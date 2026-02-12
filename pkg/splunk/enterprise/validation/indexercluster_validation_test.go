@@ -69,49 +69,6 @@ func TestValidateIndexerClusterCreate(t *testing.T) {
 			wantErrCount: 1,
 			wantErrField: "spec.replicas",
 		},
-		{
-			name: "valid indexer cluster - with common spec",
-			obj: &enterpriseApi.IndexerCluster{
-				Spec: enterpriseApi.IndexerClusterSpec{
-					Replicas: 3,
-					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "Always",
-						},
-					},
-				},
-			},
-			wantErrCount: 0,
-		},
-		{
-			name: "invalid indexer cluster - invalid image pull policy",
-			obj: &enterpriseApi.IndexerCluster{
-				Spec: enterpriseApi.IndexerClusterSpec{
-					Replicas: 3,
-					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "InvalidPolicy",
-						},
-					},
-				},
-			},
-			wantErrCount: 1,
-			wantErrField: "spec.imagePullPolicy",
-		},
-		{
-			name: "invalid indexer cluster - multiple errors",
-			obj: &enterpriseApi.IndexerCluster{
-				Spec: enterpriseApi.IndexerClusterSpec{
-					Replicas: -1,
-					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "InvalidPolicy",
-						},
-					},
-				},
-			},
-			wantErrCount: 2,
-		},
 	}
 
 	for _, tt := range tests {

@@ -36,33 +36,6 @@ func TestValidateLicenseManagerCreate(t *testing.T) {
 			wantErrCount: 0,
 		},
 		{
-			name: "valid license manager - with common spec",
-			obj: &enterpriseApi.LicenseManager{
-				Spec: enterpriseApi.LicenseManagerSpec{
-					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "Always",
-						},
-					},
-				},
-			},
-			wantErrCount: 0,
-		},
-		{
-			name: "invalid license manager - invalid image pull policy",
-			obj: &enterpriseApi.LicenseManager{
-				Spec: enterpriseApi.LicenseManagerSpec{
-					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "InvalidPolicy",
-						},
-					},
-				},
-			},
-			wantErrCount: 1,
-			wantErrField: "spec.imagePullPolicy",
-		},
-		{
 			name: "valid license manager - with storage config",
 			obj: &enterpriseApi.LicenseManager{
 				Spec: enterpriseApi.LicenseManagerSpec{
@@ -115,28 +88,6 @@ func TestValidateLicenseManagerUpdate(t *testing.T) {
 			name:         "valid update - no changes",
 			obj:          &enterpriseApi.LicenseManager{},
 			oldObj:       &enterpriseApi.LicenseManager{},
-			wantErrCount: 0,
-		},
-		{
-			name: "valid update - change image pull policy",
-			obj: &enterpriseApi.LicenseManager{
-				Spec: enterpriseApi.LicenseManagerSpec{
-					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "Never",
-						},
-					},
-				},
-			},
-			oldObj: &enterpriseApi.LicenseManager{
-				Spec: enterpriseApi.LicenseManagerSpec{
-					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "Always",
-						},
-					},
-				},
-			},
 			wantErrCount: 0,
 		},
 	}

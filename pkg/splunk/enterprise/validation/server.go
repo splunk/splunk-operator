@@ -141,13 +141,11 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 	reqLog := log.FromContext(r.Context()).WithName("webhook-server")
 	reqLog.V(1).Info("Received validation request", "method", r.Method, "path", r.URL.Path)
 
-	// Only accept POST requests
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Read request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		reqLog.Error(err, "Failed to read request body")
@@ -156,7 +154,6 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	// Decode AdmissionReview
 	var admissionReview admissionv1.AdmissionReview
 	if err := json.Unmarshal(body, &admissionReview); err != nil {
 		reqLog.Error(err, "Failed to decode admission review")
@@ -164,7 +161,6 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Log the request details
 	if admissionReview.Request != nil {
 		reqLog.Info("Processing admission request",
 			"kind", admissionReview.Request.Kind.Kind,
@@ -174,10 +170,8 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 			"user", admissionReview.Request.UserInfo.Username)
 	}
 
-	// Perform validation
 	warnings, validationErr := Validate(&admissionReview, s.options.Validators)
 
-	// Build response
 	response := &admissionv1.AdmissionResponse{
 		UID: admissionReview.Request.UID,
 	}
@@ -202,12 +196,10 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Add warnings if any
 	if len(warnings) > 0 {
 		response.Warnings = warnings
 	}
 
-	// Build response review
 	responseReview := admissionv1.AdmissionReview{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "admission.k8s.io/v1",
@@ -216,7 +208,6 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 		Response: response,
 	}
 
-	// Encode and send response
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(responseReview); err != nil {
 		serverLog.Error(err, "Failed to encode response")

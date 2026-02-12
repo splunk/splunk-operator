@@ -36,33 +36,6 @@ func TestValidateMonitoringConsoleCreate(t *testing.T) {
 			wantErrCount: 0,
 		},
 		{
-			name: "valid monitoring console - with common spec",
-			obj: &enterpriseApi.MonitoringConsole{
-				Spec: enterpriseApi.MonitoringConsoleSpec{
-					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "Always",
-						},
-					},
-				},
-			},
-			wantErrCount: 0,
-		},
-		{
-			name: "invalid monitoring console - invalid image pull policy",
-			obj: &enterpriseApi.MonitoringConsole{
-				Spec: enterpriseApi.MonitoringConsoleSpec{
-					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "InvalidPolicy",
-						},
-					},
-				},
-			},
-			wantErrCount: 1,
-			wantErrField: "spec.imagePullPolicy",
-		},
-		{
 			name: "valid monitoring console - with storage config",
 			obj: &enterpriseApi.MonitoringConsole{
 				Spec: enterpriseApi.MonitoringConsoleSpec{
@@ -130,28 +103,6 @@ func TestValidateMonitoringConsoleUpdate(t *testing.T) {
 			name:         "valid update - no changes",
 			obj:          &enterpriseApi.MonitoringConsole{},
 			oldObj:       &enterpriseApi.MonitoringConsole{},
-			wantErrCount: 0,
-		},
-		{
-			name: "valid update - change image pull policy",
-			obj: &enterpriseApi.MonitoringConsole{
-				Spec: enterpriseApi.MonitoringConsoleSpec{
-					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "Never",
-						},
-					},
-				},
-			},
-			oldObj: &enterpriseApi.MonitoringConsole{
-				Spec: enterpriseApi.MonitoringConsoleSpec{
-					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "Always",
-						},
-					},
-				},
-			},
 			wantErrCount: 0,
 		},
 	}

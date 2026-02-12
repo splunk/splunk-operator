@@ -25,6 +25,10 @@ import (
 )
 
 func TestValidateCommonSplunkSpec(t *testing.T) {
+	// Note: The following fields are validated via kubebuilder annotations, not webhook:
+	// - ImagePullPolicy: +kubebuilder:validation:Enum
+	// - LivenessInitialDelaySeconds: +kubebuilder:validation:Minimum=0
+	// - ReadinessInitialDelaySeconds: +kubebuilder:validation:Minimum=0
 	tests := []struct {
 		name         string
 		spec         *enterpriseApi.CommonSplunkSpec
@@ -34,78 +38,6 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 		{
 			name:         "valid spec - empty",
 			spec:         &enterpriseApi.CommonSplunkSpec{},
-			wantErrCount: 0,
-		},
-		{
-			name: "valid spec - with valid image pull policy",
-			spec: &enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-				},
-			},
-			wantErrCount: 0,
-		},
-		{
-			name: "valid spec - IfNotPresent policy",
-			spec: &enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "IfNotPresent",
-				},
-			},
-			wantErrCount: 0,
-		},
-		{
-			name: "valid spec - Never policy",
-			spec: &enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Never",
-				},
-			},
-			wantErrCount: 0,
-		},
-		{
-			name: "invalid image pull policy",
-			spec: &enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "InvalidPolicy",
-				},
-			},
-			wantErrCount: 1,
-			wantErrField: "spec.imagePullPolicy",
-		},
-		{
-			name: "negative liveness delay",
-			spec: &enterpriseApi.CommonSplunkSpec{
-				LivenessInitialDelaySeconds: -1,
-			},
-			wantErrCount: 1,
-			wantErrField: "spec.livenessInitialDelaySeconds",
-		},
-		{
-			name: "negative readiness delay",
-			spec: &enterpriseApi.CommonSplunkSpec{
-				ReadinessInitialDelaySeconds: -1,
-			},
-			wantErrCount: 1,
-			wantErrField: "spec.readinessInitialDelaySeconds",
-		},
-		{
-			name: "multiple errors",
-			spec: &enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "InvalidPolicy",
-				},
-				LivenessInitialDelaySeconds:  -1,
-				ReadinessInitialDelaySeconds: -1,
-			},
-			wantErrCount: 3,
-		},
-		{
-			name: "valid delays",
-			spec: &enterpriseApi.CommonSplunkSpec{
-				LivenessInitialDelaySeconds:  30,
-				ReadinessInitialDelaySeconds: 10,
-			},
 			wantErrCount: 0,
 		},
 	}

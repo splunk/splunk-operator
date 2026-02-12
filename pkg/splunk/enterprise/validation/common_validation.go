@@ -31,39 +31,10 @@ var storageCapacityRegex = regexp.MustCompile(`^[0-9]+Gi$`)
 func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
-	// Validate image pull policy if specified
-	if spec.ImagePullPolicy != "" {
-		validPolicies := []string{"Always", "Never", "IfNotPresent"}
-		valid := false
-		for _, p := range validPolicies {
-			if string(spec.ImagePullPolicy) == p {
-				valid = true
-				break
-			}
-		}
-		if !valid {
-			allErrs = append(allErrs, field.NotSupported(
-				fldPath.Child("imagePullPolicy"),
-				spec.ImagePullPolicy,
-				validPolicies))
-		}
-	}
-
-	// Validate LivenessInitialDelaySeconds
-	if spec.LivenessInitialDelaySeconds < 0 {
-		allErrs = append(allErrs, field.Invalid(
-			fldPath.Child("livenessInitialDelaySeconds"),
-			spec.LivenessInitialDelaySeconds,
-			"must be non-negative"))
-	}
-
-	// Validate ReadinessInitialDelaySeconds
-	if spec.ReadinessInitialDelaySeconds < 0 {
-		allErrs = append(allErrs, field.Invalid(
-			fldPath.Child("readinessInitialDelaySeconds"),
-			spec.ReadinessInitialDelaySeconds,
-			"must be non-negative"))
-	}
+	// Note: The following fields are validated via kubebuilder annotations in api/v4/common_types.go:
+	// - ImagePullPolicy: +kubebuilder:validation:Enum=Always;Never;IfNotPresent
+	// - LivenessInitialDelaySeconds: +kubebuilder:validation:Minimum=0
+	// - ReadinessInitialDelaySeconds: +kubebuilder:validation:Minimum=0
 
 	// Validate EtcVolumeStorageConfig
 	allErrs = append(allErrs, validateStorageConfig(&spec.EtcVolumeStorageConfig, fldPath.Child("etcVolumeStorageConfig"))...)

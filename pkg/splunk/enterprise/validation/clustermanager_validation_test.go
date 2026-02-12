@@ -36,33 +36,6 @@ func TestValidateClusterManagerCreate(t *testing.T) {
 			wantErrCount: 0,
 		},
 		{
-			name: "valid cluster manager - with common spec",
-			obj: &enterpriseApi.ClusterManager{
-				Spec: enterpriseApi.ClusterManagerSpec{
-					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "Always",
-						},
-					},
-				},
-			},
-			wantErrCount: 0,
-		},
-		{
-			name: "invalid cluster manager - invalid image pull policy",
-			obj: &enterpriseApi.ClusterManager{
-				Spec: enterpriseApi.ClusterManagerSpec{
-					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "InvalidPolicy",
-						},
-					},
-				},
-			},
-			wantErrCount: 1,
-			wantErrField: "spec.imagePullPolicy",
-		},
-		{
 			name: "valid cluster manager - with SmartStore",
 			obj: &enterpriseApi.ClusterManager{
 				Spec: enterpriseApi.ClusterManagerSpec{
@@ -140,11 +113,6 @@ func TestValidateClusterManagerCreate(t *testing.T) {
 			name: "invalid cluster manager - multiple errors",
 			obj: &enterpriseApi.ClusterManager{
 				Spec: enterpriseApi.ClusterManagerSpec{
-					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "InvalidPolicy",
-						},
-					},
 					SmartStore: enterpriseApi.SmartStoreSpec{
 						VolList: []enterpriseApi.VolumeSpec{
 							{Name: "", Endpoint: ""},
@@ -152,7 +120,7 @@ func TestValidateClusterManagerCreate(t *testing.T) {
 					},
 				},
 			},
-			wantErrCount: 3, // invalid policy + missing name + missing endpoint/path
+			wantErrCount: 2, // missing name + missing endpoint/path
 		},
 	}
 
