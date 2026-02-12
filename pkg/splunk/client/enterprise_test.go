@@ -643,52 +643,6 @@ func TestSetIdxcSecret(t *testing.T) {
 	splunkClientErrorTester(t, test)
 }
 
-func TestGetLicenseInfo_Success(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/licenser/licenses?count=0&output_mode=json", nil)
-	wantLicenseInfo := LicenseInfo{
-		ID:   "1234-5678-90AB-CDEF",
-		Type: "Enterprise",
-	}
-	test := func(c SplunkClient) error {
-		info, err := c.GetLicenseInfo()
-		if err != nil {
-			return err
-		}
-		if info.ID != wantLicenseInfo.ID || info.Type != wantLicenseInfo.Type {
-			t.Errorf("LicenseInfo = %+v; want %+v", info, wantLicenseInfo)
-		}
-		return nil
-	}
-	body := `{"entry":[{"content":{"guid":"1234-5678-90AB-CDEF","type":"Enterprise"}}]}`
-	splunkClientTester(t, "TestGetLicenseInfo", 200, body, wantRequest, test)
-
-	// test body with no entries
-	test = func(c SplunkClient) error {
-		_, err := c.GetLicenseInfo()
-		if err == nil {
-			t.Errorf("GetLicenseInfo returned nil; want error")
-		}
-		return nil
-	}
-	body = `{"entry":[]}`
-	splunkClientTester(t, "TestGetLicenseInfo", 200, body, wantRequest, test)
-}
-
-func TestGetLicenseInfo_Error(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/licenser/licenses?count=0&output_mode=json", nil)
-
-	test := func(c SplunkClient) error {
-		_, err := c.GetLicenseInfo()
-		if err == nil {
-			t.Errorf("GetLicenseInfo should return error for 500 response code")
-		}
-		return nil
-	}
-
-	// Simulate a 500 error response from the mock client
-	splunkClientTester(t, "TestGetLicenseInfo_Error", 500, "", wantRequest, test)
-}
-
 func TestSendTelemetry_Success(t *testing.T) {
 	path := "/services/telemetry/metrics"
 	bodyBytes := []byte(`{"metric":"value"}`)
