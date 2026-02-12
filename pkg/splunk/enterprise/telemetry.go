@@ -483,13 +483,13 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 	}
 	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", serviceFQDN), "admin", string(adminPwd))
 
-	var licenseInfo *splclient.LicenseInfo
+	var licenseInfo map[string]splclient.LicenseInfo
 	licenseInfo, err = splunkClient.GetLicenseInfo()
 	if err != nil {
 		scopedLog.Error(err, "Failed to retrieve the license info")
 		return false
 	} else {
-		data[telLicenseInfoKey] = *licenseInfo
+		data[telLicenseInfoKey] = licenseInfo
 	}
 	telemetry := Telemetry{
 		Type:          "event",

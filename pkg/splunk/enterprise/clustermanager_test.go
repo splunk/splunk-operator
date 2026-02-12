@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -53,6 +54,11 @@ func TestApplyClusterManager(t *testing.T) {
 	// redefining cpmakeTar to return nil always
 	cpMakeTar = func(src localPath, dest remotePath, writer io.Writer) error {
 		return nil
+	}
+
+	// Mock the event publisher to return a valid (empty) publisher in tests
+	newK8EventPublisher = func(recorder record.EventRecorder, instance pkgruntime.Object) (*K8EventPublisher, error) {
+		return &K8EventPublisher{}, nil
 	}
 
 	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {

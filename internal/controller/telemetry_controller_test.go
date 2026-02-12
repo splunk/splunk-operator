@@ -182,7 +182,7 @@ var _ = Describe("Telemetry Controller", func() {
 		}).NotTo(Panic())
 	})
 
-	It("Reconcile returns requeue when ApplyTelemetry returns Requeue=true but RequeueAfter=0", func() {
+	It("Reconcile returns requeue when ApplyTelemetry returns Requeue=true and RequeueAfter=0", func() {
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: ns, Labels: labels},
 			Data:       map[string]string{"foo": "bar"},
@@ -191,20 +191,18 @@ var _ = Describe("Telemetry Controller", func() {
 		c := builder.Build()
 		r := &TelemetryReconciler{Client: c, Scheme: scheme.Scheme}
 		req := reconcile.Request{NamespacedName: types.NamespacedName{Name: cmName, Namespace: ns}}
-
 		origApply := applyTelemetryFn
 		defer func() { applyTelemetryFn = origApply }()
 		applyTelemetryFn = func(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap) (reconcile.Result, error) {
 			return reconcile.Result{Requeue: true, RequeueAfter: 0}, nil
 		}
-
 		result, err := r.Reconcile(ctx, req)
 		Expect(err).To(BeNil())
 		Expect(result.Requeue).To(BeTrue())
 		Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 	})
 
-	It("Reconcile returns result when ApplyTelemetry returns Requeue=false but RequeueAfter>0", func() {
+	It("Reconcile returns result when ApplyTelemetry returns Requeue=false and RequeueAfter>0", func() {
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: ns, Labels: labels},
 			Data:       map[string]string{"foo": "bar"},
@@ -213,13 +211,11 @@ var _ = Describe("Telemetry Controller", func() {
 		c := builder.Build()
 		r := &TelemetryReconciler{Client: c, Scheme: scheme.Scheme}
 		req := reconcile.Request{NamespacedName: types.NamespacedName{Name: cmName, Namespace: ns}}
-
 		origApply := applyTelemetryFn
 		defer func() { applyTelemetryFn = origApply }()
 		applyTelemetryFn = func(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap) (reconcile.Result, error) {
 			return reconcile.Result{Requeue: false, RequeueAfter: time.Second * 123}, nil
 		}
-
 		result, err := r.Reconcile(ctx, req)
 		Expect(err).To(BeNil())
 		Expect(result.Requeue).To(BeFalse())
@@ -235,13 +231,11 @@ var _ = Describe("Telemetry Controller", func() {
 		c := builder.Build()
 		r := &TelemetryReconciler{Client: c, Scheme: scheme.Scheme}
 		req := reconcile.Request{NamespacedName: types.NamespacedName{Name: cmName, Namespace: ns}}
-
 		origApply := applyTelemetryFn
 		defer func() { applyTelemetryFn = origApply }()
 		applyTelemetryFn = func(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap) (reconcile.Result, error) {
 			return reconcile.Result{Requeue: false, RequeueAfter: 0}, fmt.Errorf("some error")
 		}
-
 		result, err := r.Reconcile(ctx, req)
 		Expect(err).To(BeNil())
 		Expect(result.Requeue).To(BeTrue())
@@ -257,13 +251,51 @@ var _ = Describe("Telemetry Controller", func() {
 		c := builder.Build()
 		r := &TelemetryReconciler{Client: c, Scheme: scheme.Scheme}
 		req := reconcile.Request{NamespacedName: types.NamespacedName{Name: cmName, Namespace: ns}}
-
 		origApply := applyTelemetryFn
 		defer func() { applyTelemetryFn = origApply }()
 		applyTelemetryFn = func(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap) (reconcile.Result, error) {
 			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 42}, fmt.Errorf("some error")
 		}
+		result, err := r.Reconcile(ctx, req)
+		Expect(err).To(BeNil())
+		Expect(result.Requeue).To(BeTrue())
+		Expect(result.RequeueAfter).To(Equal(time.Second * 600))
+	})
 
+	It("Reconcile returns result when ApplyTelemetry returns nil result and nil error", func() {
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: ns, Labels: labels},
+			Data:       map[string]string{"foo": "bar"},
+		}
+		builder := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(cm)
+		c := builder.Build()
+		r := &TelemetryReconciler{Client: c, Scheme: scheme.Scheme}
+		req := reconcile.Request{NamespacedName: types.NamespacedName{Name: cmName, Namespace: ns}}
+		origApply := applyTelemetryFn
+		defer func() { applyTelemetryFn = origApply }()
+		applyTelemetryFn = func(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap) (reconcile.Result, error) {
+			return reconcile.Result{}, nil
+		}
+		result, err := r.Reconcile(ctx, req)
+		Expect(err).To(BeNil())
+		Expect(result.Requeue).To(BeFalse())
+		Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
+	})
+
+	It("Reconcile returns requeue when ApplyTelemetry returns nil result and non-nil error", func() {
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: ns, Labels: labels},
+			Data:       map[string]string{"foo": "bar"},
+		}
+		builder := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(cm)
+		c := builder.Build()
+		r := &TelemetryReconciler{Client: c, Scheme: scheme.Scheme}
+		req := reconcile.Request{NamespacedName: types.NamespacedName{Name: cmName, Namespace: ns}}
+		origApply := applyTelemetryFn
+		defer func() { applyTelemetryFn = origApply }()
+		applyTelemetryFn = func(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap) (reconcile.Result, error) {
+			return reconcile.Result{}, fmt.Errorf("some error")
+		}
 		result, err := r.Reconcile(ctx, req)
 		Expect(err).To(BeNil())
 		Expect(result.Requeue).To(BeTrue())
@@ -281,8 +313,4 @@ func (e *errorClient) Get(ctx context.Context, key client.ObjectKey, obj client.
 
 type panicClient struct {
 	client.Client
-}
-
-func (p *panicClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-	panic("test panic in Get")
 }
