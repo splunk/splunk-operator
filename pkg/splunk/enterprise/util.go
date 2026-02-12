@@ -139,6 +139,9 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("GetRemoteStorageClient").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, cr)
+
 	remoteDataClient := splclient.SplunkRemoteDataClient{}
 	//use the provider name to get the corresponding function pointer
 	getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
@@ -156,6 +159,14 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 		// Get credentials through the secretRef
 		remoteDataClientSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), appSecretRef)
 		if err != nil {
+			// Emit event for missing secret
+			if k8serrors.IsNotFound(err) {
+				if eventPublisher != nil {
+					eventPublisher.Warning(ctx, "SecretMissing",
+						fmt.Sprintf("Required secret '%s' not found in namespace '%s'. Create secret to proceed.", appSecretRef, cr.GetNamespace()))
+				}
+			}
+
 			return remoteDataClient, err
 		}
 
@@ -205,6 +216,11 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 
 	if err != nil {
 		scopedLog.Error(err, "Failed to get the S3 client")
+		// Emit event when operator cannot connect to the remote app repository
+		if eventPublisher != nil {
+			eventPublisher.Warning(ctx, "AppRepositoryConnectionFailed",
+				fmt.Sprintf("Failed to connect to app repository '%s': %s. Check credentials and network.", vol.Name, err.Error()))
+		}
 		return remoteDataClient, err
 	}
 
@@ -398,8 +414,18 @@ func getSearchHeadExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 
 // GetSmartstoreRemoteVolumeSecrets is used to retrieve S3 access key and secrete keys.
 func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec) (string, string, string, error) {
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, cr)
+
 	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
 	if err != nil {
+		// Emit event for missing secret
+		if k8serrors.IsNotFound(err) {
+			if eventPublisher != nil {
+				eventPublisher.Warning(ctx, "SecretMissing",
+					fmt.Sprintf("Required secret '%s' not found in namespace '%s'. Create secret to proceed.", volume.SecretRef, cr.GetNamespace()))
+			}
+		}
 		return "", "", "", err
 	}
 
@@ -409,8 +435,16 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 	splutil.SetSecretOwnerRef(ctx, client, volume.SecretRef, cr)
 
 	if accessKey == "" {
+		if eventPublisher != nil {
+			eventPublisher.Warning(ctx, "SecretInvalid",
+				fmt.Sprintf("Secret '%s' missing required fields: %s. Update secret with required data.", namespaceScopedSecret.GetName(), "accessKey"))
+		}
 		return "", "", "", fmt.Errorf("s3 Access Key is missing")
 	} else if secretKey == "" {
+		if eventPublisher != nil {
+			eventPublisher.Warning(ctx, "SecretInvalid",
+				fmt.Sprintf("Secret '%s' missing required fields: %s. Update secret with required data.", namespaceScopedSecret.GetName(), "s3SecretKey"))
+		}
 		return "", "", "", fmt.Errorf("s3 Secret Key is missing")
 	}
 
