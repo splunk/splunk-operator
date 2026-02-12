@@ -42,6 +42,8 @@ const (
 	telemetryRetryDelay = time.Second * 600
 )
 
+var applyTelemetryFn = enterprise.ApplyTelemetry
+
 type TelemetryReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
@@ -83,7 +85,7 @@ func (r *TelemetryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	reqLogger.Info("start", "Telemetry configmap version", cm.GetResourceVersion())
 
-	result, err := enterprise.ApplyTelemetry(ctx, r.Client, cm)
+	result, err := applyTelemetryFn(ctx, r.Client, cm)
 	if err != nil {
 		reqLogger.Error(err, "Failed to send telemetry")
 		return ctrl.Result{Requeue: true, RequeueAfter: telemetryRetryDelay}, nil
