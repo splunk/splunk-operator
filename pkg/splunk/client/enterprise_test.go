@@ -667,11 +667,11 @@ func TestUpdateConfFile(t *testing.T) {
 
 	// First request: create the property (object) if it doesn't exist
 	createBody := strings.NewReader(fmt.Sprintf("name=%s", property))
-	wantCreateRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/configs/conf-outputs", createBody)
+	wantCreateRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/system/configs/conf-outputs", createBody)
 
 	// Second request: update the key/value for the property
 	updateBody := strings.NewReader(fmt.Sprintf("%s=%s", key, value))
-	wantUpdateRequest, _ := http.NewRequest("POST", fmt.Sprintf("https://localhost:8089/services/configs/conf-outputs/%s", property), updateBody)
+	wantUpdateRequest, _ := http.NewRequest("POST", fmt.Sprintf("https://localhost:8089/servicesNS/nobody/system/configs/conf-outputs/%s", property), updateBody)
 
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	mockSplunkClient.AddHandler(wantCreateRequest, 201, "", nil)

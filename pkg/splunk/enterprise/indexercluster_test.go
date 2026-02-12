@@ -2324,7 +2324,7 @@ func TestUpdateIndexerConfFiles(t *testing.T) {
 
 	for i := 0; i < int(cr.Status.ReadyReplicas); i++ {
 		podName := fmt.Sprintf("splunk-test-indexer-%d", i)
-		baseURL := fmt.Sprintf("https://%s.splunk-test-indexer-headless.test.svc.cluster.local:8089/services/configs/conf-default-mode", podName)
+		baseURL := fmt.Sprintf("https://%s.splunk-test-indexer-headless.test.svc.cluster.local:8089/servicesNS/nobody/system/configs/conf-default-mode", podName)
 
 		for _, field := range propertyKVList {
 			req, _ := http.NewRequest("POST", baseURL, strings.NewReader(fmt.Sprintf("name=%s", field[0])))
@@ -2360,7 +2360,7 @@ func addRemoteQueueHandlersForIndexer(mockHTTPClient *spltest.MockHTTPClient, cr
 	for i := 0; i < int(cr.Status.ReadyReplicas); i++ {
 		podName := fmt.Sprintf("splunk-%s-indexer-%d", cr.GetName(), i)
 		baseURL := fmt.Sprintf(
-			"https://%s.splunk-%s-indexer-headless.%s.svc.cluster.local:8089/services/configs/%s",
+			"https://%s.splunk-%s-indexer-headless.%s.svc.cluster.local:8089/servicesNS/nobody/system/configs/%s",
 			podName, cr.GetName(), cr.GetNamespace(), confName,
 		)
 
@@ -2579,7 +2579,7 @@ func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
 	// outputs.conf
 	mockHTTPClient := &spltest.MockHTTPClient{}
 
-	base := "https://splunk-test-indexer-0.splunk-test-indexer-headless.test.svc.cluster.local:8089/services/configs"
+	base := "https://splunk-test-indexer-0.splunk-test-indexer-headless.test.svc.cluster.local:8089/servicesNS/nobody/system/configs"
 	q := "remote_queue:test-queue"
 
 	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-outputs", base), "name="+q), 200, "", nil)
