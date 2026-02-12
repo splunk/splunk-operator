@@ -19,7 +19,6 @@ limitations under the License.
 import (
 	"context"
 	"fmt"
-	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -190,11 +189,6 @@ type errorClient struct {
 
 func (e *errorClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	return fmt.Errorf("some error")
-}
-
-func TestTelemetryController(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Telemetry Controller Suite")
 }
 
 type panicClient struct {
