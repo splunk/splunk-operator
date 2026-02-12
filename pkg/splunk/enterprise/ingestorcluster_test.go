@@ -291,7 +291,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 
 	for i := 0; i < int(cr.Status.ReadyReplicas); i++ {
 		podName := fmt.Sprintf("splunk-test-ingestor-%d", i)
-		baseURL := fmt.Sprintf("https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/servicesNS/nobody/system/configs/conf-default-mode", podName, cr.GetName(), cr.GetNamespace())
+		baseURL := fmt.Sprintf("https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/services/configs/conf-default-mode", podName, cr.GetName(), cr.GetNamespace())
 
 		for _, field := range propertyKVList {
 			req, _ := http.NewRequest("POST", baseURL, strings.NewReader(fmt.Sprintf("name=%s", field[0])))
@@ -652,7 +652,7 @@ func TestUpdateIngestorConfFiles(t *testing.T) {
 
 	for i := 0; i < int(cr.Status.ReadyReplicas); i++ {
 		podName := fmt.Sprintf("splunk-test-ingestor-%d", i)
-		baseURL := fmt.Sprintf("https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/servicesNS/nobody/system/configs/conf-default-mode", podName, cr.GetName(), cr.GetNamespace())
+		baseURL := fmt.Sprintf("https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/services/configs/conf-default-mode", podName, cr.GetName(), cr.GetNamespace())
 
 		for _, field := range propertyKVList {
 			req, _ := http.NewRequest("POST", baseURL, strings.NewReader(fmt.Sprintf("name=%s", field[0])))
@@ -674,7 +674,7 @@ func addRemoteQueueHandlersForIngestor(mockHTTPClient *spltest.MockHTTPClient, c
 	for i := 0; i < int(cr.Status.ReadyReplicas); i++ {
 		podName := fmt.Sprintf("splunk-%s-ingestor-%d", cr.GetName(), i)
 		baseURL := fmt.Sprintf(
-			"https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/servicesNS/nobody/system/configs/%s",
+			"https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/services/configs/%s",
 			podName, cr.GetName(), cr.GetNamespace(), confName,
 		)
 

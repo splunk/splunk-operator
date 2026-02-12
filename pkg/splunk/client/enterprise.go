@@ -1012,7 +1012,7 @@ func (c *SplunkClient) RestartSplunk() error {
 // See https://help.splunk.com/en/splunk-enterprise/leverage-rest-apis/rest-api-reference/10.0/configuration-endpoints/configuration-endpoint-descriptions
 func (c *SplunkClient) UpdateConfFile(scopedLog logr.Logger, fileName, property string, propertyKVList [][]string) error {
 	// Creates an object in a conf file if it doesn't exist
-	endpoint := fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s", c.ManagementURI, fileName)
+	endpoint := fmt.Sprintf("%s/services/configs/conf-%s", c.ManagementURI, fileName)
 	body := fmt.Sprintf("name=%s", property)
 
 	scopedLog.Info("Creating conf file object if it does not exist", "fileName", fileName, "property", property)
@@ -1031,7 +1031,7 @@ func (c *SplunkClient) UpdateConfFile(scopedLog logr.Logger, fileName, property 
 	}
 
 	// Updates a property of an object in a conf file
-	endpoint = fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s/%s", c.ManagementURI, fileName, property)
+	endpoint = fmt.Sprintf("%s/services/configs/conf-%s/%s", c.ManagementURI, fileName, property)
 	body = ""
 	for _, kv := range propertyKVList {
 		body += fmt.Sprintf("%s=%s&", kv[0], kv[1])
