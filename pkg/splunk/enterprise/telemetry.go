@@ -21,7 +21,7 @@ import (
 const (
 	requeAfterInSeconds = 86400 // Send telemetry once a day
 	defaultTestMode     = "false"
-	defaultTestVersion  = "unknown"
+	defaultTestVersion  = "3.1.0"
 
 	telStatusKey     = "status"
 	telDeploymentKey = "deployment"
@@ -39,6 +39,7 @@ type Telemetry struct {
 	OptInRequired int                    `json:"optInRequired"`
 	Data          map[string]interface{} `json:"data"`
 	Test          bool                   `json:"test"`
+	Visibility    string                 `json:"visibility,omitempty"`
 }
 
 type TelemetryStatus struct {
@@ -115,7 +116,8 @@ func updateLastTransmissionTime(ctx context.Context, client splcommon.Controller
 	scopedLog.Info("Updated last transmission time in configmap", "newStatus", cm.Data[telStatusKey])
 }
 
-func collectResourceTelData(resources corev1.ResourceRequirements, data map[string]string) {
+func collectResourceTelData(resources corev1.ResourceRequirements) map[string]string {
+	retData := make(map[string]string)
 	defaultResources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse(defaultRequestsCPU),
@@ -130,42 +132,49 @@ func collectResourceTelData(resources corev1.ResourceRequirements, data map[stri
 	if resources.Requests == nil {
 		cpu := defaultResources.Requests[corev1.ResourceCPU]
 		mem := defaultResources.Requests[corev1.ResourceMemory]
-		data[cpuRequestKey] = (&cpu).String()
-		data[memoryRequestKey] = (&mem).String()
+		retData[cpuRequestKey] = (&cpu).String()
+		retData[memoryRequestKey] = (&mem).String()
 	} else {
 		if cpuReq, ok := resources.Requests[corev1.ResourceCPU]; ok {
-			data[cpuRequestKey] = cpuReq.String()
+			retData[cpuRequestKey] = cpuReq.String()
 		} else {
 			cpu := defaultResources.Requests[corev1.ResourceCPU]
-			data[cpuRequestKey] = (&cpu).String()
+			retData[cpuRequestKey] = (&cpu).String()
 		}
 		if memReq, ok := resources.Requests[corev1.ResourceMemory]; ok {
-			data[memoryRequestKey] = memReq.String()
+			retData[memoryRequestKey] = memReq.String()
 		} else {
 			mem := defaultResources.Requests[corev1.ResourceMemory]
-			data[memoryRequestKey] = (&mem).String()
+			retData[memoryRequestKey] = (&mem).String()
 		}
 	}
 
 	if resources.Limits == nil {
 		cpu := defaultResources.Limits[corev1.ResourceCPU]
 		mem := defaultResources.Limits[corev1.ResourceMemory]
-		data[cpuLimitKey] = (&cpu).String()
-		data[memoryLimitKey] = (&mem).String()
+		retData[cpuLimitKey] = (&cpu).String()
+		retData[memoryLimitKey] = (&mem).String()
 	} else {
 		if cpuLim, ok := resources.Limits[corev1.ResourceCPU]; ok {
-			data[cpuLimitKey] = cpuLim.String()
+			retData[cpuLimitKey] = cpuLim.String()
 		} else {
 			cpu := defaultResources.Limits[corev1.ResourceCPU]
-			data[cpuLimitKey] = (&cpu).String()
+			retData[cpuLimitKey] = (&cpu).String()
 		}
 		if memLim, ok := resources.Limits[corev1.ResourceMemory]; ok {
-			data[memoryLimitKey] = memLim.String()
+			retData[memoryLimitKey] = memLim.String()
 		} else {
 			mem := defaultResources.Limits[corev1.ResourceMemory]
-			data[memoryLimitKey] = (&mem).String()
+			retData[memoryLimitKey] = (&mem).String()
 		}
 	}
+	return retData
+}
+
+type crListHandler struct {
+	kind        string
+	handlerFunc func(ctx context.Context, client splcommon.ControllerClient) (interface{}, []splcommon.MetaObject, error)
+	checkTelApp bool
 }
 
 func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerClient, deploymentData map[string]interface{}) map[string][]splcommon.MetaObject {
@@ -176,180 +185,210 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 	crWithTelAppList = make(map[string][]splcommon.MetaObject)
 
 	scopedLog.Info("Start collecting deployment telemetry data")
-	var err error
-	var standaloneList enterpriseApi.StandaloneList
-	err = client.List(ctx, &standaloneList)
-	if err != nil {
-		scopedLog.Error(err, "Failed to list standalone objects")
-	} else if len(standaloneList.Items) > 0 {
-		var perKindData map[string]interface{}
-		perKindData = make(map[string]interface{})
-		deploymentData[standaloneList.Items[0].Kind] = perKindData
-		for _, cr := range standaloneList.Items {
-			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-			var crResourceData map[string]string
-			crResourceData = make(map[string]string)
-			perKindData[cr.GetName()] = crResourceData
-			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
-			if cr.Status.TelAppInstalled {
-				crWithTelAppList[standaloneList.Items[0].Kind] = append(crWithTelAppList[standaloneList.Items[0].Kind], &cr)
-			} else {
-				scopedLog.Info("Telemetry app is not installed for this CR.", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-			}
-		}
+	// Define all CR handlers in a slice
+	handlers := []crListHandler{
+		{kind: "Standalone", handlerFunc: handleStandalones, checkTelApp: true},
+		{kind: "LicenseManager", handlerFunc: handleLicenseManagers, checkTelApp: true},
+		{kind: "LicenseMaster", handlerFunc: handleLicenseMasters, checkTelApp: true},
+		{kind: "SearchHeadCluster", handlerFunc: handleSearchHeadClusters, checkTelApp: true},
+		{kind: "IndexerCluster", handlerFunc: handleIndexerClusters, checkTelApp: false},
+		{kind: "ClusterManager", handlerFunc: handleClusterManagers, checkTelApp: true},
+		{kind: "ClusterMaster", handlerFunc: handleClusterMasters, checkTelApp: true},
+		{kind: "MonitoringConsole", handlerFunc: handleMonitoringConsoles, checkTelApp: false},
 	}
 
-	var lmanagerList enterpriseApi.LicenseManagerList
-	err = client.List(ctx, &lmanagerList)
-	if err != nil {
-		scopedLog.Error(err, "Failed to list LicenseManager objects")
-	} else if len(lmanagerList.Items) > 0 {
-		var perKindData map[string]interface{}
-		perKindData = make(map[string]interface{})
-		deploymentData[lmanagerList.Items[0].Kind] = perKindData
-		for _, cr := range lmanagerList.Items {
-			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-			var crResourceData map[string]string
-			crResourceData = make(map[string]string)
-			perKindData[cr.GetName()] = crResourceData
-			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
-			if cr.Status.TelAppInstalled {
-				crWithTelAppList[lmanagerList.Items[0].Kind] = append(crWithTelAppList[lmanagerList.Items[0].Kind], &cr)
-			} else {
-				scopedLog.Info("Telemetry app is not installed for this CR.", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-			}
+	// Process each CR type using the same logic
+	for _, handler := range handlers {
+		data, crs, err := handler.handlerFunc(ctx, client)
+		if err != nil {
+			scopedLog.Error(err, "Error processing CR type", "kind", handler.kind)
+			continue
 		}
-	}
-
-	var lmasterList enterpriseApiV3.LicenseMasterList
-	err = client.List(ctx, &lmasterList)
-	if err != nil {
-		scopedLog.Error(err, "Failed to list LicenseMaster objects")
-	} else if len(lmasterList.Items) > 0 {
-		var perKindData map[string]interface{}
-		perKindData = make(map[string]interface{})
-		deploymentData[lmasterList.Items[0].Kind] = perKindData
-		for _, cr := range lmasterList.Items {
-			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-			var crResourceData map[string]string
-			crResourceData = make(map[string]string)
-			perKindData[cr.GetName()] = crResourceData
-			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
-			if cr.Status.TelAppInstalled {
-				crWithTelAppList[lmasterList.Items[0].Kind] = append(crWithTelAppList[lmasterList.Items[0].Kind], &cr)
-			} else {
-				scopedLog.Info("Telemetry app is not installed for this CR.", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-			}
+		if handler.checkTelApp && crs != nil && len(crs) > 0 {
+			crWithTelAppList[handler.kind] = crs
 		}
-	}
-
-	var shcList enterpriseApi.SearchHeadClusterList
-	err = client.List(ctx, &shcList)
-	if err != nil {
-		scopedLog.Error(err, "Failed to list SearchHeadCluster objects")
-	} else if len(shcList.Items) > 0 {
-		var perKindData map[string]interface{}
-		perKindData = make(map[string]interface{})
-		deploymentData[shcList.Items[0].Kind] = perKindData
-		for _, cr := range shcList.Items {
-			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-			var crResourceData map[string]string
-			crResourceData = make(map[string]string)
-			perKindData[cr.GetName()] = crResourceData
-			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
-			if cr.Status.TelAppInstalled {
-				crWithTelAppList[shcList.Items[0].Kind] = append(crWithTelAppList[shcList.Items[0].Kind], &cr)
-			} else {
-				scopedLog.Info("Telemetry app is not installed for this CR.", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-			}
-		}
-	}
-
-	var idxList enterpriseApi.IndexerClusterList
-	err = client.List(ctx, &idxList)
-	if err != nil {
-		scopedLog.Error(err, "Failed to list IndexerCluster objects")
-	} else if len(idxList.Items) > 0 {
-		var perKindData map[string]interface{}
-		perKindData = make(map[string]interface{})
-		deploymentData[idxList.Items[0].Kind] = perKindData
-		for _, cr := range idxList.Items {
-			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-			var crResourceData map[string]string
-			crResourceData = make(map[string]string)
-			perKindData[cr.GetName()] = crResourceData
-			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
-		}
-	}
-
-	var cmanagerList enterpriseApi.ClusterManagerList
-	err = client.List(ctx, &cmanagerList)
-	if err != nil {
-		scopedLog.Error(err, "Failed to list ClusterManager objects")
-	} else if len(cmanagerList.Items) > 0 {
-		var perKindData map[string]interface{}
-		perKindData = make(map[string]interface{})
-		deploymentData[cmanagerList.Items[0].Kind] = perKindData
-		for _, cr := range cmanagerList.Items {
-			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-			var crResourceData map[string]string
-			crResourceData = make(map[string]string)
-			perKindData[cr.GetName()] = crResourceData
-			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
-			if cr.Status.TelAppInstalled {
-				crWithTelAppList[cmanagerList.Items[0].Kind] = append(crWithTelAppList[cmanagerList.Items[0].Kind], &cr)
-			} else {
-				scopedLog.Info("Telemetry app is not installed for this CR.", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-			}
-		}
-	}
-
-	var cmasterList enterpriseApiV3.ClusterMasterList
-	err = client.List(ctx, &cmasterList)
-	if err != nil {
-		scopedLog.Error(err, "Failed to list ClusterMaster objects")
-	} else if len(cmasterList.Items) > 0 {
-		var perKindData map[string]interface{}
-		perKindData = make(map[string]interface{})
-		deploymentData[cmasterList.Items[0].Kind] = perKindData
-		for _, cr := range cmasterList.Items {
-			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-			var crResourceData map[string]string
-			crResourceData = make(map[string]string)
-			perKindData[cr.GetName()] = crResourceData
-			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
-			if cr.Status.TelAppInstalled {
-				crWithTelAppList[cmasterList.Items[0].Kind] = append(crWithTelAppList[cmasterList.Items[0].Kind], &cr)
-			} else {
-				scopedLog.Info("Telemetry app is not installed for this CR.", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-			}
-		}
-	}
-
-	var mconsoleList enterpriseApi.MonitoringConsoleList
-	err = client.List(ctx, &mconsoleList)
-	if err != nil {
-		scopedLog.Error(err, "Failed to list ClusterMaster objects")
-	} else if len(mconsoleList.Items) > 0 {
-		var perKindData map[string]interface{}
-		perKindData = make(map[string]interface{})
-		deploymentData[mconsoleList.Items[0].Kind] = perKindData
-		for _, cr := range mconsoleList.Items {
-			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-			var crResourceData map[string]string
-			crResourceData = make(map[string]string)
-			perKindData[cr.GetName()] = crResourceData
-			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
+		if data != nil {
+			deploymentData[handler.kind] = data
 		}
 	}
 
 	return crWithTelAppList
+}
+
+func handleStandalones(ctx context.Context, client splcommon.ControllerClient) (interface{}, []splcommon.MetaObject, error) {
+	var list enterpriseApi.StandaloneList
+	err := client.List(ctx, &list)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(list.Items) == 0 {
+		return nil, nil, nil
+	}
+
+	retData := make(map[string]interface{})
+	retCRs := make([]splcommon.MetaObject, 0)
+	for i := range list.Items {
+		cr := &list.Items[i]
+		if cr.Status.TelAppInstalled {
+			retCRs = append(retCRs, cr)
+		}
+		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+	}
+	return retData, retCRs, nil
+}
+
+func handleLicenseManagers(ctx context.Context, client splcommon.ControllerClient) (interface{}, []splcommon.MetaObject, error) {
+	var list enterpriseApi.LicenseManagerList
+	err := client.List(ctx, &list)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(list.Items) == 0 {
+		return nil, nil, nil
+	}
+
+	retData := make(map[string]interface{})
+	retCRs := make([]splcommon.MetaObject, 0)
+	for i := range list.Items {
+		cr := &list.Items[i]
+		if cr.Status.TelAppInstalled {
+			retCRs = append(retCRs, cr)
+		}
+		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+	}
+	return retData, retCRs, nil
+}
+
+func handleLicenseMasters(ctx context.Context, client splcommon.ControllerClient) (interface{}, []splcommon.MetaObject, error) {
+	var list enterpriseApiV3.LicenseMasterList
+	err := client.List(ctx, &list)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(list.Items) == 0 {
+		return nil, nil, nil
+	}
+
+	retData := make(map[string]interface{})
+	retCRs := make([]splcommon.MetaObject, 0)
+	for i := range list.Items {
+		cr := &list.Items[i]
+		if cr.Status.TelAppInstalled {
+			retCRs = append(retCRs, cr)
+		}
+		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+	}
+	return retData, retCRs, nil
+}
+
+func handleSearchHeadClusters(ctx context.Context, client splcommon.ControllerClient) (interface{}, []splcommon.MetaObject, error) {
+	var list enterpriseApi.SearchHeadClusterList
+	err := client.List(ctx, &list)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(list.Items) == 0 {
+		return nil, nil, nil
+	}
+
+	retData := make(map[string]interface{})
+	retCRs := make([]splcommon.MetaObject, 0)
+	for i := range list.Items {
+		cr := &list.Items[i]
+		if cr.Status.TelAppInstalled {
+			retCRs = append(retCRs, cr)
+		}
+		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+	}
+	return retData, retCRs, nil
+}
+
+func handleIndexerClusters(ctx context.Context, client splcommon.ControllerClient) (interface{}, []splcommon.MetaObject, error) {
+	var list enterpriseApi.IndexerClusterList
+	err := client.List(ctx, &list)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(list.Items) == 0 {
+		return nil, nil, nil
+	}
+
+	retData := make(map[string]interface{})
+	for i := range list.Items {
+		cr := &list.Items[i]
+		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+	}
+	return retData, nil, nil
+}
+
+func handleClusterManagers(ctx context.Context, client splcommon.ControllerClient) (interface{}, []splcommon.MetaObject, error) {
+	var list enterpriseApi.ClusterManagerList
+	err := client.List(ctx, &list)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(list.Items) == 0 {
+		return nil, nil, nil
+	}
+
+	retData := make(map[string]interface{})
+	retCRs := make([]splcommon.MetaObject, 0)
+	for i := range list.Items {
+		cr := &list.Items[i]
+		if cr.Status.TelAppInstalled {
+			retCRs = append(retCRs, cr)
+		}
+		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+	}
+	return retData, retCRs, nil
+}
+
+func handleClusterMasters(ctx context.Context, client splcommon.ControllerClient) (interface{}, []splcommon.MetaObject, error) {
+	var list enterpriseApiV3.ClusterMasterList
+	err := client.List(ctx, &list)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(list.Items) == 0 {
+		return nil, nil, nil
+	}
+
+	retData := make(map[string]interface{})
+	retCRs := make([]splcommon.MetaObject, 0)
+	for i := range list.Items {
+		cr := &list.Items[i]
+		if cr.Status.TelAppInstalled {
+			retCRs = append(retCRs, cr)
+		}
+		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+	}
+	return retData, retCRs, nil
+}
+
+func handleMonitoringConsoles(ctx context.Context, client splcommon.ControllerClient) (interface{}, []splcommon.MetaObject, error) {
+	var list enterpriseApi.MonitoringConsoleList
+	err := client.List(ctx, &list)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(list.Items) == 0 {
+		return nil, nil, nil
+	}
+
+	retData := make(map[string]interface{})
+	for i := range list.Items {
+		cr := &list.Items[i]
+		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+	}
+	return retData, nil, nil
 }
 
 func CollectCMTelData(ctx context.Context, cm *corev1.ConfigMap, data map[string]interface{}) {
