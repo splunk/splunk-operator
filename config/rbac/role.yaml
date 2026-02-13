@@ -97,3 +97,29 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - postgresclusterclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - postgresql.cnpg.io
+  resources:
+  - clusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - postgresql.cnpg.io
+  resources:
+  - clusters/status
+  verbs:
+  - get

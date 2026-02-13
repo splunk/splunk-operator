@@ -22,32 +22,32 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ClusterClassSpec defines the desired state of ClusterClass.
-// ClusterClass is immutable after creation - it serves as a template for Cluster CRs.
-type ClusterClassSpec struct {
+// PostgresClusterClassSpec defines the desired state of PostgresClusterClass.
+// PostgresClusterClass is immutable after creation - it serves as a template for Cluster CRs.
+type PostgresClusterClassSpec struct {
 	// Provisioner identifies which database provisioner to use.
 	// Currently supported: "postgresql.cnpg.io" (CloudNativePG)
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=postgresql.cnpg.io
 	Provisioner string `json:"provisioner"`
 
-	// ClusterConfig contains cluster-level configuration.
-	// These settings apply to database cluster infrastructure.
-	// Can be overridden in Cluster CR.
+	// PostgresClusterConfig contains cluster-level configuration.
+	// These settings apply to PostgresCluster infrastructure.
+	// Can be overridden in PostgresCluster CR.
 	// +kubebuilder:default={}
 	// +optional
-	ClusterConfig ClusterConfig `json:"clusterConfig,omitempty"`
+	Config PosgresClusterClassConfig `json:"config,omitempty"`
 
 	// CNPG contains CloudNativePG-specific configuration and policies.
 	// Only used when Provisioner is "postgresql.cnpg.io"
-	// These settings CANNOT be overridden in Cluster CR (platform policy).
+	// These settings CANNOT be overridden in PostgresCluster CR (platform policy).
 	// +optional
 	CNPG *CNPGConfig `json:"cnpg,omitempty"`
 }
 
-// ClusterConfig contains provider-agnostic cluster configuration.
-// These fields define database cluster infrastructure and can be overridden in Cluster CR.
-type ClusterConfig struct {
+// PosgresClusterClassConfig contains provider-agnostic cluster configuration.
+// These fields define PostgresCluster infrastructure and can be overridden in PostgresCluster CR.
+type PosgresClusterClassConfig struct {
 	// Instances is the number of database instances (1 primary + N replicas).
 	// Single instance (1) is suitable for development.
 	// High availability requires at least 3 instances (1 primary + 2 replicas).
@@ -106,13 +106,13 @@ type CNPGConfig struct {
 	PrimaryUpdateMethod string `json:"primaryUpdateMethod,omitempty"`
 }
 
-// ClusterClassStatus defines the observed state of ClusterClass.
-type ClusterClassStatus struct {
-	// Conditions represent the latest available observations of the ClusterClass state.
+// PostgresClusterClassStatus defines the observed state of PostgresClusterClass.
+type PostgresClusterClassStatus struct {
+	// Conditions represent the latest available observations of the PostgresClusterClass state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// Phase represents the current phase of the ClusterClass.
+	// Phase represents the current phase of the PostgresClusterClass.
 	// Valid phases: "Ready", "Invalid"
 	// +optional
 	Phase string `json:"phase,omitempty"`
@@ -122,31 +122,31 @@ type ClusterClassStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Provisioner",type=string,JSONPath=`.spec.provisioner`
-// +kubebuilder:printcolumn:name="Instances",type=integer,JSONPath=`.spec.clusterConfig.instances`
-// +kubebuilder:printcolumn:name="Storage",type=string,JSONPath=`.spec.clusterConfig.storage`
-// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.clusterConfig.postgresVersion`
+// +kubebuilder:printcolumn:name="Instances",type=integer,JSONPath=`.spec.postgresClusterConfig.instances`
+// +kubebuilder:printcolumn:name="Storage",type=string,JSONPath=`.spec.postgresClusterConfig.storage`
+// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.postgresClusterConfig.postgresVersion`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
-// ClusterClass is the Schema for the clusterclasses API.
-// ClusterClass defines a reusable template and policy for database cluster provisioning.
-type ClusterClass struct {
+// PostgresClusterClass is the Schema for the postgresclusterclasses API.
+// PostgresClusterClass defines a reusable template and policy for postgres cluster provisioning.
+type PostgresClusterClass struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ClusterClassSpec   `json:"spec,omitempty"`
-	Status ClusterClassStatus `json:"status,omitempty"`
+	Spec   PostgresClusterClassSpec   `json:"spec,omitempty"`
+	Status PostgresClusterClassStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// ClusterClassList contains a list of ClusterClass.
-type ClusterClassList struct {
+// PostgresClusterClassList contains a list of PostgresClusterClass.
+type PostgresClusterClassList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ClusterClass `json:"items"`
+	Items           []PostgresClusterClass `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&ClusterClass{}, &ClusterClassList{})
+	SchemeBuilder.Register(&PostgresClusterClass{}, &PostgresClusterClassList{})
 }

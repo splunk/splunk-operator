@@ -4,27 +4,27 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: clusterclasses.enterprise.splunk.com
+  name: postgresclusterclasses.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: ClusterClass
-    listKind: ClusterClassList
-    plural: clusterclasses
-    singular: clusterclass
+    kind: PostgresClusterClass
+    listKind: PostgresClusterClassList
+    plural: postgresclusterclasses
+    singular: postgresclusterclass
   scope: Cluster
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.provisioner
       name: Provisioner
       type: string
-    - jsonPath: .spec.clusterConfig.instances
+    - jsonPath: .spec.postgresClusterConfig.instances
       name: Instances
       type: integer
-    - jsonPath: .spec.clusterConfig.storage
+    - jsonPath: .spec.postgresClusterConfig.storage
       name: Storage
       type: string
-    - jsonPath: .spec.clusterConfig.postgresVersion
+    - jsonPath: .spec.postgresClusterConfig.postgresVersion
       name: Version
       type: string
     - jsonPath: .status.phase
@@ -37,8 +37,8 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          ClusterClass is the Schema for the clusterclasses API.
-          ClusterClass defines a reusable template and policy for database cluster provisioning.
+          PostgresClusterClass is the Schema for the postgresclusterclasses API.
+          PostgresClusterClass defines a reusable template and policy for postgres cluster provisioning.
         properties:
           apiVersion:
             description: |-
@@ -59,15 +59,35 @@ spec:
             type: object
           spec:
             description: |-
-              ClusterClassSpec defines the desired state of ClusterClass.
-              ClusterClass is immutable after creation - it serves as a template for Cluster CRs.
+              PostgresClusterClassSpec defines the desired state of PostgresClusterClass.
+              PostgresClusterClass is immutable after creation - it serves as a template for Cluster CRs.
             properties:
-              clusterConfig:
+              cnpg:
+                description: |-
+                  CNPG contains CloudNativePG-specific configuration and policies.
+                  Only used when Provisioner is "postgresql.cnpg.io"
+                  These settings CANNOT be overridden in PostgresCluster CR (platform policy).
+                properties:
+                  primaryUpdateMethod:
+                    default: switchover
+                    description: |-
+                      PrimaryUpdateMethod determines how the primary instance is updated.
+                      "restart" - tolerate brief downtime (suitable for development)
+                      "switchover" - minimal downtime via automated failover (production-grade)
+
+                      NOTE: When using "switchover", ensure clusterConfig.instances > 1.
+                      Switchover requires at least one replica to fail over to.
+                    enum:
+                    - restart
+                    - switchover
+                    type: string
+                type: object
+              config:
                 default: {}
                 description: |-
-                  ClusterConfig contains cluster-level configuration.
-                  These settings apply to database cluster infrastructure.
-                  Can be overridden in Cluster CR.
+                  PostgresClusterConfig contains cluster-level configuration.
+                  These settings apply to PostgresCluster infrastructure.
+                  Can be overridden in PostgresCluster CR.
                 properties:
                   instances:
                     default: 1
@@ -176,26 +196,6 @@ spec:
                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                     x-kubernetes-int-or-string: true
                 type: object
-              cnpg:
-                description: |-
-                  CNPG contains CloudNativePG-specific configuration and policies.
-                  Only used when Provisioner is "postgresql.cnpg.io"
-                  These settings CANNOT be overridden in Cluster CR (platform policy).
-                properties:
-                  primaryUpdateMethod:
-                    default: switchover
-                    description: |-
-                      PrimaryUpdateMethod determines how the primary instance is updated.
-                      "restart" - tolerate brief downtime (suitable for development)
-                      "switchover" - minimal downtime via automated failover (production-grade)
-
-                      NOTE: When using "switchover", ensure clusterConfig.instances > 1.
-                      Switchover requires at least one replica to fail over to.
-                    enum:
-                    - restart
-                    - switchover
-                    type: string
-                type: object
               provisioner:
                 description: |-
                   Provisioner identifies which database provisioner to use.
@@ -207,11 +207,12 @@ spec:
             - provisioner
             type: object
           status:
-            description: ClusterClassStatus defines the observed state of ClusterClass.
+            description: PostgresClusterClassStatus defines the observed state of
+              PostgresClusterClass.
             properties:
               conditions:
                 description: Conditions represent the latest available observations
-                  of the ClusterClass state.
+                  of the PostgresClusterClass state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -269,7 +270,7 @@ spec:
                 type: array
               phase:
                 description: |-
-                  Phase represents the current phase of the ClusterClass.
+                  Phase represents the current phase of the PostgresClusterClass.
                   Valid phases: "Ready", "Invalid"
                 type: string
             type: object
