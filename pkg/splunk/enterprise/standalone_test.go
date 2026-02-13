@@ -129,7 +129,7 @@ func TestApplyStandalone(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyStandalone(context.Background(), c, cr.(*enterpriseApi.Standalone))
+		_, err := ApplyStandalone(context.Background(), c, nil, cr.(*enterpriseApi.Standalone))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandalone", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -139,7 +139,7 @@ func TestApplyStandalone(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyStandalone(context.Background(), c, cr.(*enterpriseApi.Standalone))
+		_, err := ApplyStandalone(context.Background(), c, nil, cr.(*enterpriseApi.Standalone))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -149,7 +149,7 @@ func TestApplyStandalone(t *testing.T) {
 	c := spltest.NewMockClient()
 	ctx := context.TODO()
 	_ = errors.New(splcommon.Rerr)
-	_, err := ApplyStandalone(ctx, c, &current)
+	_, err := ApplyStandalone(ctx, c, nil, &current)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -197,7 +197,7 @@ func TestApplyStandalone(t *testing.T) {
 			},
 		},
 	}
-	ApplyStandalone(ctx, c, &current)
+	ApplyStandalone(ctx, c, nil, &current)
 }
 
 func TestApplyStandaloneWithSmartstore(t *testing.T) {
@@ -300,7 +300,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Without S3 keys, ApplyStandalone should fail
-	_, err := ApplyStandalone(context.Background(), client, &current)
+	_, err := ApplyStandalone(context.Background(), client, nil, &current)
 	if err == nil {
 		t.Errorf("ApplyStandalone should fail without S3 secrets configured")
 	}
@@ -321,7 +321,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyStandalone(context.Background(), c, cr.(*enterpriseApi.Standalone))
+		_, err := ApplyStandalone(context.Background(), c, nil, cr.(*enterpriseApi.Standalone))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandaloneWithSmartstore", &current, revised, createCalls, updateCalls, reconcile, true, secret)
@@ -348,7 +348,7 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 			if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateStandaloneSpec() returned error: %v", err)
 			}
-			return getStandaloneStatefulSet(ctx, c, &cr)
+			return getStandaloneStatefulSet(ctx, c, nil, &cr)
 		}
 		configTester(t, "getStandaloneStatefulSet()", f, want)
 	}
@@ -421,7 +421,7 @@ func TestStandaloneSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	c := spltest.NewMockClient()
 
 	// Attempt to apply the standalone spec
-	_, err := ApplyStandalone(ctx, c, &standalone)
+	_, err := ApplyStandalone(ctx, c, nil, &standalone)
 
 	// Assert that an error is returned
 	if err == nil {
@@ -472,7 +472,7 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 		t.Error(err.Error())
 	}
 
-	_, err = ApplyStandalone(context.Background(), client, &current)
+	_, err = ApplyStandalone(context.Background(), client, nil, &current)
 	if err != nil {
 		t.Errorf("ApplyStandalone should not fail with full configuration")
 	}
@@ -559,7 +559,7 @@ func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
 
-	_, err = ApplyStandalone(ctx, client, &cr)
+	_, err = ApplyStandalone(ctx, client, nil, &cr)
 
 	if err != nil {
 		t.Errorf("ApplyStandalone should be successful")
@@ -630,7 +630,7 @@ func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
-	_, err = ApplyStandalone(ctx, client, &cr)
+	_, err = ApplyStandalone(ctx, client, nil, &cr)
 
 	if err != nil {
 		t.Errorf("ApplyStandalone should be successful")
@@ -638,7 +638,7 @@ func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
 
 	// now scale up
 	cr.Spec.Replicas = 2
-	_, err = ApplyStandalone(ctx, client, &cr)
+	_, err = ApplyStandalone(ctx, client, nil, &cr)
 	if err != nil {
 		t.Errorf("ApplyStandalone should be successful")
 	}
@@ -1066,7 +1066,7 @@ func TestApplyStandaloneDeletion(t *testing.T) {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
 
-	_, err = ApplyStandalone(ctx, c, &stand1)
+	_, err = ApplyStandalone(ctx, c, nil, &stand1)
 	if err != nil {
 		t.Errorf("ApplyStandalone should not have returned error here.")
 	}
@@ -1227,7 +1227,7 @@ func TestStandaloneWitAppFramework(t *testing.T) {
 	c.Create(ctx, standalone)
 
 	// call reconciliation
-	_, err := ApplyStandalone(ctx, c, standalone)
+	_, err := ApplyStandalone(ctx, c, nil, standalone)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
 		debug.PrintStack()
@@ -1352,7 +1352,7 @@ func TestStandaloneWithReadyState(t *testing.T) {
 	// simulate create standalone instance before reconcilation
 	c.Create(ctx, &standalone)
 
-	_, err := ApplyStandalone(ctx, c, &standalone)
+	_, err := ApplyStandalone(ctx, c, nil, &standalone)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
 		debug.PrintStack()
@@ -1392,7 +1392,7 @@ func TestStandaloneWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyStandalone(ctx, c, &standalone)
+	_, err = ApplyStandalone(ctx, c, nil, &standalone)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
 		debug.PrintStack()
@@ -1510,7 +1510,7 @@ func TestStandaloneWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyStandalone(ctx, c, &standalone)
+	_, err = ApplyStandalone(ctx, c, nil, &standalone)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
 		debug.PrintStack()

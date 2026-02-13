@@ -38,6 +38,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	sdk "github.com/splunk/splunk-operator/pkg/platform-sdk"
+	"github.com/splunk/splunk-operator/pkg/platform-sdk/api"
 )
 
 const (
@@ -47,7 +50,8 @@ const (
 // StandaloneReconciler reconciles a Standalone object
 type StandaloneReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme     *runtime.Scheme
+	SDKRuntime api.Runtime
 }
 
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=standalones,verbs=get;list;watch;create;update;patch;delete
@@ -65,6 +69,8 @@ type StandaloneReconciler struct {
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=platform.splunk.com,resources=tenantconfigs,verbs=get;list;watch
+//+kubebuilder:rbac:groups=platform.splunk.com,resources=tenantconfigs/status,verbs=get
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -107,7 +113,7 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
 
-	result, err := ApplyStandalone(ctx, r.Client, instance)
+	result, err := ApplyStandalone(ctx, r.Client, r.SDKRuntime, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
 		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
 	}
@@ -116,12 +122,31 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 // ApplyStandalone adding to handle unit test case
-var ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
-	return enterprise.ApplyStandalone(ctx, client, instance)
+var ApplyStandalone = func(ctx context.Context, client client.Client, sdkRuntime api.Runtime, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+	return enterprise.ApplyStandalone(ctx, client, sdkRuntime, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Initialize Platform SDK Runtime
+	recorder := mgr.GetEventRecorderFor("splunk-standalone-controller")
+	sdkRuntime, err := sdk.NewRuntime(
+		mgr.GetClient(),
+		sdk.WithClusterScoped(),
+		sdk.WithLogger(ctrl.Log.WithName("platform-sdk")),
+		sdk.WithEventRecorder(recorder),
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to create Platform SDK runtime")
+	}
+
+	// Start SDK runtime
+	if err := sdkRuntime.Start(context.Background()); err != nil {
+		return errors.Wrap(err, "failed to start Platform SDK runtime")
+	}
+
+	r.SDKRuntime = sdkRuntime
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.Standalone{}).
 		WithEventFilter(predicate.Or(
