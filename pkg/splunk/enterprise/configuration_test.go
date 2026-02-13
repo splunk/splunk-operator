@@ -286,7 +286,7 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 
 	client := spltest.NewMockClient()
 
-	_, err := ApplyStandalone(context.Background(), client, &cr)
+	_, err := ApplyStandalone(context.Background(), client, nil, &cr)
 	if err == nil {
 		t.Errorf("ApplyStandalone should fail on invalid smartstore config")
 	}

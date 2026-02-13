@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/splunk/splunk-operator/pkg/platform-sdk/api"
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -677,8 +678,22 @@ func addProbeConfigMapVolume(configMap *corev1.ConfigMap, statefulSet *appsv1.St
 	})
 }
 
+// getSplunkStatefulSetWithSDK returns a Kubernetes StatefulSet object for Splunk instances with Platform SDK integration.
+// This function extends getSplunkStatefulSet by integrating the SecretAdapter for secret management.
+func getSplunkStatefulSetWithSDK(ctx context.Context, client splcommon.ControllerClient, sdkRuntime api.Runtime, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
+	// Use the existing function to create the base statefulset
+	// but we'll override the secret resolution logic below
+	return getSplunkStatefulSetWithAdapter(ctx, client, sdkRuntime, cr, spec, instanceType, replicas, extraEnv)
+}
+
 // getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
 func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
+	// Call the internal implementation without SDK
+	return getSplunkStatefulSetWithAdapter(ctx, client, nil, cr, spec, instanceType, replicas, extraEnv)
+}
+
+// getSplunkStatefulSetWithAdapter is the internal implementation that handles both SDK and non-SDK modes.
+func getSplunkStatefulSetWithAdapter(ctx context.Context, client splcommon.ControllerClient, sdkRuntime api.Runtime, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
 
 	// prepare misc values
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
@@ -773,9 +788,47 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 
 	// retrieve the secret to upload to the statefulSet pod
-	statefulSetSecret, err := splutil.GetLatestVersionedSecret(ctx, client, cr, cr.GetNamespace(), statefulSet.GetName())
-	if err != nil || statefulSetSecret == nil {
-		return statefulSet, err
+	// Always use Platform SDK when runtime is available
+	var statefulSetSecret *corev1.Secret
+
+	if sdkRuntime != nil {
+		// Use Platform SDK secret management
+		reqLogger := log.FromContext(ctx)
+		scopedLog := reqLogger.WithName("getSplunkStatefulSetWithAdapter")
+		scopedLog.Info("Using Platform SDK for secret management",
+			"cr", cr.GetName(),
+			"instanceType", instanceType.ToString())
+
+		// Create SDK reconcile context
+		rctx := sdkRuntime.NewReconcileContext(ctx, cr.GetNamespace(), cr.GetName())
+
+		// Create secret adapter
+		adapter := NewSecretAdapter(
+			true, // SDK enabled
+			rctx,
+			client,
+			cr.GetNamespace(),
+			statefulSet.GetName(),
+		)
+
+		// Resolve secret via adapter
+		statefulSetSecret, _, err = adapter.GetSplunkSecret(ctx)
+		if err != nil || statefulSetSecret == nil {
+			scopedLog.Error(err, "Failed to get secret via Platform SDK",
+				"cr", cr.GetName(),
+				"error", err)
+			return statefulSet, err
+		}
+
+		scopedLog.Info("Secret resolved via Platform SDK",
+			"secretName", statefulSetSecret.GetName(),
+			"cr", cr.GetName())
+	} else {
+		// Use legacy secret management
+		statefulSetSecret, err = splutil.GetLatestVersionedSecret(ctx, client, cr, cr.GetNamespace(), statefulSet.GetName())
+		if err != nil || statefulSetSecret == nil {
+			return statefulSet, err
+		}
 	}
 
 	// update statefulset's pod template with common splunk pod config
@@ -1146,6 +1199,43 @@ func getStartupProbe(ctx context.Context, cr splcommon.MetaObject, instanceType 
 	startupProbe := getProbeWithConfigUpdates(&defaultStartupProbe, spec.StartupProbe, 0)
 	scopedLog.Info("StartupProbe", "Configured", startupProbe)
 	return startupProbe
+}
+
+// getSplunkPodSecurityContext returns the pod security context for Splunk containers.
+func getSplunkPodSecurityContext(spec *enterpriseApi.CommonSplunkSpec) *corev1.PodSecurityContext {
+	runAsUser := int64(41812)
+	fsGroup := int64(41812)
+	runAsNonRoot := true
+	fsGroupChangePolicy := corev1.FSGroupChangeOnRootMismatch
+
+	return &corev1.PodSecurityContext{
+		RunAsUser:           &runAsUser,
+		FSGroup:             &fsGroup,
+		RunAsNonRoot:        &runAsNonRoot,
+		FSGroupChangePolicy: &fsGroupChangePolicy,
+	}
+}
+
+// getSplunkSecurityContext returns the container security context for Splunk containers.
+func getSplunkSecurityContext(spec *enterpriseApi.CommonSplunkSpec) *corev1.SecurityContext {
+	runAsUser := int64(41812)
+	runAsNonRoot := true
+	allowPrivilegeEscalation := false
+	privileged := false
+
+	return &corev1.SecurityContext{
+		RunAsUser:                &runAsUser,
+		RunAsNonRoot:             &runAsNonRoot,
+		AllowPrivilegeEscalation: &allowPrivilegeEscalation,
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+			Add:  []corev1.Capability{"NET_BIND_SERVICE"},
+		},
+		Privileged: &privileged,
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}
 }
 
 // getProbeWithConfigUpdates Validates probe values and updates them
