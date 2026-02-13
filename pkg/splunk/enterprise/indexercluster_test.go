@@ -1533,18 +1533,44 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 		},
 	}
 
+	// Mock cluster config endpoint for VerifyRFPeers
+	type ClusterInfoEntry struct {
+		Content splclient.ClusterInfo `json:"content"`
+	}
+	clusterInfoResponse := struct {
+		Entry []ClusterInfoEntry `json:"entry"`
+	}{
+		Entry: []ClusterInfoEntry{
+			{
+				Content: splclient.ClusterInfo{
+					MultiSite:             "false",
+					ReplicationFactor:     3,
+					SiteReplicationFactor: "",
+				},
+			},
+		},
+	}
+	response3, _ := json.Marshal(clusterInfoResponse)
+
 	response1, _ := json.Marshal(apiResponse1)
 	response2, _ := json.Marshal(apiResponse2)
 	wantRequest1, _ := http.NewRequest("GET", "https://splunk-test-cluster-manager-service.default.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json", nil)
 	wantRequest2, _ := http.NewRequest("GET", "https://splunk-test-cluster-manager-service.default.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json", nil)
+	wantRequest3, _ := http.NewRequest("GET", "https://splunk-test-cluster-manager-service.default.svc.cluster.local:8089/services/cluster/config?count=0&output_mode=json", nil)
 	mclient.AddHandler(wantRequest1, 200, string(response1), nil)
 	mclient.AddHandler(wantRequest2, 200, string(response2), nil)
+	mclient.AddHandler(wantRequest3, 200, string(response3), nil)
 
-	// mock the verify RF peer function
-	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
-		return nil
+	// Mock GetSpecificSecretTokenFromPod to return a dummy password
+	// This allows VerifyRFPeers to execute its real logic with HTTP calls mocked via MockHTTPClient
+	savedGetSpecificSecretTokenFromPod := splutil.GetSpecificSecretTokenFromPod
+	defer func() { splutil.GetSpecificSecretTokenFromPod = savedGetSpecificSecretTokenFromPod }()
+	splutil.GetSpecificSecretTokenFromPod = func(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, secretToken string) (string, error) {
+		return "dummypassword", nil
 	}
 
+	savedNewIndexerClusterPodManager := newIndexerClusterPodManager
+	defer func() { newIndexerClusterPodManager = savedNewIndexerClusterPodManager }()
 	newIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) indexerClusterPodManager {
 		return indexerClusterPodManager{
 			log:     log,
@@ -1558,15 +1584,40 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 		}
 	}
 
+	// Initialize GlobalResourceTracker to enable app framework
+	initGlobalResourceTracker()
+
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
 	_ = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
+	savedGetAppsList := GetAppsList
+	defer func() { GetAppsList = savedGetAppsList }()
 	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
 		RemoteDataListResponse := splclient.RemoteDataListResponse{}
 		return RemoteDataListResponse, nil
 	}
+
+	// Mock GetPodExecClient to return a mock client that simulates pod operations locally
+	savedGetPodExecClient := splutil.GetPodExecClient
+	splutil.GetPodExecClient = func(client splcommon.ControllerClient, cr splcommon.MetaObject, targetPodName string) splutil.PodExecClientImpl {
+		mockClient := &spltest.MockPodExecClient{
+			Client:        client,
+			Cr:            cr,
+			TargetPodName: targetPodName,
+		}
+		// Add mock responses for common commands
+		ctx := context.TODO()
+		// Mock mkdir command (used by createDirOnSplunkPods)
+		mockClient.AddMockPodExecReturnContext(ctx, "mkdir -p", &spltest.MockPodExecReturnContext{
+			StdOut: "",
+			StdErr: "",
+			Err:    nil,
+		})
+		return mockClient
+	}
+	defer func() { splutil.GetPodExecClient = savedGetPodExecClient }()
 
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
@@ -1707,7 +1758,7 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermanager)
+	_, err = ApplyClusterManager(ctx, c, clustermanager, nil)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
@@ -1786,7 +1837,7 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermanager)
+	_, err = ApplyClusterManager(ctx, c, clustermanager, nil)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()

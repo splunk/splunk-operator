@@ -1181,7 +1181,7 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 	cm.Spec.Image = "splunk/splunk:latest"
 	// Create the instances
 	client.Create(ctx, cm)
-	_, err := ApplyClusterManager(ctx, client, cm)
+	_, err := ApplyClusterManager(ctx, client, cm, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
