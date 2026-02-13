@@ -25,10 +25,10 @@ resources:
 - postgrescluster_admin_role.yaml
 - postgrescluster_editor_role.yaml
 - postgrescluster_viewer_role.yaml
-- databaseclass_admin_role.yaml
-- databaseclass_editor_role.yaml
-- databaseclass_viewer_role.yaml
-- database_admin_role.yaml
-- database_editor_role.yaml
-- database_viewer_role.yaml
+- postgresclusterclass_admin_role.yaml
+- postgresclusterclass_editor_role.yaml
+- postgresclusterclass_viewer_role.yaml
+- postgresdatabase_admin_role.yaml
+- postgresdatabase_editor_role.yaml
+- postgresdatabase_viewer_role.yaml
 

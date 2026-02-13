@@ -1,14 +1,14 @@
 ---
-# Development ClusterClass
+# Development PostgresClusterClass
 # Minimal configuration for local development and testing
 apiVersion: enterprise.splunk.com/v4
-kind: ClusterClass
+kind: PostgresClusterClass
 metadata:
   name: postgresql-dev
 spec:
   provisioner: postgresql.cnpg.io
 
-  clusterConfig:
+  config:
     # Single instance - no HA (suitable for development)
     instances: 1
 

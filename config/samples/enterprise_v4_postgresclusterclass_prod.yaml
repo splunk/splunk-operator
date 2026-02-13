@@ -1,14 +1,14 @@
 ---
-# Production ClusterClass
+# Production PostgresClusterClass
 # Full configuration with HA, security, and tuned PostgreSQL settings
 apiVersion: enterprise.splunk.com/v4
-kind: ClusterClass
+kind: PostgresClusterClass
 metadata:
   name: postgresql-prod
 spec:
   provisioner: postgresql.cnpg.io
 
-  clusterConfig:
+  config:
     # High availability - 1 primary + 2 replicas
     instances: 3
 
