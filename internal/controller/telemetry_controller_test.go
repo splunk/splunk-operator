@@ -303,6 +303,7 @@ var _ = Describe("Telemetry Controller", func() {
 	})
 })
 
+// Fake manager for SetupWithManager test
 type errorClient struct {
 	client.Client
 }
@@ -313,4 +314,8 @@ func (e *errorClient) Get(ctx context.Context, key client.ObjectKey, obj client.
 
 type panicClient struct {
 	client.Client
+}
+
+func (p *panicClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	panic("test panic")
 }
