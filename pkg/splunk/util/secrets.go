@@ -33,8 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// GetSpecificSecretTokenFromPod retrieves a specific secret token's value from a Pod
-func GetSpecificSecretTokenFromPod(ctx context.Context, c splcommon.ControllerClient, PodName string, namespace string, secretToken string) (string, error) {
+// getSpecificSecretTokenFromPodImpl retrieves a specific secret token's value from a Pod
+func getSpecificSecretTokenFromPodImpl(ctx context.Context, c splcommon.ControllerClient, PodName string, namespace string, secretToken string) (string, error) {
 	// Get Pod data
 	secret, err := GetSecretFromPod(ctx, c, PodName, namespace)
 	if err != nil {
@@ -56,6 +56,9 @@ func GetSpecificSecretTokenFromPod(ctx context.Context, c splcommon.ControllerCl
 
 	return string(secret.Data[secretToken]), nil
 }
+
+// GetSpecificSecretTokenFromPod is a var function to allow mocking in tests
+var GetSpecificSecretTokenFromPod = getSpecificSecretTokenFromPodImpl
 
 // GetSecretFromPod retrieves secret data from a pod
 func GetSecretFromPod(ctx context.Context, c splcommon.ControllerClient, PodName string, namespace string) (*corev1.Secret, error) {
