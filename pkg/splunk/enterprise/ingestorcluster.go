@@ -1,18 +1,16 @@
-/*
-Copyright 2025.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package enterprise
 
@@ -20,8 +18,12 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/go-logr/logr"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -53,7 +55,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
 
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	cr.Kind = "IngestorCluster"
@@ -71,9 +73,9 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
-
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.BusConfiguration = enterpriseApi.BusConfigurationSpec{}
+		cr.Status.CredentialSecretVersion = "0"
+		cr.Status.ServiceAccount = ""
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 
@@ -210,34 +212,94 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	// No need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		// Bus config
-		busConfig := enterpriseApi.BusConfiguration{}
-		if cr.Spec.BusConfigurationRef.Name != "" {
+		// Queue
+		queue := enterpriseApi.Queue{}
+		if cr.Spec.QueueRef.Name != "" {
 			ns := cr.GetNamespace()
-			if cr.Spec.BusConfigurationRef.Namespace != "" {
-				ns = cr.Spec.BusConfigurationRef.Namespace
+			if cr.Spec.QueueRef.Namespace != "" {
+				ns = cr.Spec.QueueRef.Namespace
 			}
 			err = client.Get(ctx, types.NamespacedName{
-				Name:      cr.Spec.BusConfigurationRef.Name,
+				Name:      cr.Spec.QueueRef.Name,
 				Namespace: ns,
-			}, &busConfig)
+			}, &queue)
 			if err != nil {
 				return result, err
 			}
 		}
+		if queue.Spec.Provider == "sqs" {
+			if queue.Spec.SQS.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
+				ep, err := resolveSQSEndpoint(ctx, queue.Spec.SQS.AuthRegion)
+				if err != nil {
+					return result, err
+				}
+				queue.Spec.SQS.Endpoint = ep
+			}
+		}
 
-		// If bus config is updated
-		if !reflect.DeepEqual(cr.Status.BusConfiguration, busConfig.Spec) {
-			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
-
-			err = mgr.handlePushBusChange(ctx, cr, busConfig, client)
+		// Object Storage
+		os := enterpriseApi.ObjectStorage{}
+		if cr.Spec.ObjectStorageRef.Name != "" {
+			ns := cr.GetNamespace()
+			if cr.Spec.ObjectStorageRef.Namespace != "" {
+				ns = cr.Spec.ObjectStorageRef.Namespace
+			}
+			err = client.Get(ctx, types.NamespacedName{
+				Name:      cr.Spec.ObjectStorageRef.Name,
+				Namespace: ns,
+			}, &os)
 			if err != nil {
-				eventPublisher.Warning(ctx, "ApplyIngestorCluster", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
-				scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
+				return result, err
+			}
+		}
+		if os.Spec.Provider == "s3" {
+			if os.Spec.S3.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
+				ep, err := resolveS3Endpoint(ctx, queue.Spec.SQS.AuthRegion)
+				if err != nil {
+					return result, err
+				}
+				os.Spec.S3.Endpoint = ep
+			}
+		}
+
+		// Secret reference
+		accessKey, secretKey, version := "", "", ""
+		if queue.Spec.Provider == "sqs" && cr.Spec.ServiceAccount == "" {
+			for _, vol := range queue.Spec.SQS.VolList {
+				if vol.SecretRef != "" {
+					accessKey, secretKey, version, err = GetQueueRemoteVolumeSecrets(ctx, vol, client, cr)
+					if err != nil {
+						scopedLog.Error(err, "Failed to get queue remote volume secrets")
+						return result, err
+					}
+				}
+			}
+		}
+
+		secretChanged := cr.Status.CredentialSecretVersion != version
+		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
+
+		// If queue is updated
+		if secretChanged || serviceAccountChanged {
+			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
+			err = mgr.updateIngestorConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, client)
+			if err != nil {
+				eventPublisher.Warning(ctx, "ApplyIngestorCluster", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
+				scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
 				return result, err
 			}
 
-			cr.Status.BusConfiguration = busConfig.Spec
+			for i := int32(0); i < cr.Spec.Replicas; i++ {
+				ingClient := mgr.getClient(ctx, i)
+				err = ingClient.RestartSplunk()
+				if err != nil {
+					return result, err
+				}
+				scopedLog.Info("Restarted splunk", "ingestor", i)
+			}
+
+			cr.Status.CredentialSecretVersion = version
+			cr.Status.ServiceAccount = cr.Spec.ServiceAccount
 		}
 
 		// Upgrade fron automated MC to MC CRD
@@ -280,11 +342,32 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	return result, nil
 }
 
+// getClient for ingestorClusterPodManager returns a SplunkClient for the member n
+func (mgr *ingestorClusterPodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ingestorClusterPodManager.getClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+
+	// Get Pod Name
+	memberName := GetSplunkStatefulsetPodName(SplunkIngestor, mgr.cr.GetName(), n)
+
+	// Get Fully Qualified Domain Name
+	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
+		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIngestor, mgr.cr.GetName(), true)))
+
+	// Retrieve admin password from Pod
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
+	if err != nil {
+		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
+	}
+
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+}
+
 // validateIngestorClusterSpec checks validity and makes default updates to a IngestorClusterSpec and returns error if something is wrong
 func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) error {
-	// We cannot have 0 replicas in IngestorCluster spec since this refers to number of ingestion pods in an ingestor cluster
-	if cr.Spec.Replicas < 3 {
-		cr.Spec.Replicas = 3
+	// We cannot have 0 replicas in IngestorCluster spec since this refers to number of ingestion pods in the ingestor cluster
+	if cr.Spec.Replicas < 1 {
+		cr.Spec.Replicas = 1
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
@@ -310,10 +393,10 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 	return ss, nil
 }
 
-// Checks if only Bus or Pipeline config changed, and updates the conf file if so
-func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, busConfig enterpriseApi.BusConfiguration, k8s client.Client) error {
+// updateIngestorConfFiles checks if Queue or Pipeline inputs are created for the first time and updates the conf file if so
+func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Context, newCR *enterpriseApi.IngestorCluster, queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string, k8s client.Client) error {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("handlePushBusChange").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
+	scopedLog := reqLogger.WithName("updateIngestorConfFiles").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
 
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.Replicas
@@ -329,67 +412,57 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 		}
 		splunkClient := mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
-		afterDelete := false
-		if (busConfig.Spec.SQS.QueueName != "" && newCR.Status.BusConfiguration.SQS.QueueName != "" && busConfig.Spec.SQS.QueueName != newCR.Status.BusConfiguration.SQS.QueueName) ||
-			(busConfig.Spec.Type != "" && newCR.Status.BusConfiguration.Type != "" && busConfig.Spec.Type != newCR.Status.BusConfiguration.Type) {
-			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
-				updateErr = err
-			}
-			afterDelete = true
-		}
+		queueInputs, pipelineInputs := getQueueAndPipelineInputsForIngestorConfFiles(queue, os, accessKey, secretKey)
 
-		busChangedFields, pipelineChangedFields := getChangedBusFieldsForIngestor(&busConfig, newCR, afterDelete)
-
-		for _, pbVal := range busChangedFields {
-			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
+		for _, input := range queueInputs {
+			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{input}); err != nil {
 				updateErr = err
 			}
 		}
 
-		for _, field := range pipelineChangedFields {
-			if err := splunkClient.UpdateConfFile(scopedLog, "default-mode", field[0], [][]string{{field[1], field[2]}}); err != nil {
+		for _, input := range pipelineInputs {
+			if err := splunkClient.UpdateConfFile(scopedLog, "default-mode", input[0], [][]string{{input[1], input[2]}}); err != nil {
 				updateErr = err
 			}
 		}
 	}
 
-	// Do NOT restart Splunk
 	return updateErr
 }
 
-// getChangedBusFieldsForIngestor returns a list of changed bus and pipeline fields for ingestor pods
-func getChangedBusFieldsForIngestor(busConfig *enterpriseApi.BusConfiguration, busConfigIngestorStatus *enterpriseApi.IngestorCluster, afterDelete bool) (busChangedFields, pipelineChangedFields [][]string) {
-	oldPB := &busConfigIngestorStatus.Status.BusConfiguration
-	newPB := &busConfig.Spec
+// getQueueAndPipelineInputsForIngestorConfFiles returns a list of queue and pipeline inputs for ingestor pods conf files
+func getQueueAndPipelineInputsForIngestorConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) (queueInputs, pipelineInputs [][]string) {
+	// Queue Inputs
+	queueInputs = getQueueAndObjectStorageInputsForIngestorConfFiles(queue, os, accessKey, secretKey)
 
-	// Push changed bus fields
-	busChangedFields = pushBusChanged(oldPB, newPB, afterDelete)
-
-	// Always changed pipeline fields
-	pipelineChangedFields = pipelineConfig(false)
+	// Pipeline inputs
+	pipelineInputs = getPipelineInputsForConfFile(false)
 
 	return
 }
 
 type ingestorClusterPodManager struct {
+	c               splcommon.ControllerClient
 	log             logr.Logger
 	cr              *enterpriseApi.IngestorCluster
 	secrets         *corev1.Secret
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
 }
 
-// newIngestorClusterPodManager function to create pod manager this is added to write unit test case
-var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) ingestorClusterPodManager {
+// newIngestorClusterPodManager creates pod manager to handle unit test cases
+var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
 	return ingestorClusterPodManager{
 		log:             log,
 		cr:              cr,
 		secrets:         secret,
 		newSplunkClient: newSplunkClient,
+		c:               c,
 	}
 }
 
-func pipelineConfig(isIndexer bool) (output [][]string) {
-	output = append(output,
+// getPipelineInputsForConfFile returns a list of pipeline inputs for conf file
+func getPipelineInputsForConfFile(isIndexer bool) (config [][]string) {
+	config = append(config,
 		[]string{"pipeline:remotequeueruleset", "disabled", "false"},
 		[]string{"pipeline:ruleset", "disabled", "true"},
 		[]string{"pipeline:remotequeuetyping", "disabled", "false"},
@@ -397,36 +470,87 @@ func pipelineConfig(isIndexer bool) (output [][]string) {
 		[]string{"pipeline:typing", "disabled", "true"},
 	)
 	if !isIndexer {
-		output = append(output, []string{"pipeline:indexerPipe", "disabled", "true"})
+		config = append(config, []string{"pipeline:indexerPipe", "disabled", "true"})
 	}
-	return output
+
+	return
 }
 
-func pushBusChanged(oldBus, newBus *enterpriseApi.BusConfigurationSpec, afterDelete bool) (output [][]string) {
-	if oldBus.Type != newBus.Type || afterDelete {
-		output = append(output, []string{"remote_queue.type", newBus.Type})
-	}
-	if oldBus.SQS.AuthRegion != newBus.SQS.AuthRegion || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.auth_region", newBus.Type), newBus.SQS.AuthRegion})
-	}
-	if oldBus.SQS.Endpoint != newBus.SQS.Endpoint || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.endpoint", newBus.Type), newBus.SQS.Endpoint})
-	}
-	if oldBus.SQS.LargeMessageStoreEndpoint != newBus.SQS.LargeMessageStoreEndpoint || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newBus.Type), newBus.SQS.LargeMessageStoreEndpoint})
-	}
-	if oldBus.SQS.LargeMessageStorePath != newBus.SQS.LargeMessageStorePath || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", newBus.Type), newBus.SQS.LargeMessageStorePath})
-	}
-	if oldBus.SQS.DeadLetterQueueName != newBus.SQS.DeadLetterQueueName || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newBus.Type), newBus.SQS.DeadLetterQueueName})
+// getQueueAndObjectStorageInputsForConfFiles returns a list of queue and object storage inputs for conf files
+func getQueueAndObjectStorageInputsForIngestorConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) (config [][]string) {
+	queueProvider := ""
+	authRegion := ""
+	endpoint := ""
+	dlq := ""
+	if queue.Provider == "sqs" {
+		queueProvider = "sqs_smartbus"
+		authRegion = queue.SQS.AuthRegion
+		endpoint = queue.SQS.Endpoint
+		dlq = queue.SQS.DLQ
 	}
 
-	output = append(output,
-		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", newBus.Type), "s2s"},
-		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", newBus.Type), "4"},
-		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", newBus.Type), "max_count"},
-		[]string{fmt.Sprintf("remote_queue.%s.send_interval", newBus.Type), "5s"})
+	path := ""
+	osEndpoint := ""
+	osProvider := ""
+	if os.Provider == "s3" {
+		osProvider = "sqs_smartbus"
+		osEndpoint = os.S3.Endpoint
+		path = os.S3.Path
+		if !strings.HasPrefix(path, "s3://") {
+			path = "s3://" + path
+		}
+	}
 
-	return output
+	config = append(config,
+		[]string{"remote_queue.type", queueProvider},
+		[]string{fmt.Sprintf("remote_queue.%s.auth_region", queueProvider), authRegion},
+		[]string{fmt.Sprintf("remote_queue.%s.endpoint", queueProvider), endpoint},
+		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", osProvider), osEndpoint},
+		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.path", osProvider), path},
+		[]string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", queueProvider), dlq},
+		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", queueProvider), "s2s"},
+		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", queueProvider), "4"},
+		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", queueProvider), "max_count"},
+		[]string{fmt.Sprintf("remote_queue.%s.send_interval", queueProvider), "5s"},
+	)
+
+	if accessKey != "" && secretKey != "" {
+		config = append(config, []string{fmt.Sprintf("remote_queue.%s.access_key", queueProvider), accessKey})
+		config = append(config, []string{fmt.Sprintf("remote_queue.%s.secret_key", queueProvider), secretKey})
+	}
+
+	return
+}
+
+func resolveS3Endpoint(ctx context.Context, region string) (string, error) {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	if err != nil {
+		return "", err
+	}
+
+	client := s3.NewFromConfig(cfg)
+	params := s3.EndpointParameters{Region: &region}
+
+	ep, err := client.Options().EndpointResolverV2.ResolveEndpoint(ctx, params)
+	if err != nil {
+		return "", err
+	}
+	// Full endpoint URL as string:
+	return ep.URI.String(), nil
+}
+
+func resolveSQSEndpoint(ctx context.Context, region string) (string, error) {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	if err != nil {
+		return "", err
+	}
+
+	client := sqs.NewFromConfig(cfg)
+	params := sqs.EndpointParameters{Region: &region}
+
+	ep, err := client.Options().EndpointResolverV2.ResolveEndpoint(ctx, params)
+	if err != nil {
+		return "", err
+	}
+	return ep.URI.String(), nil
 }

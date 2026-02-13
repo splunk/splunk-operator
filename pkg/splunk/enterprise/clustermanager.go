@@ -22,7 +22,6 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
@@ -49,7 +48,8 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyClusterManager")
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "ClusterManager"
 
@@ -322,7 +322,8 @@ func getClusterManagerStatefulSet(ctx context.Context, client splcommon.Controll
 func CheckIfsmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	eventPublisher := GetEventPublisher(ctx, cr)
 
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
 	streamOptions := splutil.NewStreamOptionsObject(command)
@@ -401,7 +402,9 @@ func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *
 func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("PushManagerApps").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, cr)
 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
@@ -413,7 +416,6 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 	//Get the admin password from the secret object
 	adminPwd, foundSecret := defaultSecret.Data["password"]
 	if !foundSecret {
-		eventPublisher.Warning(ctx, "PushManagerAppsBundle", "could not find admin password while trying to push the manager apps bundle")
 		return fmt.Errorf("could not find admin password while trying to push the manager apps bundle")
 	}
 
@@ -429,7 +431,7 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 }
 
 // helper function to get the list of ClusterManager types in the current namespace
-func getClusterManagerList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+func getClusterManagerList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []rclient.ListOption) (int, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getClusterManagerList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -477,7 +479,9 @@ var GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.Clus
 func changeClusterManagerAnnotations(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("changeClusterManagerAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, cr)
 
 	clusterManagerInstance := &enterpriseApi.ClusterManager{}
 	if len(cr.Spec.ClusterManagerRef.Name) > 0 {

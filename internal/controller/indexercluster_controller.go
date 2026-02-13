@@ -26,12 +26,14 @@ import (
 	"github.com/pkg/errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -44,7 +46,8 @@ import (
 // IndexerClusterReconciler reconciles a IndexerCluster object
 type IndexerClusterReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=indexerclusters,verbs=get;list;watch;create;update;patch;delete
@@ -104,6 +107,9 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
 
+	// Pass event recorder through context
+	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
+
 	result, err := ApplyIndexerCluster(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
 		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
@@ -148,6 +154,57 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.IndexerCluster{},
 			)).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				secret, ok := obj.(*corev1.Secret)
+				if !ok {
+					return nil
+				}
+
+				// Only consider indexer clusters in the same namespace as the Secret
+				var list enterpriseApi.IndexerClusterList
+				if err := r.Client.List(ctx, &list, client.InNamespace(secret.Namespace)); err != nil {
+					return nil
+				}
+
+				var reqs []reconcile.Request
+				for _, ic := range list.Items {
+					if ic.Spec.QueueRef.Name == "" {
+						continue
+					}
+
+					queueNS := ic.Spec.QueueRef.Namespace
+					if queueNS == "" {
+						queueNS = ic.Namespace
+					}
+
+					queue := &enterpriseApi.Queue{}
+					if err := r.Client.Get(ctx, types.NamespacedName{
+						Name:      ic.Spec.QueueRef.Name,
+						Namespace: queueNS,
+					}, queue); err != nil {
+						continue
+					}
+
+					if queue.Spec.Provider != "sqs" {
+						continue
+					}
+
+					for _, vol := range queue.Spec.SQS.VolList {
+						if vol.SecretRef == secret.Name {
+							reqs = append(reqs, reconcile.Request{
+								NamespacedName: types.NamespacedName{
+									Name:      ic.Name,
+									Namespace: ic.Namespace,
+								},
+							})
+							break
+						}
+					}
+				}
+				return reqs
+			}),
+		).
 		Watches(&corev1.Pod{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
@@ -172,9 +229,9 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.IndexerCluster{},
 			)).
-		Watches(&enterpriseApi.BusConfiguration{},
+		Watches(&enterpriseApi.Queue{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				bc, ok := obj.(*enterpriseApi.BusConfiguration)
+				b, ok := obj.(*enterpriseApi.Queue)
 				if !ok {
 					return nil
 				}
@@ -184,11 +241,39 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 				var reqs []reconcile.Request
 				for _, ic := range list.Items {
-					ns := ic.Spec.BusConfigurationRef.Namespace
+					ns := ic.Spec.QueueRef.Namespace
 					if ns == "" {
 						ns = ic.Namespace
 					}
-					if ic.Spec.BusConfigurationRef.Name == bc.Name && ns == bc.Namespace {
+					if ic.Spec.QueueRef.Name == b.Name && ns == b.Namespace {
+						reqs = append(reqs, reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Name:      ic.Name,
+								Namespace: ic.Namespace,
+							},
+						})
+					}
+				}
+				return reqs
+			}),
+		).
+		Watches(&enterpriseApi.ObjectStorage{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				os, ok := obj.(*enterpriseApi.ObjectStorage)
+				if !ok {
+					return nil
+				}
+				var list enterpriseApi.IndexerClusterList
+				if err := r.Client.List(ctx, &list); err != nil {
+					return nil
+				}
+				var reqs []reconcile.Request
+				for _, ic := range list.Items {
+					ns := ic.Spec.ObjectStorageRef.Namespace
+					if ns == "" {
+						ns = ic.Namespace
+					}
+					if ic.Spec.ObjectStorageRef.Name == os.Name && ns == os.Namespace {
 						reqs = append(reqs, reconcile.Request{
 							NamespacedName: types.NamespacedName{
 								Name:      ic.Name,
@@ -203,5 +288,6 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Named("indexer-cluster-controller").
 		Complete(r)
 }

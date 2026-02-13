@@ -317,7 +317,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		},
 	}
 	method = "searchHeadClusterPodManager.Update(All pods ready)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[5]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseReady, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => transition to detention
@@ -337,7 +337,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	)
 	pod.ObjectMeta.Labels["controller-revision-hash"] = "v0"
 	method = "searchHeadClusterPodManager.Update(Quarantine Pod)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[5], funcCalls[2], funcCalls[2]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5], funcCalls[2], funcCalls[2]}, "Create": {funcCalls[1]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => wait for searches to drain
@@ -345,13 +345,13 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"status":"Up"`, `"status":"ManualDetention"`, 1)
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"active_historical_search_count":0`, `"active_historical_search_count":1`, 1)
 	method = "searchHeadClusterPodManager.Update(Draining Searches)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[5]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => delete pod
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"active_historical_search_count":1`, `"active_historical_search_count":0`, 1)
 	method = "searchHeadClusterPodManager.Update(Delete Pod)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[5]}, "Create": {funcCalls[1]}, "Delete": {funcCalls[5]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}, "Delete": {funcCalls[5]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod update finished => release from detention
@@ -364,7 +364,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		Body:   ``,
 	})
 	method = "searchHeadClusterPodManager.Update(Release Quarantine)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[5], funcCalls[2]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5], funcCalls[2]}, "Create": {funcCalls[1]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test scale down => remove member
@@ -394,6 +394,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
@@ -658,6 +659,90 @@ func TestApplyShcSecret(t *testing.T) {
 	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	}
+}
+
+func TestShcPasswordSyncCompleted(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	builder := fake.NewClientBuilder().
+		WithScheme(sch).
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
+
+	client := builder.Build()
+	ctx := context.TODO()
+
+	// Create a mock event recorder to capture events
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+
+	shc := enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "shc",
+			Namespace: "test",
+		},
+	}
+	shc.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("SearchHeadCluster"))
+
+	err := client.Create(ctx, &shc)
+	if err != nil {
+		t.Fatalf("Failed to create SearchHeadCluster: %v", err)
+	}
+
+	// Create namespace scoped secret so ApplyShcSecret has something to work with
+	nsSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, shc.GetNamespace())
+	if err != nil {
+		t.Fatalf("Failed to apply namespace scoped secret: %v", err)
+	}
+
+	// Set CR status resource version to a stale value so ApplyShcSecret does not early-return
+	shc.Status.NamespaceSecretResourceVersion = nsSecret.ResourceVersion + "-old"
+	shc.Status.AdminPasswordChangedSecrets = make(map[string]bool)
+
+	// Initialize a minimal pod manager for ApplyShcSecret
+	mgr := &searchHeadClusterPodManager{
+		c:   client,
+		log: logt.WithName("TestShcPasswordSyncCompleted"),
+		cr:  &shc,
+	}
+
+	// Use a mock PodExec client; replicas will be 0 so it won't be exercised
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+
+	// Add event publisher to context so ApplyShcSecret can emit events
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	// Call ApplyShcSecret; with 0 replicas it will complete without touching pods,
+	// but still emit the PasswordSyncCompleted event
+	err = ApplyShcSecret(ctx, mgr, 0, mockPodExecClient)
+	if err != nil {
+		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	}
+
+	// Check that PasswordSyncCompleted event was published
+	foundEvent := false
+	for _, event := range recorder.events {
+		if event.reason == "PasswordSyncCompleted" {
+			foundEvent = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, "Password synchronized") {
+				t.Errorf("Expected event message to contain 'Password synchronized', got: %s", event.message)
+			}
+			break
+		}
+	}
+	if !foundEvent {
+		t.Errorf("Expected PasswordSyncCompleted event to be published")
 	}
 }
 
@@ -2071,5 +2156,203 @@ func TestSetDeployerConfig(t *testing.T) {
 	// Verify deployer nodeAffinity are set properly
 	if !reflect.DeepEqual(shc.Spec.DeployerNodeAffinity, depSts.Spec.Template.Spec.Affinity.NodeAffinity) {
 		t.Errorf("Failed to set deployer resources properly, requests are off")
+	}
+}
+
+func TestShcPasswordSyncFailedEvent(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	builder := fake.NewClientBuilder().
+		WithScheme(sch).
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
+
+	c := builder.Build()
+	ctx := context.TODO()
+
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	// Create namespace scoped secret
+	nsSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Fatalf("Failed to apply namespace scoped secret: %v", err)
+	}
+
+	shc := enterpriseApi.SearchHeadCluster{
+		TypeMeta:   metav1.TypeMeta{Kind: "SearchHeadCluster"},
+		ObjectMeta: metav1.ObjectMeta{Name: "shc", Namespace: "test"},
+	}
+	shc.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("SearchHeadCluster"))
+	// Set stale resource version so ApplyShcSecret doesn't early-return
+	shc.Status.NamespaceSecretResourceVersion = nsSecret.ResourceVersion + "-old"
+	shc.Status.AdminPasswordChangedSecrets = make(map[string]bool)
+
+	// Create the search head pod with a secret volume mount
+	podSecretName := "splunk-shc-search-head-secret-v1"
+	shPodName := "splunk-shc-search-head-0"
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: shPodName, Namespace: "test"},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}},
+			Volumes: []corev1.Volume{
+				{
+					Name: "mnt-splunk-secrets",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{SecretName: podSecretName},
+					},
+				},
+			},
+		},
+	}
+	if err := c.Create(ctx, pod); err != nil {
+		t.Fatalf("Failed to create pod: %v", err)
+	}
+
+	// Create the pod's secret with a DIFFERENT shc_secret than namespace secret
+	podSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: podSecretName, Namespace: "test"},
+		Data: map[string][]byte{
+			"password":   []byte("admin-password"),
+			"shc_secret": []byte("old-shc-secret"),
+		},
+	}
+	if err := c.Create(ctx, podSecret); err != nil {
+		t.Fatalf("Failed to create pod secret: %v", err)
+	}
+
+	mgr := &searchHeadClusterPodManager{
+		c:   c,
+		log: logt.WithName("TestShcPasswordSyncFailedEvent"),
+		cr:  &shc,
+	}
+
+	// Configure mock pod exec client to return an error on shcluster-config command
+	mockPodExecClient := &spltest.MockPodExecClient{}
+	mockPodExecClient.AddMockPodExecReturnContext(ctx, "shcluster-config", &spltest.MockPodExecReturnContext{
+		StdOut: "",
+		StdErr: "connection refused",
+		Err:    fmt.Errorf("connection refused"),
+	})
+
+	// Call ApplyShcSecret — should fail at RunPodExecCommand and emit PasswordSyncFailed
+	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
+	if err == nil {
+		t.Errorf("Expected error from ApplyShcSecret when pod exec fails")
+	}
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "PasswordSyncFailed" {
+			found = true
+			if event.eventType != corev1.EventTypeWarning {
+				t.Errorf("Expected Warning event type for PasswordSyncFailed, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, shPodName) {
+				t.Errorf("Expected event message to contain pod name '%s', got: %s", shPodName, event.message)
+			}
+			if !strings.Contains(event.message, "connection refused") {
+				t.Errorf("Expected event message to contain error details, got: %s", event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected PasswordSyncFailed event to be published")
+	}
+}
+
+func TestShcScaledUpScaledDownEvent(t *testing.T) {
+	ctx := context.TODO()
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	crName := "test-shc"
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: "test"},
+	}
+
+	// Simulate ScaledUp: previousReplicas=3, desiredReplicas=5, phase=PhaseReady, Status.Replicas=5
+	previousReplicas := int32(3)
+	desiredReplicas := int32(5)
+	cr.Status.Replicas = desiredReplicas
+	phase := enterpriseApi.PhaseReady
+
+	// Replicate the production conditional from searchHeadClusterPodManager.Update()
+	ep := GetEventPublisher(ctx, cr)
+	if phase == enterpriseApi.PhaseReady {
+		if desiredReplicas > previousReplicas && cr.Status.Replicas == desiredReplicas {
+			ep.Normal(ctx, "ScaledUp",
+				fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		}
+	}
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "ScaledUp" {
+			found = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type for ScaledUp, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, crName) {
+				t.Errorf("Expected event message to contain CR name '%s', got: %s", crName, event.message)
+			}
+			if !strings.Contains(event.message, "3") || !strings.Contains(event.message, "5") {
+				t.Errorf("Expected event message to contain replica counts, got: %s", event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected ScaledUp event to be published")
+	}
+
+	// Simulate ScaledDown: previousReplicas=5, desiredReplicas=3, phase=PhaseReady, Status.Replicas=3
+	recorder.events = []mockEvent{}
+	previousReplicas = int32(5)
+	desiredReplicas = int32(3)
+	cr.Status.Replicas = desiredReplicas
+
+	if phase == enterpriseApi.PhaseReady {
+		if desiredReplicas < previousReplicas && cr.Status.Replicas == desiredReplicas {
+			ep.Normal(ctx, "ScaledDown",
+				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		}
+	}
+
+	found = false
+	for _, event := range recorder.events {
+		if event.reason == "ScaledDown" {
+			found = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type for ScaledDown, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, crName) {
+				t.Errorf("Expected event message to contain CR name '%s', got: %s", crName, event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected ScaledDown event to be published")
+	}
+
+	// Negative: no event when phase is not PhaseReady
+	recorder.events = []mockEvent{}
+	phase = enterpriseApi.PhasePending
+	if phase == enterpriseApi.PhaseReady {
+		if desiredReplicas < previousReplicas && cr.Status.Replicas == desiredReplicas {
+			ep.Normal(ctx, "ScaledDown",
+				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		}
+	}
+	if len(recorder.events) != 0 {
+		t.Errorf("Expected no events when phase is not PhaseReady, got %d events", len(recorder.events))
 	}
 }

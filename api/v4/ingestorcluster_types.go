@@ -1,18 +1,16 @@
-/*
-Copyright 2025.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package v4
 
@@ -28,19 +26,28 @@ const (
 	IngestorClusterPausedAnnotation = "ingestorcluster.enterprise.splunk.com/paused"
 )
 
+// +kubebuilder:validation:XValidation:rule="self.queueRef == oldSelf.queueRef",message="queueRef is immutable once created"
+// +kubebuilder:validation:XValidation:rule="self.objectStorageRef == oldSelf.objectStorageRef",message="objectStorageRef is immutable once created"
 // IngestorClusterSpec defines the spec of Ingestor Cluster
 type IngestorClusterSpec struct {
 	// Common Splunk spec
 	CommonSplunkSpec `json:",inline"`
 
 	// Number of ingestor pods
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=1
 	Replicas int32 `json:"replicas"`
 
 	// Splunk Enterprise app repository that specifies remote app location and scope for Splunk app management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 
-	// Bus configuration reference
-	BusConfigurationRef corev1.ObjectReference `json:"busConfigurationRef"`
+	// +kubebuilder:validation:Required
+	// Queue reference
+	QueueRef corev1.ObjectReference `json:"queueRef"`
+
+	// +kubebuilder:validation:Required
+	// Object Storage reference
+	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
 }
 
 // IngestorClusterStatus defines the observed state of Ingestor Cluster
@@ -69,8 +76,11 @@ type IngestorClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	// Bus configuration
-	BusConfiguration BusConfigurationSpec `json:"busConfiguration,omitempty"`
+	// Credential secret version to track changes to the secret and trigger rolling restart of indexer cluster peers when the secret is updated
+	CredentialSecretVersion string `json:"credentialSecretVersion,omitempty"`
+
+	// Service account to track changes to the service account and trigger rolling restart of indexer cluster peers when the service account is updated
+	ServiceAccount string `json:"serviceAccount,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -137,12 +147,12 @@ func (ic *IngestorCluster) NewEvent(eventType, reason, message string) corev1.Ev
 		Reason:  reason,
 		Message: message,
 		Source: corev1.EventSource{
-			Component: "splunk-ingestorcluster-controller",
+			Component: "splunk-ingestor-cluster-controller",
 		},
 		FirstTimestamp:      t,
 		LastTimestamp:       t,
 		Count:               1,
 		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/ingestorcluster-controller",
+		ReportingController: "enterprise.splunk.com/ingestor-cluster-controller",
 	}
 }

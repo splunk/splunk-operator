@@ -128,7 +128,16 @@ resources:
   controller: true
   domain: splunk.com
   group: enterprise
-  kind: BusConfiguration
+  kind: Queue
+  path: github.com/splunk/splunk-operator/api/v4
+  version: v4
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: splunk.com
+  group: enterprise
+  kind: ObjectStorage
   path: github.com/splunk/splunk-operator/api/v4
   version: v4
 version: "3"

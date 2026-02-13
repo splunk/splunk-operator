@@ -34,12 +34,20 @@ const (
 	IndexerClusterPausedAnnotation = "indexercluster.enterprise.splunk.com/paused"
 )
 
+// +kubebuilder:validation:XValidation:rule="has(self.queueRef) == has(self.objectStorageRef)",message="queueRef and objectStorageRef must both be set or both be empty"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.queueRef) || self.queueRef == oldSelf.queueRef",message="queueRef is immutable once created"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.objectStorageRef) || self.objectStorageRef == oldSelf.objectStorageRef",message="objectStorageRef is immutable once created"
 // IndexerClusterSpec defines the desired state of a Splunk Enterprise indexer cluster
 type IndexerClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
-	// Bus configuration reference
-	BusConfigurationRef corev1.ObjectReference `json:"busConfigurationRef,omitempty"`
+	// +optional
+	// Queue reference
+	QueueRef corev1.ObjectReference `json:"queueRef"`
+
+	// +optional
+	// Object Storage reference
+	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
 
 	// Number of search head pods; a search head cluster will be created if > 1
 	Replicas int32 `json:"replicas"`
@@ -112,11 +120,14 @@ type IndexerClusterStatus struct {
 	// status of each indexer cluster peer
 	Peers []IndexerClusterMemberStatus `json:"peers"`
 
-	// Auxillary message describing CR status
+	// Auxiliary message describing CR status
 	Message string `json:"message"`
 
-	// Bus configuration
-	BusConfiguration BusConfigurationSpec `json:"busConfiguration,omitempty"`
+	// Credential secret version to track changes to the secret and trigger rolling restart of indexer cluster peers when the secret is updated
+	CredentialSecretVersion string `json:"credentialSecretVersion,omitempty"`
+
+	// Service account to track changes to the service account and trigger rolling restart of indexer cluster peers when the service account is updated
+	ServiceAccount string `json:"serviceAccount,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -132,7 +143,7 @@ type IndexerClusterStatus struct {
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of indexer peers"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready indexer peers"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of indexer cluster"
-// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
+// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxiliary message describing CR status"
 // +kubebuilder:storageversion
 type IndexerCluster struct {
 	metav1.TypeMeta   `json:",inline"`

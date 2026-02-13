@@ -19,7 +19,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -37,13 +36,12 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// NewSplunkClientFunc funciton pointer type
+// NewSplunkClientFunc function pointer type
 type NewSplunkClientFunc func(managementURI, username, password string) *splclient.SplunkClient
 
 // ApplyIndexerClusterManager reconciles the state of a Splunk Enterprise indexer cluster.
@@ -56,7 +54,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyIndexerClusterManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "IndexerCluster"
 
@@ -78,7 +77,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// updates status after function completes
 	cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.BusConfiguration = enterpriseApi.BusConfigurationSpec{}
+		cr.Status.CredentialSecretVersion = "0"
+		cr.Status.ServiceAccount = ""
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
@@ -119,7 +119,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
 	}
 
-	mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+	mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 	// Check if we have configured enough number(<= RF) of replicas
 	if mgr.cr.Status.ClusterManagerPhase == enterpriseApi.PhaseReady {
 		err = VerifyRFPeers(ctx, mgr, client)
@@ -245,35 +245,95 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		// Bus config
-		busConfig := enterpriseApi.BusConfiguration{}
-		if cr.Spec.BusConfigurationRef.Name != "" {
+		// Queue
+		queue := enterpriseApi.Queue{}
+		if cr.Spec.QueueRef.Name != "" {
 			ns := cr.GetNamespace()
-			if cr.Spec.BusConfigurationRef.Namespace != "" {
-				ns = cr.Spec.BusConfigurationRef.Namespace
+			if cr.Spec.QueueRef.Namespace != "" {
+				ns = cr.Spec.QueueRef.Namespace
 			}
-			err = client.Get(context.Background(), types.NamespacedName{
-				Name:      cr.Spec.BusConfigurationRef.Name,
+			err = client.Get(ctx, types.NamespacedName{
+				Name:      cr.Spec.QueueRef.Name,
 				Namespace: ns,
-			}, &busConfig)
+			}, &queue)
 			if err != nil {
 				return result, err
 			}
 		}
-
-		// If bus config is updated
-		if cr.Spec.BusConfigurationRef.Name != "" {
-			if !reflect.DeepEqual(cr.Status.BusConfiguration, busConfig.Spec) {
-				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
-
-				err = mgr.handlePullBusChange(ctx, cr, busConfig, client)
+		if queue.Spec.Provider == "sqs" {
+			if queue.Spec.SQS.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
+				ep, err := resolveSQSEndpoint(ctx, queue.Spec.SQS.AuthRegion)
 				if err != nil {
-					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
-					scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
+					return result, err
+				}
+				queue.Spec.SQS.Endpoint = ep
+			}
+		}
+
+		// Object Storage
+		os := enterpriseApi.ObjectStorage{}
+		if cr.Spec.ObjectStorageRef.Name != "" {
+			ns := cr.GetNamespace()
+			if cr.Spec.ObjectStorageRef.Namespace != "" {
+				ns = cr.Spec.ObjectStorageRef.Namespace
+			}
+			err = client.Get(ctx, types.NamespacedName{
+				Name:      cr.Spec.ObjectStorageRef.Name,
+				Namespace: ns,
+			}, &os)
+			if err != nil {
+				return result, err
+			}
+		}
+		if os.Spec.Provider == "s3" {
+			if os.Spec.S3.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
+				ep, err := resolveS3Endpoint(ctx, queue.Spec.SQS.AuthRegion)
+				if err != nil {
+					return result, err
+				}
+				os.Spec.S3.Endpoint = ep
+			}
+		}
+
+		// Secret reference
+		accessKey, secretKey, version := "", "", ""
+		if queue.Spec.Provider == "sqs" && cr.Spec.ServiceAccount == "" {
+			for _, vol := range queue.Spec.SQS.VolList {
+				if vol.SecretRef != "" {
+					accessKey, secretKey, version, err = GetQueueRemoteVolumeSecrets(ctx, vol, client, cr)
+					if err != nil {
+						scopedLog.Error(err, "Failed to get queue remote volume secrets")
+						return result, err
+					}
+				}
+			}
+		}
+
+		secretChanged := cr.Status.CredentialSecretVersion != version
+		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
+
+		// If queue is updated
+		if cr.Spec.QueueRef.Name != "" {
+			if secretChanged || serviceAccountChanged {
+				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
+				err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, client)
+				if err != nil {
+					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
+					scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
 					return result, err
 				}
 
-				cr.Status.BusConfiguration = busConfig.Spec
+				for i := int32(0); i < cr.Spec.Replicas; i++ {
+					idxcClient := mgr.getClient(ctx, i)
+					err = idxcClient.RestartSplunk()
+					if err != nil {
+						return result, err
+					}
+					scopedLog.Info("Restarted splunk", "indexer", i)
+				}
+
+				cr.Status.CredentialSecretVersion = version
+				cr.Status.ServiceAccount = cr.Spec.ServiceAccount
 			}
 		}
 
@@ -281,7 +341,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
 		if err != nil {
-			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrive cluster manager spec failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrieve cluster manager spec failed %s", err.Error()))
 			return result, err
 		}
 		if cmMonitoringConsoleConfigRef != "" {
@@ -312,7 +372,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
 			if err != nil {
-				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintainance mode failed %s", err.Error()))
+				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintenance mode failed %s", err.Error()))
 				return result, err
 			}
 		}
@@ -353,7 +413,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyIndexerCluster")
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	eventPublisher := GetEventPublisher(ctx, cr)
 	cr.Kind = "IndexerCluster"
 
 	// validate and updates defaults for CR
@@ -366,7 +427,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.BusConfiguration = enterpriseApi.BusConfigurationSpec{}
+		cr.Status.CredentialSecretVersion = "0"
+		cr.Status.ServiceAccount = ""
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
@@ -409,7 +471,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
 	}
 
-	mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+	mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 	// Check if we have configured enough number(<= RF) of replicas
 	if mgr.cr.Status.ClusterMasterPhase == enterpriseApi.PhaseReady {
 		err = VerifyRFPeers(ctx, mgr, client)
@@ -536,35 +598,94 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		// Bus config
-		busConfig := enterpriseApi.BusConfiguration{}
-		if cr.Spec.BusConfigurationRef.Name != "" {
+		// Queue
+		queue := enterpriseApi.Queue{}
+		if cr.Spec.QueueRef.Name != "" {
 			ns := cr.GetNamespace()
-			if cr.Spec.BusConfigurationRef.Namespace != "" {
-				ns = cr.Spec.BusConfigurationRef.Namespace
+			if cr.Spec.QueueRef.Namespace != "" {
+				ns = cr.Spec.QueueRef.Namespace
 			}
 			err = client.Get(context.Background(), types.NamespacedName{
-				Name:      cr.Spec.BusConfigurationRef.Name,
+				Name:      cr.Spec.QueueRef.Name,
 				Namespace: ns,
-			}, &busConfig)
+			}, &queue)
 			if err != nil {
 				return result, err
 			}
 		}
-
-		// If bus config is updated
-		if cr.Spec.BusConfigurationRef.Name != "" {
-			if !reflect.DeepEqual(cr.Status.BusConfiguration, busConfig.Spec) {
-				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
-
-				err = mgr.handlePullBusChange(ctx, cr, busConfig, client)
+		if queue.Spec.Provider == "sqs" {
+			if queue.Spec.SQS.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
+				ep, err := resolveSQSEndpoint(ctx, queue.Spec.SQS.AuthRegion)
 				if err != nil {
-					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
-					scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
+					return result, err
+				}
+				queue.Spec.SQS.Endpoint = ep
+			}
+		}
+
+		// Object Storage
+		os := enterpriseApi.ObjectStorage{}
+		if cr.Spec.ObjectStorageRef.Name != "" {
+			ns := cr.GetNamespace()
+			if cr.Spec.ObjectStorageRef.Namespace != "" {
+				ns = cr.Spec.ObjectStorageRef.Namespace
+			}
+			err = client.Get(context.Background(), types.NamespacedName{
+				Name:      cr.Spec.ObjectStorageRef.Name,
+				Namespace: ns,
+			}, &os)
+			if err != nil {
+				return result, err
+			}
+		}
+		if os.Spec.Provider == "s3" {
+			if os.Spec.S3.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
+				ep, err := resolveS3Endpoint(ctx, queue.Spec.SQS.AuthRegion)
+				if err != nil {
+					return result, err
+				}
+				os.Spec.S3.Endpoint = ep
+			}
+		}
+
+		// Secret reference
+		accessKey, secretKey, version := "", "", ""
+		if queue.Spec.Provider == "sqs" && cr.Spec.ServiceAccount == "" {
+			for _, vol := range queue.Spec.SQS.VolList {
+				if vol.SecretRef != "" {
+					accessKey, secretKey, version, err = GetQueueRemoteVolumeSecrets(ctx, vol, client, cr)
+					if err != nil {
+						scopedLog.Error(err, "Failed to get queue remote volume secrets")
+						return result, err
+					}
+				}
+			}
+		}
+
+		secretChanged := cr.Status.CredentialSecretVersion != version
+		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
+
+		if cr.Spec.QueueRef.Name != "" {
+			if secretChanged || serviceAccountChanged {
+				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
+				err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, client)
+				if err != nil {
+					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
+					scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
 					return result, err
 				}
 
-				cr.Status.BusConfiguration = busConfig.Spec
+				for i := int32(0); i < cr.Spec.Replicas; i++ {
+					idxcClient := mgr.getClient(ctx, i)
+					err = idxcClient.RestartSplunk()
+					if err != nil {
+						return result, err
+					}
+					scopedLog.Info("Restarted splunk", "indexer", i)
+				}
+
+				cr.Status.CredentialSecretVersion = version
+				cr.Status.ServiceAccount = cr.Spec.ServiceAccount
 			}
 		}
 
@@ -572,7 +693,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
 		if err != nil {
-			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrive cluster master spec failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrieve cluster master spec failed %s", err.Error()))
 			return result, err
 		}
 		if cmMonitoringConsoleConfigRef != "" {
@@ -603,7 +724,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
 			if err != nil {
-				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintainance mode failed %s", err.Error()))
+				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintenance mode failed %s", err.Error()))
 				return result, err
 			}
 		}
@@ -647,12 +768,13 @@ type indexerClusterPodManager struct {
 }
 
 // newIndexerClusterPodManager function to create pod manager this is added to write unit test case
-var newIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) indexerClusterPodManager {
+var newIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc, c splcommon.ControllerClient) indexerClusterPodManager {
 	return indexerClusterPodManager{
 		log:             log,
 		cr:              cr,
 		secrets:         secret,
 		newSplunkClient: newSplunkClient,
+		c:               c,
 	}
 }
 
@@ -696,6 +818,10 @@ func SetClusterMaintenanceMode(ctx context.Context, c splcommon.ControllerClient
 // ApplyIdxcSecret checks if any of the indexer's have a different idxc_secret from namespace scoped secret and changes it
 func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
 	var indIdxcSecret string
+
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+
 	// Get namespace scoped secret
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, mgr.c, mgr.cr.GetNamespace())
 	if err != nil {
@@ -722,6 +848,7 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 	nsIdxcSecret := string(namespaceSecret.Data[splcommon.IdxcSecret])
 
 	// Loop over all indexer pods and get individual pod's idxc password
+	howManyPodsHaveSecretChanged := 0
 	for i := int32(0); i <= replicas-1; i++ {
 		// Get Indexer's name
 		indexerPodName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), i)
@@ -787,13 +914,25 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 			// Change idxc secret key
 			err = idxcClient.SetIdxcSecret(nsIdxcSecret)
 			if err != nil {
+				// Emit event for password sync failure
+				if eventPublisher != nil {
+					eventPublisher.Warning(ctx, "PasswordSyncFailed",
+						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", indexerPodName, err.Error()))
+				}
 				return err
 			}
 			scopedLog.Info("Changed idxc secret")
 
+			howManyPodsHaveSecretChanged += 1
+
 			// Restart splunk instance on pod
 			err = idxcClient.RestartSplunk()
 			if err != nil {
+				// Emit event for password sync failure
+				if eventPublisher != nil {
+					eventPublisher.Warning(ctx, "PasswordSyncFailed",
+						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", indexerPodName, err.Error()))
+				}
 				return err
 			}
 			scopedLog.Info("Restarted splunk")
@@ -847,6 +986,12 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 		}
 	}
 
+	// Emit event for password sync completed
+	if eventPublisher != nil {
+		eventPublisher.Normal(ctx, "PasswordSyncCompleted",
+			fmt.Sprintf("Password synchronized for %d pods", howManyPodsHaveSecretChanged))
+	}
+
 	return nil
 }
 
@@ -854,6 +999,12 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 
 	var err error
+
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+
+	// Track last successful replica count to emit scale events after completion
+	previousReplicas := mgr.cr.Status.Replicas
 
 	// Assign client
 	if mgr.c == nil {
@@ -887,7 +1038,27 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	}
 
 	// manage scaling and updates
-	return splctrl.UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
+	phase, err := splctrl.UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
+	if err != nil {
+		return phase, err
+	}
+
+	// Emit ScaledUp event only after a successful scale-up has completed
+	if phase == enterpriseApi.PhaseReady {
+		if desiredReplicas > previousReplicas && mgr.cr.Status.Replicas == desiredReplicas {
+			if eventPublisher != nil {
+				eventPublisher.Normal(ctx, "ScaledUp",
+					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", mgr.cr.GetName(), previousReplicas, desiredReplicas))
+			}
+		} else if desiredReplicas < previousReplicas && mgr.cr.Status.Replicas == desiredReplicas {
+			if eventPublisher != nil {
+				eventPublisher.Normal(ctx, "ScaledDown",
+					fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", mgr.cr.GetName(), previousReplicas, desiredReplicas))
+			}
+		}
+	}
+
+	return phase, nil
 }
 
 // PrepareScaleDown for indexerClusterPodManager prepares indexer pod to be removed via scale down event; it returns true when ready
@@ -1033,6 +1204,9 @@ func getSiteRepFactorOriginCount(siteRepFactor string) int32 {
 // verifyRFPeers verifies the number of peers specified in the replicas section
 // of IndexerClsuster CR. If it is less than RF, than we set it to RF.
 func (mgr *indexerClusterPodManager) verifyRFPeers(ctx context.Context, c splcommon.ControllerClient) error {
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+
 	if mgr.c == nil {
 		mgr.c = c
 	}
@@ -1049,8 +1223,14 @@ func (mgr *indexerClusterPodManager) verifyRFPeers(ctx context.Context, c splcom
 		replicationFactor = clusterInfo.ReplicationFactor
 	}
 
-	if mgr.cr.Spec.Replicas < replicationFactor {
-		mgr.log.Info("Changing number of replicas as it is less than RF number of peers", "replicas", mgr.cr.Spec.Replicas)
+	requestedReplicas := mgr.cr.Spec.Replicas
+	if requestedReplicas < replicationFactor {
+		mgr.log.Info("Changing number of replicas as it is less than RF number of peers", "replicas", requestedReplicas)
+		// Emit event indicating scaling below RF is blocked/adjusted
+		if eventPublisher != nil {
+			eventPublisher.Warning(ctx, "ScalingBlockedRF",
+				fmt.Sprintf("Cannot scale below replication factor: %d replicas required, %d requested. Adjust replicationFactor or replicas.", replicationFactor, requestedReplicas))
+		}
 		mgr.cr.Spec.Replicas = replicationFactor
 	}
 	return nil
@@ -1077,6 +1257,9 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 		mgr.cr.Status.MaintenanceMode = false
 		return fmt.Errorf("waiting for cluster manager to become ready")
 	}
+
+	oldInitialized := mgr.cr.Status.Initialized
+	oldIndexingReady := mgr.cr.Status.IndexingReady
 
 	// get indexer cluster info from cluster manager if it's ready
 	clusterInfo, err := GetClusterManagerInfoCall(ctx, mgr)
@@ -1118,6 +1301,39 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 		mgr.cr.Status.Peers = mgr.cr.Status.Peers[:statefulSet.Status.Replicas]
 	}
 
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+
+	// Emit events only on state transitions
+	if eventPublisher != nil {
+		// Compute current available peers for quorum-related events
+		var available int32
+		totalPeers := len(mgr.cr.Status.Peers)
+		for _, p := range mgr.cr.Status.Peers {
+			if p.Status == "Up" && p.Searchable {
+				available++
+			}
+		}
+
+		// Cluster just finished initializing when quorum becomes ready
+		if !oldIndexingReady && mgr.cr.Status.IndexingReady {
+			if !oldInitialized && mgr.cr.Status.Initialized {
+				eventPublisher.Normal(ctx, "ClusterInitialized",
+					fmt.Sprintf("Cluster '%s' initialized with %d peers", mgr.cr.GetName(), totalPeers))
+			}
+
+			// Cluster quorum just restored
+			eventPublisher.Normal(ctx, "ClusterQuorumRestored",
+				fmt.Sprintf("Cluster quorum restored: %d/%d peers available", available, totalPeers))
+		}
+
+		// Cluster quorum lost (transition out of indexing ready)
+		if oldIndexingReady && !mgr.cr.Status.IndexingReady {
+			eventPublisher.Warning(ctx, "ClusterQuorumLost",
+				fmt.Sprintf("Cluster quorum lost: %d/%d peers available. Investigate peer failures immediately.", available, totalPeers))
+		}
+	}
+
 	return nil
 }
 
@@ -1154,7 +1370,7 @@ func validateIndexerClusterSpec(ctx context.Context, c splcommon.ControllerClien
 }
 
 // helper function to get the list of IndexerCluster types in the current namespace
-func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.IndexerClusterList, error) {
+func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []rclient.ListOption) (enterpriseApi.IndexerClusterList, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getIndexerClusterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -1171,23 +1387,19 @@ func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr
 
 // RetrieveCMSpec finds monitoringConsole ref from cm spec
 func RetrieveCMSpec(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (string, error) {
-	var monitoringConsoleRef string = ""
-
 	if len(cr.Spec.ClusterMasterRef.Name) > 0 && len(cr.Spec.ClusterManagerRef.Name) == 0 {
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.ClusterMasterRef.Name}
 		var cmCR enterpriseApiV3.ClusterMaster
 		err := client.Get(ctx, namespacedName, &cmCR)
 		if err == nil {
-			monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
-			return monitoringConsoleRef, err
+			return cmCR.Spec.MonitoringConsoleRef.Name, nil
 		}
 	} else if len(cr.Spec.ClusterManagerRef.Name) > 0 && len(cr.Spec.ClusterMasterRef.Name) == 0 {
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.ClusterManagerRef.Name}
 		var cmCR enterpriseApi.ClusterManager
 		err := client.Get(ctx, namespacedName, &cmCR)
 		if err == nil {
-			monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
-			return monitoringConsoleRef, err
+			return cmCR.Spec.MonitoringConsoleRef.Name, nil
 		}
 	}
 
@@ -1231,12 +1443,12 @@ func getSiteName(ctx context.Context, c splcommon.ControllerClient, cr *enterpri
 	return extractedValue
 }
 
-var newSplunkClientForBusPipeline = splclient.NewSplunkClient
+var newSplunkClientForQueuePipeline = splclient.NewSplunkClient
 
-// Checks if only PullBus or Pipeline config changed, and updates the conf file if so
-func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, newCR *enterpriseApi.IndexerCluster, busConfig enterpriseApi.BusConfiguration, k8s client.Client) error {
+// updateIndexerConfFiles checks if Queue or Pipeline inputs are created for the first time and updates the conf file if so
+func (mgr *indexerClusterPodManager) updateIndexerConfFiles(ctx context.Context, newCR *enterpriseApi.IndexerCluster, queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string, k8s rclient.Client) error {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("handlePullBusChange").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
+	scopedLog := reqLogger.WithName("updateIndexerConfFiles").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
 
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.ReadyReplicas
@@ -1250,56 +1462,39 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 		if err != nil {
 			return err
 		}
-		splunkClient := newSplunkClientForBusPipeline(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
+		splunkClient := newSplunkClientForQueuePipeline(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
-		afterDelete := false
-		if (busConfig.Spec.SQS.QueueName != "" && newCR.Status.BusConfiguration.SQS.QueueName != "" && busConfig.Spec.SQS.QueueName != newCR.Status.BusConfiguration.SQS.QueueName) ||
-			(busConfig.Spec.Type != "" && newCR.Status.BusConfiguration.Type != "" && busConfig.Spec.Type != newCR.Status.BusConfiguration.Type) {
-			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
-				updateErr = err
-			}
-			if err := splunkClient.DeleteConfFileProperty(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
-				updateErr = err
-			}
-			afterDelete = true
-		}
+		queueInputs, queueOutputs, pipelineInputs := getQueueAndPipelineInputsForIndexerConfFiles(queue, os, accessKey, secretKey)
 
-		busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields := getChangedBusFieldsForIndexer(&busConfig, newCR, afterDelete)
-
-		for _, pbVal := range busChangedFieldsOutputs {
-			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
+		for _, pbVal := range queueOutputs {
+			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
 
-		for _, pbVal := range busChangedFieldsInputs {
-			if err := splunkClient.UpdateConfFile(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
+		for _, pbVal := range queueInputs {
+			if err := splunkClient.UpdateConfFile(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
 
-		for _, field := range pipelineChangedFields {
+		for _, field := range pipelineInputs {
 			if err := splunkClient.UpdateConfFile(scopedLog, "default-mode", field[0], [][]string{{field[1], field[2]}}); err != nil {
 				updateErr = err
 			}
 		}
 	}
 
-	// Do NOT restart Splunk
 	return updateErr
 }
 
-// getChangedBusFieldsForIndexer returns a list of changed bus and pipeline fields for indexer pods
-func getChangedBusFieldsForIndexer(busConfig *enterpriseApi.BusConfiguration, busConfigIndexerStatus *enterpriseApi.IndexerCluster, afterDelete bool) (busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields [][]string) {
-	// Compare bus fields
-	oldPB := busConfigIndexerStatus.Status.BusConfiguration
-	newPB := busConfig.Spec
+// getQueueAndPipelineInputsForIndexerConfFiles returns a list of queue and pipeline inputs for indexer pods conf files
+func getQueueAndPipelineInputsForIndexerConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) (queueInputs, queueOutputs, pipelineInputs [][]string) {
+	// Queue Inputs
+	queueInputs, queueOutputs = getQueueAndObjectStorageInputsForIndexerConfFiles(queue, os, accessKey, secretKey)
 
-	// Push all bus fields
-	busChangedFieldsInputs, busChangedFieldsOutputs = pullBusChanged(&oldPB, &newPB, afterDelete)
-
-	// Always set all pipeline fields, not just changed ones
-	pipelineChangedFields = pipelineConfig(true)
+	// Pipeline inputs
+	pipelineInputs = getPipelineInputsForConfFile(true)
 
 	return
 }
@@ -1315,34 +1510,52 @@ func imageUpdatedTo9(previousImage string, currentImage string) bool {
 	return strings.HasPrefix(previousVersion, "8") && strings.HasPrefix(currentVersion, "9")
 }
 
-func pullBusChanged(oldBus, newBus *enterpriseApi.BusConfigurationSpec, afterDelete bool) (inputs, outputs [][]string) {
-	if oldBus.Type != newBus.Type || afterDelete {
-		inputs = append(inputs, []string{"remote_queue.type", newBus.Type})
+// getQueueAndObjectStorageInputsForIndexerConfFiles returns a list of queue and object storage inputs for conf files
+func getQueueAndObjectStorageInputsForIndexerConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) (inputs, outputs [][]string) {
+	queueProvider := ""
+	authRegion := ""
+	endpoint := ""
+	dlq := ""
+	if queue.Provider == "sqs" {
+		queueProvider = "sqs_smartbus"
+		authRegion = queue.SQS.AuthRegion
+		endpoint = queue.SQS.Endpoint
+		dlq = queue.SQS.DLQ
 	}
-	if oldBus.SQS.AuthRegion != newBus.SQS.AuthRegion || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.auth_region", newBus.Type), newBus.SQS.AuthRegion})
+
+	path := ""
+	osEndpoint := ""
+	osProvider := ""
+	if os.Provider == "s3" {
+		osProvider = "sqs_smartbus"
+		osEndpoint = os.S3.Endpoint
+		path = os.S3.Path
+		if !strings.HasPrefix(path, "s3://") {
+			path = "s3://" + path
+		}
 	}
-	if oldBus.SQS.Endpoint != newBus.SQS.Endpoint || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.endpoint", newBus.Type), newBus.SQS.Endpoint})
-	}
-	if oldBus.SQS.LargeMessageStoreEndpoint != newBus.SQS.LargeMessageStoreEndpoint || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newBus.Type), newBus.SQS.LargeMessageStoreEndpoint})
-	}
-	if oldBus.SQS.LargeMessageStorePath != newBus.SQS.LargeMessageStorePath || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", newBus.Type), newBus.SQS.LargeMessageStorePath})
-	}
-	if oldBus.SQS.DeadLetterQueueName != newBus.SQS.DeadLetterQueueName || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newBus.Type), newBus.SQS.DeadLetterQueueName})
-	}
+
 	inputs = append(inputs,
-		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", newBus.Type), "4"},
-		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", newBus.Type), "max_count"},
+		[]string{"remote_queue.type", queueProvider},
+		[]string{fmt.Sprintf("remote_queue.%s.auth_region", queueProvider), authRegion},
+		[]string{fmt.Sprintf("remote_queue.%s.endpoint", queueProvider), endpoint},
+		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", osProvider), osEndpoint},
+		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.path", osProvider), path},
+		[]string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", queueProvider), dlq},
+		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", queueProvider), "4"},
+		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", queueProvider), "max_count"},
 	)
+
+	// TODO: Handle credentials change
+	if accessKey != "" && secretKey != "" {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.access_key", queueProvider), accessKey})
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.secret_key", queueProvider), secretKey})
+	}
 
 	outputs = inputs
 	outputs = append(outputs,
-		[]string{fmt.Sprintf("remote_queue.%s.send_interval", newBus.Type), "5s"},
-		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", newBus.Type), "s2s"},
+		[]string{fmt.Sprintf("remote_queue.%s.send_interval", queueProvider), "5s"},
+		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", queueProvider), "s2s"},
 	)
 
 	return inputs, outputs
