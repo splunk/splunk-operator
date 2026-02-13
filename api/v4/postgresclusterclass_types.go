@@ -38,6 +38,11 @@ type PostgresClusterClassSpec struct {
 	// +optional
 	Config PosgresClusterClassConfig `json:"config,omitempty"`
 
+	// ConnectionPooler contains PgBouncer connection pooler configuration.
+	// When enabled, creates RW and RO pooler deployments for clusters using this class.
+	// +optional
+	ConnectionPooler *ConnectionPoolerConfig `json:"connectionPooler,omitempty"`
+
 	// CNPG contains CloudNativePG-specific configuration and policies.
 	// Only used when Provisioner is "postgresql.cnpg.io"
 	// These settings CANNOT be overridden in PostgresCluster CR (platform policy).

@@ -232,6 +232,16 @@ spec:
                   - type
                   type: object
                 type: array
+              connectionPoolerStatus:
+                description: |-
+                  ConnectionPoolerStatus contains the observed state of the connection pooler.
+                  Only populated when connection pooler is enabled in the PostgresClusterClass.
+                properties:
+                  enabled:
+                    description: Enabled indicates whether pooler is active for this
+                      cluster.
+                    type: boolean
+                type: object
               phase:
                 description: |-
                   Phase represents the current phase of the PostgresCluster.

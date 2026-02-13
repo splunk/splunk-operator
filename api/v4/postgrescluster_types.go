@@ -88,6 +88,11 @@ type PostgresClusterStatus struct {
 	// Right now, only CNPG is supported.
 	// +optional
 	ProvisionerRef *corev1.ObjectReference `json:"provisionerRef,omitempty"`
+
+	// ConnectionPoolerStatus contains the observed state of the connection pooler.
+	// Only populated when connection pooler is enabled in the PostgresClusterClass.
+	// +optional
+	ConnectionPoolerStatus *ConnectionPoolerStatus `json:"connectionPoolerStatus,omitempty"`
 }
 
 // +kubebuilder:object:root=true
