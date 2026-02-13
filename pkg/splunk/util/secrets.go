@@ -33,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// GetSpecificSecretTokenFromPod retrieves a specific secret token's value from a Pod
+// getSpecificSecretTokenFromPodImpl retrieves a specific secret token's value from a Pod
 func getSpecificSecretTokenFromPodImpl(ctx context.Context, c splcommon.ControllerClient, PodName string, namespace string, secretToken string) (string, error) {
 	// Get Pod data
 	secret, err := GetSecretFromPod(ctx, c, PodName, namespace)
