@@ -79,9 +79,6 @@ The webhook validates the following spec fields:
 
 | Field | Validation Rule | Error Message |
 |-------|-----------------|---------------|
-| `spec.imagePullPolicy` | Must be `Always`, `Never`, or `IfNotPresent` | Unsupported value: supported values: "Always", "Never", "IfNotPresent" |
-| `spec.livenessInitialDelaySeconds` | Must be ≥ 0 | must be non-negative |
-| `spec.readinessInitialDelaySeconds` | Must be ≥ 0 | must be non-negative |
 | `spec.etcVolumeStorageConfig.storageCapacity` | Must match format `^[0-9]+Gi$` (e.g., "10Gi", "100Gi") | must be in Gi format (e.g., '10Gi', '100Gi') |
 | `spec.varVolumeStorageConfig.storageCapacity` | Must match format `^[0-9]+Gi$` | must be in Gi format (e.g., '10Gi', '100Gi') |
 | `spec.etcVolumeStorageConfig.storageClassName` | Required when `ephemeralStorage=false` and `storageCapacity` is set | storageClassName is required when using persistent storage |
@@ -132,22 +129,6 @@ spec:
 Error:
 ```
 The Standalone "example" is invalid: .spec.replicas: Invalid value: -1: should be a non-negative integer
-```
-
-### Invalid ImagePullPolicy
-
-```yaml
-apiVersion: enterprise.splunk.com/v4
-kind: Standalone
-metadata:
-  name: example
-spec:
-  imagePullPolicy: "InvalidPolicy"  # Invalid: not a valid policy
-```
-
-Error:
-```
-The Standalone "example" is invalid: spec.imagePullPolicy: Unsupported value: "InvalidPolicy": supported values: "Always", "IfNotPresent"
 ```
 
 ### Invalid Storage Configuration
