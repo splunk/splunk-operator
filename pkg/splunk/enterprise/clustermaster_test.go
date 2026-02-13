@@ -241,6 +241,27 @@ func TestClusterMasterSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 
 func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	// Mock VerifyCMasterisMultisite to avoid 5-second HTTP timeout
+	// This function tries to connect to Splunk REST API which doesn't exist in unit tests
+	savedVerifyCMasterisMultisite := VerifyCMasterisMultisite
+	defer func() { VerifyCMasterisMultisite = savedVerifyCMasterisMultisite }()
+	VerifyCMasterisMultisite = func(ctx context.Context, cr *enterpriseApiV3.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := getClusterMasterExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		return extraEnv, nil
+	}
+
+	// Mock PerformCmasterBundlePush to avoid pod exec operations
+	// When Mock=false and NeedToPushMasterApps=true, return error to simulate test expectations
+	savedPerformCmasterBundlePush := PerformCmasterBundlePush
+	defer func() { PerformCmasterBundlePush = savedPerformCmasterBundlePush }()
+	PerformCmasterBundlePush = func(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) error {
+		if !cr.Spec.CommonSplunkSpec.Mock && cr.Status.BundlePushTracker.NeedToPushMasterApps {
+			return fmt.Errorf("simulated bundle push error when Mock=false")
+		}
+		return nil
+	}
+
 	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -1161,15 +1182,50 @@ func TestCheckIfMastersmartstoreConfigMapUpdatedToPod(t *testing.T) {
 
 func TestClusterMasterWitReadyState(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	// Mock VerifyCMasterisMultisite to avoid 5-second HTTP timeout
+	// This function tries to connect to Splunk REST API which doesn't exist in unit tests
+	savedVerifyCMasterisMultisiteForReadyState := VerifyCMasterisMultisite
+	defer func() { VerifyCMasterisMultisite = savedVerifyCMasterisMultisiteForReadyState }()
+	VerifyCMasterisMultisite = func(ctx context.Context, cr *enterpriseApiV3.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := getClusterMasterExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		return extraEnv, nil
+	}
+
+	// Initialize GlobalResourceTracker to enable app framework
+	initGlobalResourceTracker()
+
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
 	_ = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
+	savedGetAppsListForReadyState := GetAppsList
+	defer func() { GetAppsList = savedGetAppsListForReadyState }()
 	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
 		RemoteDataListResponse := splclient.RemoteDataListResponse{}
 		return RemoteDataListResponse, nil
 	}
+
+	// Mock GetPodExecClient to return a mock client that simulates pod operations locally
+	savedGetPodExecClient := splutil.GetPodExecClient
+	splutil.GetPodExecClient = func(client splcommon.ControllerClient, cr splcommon.MetaObject, targetPodName string) splutil.PodExecClientImpl {
+		mockClient := &spltest.MockPodExecClient{
+			Client:        client,
+			Cr:            cr,
+			TargetPodName: targetPodName,
+		}
+		// Add mock responses for common commands
+		ctx := context.TODO()
+		// Mock mkdir command (used by createDirOnSplunkPods)
+		mockClient.AddMockPodExecReturnContext(ctx, "mkdir -p", &spltest.MockPodExecReturnContext{
+			StdOut: "",
+			StdErr: "",
+			Err:    nil,
+		})
+		return mockClient
+	}
+	defer func() { splutil.GetPodExecClient = savedGetPodExecClient }()
 
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
