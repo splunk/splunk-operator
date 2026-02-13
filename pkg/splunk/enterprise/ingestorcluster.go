@@ -21,9 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/go-logr/logr"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -212,77 +209,19 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	// No need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		// Queue
-		queue := enterpriseApi.Queue{}
-		if cr.Spec.QueueRef.Name != "" {
-			ns := cr.GetNamespace()
-			if cr.Spec.QueueRef.Namespace != "" {
-				ns = cr.Spec.QueueRef.Namespace
-			}
-			err = client.Get(ctx, types.NamespacedName{
-				Name:      cr.Spec.QueueRef.Name,
-				Namespace: ns,
-			}, &queue)
-			if err != nil {
-				return result, err
-			}
-		}
-		if queue.Spec.Provider == "sqs" {
-			if queue.Spec.SQS.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
-				ep, err := resolveSQSEndpoint(ctx, queue.Spec.SQS.AuthRegion)
-				if err != nil {
-					return result, err
-				}
-				queue.Spec.SQS.Endpoint = ep
-			}
+		qosCfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, cr.Spec.QueueRef, cr.Spec.ObjectStorageRef, cr.Spec.ServiceAccount)
+		if err != nil {
+			scopedLog.Error(err, "Failed to resolve Queue/ObjectStorage config")
+			return result, err
 		}
 
-		// Object Storage
-		os := enterpriseApi.ObjectStorage{}
-		if cr.Spec.ObjectStorageRef.Name != "" {
-			ns := cr.GetNamespace()
-			if cr.Spec.ObjectStorageRef.Namespace != "" {
-				ns = cr.Spec.ObjectStorageRef.Namespace
-			}
-			err = client.Get(ctx, types.NamespacedName{
-				Name:      cr.Spec.ObjectStorageRef.Name,
-				Namespace: ns,
-			}, &os)
-			if err != nil {
-				return result, err
-			}
-		}
-		if os.Spec.Provider == "s3" {
-			if os.Spec.S3.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
-				ep, err := resolveS3Endpoint(ctx, queue.Spec.SQS.AuthRegion)
-				if err != nil {
-					return result, err
-				}
-				os.Spec.S3.Endpoint = ep
-			}
-		}
-
-		// Secret reference
-		accessKey, secretKey, version := "", "", ""
-		if queue.Spec.Provider == "sqs" && cr.Spec.ServiceAccount == "" {
-			for _, vol := range queue.Spec.SQS.VolList {
-				if vol.SecretRef != "" {
-					accessKey, secretKey, version, err = GetQueueRemoteVolumeSecrets(ctx, vol, client, cr)
-					if err != nil {
-						scopedLog.Error(err, "Failed to get queue remote volume secrets")
-						return result, err
-					}
-				}
-			}
-		}
-
-		secretChanged := cr.Status.CredentialSecretVersion != version
+		secretChanged := cr.Status.CredentialSecretVersion != qosCfg.Version
 		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
 
 		// If queue is updated
 		if secretChanged || serviceAccountChanged {
 			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
-			err = mgr.updateIngestorConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, client)
+			err = mgr.updateIngestorConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyIngestorCluster", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
 				scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
@@ -298,7 +237,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 				scopedLog.Info("Restarted splunk", "ingestor", i)
 			}
 
-			cr.Status.CredentialSecretVersion = version
+			cr.Status.CredentialSecretVersion = qosCfg.Version
 			cr.Status.ServiceAccount = cr.Spec.ServiceAccount
 		}
 
@@ -520,37 +459,4 @@ func getQueueAndObjectStorageInputsForIngestorConfFiles(queue *enterpriseApi.Que
 	}
 
 	return
-}
-
-func resolveS3Endpoint(ctx context.Context, region string) (string, error) {
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
-	if err != nil {
-		return "", err
-	}
-
-	client := s3.NewFromConfig(cfg)
-	params := s3.EndpointParameters{Region: &region}
-
-	ep, err := client.Options().EndpointResolverV2.ResolveEndpoint(ctx, params)
-	if err != nil {
-		return "", err
-	}
-	// Full endpoint URL as string:
-	return ep.URI.String(), nil
-}
-
-func resolveSQSEndpoint(ctx context.Context, region string) (string, error) {
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
-	if err != nil {
-		return "", err
-	}
-
-	client := sqs.NewFromConfig(cfg)
-	params := sqs.EndpointParameters{Region: &region}
-
-	ep, err := client.Options().EndpointResolverV2.ResolveEndpoint(ctx, params)
-	if err != nil {
-		return "", err
-	}
-	return ep.URI.String(), nil
 }
