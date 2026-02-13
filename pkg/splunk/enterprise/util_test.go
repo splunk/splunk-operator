@@ -3315,7 +3315,7 @@ func TestGetCurrentImage(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.IngestorCluster{})
 	client := builder.Build()
 	client.Create(ctx, &current)
-	_, err := ApplyClusterManager(ctx, client, &current)
+	_, err := ApplyClusterManager(ctx, client, &current, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
