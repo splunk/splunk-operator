@@ -1,6 +1,6 @@
 # Adds namespace to all resources.
-# Cluster-scoped deployment WITHOUT webhook (default)
-# To enable webhook, use config/default-with-webhook overlay
+# Cluster-scoped deployment WITH webhook enabled (opt-in)
+# Requires cert-manager to be installed in the cluster
 namespace: splunk-operator 
 
 # Value of this field is prepended to the
@@ -20,55 +20,55 @@ bases:
 - ../persistent-volume
 - ../service
 - ../manager
-# [WEBHOOK] To enable webhook, use config/default-with-webhook overlay
-#- ../webhook
+# [WEBHOOK] Enabled for opt-in webhook deployment
+- ../webhook
 # [CERTMANAGER] Required for webhook TLS
-#- ../certmanager
+- ../certmanager
 # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
 #- ../prometheus
 # [METRICS] Expose the controller manager metrics service.
 - metrics_service.yaml
-# [NETWORK POLICY] Protect the /metrics endpoint and Webhook Server with NetworkPolicy.
-# Only Pod(s) running a namespace labeled with 'metrics: enabled' will be able to gather the metrics.
-# Only CR(s) which requires webhooks and are applied on namespaces labeled with 'webhooks: enabled' will
-# be able to communicate with the Webhook Server.
-#- ../network-policy
 
-# [WEBHOOK] To enable webhook, use config/default-with-webhook overlay
-#patchesStrategicMerge:
-#- manager_webhook_patch.yaml
+patchesStrategicMerge:
+# Mount the controller config file for loading manager configurations
+# through a ComponentConfig type
+#- manager_config_patch.yaml
+
+# [WEBHOOK] Enabled for webhook deployment
+- manager_webhook_patch.yaml
+
 # [CERTMANAGER] Enabled for CA injection in the admission webhooks
-#- webhookcainjection_patch.yaml
+- webhookcainjection_patch.yaml
 
 # the following config is for teaching kustomize how to do var substitution
+vars:
 # [CERTMANAGER] Variables for cert-manager CA injection
-#vars:
-#- name: CERTIFICATE_NAMESPACE # namespace of the certificate CR
-#  objref:
-#    kind: Certificate
-#    group: cert-manager.io
-#    version: v1
-#    name: serving-cert # this name should match the one in certificate.yaml
-#  fieldref:
-#    fieldpath: metadata.namespace
-#- name: CERTIFICATE_NAME
-#  objref:
-#    kind: Certificate
-#    group: cert-manager.io
-#    version: v1
-#    name: serving-cert # this name should match the one in certificate.yaml
-#- name: SERVICE_NAMESPACE # namespace of the service
-#  objref:
-#    kind: Service
-#    version: v1
-#    name: webhook-service
-#  fieldref:
-#    fieldpath: metadata.namespace
-#- name: SERVICE_NAME
-#  objref:
-#    kind: Service
-#    version: v1
-#    name: webhook-service
+- name: CERTIFICATE_NAMESPACE # namespace of the certificate CR
+  objref:
+    kind: Certificate
+    group: cert-manager.io
+    version: v1
+    name: serving-cert # this name should match the one in certificate.yaml
+  fieldref:
+    fieldpath: metadata.namespace
+- name: CERTIFICATE_NAME
+  objref:
+    kind: Certificate
+    group: cert-manager.io
+    version: v1
+    name: serving-cert # this name should match the one in certificate.yaml
+- name: SERVICE_NAMESPACE # namespace of the service
+  objref:
+    kind: Service
+    version: v1
+    name: webhook-service
+  fieldref:
+    fieldpath: metadata.namespace
+- name: SERVICE_NAME
+  objref:
+    kind: Service
+    version: v1
+    name: webhook-service
 
 #patches:
 #- target:
@@ -124,6 +124,8 @@ patches:
         value: splunk-operator
       - name: SPLUNK_GENERAL_TERMS
         value: SPLUNK_GENERAL_TERMS_VALUE
+      - name: ENABLE_VALIDATION_WEBHOOK
+        value: "true"
       - name: POD_NAME
         valueFrom:
           fieldRef:
@@ -133,9 +135,3 @@ patches:
 - path: manager_metrics_patch.yaml
   target:
     kind: Deployment
-
-# [WEBHOOK] To enable webhook, use config/default-with-webhook overlay
-#- path: manager_webhook_patch.yaml
-#  target:
-#    kind: Deployment
-
