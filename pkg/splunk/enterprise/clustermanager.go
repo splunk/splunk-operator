@@ -40,24 +40,24 @@ import (
 )
 
 // ApplyClusterManager reconciles the state of a Splunk Enterprise cluster manager.
-func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (reconcile.Result, error) {
-
+// podExecClient parameter is optional - if nil, a real PodExecClient will be created.
+// This allows tests to inject a mock client.
+func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (result reconcile.Result, err error) {
 	// unless modified, reconcile for this object will be requeued after 5 seconds
-	result := reconcile.Result{
+	result = reconcile.Result{
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyClusterManager")
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "ClusterManager"
 
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
-
-	var err error
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
 
@@ -226,8 +226,10 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
 		}
 
-		// Create podExecClient
-		podExecClient := splutil.GetPodExecClient(client, cr, "")
+		// Create podExecClient (use injected one if provided, otherwise create real one)
+		if podExecClient == nil {
+			podExecClient = splutil.GetPodExecClient(client, cr, "")
+		}
 
 		// Add a splunk operator telemetry app
 		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
@@ -242,7 +244,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 		// Manager apps bundle push requires multiple reconcile iterations in order to reflect the configMap on the CM pod.
 		// So keep PerformCmBundlePush() as the last call in this block of code, so that other functionalities are not blocked
-		err = PerformCmBundlePush(ctx, client, cr)
+		err = PerformCmBundlePush(ctx, client, cr, podExecClient)
 		if err != nil {
 			return result, err
 		}
@@ -322,7 +324,8 @@ func getClusterManagerStatefulSet(ctx context.Context, client splcommon.Controll
 func CheckIfsmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	eventPublisher := GetEventPublisher(ctx, cr)
 
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
 	streamOptions := splutil.NewStreamOptionsObject(command)
@@ -349,8 +352,9 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.Con
 	return fmt.Errorf("smartstore ConfigMap is missing")
 }
 
-// PerformCmBundlePush initiates the bundle push from cluster manager
-func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
+// PerformCmBundlePush performs cluster manager bundle push operation
+// Defined as a variable to allow mocking in unit tests
+var PerformCmBundlePush = func(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) error {
 	if !cr.Status.BundlePushTracker.NeedToPushManagerApps {
 		return nil
 	}
@@ -375,8 +379,11 @@ func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *
 	// for the configMap update to the Pod before proceeding for the manager apps
 	// bundle push.
 
-	cmPodName := fmt.Sprintf("splunk-%s-%s-0", cr.GetName(), "cluster-manager")
-	podExecClient := splutil.GetPodExecClient(c, cr, cmPodName)
+	// Create podExecClient if not provided
+	if podExecClient == nil {
+		cmPodName := fmt.Sprintf("splunk-%s-%s-0", cr.GetName(), "cluster-manager")
+		podExecClient = splutil.GetPodExecClient(c, cr, cmPodName)
+	}
 	err := CheckIfsmartstoreConfigMapUpdatedToPod(ctx, c, cr, podExecClient)
 	if err != nil {
 		return err
@@ -401,7 +408,9 @@ func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *
 func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("PushManagerApps").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, cr)
 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
@@ -413,7 +422,6 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 	//Get the admin password from the secret object
 	adminPwd, foundSecret := defaultSecret.Data["password"]
 	if !foundSecret {
-		eventPublisher.Warning(ctx, "PushManagerAppsBundle", "could not find admin password while trying to push the manager apps bundle")
 		return fmt.Errorf("could not find admin password while trying to push the manager apps bundle")
 	}
 
@@ -477,7 +485,9 @@ var GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.Clus
 func changeClusterManagerAnnotations(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("changeClusterManagerAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, cr)
 
 	clusterManagerInstance := &enterpriseApi.ClusterManager{}
 	if len(cr.Spec.ClusterManagerRef.Name) > 0 {

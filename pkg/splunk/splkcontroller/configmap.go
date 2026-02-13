@@ -43,7 +43,7 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 
 	err := client.Get(context.TODO(), namespacedName, &current)
 
-	// dataUpdated flag returns if the data on the configMap has been succesfully updated
+	// dataUpdated flag returns if the data on the configMap has been successfully updated
 	dataUpdated := false
 	if err == nil {
 		// updateNeeded flag indicates if an update to the configMap is necessary
