@@ -91,3 +91,43 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - platform.splunk.com
+  resources:
+  - platformconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - platform.splunk.com
+  resources:
+  - platformconfigs/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - platform.splunk.com
+  resources:
+  - platformconfigs/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - platform.splunk.com
+  resources:
+  - tenantconfigs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - platform.splunk.com
+  resources:
+  - tenantconfigs/status
+  verbs:
+  - get
