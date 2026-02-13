@@ -35,6 +35,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+var (
+	phaseManagerBusyWaitDuration  = 1 * time.Second
+	phaseManagerLoopSleepDuration = 200 * time.Millisecond
+)
+
 var appPhaseInfoStatuses = map[enterpriseApi.AppPhaseStatusType]bool{
 	enterpriseApi.AppPkgDownloadPending:     true,
 	enterpriseApi.AppPkgDownloadInProgress:  true,
@@ -601,10 +606,10 @@ downloadWork:
 		default:
 			// All the workers are busy, check after one second
 			scopedLog.Info("All the workers are busy, we will check again after one second")
-			time.Sleep(1 * time.Second)
+			time.Sleep(phaseManagerBusyWaitDuration)
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(phaseManagerLoopSleepDuration)
 	}
 
 	// wait for all the download threads to finish
@@ -684,7 +689,7 @@ downloadPhase:
 			}
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(phaseManagerLoopSleepDuration)
 	}
 }
 
@@ -1006,7 +1011,11 @@ func runPodCopyWorker(ctx context.Context, worker *PipelineWorker, ch chan struc
 	}
 
 	// get the podExecClient to be used for copying file to pod
-	podExecClient := splutil.GetPodExecClient(worker.client, cr, worker.targetPodName)
+	// Use injected client if available (for testing), otherwise create real client
+	podExecClient := worker.podExecClient
+	if podExecClient == nil {
+		podExecClient = splutil.GetPodExecClient(worker.client, cr, worker.targetPodName)
+	}
 	stdOut, stdErr, err := CopyFileToPod(ctx, worker.client, cr.GetNamespace(), appPkgLocalPath, appPkgPathOnPod, podExecClient)
 	if err != nil {
 		phaseInfo.FailCount++
@@ -1066,10 +1075,10 @@ podCopyHandler:
 			}
 		default:
 			// All the workers are busy, check after one second
-			time.Sleep(1 * time.Second)
+			time.Sleep(phaseManagerBusyWaitDuration)
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(phaseManagerLoopSleepDuration)
 	}
 
 	// Wait for all the workers to finish
@@ -1135,7 +1144,7 @@ podCopyPhase:
 			}
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(phaseManagerLoopSleepDuration)
 	}
 }
 
@@ -1235,9 +1244,12 @@ installHandler:
 
 			// Install workers can exist for local scope and premium app scopes
 			if installWorker != nil {
-				podExecClient := splutil.GetPodExecClient(installWorker.client, installWorker.cr, installWorker.targetPodName)
+				// Use injected client if available (for testing), otherwise create real client
+				podExecClient := installWorker.podExecClient
+				if podExecClient == nil {
+					podExecClient = splutil.GetPodExecClient(installWorker.client, installWorker.cr, installWorker.targetPodName)
+				}
 				podID, _ := getOrdinalValFromPodName(installWorker.targetPodName)
-
 				// Get app source spec
 				appSrcSpec, err := getAppSrcSpec(installWorker.afwConfig.AppSources, installWorker.appSrcName)
 				if err != nil {
@@ -1268,10 +1280,10 @@ installHandler:
 			}
 
 		default:
-			time.Sleep(1 * time.Second)
+			time.Sleep(phaseManagerBusyWaitDuration)
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(phaseManagerLoopSleepDuration)
 	}
 
 	for {
@@ -1291,7 +1303,7 @@ installHandler:
 		}
 
 		// Sleep for a second before retry
-		time.Sleep(1 * time.Second)
+		time.Sleep(phaseManagerBusyWaitDuration)
 	}
 
 	// Wait for all the workers to finish
@@ -1387,7 +1399,7 @@ installPhase:
 			}
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(phaseManagerLoopSleepDuration)
 	}
 }
 
