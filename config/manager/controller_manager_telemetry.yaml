@@ -6,6 +6,6 @@ data:
   status: |
     {
       "lastTransmission": "",
-      "test": "true",
+      "test": "false",
       "sokVersion": "3.1.0"
     }

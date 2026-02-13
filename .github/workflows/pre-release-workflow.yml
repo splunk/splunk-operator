@@ -232,14 +232,6 @@ jobs:
         replace: "SPLUNK_ENTERPRISE_IMAGE"
         include: "config/default/kustomization.yaml"
 
-    - name: Update Telemetry Test Value
-      uses: jacobtomlinson/gha-find-replace@v3
-      with:
-        find: '"test"\s*:\s*"[^"]*"'
-        replace: '"test": "false"'
-        isRegexp: true
-        include: 'config/manager/controller_manager_telemetry.yaml'
-
     - name: Reset files before creating Pull Request
       run: |
         git checkout go.sum
