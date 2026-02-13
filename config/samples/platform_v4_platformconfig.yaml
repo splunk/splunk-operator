@@ -1,0 +1,9 @@
+apiVersion: platform.splunk.com/v4
+kind: PlatformConfig
+metadata:
+  labels:
+    app.kubernetes.io/name: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: platformconfig-sample
+spec:
+  # TODO(user): Add fields here

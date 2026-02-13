@@ -1,0 +1,284 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: platformconfigs.platform.splunk.com
+spec:
+  group: platform.splunk.com
+  names:
+    kind: PlatformConfig
+    listKind: PlatformConfigList
+    plural: platformconfigs
+    singular: platformconfig
+  scope: Cluster
+  versions:
+  - name: v4
+    schema:
+      openAPIV3Schema:
+        description: PlatformConfig is the Schema for the platformconfigs API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PlatformConfigSpec defines the desired state of PlatformConfig.
+            properties:
+              certificates:
+                description: Certificates configuration for TLS certificate management.
+                properties:
+                  certManager:
+                    description: |-
+                      CertManager configures cert-manager integration.
+                      Only used when Provider is "cert-manager".
+                    properties:
+                      enabled:
+                        description: |-
+                          Enabled indicates whether cert-manager integration is enabled.
+                          Default: true
+                        type: boolean
+                      issuerKind:
+                        description: |-
+                          IssuerKind is the kind of issuer (Issuer or ClusterIssuer).
+                          Default: "ClusterIssuer"
+                        enum:
+                        - Issuer
+                        - ClusterIssuer
+                        type: string
+                      issuerName:
+                        description: IssuerName is the name of the cert-manager Issuer
+                          or ClusterIssuer.
+                        type: string
+                    type: object
+                  naming:
+                    description: |-
+                      Naming configures certificate naming pattern.
+                      Used to construct certificate secret names for each service instance.
+                    properties:
+                      pattern:
+                        default: ${service}-${instance}-tls
+                        description: |-
+                          Pattern is the naming pattern for certificate secrets.
+                          Supports variable substitution:
+                          - ${namespace}: Kubernetes namespace
+                          - ${service}: Service type (e.g., "standalone", "clustermanager")
+                          - ${instance}: Instance name (e.g., "my-splunk")
+                          Example: "${service}-${instance}-tls" -> "standalone-my-splunk-tls"
+                          Default: "${service}-${instance}-tls"
+                        type: string
+                    type: object
+                  provider:
+                    description: |-
+                      Provider specifies the certificate provider to use.
+                      Valid values: "user-provided", "cert-manager"
+                      Default: "cert-manager"
+                    enum:
+                    - user-provided
+                    - cert-manager
+                    type: string
+                  userProvided:
+                    description: |-
+                      UserProvided configures user-provided certificates.
+                      Only used when Provider is "user-provided".
+                    properties:
+                      namespace:
+                        description: |-
+                          Namespace is the namespace where the certificate secrets are located.
+                          If not specified, uses the same namespace as the resource.
+                        type: string
+                      pattern:
+                        description: |-
+                          Pattern overrides the global naming pattern for user-provided certificates.
+                          If not specified, uses the pattern from CertificatesConfig.Naming.
+                        type: string
+                    type: object
+                type: object
+              secrets:
+                description: Secrets configuration for secret management.
+                properties:
+                  csi:
+                    description: |-
+                      CSI configures CSI-based secret management.
+                      Only used when Provider is "csi".
+                    properties:
+                      aws:
+                        description: |-
+                          AWS configures AWS Secrets Manager settings.
+                          Only used when DefaultProvider is "aws".
+                        properties:
+                          region:
+                            description: |-
+                              Region is the AWS region.
+                              Example: "us-west-2"
+                            type: string
+                        type: object
+                      defaultProvider:
+                        description: |-
+                          DefaultProvider is the default CSI provider.
+                          Valid values: "vault", "aws", "azure", "gcp"
+                        enum:
+                        - vault
+                        - aws
+                        - azure
+                        - gcp
+                        type: string
+                      driver:
+                        default: secrets-store.csi.k8s.io
+                        description: |-
+                          Driver is the CSI driver to use.
+                          Default: "secrets-store.csi.k8s.io"
+                        type: string
+                      mountPath:
+                        default: /mnt/secrets
+                        description: |-
+                          MountPath is the default mount path for CSI secrets.
+                          Default: "/mnt/secrets"
+                        type: string
+                      naming:
+                        description: Naming configures SecretProviderClass naming
+                          pattern.
+                        properties:
+                          pattern:
+                            default: ${service}-${instance}-secrets
+                            description: |-
+                              Pattern is the naming pattern for SecretProviderClass resources.
+                              Supports variable substitution:
+                              - ${namespace}: Kubernetes namespace
+                              - ${service}: Service type (e.g., "standalone", "clustermanager")
+                              - ${instance}: Instance name (e.g., "my-splunk")
+                              Example: "${service}-${instance}-secrets" -> "standalone-my-splunk-secrets"
+                              Default: "${service}-${instance}-secrets"
+                            type: string
+                        type: object
+                      vault:
+                        description: |-
+                          Vault configures Vault-specific settings.
+                          Only used when DefaultProvider is "vault".
+                        properties:
+                          address:
+                            description: |-
+                              Address is the Vault server address.
+                              Example: "https://vault.company.com"
+                            type: string
+                          role:
+                            description: Role is the Vault role to use for authentication.
+                            type: string
+                        type: object
+                    type: object
+                  generateFallback:
+                    description: |-
+                      GenerateFallback indicates whether to generate fallback secrets.
+                      Only for development environments.
+                      Default: false
+                    type: boolean
+                  provider:
+                    description: |-
+                      Provider specifies the secret provider to use.
+                      Valid values: "kubernetes", "external-secrets", "csi"
+                      Default: "kubernetes"
+                    enum:
+                    - kubernetes
+                    - external-secrets
+                    - csi
+                    type: string
+                  versioningEnabled:
+                    description: |-
+                      VersioningEnabled enables versioned secrets for Splunk resources.
+                      Default: true
+                    type: boolean
+                  versionsToKeep:
+                    description: |-
+                      VersionsToKeep is how many versions to keep.
+                      Default: 3
+                    maximum: 10
+                    minimum: 1
+                    type: integer
+                type: object
+            type: object
+          status:
+            description: PlatformConfigStatus defines the observed state of PlatformConfig.
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the config's state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              observedGeneration:
+                description: ObservedGeneration is the generation observed by the
+                  controller.
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
