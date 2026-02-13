@@ -39,7 +39,7 @@ func TestInstanceType(t *testing.T) {
 		SplunkLicenseMaster:     splcommon.LicenseManagerRole,
 		SplunkLicenseManager:    splcommon.LicenseManagerRole,
 		SplunkMonitoringConsole: "splunk_monitor",
-		SplunkIngestor:          "splunk_ingestor", 
+		SplunkIngestor:          "splunk_ingestor",
 	}
 	for key, val := range instMap {
 		if key.ToRole() != val {
