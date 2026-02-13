@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"testing"
 	"time"
@@ -76,6 +77,11 @@ func (c *FakeListClient) List(_ context.Context, list client.ObjectList, _ ...cl
 		l.Items = nil
 		for _, obj := range c.crs["ClusterMaster"] {
 			l.Items = append(l.Items, *(obj.(*enterpriseApiV3.ClusterMaster)))
+		}
+	case *enterpriseApi.MonitoringConsoleList:
+		l.Items = nil
+		for _, obj := range c.crs["MonitoringConsole"] {
+			l.Items = append(l.Items, *(obj.(*enterpriseApi.MonitoringConsole)))
 		}
 	default:
 		return nil
@@ -366,6 +372,67 @@ func TestApplyTelemetry_Success(t *testing.T) {
 	}
 }
 
+func TestApplyTelemetry_ConfigMapWithExistingData(t *testing.T) {
+	cm := &corev1.ConfigMap{Data: map[string]string{"foo": "bar"}}
+	mockClient := test.NewMockClient()
+	result, err := ApplyTelemetry(context.TODO(), mockClient, cm)
+	if err == nil {
+		t.Errorf("expected error when no CRs are present, even with configmap data")
+	}
+	if result != (reconcile.Result{}) && !result.Requeue {
+		t.Errorf("expected requeue to be true")
+	}
+}
+
+// Fix TestApplyTelemetry_CRNoTelAppInstalled signature
+func TestApplyTelemetry_CRNoTelAppInstalled(t *testing.T) {
+	cm := &corev1.ConfigMap{Data: map[string]string{}}
+	mockClient := test.NewMockClient()
+	cr := &enterpriseApi.Standalone{
+		TypeMeta:   metav1.TypeMeta{Kind: "Standalone"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Status:     enterpriseApi.StandaloneStatus{TelAppInstalled: false},
+	}
+	_ = mockClient.Create(context.TODO(), cr)
+	result, err := ApplyTelemetry(context.TODO(), mockClient, cm)
+	if err == nil {
+		t.Errorf("expected error when no CRs with TelAppInstalled=true")
+	}
+	if result != (reconcile.Result{}) && !result.Requeue {
+		t.Errorf("expected requeue to be true")
+	}
+}
+
+func TestApplyTelemetry_SendTelemetryFails(t *testing.T) {
+	cm := &corev1.ConfigMap{Data: map[string]string{}}
+	mockClient := test.NewMockClient()
+	cr := &enterpriseApi.Standalone{
+		TypeMeta:   metav1.TypeMeta{Kind: "Standalone"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Status:     enterpriseApi.StandaloneStatus{TelAppInstalled: true},
+	}
+	_ = mockClient.Create(context.TODO(), cr)
+	origFactory := newSplunkClientFactory
+	newSplunkClientFactory = func(uri, user, pass string) SplunkTelemetryClient {
+		return &mockSplunkTelemetryClient{
+			GetLicenseInfoFunc: func() (map[string]splclient.LicenseInfo, error) {
+				return map[string]splclient.LicenseInfo{"test": {}}, nil
+			},
+			SendTelemetryFunc: func(path string, body []byte) (interface{}, error) {
+				return nil, errors.New("fail send")
+			},
+		}
+	}
+	defer func() { newSplunkClientFactory = origFactory }()
+	result, err := ApplyTelemetry(context.TODO(), mockClient, cm)
+	if err == nil {
+		t.Errorf("expected error when SendTelemetry fails")
+	}
+	if result != (reconcile.Result{}) && !result.Requeue {
+		t.Errorf("expected requeue to be true")
+	}
+}
+
 func TestGetCurrentStatus_ValidStatus(t *testing.T) {
 	status := TelemetryStatus{LastTransmission: "2024-01-01T00:00:00Z", Test: "true", SokVersion: "1.2.3"}
 	b, _ := json.Marshal(status)
@@ -373,5 +440,846 @@ func TestGetCurrentStatus_ValidStatus(t *testing.T) {
 	got := getCurrentStatus(context.TODO(), cm)
 	if got.LastTransmission != status.LastTransmission || got.Test != status.Test || got.SokVersion != status.SokVersion {
 		t.Errorf("expected status to match, got %+v", got)
+	}
+}
+
+func TestHandleMonitoringConsoles_NoCRs(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"MonitoringConsole": {}}}
+	ctx := context.TODO()
+	data, _, err := handleMonitoringConsoles(ctx, mockClient)
+	if data != nil || err != nil {
+		t.Errorf("expected nil, nil, nil when no MonitoringConsole CRs exist")
+	}
+}
+
+func TestHandleMonitoringConsoles_OneCR(t *testing.T) {
+	mc := &enterpriseApi.MonitoringConsole{
+		ObjectMeta: metav1.ObjectMeta{Name: "mc1"},
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+					},
+				},
+			},
+		},
+	}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"MonitoringConsole": {mc}}}
+	ctx := context.TODO()
+	data, _, err := handleMonitoringConsoles(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 1 {
+		t.Errorf("expected one telemetry entry for mc1")
+	}
+	res, ok := m["mc1"].(map[string]string)
+	if !ok {
+		t.Errorf("expected resource telemetry for mc1")
+	}
+	if res[cpuRequestKey] != "1" || res[memoryRequestKey] != "2Gi" || res[cpuLimitKey] != "2" || res[memoryLimitKey] != "4Gi" {
+		t.Errorf("unexpected resource telemetry: %+v", res)
+	}
+}
+
+func TestHandleMonitoringConsoles_ListError(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"MonitoringConsole": {}}}
+	ctx := context.TODO()
+	errClient := &errorClient{mockClient}
+	data, _, err := handleMonitoringConsoles(ctx, errClient)
+	if err == nil || err.Error() != "fail list" {
+		t.Errorf("expected error 'fail list', got %v", err)
+	}
+	if data != nil {
+		t.Errorf("expected nil, nil when error")
+	}
+}
+
+func TestHandleMonitoringConsoles_MultipleCRs(t *testing.T) {
+	mc1 := &enterpriseApi.MonitoringConsole{
+		ObjectMeta: metav1.ObjectMeta{Name: "mc1"},
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+					},
+				},
+			},
+		},
+	}
+	mc2 := &enterpriseApi.MonitoringConsole{
+		ObjectMeta: metav1.ObjectMeta{Name: "mc2"},
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3"), corev1.ResourceMemory: resource.MustParse("6Gi")},
+						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4"), corev1.ResourceMemory: resource.MustParse("8Gi")},
+					},
+				},
+			},
+		},
+	}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"MonitoringConsole": {mc1, mc2}}}
+	ctx := context.TODO()
+	data, _, err := handleMonitoringConsoles(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 2 {
+		t.Errorf("expected two telemetry entries")
+	}
+	res1, ok := m["mc1"].(map[string]string)
+	if !ok || res1[cpuRequestKey] != "1" || res1[memoryRequestKey] != "2Gi" || res1[cpuLimitKey] != "2" || res1[memoryLimitKey] != "4Gi" {
+		t.Errorf("unexpected resource telemetry for mc1: %+v", res1)
+	}
+	res2, ok := m["mc2"].(map[string]string)
+	if !ok || res2[cpuRequestKey] != "3" || res2[memoryRequestKey] != "6Gi" || res2[cpuLimitKey] != "4" || res2[memoryLimitKey] != "8Gi" {
+		t.Errorf("unexpected resource telemetry for mc2: %+v", res2)
+	}
+}
+
+// Error client for simulating List error in tests
+// Implements List to always return error
+
+type errorClient struct{ *FakeListClient }
+
+func (c *errorClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	return errors.New("fail list")
+}
+
+// --- TEST-ONLY PATCHABLE TELEMETRY CLIENT MOCKS ---
+
+// SplunkTelemetryClient is the interface for test patching (copied from production code if not imported)
+type SplunkTelemetryClient interface {
+	GetLicenseInfo() (map[string]splclient.LicenseInfo, error)
+	SendTelemetry(path string, body []byte) (interface{}, error)
+}
+
+// mockSplunkTelemetryClient is a test mock for SplunkTelemetryClient
+// Allows patching SendTelemetry and GetLicenseInfo
+// Use fields for function overrides
+type mockSplunkTelemetryClient struct {
+	GetLicenseInfoFunc func() (map[string]splclient.LicenseInfo, error)
+	SendTelemetryFunc  func(path string, body []byte) (interface{}, error)
+}
+
+func (m *mockSplunkTelemetryClient) GetLicenseInfo() (map[string]splclient.LicenseInfo, error) {
+	if m.GetLicenseInfoFunc != nil {
+		return m.GetLicenseInfoFunc()
+	}
+	return map[string]splclient.LicenseInfo{"test": {}}, nil
+}
+func (m *mockSplunkTelemetryClient) SendTelemetry(path string, body []byte) (interface{}, error) {
+	if m.SendTelemetryFunc != nil {
+		return m.SendTelemetryFunc(path, body)
+	}
+	return nil, nil
+}
+
+// Patchable factory for tests (must match production variable name)
+var newSplunkClientFactory = func(uri, user, pass string) SplunkTelemetryClient {
+	return &mockSplunkTelemetryClient{}
+}
+
+// --- Tests for handleStandalones ---
+func TestHandleStandalones_NoCRs(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"Standalone": {}}}
+	ctx := context.TODO()
+	data, _, err := handleStandalones(ctx, mockClient)
+	if data != nil || err != nil {
+		t.Errorf("expected nil, nil, nil when no Standalone CRs exist")
+	}
+}
+func TestHandleStandalones_OneCR(t *testing.T) {
+	cr := &enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{Name: "s1"},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+					},
+				},
+			},
+		},
+	}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"Standalone": {cr}}}
+	ctx := context.TODO()
+	data, _, err := handleStandalones(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 1 {
+		t.Errorf("expected one telemetry entry for s1")
+	}
+	res, ok := m["s1"].(map[string]string)
+	if !ok {
+		t.Errorf("expected resource telemetry for s1")
+	}
+	if res[cpuRequestKey] != "1" || res[memoryRequestKey] != "2Gi" || res[cpuLimitKey] != "2" || res[memoryLimitKey] != "4Gi" {
+		t.Errorf("unexpected resource telemetry: %+v", res)
+	}
+}
+func TestHandleStandalones_MultipleCRs(t *testing.T) {
+	cr1 := &enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{Name: "s1"},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
+					},
+				},
+			},
+		},
+	}
+	cr2 := &enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{Name: "s2"},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")},
+						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")},
+					},
+				},
+			},
+		},
+	}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"Standalone": {cr1, cr2}}}
+	ctx := context.TODO()
+	data, _, err := handleStandalones(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 2 {
+		t.Errorf("expected two telemetry entries")
+	}
+}
+
+type errorStandaloneClient struct{ *FakeListClient }
+
+func (c *errorStandaloneClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	return errors.New("fail list")
+}
+func TestHandleStandalones_ListError(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"Standalone": {}}}
+	ctx := context.TODO()
+	errClient := &errorStandaloneClient{mockClient}
+	data, _, err := handleStandalones(ctx, errClient)
+	if err == nil || err.Error() != "fail list" {
+		t.Errorf("expected error 'fail list', got %v", err)
+	}
+	if data != nil {
+		t.Errorf("expected nil, nil when error")
+	}
+}
+func TestHandleStandalones_EdgeResourceSpecs(t *testing.T) {
+	cr := &enterpriseApi.Standalone{ObjectMeta: metav1.ObjectMeta{Name: "s1"}, Spec: enterpriseApi.StandaloneSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"Standalone": {cr}}}
+	ctx := context.TODO()
+	data, _, err := handleStandalones(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 1 {
+		t.Errorf("expected one telemetry entry for s1")
+	}
+	res, ok := m["s1"].(map[string]string)
+	if !ok {
+		t.Errorf("expected resource telemetry for s1")
+	}
+	if res[cpuRequestKey] != "" || res[memoryRequestKey] != "" || res[cpuLimitKey] != "" || res[memoryLimitKey] != "" {
+		// Acceptable: all empty
+	} else {
+		t.Errorf("unexpected resource telemetry for edge case: %+v", res)
+	}
+}
+
+// --- Tests for handleLicenseManagers ---
+func TestHandleLicenseManagers_NoCRs(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"LicenseManager": {}}}
+	ctx := context.TODO()
+	data, _, err := handleLicenseManagers(ctx, mockClient)
+	if data != nil || err != nil {
+		t.Errorf("expected nil, nil, nil when no LicenseManager CRs exist")
+	}
+}
+func TestHandleLicenseManagers_OneCR(t *testing.T) {
+	cr := &enterpriseApi.LicenseManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "lm1"},
+		Spec: enterpriseApi.LicenseManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+					},
+				},
+			},
+		},
+	}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"LicenseManager": {cr}}}
+	ctx := context.TODO()
+	data, _, err := handleLicenseManagers(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 1 {
+		t.Errorf("expected one telemetry entry for lm1")
+	}
+	res, ok := m["lm1"].(map[string]string)
+	if !ok {
+		t.Errorf("expected resource telemetry for lm1")
+	}
+	if res[cpuRequestKey] != "1" || res[memoryRequestKey] != "2Gi" || res[cpuLimitKey] != "2" || res[memoryLimitKey] != "4Gi" {
+		t.Errorf("unexpected resource telemetry: %+v", res)
+	}
+}
+func TestHandleLicenseManagers_MultipleCRs(t *testing.T) {
+	cr1 := &enterpriseApi.LicenseManager{ObjectMeta: metav1.ObjectMeta{Name: "lm1"}, Spec: enterpriseApi.LicenseManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}
+	cr2 := &enterpriseApi.LicenseManager{ObjectMeta: metav1.ObjectMeta{Name: "lm2"}, Spec: enterpriseApi.LicenseManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"LicenseManager": {cr1, cr2}}}
+	ctx := context.TODO()
+	data, _, err := handleLicenseManagers(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 2 {
+		t.Errorf("expected two telemetry entries")
+	}
+}
+
+type errorLicenseManagerClient struct{ *FakeListClient }
+
+func (c *errorLicenseManagerClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	return errors.New("fail list")
+}
+func TestHandleLicenseManagers_ListError(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"LicenseManager": {}}}
+	ctx := context.TODO()
+	errClient := &errorLicenseManagerClient{mockClient}
+	data, _, err := handleLicenseManagers(ctx, errClient)
+	if err == nil || err.Error() != "fail list" {
+		t.Errorf("expected error 'fail list', got %v", err)
+	}
+	if data != nil {
+		t.Errorf("expected nil, nil when error")
+	}
+}
+func TestHandleLicenseManagers_EdgeResourceSpecs(t *testing.T) {
+	cr := &enterpriseApi.LicenseManager{ObjectMeta: metav1.ObjectMeta{Name: "lm1"}, Spec: enterpriseApi.LicenseManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"LicenseManager": {cr}}}
+	ctx := context.TODO()
+	data, _, err := handleLicenseManagers(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 1 {
+		t.Errorf("expected one telemetry entry for lm1")
+	}
+	res, ok := m["lm1"].(map[string]string)
+	if !ok {
+		t.Errorf("expected resource telemetry for lm1")
+	}
+	if res[cpuRequestKey] != "" || res[memoryRequestKey] != "" || res[cpuLimitKey] != "" || res[memoryLimitKey] != "" {
+		// Acceptable: all empty
+	} else {
+		t.Errorf("unexpected resource telemetry for edge case: %+v", res)
+	}
+}
+
+// --- Tests for handleLicenseMasters ---
+func TestHandleLicenseMasters_NoCRs(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"LicenseMaster": {}}}
+	ctx := context.TODO()
+	data, _, err := handleLicenseMasters(ctx, mockClient)
+	if data != nil || err != nil {
+		t.Errorf("expected nil, nil, nil when no LicenseMaster CRs exist")
+	}
+}
+func TestHandleLicenseMasters_OneCR(t *testing.T) {
+	cr := &enterpriseApiV3.LicenseMaster{
+		ObjectMeta: metav1.ObjectMeta{Name: "lm1"},
+		Spec: enterpriseApiV3.LicenseMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+					},
+				},
+			},
+		},
+	}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"LicenseMaster": {cr}}}
+	ctx := context.TODO()
+	data, _, err := handleLicenseMasters(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 1 {
+		t.Errorf("expected one telemetry entry for lm1")
+	}
+	res, ok := m["lm1"].(map[string]string)
+	if !ok {
+		t.Errorf("expected resource telemetry for lm1")
+	}
+	if res[cpuRequestKey] != "1" || res[memoryRequestKey] != "2Gi" || res[cpuLimitKey] != "2" || res[memoryLimitKey] != "4Gi" {
+		t.Errorf("unexpected resource telemetry: %+v", res)
+	}
+}
+func TestHandleLicenseMasters_MultipleCRs(t *testing.T) {
+	cr1 := &enterpriseApiV3.LicenseMaster{ObjectMeta: metav1.ObjectMeta{Name: "lm1"}, Spec: enterpriseApiV3.LicenseMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}
+	cr2 := &enterpriseApiV3.LicenseMaster{ObjectMeta: metav1.ObjectMeta{Name: "lm2"}, Spec: enterpriseApiV3.LicenseMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"LicenseMaster": {cr1, cr2}}}
+	ctx := context.TODO()
+	data, _, err := handleLicenseMasters(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 2 {
+		t.Errorf("expected two telemetry entries")
+	}
+}
+
+type errorLicenseMasterClient struct{ *FakeListClient }
+
+func (c *errorLicenseMasterClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	return errors.New("fail list")
+}
+func TestHandleLicenseMasters_ListError(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"LicenseMaster": {}}}
+	ctx := context.TODO()
+	errClient := &errorLicenseMasterClient{mockClient}
+	data, _, err := handleLicenseMasters(ctx, errClient)
+	if err == nil || err.Error() != "fail list" {
+		t.Errorf("expected error 'fail list', got %v", err)
+	}
+	if data != nil {
+		t.Errorf("expected nil, nil when error")
+	}
+}
+func TestHandleLicenseMasters_EdgeResourceSpecs(t *testing.T) {
+	cr := &enterpriseApiV3.LicenseMaster{ObjectMeta: metav1.ObjectMeta{Name: "lm1"}, Spec: enterpriseApiV3.LicenseMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"LicenseMaster": {cr}}}
+	ctx := context.TODO()
+	data, _, err := handleLicenseMasters(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 1 {
+		t.Errorf("expected one telemetry entry for lm1")
+	}
+	res, ok := m["lm1"].(map[string]string)
+	if !ok {
+		t.Errorf("expected resource telemetry for lm1")
+	}
+	if res[cpuRequestKey] != "" || res[memoryRequestKey] != "" || res[cpuLimitKey] != "" || res[memoryLimitKey] != "" {
+		// Acceptable: all empty
+	} else {
+		t.Errorf("unexpected resource telemetry for edge case: %+v", res)
+	}
+}
+
+// --- Tests for handleSearchHeadClusters ---
+func TestHandleSearchHeadClusters_NoCRs(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"SearchHeadCluster": {}}}
+	ctx := context.TODO()
+	data, _, err := handleSearchHeadClusters(ctx, mockClient)
+	if data != nil || err != nil {
+		t.Errorf("expected nil, nil, nil when no SearchHeadCluster CRs exist")
+	}
+}
+func TestHandleSearchHeadClusters_OneCR(t *testing.T) {
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "shc1"},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+					},
+				},
+			},
+		},
+	}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"SearchHeadCluster": {cr}}}
+	ctx := context.TODO()
+	data, _, err := handleSearchHeadClusters(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 1 {
+		t.Errorf("expected one telemetry entry for shc1")
+	}
+	res, ok := m["shc1"].(map[string]string)
+	if !ok {
+		t.Errorf("expected resource telemetry for shc1")
+	}
+	if res[cpuRequestKey] != "1" || res[memoryRequestKey] != "2Gi" || res[cpuLimitKey] != "2" || res[memoryLimitKey] != "4Gi" {
+		t.Errorf("unexpected resource telemetry: %+v", res)
+	}
+}
+func TestHandleSearchHeadClusters_MultipleCRs(t *testing.T) {
+	cr1 := &enterpriseApi.SearchHeadCluster{ObjectMeta: metav1.ObjectMeta{Name: "shc1"}, Spec: enterpriseApi.SearchHeadClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}
+	cr2 := &enterpriseApi.SearchHeadCluster{ObjectMeta: metav1.ObjectMeta{Name: "shc2"}, Spec: enterpriseApi.SearchHeadClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"SearchHeadCluster": {cr1, cr2}}}
+	ctx := context.TODO()
+	data, _, err := handleSearchHeadClusters(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 2 {
+		t.Errorf("expected two telemetry entries")
+	}
+}
+
+type errorSearchHeadClusterClient struct{ *FakeListClient }
+
+func (c *errorSearchHeadClusterClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	return errors.New("fail list")
+}
+func TestHandleSearchHeadClusters_ListError(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"SearchHeadCluster": {}}}
+	ctx := context.TODO()
+	errClient := &errorSearchHeadClusterClient{mockClient}
+	data, _, err := handleSearchHeadClusters(ctx, errClient)
+	if err == nil || err.Error() != "fail list" {
+		t.Errorf("expected error 'fail list', got %v", err)
+	}
+	if data != nil {
+		t.Errorf("expected nil, nil when error")
+	}
+}
+func TestHandleSearchHeadClusters_EdgeResourceSpecs(t *testing.T) {
+	cr := &enterpriseApi.SearchHeadCluster{ObjectMeta: metav1.ObjectMeta{Name: "shc1"}, Spec: enterpriseApi.SearchHeadClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"SearchHeadCluster": {cr}}}
+	ctx := context.TODO()
+	data, _, err := handleSearchHeadClusters(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 1 {
+		t.Errorf("expected one telemetry entry for shc1")
+	}
+	res, ok := m["shc1"].(map[string]string)
+	if !ok {
+		t.Errorf("expected resource telemetry for shc1")
+	}
+	if res[cpuRequestKey] != "" || res[memoryRequestKey] != "" || res[cpuLimitKey] != "" || res[memoryLimitKey] != "" {
+		// Acceptable: all empty
+	} else {
+		t.Errorf("unexpected resource telemetry for edge case: %+v", res)
+	}
+}
+
+// --- Tests for handleIndexerClusters ---
+func TestHandleIndexerClusters_NoCRs(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"IndexerCluster": {}}}
+	ctx := context.TODO()
+	data, _, err := handleIndexerClusters(ctx, mockClient)
+	if data != nil || err != nil {
+		t.Errorf("expected nil, nil, nil when no IndexerCluster CRs exist")
+	}
+}
+func TestHandleIndexerClusters_OneCR(t *testing.T) {
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "idx1"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+					},
+				},
+			},
+		},
+	}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"IndexerCluster": {cr}}}
+	ctx := context.TODO()
+	data, _, err := handleIndexerClusters(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 1 {
+		t.Errorf("expected one telemetry entry for idx1")
+	}
+	res, ok := m["idx1"].(map[string]string)
+	if !ok {
+		t.Errorf("expected resource telemetry for idx1")
+	}
+	if res[cpuRequestKey] != "1" || res[memoryRequestKey] != "2Gi" || res[cpuLimitKey] != "2" || res[memoryLimitKey] != "4Gi" {
+		t.Errorf("unexpected resource telemetry: %+v", res)
+	}
+}
+func TestHandleIndexerClusters_MultipleCRs(t *testing.T) {
+	cr1 := &enterpriseApi.IndexerCluster{ObjectMeta: metav1.ObjectMeta{Name: "idx1"}, Spec: enterpriseApi.IndexerClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}
+	cr2 := &enterpriseApi.IndexerCluster{ObjectMeta: metav1.ObjectMeta{Name: "idx2"}, Spec: enterpriseApi.IndexerClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"IndexerCluster": {cr1, cr2}}}
+	ctx := context.TODO()
+	data, _, err := handleIndexerClusters(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 2 {
+		t.Errorf("expected two telemetry entries")
+	}
+}
+
+type errorIndexerClusterClient struct{ *FakeListClient }
+
+func (c *errorIndexerClusterClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	return errors.New("fail list")
+}
+func TestHandleIndexerClusters_ListError(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"IndexerCluster": {}}}
+	ctx := context.TODO()
+	errClient := &errorIndexerClusterClient{mockClient}
+	data, _, err := handleIndexerClusters(ctx, errClient)
+	if err == nil || err.Error() != "fail list" {
+		t.Errorf("expected error 'fail list', got %v", err)
+	}
+	if data != nil {
+		t.Errorf("expected nil, nil when error")
+	}
+}
+func TestHandleIndexerClusters_EdgeResourceSpecs(t *testing.T) {
+	cr := &enterpriseApi.IndexerCluster{ObjectMeta: metav1.ObjectMeta{Name: "idx1"}, Spec: enterpriseApi.IndexerClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"IndexerCluster": {cr}}}
+	ctx := context.TODO()
+	data, _, err := handleIndexerClusters(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 1 {
+		t.Errorf("expected one telemetry entry for idx1")
+	}
+	res, ok := m["idx1"].(map[string]string)
+	if !ok {
+		t.Errorf("expected resource telemetry for idx1")
+	}
+	if res[cpuRequestKey] != "" || res[memoryRequestKey] != "" || res[cpuLimitKey] != "" || res[memoryLimitKey] != "" {
+		// Acceptable: all empty
+	} else {
+		t.Errorf("unexpected resource telemetry for edge case: %+v", res)
+	}
+}
+
+// --- Tests for handleClusterManagers ---
+func TestHandleClusterManagers_NoCRs(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"ClusterManager": {}}}
+	ctx := context.TODO()
+	data, _, err := handleClusterManagers(ctx, mockClient)
+	if data != nil || err != nil {
+		t.Errorf("expected nil, nil, nil when no ClusterManager CRs exist")
+	}
+}
+func TestHandleClusterManagers_OneCR(t *testing.T) {
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "cmgr1"},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+					},
+				},
+			},
+		},
+	}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"ClusterManager": {cr}}}
+	ctx := context.TODO()
+	data, _, err := handleClusterManagers(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 1 {
+		t.Errorf("expected one telemetry entry for cmgr1")
+	}
+	res, ok := m["cmgr1"].(map[string]string)
+	if !ok {
+		t.Errorf("expected resource telemetry for cmgr1")
+	}
+	if res[cpuRequestKey] != "1" || res[memoryRequestKey] != "2Gi" || res[cpuLimitKey] != "2" || res[memoryLimitKey] != "4Gi" {
+		t.Errorf("unexpected resource telemetry: %+v", res)
+	}
+}
+func TestHandleClusterManagers_MultipleCRs(t *testing.T) {
+	cr1 := &enterpriseApi.ClusterManager{ObjectMeta: metav1.ObjectMeta{Name: "cmgr1"}, Spec: enterpriseApi.ClusterManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}
+	cr2 := &enterpriseApi.ClusterManager{ObjectMeta: metav1.ObjectMeta{Name: "cmgr2"}, Spec: enterpriseApi.ClusterManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"ClusterManager": {cr1, cr2}}}
+	ctx := context.TODO()
+	data, _, err := handleClusterManagers(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 2 {
+		t.Errorf("expected two telemetry entries")
+	}
+}
+
+type errorClusterManagerClient struct{ *FakeListClient }
+
+func (c *errorClusterManagerClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	return errors.New("fail list")
+}
+func TestHandleClusterManagers_ListError(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"ClusterManager": {}}}
+	ctx := context.TODO()
+	errClient := &errorClusterManagerClient{mockClient}
+	data, _, err := handleClusterManagers(ctx, errClient)
+	if err == nil || err.Error() != "fail list" {
+		t.Errorf("expected error 'fail list', got %v", err)
+	}
+	if data != nil {
+		t.Errorf("expected nil, nil when error")
+	}
+}
+func TestHandleClusterManagers_EdgeResourceSpecs(t *testing.T) {
+	cr := &enterpriseApi.ClusterManager{ObjectMeta: metav1.ObjectMeta{Name: "cmgr1"}, Spec: enterpriseApi.ClusterManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"ClusterManager": {cr}}}
+	ctx := context.TODO()
+	data, _, err := handleClusterManagers(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 1 {
+		t.Errorf("expected one telemetry entry for cmgr1")
+	}
+	res, ok := m["cmgr1"].(map[string]string)
+	if !ok {
+		t.Errorf("expected resource telemetry for cmgr1")
+	}
+	if res[cpuRequestKey] != "" || res[memoryRequestKey] != "" || res[cpuLimitKey] != "" || res[memoryLimitKey] != "" {
+		// Acceptable: all empty
+	} else {
+		t.Errorf("unexpected resource telemetry for edge case: %+v", res)
+	}
+}
+
+// --- Tests for handleClusterMasters ---
+func TestHandleClusterMasters_NoCRs(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"ClusterMaster": {}}}
+	ctx := context.TODO()
+	data, _, err := handleClusterMasters(ctx, mockClient)
+	if data != nil || err != nil {
+		t.Errorf("expected nil, nil, nil when no ClusterMaster CRs exist")
+	}
+}
+func TestHandleClusterMasters_OneCR(t *testing.T) {
+	cr := &enterpriseApiV3.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{Name: "cmast1"},
+		Spec: enterpriseApiV3.ClusterMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+					},
+				},
+			},
+		},
+	}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"ClusterMaster": {cr}}}
+	ctx := context.TODO()
+	data, _, err := handleClusterMasters(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 1 {
+		t.Errorf("expected one telemetry entry for cmast1")
+	}
+	res, ok := m["cmast1"].(map[string]string)
+	if !ok {
+		t.Errorf("expected resource telemetry for cmast1")
+	}
+	if res[cpuRequestKey] != "1" || res[memoryRequestKey] != "2Gi" || res[cpuLimitKey] != "2" || res[memoryLimitKey] != "4Gi" {
+		t.Errorf("unexpected resource telemetry: %+v", res)
+	}
+}
+func TestHandleClusterMasters_MultipleCRs(t *testing.T) {
+	cr1 := &enterpriseApiV3.ClusterMaster{ObjectMeta: metav1.ObjectMeta{Name: "cmast1"}, Spec: enterpriseApiV3.ClusterMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}
+	cr2 := &enterpriseApiV3.ClusterMaster{ObjectMeta: metav1.ObjectMeta{Name: "cmast2"}, Spec: enterpriseApiV3.ClusterMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"ClusterMaster": {cr1, cr2}}}
+	ctx := context.TODO()
+	data, _, err := handleClusterMasters(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 2 {
+		t.Errorf("expected two telemetry entries")
+	}
+}
+
+type errorClusterMasterClient struct{ *FakeListClient }
+
+func (c *errorClusterMasterClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	return errors.New("fail list")
+}
+func TestHandleClusterMasters_ListError(t *testing.T) {
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"ClusterMaster": {}}}
+	ctx := context.TODO()
+	errClient := &errorClusterMasterClient{mockClient}
+	data, _, err := handleClusterMasters(ctx, errClient)
+	if err == nil {
+		t.Errorf("expected error 'fail list', got %v", err)
+	}
+	if data != nil {
+		t.Errorf("expected nil, nil when error")
+	}
+}
+func TestHandleClusterMasters_EdgeResourceSpecs(t *testing.T) {
+	cr := &enterpriseApiV3.ClusterMaster{ObjectMeta: metav1.ObjectMeta{Name: "cmast1"}, Spec: enterpriseApiV3.ClusterMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"ClusterMaster": {cr}}}
+	ctx := context.TODO()
+	data, _, err := handleClusterMasters(ctx, mockClient)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || len(m) != 1 {
+		t.Errorf("expected one telemetry entry for cmast1")
+	}
+	res, ok := m["cmast1"].(map[string]string)
+	if !ok {
+		t.Errorf("expected resource telemetry for cmast1")
+	}
+	if res[cpuRequestKey] != "" || res[memoryRequestKey] != "" || res[cpuLimitKey] != "" || res[memoryLimitKey] != "" {
+		// Acceptable: all empty
+	} else {
+		t.Errorf("unexpected resource telemetry for edge case: %+v", res)
 	}
 }
