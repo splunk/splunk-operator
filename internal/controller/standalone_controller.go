@@ -148,9 +148,13 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		logger.Info("Platform SDK runtime initialization failed, falling back to legacy mode", "error", err.Error())
 		r.SDKRuntime = nil
 	} else {
-		// Start SDK runtime
-		if err := sdkRuntime.Start(context.Background()); err != nil {
-			logger.Info("Platform SDK runtime start failed, falling back to legacy mode", "error", err.Error())
+		// Start SDK runtime with timeout to prevent hanging
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		startErr := sdkRuntime.Start(ctx)
+		if startErr != nil {
+			logger.Info("Platform SDK runtime start failed, falling back to legacy mode", "error", startErr.Error())
 			r.SDKRuntime = nil
 		} else {
 			logger.Info("Platform SDK runtime initialized successfully")
