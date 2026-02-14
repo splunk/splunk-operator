@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/go-logr/logr"
+	platformv4 "github.com/splunk/splunk-operator/api/platform/v4"
 	sdk "github.com/splunk/splunk-operator/pkg/platform-sdk"
 	"github.com/splunk/splunk-operator/pkg/platform-sdk/api/config"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -104,6 +105,7 @@ func TestSecretAdapter_SDKMode(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = config.AddToScheme(scheme)
+	_ = platformv4.AddToScheme(scheme)
 
 	// Create source secret (what admins create manually or via ESO)
 	sourceSecret := &corev1.Secret{
@@ -217,6 +219,7 @@ func TestSecretAdapter_SDKMode_SecretNotReady(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = config.AddToScheme(scheme)
+	_ = platformv4.AddToScheme(scheme)
 
 	// Create fake client WITHOUT source secret (simulating ExternalSecret not yet synced)
 	fakeClient := fake.NewClientBuilder().
@@ -292,6 +295,7 @@ func TestSecretAdapter_SDKMode_SecretVersioning(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = config.AddToScheme(scheme)
+	_ = platformv4.AddToScheme(scheme)
 
 	// Create source secret
 	sourceSecret := &corev1.Secret{

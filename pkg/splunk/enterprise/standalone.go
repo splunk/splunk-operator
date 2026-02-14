@@ -294,6 +294,12 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getStandaloneStatefulSet").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
+	// Legacy mode: fall back to old implementation if SDK runtime is nil
+	if sdkRuntime == nil {
+		scopedLog.Info("Using legacy StatefulSet creation (SDK runtime not available)")
+		return getStandaloneStatefulSetLegacy(ctx, client, cr)
+	}
+
 	// Create SDK reconcile context
 	rctx := sdkRuntime.NewReconcileContext(ctx, cr.Namespace, cr.Name)
 
@@ -429,6 +435,27 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	scopedLog.Info("StatefulSet built successfully using Platform SDK")
+	return ss, nil
+}
+
+// getStandaloneStatefulSetLegacy returns a StatefulSet using the legacy (pre-SDK) implementation.
+// This is used for backward compatibility when SDK runtime is not available (e.g., in old tests).
+func getStandaloneStatefulSetLegacy(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (*appsv1.StatefulSet, error) {
+	// get generic statefulset for Splunk Enterprise objects
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{})
+	if err != nil {
+		return nil, err
+	}
+
+	smartStoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, SplunkStandalone)
+
+	if smartStoreConfigMap != nil {
+		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
+	}
+
+	// Setup App framework staging volume for apps
+	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+
 	return ss, nil
 }
 
