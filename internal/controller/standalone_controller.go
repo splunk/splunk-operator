@@ -134,8 +134,10 @@ var ApplyStandalone = func(ctx context.Context, client client.Client, sdkRuntime
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Initialize Platform SDK Runtime
+	// Initialize Platform SDK Runtime (optional - falls back to legacy mode if unavailable)
 	recorder := mgr.GetEventRecorderFor("splunk-standalone-controller")
+	logger := ctrl.Log.WithName("standalone-controller")
+
 	sdkRuntime, err := sdk.NewRuntime(
 		mgr.GetClient(),
 		sdk.WithClusterScoped(),
@@ -143,15 +145,18 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		sdk.WithEventRecorder(recorder),
 	)
 	if err != nil {
-		return errors.Wrap(err, "failed to create Platform SDK runtime")
+		logger.Info("Platform SDK runtime initialization failed, falling back to legacy mode", "error", err.Error())
+		r.SDKRuntime = nil
+	} else {
+		// Start SDK runtime
+		if err := sdkRuntime.Start(context.Background()); err != nil {
+			logger.Info("Platform SDK runtime start failed, falling back to legacy mode", "error", err.Error())
+			r.SDKRuntime = nil
+		} else {
+			logger.Info("Platform SDK runtime initialized successfully")
+			r.SDKRuntime = sdkRuntime
+		}
 	}
-
-	// Start SDK runtime
-	if err := sdkRuntime.Start(context.Background()); err != nil {
-		return errors.Wrap(err, "failed to start Platform SDK runtime")
-	}
-
-	r.SDKRuntime = sdkRuntime
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.Standalone{}).
