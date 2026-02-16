@@ -303,7 +303,16 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	// Create SDK reconcile context
 	rctx := sdkRuntime.NewReconcileContext(ctx, cr.Namespace, cr.Name)
 
-	// 1. Resolve secrets using SDK
+	// 1. Ensure legacy namespace-scoped secret exists (SDK will use it as source)
+	// The SDK expects the legacy secret splunk-{namespace}-secret to exist before resolution
+	scopedLog.Info("Ensuring legacy namespace-scoped secret exists", "namespace", cr.Namespace)
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, cr.GetNamespace())
+	if err != nil {
+		scopedLog.Error(err, "Failed to create/update namespace-scoped secret")
+		return nil, fmt.Errorf("failed to ensure namespace-scoped secret: %w", err)
+	}
+
+	// 2. Resolve secrets using SDK
 	// Use a simple binding name like "{crName}-credentials" which will create versioned secrets
 	// The SDK will automatically look for the legacy source secret: splunk-{namespace}-secret
 	bindingName := fmt.Sprintf("%s-credentials", cr.Name)
@@ -325,7 +334,7 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	}
 	scopedLog.Info("Secret resolved successfully", "secretName", secretRef.SecretName, "ready", secretRef.Ready)
 
-	// 2. TODO: Resolve certificates (optional - only if TLS enabled)
+	// 3. TODO: Resolve certificates (optional - only if TLS enabled)
 	// This will be implemented in a future update
 	var tlsCert *certificate.Ref
 	_ = tlsCert // Avoid unused variable error
@@ -341,7 +350,7 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	readinessProbe := getReadinessProbe(ctx, cr, SplunkStandalone, &cr.Spec.CommonSplunkSpec)
 	startupProbe := getStartupProbe(ctx, cr, SplunkStandalone, &cr.Spec.CommonSplunkSpec)
 
-	// 3. Build StatefulSet using SDK
+	// 4. Build StatefulSet using SDK
 	builder := rctx.BuildStatefulSet().
 		// Basic configuration
 		WithName(GetSplunkStatefulsetName(SplunkStandalone, cr.GetName())).
@@ -427,13 +436,13 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 		addEphemeralVolumes(ss, splcommon.VarVolumeStorage)
 	}
 
-	// 4. Add SmartStore init container if needed (preserve existing logic)
+	// 5. Add SmartStore init container if needed (preserve existing logic)
 	smartStoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, SplunkStandalone)
 	if smartStoreConfigMap != nil {
 		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
 	}
 
-	// 5. Setup App framework staging volume (preserve existing logic)
+	// 6. Setup App framework staging volume (preserve existing logic)
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	scopedLog.Info("StatefulSet built successfully using Platform SDK")
