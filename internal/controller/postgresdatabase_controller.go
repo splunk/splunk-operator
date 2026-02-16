@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -51,6 +52,7 @@ type PostgresDatabaseReconciler struct {
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresdatabases/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresdatabases/finalizers,verbs=update
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters,verbs=get;list;watch
+//+kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters,verbs=get;list;watch;patch
 
 func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -127,6 +129,134 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		logger.Error(err, "Failed to update Database status")
 		return ctrl.Result{}, err
 	}
+	// Create users in cnpg cluster
+	if cluster.Status.ProvisionerRef == nil {
+		logger.Error(nil, "Cluster has no ProvisionerRef yet", "cluster", cluster.Name)
+		return ctrl.Result{RequeueAfter: retryDelay}, nil
+	}
+
+	meta.SetStatusCondition(&postgresDB.Status.Conditions, metav1.Condition{
+		Type:    "UsersReady",
+		Status:  metav1.ConditionFalse,
+		Reason:  "Provisioning",
+		Message: "Initiate user creation",
+	})
+	if err := r.Status().Update(ctx, postgresDB); err != nil {
+		logger.Error(err, "Failed to update Database status")
+		return ctrl.Result{}, err
+	}
+	// ABSTRACTION BREAK: We modify CNPG Cluster directly for multi-tenant user management
+	// Reason: SSA allows multiple PostgresDatabase CRs to independently manage users
+	allRoles := []cnpgv1.RoleConfiguration{}
+	for _, dbSpec := range postgresDB.Spec.Databases {
+		dbAdminUser := fmt.Sprintf("%s_admin", dbSpec.Name)
+		dbRWUser := fmt.Sprintf("%s_rw", dbSpec.Name)
+		allRoles = append(allRoles, cnpgv1.RoleConfiguration{
+			Name:   dbAdminUser,
+			Ensure: cnpgv1.EnsurePresent,
+		},
+			cnpgv1.RoleConfiguration{
+				Name:   dbRWUser,
+				Ensure: cnpgv1.EnsurePresent,
+			})
+	}
+
+	rolePatch := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cluster.Status.ProvisionerRef.Name,
+			Namespace: cluster.Status.ProvisionerRef.Namespace,
+		},
+		Spec: cnpgv1.ClusterSpec{
+			Managed: &cnpgv1.ManagedConfiguration{
+				Roles: allRoles,
+			},
+		},
+	}
+
+	if err := r.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fmt.Sprintf("postgresdatabase-%s", postgresDB.Name))); err != nil {
+		logger.Error(err, "Failed to add users to CNPG Cluster", "postgres database CR", postgresDB.Name)
+		//TODO add proper status showing we have error with configuration
+		return ctrl.Result{}, err
+	}
+	logger.Info("Users added to CNPG Cluster", "database CR", postgresDB.Name, "cnpgCluster", cluster.Status.ProvisionerRef.Name)
+
+	// Verify users are actually created by CNPG
+	cnpgCluster := &cnpgv1.Cluster{}
+	if err := r.Get(ctx, types.NamespacedName{
+		Name:      cluster.Status.ProvisionerRef.Name,
+		Namespace: cluster.Status.ProvisionerRef.Namespace,
+	}, cnpgCluster); err != nil {
+		logger.Error(err, "Failed to verify CNPG Cluster status")
+		return ctrl.Result{RequeueAfter: retryDelay}, nil
+	}
+
+	// Build list of expected users
+	expectedUsers := []string{}
+	for _, dbSpec := range postgresDB.Spec.Databases {
+		expectedUsers = append(expectedUsers,
+			fmt.Sprintf("%s_admin", dbSpec.Name),
+			fmt.Sprintf("%s_rw", dbSpec.Name),
+		)
+	}
+
+	// Check for failed users first (fail fast)
+	if cnpgCluster.Status.ManagedRolesStatus.CannotReconcile != nil {
+		for _, userName := range expectedUsers {
+			if errs, failed := cnpgCluster.Status.ManagedRolesStatus.CannotReconcile[userName]; failed {
+				logger.Error(nil, "User reconciliation failed permanently", "user", userName, "errors", errs)
+				meta.SetStatusCondition(&postgresDB.Status.Conditions, metav1.Condition{
+					Type:    "UsersReady",
+					Status:  metav1.ConditionFalse,
+					Reason:  "ReconciliationFailed",
+					Message: fmt.Sprintf("User %s failed: %v", userName, errs),
+				})
+				postgresDB.Status.Phase = "Failed"
+				r.Status().Update(ctx, postgresDB)
+				return ctrl.Result{}, fmt.Errorf("user %s reconciliation failed: %v", userName, errs)
+			}
+		}
+	}
+
+	// Check if all users are reconciled
+	reconciledUsers := cnpgCluster.Status.ManagedRolesStatus.ByStatus[cnpgv1.RoleStatusReconciled]
+	notReady := []string{}
+	for _, userName := range expectedUsers {
+		if !slices.Contains(reconciledUsers, userName) {
+			notReady = append(notReady, userName)
+		}
+	}
+
+	// If any not ready, requeue
+	if len(notReady) > 0 {
+		meta.SetStatusCondition(&postgresDB.Status.Conditions, metav1.Condition{
+			Type:    "UsersReady",
+			Status:  metav1.ConditionFalse,
+			Reason:  "Provisioning",
+			Message: fmt.Sprintf("Waiting for users: %v", notReady),
+		})
+		r.Status().Update(ctx, postgresDB)
+		logger.Info("Users not reconciled, requeuing", "pending", notReady)
+		return ctrl.Result{RequeueAfter: retryDelay}, nil
+	}
+
+	// All users reconciled!
+	meta.SetStatusCondition(&postgresDB.Status.Conditions, metav1.Condition{
+		Type:    "UsersReady",
+		Status:  metav1.ConditionTrue,
+		Reason:  "Reconciled",
+		Message: fmt.Sprintf("All %d users ready", len(expectedUsers)),
+	})
+	r.Status().Update(ctx, postgresDB)
+	logger.Info("All users reconciled")
+	//TODO Do we need to check here if status is provisioned correctly before we move forward?
+	meta.SetStatusCondition(&postgresDB.Status.Conditions, metav1.Condition{
+		Type:    "UsersReady",
+		Status:  metav1.ConditionTrue,
+		Reason:  "Provisioned",
+		Message: "Users created",
+	})
+
+	// Create databases
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		logger.Info("Processing database", "database", dbSpec.Name)
 
@@ -142,7 +272,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				Name:  dbSpec.Name,
 				Owner: fmt.Sprintf("%s_admin", dbSpec.Name),
 				ClusterRef: corev1.LocalObjectReference{
-					Name: cluster.Spec.CNPGClusterRef.Name,
+					Name: cluster.Status.ProvisionerRef.Name,
 				},
 			},
 		}
@@ -152,7 +282,6 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			logger.Error(err, "Failed to set owner reference")
 			return ctrl.Result{}, err
 		}
-
 		// Create or update database
 		if err := r.Create(ctx, cnpgDB); err != nil {
 			if errors.IsAlreadyExists(err) {
