@@ -1,0 +1,137 @@
+# Adds namespace to all resources.
+# Cluster-scoped deployment WITH webhook enabled (opt-in)
+# Requires cert-manager to be installed in the cluster
+namespace: splunk-operator 
+
+# Value of this field is prepended to the
+# names of all resources, e.g. a deployment named
+# "wordpress" becomes "alices-wordpress".
+# Note that it should also match with the prefix (text before '-') of the namespace
+# field above.
+namePrefix: splunk-operator-
+
+# Labels to add to all resources and selectors.
+commonLabels:
+  name: splunk-operator
+
+bases:
+- ../crd
+- ../rbac
+- ../persistent-volume
+- ../service
+- ../manager
+# [WEBHOOK] Enabled for opt-in webhook deployment
+- ../webhook
+# [CERTMANAGER] Required for webhook TLS
+- ../certmanager
+# [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
+#- ../prometheus
+# [METRICS] Expose the controller manager metrics service.
+- metrics_service.yaml
+
+patchesStrategicMerge:
+# Mount the controller config file for loading manager configurations
+# through a ComponentConfig type
+#- manager_config_patch.yaml
+
+# [WEBHOOK] Enabled for webhook deployment
+- manager_webhook_patch.yaml
+
+# [CERTMANAGER] Enabled for CA injection in the admission webhooks
+- webhookcainjection_patch.yaml
+
+# the following config is for teaching kustomize how to do var substitution
+vars:
+# [CERTMANAGER] Variables for cert-manager CA injection
+- name: CERTIFICATE_NAMESPACE # namespace of the certificate CR
+  objref:
+    kind: Certificate
+    group: cert-manager.io
+    version: v1
+    name: serving-cert # this name should match the one in certificate.yaml
+  fieldref:
+    fieldpath: metadata.namespace
+- name: CERTIFICATE_NAME
+  objref:
+    kind: Certificate
+    group: cert-manager.io
+    version: v1
+    name: serving-cert # this name should match the one in certificate.yaml
+- name: SERVICE_NAMESPACE # namespace of the service
+  objref:
+    kind: Service
+    version: v1
+    name: webhook-service
+  fieldref:
+    fieldpath: metadata.namespace
+- name: SERVICE_NAME
+  objref:
+    kind: Service
+    version: v1
+    name: webhook-service
+
+#patches:
+#- target:
+#    kind: Deployment
+#    name: controller-manager
+#  patch: |-
+#    - op: replace
+#      path: /metadata/name
+#      value: splunk-operator
+#- target:
+#    kind: ServiceAccount
+#    name: controller-manager
+#  patch: |-
+#    - op: replace
+#      path: /metadata/name
+#      value: splunk-operator
+#- target:
+#    kind: Service
+#    name: controller-manager-service
+#  patch: |-
+#    - op: replace
+#      path: /metadata/name
+#      value: splunk-operator-service
+#- target:
+#    kind: Role
+#    name: manager-role
+#  patch: |-
+#    - op: replace
+#      path: /metadata/name
+#      value: splunk:operator:namespace-manager
+#- target:
+#    kind: RoleBinding
+#    name: manager-rolebinding
+#  patch: |-
+#    - op: replace
+#      path: /metadata/name
+#      value: splunk:operator:namespace-manager
+
+# currently patch is set to change deployment environment variables
+patches:
+- target:
+    kind: Deployment
+    name: controller-manager
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/env
+      value: 
+      - name: WATCH_NAMESPACE
+        value: WATCH_NAMESPACE_VALUE
+      - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
+        value: SPLUNK_ENTERPRISE_IMAGE
+      - name: OPERATOR_NAME
+        value: splunk-operator
+      - name: SPLUNK_GENERAL_TERMS
+        value: SPLUNK_GENERAL_TERMS_VALUE
+      - name: ENABLE_VALIDATION_WEBHOOK
+        value: "true"
+      - name: POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+# [METRICS] The following patch will enable the metrics endpoint using HTTPS and the port :8443.
+# More info: https://book.kubebuilder.io/reference/metrics
+- path: manager_metrics_patch.yaml
+  target:
+    kind: Deployment
