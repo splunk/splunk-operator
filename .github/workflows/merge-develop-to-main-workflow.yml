@@ -121,7 +121,7 @@ jobs:
           make generate-artifacts IMG=${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.enterprise_version }}
 
       - name: Upload Release Artifacts
-        uses: actions/upload-artifact@v4.4.0
+        uses: actions/upload-artifact@v6
         with:
           name: "release-artifacts-${{ github.event.inputs.release_version }}-RC"
           path: "release-**"
