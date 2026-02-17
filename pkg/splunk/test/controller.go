@@ -349,11 +349,32 @@ func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		return nil
 	}
 
-	dummySchemaResource := schema.GroupResource{
-		Group:    obj.GetObjectKind().GroupVersionKind().Group,
-		Resource: obj.GetObjectKind().GroupVersionKind().Kind,
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	if gvk.Empty() {
+		// Infer GVK from object type
+		typeName := reflect.TypeOf(obj).Elem().Name()
+		// Determine group based on type
+		var group, version string
+		switch obj.(type) {
+		case *corev1.Pod, *corev1.Service, *corev1.ConfigMap, *corev1.Secret:
+			group, version = "", "v1"
+		case *appsv1.StatefulSet, *appsv1.Deployment:
+			group, version = "apps", "v1"
+		default:
+			group, version = "enterprise.splunk.com", "v4"
+		}
+		gvk = schema.GroupVersionKind{
+			Group:   group,
+			Version: version,
+			Kind:    typeName,
+		}
 	}
-	c.NotFoundError = k8serrors.NewNotFound(dummySchemaResource, obj.GetName())
+
+	dummySchemaResource := schema.GroupResource{
+		Group:    gvk.Group,
+		Resource: gvk.Kind,
+	}
+	c.NotFoundError = k8serrors.NewNotFound(dummySchemaResource, key.Name)
 	return c.NotFoundError
 }
 

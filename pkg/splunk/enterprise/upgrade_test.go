@@ -214,7 +214,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
 	}
 
-	_, err = ApplyClusterManager(ctx, client, &cm)
+	_, err = ApplyClusterManager(ctx, client, &cm, nil)
 	// license manager statefulset is not created
 	if err != nil && !k8serrors.IsNotFound(err) {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
@@ -268,7 +268,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("lm is not in ready state")
 	}
 
-	_, err = ApplyClusterManager(ctx, client, &cm)
+	_, err = ApplyClusterManager(ctx, client, &cm, nil)
 	// lm statefulset should have been created by now, this should pass
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
@@ -279,7 +279,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-cluster-manager", cm.Name), cm.Namespace)
 	cm.Status.TelAppInstalled = true
 	// cluster manager is found  and creat
-	_, err = ApplyClusterManager(ctx, client, &cm)
+	_, err = ApplyClusterManager(ctx, client, &cm, nil)
 	// lm statefulset should have been created by now, this should pass
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
@@ -532,7 +532,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	}
 
 	cm.Status.TelAppInstalled = true
-	_, err = ApplyClusterManager(ctx, client, &cm)
+	_, err = ApplyClusterManager(ctx, client, &cm, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
 	}
@@ -585,13 +585,13 @@ func TestUpgradePathValidation(t *testing.T) {
 	}
 
 	cm.Status.TelAppInstalled = true
-	_, err = ApplyClusterManager(ctx, client, &cm)
+	_, err = ApplyClusterManager(ctx, client, &cm, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
 	}
 
 	cm.Status.TelAppInstalled = true
-	_, err = ApplyClusterManager(ctx, client, &cm)
+	_, err = ApplyClusterManager(ctx, client, &cm, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
 	}

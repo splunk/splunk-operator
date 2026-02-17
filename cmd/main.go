@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -27,6 +28,7 @@ import (
 	intController "github.com/splunk/splunk-operator/internal/controller"
 	"github.com/splunk/splunk-operator/internal/controller/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
+	"github.com/splunk/splunk-operator/pkg/splunk/enterprise/validation"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 
@@ -46,7 +48,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -83,9 +84,8 @@ func main() {
 
 	var tlsOpts []func(*tls.Config)
 
-	// TLS certificate configuration for webhooks and metrics
+	// TLS certificate configuration for metrics
 	var metricsCertPath, metricsCertName, metricsCertKey string
-	var webhookCertPath, webhookCertName, webhookCertKey string
 
 	flag.StringVar(&logEncoder, "log-encoder", "json", "log encoding ('json' or 'console')")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -101,10 +101,7 @@ func main() {
 	flag.BoolVar(&secureMetrics, "metrics-secure", false,
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 
-	// TLS certificate flags for webhooks and metrics server
-	flag.StringVar(&webhookCertPath, "webhook-cert-path", "", "The directory that contains the webhook certificate.")
-	flag.StringVar(&webhookCertName, "webhook-cert-name", "tls.crt", "The name of the webhook certificate file.")
-	flag.StringVar(&webhookCertKey, "webhook-cert-key", "tls.key", "The name of the webhook key file.")
+	// TLS certificate flags for metrics server
 	flag.StringVar(&metricsCertPath, "metrics-cert-path", "", "The directory that contains the metrics server certificate.")
 	flag.StringVar(&metricsCertName, "metrics-cert-name", "tls.crt", "The name of the metrics server certificate file.")
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
@@ -158,30 +155,8 @@ func main() {
 	// Logging setup
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	// Initialize certificate watchers for webhooks and metrics
-	var metricsCertWatcher, webhookCertWatcher *certwatcher.CertWatcher
-	webhookTLSOpts := tlsOpts
-
-	if len(webhookCertPath) > 0 {
-		setupLog.Info("Initializing webhook certificate watcher using provided certificates",
-			"webhook-cert-path", webhookCertPath, "webhook-cert-name", webhookCertName, "webhook-cert-key", webhookCertKey)
-
-		var err error
-		webhookCertWatcher, err = certwatcher.New(
-			filepath.Join(webhookCertPath, webhookCertName),
-			filepath.Join(webhookCertPath, webhookCertKey),
-		)
-		if err != nil {
-			setupLog.Error(err, "Failed to initialize webhook certificate watcher")
-			os.Exit(1)
-		}
-
-		webhookTLSOpts = append(webhookTLSOpts, func(config *tls.Config) {
-			config.GetCertificate = webhookCertWatcher.GetCertificate
-		})
-	}
-
 	// Configure metrics certificate watcher if metrics certs are provided
+	var metricsCertWatcher *certwatcher.CertWatcher
 	if len(metricsCertPath) > 0 {
 		setupLog.Info("Initializing metrics certificate watcher using provided certificates",
 			"metrics-cert-path", metricsCertPath, "metrics-cert-name", metricsCertName, "metrics-cert-key", metricsCertKey)
@@ -201,11 +176,6 @@ func main() {
 		})
 	}
 
-	// Configure webhook server options
-	webhookServerOptions := webhook.Options{
-		TLSOpts: webhookTLSOpts,
-	}
-
 	baseOptions := ctrl.Options{
 		Metrics:                metricsServerOptions,
 		Scheme:                 scheme,
@@ -214,7 +184,6 @@ func main() {
 		LeaderElectionID:       "270bec8c.splunk.com",
 		LeaseDuration:          &leaseDuration,
 		RenewDeadline:          &renewDeadline,
-		WebhookServer:          webhook.NewServer(webhookServerOptions),
 	}
 
 	// Apply namespace-specific configuration
@@ -300,6 +269,43 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Telemetry")
 		os.Exit(1)
 	}
+
+	// Setup centralized validation webhook server (opt-in via ENABLE_VALIDATION_WEBHOOK env var, defaults to false)
+	enableWebhooks := os.Getenv("ENABLE_VALIDATION_WEBHOOK")
+	if enableWebhooks == "true" {
+		// Parse optional timeout configurations from environment
+		readTimeout := 10 * time.Second
+		if val := os.Getenv("WEBHOOK_READ_TIMEOUT"); val != "" {
+			if d, err := time.ParseDuration(val); err == nil {
+				readTimeout = d
+			}
+		}
+		writeTimeout := 10 * time.Second
+		if val := os.Getenv("WEBHOOK_WRITE_TIMEOUT"); val != "" {
+			if d, err := time.ParseDuration(val); err == nil {
+				writeTimeout = d
+			}
+		}
+
+		webhookServer := validation.NewWebhookServer(validation.WebhookServerOptions{
+			Port:         9443,
+			CertDir:      "/tmp/k8s-webhook-server/serving-certs",
+			Validators:   validation.DefaultValidators,
+			ReadTimeout:  readTimeout,
+			WriteTimeout: writeTimeout,
+		})
+
+		// Add webhook server as a runnable to the manager
+		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			return webhookServer.Start(ctx)
+		})); err != nil {
+			setupLog.Error(err, "unable to add webhook server to manager")
+			os.Exit(1)
+		}
+		setupLog.Info("Validation webhook enabled via ENABLE_VALIDATION_WEBHOOK=true")
+	} else {
+		setupLog.Info("Validation webhook disabled (set ENABLE_VALIDATION_WEBHOOK=true to enable)")
+	}
 	//+kubebuilder:scaffold:builder
 
 	// Register certificate watchers with the manager
@@ -307,14 +313,6 @@ func main() {
 		setupLog.Info("Adding metrics certificate watcher to manager")
 		if err := mgr.Add(metricsCertWatcher); err != nil {
 			setupLog.Error(err, "Unable to add metrics certificate watcher to manager")
-			os.Exit(1)
-		}
-	}
-
-	if webhookCertWatcher != nil {
-		setupLog.Info("Adding webhook certificate watcher to manager")
-		if err := mgr.Add(webhookCertWatcher); err != nil {
-			setupLog.Error(err, "Unable to add webhook certificate watcher to manager")
 			os.Exit(1)
 		}
 	}

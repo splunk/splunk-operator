@@ -831,24 +831,53 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	mclient.AddHandler(wantRequest2, 200, string(response2), nil)
 
 	// mock the verify RF peer funciton
+	savedVerifyRFPeers := VerifyRFPeers
+	defer func() { VerifyRFPeers = savedVerifyRFPeers }()
 	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
 		return nil
 	}
 
 	// Mock the addTelApp function for unit tests
+	savedAddTelApp := addTelApp
+	defer func() { addTelApp = savedAddTelApp }()
 	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
 		return nil
 	}
+
+	// Initialize GlobalResourceTracker to enable app framework
+	initGlobalResourceTracker()
 
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
 	_ = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
+	savedGetAppsList := GetAppsList
+	defer func() { GetAppsList = savedGetAppsList }()
 	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
 		RemoteDataListResponse := splclient.RemoteDataListResponse{}
 		return RemoteDataListResponse, nil
 	}
+
+	// Mock GetPodExecClient to return a mock client that simulates pod operations locally
+	savedGetPodExecClient := splutil.GetPodExecClient
+	splutil.GetPodExecClient = func(client splcommon.ControllerClient, cr splcommon.MetaObject, targetPodName string) splutil.PodExecClientImpl {
+		mockClient := &spltest.MockPodExecClient{
+			Client:        client,
+			Cr:            cr,
+			TargetPodName: targetPodName,
+		}
+		// Add mock responses for common commands
+		ctx := context.TODO()
+		// Mock mkdir command (used by createDirOnSplunkPods)
+		mockClient.AddMockPodExecReturnContext(ctx, "mkdir -p", &spltest.MockPodExecReturnContext{
+			StdOut: "",
+			StdErr: "",
+			Err:    nil,
+		})
+		return mockClient
+	}
+	defer func() { splutil.GetPodExecClient = savedGetPodExecClient }()
 
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
@@ -1193,7 +1222,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermanager)
+	_, err = ApplyClusterManager(ctx, c, clustermanager, nil)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
@@ -1267,7 +1296,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermanager)
+	_, err = ApplyClusterManager(ctx, c, clustermanager, nil)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()

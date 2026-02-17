@@ -254,7 +254,7 @@ func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.
 
 	client := spltest.NewMockClient()
 
-	_, err := ApplyClusterManager(context.TODO(), client, &cr)
+	_, err := ApplyClusterManager(context.TODO(), client, &cr, nil)
 	if err == nil {
 		t.Errorf("ApplyClusterManager should fail on invalid smartstore config")
 	}
