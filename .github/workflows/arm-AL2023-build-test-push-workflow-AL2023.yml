@@ -62,7 +62,6 @@ jobs:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_PREFIX }}/${{ github.event.inputs.splunk_image_repository_tag }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-      S3_REGION: ${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}
     steps:
     - name: Set up cosign
       uses: sigstore/cosign-installer@main
@@ -70,6 +69,8 @@ jobs:
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+    - name: Export S3_REGION from .env
+      run: echo "S3_REGION=${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}" >> $GITHUB_ENV
     - name: Setup Go
       uses: actions/setup-go@v2
       with:
@@ -138,7 +139,6 @@ jobs:
       TEST_INDEXES_S3_BUCKET: ${{ secrets.TEST_INDEXES_S3_BUCKET }}
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       PRIVATE_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
-      S3_REGION: ${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}
       EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
