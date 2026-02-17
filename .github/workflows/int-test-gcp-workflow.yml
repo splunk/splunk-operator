@@ -55,14 +55,13 @@ jobs:
       - name: Login to GCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
+          registry: ${{ env.ARTIFACT_REGISTRY }}
           username: _json_key
           password: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
       - name: Build Splunk Operator Image
         run: |
-          make docker-buildx IMG=${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-
+          make docker-buildx IMG=${{ env.ARTIFACT_REGISTRY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   create-cluster-and-run-tests:
     strategy:
       matrix:
@@ -80,15 +79,13 @@ jobs:
       CLUSTER_PROVIDER: gcp
       ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ secrets.GCP_REGION }}
-      AWS_S3_REGION: ${{ secrets.GCP_REGION }}
-      GCP_ZONE: ${{ secrets.GCP_ZONE }}
+      GCP_REGION: ${{ steps.dotenv.outputs.GCP_REGION }}
+      GCP_ZONE: ${{ steps.dotenv.outputs.GCP_ZONE }}
       GCP_NETWORK: default  # Adjust if using a custom network
       GCP_SUBNETWORK: default  # Adjust if using a custom subnetwork
       TEST_FOCUS: ${{ matrix.test_focus.name }}
       CLUSTER_NODES: 2
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
-      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       # This regex matches any string not containing integration keyword
@@ -158,11 +155,6 @@ jobs:
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
           install_components: 'kubectl'
-
-      - name: Change Splunk Enterprise Image on Main Branches
-        if: github.ref == 'refs/heads/main'
-        run: |
-          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v1

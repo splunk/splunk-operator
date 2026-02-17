@@ -198,7 +198,7 @@ WATCH_NAMESPACE=""                                 # Watch all namespaces (clust
 ENVIRONMENT=default                                # Deployment environment
 
 # Splunk configuration
-SPLUNK_ENTERPRISE_IMAGE=(See SPLUNK_ENTERPRISE_RELEASE_IMAGE in .env)   # Splunk Enterprise image
+SPLUNK_ENTERPRISE_IMAGE=(See SPLUNK_ENTERPRISE_IMAGE in .env)   # Splunk Enterprise image
 SPLUNK_GENERAL_TERMS=""                           # SGT acceptance (required)
 
 # Testing
