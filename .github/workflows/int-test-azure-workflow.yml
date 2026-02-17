@@ -15,7 +15,6 @@ jobs:
   build-operator-image:
     runs-on: ubuntu-latest
     env:
-      SPLUNK_ENTERPRISE_IMAGE: ${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       CONTAINER_REGISTRY: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
     steps:
@@ -23,6 +22,9 @@ jobs:
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+    - name: Export env from .env
+      run: |
+        echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_ENV
     - name: Setup Go
       uses: actions/setup-go@v2
       with:
@@ -63,13 +65,15 @@ jobs:
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       ECR_REPOSITORY: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
       AZURE_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
-      AZURE_REGION: ${{ steps.dotenv.outputs.AZURE_REGION }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+    - name: Export env from .env
+      run: |
+        echo "AZURE_REGION=${{ steps.dotenv.outputs.AZURE_REGION }}" >> $GITHUB_ENV
     - name: Set Cluster Name
       run: |
         echo "TEST_CLUSTER_NAME=az${{ github.run_id }}" >> $GITHUB_ENV
@@ -112,7 +116,6 @@ jobs:
     env:
       CLUSTER_NODES: 2
       CLUSTER_WORKERS: 5
-      SPLUNK_ENTERPRISE_IMAGE: ${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       TEST_FOCUS: azure_sanity
@@ -130,7 +133,6 @@ jobs:
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       ECR_REPOSITORY: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
       AZURE_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
-      AZURE_REGION: ${{ steps.dotenv.outputs.AZURE_REGION }}
       CLUSTER_WIDE: "true"
       # AZURE_MANAGED_ID_ENABLED: "${{ matrix.auth_method_managed_id }}"
       AZURE_MANAGED_ID_ENABLED: "false"
@@ -144,6 +146,10 @@ jobs:
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      - name: Export env from .env
+        run: |
+          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_ENV
+          echo "AZURE_REGION=${{ steps.dotenv.outputs.AZURE_REGION }}" >> $GITHUB_ENV
       - name: 'Login via Azure CLI'
         uses: azure/login@v1
         with:

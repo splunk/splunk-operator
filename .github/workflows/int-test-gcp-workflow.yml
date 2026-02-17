@@ -82,13 +82,10 @@ jobs:
       CLUSTER_PROVIDER: gcp
       ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ steps.dotenv.outputs.GCP_REGION }}
-      GCP_ZONE: ${{ steps.dotenv.outputs.GCP_ZONE }}
       GCP_NETWORK: default  # Adjust if using a custom network
       GCP_SUBNETWORK: default  # Adjust if using a custom subnetwork
       TEST_FOCUS: ${{ matrix.test_focus.name }}
       CLUSTER_NODES: 2
-      SPLUNK_ENTERPRISE_IMAGE: ${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       # This regex matches any string not containing integration keyword
@@ -123,6 +120,11 @@ jobs:
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
         with:
           path: .env
+      - name: Export env from .env
+        run: |
+          echo "GCP_REGION=${{ steps.dotenv.outputs.GCP_REGION }}" >> $GITHUB_ENV
+          echo "GCP_ZONE=${{ steps.dotenv.outputs.GCP_ZONE }}" >> $GITHUB_ENV
+          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_ENV
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v1
