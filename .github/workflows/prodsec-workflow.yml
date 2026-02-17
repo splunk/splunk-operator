@@ -4,11 +4,17 @@ permissions:
   packages: write
   pull-requests: write
 on:
-  pull_request: {}
+  pull_request:
+    paths-ignore:
+    - 'docs/**'
+    - '*.md'
   push:
     branches:
     - main
     - develop
+    paths-ignore:
+    - 'docs/**'
+    - '*.md'
 jobs:
   semgrep:
     name: Semgrep Scanner
@@ -34,7 +40,7 @@ jobs:
       run: |
         echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_ENV
         echo "S3_REGION=${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}" >> $GITHUB_ENV
-    - name: Run FOSSA Test 
+    - name: Run FOSSA Test
       uses: fossas/fossa-action@main
       with:
         api-key: ${{secrets.FOSSA_API_TOKEN}}

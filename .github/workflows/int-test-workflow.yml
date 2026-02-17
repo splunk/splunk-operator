@@ -10,6 +10,9 @@ on:
       - develop
       - main
       - feature**
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
