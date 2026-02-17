@@ -1380,10 +1380,11 @@ spec:
                   environment variables)
                 type: string
               imagePullPolicy:
-                description: 'Sets pull policy for all images (either “Always” or
-                  the default: “IfNotPresent”)'
+                description: 'Sets pull policy for all images ("Always", "Never",
+                  or the default: "IfNotPresent")'
                 enum:
                 - Always
+                - Never
                 - IfNotPresent
                 type: string
               imagePullSecrets:
@@ -6254,10 +6255,11 @@ spec:
                   environment variables)
                 type: string
               imagePullPolicy:
-                description: 'Sets pull policy for all images (either “Always” or
-                  the default: “IfNotPresent”)'
+                description: 'Sets pull policy for all images ("Always", "Never",
+                  or the default: "IfNotPresent")'
                 enum:
                 - Always
+                - Never
                 - IfNotPresent
                 type: string
               imagePullSecrets:

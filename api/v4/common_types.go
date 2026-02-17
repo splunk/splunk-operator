@@ -91,8 +91,8 @@ type Spec struct {
 	// Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE environment variables)
 	Image string `json:"image"`
 
-	// Sets pull policy for all images (either “Always” or the default: “IfNotPresent”)
-	// +kubebuilder:validation:Enum=Always;IfNotPresent
+	// Sets pull policy for all images ("Always", "Never", or the default: "IfNotPresent")
+	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
 	ImagePullPolicy string `json:"imagePullPolicy"`
 
 	// Name of Scheduler to use for pod placement (defaults to “default-scheduler”)

@@ -19,6 +19,7 @@ config/examples/licensemaster/default.yaml
 config/rbac/licensemaster_editor_role.yaml
 config/rbac/licensemaster_viewer_role.yaml
 config/samples/enterprise_v3_licensemaster.yaml
+config/webhook/manifests.yaml
 tools/make_bundle.sh
 config/samples/kustomization.yaml
 config/manifests/bases/splunk-operator.clusterserviceversion.yaml
