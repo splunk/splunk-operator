@@ -397,6 +397,26 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 		WithSecret(secretRef).
 		WithConfigMap(GetProbeConfigMapName(cr.Namespace))
 
+	// IMPORTANT: SDK doesn't auto-mount K8s secrets (only uses envFrom)
+	// But Splunk requires secret mounted as file at /mnt/splunk-secrets/default.yml
+	// So we manually add the volume and mount
+	secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
+	builder = builder.
+		WithVolume(corev1.Volume{
+			Name: "mnt-splunk-secrets",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  secretRef.SecretName,
+					DefaultMode: &secretVolDefaultMode,
+				},
+			},
+		}).
+		WithVolumeMount(corev1.VolumeMount{
+			Name:      "mnt-splunk-secrets",
+			MountPath: "/mnt/splunk-secrets",
+			ReadOnly:  true,
+		})
+
 	// Add certificates if enabled
 	if tlsCert != nil {
 		builder = builder.WithCertificate(tlsCert)
