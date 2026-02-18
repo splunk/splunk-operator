@@ -9,6 +9,9 @@ on:
     branches:
       - develop
       - main
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
 jobs:
   build-operator-image-distroless:
     runs-on: ubuntu-latest

@@ -5,11 +5,17 @@ permissions:
   id-token: write
   pull-requests: write
 on:
-  pull_request: {}
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
   push:
     branches:
-    - main
-    - develop
+      - main
+      - develop
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
 jobs:
   check-formating:
     runs-on: ubuntu-latest
