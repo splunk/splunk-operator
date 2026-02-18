@@ -267,8 +267,16 @@ func main() {
 	if err := (&controller.IngestorClusterReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("ingestorcluster-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "IngestorCluster")
+		os.Exit(1)
+	}
+	if err = (&intController.TelemetryReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Telemetry")
 		os.Exit(1)
 	}
 

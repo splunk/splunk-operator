@@ -16,6 +16,7 @@
 package client
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -955,11 +956,35 @@ func (c *SplunkClient) SetIdxcSecret(idxcSecret string) error {
 	return c.Do(request, expectedStatus, nil)
 }
 
+type TelemetryResponse struct {
+	Message       string `json:"message"`
+	MetricValueID string `json:"metricValueId"`
+}
+
+func (c *SplunkClient) SendTelemetry(path string, body []byte) (*TelemetryResponse, error) {
+	endpoint := fmt.Sprintf("%s%s", c.ManagementURI, path)
+	request, err := http.NewRequest("POST", endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	expectedStatus := []int{201}
+	var response TelemetryResponse
+
+	err = c.Do(request, expectedStatus, &response)
+	if err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
 // LicenseInfo represents license information from Splunk
 type LicenseInfo struct {
 	Title          string `json:"title"`
 	Status         string `json:"status"`
 	ExpirationTime int64  `json:"expiration_time"`
+	ID             string `json:"guid"`
+	Type           string `json:"type"`
 }
 
 // LicenseResponse represents the API response from /services/licenser/licenses
