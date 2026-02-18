@@ -38,6 +38,8 @@ jobs:
       CLUSTER_WORKERS: 3
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
+      SPLUNK_ENTERPRISE_IMAGE: ${{ vars.SPLUNK_ENTERPRISE_IMAGE }}
+      S3_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       TEST_FOCUS: "${{ matrix.test }}"
       # This regex matches any string not containing integration keyword
       TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
@@ -72,12 +74,6 @@ jobs:
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-        with:
-          export-variables: true
-      - name: Export env from .env
-        run: |
-          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_ENV
-          echo "S3_REGION=${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}" >> $GITHUB_ENV
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v3
         with:

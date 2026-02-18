@@ -20,15 +20,13 @@ jobs:
     env:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ vars.SPLUNK_ENTERPRISE_IMAGE }}
+      S3_REGION: ${{ vars.AWS_DEFAULT_REGION }}
     steps:
     - uses: actions/checkout@v2
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-    - name: Export env from .env
-      run: |
-        echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_ENV
-        echo "S3_REGION=${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}" >> $GITHUB_ENV
     - name: Setup Go
       uses: actions/setup-go@v2
       with:
@@ -63,6 +61,8 @@ jobs:
     env:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
+      SPLUNK_ENTERPRISE_IMAGE: ${{ vars.SPLUNK_ENTERPRISE_IMAGE }}
+      S3_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       TEST_CLUSTER_PLATFORM: eks
       EKS_VPC_PRIVATE_SUBNET_STRING: ${{ secrets.EKS_VPC_PRIVATE_SUBNET_STRING }}
       EKS_VPC_PUBLIC_SUBNET_STRING: ${{ secrets.EKS_VPC_PUBLIC_SUBNET_STRING }}
@@ -102,10 +102,6 @@ jobs:
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-      - name: Export env from .env
-        run: |
-          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_ENV
-          echo "S3_REGION=${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}" >> $GITHUB_ENV
       - name: Change helm repo path on main branch
         if: github.ref == 'refs/heads/main'
         run: |

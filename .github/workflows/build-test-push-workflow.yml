@@ -74,6 +74,8 @@ jobs:
     env:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ vars.SPLUNK_ENTERPRISE_IMAGE }}
+      S3_REGION: ${{ vars.AWS_DEFAULT_REGION }}
     steps:
     - name: Set up cosign
       uses: sigstore/cosign-installer@main
@@ -82,10 +84,6 @@ jobs:
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-    - name: Export env from .env
-      run: |
-        echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_ENV
-        echo "S3_REGION=${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}" >> $GITHUB_ENV
     - name: Setup Go
       uses: actions/setup-go@v2
       with:
@@ -134,6 +132,8 @@ jobs:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       IMAGE_NAME: ${{ secrets.ECR_REPOSITORY }}/splunk/splunk-operator:${{ github.sha }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ vars.SPLUNK_ENTERPRISE_IMAGE }}
+      S3_REGION: ${{ vars.AWS_DEFAULT_REGION }}
     steps:
     - name: Set up cosign
       uses: sigstore/cosign-installer@main
@@ -141,10 +141,6 @@ jobs:
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-    - name: Export env from .env
-      run: |
-        echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_ENV
-        echo "S3_REGION=${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}" >> $GITHUB_ENV
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2.5.0
     - name: Configure AWS credentials
@@ -197,6 +193,8 @@ jobs:
       CLUSTER_WORKERS: 3
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
+      SPLUNK_ENTERPRISE_IMAGE: ${{ vars.SPLUNK_ENTERPRISE_IMAGE }}
+      S3_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       TEST_FOCUS: "${{ matrix.test }}"
       # This regex matches any string not containing smoke keyword
       TEST_TO_SKIP: "^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$"
@@ -226,10 +224,6 @@ jobs:
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-      - name: Export env from .env
-        run: |
-          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_ENV
-          echo "S3_REGION=${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}" >> $GITHUB_ENV
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v3
         with:

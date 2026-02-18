@@ -62,6 +62,7 @@ jobs:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_PREFIX }}/${{ github.event.inputs.splunk_image_repository_tag }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      S3_REGION: ${{ vars.AWS_DEFAULT_REGION }}
     steps:
     - name: Set up cosign
       uses: sigstore/cosign-installer@main
@@ -70,11 +71,6 @@ jobs:
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-      with:
-        export-variables: true
-    - name: Export env from .env
-      run: |
-        echo "S3_REGION=$AWS_DEFAULT_REGION" >> $GITHUB_ENV
     - name: Setup Go
       uses: actions/setup-go@v2
       with:
@@ -133,6 +129,7 @@ jobs:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_PREFIX }}/${{ github.event.inputs.splunk_image_repository_tag }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
+      S3_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       TEST_FOCUS: "${{ matrix.test }}"
       # This regex matches any string not containing smoke keyword
       TEST_TO_SKIP: "^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$"
@@ -165,11 +162,6 @@ jobs:
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-        with:
-          export-variables: true
-      - name: Export env from .env
-        run: |
-          echo "S3_REGION=$AWS_DEFAULT_REGION" >> $GITHUB_ENV
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v3
         with:

@@ -18,16 +18,12 @@ jobs:
     env:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       CONTAINER_REGISTRY: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
+      AZURE_REGION: ${{ vars.AZURE_REGION }}
     steps:
     - uses: actions/checkout@v2
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-      with:
-        export-variables: true
-    - name: Export env from .env
-      run: |
-          echo "AZURE_REGION=$AZURE_REGION" >> $GITHUB_ENV
     - name: Setup Go
       uses: actions/setup-go@v2
       with:
@@ -68,17 +64,13 @@ jobs:
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       ECR_REPOSITORY: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
       AZURE_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
+      AZURE_REGION: ${{ vars.AZURE_REGION }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-      with:
-        export-variables: true
-    - name: Export env from .env
-      run: |
-          echo "AZURE_REGION=$AZURE_REGION" >> $GITHUB_ENV
     - name: Set Cluster Name
       run: |
         echo "TEST_CLUSTER_NAME=az${{ github.run_id }}" >> $GITHUB_ENV
@@ -123,6 +115,8 @@ jobs:
       CLUSTER_WORKERS: 5
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
+      SPLUNK_ENTERPRISE_IMAGE: ${{ vars.SPLUNK_ENTERPRISE_IMAGE }}
+      AZURE_REGION: ${{ vars.AZURE_REGION }}
       TEST_FOCUS: azure_sanity
       # This regex matches any string not containing integration keyword
       TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
@@ -151,12 +145,6 @@ jobs:
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-        with:
-          export-variables: true
-      - name: Export env from .env
-        run: |
-          echo "SPLUNK_ENTERPRISE_IMAGE=$SPLUNK_ENTERPRISE_IMAGE" >> $GITHUB_ENV
-          echo "AZURE_REGION=$AZURE_REGION" >> $GITHUB_ENV
       - name: 'Login via Azure CLI'
         uses: azure/login@v1
         with:
