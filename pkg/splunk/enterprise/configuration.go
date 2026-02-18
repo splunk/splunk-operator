@@ -85,6 +85,13 @@ var defaultStartupProbe corev1.Probe = corev1.Probe{
 	},
 }
 
+const (
+	defaultRequestsCPU    = "0.1"
+	defaultRequestsMemory = "512Mi"
+	defaultLimitsCPU      = "4"
+	defaultLimitsMemory   = "8Gi"
+)
+
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
 	// For multisite / multipart IndexerCluster, the name of the part containing the cluster-manager is used
@@ -366,12 +373,12 @@ func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 
 	defaultResources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("0.1"),
-			corev1.ResourceMemory: resource.MustParse("512Mi"),
+			corev1.ResourceCPU:    resource.MustParse(defaultRequestsCPU),
+			corev1.ResourceMemory: resource.MustParse(defaultRequestsMemory),
 		},
 		Limits: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("4"),
-			corev1.ResourceMemory: resource.MustParse("8Gi"),
+			corev1.ResourceCPU:    resource.MustParse(defaultLimitsCPU),
+			corev1.ResourceMemory: resource.MustParse(defaultLimitsMemory),
 		},
 	}
 

@@ -1830,3 +1830,13 @@ func (d *Deployment) DeployMultisiteClusterMasterWithMonitoringConsole(ctx conte
 	}
 	return nil
 }
+
+// GetConfigMap retrieves a ConfigMap by name in the deployment's namespace.
+func (d *Deployment) GetConfigMap(ctx context.Context, name string) (*corev1.ConfigMap, error) {
+	cm := &corev1.ConfigMap{}
+	err := d.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: name, Namespace: d.testenv.namespace}, cm)
+	if err != nil {
+		return nil, err
+	}
+	return cm, nil
+}

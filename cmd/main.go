@@ -262,6 +262,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Standalone")
 		os.Exit(1)
 	}
+	if err = (&intController.TelemetryReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Telemetry")
+		os.Exit(1)
+	}
 
 	// Setup centralized validation webhook server (opt-in via ENABLE_VALIDATION_WEBHOOK env var, defaults to false)
 	enableWebhooks := os.Getenv("ENABLE_VALIDATION_WEBHOOK")
