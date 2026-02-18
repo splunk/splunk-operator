@@ -92,6 +92,9 @@ const (
 	// default docker image used for Splunk instances
 	defaultSplunkImage = "splunk/splunk"
 
+	// Todo: sgontla: for now, use a fixed image, will be overriden by env.
+	defaultKVServiceImage = "kvstore/kvservice:latest"
+
 	// identifier used for S3 access key
 	s3AccessKey = "s3_access_key"
 
@@ -140,10 +143,11 @@ const (
 	// port names and templates and protocols
 	portNameTemplateStr = "%s-%s"
 
-	splunkwebPort = "splunkweb"
-	splunkdPort   = "splunkd"
-	s2sPort       = "s2s"
-	hecPort       = "hec"
+	splunkKVServicePort = "splunkv"
+	splunkwebPort       = "splunkweb"
+	splunkdPort         = "splunkd"
+	s2sPort             = "s2s"
+	hecPort             = "hec"
 
 	protoHTTP  = "http"
 	protoHTTPS = "https"
@@ -181,6 +185,9 @@ const (
 
 	// Number of Licensemaster replicas
 	numberOfLicenseMasterReplicas = 1
+
+	// defaultKVServicePort
+	defaultKVServicePort = 8066
 
 	// Telemetry app.conf string
 	telAppConfString = `[install]

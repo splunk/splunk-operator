@@ -137,11 +137,11 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// create or update KVService CR with owner reference
-	err = createKVServiceCR(ctx, client, cr)
-	if err != nil {
-		eventPublisher.Warning(ctx, "createKVServiceCR", fmt.Sprintf("apply KVService CR failed %s", err.Error()))
-		return result, err
-	}
+	// err = createKVServiceCR(ctx, client, cr)
+	// if err != nil {
+	// 	eventPublisher.Warning(ctx, "createKVServiceCR", fmt.Sprintf("apply KVService CR failed %s", err.Error()))
+	// 	return result, err
+	// }
 
 	// create or update statefulset
 	statefulSet, err := getLicenseManagerStatefulSet(ctx, client, cr)

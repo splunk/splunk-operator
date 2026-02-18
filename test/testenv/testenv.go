@@ -44,8 +44,9 @@ import (
 const (
 	defaultOperatorInstallation = "false"
 
-	defaultOperatorImage = "splunk/splunk-operator"
-	defaultSplunkImage   = "splunk/splunk:latest"
+	defaultOperatorImage  = "splunk/splunk-operator"
+	defaultSplunkImage    = "splunk/splunk:latest"
+	defaultKVServiceImage = "kvstore/kvservice:latest"
 
 	// defaultTestTimeout is the max timeout in seconds before async test failed.
 	defaultTestTimeout = 1000000
@@ -133,6 +134,7 @@ var (
 	metricsPort              = 8383
 	specifiedOperatorImage   = defaultOperatorImage
 	specifiedSplunkImage     = defaultSplunkImage
+	specifiedKVServiceImage  = defaultKVServiceImage
 	specifiedSkipTeardown    = false
 	specifiedLicenseFilePath = ""
 	specifiedCommitHash      = ""
@@ -189,8 +191,10 @@ func init() {
 	flag.StringVar(&specifiedOperatorImage, "operator-image", defaultOperatorImage, "Splunk Operator image to use")
 	if os.Getenv("GRAVITON_TESTING") == "true" {
 		flag.StringVar(&specifiedSplunkImage, "splunk-image", os.Getenv("SPLUNK_ENTERPRISE_IMAGE"), "Splunk Enterprise (splunkd) image to use")
+		flag.StringVar(&specifiedKVServiceImage, "kvservice-image", os.Getenv("SPLUNK_KVSERVICE_IMAGE"), "KVService image to use")
 	} else {
 		flag.StringVar(&specifiedSplunkImage, "splunk-image", defaultSplunkImage, "Splunk Enterprise (splunkd) image to use")
+		flag.StringVar(&specifiedKVServiceImage, "kvservice-image", defaultKVServiceImage, "KVService image to use")
 	}
 	flag.BoolVar(&specifiedSkipTeardown, "skip-teardown", false, "True to skip tearing down the test env after use")
 	flag.IntVar(&SpecifiedTestTimeout, "test-timeout", defaultTestTimeout, "Max test timeout in seconds to use")

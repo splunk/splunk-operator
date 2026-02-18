@@ -452,6 +452,14 @@ func getSplunkDefaults(identifier, namespace string, instanceType InstanceType, 
 
 // getSplunkPorts returns a map of ports to use for Splunk instances.
 func getSplunkPorts(instanceType InstanceType) map[string]int {
+	if instanceType == SplunkKVService {
+		return map[string]int{
+			// ToDo: sgontla: http for now, modify it to https when certs are added
+			//GetPortName(splunkKVServicePort, protoHTTPS): 8066,
+			GetPortName(splunkKVServicePort, protoHTTP): 8066,
+		}
+	}
+
 	result := map[string]int{
 		GetPortName(splunkwebPort, protoHTTP): 8000,
 		GetPortName(splunkdPort, protoHTTPS):  8089,
@@ -931,16 +939,20 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	if domainName == "" {
 		domainName = "cluster.local"
 	}
-	env := []corev1.EnvVar{
-		{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
-		{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
-		{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
-		{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
-		{Name: "SPLUNK_ROLE", Value: role},
-		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
-		{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
-		{Name: "SPLUNK_GENERAL_TERMS", Value: os.Getenv("SPLUNK_GENERAL_TERMS")},
-		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
+
+	env := []corev1.EnvVar{}
+	if instanceType != SplunkKVService {
+		env = []corev1.EnvVar{
+			{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
+			{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
+			{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
+			{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
+			{Name: "SPLUNK_ROLE", Value: role},
+			{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
+			{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
+			{Name: "SPLUNK_GENERAL_TERMS", Value: os.Getenv("SPLUNK_GENERAL_TERMS")},
+			{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
+		}
 	}
 
 	// update variables for licensing, if configured
