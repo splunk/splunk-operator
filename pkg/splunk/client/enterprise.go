@@ -1040,10 +1040,10 @@ func (c *SplunkClient) UpdateConfFile(scopedLog logr.Logger, fileName, property 
 		body = body[:len(body)-1]
 	}
 
-	scopedLog.Info("Updating conf file object", "fileName", fileName, "property", property, "body", body)
+	scopedLog.Info("Updating conf file object", "fileName", fileName, "property", property)
 	request, err = http.NewRequest("POST", endpoint, strings.NewReader(body))
 	if err != nil {
-		scopedLog.Error(err, "Failed to update conf file object", "fileName", fileName, "property", property, "body", body)
+		scopedLog.Error(err, "Failed to update conf file object", "fileName", fileName, "property", property)
 		return err
 	}
 
@@ -1051,7 +1051,7 @@ func (c *SplunkClient) UpdateConfFile(scopedLog logr.Logger, fileName, property 
 	expectedStatus = []int{200, 201}
 	err = c.Do(request, expectedStatus, nil)
 	if err != nil {
-		scopedLog.Error(err, fmt.Sprintf("Status not in %v for conf file object update", expectedStatus), "fileName", fileName, "property", property, "body", body)
+		scopedLog.Error(err, fmt.Sprintf("Status not in %v for conf file object update", expectedStatus), "fileName", fileName, "property", property)
 	}
 	return err
 }
