@@ -140,7 +140,7 @@ test: manifests generate fmt vet envtest ## Run tests.
 
 .PHONY: spec-config-mapping
 spec-config-mapping: ## Generate CRD spec-to-Splunk-config mapping JSON.
-	go run ./tools/spec-config-mapping -o spec-config-mapping.json
+	go run ./tools/spec-config-mapping -o api/v4/spec-config-mapping.json
 
 ##@ Build
 

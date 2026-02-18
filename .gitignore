@@ -99,4 +99,3 @@ test/secret/*.log
 kubeconfig
 .devcontainer/devcontainer.json
 kuttl-artifacts/*
-spec-config-mapping.json
