@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"os"
 	"reflect"
-	"sort"
 	"strings"
 	"time"
 
@@ -32,11 +31,11 @@ import (
 
 // Manifest is the top-level output structure.
 type Manifest struct {
-	Version          string                `json:"version"`
-	GeneratedAt      string                `json:"generatedAt"`
-	OperatorVersion  string                `json:"operatorVersion"`
-	APIVersion       string                `json:"apiVersion"`
-	CRDs map[string]CRDMapping `json:"crds"`
+	Version         string                `json:"version"`
+	GeneratedAt     string                `json:"generatedAt"`
+	OperatorVersion string                `json:"operatorVersion"`
+	APIVersion      string                `json:"apiVersion"`
+	CRDs            map[string]CRDMapping `json:"crds"`
 }
 
 // CRDMapping holds the field mappings for one CRD kind.
@@ -46,14 +45,12 @@ type CRDMapping struct {
 
 // FieldMapping is the per-field entry in the JSON output.
 type FieldMapping struct {
-	JSONPath    string `json:"jsonPath"`
-	GoType      string `json:"goType"`
-	ConfFile    string `json:"confFile"`
-	Stanza      string `json:"stanza"`
-	Key         string `json:"key"`
-	Description string `json:"description"`
+	JSONPath string `json:"jsonPath"`
+	GoType   string `json:"goType"`
+	ConfFile string `json:"confFile"`
+	Stanza   string `json:"stanza"`
+	Key      string `json:"key"`
 }
-
 
 // ── CRD registry ──────────────────────────────────────────────────────
 
@@ -73,18 +70,20 @@ func crdRegistry() []crdEntry {
 	}
 }
 
-// ── Reflection walker ─────────────────────────────────────────────────
+// ── confContext tracks inherited confFile and stanza from parent tags ──
 
-// fieldInfo holds metadata about a discovered struct field.
-type fieldInfo struct {
-	jsonPath string
-	goType   string
+type confContext struct {
+	confFile string
+	stanza   string
 }
 
-// WalkSpecFields recursively walks a struct type and collects leaf field
-// JSON paths. Embedded structs are flattened (their prefix is inherited).
-// Slice and struct fields are recursed into; primitive fields are leaves.
-func WalkSpecFields(t reflect.Type, prefix string) []fieldInfo {
+// ── Reflection walker ─────────────────────────────────────────────────
+
+// WalkConfTags recursively walks a struct type and collects fields that
+// have a `splunkconf` struct tag. Parent struct/slice fields with a
+// 2-part tag ("confFile,stanza") set the context for child leaf fields
+// with a 1-part tag ("key").
+func WalkConfTags(t reflect.Type, prefix string, ctx confContext) map[string]FieldMapping {
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
@@ -92,7 +91,8 @@ func WalkSpecFields(t reflect.Type, prefix string) []fieldInfo {
 		return nil
 	}
 
-	var fields []fieldInfo
+	result := make(map[string]FieldMapping)
+
 	for i := 0; i < t.NumField(); i++ {
 		sf := t.Field(i)
 
@@ -103,9 +103,11 @@ func WalkSpecFields(t reflect.Type, prefix string) []fieldInfo {
 		}
 		jsonName := strings.Split(jsonTag, ",")[0]
 
-		// Handle embedded (anonymous) structs: flatten, keep parent prefix
+		// Handle embedded (anonymous) structs: flatten, keep parent prefix and context
 		if sf.Anonymous {
-			fields = append(fields, WalkSpecFields(sf.Type, prefix)...)
+			for k, v := range WalkConfTags(sf.Type, prefix, ctx) {
+				result[k] = v
+			}
 			continue
 		}
 
@@ -118,6 +120,9 @@ func WalkSpecFields(t reflect.Type, prefix string) []fieldInfo {
 			fullPath = prefix + "." + jsonName
 		}
 
+		// Check for splunkconf tag
+		splunkTag := sf.Tag.Get("splunkconf")
+
 		ft := sf.Type
 		if ft.Kind() == reflect.Ptr {
 			ft = ft.Elem()
@@ -125,46 +130,63 @@ func WalkSpecFields(t reflect.Type, prefix string) []fieldInfo {
 
 		switch ft.Kind() {
 		case reflect.Struct:
-			// Check if this is a well-known Kubernetes type we treat as a leaf
 			if isLeafType(ft) {
-				fields = append(fields, fieldInfo{jsonPath: fullPath, goType: ft.String()})
-			} else {
-				fields = append(fields, WalkSpecFields(ft, fullPath)...)
+				// Opaque k8s type — skip
+				continue
 			}
+			// If this struct field has a 2-part splunkconf tag, it sets context for children
+			childCtx := ctx
+			if parts := strings.SplitN(splunkTag, ",", 2); len(parts) == 2 {
+				childCtx = confContext{confFile: parts[0], stanza: parts[1]}
+			}
+			for k, v := range WalkConfTags(ft, fullPath, childCtx) {
+				result[k] = v
+			}
+
 		case reflect.Slice:
 			elemType := ft.Elem()
 			if elemType.Kind() == reflect.Ptr {
 				elemType = elemType.Elem()
 			}
 			if elemType.Kind() == reflect.Struct && !isLeafType(elemType) {
-				// Recurse into the element type (represents array items)
-				fields = append(fields, WalkSpecFields(elemType, fullPath)...)
-			} else {
-				fields = append(fields, fieldInfo{jsonPath: fullPath, goType: ft.String()})
+				childCtx := ctx
+				if parts := strings.SplitN(splunkTag, ",", 2); len(parts) == 2 {
+					childCtx = confContext{confFile: parts[0], stanza: parts[1]}
+				}
+				for k, v := range WalkConfTags(elemType, fullPath, childCtx) {
+					result[k] = v
+				}
 			}
+
 		default:
-			fields = append(fields, fieldInfo{jsonPath: fullPath, goType: ft.String()})
+			// Leaf field — only include if it has a splunkconf key tag
+			if splunkTag == "" {
+				continue
+			}
+			if ctx.confFile == "" || ctx.stanza == "" {
+				continue
+			}
+			result[fullPath] = FieldMapping{
+				JSONPath: "spec." + fullPath,
+				GoType:   ft.String(),
+				ConfFile: ctx.confFile,
+				Stanza:   ctx.stanza,
+				Key:      splunkTag,
+			}
 		}
 	}
-	return fields
+	return result
 }
 
-// isLeafType returns true for complex types we don't want to recurse into
-// (Kubernetes API types, etc.).
+// isLeafType returns true for complex types we don't want to recurse into.
 func isLeafType(t reflect.Type) bool {
-	pkg := t.PkgPath()
-	// Treat all k8s.io types as opaque leaves
-	if strings.HasPrefix(pkg, "k8s.io/") {
-		return true
-	}
-	return false
+	return strings.HasPrefix(t.PkgPath(), "k8s.io/")
 }
 
 // ── Main ──────────────────────────────────────────────────────────────
 
 func main() {
 	outPath := flag.String("o", "spec-config-mapping.json", "Output JSON file path")
-	strict := flag.Bool("strict", true, "Exit non-zero if any spec fields are unmapped")
 	flag.Parse()
 
 	registry := crdRegistry()
@@ -176,40 +198,12 @@ func main() {
 		CRDs:            make(map[string]CRDMapping),
 	}
 
-	var unmapped []string
-
 	for _, crd := range registry {
-		fields := WalkSpecFields(crd.specType, "")
-		specFields := make(map[string]FieldMapping)
-
-		for _, f := range fields {
-			target, ok := fieldMappings[f.jsonPath]
-			if !ok {
-				unmapped = append(unmapped, fmt.Sprintf("%s.%s", crd.kind, f.jsonPath))
-				continue
-			}
-
-			// Only include fields with a full conf coordinate (confFile + stanza + key)
-			if target.ConfFile == "" || target.ConfFile == "env" || target.Stanza == "" || target.Key == "" {
-				continue
-			}
-
-			specFields[f.jsonPath] = FieldMapping{
-				JSONPath:    "spec." + f.jsonPath,
-				GoType:      f.goType,
-				ConfFile:    target.ConfFile,
-				Stanza:      target.Stanza,
-				Key:         target.Key,
-				Description: target.Description,
-			}
-
-		}
-
-		manifest.CRDs[crd.kind] = CRDMapping{SpecFields: specFields}
+		fields := WalkConfTags(crd.specType, "", confContext{})
+		manifest.CRDs[crd.kind] = CRDMapping{SpecFields: fields}
 	}
 
-	// Write output using Encoder so we can disable HTML escaping
-	// (json.MarshalIndent escapes <> as \u003c/\u003e by default)
+	// Write output
 	f, err := os.Create(*outPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: failed to create %s: %v\n", *outPath, err)
@@ -232,16 +226,4 @@ func main() {
 	}
 	fmt.Fprintf(os.Stderr, "Generated %s: %d CRDs, %d total field mappings\n",
 		*outPath, len(manifest.CRDs), totalFields)
-
-	if len(unmapped) > 0 {
-		fmt.Fprintf(os.Stderr, "\nWARNING: %d unmapped field(s):\n", len(unmapped))
-		sort.Strings(unmapped)
-		for _, u := range unmapped {
-			fmt.Fprintf(os.Stderr, "  - %s\n", u)
-		}
-		if *strict {
-			fmt.Fprintf(os.Stderr, "\nAdd mappings to tools/spec-config-mapping/mappings.go to fix this.\n")
-			os.Exit(1)
-		}
-	}
 }

@@ -257,16 +257,16 @@ type StorageClassSpec struct {
 // SmartStoreSpec defines Splunk indexes and remote storage volume configuration
 type SmartStoreSpec struct {
 	// List of remote storage volumes
-	VolList []VolumeSpec `json:"volumes,omitempty"`
+	VolList []VolumeSpec `json:"volumes,omitempty" splunkconf:"indexes.conf,volume:<name>"`
 
 	// List of Splunk indexes
-	IndexList []IndexSpec `json:"indexes,omitempty"`
+	IndexList []IndexSpec `json:"indexes,omitempty" splunkconf:"indexes.conf,<index_name>"`
 
 	// Default configuration for indexes
-	Defaults IndexConfDefaultsSpec `json:"defaults,omitempty"`
+	Defaults IndexConfDefaultsSpec `json:"defaults,omitempty" splunkconf:"indexes.conf,default"`
 
 	// Defines Cache manager settings
-	CacheManagerConf CacheManagerSpec `json:"cacheManager,omitempty"`
+	CacheManagerConf CacheManagerSpec `json:"cacheManager,omitempty" splunkconf:"server.conf,cachemanager"`
 }
 
 // CacheManagerSpec defines cachemanager specific configuration
@@ -274,19 +274,19 @@ type CacheManagerSpec struct {
 	IndexAndCacheManagerCommonSpec `json:",inline"`
 
 	// Eviction policy to use
-	EvictionPolicy string `json:"evictionPolicy,omitempty"`
+	EvictionPolicy string `json:"evictionPolicy,omitempty" splunkconf:"eviction_policy"`
 
 	// Max cache size per partition
-	MaxCacheSizeMB uint `json:"maxCacheSize,omitempty"`
+	MaxCacheSizeMB uint `json:"maxCacheSize,omitempty" splunkconf:"max_cache_size"`
 
 	// Additional size beyond 'minFreeSize' before eviction kicks in
-	EvictionPaddingSizeMB uint `json:"evictionPadding,omitempty"`
+	EvictionPaddingSizeMB uint `json:"evictionPadding,omitempty" splunkconf:"eviction_padding"`
 
 	// Maximum number of buckets that can be downloaded from remote storage in parallel
-	MaxConcurrentDownloads uint `json:"maxConcurrentDownloads,omitempty"`
+	MaxConcurrentDownloads uint `json:"maxConcurrentDownloads,omitempty" splunkconf:"max_concurrent_downloads"`
 
 	// Maximum number of buckets that can be uploaded to remote storage in parallel
-	MaxConcurrentUploads uint `json:"maxConcurrentUploads,omitempty"`
+	MaxConcurrentUploads uint `json:"maxConcurrentUploads,omitempty" splunkconf:"max_concurrent_uploads"`
 }
 
 // IndexConfDefaultsSpec defines Splunk indexes.conf global/defaults
@@ -300,22 +300,22 @@ type VolumeSpec struct {
 	Name string `json:"name"`
 
 	// Remote volume URI
-	Endpoint string `json:"endpoint"`
+	Endpoint string `json:"endpoint" splunkconf:"remote.s3.endpoint"`
 
 	// Remote volume path
-	Path string `json:"path"`
+	Path string `json:"path" splunkconf:"path"`
 
 	// Secret object name
-	SecretRef string `json:"secretRef"`
+	SecretRef string `json:"secretRef" splunkconf:"remote.s3.access_key;remote.s3.secret_key"`
 
 	// Remote Storage type. Supported values: s3, blob, gcs. s3 works with aws or minio providers, whereas blob works with azure provider, gcs works for gcp.
-	Type string `json:"storageType"`
+	Type string `json:"storageType" splunkconf:"storageType"`
 
 	// App Package Remote Store provider. Supported values: aws, minio, azure, gcp.
 	Provider string `json:"provider"`
 
 	// Region of the remote storage volume where apps reside. Used for aws, if provided. Not used for minio and azure.
-	Region string `json:"region"`
+	Region string `json:"region" splunkconf:"remote.s3.auth_region"`
 }
 
 // VolumeAndTypeSpec used to add any custom varaibles for volume implementation
@@ -329,7 +329,7 @@ type IndexSpec struct {
 	Name string `json:"name"`
 
 	// Index location relative to the remote volume path
-	RemotePath string `json:"remotePath,omitempty"`
+	RemotePath string `json:"remotePath,omitempty" splunkconf:"remotePath"`
 
 	IndexAndCacheManagerCommonSpec `json:",inline"`
 
@@ -340,22 +340,22 @@ type IndexSpec struct {
 type IndexAndGlobalCommonSpec struct {
 
 	// Remote Volume name
-	VolName string `json:"volumeName,omitempty"`
+	VolName string `json:"volumeName,omitempty" splunkconf:"remotePath"`
 
 	// MaxGlobalDataSizeMB defines the maximum amount of space for warm and cold buckets of an index
-	MaxGlobalDataSizeMB uint `json:"maxGlobalDataSizeMB,omitempty"`
+	MaxGlobalDataSizeMB uint `json:"maxGlobalDataSizeMB,omitempty" splunkconf:"maxGlobalDataSizeMB"`
 
 	// MaxGlobalDataSizeMB defines the maximum amount of cumulative space for warm and cold buckets of an index
-	MaxGlobalRawDataSizeMB uint `json:"maxGlobalRawDataSizeMB,omitempty"`
+	MaxGlobalRawDataSizeMB uint `json:"maxGlobalRawDataSizeMB,omitempty" splunkconf:"maxGlobalRawDataSizeMB"`
 }
 
 // IndexAndCacheManagerCommonSpec defines configurations that can be configured at index level or at server level
 type IndexAndCacheManagerCommonSpec struct {
 	// Time period relative to the bucket's age, during which the bucket is protected from cache eviction
-	HotlistRecencySecs uint `json:"hotlistRecencySecs,omitempty"`
+	HotlistRecencySecs uint `json:"hotlistRecencySecs,omitempty" splunkconf:"hotlist_recency_secs"`
 
 	// Time period relative to the bucket's age, during which the bloom filter file is protected from cache eviction
-	HotlistBloomFilterRecencyHours uint `json:"hotlistBloomFilterRecencyHours,omitempty"`
+	HotlistBloomFilterRecencyHours uint `json:"hotlistBloomFilterRecencyHours,omitempty" splunkconf:"hotlist_bloom_filter_recency_hours"`
 }
 
 // AppSourceDefaultSpec defines config common for defaults and App Sources
@@ -381,7 +381,7 @@ type PremiumAppsProps struct {
 
 	// Enterpreise Security App defaults
 	// +optional
-	EsDefaults EsDefaults `json:"esDefaults,omitempty"`
+	EsDefaults EsDefaults `json:"esDefaults,omitempty" splunkconf:"web.conf,settings"`
 }
 
 // EsDefaults captures defaults for the Enterprise Security App
@@ -397,7 +397,7 @@ type EsDefaults struct {
 	//     ignore: Ignores whether SSL is enabled or disabled.
 	//
 	// +optional
-	SslEnablement string `json:"sslEnablement,omitempty"`
+	SslEnablement string `json:"sslEnablement,omitempty" splunkconf:"enableSplunkWebSSL"`
 }
 
 // AppSourceSpec defines list of App package (*.spl, *.tgz) locations on remote volumes
