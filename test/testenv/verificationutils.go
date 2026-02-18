@@ -20,7 +20,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os/exec"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"time"
 
@@ -1248,4 +1250,85 @@ func VerifyFilesInDirectoryOnPod(ctx context.Context, deployment *Deployment, te
 			return true
 		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 	}
+}
+
+func GetTelemetryLastSubmissionTime(ctx context.Context, deployment *Deployment) string {
+	const (
+		configMapName = "splunk-operator-manager-telemetry"
+		statusKey     = "status"
+	)
+	type telemetryStatus struct {
+		LastTransmission string `json:"lastTransmission"`
+	}
+
+	cm := &corev1.ConfigMap{}
+	err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: configMapName, Namespace: "splunk-operator"}, cm)
+	if err != nil {
+		logf.Log.Error(err, "GetTelemetryLastSubmissionTime: failed to retrieve configmap")
+		return ""
+	}
+
+	statusVal, ok := cm.Data[statusKey]
+	if !ok || statusVal == "" {
+		logf.Log.Info("GetTelemetryLastSubmissionTime: failed to retrieve status")
+		return ""
+	}
+	logf.Log.Info("GetTelemetryLastSubmissionTime: retrieved status", "status", statusVal)
+
+	var status telemetryStatus
+	if err := json.Unmarshal([]byte(statusVal), &status); err != nil {
+		logf.Log.Error(err, "GetTelemetryLastSubmissionTime: failed to unmarshal status", "statusVal", statusVal)
+		return ""
+	}
+	return status.LastTransmission
+}
+
+// VerifyTelemetry checks that the telemetry ConfigMap has a non-empty lastTransmission field in its status key.
+func VerifyTelemetry(ctx context.Context, deployment *Deployment, prevVal string) {
+	logf.Log.Info("VerifyTelemetry: start")
+	gomega.Eventually(func() bool {
+		currentVal := GetTelemetryLastSubmissionTime(ctx, deployment)
+		if currentVal != "" && currentVal != prevVal {
+			logf.Log.Info("VerifyTelemetry: success", "previous", prevVal, "current", currentVal)
+			return true
+		}
+		return false
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
+// TriggerTelemetrySubmission updates or adds the 'test_submission' key in the telemetry ConfigMap with a JSON value containing a random number.
+func TriggerTelemetrySubmission(ctx context.Context, deployment *Deployment) {
+	const (
+		configMapName = "splunk-operator-manager-telemetry"
+		testKey       = "test_submission"
+	)
+
+	// Generate a random number
+	rand.Seed(time.Now().UnixNano())
+	randomNumber := rand.Intn(1000)
+
+	// Create the JSON value
+	jsonValue, err := json.Marshal(map[string]int{"value": randomNumber})
+	if err != nil {
+		logf.Log.Error(err, "Failed to marshal JSON value")
+		return
+	}
+
+	// Update the ConfigMap
+	cm := &corev1.ConfigMap{}
+	err = deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: configMapName, Namespace: "splunk-operator"}, cm)
+	if err != nil {
+		logf.Log.Error(err, "Failed to get ConfigMap")
+		return
+	}
+
+	// Update the test_submission key
+	cm.Data[testKey] = string(jsonValue)
+	err = deployment.testenv.GetKubeClient().Update(ctx, cm)
+	if err != nil {
+		logf.Log.Error(err, "Failed to update ConfigMap")
+		return
+	}
+
+	logf.Log.Info("Successfully updated telemetry ConfigMap", "key", testKey, "value", jsonValue)
 }
