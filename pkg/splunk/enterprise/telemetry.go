@@ -212,6 +212,7 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 		}
 	}
 
+	scopedLog.Info("Successfully collected deployment telemetry data", "deploymentData", deploymentData)
 	return crWithTelAppList
 }
 
@@ -408,6 +409,7 @@ func CollectCMTelData(ctx context.Context, cm *corev1.ConfigMap, data map[string
 			data[key] = val
 		} else {
 			data[key] = compData
+			scopedLog.Info("Got telemetry input", "key", key, "value", val)
 		}
 	}
 }
@@ -505,7 +507,7 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 		scopedLog.Error(err, "Failed to marshal to bytes")
 		return false
 	}
-	scopedLog.Info("Sending request", "path", path, "body", string(bodyBytes))
+	scopedLog.Info("Sending request", "path", path)
 
 	response, err := splunkClient.SendTelemetry(path, bodyBytes)
 	if err != nil {
