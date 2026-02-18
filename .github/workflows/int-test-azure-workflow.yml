@@ -8,11 +8,10 @@ on:
     branches:
       - develop
       - main
+      - feature/decrease-number-of-secrets
     paths-ignore:
       - 'docs/**'
       - '*.md'
-    paths:
-      - '.github/workflows/int-test-azure-workflow.yml'
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest

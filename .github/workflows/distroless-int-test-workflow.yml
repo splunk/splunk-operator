@@ -9,11 +9,10 @@ on:
     branches:
       - develop
       - main
+      - feature/decrease-number-of-secrets
     paths-ignore:
       - 'docs/**'
       - '*.md'
-    paths:
-      - '.github/workflows/distroless-int-test-workflow.yml'
 jobs:
   build-operator-image-distroless:
     runs-on: ubuntu-latest
