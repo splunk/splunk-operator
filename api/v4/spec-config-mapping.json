@@ -1,0 +1,395 @@
+{
+  "version": "1.0.0",
+  "generatedAt": "2026-02-18T19:38:20Z",
+  "operatorVersion": "3.0.0",
+  "apiVersion": "enterprise.splunk.com/v4",
+  "crds": {
+    "ClusterManager": {
+      "specFields": {
+        "appRepo.appSources.premiumAppsProps.esDefaults.sslEnablement": {
+          "jsonPath": "spec.appRepo.appSources.premiumAppsProps.esDefaults.sslEnablement",
+          "goType": "string",
+          "confFile": "web.conf",
+          "stanza": "settings",
+          "key": "enableSplunkWebSSL"
+        },
+        "appRepo.defaults.premiumAppsProps.esDefaults.sslEnablement": {
+          "jsonPath": "spec.appRepo.defaults.premiumAppsProps.esDefaults.sslEnablement",
+          "goType": "string",
+          "confFile": "web.conf",
+          "stanza": "settings",
+          "key": "enableSplunkWebSSL"
+        },
+        "smartstore.cacheManager.evictionPadding": {
+          "jsonPath": "spec.smartstore.cacheManager.evictionPadding",
+          "goType": "uint",
+          "confFile": "server.conf",
+          "stanza": "cachemanager",
+          "key": "eviction_padding"
+        },
+        "smartstore.cacheManager.evictionPolicy": {
+          "jsonPath": "spec.smartstore.cacheManager.evictionPolicy",
+          "goType": "string",
+          "confFile": "server.conf",
+          "stanza": "cachemanager",
+          "key": "eviction_policy"
+        },
+        "smartstore.cacheManager.hotlistBloomFilterRecencyHours": {
+          "jsonPath": "spec.smartstore.cacheManager.hotlistBloomFilterRecencyHours",
+          "goType": "uint",
+          "confFile": "server.conf",
+          "stanza": "cachemanager",
+          "key": "hotlist_bloom_filter_recency_hours"
+        },
+        "smartstore.cacheManager.hotlistRecencySecs": {
+          "jsonPath": "spec.smartstore.cacheManager.hotlistRecencySecs",
+          "goType": "uint",
+          "confFile": "server.conf",
+          "stanza": "cachemanager",
+          "key": "hotlist_recency_secs"
+        },
+        "smartstore.cacheManager.maxCacheSize": {
+          "jsonPath": "spec.smartstore.cacheManager.maxCacheSize",
+          "goType": "uint",
+          "confFile": "server.conf",
+          "stanza": "cachemanager",
+          "key": "max_cache_size"
+        },
+        "smartstore.cacheManager.maxConcurrentDownloads": {
+          "jsonPath": "spec.smartstore.cacheManager.maxConcurrentDownloads",
+          "goType": "uint",
+          "confFile": "server.conf",
+          "stanza": "cachemanager",
+          "key": "max_concurrent_downloads"
+        },
+        "smartstore.cacheManager.maxConcurrentUploads": {
+          "jsonPath": "spec.smartstore.cacheManager.maxConcurrentUploads",
+          "goType": "uint",
+          "confFile": "server.conf",
+          "stanza": "cachemanager",
+          "key": "max_concurrent_uploads"
+        },
+        "smartstore.defaults.maxGlobalDataSizeMB": {
+          "jsonPath": "spec.smartstore.defaults.maxGlobalDataSizeMB",
+          "goType": "uint",
+          "confFile": "indexes.conf",
+          "stanza": "default",
+          "key": "maxGlobalDataSizeMB"
+        },
+        "smartstore.defaults.maxGlobalRawDataSizeMB": {
+          "jsonPath": "spec.smartstore.defaults.maxGlobalRawDataSizeMB",
+          "goType": "uint",
+          "confFile": "indexes.conf",
+          "stanza": "default",
+          "key": "maxGlobalRawDataSizeMB"
+        },
+        "smartstore.defaults.volumeName": {
+          "jsonPath": "spec.smartstore.defaults.volumeName",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "default",
+          "key": "remotePath"
+        },
+        "smartstore.indexes.hotlistBloomFilterRecencyHours": {
+          "jsonPath": "spec.smartstore.indexes.hotlistBloomFilterRecencyHours",
+          "goType": "uint",
+          "confFile": "indexes.conf",
+          "stanza": "<index_name>",
+          "key": "hotlist_bloom_filter_recency_hours"
+        },
+        "smartstore.indexes.hotlistRecencySecs": {
+          "jsonPath": "spec.smartstore.indexes.hotlistRecencySecs",
+          "goType": "uint",
+          "confFile": "indexes.conf",
+          "stanza": "<index_name>",
+          "key": "hotlist_recency_secs"
+        },
+        "smartstore.indexes.maxGlobalDataSizeMB": {
+          "jsonPath": "spec.smartstore.indexes.maxGlobalDataSizeMB",
+          "goType": "uint",
+          "confFile": "indexes.conf",
+          "stanza": "<index_name>",
+          "key": "maxGlobalDataSizeMB"
+        },
+        "smartstore.indexes.maxGlobalRawDataSizeMB": {
+          "jsonPath": "spec.smartstore.indexes.maxGlobalRawDataSizeMB",
+          "goType": "uint",
+          "confFile": "indexes.conf",
+          "stanza": "<index_name>",
+          "key": "maxGlobalRawDataSizeMB"
+        },
+        "smartstore.indexes.remotePath": {
+          "jsonPath": "spec.smartstore.indexes.remotePath",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "<index_name>",
+          "key": "remotePath"
+        },
+        "smartstore.indexes.volumeName": {
+          "jsonPath": "spec.smartstore.indexes.volumeName",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "<index_name>",
+          "key": "remotePath"
+        },
+        "smartstore.volumes.endpoint": {
+          "jsonPath": "spec.smartstore.volumes.endpoint",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "volume:<name>",
+          "key": "remote.s3.endpoint"
+        },
+        "smartstore.volumes.path": {
+          "jsonPath": "spec.smartstore.volumes.path",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "volume:<name>",
+          "key": "path"
+        },
+        "smartstore.volumes.region": {
+          "jsonPath": "spec.smartstore.volumes.region",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "volume:<name>",
+          "key": "remote.s3.auth_region"
+        },
+        "smartstore.volumes.secretRef": {
+          "jsonPath": "spec.smartstore.volumes.secretRef",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "volume:<name>",
+          "key": "remote.s3.access_key;remote.s3.secret_key"
+        },
+        "smartstore.volumes.storageType": {
+          "jsonPath": "spec.smartstore.volumes.storageType",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "volume:<name>",
+          "key": "storageType"
+        }
+      }
+    },
+    "IndexerCluster": {
+      "specFields": {}
+    },
+    "LicenseManager": {
+      "specFields": {
+        "appRepo.appSources.premiumAppsProps.esDefaults.sslEnablement": {
+          "jsonPath": "spec.appRepo.appSources.premiumAppsProps.esDefaults.sslEnablement",
+          "goType": "string",
+          "confFile": "web.conf",
+          "stanza": "settings",
+          "key": "enableSplunkWebSSL"
+        },
+        "appRepo.defaults.premiumAppsProps.esDefaults.sslEnablement": {
+          "jsonPath": "spec.appRepo.defaults.premiumAppsProps.esDefaults.sslEnablement",
+          "goType": "string",
+          "confFile": "web.conf",
+          "stanza": "settings",
+          "key": "enableSplunkWebSSL"
+        }
+      }
+    },
+    "MonitoringConsole": {
+      "specFields": {
+        "appRepo.appSources.premiumAppsProps.esDefaults.sslEnablement": {
+          "jsonPath": "spec.appRepo.appSources.premiumAppsProps.esDefaults.sslEnablement",
+          "goType": "string",
+          "confFile": "web.conf",
+          "stanza": "settings",
+          "key": "enableSplunkWebSSL"
+        },
+        "appRepo.defaults.premiumAppsProps.esDefaults.sslEnablement": {
+          "jsonPath": "spec.appRepo.defaults.premiumAppsProps.esDefaults.sslEnablement",
+          "goType": "string",
+          "confFile": "web.conf",
+          "stanza": "settings",
+          "key": "enableSplunkWebSSL"
+        }
+      }
+    },
+    "SearchHeadCluster": {
+      "specFields": {
+        "appRepo.appSources.premiumAppsProps.esDefaults.sslEnablement": {
+          "jsonPath": "spec.appRepo.appSources.premiumAppsProps.esDefaults.sslEnablement",
+          "goType": "string",
+          "confFile": "web.conf",
+          "stanza": "settings",
+          "key": "enableSplunkWebSSL"
+        },
+        "appRepo.defaults.premiumAppsProps.esDefaults.sslEnablement": {
+          "jsonPath": "spec.appRepo.defaults.premiumAppsProps.esDefaults.sslEnablement",
+          "goType": "string",
+          "confFile": "web.conf",
+          "stanza": "settings",
+          "key": "enableSplunkWebSSL"
+        }
+      }
+    },
+    "Standalone": {
+      "specFields": {
+        "appRepo.appSources.premiumAppsProps.esDefaults.sslEnablement": {
+          "jsonPath": "spec.appRepo.appSources.premiumAppsProps.esDefaults.sslEnablement",
+          "goType": "string",
+          "confFile": "web.conf",
+          "stanza": "settings",
+          "key": "enableSplunkWebSSL"
+        },
+        "appRepo.defaults.premiumAppsProps.esDefaults.sslEnablement": {
+          "jsonPath": "spec.appRepo.defaults.premiumAppsProps.esDefaults.sslEnablement",
+          "goType": "string",
+          "confFile": "web.conf",
+          "stanza": "settings",
+          "key": "enableSplunkWebSSL"
+        },
+        "smartstore.cacheManager.evictionPadding": {
+          "jsonPath": "spec.smartstore.cacheManager.evictionPadding",
+          "goType": "uint",
+          "confFile": "server.conf",
+          "stanza": "cachemanager",
+          "key": "eviction_padding"
+        },
+        "smartstore.cacheManager.evictionPolicy": {
+          "jsonPath": "spec.smartstore.cacheManager.evictionPolicy",
+          "goType": "string",
+          "confFile": "server.conf",
+          "stanza": "cachemanager",
+          "key": "eviction_policy"
+        },
+        "smartstore.cacheManager.hotlistBloomFilterRecencyHours": {
+          "jsonPath": "spec.smartstore.cacheManager.hotlistBloomFilterRecencyHours",
+          "goType": "uint",
+          "confFile": "server.conf",
+          "stanza": "cachemanager",
+          "key": "hotlist_bloom_filter_recency_hours"
+        },
+        "smartstore.cacheManager.hotlistRecencySecs": {
+          "jsonPath": "spec.smartstore.cacheManager.hotlistRecencySecs",
+          "goType": "uint",
+          "confFile": "server.conf",
+          "stanza": "cachemanager",
+          "key": "hotlist_recency_secs"
+        },
+        "smartstore.cacheManager.maxCacheSize": {
+          "jsonPath": "spec.smartstore.cacheManager.maxCacheSize",
+          "goType": "uint",
+          "confFile": "server.conf",
+          "stanza": "cachemanager",
+          "key": "max_cache_size"
+        },
+        "smartstore.cacheManager.maxConcurrentDownloads": {
+          "jsonPath": "spec.smartstore.cacheManager.maxConcurrentDownloads",
+          "goType": "uint",
+          "confFile": "server.conf",
+          "stanza": "cachemanager",
+          "key": "max_concurrent_downloads"
+        },
+        "smartstore.cacheManager.maxConcurrentUploads": {
+          "jsonPath": "spec.smartstore.cacheManager.maxConcurrentUploads",
+          "goType": "uint",
+          "confFile": "server.conf",
+          "stanza": "cachemanager",
+          "key": "max_concurrent_uploads"
+        },
+        "smartstore.defaults.maxGlobalDataSizeMB": {
+          "jsonPath": "spec.smartstore.defaults.maxGlobalDataSizeMB",
+          "goType": "uint",
+          "confFile": "indexes.conf",
+          "stanza": "default",
+          "key": "maxGlobalDataSizeMB"
+        },
+        "smartstore.defaults.maxGlobalRawDataSizeMB": {
+          "jsonPath": "spec.smartstore.defaults.maxGlobalRawDataSizeMB",
+          "goType": "uint",
+          "confFile": "indexes.conf",
+          "stanza": "default",
+          "key": "maxGlobalRawDataSizeMB"
+        },
+        "smartstore.defaults.volumeName": {
+          "jsonPath": "spec.smartstore.defaults.volumeName",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "default",
+          "key": "remotePath"
+        },
+        "smartstore.indexes.hotlistBloomFilterRecencyHours": {
+          "jsonPath": "spec.smartstore.indexes.hotlistBloomFilterRecencyHours",
+          "goType": "uint",
+          "confFile": "indexes.conf",
+          "stanza": "<index_name>",
+          "key": "hotlist_bloom_filter_recency_hours"
+        },
+        "smartstore.indexes.hotlistRecencySecs": {
+          "jsonPath": "spec.smartstore.indexes.hotlistRecencySecs",
+          "goType": "uint",
+          "confFile": "indexes.conf",
+          "stanza": "<index_name>",
+          "key": "hotlist_recency_secs"
+        },
+        "smartstore.indexes.maxGlobalDataSizeMB": {
+          "jsonPath": "spec.smartstore.indexes.maxGlobalDataSizeMB",
+          "goType": "uint",
+          "confFile": "indexes.conf",
+          "stanza": "<index_name>",
+          "key": "maxGlobalDataSizeMB"
+        },
+        "smartstore.indexes.maxGlobalRawDataSizeMB": {
+          "jsonPath": "spec.smartstore.indexes.maxGlobalRawDataSizeMB",
+          "goType": "uint",
+          "confFile": "indexes.conf",
+          "stanza": "<index_name>",
+          "key": "maxGlobalRawDataSizeMB"
+        },
+        "smartstore.indexes.remotePath": {
+          "jsonPath": "spec.smartstore.indexes.remotePath",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "<index_name>",
+          "key": "remotePath"
+        },
+        "smartstore.indexes.volumeName": {
+          "jsonPath": "spec.smartstore.indexes.volumeName",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "<index_name>",
+          "key": "remotePath"
+        },
+        "smartstore.volumes.endpoint": {
+          "jsonPath": "spec.smartstore.volumes.endpoint",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "volume:<name>",
+          "key": "remote.s3.endpoint"
+        },
+        "smartstore.volumes.path": {
+          "jsonPath": "spec.smartstore.volumes.path",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "volume:<name>",
+          "key": "path"
+        },
+        "smartstore.volumes.region": {
+          "jsonPath": "spec.smartstore.volumes.region",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "volume:<name>",
+          "key": "remote.s3.auth_region"
+        },
+        "smartstore.volumes.secretRef": {
+          "jsonPath": "spec.smartstore.volumes.secretRef",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "volume:<name>",
+          "key": "remote.s3.access_key;remote.s3.secret_key"
+        },
+        "smartstore.volumes.storageType": {
+          "jsonPath": "spec.smartstore.volumes.storageType",
+          "goType": "string",
+          "confFile": "indexes.conf",
+          "stanza": "volume:<name>",
+          "key": "storageType"
+        }
+      }
+    }
+  }
+}
