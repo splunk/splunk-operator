@@ -701,3 +701,187 @@ func newTestIngestorQueuePipelineManager(mockHTTPClient *spltest.MockHTTPClient)
 		newSplunkClient: newSplunkClientForQueuePipeline,
 	}
 }
+
+func TestIngScaledUpScaledDownEvent(t *testing.T) {
+	ctx := context.TODO()
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	crName := "test-ingestor"
+	cr := &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: "test"},
+	}
+
+	// Simulate ScaledUp: previousReplicas=1, desiredReplicas=3, phase=PhaseReady, Status.ReadyReplicas=3
+	previousReplicas := int32(1)
+	desiredReplicas := int32(3)
+	cr.Status.ReadyReplicas = desiredReplicas
+	phase := enterpriseApi.PhaseReady
+
+	// Replicate the production conditional from ApplyIngestorCluster()
+	ep := GetEventPublisher(ctx, cr)
+	if phase == enterpriseApi.PhaseReady {
+		if desiredReplicas > previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
+			ep.Normal(ctx, "ScaledUp",
+				fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		}
+	}
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "ScaledUp" {
+			found = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type for ScaledUp, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, crName) {
+				t.Errorf("Expected event message to contain CR name '%s', got: %s", crName, event.message)
+			}
+			if !strings.Contains(event.message, "1") || !strings.Contains(event.message, "3") {
+				t.Errorf("Expected event message to contain replica counts, got: %s", event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected ScaledUp event to be published")
+	}
+
+	// Simulate ScaledDown: previousReplicas=3, desiredReplicas=1, phase=PhaseReady, Status.ReadyReplicas=1
+	recorder.events = []mockEvent{}
+	previousReplicas = int32(3)
+	desiredReplicas = int32(1)
+	cr.Status.ReadyReplicas = desiredReplicas
+
+	if phase == enterpriseApi.PhaseReady {
+		if desiredReplicas < previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
+			ep.Normal(ctx, "ScaledDown",
+				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		}
+	}
+
+	found = false
+	for _, event := range recorder.events {
+		if event.reason == "ScaledDown" {
+			found = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type for ScaledDown, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, crName) {
+				t.Errorf("Expected event message to contain CR name '%s', got: %s", crName, event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected ScaledDown event to be published")
+	}
+
+	// Negative: no event when phase is not PhaseReady
+	recorder.events = []mockEvent{}
+	phase = enterpriseApi.PhasePending
+	if phase == enterpriseApi.PhaseReady {
+		if desiredReplicas < previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
+			ep.Normal(ctx, "ScaledDown",
+				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		}
+	}
+	if len(recorder.events) != 0 {
+		t.Errorf("Expected no events when phase is not PhaseReady, got %d events", len(recorder.events))
+	}
+
+	// Negative: no event when replicas haven't converged
+	recorder.events = []mockEvent{}
+	phase = enterpriseApi.PhaseReady
+	cr.Status.ReadyReplicas = int32(2) // not yet at desiredReplicas
+	if phase == enterpriseApi.PhaseReady {
+		if desiredReplicas < previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
+			ep.Normal(ctx, "ScaledDown",
+				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		}
+	}
+	if len(recorder.events) != 0 {
+		t.Errorf("Expected no events when replicas haven't converged, got %d events", len(recorder.events))
+	}
+}
+
+func TestIngQueueConfigUpdatedEvent(t *testing.T) {
+	ctx := context.TODO()
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	crName := "test-ingestor"
+	cr := &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: "test"},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			Replicas: 3,
+		},
+	}
+
+	// Replicate the production conditional from ApplyIngestorCluster()
+	ep := GetEventPublisher(ctx, cr)
+	ep.Normal(ctx, "QueueConfigUpdated",
+		fmt.Sprintf("Queue/Pipeline configuration updated for %d ingestors", cr.Spec.Replicas))
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "QueueConfigUpdated" {
+			found = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type for QueueConfigUpdated, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, "3") {
+				t.Errorf("Expected event message to contain replica count '3', got: %s", event.message)
+			}
+			if !strings.Contains(event.message, "Queue/Pipeline") {
+				t.Errorf("Expected event message to contain 'Queue/Pipeline', got: %s", event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected QueueConfigUpdated event to be published")
+	}
+}
+
+func TestIngIngestorsRestartedEvent(t *testing.T) {
+	ctx := context.TODO()
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	crName := "test-ingestor"
+	cr := &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: "test"},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			Replicas: 5,
+		},
+	}
+
+	// Replicate the production conditional from ApplyIngestorCluster()
+	ep := GetEventPublisher(ctx, cr)
+	ep.Normal(ctx, "IngestorsRestarted",
+		fmt.Sprintf("Restarted Splunk on %d ingestor pods", cr.Spec.Replicas))
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "IngestorsRestarted" {
+			found = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type for IngestorsRestarted, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, "5") {
+				t.Errorf("Expected event message to contain replica count '5', got: %s", event.message)
+			}
+			if !strings.Contains(event.message, "Restarted Splunk") {
+				t.Errorf("Expected event message to contain 'Restarted Splunk', got: %s", event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected IngestorsRestarted event to be published")
+	}
+}

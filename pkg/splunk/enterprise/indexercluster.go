@@ -260,10 +260,13 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 				err = mgr.updateIndexerConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
 				if err != nil {
-					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
-					scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
+					eventPublisher.Warning(ctx, "UpdateConfFilesFailure", fmt.Sprintf("failed to update conf file for Queue/Pipeline config due to %s", err.Error()))
+				scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config")
 					return result, err
 				}
+
+				eventPublisher.Normal(ctx, "QueueConfigUpdated",
+					fmt.Sprintf("Queue/Pipeline configuration updated for %d indexers", cr.Spec.Replicas))
 
 				for i := int32(0); i < cr.Spec.Replicas; i++ {
 					idxcClient := mgr.getClient(ctx, i)
@@ -273,6 +276,9 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 					}
 					scopedLog.Info("Restarted splunk", "indexer", i)
 				}
+
+				eventPublisher.Normal(ctx, "IndexersRestarted",
+					fmt.Sprintf("Restarted Splunk on %d indexer pods", cr.Spec.Replicas))
 
 				cr.Status.CredentialSecretVersion = qosCfg.Version
 				cr.Status.ServiceAccount = cr.Spec.ServiceAccount
@@ -559,6 +565,9 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 					return result, err
 				}
 
+				eventPublisher.Normal(ctx, "QueueConfigUpdated",
+					fmt.Sprintf("Queue/Pipeline configuration updated for %d indexers", cr.Spec.Replicas))
+
 				for i := int32(0); i < cr.Spec.Replicas; i++ {
 					idxcClient := mgr.getClient(ctx, i)
 					err = idxcClient.RestartSplunk()
@@ -567,6 +576,9 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 					}
 					scopedLog.Info("Restarted splunk", "indexer", i)
 				}
+
+				eventPublisher.Normal(ctx, "IndexersRestarted",
+					fmt.Sprintf("Restarted Splunk on %d indexer pods", cr.Spec.Replicas))
 
 				cr.Status.CredentialSecretVersion = qosCfg.Version
 				cr.Status.ServiceAccount = cr.Spec.ServiceAccount

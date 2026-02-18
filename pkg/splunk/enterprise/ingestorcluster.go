@@ -68,6 +68,9 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
 
+	// Track previous replicas for scaling events
+	previousReplicas := cr.Status.Replicas
+
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
 	if cr.Status.Replicas < cr.Spec.Replicas {
@@ -207,6 +210,18 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	}
 	cr.Status.Phase = phase
 
+	// Emit scaling events when phase is ready
+	if phase == enterpriseApi.PhaseReady {
+		desiredReplicas := cr.Spec.Replicas
+		if desiredReplicas > previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
+			eventPublisher.Normal(ctx, "ScaledUp",
+				fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		} else if desiredReplicas < previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
+			eventPublisher.Normal(ctx, "ScaledDown",
+				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		}
+	}
+
 	// No need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		qosCfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, cr.Spec.QueueRef, cr.Spec.ObjectStorageRef, cr.Spec.ServiceAccount)
@@ -220,16 +235,19 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 		// If queue is updated
 		if secretChanged || serviceAccountChanged {
-			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
-			err = mgr.updateIngestorConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
+			ingMgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
+			err = ingMgr.updateIngestorConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
 			if err != nil {
 				eventPublisher.Warning(ctx, "UpdateConfFilesFailure", fmt.Sprintf("failed to update conf file for Queue/Pipeline config due to %s", err.Error()))
 				scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config")
 				return result, err
 			}
 
+			eventPublisher.Normal(ctx, "QueueConfigUpdated",
+				fmt.Sprintf("Queue/Pipeline configuration updated for %d ingestors", cr.Spec.Replicas))
+
 			for i := int32(0); i < cr.Spec.Replicas; i++ {
-				ingClient := mgr.getClient(ctx, i)
+				ingClient := ingMgr.getClient(ctx, i)
 				err = ingClient.RestartSplunk()
 				if err != nil {
 					return result, err
@@ -237,11 +255,14 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 				scopedLog.Info("Restarted splunk", "ingestor", i)
 			}
 
+			eventPublisher.Normal(ctx, "IngestorsRestarted",
+				fmt.Sprintf("Restarted Splunk on %d ingestor pods", cr.Spec.Replicas))
+
 			cr.Status.CredentialSecretVersion = qosCfg.Version
 			cr.Status.ServiceAccount = cr.Spec.ServiceAccount
 		}
 
-		// Upgrade fron automated MC to MC CRD
+		// Upgrade from automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
