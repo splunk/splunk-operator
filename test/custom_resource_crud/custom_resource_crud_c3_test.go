@@ -69,6 +69,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
+			prevTelemetrySubmissionTime := testenv.GetTelemetryLastSubmissionTime(ctx, deployment)
 			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
@@ -80,6 +81,10 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify telemetry
+			testenv.TriggerTelemetrySubmission(ctx, deployment)
+			testenv.VerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
