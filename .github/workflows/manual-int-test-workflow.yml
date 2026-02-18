@@ -11,6 +11,9 @@ on:
         description: 'Run Operator in Cluster Wide Mode. Type false to run cluster in namespace mode'
         required: false
         default: "true"
+  push:
+    paths:
+      - '.github/workflows/manual-int-test-workflow.yml'
 jobs:
   int-tests:
     strategy:
@@ -73,6 +76,7 @@ jobs:
           export-variables: true
       - name: Export env from .env
         run: |
+          echo "SPLUNK_ENTERPRISE_IMAGE=$SPLUNK_ENTERPRISE_IMAGE" >> $GITHUB_ENV
           echo "S3_REGION=$AWS_DEFAULT_REGION" >> $GITHUB_ENV
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v3

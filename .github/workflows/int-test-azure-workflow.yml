@@ -11,6 +11,8 @@ on:
     paths-ignore:
       - 'docs/**'
       - '*.md'
+    paths:
+      - '.github/workflows/int-test-azure-workflow.yml'
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
@@ -24,6 +26,9 @@ jobs:
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
       with:
         export-variables: true
+    - name: Export env from .env
+      run: |
+          echo "AZURE_REGION=$AZURE_REGION" >> $GITHUB_ENV
     - name: Setup Go
       uses: actions/setup-go@v2
       with:
@@ -72,6 +77,9 @@ jobs:
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
       with:
         export-variables: true
+    - name: Export env from .env
+      run: |
+          echo "AZURE_REGION=$AZURE_REGION" >> $GITHUB_ENV
     - name: Set Cluster Name
       run: |
         echo "TEST_CLUSTER_NAME=az${{ github.run_id }}" >> $GITHUB_ENV
@@ -146,6 +154,10 @@ jobs:
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
         with:
           export-variables: true
+      - name: Export env from .env
+        run: |
+          echo "SPLUNK_ENTERPRISE_IMAGE=$SPLUNK_ENTERPRISE_IMAGE" >> $GITHUB_ENV
+          echo "AZURE_REGION=$AZURE_REGION" >> $GITHUB_ENV
       - name: 'Login via Azure CLI'
         uses: azure/login@v1
         with:

@@ -7,6 +7,9 @@ permissions:
 on:
   schedule:
     - cron: "0 06 * * 0"
+  push:
+    paths:
+      - '.github/workflows/nightly-int-test-workflow.yml'
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
@@ -24,6 +27,7 @@ jobs:
         export-variables: true
     - name: Export env from .env
       run: |
+        echo "SPLUNK_ENTERPRISE_IMAGE=$SPLUNK_ENTERPRISE_IMAGE" >> $GITHUB_ENV
         echo "S3_REGION=$AWS_DEFAULT_REGION" >> $GITHUB_ENV
     - name: Setup Go
       uses: actions/setup-go@v2
@@ -115,6 +119,7 @@ jobs:
           export-variables: true
       - name: Export env from .env
         run: |
+          echo "SPLUNK_ENTERPRISE_IMAGE=$SPLUNK_ENTERPRISE_IMAGE" >> $GITHUB_ENV
           echo "S3_REGION=$AWS_DEFAULT_REGION" >> $GITHUB_ENV
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v3

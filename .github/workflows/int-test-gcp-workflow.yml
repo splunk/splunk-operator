@@ -12,6 +12,8 @@ on:
     paths-ignore:
       - 'docs/**'
       - '*.md'
+    paths:
+      - '.github/workflows/int-test-gcp-workflow.yml'
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
@@ -121,6 +123,11 @@ jobs:
         with:
           path: .env
           export-variables: true
+      - name: Export env from .env
+        run: |
+          echo "GCP_REGION=$GCP_REGION" >> $GITHUB_ENV
+          echo "GCP_ZONE=$GCP_ZONE" >> $GITHUB_ENV
+          echo "SPLUNK_ENTERPRISE_IMAGE=$SPLUNK_ENTERPRISE_IMAGE" >> $GITHUB_ENV
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v1
