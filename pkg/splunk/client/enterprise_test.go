@@ -16,6 +16,7 @@
 package client
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -640,6 +641,47 @@ func TestSetIdxcSecret(t *testing.T) {
 
 	// Test invalid http request
 	splunkClientErrorTester(t, test)
+}
+
+func TestSendTelemetry_Success(t *testing.T) {
+	path := "/services/telemetry/metrics"
+	bodyBytes := []byte(`{"metric":"value"}`)
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/telemetry/metrics", bytes.NewReader(bodyBytes))
+	wantRequest.Header.Set("Content-Type", "application/json")
+	wantResponse := TelemetryResponse{
+		Message:       "Telemetry sent successfully",
+		MetricValueID: "abc123",
+	}
+	test := func(c SplunkClient) error {
+		resp, err := c.SendTelemetry(path, bodyBytes)
+		if err != nil {
+			return err
+		}
+		if resp.Message != wantResponse.Message || resp.MetricValueID != wantResponse.MetricValueID {
+			t.Errorf("SendTelemetry = %+v; want %+v", resp, wantResponse)
+		}
+		return nil
+	}
+	responseBody := `{"message":"Telemetry sent successfully","metricValueId":"abc123"}`
+	splunkClientTester(t, "TestSendTelemetry", 201, responseBody, wantRequest, test)
+}
+
+func TestSendTelemetry_Error(t *testing.T) {
+	path := "/services/telemetry/metrics"
+	bodyBytes := []byte(`{"metric":"value"}`)
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/telemetry/metrics", bytes.NewReader(bodyBytes))
+	wantRequest.Header.Set("Content-Type", "application/json")
+
+	test := func(c SplunkClient) error {
+		_, err := c.SendTelemetry(path, bodyBytes)
+		if err == nil {
+			t.Errorf("SendTelemetry should return error for 500 response code")
+		}
+		return nil
+	}
+
+	// Simulate a 500 error response from the mock client
+	splunkClientTester(t, "TestSendTelemetry_Error", 500, "", wantRequest, test)
 }
 
 func TestRestartSplunk(t *testing.T) {
