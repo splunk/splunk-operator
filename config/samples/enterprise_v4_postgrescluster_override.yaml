@@ -22,3 +22,7 @@ spec:
     limits:
       cpu: "500m"
       memory: "1Gi"
+  # Enable connection pooler for this cluster
+  # Takes precedence over the class-level connectionPooler.enabled value
+  connectionPooler:
+    enabled: true

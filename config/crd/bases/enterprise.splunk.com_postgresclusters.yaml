@@ -58,6 +58,17 @@ spec:
                 x-kubernetes-validations:
                 - message: class is immutable
                   rule: self == oldSelf
+              connectionPooler:
+                description: ConnectionPooler contains connection pooler settings
+                  for this cluster.
+                properties:
+                  enabled:
+                    default: false
+                    description: |-
+                      Enabled controls whether PgBouncer connection pooling is deployed for this cluster.
+                      When set, takes precedence over the class-level connectionPooler.enabled value.
+                    type: boolean
+                type: object
               instances:
                 description: Instances overrides the number of PostgreSQL instances
                   from ClusterClass.

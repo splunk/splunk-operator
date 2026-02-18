@@ -16,6 +16,21 @@ limitations under the License.
 
 package v4
 
+// ConnectionPoolerMode defines the PgBouncer connection pooling strategy.
+// +kubebuilder:validation:Enum=session;transaction;statement
+type ConnectionPoolerMode string
+
+const (
+	// ConnectionPoolerModeSession assigns a connection for the entire client session (most compatible).
+	ConnectionPoolerModeSession ConnectionPoolerMode = "session"
+
+	// ConnectionPoolerModeTransaction returns the connection after each transaction (recommended).
+	ConnectionPoolerModeTransaction ConnectionPoolerMode = "transaction"
+
+	// ConnectionPoolerModeStatement returns the connection after each statement (limited compatibility).
+	ConnectionPoolerModeStatement ConnectionPoolerMode = "statement"
+)
+
 // ConnectionPoolerConfig defines PgBouncer connection pooler configuration.
 // When enabled, creates RW and RO pooler deployments for clusters using this class.
 type ConnectionPoolerConfig struct {
@@ -34,19 +49,25 @@ type ConnectionPoolerConfig struct {
 	Instances *int32 `json:"instances,omitempty"`
 
 	// Mode defines the connection pooling strategy.
-	// - "session": Connection assigned for entire client session (most compatible)
-	// - "transaction": Connection returned after each transaction (recommended)
-	// - "statement": Connection returned after each statement (limited compatibility)
-	// +kubebuilder:validation:Enum=session;transaction;statement
 	// +kubebuilder:default="transaction"
 	// +optional
-	Mode *string `json:"mode,omitempty"`
+	Mode *ConnectionPoolerMode `json:"mode,omitempty"`
 
 	// Config contains PgBouncer configuration parameters.
 	// Passed directly to CNPG Pooler spec.pgbouncer.parameters.
 	// See: https://cloudnative-pg.io/docs/1.28/connection_pooling/#pgbouncer-configuration-options
 	// +optional
 	Config map[string]string `json:"config,omitempty"`
+}
+
+// ConnectionPoolerEnable defines connection pooler settings available at the PostgresCluster level.
+// Only the enabled toggle is exposed; all other pooler settings are controlled by the PostgresClusterClass.
+type ConnectionPoolerEnable struct {
+	// Enabled controls whether PgBouncer connection pooling is deployed for this cluster.
+	// When set, takes precedence over the class-level connectionPooler.enabled value.
+	// +kubebuilder:default=false
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // ConnectionPoolerStatus contains the observed state of the connection pooler.

@@ -38,11 +38,6 @@ type PostgresClusterClassSpec struct {
 	// +optional
 	Config PosgresClusterClassConfig `json:"config,omitempty"`
 
-	// ConnectionPooler contains PgBouncer connection pooler configuration.
-	// When enabled, creates RW and RO pooler deployments for clusters using this class.
-	// +optional
-	ConnectionPooler *ConnectionPoolerConfig `json:"connectionPooler,omitempty"`
-
 	// CNPG contains CloudNativePG-specific configuration and policies.
 	// Only used when Provisioner is "postgresql.cnpg.io"
 	// These settings CANNOT be overridden in PostgresCluster CR (platform policy).
@@ -109,6 +104,11 @@ type CNPGConfig struct {
 	// +kubebuilder:default=switchover
 	// +optional
 	PrimaryUpdateMethod string `json:"primaryUpdateMethod,omitempty"`
+
+	// ConnectionPooler contains PgBouncer connection pooler configuration.
+	// When enabled, creates RW and RO pooler deployments for clusters using this class.
+	// +optional
+	ConnectionPooler *ConnectionPoolerConfig `json:"connectionPooler,omitempty"`
 }
 
 // PostgresClusterClassStatus defines the observed state of PostgresClusterClass.

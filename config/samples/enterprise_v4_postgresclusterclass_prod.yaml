@@ -59,20 +59,20 @@ spec:
       # Require SSL + password authentication
       - "hostssl all all 0.0.0.0/0 scram-sha-256"
 
-  # Connection pooler configuration (PgBouncer)
-  connectionPooler:
-    enabled: true
-    # Number of PgBouncer pod replicas
-    instances: 3
-    # Pooling mode
-    mode: transaction
-    # PgBouncer configuration parameters
-    config:
-      # Maximum number of client connections allowed
-      max_client_conn: "100"
-      # Default number of server connections per user/database pair
-      default_pool_size: "20"
-
   cnpg:
     # Switchover method - minimal downtime via automated failover
     primaryUpdateMethod: switchover
+
+    # Connection pooler configuration (PgBouncer)
+    connectionPooler:
+      enabled: true
+      # Number of PgBouncer pod replicas
+      instances: 3
+      # Pooling mode
+      mode: transaction
+      # PgBouncer configuration parameters
+      config:
+        # Maximum number of client connections allowed
+        max_client_conn: "100"
+        # Default number of server connections per user/database pair
+        default_pool_size: "20"
