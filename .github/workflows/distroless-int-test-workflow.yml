@@ -23,10 +23,11 @@ jobs:
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+        with:
+          export-variables: true
       - name: Export env from .env
         run: |
-          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_ENV
-          echo "S3_REGION=${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}" >> $GITHUB_ENV
+          echo "S3_REGION=$AWS_DEFAULT_REGION" >> $GITHUB_ENV
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
@@ -117,10 +118,11 @@ jobs:
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+        with:
+          export-variables: true
       - name: Export env from .env
         run: |
-          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_ENV
-          echo "S3_REGION=${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}" >> $GITHUB_ENV
+          echo "S3_REGION=$AWS_DEFAULT_REGION" >> $GITHUB_ENV
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v3
         with:

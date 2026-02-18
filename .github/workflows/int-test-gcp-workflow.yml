@@ -120,11 +120,7 @@ jobs:
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
         with:
           path: .env
-      - name: Export env from .env
-        run: |
-          echo "GCP_REGION=${{ steps.dotenv.outputs.GCP_REGION }}" >> $GITHUB_ENV
-          echo "GCP_ZONE=${{ steps.dotenv.outputs.GCP_ZONE }}" >> $GITHUB_ENV
-          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_ENV
+          export-variables: true
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v1

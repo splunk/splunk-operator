@@ -22,9 +22,8 @@ jobs:
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-    - name: Export env from .env
-      run: |
-        echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_ENV
+      with:
+        export-variables: true
     - name: Setup Go
       uses: actions/setup-go@v2
       with:
@@ -71,9 +70,8 @@ jobs:
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-    - name: Export env from .env
-      run: |
-        echo "AZURE_REGION=${{ steps.dotenv.outputs.AZURE_REGION }}" >> $GITHUB_ENV
+      with:
+        export-variables: true
     - name: Set Cluster Name
       run: |
         echo "TEST_CLUSTER_NAME=az${{ github.run_id }}" >> $GITHUB_ENV
@@ -146,10 +144,8 @@ jobs:
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-      - name: Export env from .env
-        run: |
-          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_ENV
-          echo "AZURE_REGION=${{ steps.dotenv.outputs.AZURE_REGION }}" >> $GITHUB_ENV
+        with:
+          export-variables: true
       - name: 'Login via Azure CLI'
         uses: azure/login@v1
         with:
