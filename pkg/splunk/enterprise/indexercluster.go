@@ -261,7 +261,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				err = mgr.updateIndexerConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
 				if err != nil {
 					eventPublisher.Warning(ctx, "UpdateConfFilesFailure", fmt.Sprintf("failed to update conf file for Queue/Pipeline config due to %s", err.Error()))
-				scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config")
+					scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config")
 					return result, err
 				}
 
