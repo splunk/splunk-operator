@@ -60,7 +60,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Validate and updates defaults for CR
 	err = validateIngestorClusterSpec(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "validateIngestorClusterSpec", fmt.Sprintf("validate ingestor cluster spec failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "SpecValidationFailure", fmt.Sprintf("validation of ingestor cluster spec failed due to %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate ingestor cluster spec")
 		return result, err
 	}
@@ -88,7 +88,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err = initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
-			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "AppInfoStatusInitializationFailure", fmt.Sprintf("init and check app info status failed due to %s", err.Error()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
 		}
@@ -99,8 +99,8 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIngestor)
 	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
-		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
+		eventPublisher.Warning(ctx, "ApplySplunkConfigFailure", fmt.Sprintf("apply of general config failed due to %s", err.Error()))
+		scopedLog.Error(err, "create or update general config failed")
 		return result, err
 	}
 
@@ -109,7 +109,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), false)
 			if err != nil {
-				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("create/update monitoring console config map failed %s", err.Error()))
+				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMapFailure", fmt.Sprintf("apply of monitoring console config map failed due to %s", err.Error()))
 				return result, err
 			}
 		}
@@ -138,14 +138,14 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Create or update a headless service for ingestor cluster
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, true))
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update headless service for ingestor cluster failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "ApplyServiceFailure", fmt.Sprintf("apply of headless service failed due to %s", err.Error()))
 		return result, err
 	}
 
 	// Create or update a regular service for ingestor cluster
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, false))
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update service for ingestor cluster failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "ApplyServiceFailure", fmt.Sprintf("apply of service failed due to %s", err.Error()))
 		return result, err
 	}
 
@@ -187,14 +187,14 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Create or update statefulset for the ingestors
 	statefulSet, err := getIngestorStatefulSet(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "getIngestorStatefulSet", fmt.Sprintf("get ingestor stateful set failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "GetIngestorStatefulSetFailure", fmt.Sprintf("get stateful set failed due to %s", err.Error()))
 		return result, err
 	}
 
 	// Make changes to respective mc configmap when changing/removing mcRef from spec
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, make([]corev1.EnvVar, 0))
 	if err != nil {
-		eventPublisher.Warning(ctx, "validateMonitoringConsoleRef", fmt.Sprintf("validate monitoring console reference failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "MonitoringConsoleRefValidationFailure", fmt.Sprintf("monitoring console reference validation failed due to %s", err.Error()))
 		return result, err
 	}
 
@@ -202,7 +202,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	phase, err := mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 	if err != nil {
-		eventPublisher.Warning(ctx, "update", fmt.Sprintf("update stateful set failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "UpdateStatefulSetFailure", fmt.Sprintf("stateful set update failed due to %s", err.Error()))
 		return result, err
 	}
 	cr.Status.Phase = phase
@@ -223,8 +223,8 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 			err = mgr.updateIngestorConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
 			if err != nil {
-				eventPublisher.Warning(ctx, "ApplyIngestorCluster", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
-				scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
+				eventPublisher.Warning(ctx, "UpdateConfFilesFailure", fmt.Sprintf("failed to update conf file for Queue/Pipeline config due to %s", err.Error()))
+				scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config")
 				return result, err
 			}
 
@@ -245,13 +245,13 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			eventPublisher.Warning(ctx, "DeleteReferencesToAutomatedMCIfExists", fmt.Sprintf("delete reference to automated MC if exists failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "MCReferencesDeletionFailure", fmt.Sprintf("reference to automated MC if exists failed due to %s", err.Error()))
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
 		}
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), true)
 			if err != nil {
-				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map failed %s", err.Error()))
+				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMapFailure", fmt.Sprintf("apply of monitoring console environment config map failed due to %s", err.Error()))
 				return result, err
 			}
 		}
