@@ -205,7 +205,28 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		if statefulSet.Status.UpdatedReplicas < statefulSet.Status.Replicas {
 			scopedLog.Info("RollingUpdate in progress",
 				"updated", statefulSet.Status.UpdatedReplicas,
-				"total", statefulSet.Status.Replicas)
+				"total", statefulSet.Status.Replicas,
+				"ready", statefulSet.Status.ReadyReplicas)
+
+			// Check for stale updates: if generation matches but update isn't progressing
+			// This can happen if preStop hooks hang or PDB blocks all evictions
+			if statefulSet.Status.ObservedGeneration == statefulSet.Generation {
+				// Generation matches but update incomplete - check if pods are stuck
+				if statefulSet.Status.ReadyReplicas == 0 {
+					scopedLog.Error(nil, "RollingUpdate stalled - no pods ready",
+						"updated", statefulSet.Status.UpdatedReplicas,
+						"total", statefulSet.Status.Replicas)
+					return enterpriseApi.PhaseError, fmt.Errorf("rolling update stalled - no pods ready")
+				}
+
+				// If less than half pods ready and update not progressing, warn
+				if statefulSet.Status.ReadyReplicas < statefulSet.Status.Replicas/2 {
+					scopedLog.Info("RollingUpdate progress slow - less than half pods ready",
+						"ready", statefulSet.Status.ReadyReplicas,
+						"total", statefulSet.Status.Replicas)
+				}
+			}
+
 			return enterpriseApi.PhaseUpdating, nil
 		}
 

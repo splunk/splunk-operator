@@ -2613,11 +2613,11 @@ func ApplyPodDisruptionBudget(
 	)
 
 	// Calculate minAvailable: allow only 1 pod to be unavailable at a time
-	// For a 3-replica cluster: minAvailable = 2
-	// This ensures we always have at least 2 pods running during rolling restarts
+	// For a 3-replica cluster: minAvailable = 2 (allows 1 disruption)
+	// For a 1-replica deployment: minAvailable = 0 (allow eviction)
 	minAvailable := replicas - 1
-	if minAvailable < 1 {
-		minAvailable = 1 // Ensure at least 1 pod is always available
+	if replicas <= 1 {
+		minAvailable = 0 // Allow eviction for single-replica deployments
 	}
 
 	// Get labels for pod selector - must match StatefulSet pod labels

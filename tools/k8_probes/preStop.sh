@@ -24,8 +24,8 @@ log_warn() {
 SPLUNK_HOME="${SPLUNK_HOME:-/opt/splunk}"
 SPLUNK_BIN="${SPLUNK_HOME}/bin/splunk"
 MGMT_PORT="${SPLUNK_MGMT_PORT:-8089}"
-SPLUNK_USER="${SPLUNK_USER:-admin}"
-SPLUNK_PASSWORD="${SPLUNK_PASSWORD}"
+SPLUNK_USER="admin"
+SPLUNK_PASSWORD_FILE="/mnt/splunk-secrets/password"
 MAX_WAIT_SECONDS="${PRESTOP_MAX_WAIT:-300}"  # 5 minutes default
 
 # Get pod metadata from downward API (set via env vars in pod spec)
@@ -38,7 +38,8 @@ log_info "Starting preStop hook for pod: ${POD_NAME}, role: ${SPLUNK_ROLE}"
 # Function to read pod intent annotation
 get_pod_intent() {
     local intent
-    intent=$(curl -s --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
+    # Add timeout to prevent hanging
+    intent=$(curl -s --max-time 10 --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
         -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
         "https://kubernetes.default.svc/api/v1/namespaces/${POD_NAMESPACE}/pods/${POD_NAME}" \
         2>/dev/null | grep -o '"splunk.com/pod-intent":"[^"]*"' | cut -d'"' -f4)
@@ -188,8 +189,8 @@ decommission_indexer() {
         elapsed=$((elapsed + check_interval))
     done
 
-    log_warn "Decommission did not complete within ${MAX_WAIT_SECONDS}s, proceeding anyway"
-    return 0
+    log_error "Decommission timeout after ${MAX_WAIT_SECONDS}s - bucket migration may be incomplete"
+    return 1  # Signal failure so operator/finalizer can detect incomplete decommission
 }
 
 # Function to detain search head (remove from cluster)
@@ -234,8 +235,8 @@ detain_search_head() {
         elapsed=$((elapsed + check_interval))
     done
 
-    log_warn "Detention did not complete within ${MAX_WAIT_SECONDS}s, proceeding anyway"
-    return 0
+    log_error "Detention timeout after ${MAX_WAIT_SECONDS}s - member may still be registered"
+    return 1  # Signal failure so operator/finalizer can detect incomplete detention
 }
 
 # Function to gracefully stop Splunk
@@ -259,6 +260,39 @@ stop_splunk() {
 
 # Main logic
 main() {
+    # Validate required environment variables
+    if [ -z "$POD_NAME" ]; then
+        log_error "POD_NAME environment variable not set"
+        exit 1
+    fi
+
+    if [ -z "$POD_NAMESPACE" ]; then
+        log_error "POD_NAMESPACE environment variable not set"
+        exit 1
+    fi
+
+    if [ -z "$SPLUNK_ROLE" ]; then
+        log_error "SPLUNK_ROLE environment variable not set"
+        exit 1
+    fi
+
+    # Read Splunk admin password from mounted secret
+    if [ ! -f "$SPLUNK_PASSWORD_FILE" ]; then
+        log_error "Splunk password file not found at ${SPLUNK_PASSWORD_FILE}"
+        exit 1
+    fi
+
+    SPLUNK_PASSWORD=$(cat "$SPLUNK_PASSWORD_FILE")
+    if [ -z "$SPLUNK_PASSWORD" ]; then
+        log_error "Splunk password file is empty"
+        exit 1
+    fi
+
+    # Role-specific validation
+    if [ "$SPLUNK_ROLE" = "splunk_indexer" ] && [ -z "$SPLUNK_CLUSTER_MANAGER_URL" ]; then
+        log_warn "SPLUNK_CLUSTER_MANAGER_URL not set for indexer - decommission status verification will be skipped"
+    fi
+
     local pod_intent
     pod_intent=$(get_pod_intent)
     log_info "Pod intent: ${pod_intent}"

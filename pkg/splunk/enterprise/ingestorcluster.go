@@ -867,10 +867,28 @@ func checkAndEvictIngestorsIfNeeded(
 ) error {
 	scopedLog := log.FromContext(ctx).WithName("checkAndEvictIngestorsIfNeeded")
 
+	// Check if StatefulSet rolling update is already in progress
+	// Skip pod eviction to avoid conflict with Kubernetes StatefulSet controller
+	statefulSetName := fmt.Sprintf("splunk-%s-ingestor", cr.Name)
+	statefulSet := &appsv1.StatefulSet{}
+	err := c.Get(ctx, types.NamespacedName{Name: statefulSetName, Namespace: cr.Namespace}, statefulSet)
+	if err != nil {
+		scopedLog.Error(err, "Failed to get StatefulSet")
+		return err
+	}
+
+	// Check if rolling update in progress
+	if statefulSet.Status.UpdatedReplicas < *statefulSet.Spec.Replicas {
+		scopedLog.Info("StatefulSet rolling update in progress, skipping pod eviction to avoid conflict",
+			"updatedReplicas", statefulSet.Status.UpdatedReplicas,
+			"desiredReplicas", *statefulSet.Spec.Replicas)
+		return nil
+	}
+
 	// Get admin credentials
 	secret := &corev1.Secret{}
 	secretName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
-	err := c.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
+	err = c.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
 	if err != nil {
 		scopedLog.Error(err, "Failed to get splunk secret")
 		return fmt.Errorf("failed to get splunk secret: %w", err)

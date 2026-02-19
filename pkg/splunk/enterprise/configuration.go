@@ -798,14 +798,17 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	// Add finalizer and intent annotation for instance types that need cleanup before pod deletion
 	// This ensures decommission/detention and cleanup operations complete before pod is removed
 	if instanceType == SplunkIndexer || instanceType == SplunkSearchHead {
-		// Add finalizer
+		// Add finalizer (check for duplicates)
 		if statefulSet.Spec.Template.ObjectMeta.Finalizers == nil {
 			statefulSet.Spec.Template.ObjectMeta.Finalizers = []string{}
 		}
-		statefulSet.Spec.Template.ObjectMeta.Finalizers = append(
-			statefulSet.Spec.Template.ObjectMeta.Finalizers,
-			"splunk.com/pod-cleanup",
-		)
+		finalizer := "splunk.com/pod-cleanup"
+		if !containsString(statefulSet.Spec.Template.ObjectMeta.Finalizers, finalizer) {
+			statefulSet.Spec.Template.ObjectMeta.Finalizers = append(
+				statefulSet.Spec.Template.ObjectMeta.Finalizers,
+				finalizer,
+			)
+		}
 
 		// Add intent annotation (default: serve)
 		// This will be updated to "scale-down" when scaling down
@@ -1035,18 +1038,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 				},
 			},
 		},
-		// Splunk admin password from secret for preStop hook
-		{
-			Name: "SPLUNK_PASSWORD",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "", // Will be set to secretToMount below
-					},
-					Key: "password",
-				},
-			},
-		},
 	}
 
 	// update variables for licensing, if configured
@@ -1179,14 +1170,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	// so when duplicates are removed the last ones are removed from the list
 	env = append(extraEnv, env...)
 	//env = append(env, extraEnv...)
-
-	// Set the secret name for SPLUNK_PASSWORD environment variable
-	for i := range env {
-		if env[i].Name == "SPLUNK_PASSWORD" && env[i].ValueFrom != nil && env[i].ValueFrom.SecretKeyRef != nil {
-			env[i].ValueFrom.SecretKeyRef.Name = secretToMount
-			break
-		}
-	}
 
 	// check if there are any duplicate entries
 	// we use orderedmap so the test case can pass as json marshal
@@ -2253,4 +2236,14 @@ func validateSplunkGeneralTerms() error {
 		return nil
 	}
 	return fmt.Errorf("license not accepted, please adjust SPLUNK_GENERAL_TERMS to indicate you have accepted the current/latest version of the license. See README file for additional information")
+}
+
+// containsString checks if a string slice contains a specific string
+func containsString(slice []string, str string) bool {
+	for _, s := range slice {
+		if s == str {
+			return true
+		}
+	}
+	return false
 }
