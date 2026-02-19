@@ -25,6 +25,18 @@ Unit tests for pod eviction logic and intent-based cleanup.
 - Tests scaling from 3→5 replicas
 - Verifies minAvailable updates correctly (2→4)
 
+✅ **TestUserCreatedPDB** - Verifies operator respects user-created PDBs
+- User creates PDB with custom minAvailable (no owner reference)
+- Operator attempts to apply PDB with different settings
+- Verifies user's PDB is NOT modified (settings preserved)
+- Verifies no owner references added to user PDB
+
+✅ **TestOperatorManagedPDB** - Verifies operator updates its own PDBs
+- Operator-managed PDB exists (has owner reference)
+- Operator applies PDB with new replica count
+- Verifies PDB is updated with new minAvailable
+- Verifies operator can modify PDBs it owns
+
 ### Intent Annotations
 
 ✅ **TestPodIntentAnnotations** - Verifies intent annotation handling
@@ -123,11 +135,13 @@ Unit tests for pod eviction logic and intent-based cleanup.
 
 ## Test Execution Summary
 
-### Passing Tests: 18/21
+### Passing Tests: 20/23
 
 ```
 TestPodDisruptionBudgetCreation ✅
 TestPodDisruptionBudgetUpdate ✅
+TestUserCreatedPDB ✅
+TestOperatorManagedPDB ✅
 TestPodIntentAnnotations ✅
 TestFinalizerHandling ✅
 TestDuplicateFinalizerPrevention ✅
@@ -145,7 +159,7 @@ TestNoRestartRequiredForIndexerCluster ✅
 TestNoRestartRequiredForSearchHeadCluster ✅
 ```
 
-### Skipped Tests (Integration): 3/21
+### Skipped Tests (Integration): 3/23
 
 ```
 TestPreStopEnvironmentVariables ⏭️ (requires preStop.sh)

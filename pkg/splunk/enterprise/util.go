@@ -2674,7 +2674,26 @@ func ApplyPodDisruptionBudget(
 		return fmt.Errorf("failed to get PodDisruptionBudget: %w", err)
 	}
 
-	// PDB exists, check if update is needed
+	// PDB exists - check if it's managed by this operator
+	// If PDB doesn't have our CR as owner, it's user-created and we should NOT modify it
+	isManagedByOperator := false
+	for _, ownerRef := range existingPDB.GetOwnerReferences() {
+		if ownerRef.UID == cr.GetUID() {
+			isManagedByOperator = true
+			break
+		}
+	}
+
+	if !isManagedByOperator {
+		// PDB exists but is NOT managed by this operator (user-created)
+		// Do not modify it - respect user's configuration
+		scopedLog.Info("PodDisruptionBudget exists but is not managed by operator, skipping update",
+			"pdbName", pdbName,
+			"reason", "user-created PDB detected")
+		return nil
+	}
+
+	// PDB is managed by operator, check if update is needed
 	needsUpdate := false
 
 	// Check if minAvailable changed

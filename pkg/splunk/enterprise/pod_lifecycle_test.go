@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -693,6 +694,152 @@ func TestPreStopHookConfiguration(t *testing.T) {
 
 	if !hasPreStopHook {
 		t.Error("PreStop hook not configured in StatefulSet")
+	}
+}
+
+// TestUserCreatedPDB tests that operator respects user-created PDBs
+func TestUserCreatedPDB(t *testing.T) {
+	ctx := context.TODO()
+	scheme := runtime.NewScheme()
+	_ = enterpriseApi.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
+
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	cr := &enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-standalone",
+			Namespace: "test",
+			UID:       "test-cr-uid",
+		},
+	}
+
+	// Scenario 1: User creates a PDB with custom settings (no owner reference)
+	userPDB := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-standalone-standalone-pdb",
+			Namespace: "test",
+			Labels: map[string]string{
+				"user-created": "true",
+			},
+			// NO owner references - indicates user-created
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			MinAvailable: &intstr.IntOrString{
+				Type:   intstr.Int,
+				IntVal: 1, // User wants minAvailable=1
+			},
+			Selector: &metav1.LabelSelector{
+				MatchLabels: getSplunkLabels("test-standalone", SplunkStandalone, ""),
+			},
+		},
+	}
+	err := c.Create(ctx, userPDB)
+	if err != nil {
+		t.Fatalf("Failed to create user PDB: %v", err)
+	}
+
+	// Operator tries to apply PDB with replicas=3 (would set minAvailable=2)
+	err = ApplyPodDisruptionBudget(ctx, c, cr, SplunkStandalone, 3)
+	if err != nil {
+		t.Fatalf("ApplyPodDisruptionBudget failed: %v", err)
+	}
+
+	// Verify PDB was NOT modified (user settings preserved)
+	pdb := &policyv1.PodDisruptionBudget{}
+	err = c.Get(ctx, types.NamespacedName{
+		Name:      "splunk-test-standalone-standalone-pdb",
+		Namespace: "test",
+	}, pdb)
+	if err != nil {
+		t.Fatalf("Failed to get PDB: %v", err)
+	}
+
+	// Verify user's minAvailable=1 is preserved (not changed to 2)
+	if pdb.Spec.MinAvailable.IntVal != 1 {
+		t.Errorf("User PDB was modified! minAvailable = %d, want 1 (user setting)",
+			pdb.Spec.MinAvailable.IntVal)
+	}
+
+	// Verify user's label is preserved
+	if pdb.Labels["user-created"] != "true" {
+		t.Error("User PDB labels were modified")
+	}
+
+	// Verify no owner references were added
+	if len(pdb.GetOwnerReferences()) > 0 {
+		t.Error("Operator added owner references to user-created PDB")
+	}
+}
+
+// TestOperatorManagedPDB tests that operator can update its own PDBs
+func TestOperatorManagedPDB(t *testing.T) {
+	ctx := context.TODO()
+	scheme := runtime.NewScheme()
+	_ = enterpriseApi.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
+
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	cr := &enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-standalone",
+			Namespace: "test",
+			UID:       "test-cr-uid",
+		},
+	}
+
+	// Create operator-managed PDB (with owner reference)
+	operatorPDB := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-standalone-standalone-pdb",
+			Namespace: "test",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "enterprise.splunk.com/v4",
+					Kind:       "Standalone",
+					Name:       "test-standalone",
+					UID:        "test-cr-uid",
+				},
+			},
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			MinAvailable: &intstr.IntOrString{
+				Type:   intstr.Int,
+				IntVal: 2, // Old value
+			},
+			Selector: &metav1.LabelSelector{
+				MatchLabels: getSplunkLabels("test-standalone", SplunkStandalone, ""),
+			},
+		},
+	}
+	err := c.Create(ctx, operatorPDB)
+	if err != nil {
+		t.Fatalf("Failed to create operator PDB: %v", err)
+	}
+
+	// Operator applies PDB with replicas=5 (should update to minAvailable=4)
+	err = ApplyPodDisruptionBudget(ctx, c, cr, SplunkStandalone, 5)
+	if err != nil {
+		t.Fatalf("ApplyPodDisruptionBudget failed: %v", err)
+	}
+
+	// Verify PDB WAS updated (operator can update its own PDBs)
+	pdb := &policyv1.PodDisruptionBudget{}
+	err = c.Get(ctx, types.NamespacedName{
+		Name:      "splunk-test-standalone-standalone-pdb",
+		Namespace: "test",
+	}, pdb)
+	if err != nil {
+		t.Fatalf("Failed to get PDB: %v", err)
+	}
+
+	// Verify minAvailable was updated from 2 to 4
+	if pdb.Spec.MinAvailable.IntVal != 4 {
+		t.Errorf("Operator-managed PDB not updated! minAvailable = %d, want 4",
+			pdb.Spec.MinAvailable.IntVal)
 	}
 }
 
