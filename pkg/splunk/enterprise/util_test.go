@@ -3522,8 +3522,8 @@ func TestAppRepositoryConnectionFailedEvent(t *testing.T) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-s3-secret", Namespace: "test"},
 		Data: map[string][]byte{
-			"s3_access_key": []byte("AKIAIOSFODNN7EXAMPLE"),
-			"s3_secret_key": []byte("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+			"s3_access_key": []byte("abc"),
+			"s3_secret_key": []byte("123"),
 		},
 	}
 	if err := client.Create(ctx, secret); err != nil {
@@ -3572,4 +3572,417 @@ func TestAppRepositoryConnectionFailedEvent(t *testing.T) {
 	if !found {
 		t.Errorf("Expected AppRepositoryConnectionFailed event to be published")
 	}
+}
+
+func TestResolveSQSEndpoint(t *testing.T) {
+	ctx := context.TODO()
+
+	tests := []struct {
+		name           string
+		region         string
+		wantEndpoint   string
+		wantErrContain string
+	}{
+		{
+			name:         "valid us-east-1 region",
+			region:       "us-east-1",
+			wantEndpoint: "https://sqs.us-east-1.amazonaws.com",
+		},
+		{
+			name:         "valid eu-west-1 region",
+			region:       "eu-west-1",
+			wantEndpoint: "https://sqs.eu-west-1.amazonaws.com",
+		},
+		{
+			name:         "valid ap-southeast-1 region",
+			region:       "ap-southeast-1",
+			wantEndpoint: "https://sqs.ap-southeast-1.amazonaws.com",
+		},
+		{
+			name:         "valid cn-north-1 region (China)",
+			region:       "cn-north-1",
+			wantEndpoint: "https://sqs.cn-north-1.amazonaws.com.cn",
+		},
+		{
+			name:         "valid cn-northwest-1 region (China Ningxia)",
+			region:       "cn-northwest-1",
+			wantEndpoint: "https://sqs.cn-northwest-1.amazonaws.com.cn",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			endpoint, err := resolveSQSEndpoint(ctx, tt.region)
+			if tt.wantErrContain != "" {
+				if err == nil {
+					t.Errorf("resolveSQSEndpoint() expected error containing %q, got nil", tt.wantErrContain)
+				} else if !strings.Contains(err.Error(), tt.wantErrContain) {
+					t.Errorf("resolveSQSEndpoint() error = %v, want error containing %q", err, tt.wantErrContain)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("resolveSQSEndpoint() unexpected error = %v", err)
+				return
+			}
+			if endpoint != tt.wantEndpoint {
+				t.Errorf("resolveSQSEndpoint() = %v, want %v", endpoint, tt.wantEndpoint)
+			}
+		})
+	}
+}
+
+func TestResolveS3Endpoint(t *testing.T) {
+	ctx := context.TODO()
+
+	tests := []struct {
+		name           string
+		region         string
+		wantEndpoint   string
+		wantErrContain string
+	}{
+		{
+			name:         "valid us-east-1 region",
+			region:       "us-east-1",
+			wantEndpoint: "https://s3.us-east-1.amazonaws.com",
+		},
+		{
+			name:         "valid eu-west-1 region",
+			region:       "eu-west-1",
+			wantEndpoint: "https://s3.eu-west-1.amazonaws.com",
+		},
+		{
+			name:         "valid ap-southeast-1 region",
+			region:       "ap-southeast-1",
+			wantEndpoint: "https://s3.ap-southeast-1.amazonaws.com",
+		},
+		{
+			name:         "valid cn-north-1 region (China)",
+			region:       "cn-north-1",
+			wantEndpoint: "https://s3.cn-north-1.amazonaws.com.cn",
+		},
+		{
+			name:         "valid cn-northwest-1 region (China Ningxia)",
+			region:       "cn-northwest-1",
+			wantEndpoint: "https://s3.cn-northwest-1.amazonaws.com.cn",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			endpoint, err := resolveS3Endpoint(ctx, tt.region)
+			if tt.wantErrContain != "" {
+				if err == nil {
+					t.Errorf("resolveS3Endpoint() expected error containing %q, got nil", tt.wantErrContain)
+				} else if !strings.Contains(err.Error(), tt.wantErrContain) {
+					t.Errorf("resolveS3Endpoint() error = %v, want error containing %q", err, tt.wantErrContain)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("resolveS3Endpoint() unexpected error = %v", err)
+				return
+			}
+			if endpoint != tt.wantEndpoint {
+				t.Errorf("resolveS3Endpoint() = %v, want %v", endpoint, tt.wantEndpoint)
+			}
+		})
+	}
+}
+
+func TestResolveQueueAndObjectStorage(t *testing.T) {
+	ctx := context.TODO()
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	t.Run("empty refs returns empty config", func(t *testing.T) {
+		client := fake.NewClientBuilder().WithScheme(sch).Build()
+		cr := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
+		}
+
+		cfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, corev1.ObjectReference{}, corev1.ObjectReference{}, "")
+		if err != nil {
+			t.Errorf("ResolveQueueAndObjectStorage() unexpected error = %v", err)
+		}
+		if cfg == nil {
+			t.Fatal("ResolveQueueAndObjectStorage() returned nil config")
+		}
+		if cfg.Queue.Provider != "" {
+			t.Errorf("Expected empty Queue.Provider, got %q", cfg.Queue.Provider)
+		}
+		if cfg.OS.Provider != "" {
+			t.Errorf("Expected empty OS.Provider, got %q", cfg.OS.Provider)
+		}
+	})
+
+	t.Run("queue ref not found returns error", func(t *testing.T) {
+		client := fake.NewClientBuilder().WithScheme(sch).Build()
+		cr := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
+		}
+
+		queueRef := corev1.ObjectReference{Name: "nonexistent-queue"}
+		_, err := ResolveQueueAndObjectStorage(ctx, client, cr, queueRef, corev1.ObjectReference{}, "")
+		if err == nil {
+			t.Error("ResolveQueueAndObjectStorage() expected error for nonexistent queue, got nil")
+		}
+	})
+
+	t.Run("objectstorage ref not found returns error", func(t *testing.T) {
+		client := fake.NewClientBuilder().WithScheme(sch).Build()
+		cr := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
+		}
+
+		osRef := corev1.ObjectReference{Name: "nonexistent-os"}
+		_, err := ResolveQueueAndObjectStorage(ctx, client, cr, corev1.ObjectReference{}, osRef, "")
+		if err == nil {
+			t.Error("ResolveQueueAndObjectStorage() expected error for nonexistent objectstorage, got nil")
+		}
+	})
+
+	t.Run("valid queue ref returns queue spec", func(t *testing.T) {
+		queue := &enterpriseApi.Queue{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-queue", Namespace: "test"},
+			Spec: enterpriseApi.QueueSpec{
+				Provider: "sqs",
+				SQS: enterpriseApi.SQSSpec{
+					Name:       "my-queue",
+					AuthRegion: "",
+					DLQ:        "my-dlq",
+					Endpoint:   "https://sqs.us-east-1.amazonaws.com",
+				},
+			},
+		}
+		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(queue).Build()
+		cr := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
+		}
+
+		queueRef := corev1.ObjectReference{Name: "test-queue"}
+		cfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, queueRef, corev1.ObjectReference{}, "")
+		if err != nil {
+			t.Errorf("ResolveQueueAndObjectStorage() unexpected error = %v", err)
+		}
+		if cfg.Queue.Provider != "sqs" {
+			t.Errorf("Expected Queue.Provider = 'sqs', got %q", cfg.Queue.Provider)
+		}
+		if cfg.Queue.SQS.Name != "my-queue" {
+			t.Errorf("Expected Queue.SQS.Name = 'my-queue', got %q", cfg.Queue.SQS.Name)
+		}
+		if cfg.Queue.SQS.Endpoint != "https://sqs.us-east-1.amazonaws.com" {
+			t.Errorf("Expected Queue.SQS.Endpoint = 'https://sqs.us-east-1.amazonaws.com', got %q", cfg.Queue.SQS.Endpoint)
+		}
+	})
+
+	t.Run("valid objectstorage ref returns os spec", func(t *testing.T) {
+		os := &enterpriseApi.ObjectStorage{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-os", Namespace: "test"},
+			Spec: enterpriseApi.ObjectStorageSpec{
+				Provider: "s3",
+				S3: enterpriseApi.S3Spec{
+					Endpoint: "https://s3.us-east-1.amazonaws.com",
+					Path:     "my-bucket/prefix",
+				},
+			},
+		}
+		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(os).Build()
+		cr := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
+		}
+
+		osRef := corev1.ObjectReference{Name: "test-os"}
+		cfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, corev1.ObjectReference{}, osRef, "")
+		if err != nil {
+			t.Errorf("ResolveQueueAndObjectStorage() unexpected error = %v", err)
+		}
+		if cfg.OS.Provider != "s3" {
+			t.Errorf("Expected OS.Provider = 's3', got %q", cfg.OS.Provider)
+		}
+		if cfg.OS.S3.Path != "my-bucket/prefix" {
+			t.Errorf("Expected OS.S3.Path = 'my-bucket/prefix', got %q", cfg.OS.S3.Path)
+		}
+	})
+
+	t.Run("queue ref with different namespace", func(t *testing.T) {
+		queue := &enterpriseApi.Queue{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-queue", Namespace: "other-ns"},
+			Spec: enterpriseApi.QueueSpec{
+				Provider: "sqs",
+				SQS: enterpriseApi.SQSSpec{
+					Name:     "cross-ns-queue",
+					DLQ:      "my-dlq",
+					Endpoint: "https://sqs.eu-west-1.amazonaws.com",
+				},
+			},
+		}
+		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(queue).Build()
+		cr := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
+		}
+
+		queueRef := corev1.ObjectReference{Name: "test-queue", Namespace: "other-ns"}
+		cfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, queueRef, corev1.ObjectReference{}, "")
+		if err != nil {
+			t.Errorf("ResolveQueueAndObjectStorage() unexpected error = %v", err)
+		}
+		if cfg.Queue.SQS.Name != "cross-ns-queue" {
+			t.Errorf("Expected Queue.SQS.Name = 'cross-ns-queue', got %q", cfg.Queue.SQS.Name)
+		}
+	})
+
+	t.Run("queue with secret ref extracts credentials", func(t *testing.T) {
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "aws-creds", Namespace: "test"},
+			Data: map[string][]byte{
+				"s3_access_key": []byte("abc"),
+				"s3_secret_key": []byte("123"),
+			},
+		}
+		queue := &enterpriseApi.Queue{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-queue", Namespace: "test"},
+			Spec: enterpriseApi.QueueSpec{
+				Provider: "sqs",
+				SQS: enterpriseApi.SQSSpec{
+					Name:     "my-queue",
+					DLQ:      "my-dlq",
+					Endpoint: "https://sqs.us-east-1.amazonaws.com",
+					VolList: []enterpriseApi.VolumeSpec{
+						{
+							Name:      "vol1",
+							SecretRef: "aws-creds",
+						},
+					},
+				},
+			},
+		}
+		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(queue, secret).Build()
+		cr := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
+		}
+
+		queueRef := corev1.ObjectReference{Name: "test-queue"}
+		cfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, queueRef, corev1.ObjectReference{}, "")
+		if err != nil {
+			t.Errorf("ResolveQueueAndObjectStorage() unexpected error = %v", err)
+		}
+		if cfg.AccessKey != "abc" {
+			t.Errorf("Expected AccessKey = 'abc', got %q", cfg.AccessKey)
+		}
+		if cfg.SecretKey != "123" {
+			t.Errorf("Expected SecretKey = '123', got %q", cfg.SecretKey)
+		}
+	})
+
+	t.Run("queue with serviceAccount skips secret extraction", func(t *testing.T) {
+		queue := &enterpriseApi.Queue{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-queue", Namespace: "test"},
+			Spec: enterpriseApi.QueueSpec{
+				Provider: "sqs",
+				SQS: enterpriseApi.SQSSpec{
+					Name:     "my-queue",
+					DLQ:      "my-dlq",
+					Endpoint: "https://sqs.us-east-1.amazonaws.com",
+					VolList: []enterpriseApi.VolumeSpec{
+						{
+							Name:      "vol1",
+							SecretRef: "aws-creds",
+						},
+					},
+				},
+			},
+		}
+		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(queue).Build()
+		cr := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
+		}
+
+		queueRef := corev1.ObjectReference{Name: "test-queue"}
+		cfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, queueRef, corev1.ObjectReference{}, "my-service-account")
+		if err != nil {
+			t.Errorf("ResolveQueueAndObjectStorage() unexpected error = %v", err)
+		}
+		// When serviceAccount is provided, credentials should not be extracted
+		if cfg.AccessKey != "" {
+			t.Errorf("Expected empty AccessKey when serviceAccount is provided, got %q", cfg.AccessKey)
+		}
+		if cfg.SecretKey != "" {
+			t.Errorf("Expected empty SecretKey when serviceAccount is provided, got %q", cfg.SecretKey)
+		}
+	})
+
+	t.Run("queue with missing secret returns error", func(t *testing.T) {
+		queue := &enterpriseApi.Queue{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-queue", Namespace: "test"},
+			Spec: enterpriseApi.QueueSpec{
+				Provider: "sqs",
+				SQS: enterpriseApi.SQSSpec{
+					Name:     "my-queue",
+					DLQ:      "my-dlq",
+					Endpoint: "https://sqs.us-east-1.amazonaws.com",
+					VolList: []enterpriseApi.VolumeSpec{
+						{
+							Name:      "vol1",
+							SecretRef: "nonexistent-secret",
+						},
+					},
+				},
+			},
+		}
+		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(queue).Build()
+		cr := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
+		}
+
+		queueRef := corev1.ObjectReference{Name: "test-queue"}
+		_, err := ResolveQueueAndObjectStorage(ctx, client, cr, queueRef, corev1.ObjectReference{}, "")
+		if err == nil {
+			t.Error("ResolveQueueAndObjectStorage() expected error for missing secret, got nil")
+		}
+	})
+
+	t.Run("both queue and objectstorage refs", func(t *testing.T) {
+		queue := &enterpriseApi.Queue{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-queue", Namespace: "test"},
+			Spec: enterpriseApi.QueueSpec{
+				Provider: "sqs",
+				SQS: enterpriseApi.SQSSpec{
+					Name:     "my-queue",
+					DLQ:      "my-dlq",
+					Endpoint: "https://sqs.us-east-1.amazonaws.com",
+				},
+			},
+		}
+		os := &enterpriseApi.ObjectStorage{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-os", Namespace: "test"},
+			Spec: enterpriseApi.ObjectStorageSpec{
+				Provider: "s3",
+				S3: enterpriseApi.S3Spec{
+					Endpoint: "https://s3.us-east-1.amazonaws.com",
+					Path:     "my-bucket",
+				},
+			},
+		}
+		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(queue, os).Build()
+		cr := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
+		}
+
+		queueRef := corev1.ObjectReference{Name: "test-queue"}
+		osRef := corev1.ObjectReference{Name: "test-os"}
+		cfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, queueRef, osRef, "")
+		if err != nil {
+			t.Errorf("ResolveQueueAndObjectStorage() unexpected error = %v", err)
+		}
+		if cfg.Queue.Provider != "sqs" {
+			t.Errorf("Expected Queue.Provider = 'sqs', got %q", cfg.Queue.Provider)
+		}
+		if cfg.OS.Provider != "s3" {
+			t.Errorf("Expected OS.Provider = 's3', got %q", cfg.OS.Provider)
+		}
+	})
 }

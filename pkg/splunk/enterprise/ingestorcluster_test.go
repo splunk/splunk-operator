@@ -17,13 +17,13 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/go-logr/logr"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -252,7 +252,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 	// outputs.conf
 	origNew := newIngestorClusterPodManager
 	mockHTTPClient := &spltest.MockHTTPClient{}
-	newIngestorClusterPodManager = func(l logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
+	newIngestorClusterPodManager = func(l *slog.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
 		return ingestorClusterPodManager{
 			c:   c,
 			log: l, cr: cr, secrets: secret,
