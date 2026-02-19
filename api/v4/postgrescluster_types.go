@@ -101,6 +101,12 @@ type PostgresClusterStatus struct {
 	ConnectionPoolerStatus *ConnectionPoolerStatus `json:"connectionPoolerStatus,omitempty"`
 }
 
+// ConnectionPoolerStatus contains the observed state of the connection pooler.
+type ConnectionPoolerStatus struct {
+	// Enabled indicates whether pooler is active for this cluster.
+	Enabled bool `json:"enabled"`
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced
