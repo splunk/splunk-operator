@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	requeAfterInSeconds = 86400 // Send telemetry once a day
+	requeAfterInSeconds = 21600 // Send telemetry once a day
 	defaultTestMode     = "false"
 	defaultTestVersion  = "3.1.0"
 
