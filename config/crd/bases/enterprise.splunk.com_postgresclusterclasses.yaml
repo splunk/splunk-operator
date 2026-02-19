@@ -68,6 +68,37 @@ spec:
                   Only used when Provisioner is "postgresql.cnpg.io"
                   These settings CANNOT be overridden in PostgresCluster CR (platform policy).
                 properties:
+                  connectionPooler:
+                    description: |-
+                      ConnectionPooler contains PgBouncer connection pooler configuration.
+                      When enabled, creates RW and RO pooler deployments for clusters using this class.
+                    properties:
+                      config:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          Config contains PgBouncer configuration parameters.
+                          Passed directly to CNPG Pooler spec.pgbouncer.parameters.
+                          See: https://cloudnative-pg.io/docs/1.28/connection_pooling/#pgbouncer-configuration-options
+                        type: object
+                      instances:
+                        default: 3
+                        description: |-
+                          Instances is the number of PgBouncer pod replicas.
+                          Higher values provide better availability and load distribution.
+                        format: int32
+                        maximum: 10
+                        minimum: 1
+                        type: integer
+                      mode:
+                        default: transaction
+                        description: Mode defines the connection pooling strategy.
+                        enum:
+                        - session
+                        - transaction
+                        - statement
+                        type: string
+                    type: object
                   primaryUpdateMethod:
                     default: switchover
                     description: |-
@@ -89,6 +120,13 @@ spec:
                   These settings apply to PostgresCluster infrastructure.
                   Can be overridden in PostgresCluster CR.
                 properties:
+                  connectionPoolerEnabled:
+                    default: false
+                    description: |-
+                      ConnectionPoolerEnabled controls whether PgBouncer connection pooling is deployed.
+                      When true, creates RW and RO pooler deployments for clusters using this class.
+                      Can be overridden in PostgresCluster CR.
+                    type: boolean
                   instances:
                     default: 1
                     description: |-

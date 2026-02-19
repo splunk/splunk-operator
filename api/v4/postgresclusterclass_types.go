@@ -88,6 +88,51 @@ type PosgresClusterClassConfig struct {
 	// Example: ["hostssl all all 0.0.0.0/0 scram-sha-256"]
 	// +optional
 	PgHBA []string `json:"pgHBA,omitempty"`
+
+	// ConnectionPoolerEnabled controls whether PgBouncer connection pooling is deployed.
+	// When true, creates RW and RO pooler deployments for clusters using this class.
+	// Can be overridden in PostgresCluster CR.
+	// +kubebuilder:default=false
+	// +optional
+	ConnectionPoolerEnabled *bool `json:"connectionPoolerEnabled,omitempty"`
+}
+
+// ConnectionPoolerMode defines the PgBouncer connection pooling strategy.
+// +kubebuilder:validation:Enum=session;transaction;statement
+type ConnectionPoolerMode string
+
+const (
+	// ConnectionPoolerModeSession assigns a connection for the entire client session (most compatible).
+	ConnectionPoolerModeSession ConnectionPoolerMode = "session"
+
+	// ConnectionPoolerModeTransaction returns the connection after each transaction (recommended).
+	ConnectionPoolerModeTransaction ConnectionPoolerMode = "transaction"
+
+	// ConnectionPoolerModeStatement returns the connection after each statement (limited compatibility).
+	ConnectionPoolerModeStatement ConnectionPoolerMode = "statement"
+)
+
+// ConnectionPoolerConfig defines PgBouncer connection pooler configuration.
+// When enabled, creates RW and RO pooler deployments for clusters using this class.
+type ConnectionPoolerConfig struct {
+	// Instances is the number of PgBouncer pod replicas.
+	// Higher values provide better availability and load distribution.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=10
+	// +kubebuilder:default=3
+	// +optional
+	Instances *int32 `json:"instances,omitempty"`
+
+	// Mode defines the connection pooling strategy.
+	// +kubebuilder:default="transaction"
+	// +optional
+	Mode *ConnectionPoolerMode `json:"mode,omitempty"`
+
+	// Config contains PgBouncer configuration parameters.
+	// Passed directly to CNPG Pooler spec.pgbouncer.parameters.
+	// See: https://cloudnative-pg.io/docs/1.28/connection_pooling/#pgbouncer-configuration-options
+	// +optional
+	Config map[string]string `json:"config,omitempty"`
 }
 
 // CNPGConfig contains CloudNativePG-specific configuration.
@@ -104,6 +149,11 @@ type CNPGConfig struct {
 	// +kubebuilder:default=switchover
 	// +optional
 	PrimaryUpdateMethod string `json:"primaryUpdateMethod,omitempty"`
+
+	// ConnectionPooler contains PgBouncer connection pooler configuration.
+	// When enabled, creates RW and RO pooler deployments for clusters using this class.
+	// +optional
+	ConnectionPooler *ConnectionPoolerConfig `json:"connectionPooler,omitempty"`
 }
 
 // PostgresClusterClassStatus defines the observed state of PostgresClusterClass.

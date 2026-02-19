@@ -71,6 +71,12 @@ type PostgresClusterSpec struct {
 	// +optional
 	// +kubebuilder:default={}
 	PgHBA []string `json:"pgHBA,omitempty"`
+
+	// ConnectionPoolerEnabled controls whether PgBouncer connection pooling is deployed for this cluster.
+	// When set, takes precedence over the class-level connectionPoolerEnabled value.
+	// +kubebuilder:default=false
+	// +optional
+	ConnectionPoolerEnabled *bool `json:"connectionPoolerEnabled,omitempty"`
 }
 
 // PostgresClusterStatus defines the observed state of PostgresCluster.
@@ -88,6 +94,17 @@ type PostgresClusterStatus struct {
 	// Right now, only CNPG is supported.
 	// +optional
 	ProvisionerRef *corev1.ObjectReference `json:"provisionerRef,omitempty"`
+
+	// ConnectionPoolerStatus contains the observed state of the connection pooler.
+	// Only populated when connection pooler is enabled in the PostgresClusterClass.
+	// +optional
+	ConnectionPoolerStatus *ConnectionPoolerStatus `json:"connectionPoolerStatus,omitempty"`
+}
+
+// ConnectionPoolerStatus contains the observed state of the connection pooler.
+type ConnectionPoolerStatus struct {
+	// Enabled indicates whether pooler is active for this cluster.
+	Enabled bool `json:"enabled"`
 }
 
 // +kubebuilder:object:root=true
