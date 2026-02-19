@@ -730,6 +730,9 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 		}
 	}
 
+	// Build update strategy based on config
+	updateStrategy := buildUpdateStrategy(spec, replicas)
+
 	statefulSet.Spec = appsv1.StatefulSetSpec{
 		Selector: &metav1.LabelSelector{
 			MatchLabels: selectLabels,
@@ -737,15 +740,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 		ServiceName:         GetSplunkServiceName(instanceType, cr.GetName(), true),
 		Replicas:            &replicas,
 		PodManagementPolicy: appsv1.ParallelPodManagement,
-		UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-			Type: appsv1.RollingUpdateStatefulSetStrategyType,
-			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
-				MaxUnavailable: &intstr.IntOrString{
-					Type:   intstr.Int,
-					IntVal: 1, // Only 1 pod unavailable at a time
-				},
-			},
-		},
+		UpdateStrategy:      updateStrategy,
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels:      labels,
@@ -834,6 +829,52 @@ func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	return configMap
+}
+
+// buildUpdateStrategy builds the StatefulSet update strategy based on RollingUpdateConfig
+func buildUpdateStrategy(spec *enterpriseApi.CommonSplunkSpec, replicas int32) appsv1.StatefulSetUpdateStrategy {
+	strategy := appsv1.StatefulSetUpdateStrategy{
+		Type: appsv1.RollingUpdateStatefulSetStrategyType,
+		RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+			MaxUnavailable: &intstr.IntOrString{
+				Type:   intstr.Int,
+				IntVal: 1, // Default: 1 pod unavailable at a time
+			},
+		},
+	}
+
+	// Apply custom rolling update config if specified
+	if spec.RollingUpdateConfig != nil {
+		config := spec.RollingUpdateConfig
+
+		// Set maxPodsUnavailable if specified
+		if config.MaxPodsUnavailable != "" {
+			// Parse as percentage or absolute number
+			if strings.HasSuffix(config.MaxPodsUnavailable, "%") {
+				// Percentage value
+				strategy.RollingUpdate.MaxUnavailable = &intstr.IntOrString{
+					Type:   intstr.String,
+					StrVal: config.MaxPodsUnavailable,
+				}
+			} else {
+				// Absolute number
+				val, err := strconv.ParseInt(config.MaxPodsUnavailable, 10, 32)
+				if err == nil && val > 0 {
+					strategy.RollingUpdate.MaxUnavailable = &intstr.IntOrString{
+						Type:   intstr.Int,
+						IntVal: int32(val),
+					}
+				}
+			}
+		}
+
+		// Set partition if specified (for canary deployments)
+		if config.Partition != nil && *config.Partition >= 0 && *config.Partition <= replicas {
+			strategy.RollingUpdate.Partition = config.Partition
+		}
+	}
+
+	return strategy
 }
 
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
@@ -977,6 +1018,35 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
 		{Name: "SPLUNK_GENERAL_TERMS", Value: os.Getenv("SPLUNK_GENERAL_TERMS")},
 		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
+		// Pod metadata for preStop hook via Kubernetes downward API
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		{
+			Name: "POD_NAMESPACE",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.namespace",
+				},
+			},
+		},
+		// Splunk admin password from secret for preStop hook
+		{
+			Name: "SPLUNK_PASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "", // Will be set to secretToMount below
+					},
+					Key: "password",
+				},
+			},
+		},
 	}
 
 	// update variables for licensing, if configured
@@ -1109,6 +1179,14 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	// so when duplicates are removed the last ones are removed from the list
 	env = append(extraEnv, env...)
 	//env = append(env, extraEnv...)
+
+	// Set the secret name for SPLUNK_PASSWORD environment variable
+	for i := range env {
+		if env[i].Name == "SPLUNK_PASSWORD" && env[i].ValueFrom != nil && env[i].ValueFrom.SecretKeyRef != nil {
+			env[i].ValueFrom.SecretKeyRef.Name = secretToMount
+			break
+		}
+	}
 
 	// check if there are any duplicate entries
 	// we use orderedmap so the test case can pass as json marshal

@@ -24,6 +24,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -297,12 +298,41 @@ func removeIndexerFromClusterManager(ctx context.Context, c splcommon.Controller
 }
 
 // waitForSearchHeadDetention waits for search head detention to complete
+// NOTE: Detention is executed by preStop hook. This function waits and verifies.
 func waitForSearchHeadDetention(ctx context.Context, c splcommon.ControllerClient, pod *corev1.Pod) error {
 	scopedLog := log.FromContext(ctx).WithName("waitForSearchHeadDetention")
-	// For now, just log - preStop hook handles detention
-	// In future, could verify via SHC captain API
-	scopedLog.Info("Search head detention verification not implemented yet")
-	return nil
+
+	// Get Splunk admin credentials from secret
+	secret, err := splutil.GetSecretFromPod(ctx, c, pod.Name, pod.Namespace)
+	if err != nil {
+		scopedLog.Error(err, "Failed to get secret for search head")
+		return err
+	}
+
+	// Create Splunk client for the search head pod
+	splunkClient := splclient.NewSplunkClient(
+		fmt.Sprintf("https://%s:8089", pod.Status.PodIP),
+		string(secret.Data["splunk_admin_username"]),
+		string(secret.Data["password"]),
+	)
+
+	// Check if member is still registered in cluster
+	memberInfo, err := splunkClient.GetSearchHeadClusterMemberInfo()
+	if err != nil {
+		// If we can't connect or get info, member may already be removed or pod is shutting down
+		scopedLog.Info("Could not get member info, assuming detention complete", "error", err.Error())
+		return nil
+	}
+
+	// Check registration status
+	if !memberInfo.Registered {
+		scopedLog.Info("Search head successfully removed from cluster")
+		return nil
+	}
+
+	// Still registered - detention not complete
+	scopedLog.Info("Search head still registered in cluster, detention in progress")
+	return fmt.Errorf("detention not complete, member still registered")
 }
 
 // Helper functions

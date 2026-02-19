@@ -1059,24 +1059,18 @@ func (mgr *indexerClusterPodManager) FinishRecycle(ctx context.Context, n int32)
 	return mgr.cr.Status.Peers[n].Status == "Up", nil
 }
 
-// decommission for indexerClusterPodManager decommissions an indexer pod; it returns true when ready
+// decommission for indexerClusterPodManager waits for indexer pod decommission to complete; it returns true when ready
+// NOTE: Decommission is now handled by preStop hook in the pod lifecycle.
+// This function only monitors the decommission status and waits for completion.
 func (mgr *indexerClusterPodManager) decommission(ctx context.Context, n int32, enforceCounts bool) (bool, error) {
 	peerName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
 
 	switch mgr.cr.Status.Peers[n].Status {
 	case "Up":
-		podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, getApplicablePodNameForK8Probes(mgr.cr, n))
-		err := setProbeLevelOnSplunkPod(ctx, podExecClient, livenessProbeLevelOne)
-		if err != nil {
-			// Don't return error here. We may be reconciling several times, and the actual Pod status is down, but
-			// not yet reflecting on the Cluster Master, in which case, the podExec fails, though the decommission is
-			// going fine.
-			mgr.log.Info("Unable to lower the liveness probe level", "peerName", peerName, "enforceCounts", enforceCounts)
-		}
-
-		mgr.log.Info("Decommissioning indexer cluster peer", "peerName", peerName, "enforceCounts", enforceCounts)
-		c := mgr.getClient(ctx, n)
-		return false, c.DecommissionIndexerClusterPeer(enforceCounts)
+		// Decommission should be initiated by preStop hook when pod terminates
+		// Operator just waits for it to progress
+		mgr.log.Info("Waiting for preStop hook to initiate decommission", "peerName", peerName)
+		return false, nil
 
 	case "Decommissioning":
 		mgr.log.Info("Waiting for decommission to complete", "peerName", peerName)
