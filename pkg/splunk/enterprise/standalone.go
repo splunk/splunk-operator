@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strings"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -31,6 +30,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -371,11 +371,39 @@ func checkAndEvictStandaloneIfNeeded(
 	}
 
 	// Check if rolling update in progress
+	// Special handling for partition-based updates: if partition is set,
+	// UpdatedReplicas < Replicas is always true, so we check if the partitioned
+	// pods are all updated
 	if statefulSet.Status.UpdatedReplicas < *statefulSet.Spec.Replicas {
-		scopedLog.Info("StatefulSet rolling update in progress, skipping pod eviction to avoid conflict",
-			"updatedReplicas", statefulSet.Status.UpdatedReplicas,
-			"desiredReplicas", *statefulSet.Spec.Replicas)
-		return nil
+		// Check if partition is configured
+		if statefulSet.Spec.UpdateStrategy.RollingUpdate != nil &&
+			statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition != nil {
+
+			partition := *statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition
+			expectedUpdatedReplicas := *statefulSet.Spec.Replicas - partition
+
+			// If all pods >= partition are updated, rolling update is "complete" for the partition
+			// Allow eviction of pods < partition
+			if statefulSet.Status.UpdatedReplicas >= expectedUpdatedReplicas {
+				scopedLog.Info("Partition-based update complete, allowing eviction of non-partitioned pods",
+					"partition", partition,
+					"updatedReplicas", statefulSet.Status.UpdatedReplicas,
+					"expectedUpdated", expectedUpdatedReplicas)
+				// Fall through to eviction logic below
+			} else {
+				scopedLog.Info("Partition-based rolling update in progress, skipping eviction",
+					"partition", partition,
+					"updatedReplicas", statefulSet.Status.UpdatedReplicas,
+					"expectedUpdated", expectedUpdatedReplicas)
+				return nil
+			}
+		} else {
+			// No partition - normal rolling update in progress
+			scopedLog.Info("StatefulSet rolling update in progress, skipping pod eviction to avoid conflict",
+				"updatedReplicas", statefulSet.Status.UpdatedReplicas,
+				"desiredReplicas", *statefulSet.Spec.Replicas)
+			return nil
+		}
 	}
 
 	// Get admin credentials
@@ -468,5 +496,7 @@ func evictPodStandalone(ctx context.Context, c client.Client, pod *corev1.Pod) e
 
 // isPDBViolationStandalone checks if an error is due to PDB violation
 func isPDBViolationStandalone(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "Cannot evict pod")
+	// Eviction API returns HTTP 429 Too Many Requests when PDB blocks eviction
+	// This is more reliable than string matching error messages
+	return k8serrors.IsTooManyRequests(err)
 }

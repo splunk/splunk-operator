@@ -26,7 +26,15 @@ SPLUNK_BIN="${SPLUNK_HOME}/bin/splunk"
 MGMT_PORT="${SPLUNK_MGMT_PORT:-8089}"
 SPLUNK_USER="admin"
 SPLUNK_PASSWORD_FILE="/mnt/splunk-secrets/password"
-MAX_WAIT_SECONDS="${PRESTOP_MAX_WAIT:-300}"  # 5 minutes default
+
+# Set max wait time based on role to align with termination grace period
+# Indexers get 270s (4.5 min), others get 90s (1.5 min)
+# This leaves 30-60s buffer for splunk stop to complete gracefully
+if [ "${SPLUNK_ROLE}" = "splunk_indexer" ]; then
+    MAX_WAIT_SECONDS="${PRESTOP_MAX_WAIT:-270}"  # 4.5 minutes for indexers (grace period 300s)
+else
+    MAX_WAIT_SECONDS="${PRESTOP_MAX_WAIT:-90}"   # 1.5 minutes for others (grace period 120s)
+fi
 
 # Get pod metadata from downward API (set via env vars in pod spec)
 POD_NAME="${POD_NAME:-unknown}"
@@ -37,19 +45,16 @@ log_info "Starting preStop hook for pod: ${POD_NAME}, role: ${SPLUNK_ROLE}"
 
 # Function to read pod intent annotation
 get_pod_intent() {
-    local intent
-    # Add timeout to prevent hanging
-    intent=$(curl -s --max-time 10 --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
-        -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
-        "https://kubernetes.default.svc/api/v1/namespaces/${POD_NAMESPACE}/pods/${POD_NAME}" \
-        2>/dev/null | grep -o '"splunk.com/pod-intent":"[^"]*"' | cut -d'"' -f4)
+    # Read intent from environment variable (set via Kubernetes downward API)
+    # This is more reliable than API calls and doesn't require RBAC permissions
+    local intent="${SPLUNK_POD_INTENT:-serve}"
 
+    # Handle case where annotation doesn't exist (empty string)
     if [ -z "$intent" ]; then
-        log_warn "Could not read pod intent annotation, defaulting to 'serve'"
-        echo "serve"
-    else
-        echo "$intent"
+        intent="serve"
     fi
+
+    echo "$intent"
 }
 
 # Function to call Splunk REST API
@@ -163,9 +168,13 @@ decommission_indexer() {
     local elapsed=0
     local check_interval=10
 
+    # Construct peer name: pod DNS name without the service suffix
+    # Peer name in CM is just the pod name (e.g., "splunk-idx-indexer-0")
+    local peer_name="${POD_NAME}"
+
     while [ $elapsed -lt $MAX_WAIT_SECONDS ]; do
         local status
-        status=$(get_indexer_peer_status "$cm_url" "${POD_NAME}.${SPLUNK_CLUSTER_MANAGER_SERVICE}")
+        status=$(get_indexer_peer_status "$cm_url" "$peer_name")
 
         log_info "Current peer status: $status"
 

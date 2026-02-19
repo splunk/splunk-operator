@@ -2621,7 +2621,20 @@ func ApplyPodDisruptionBudget(
 	}
 
 	// Get labels for pod selector - must match StatefulSet pod labels
-	labels := getSplunkLabels(cr.GetName(), instanceType, "")
+	// Need to use same partOfIdentifier logic as StatefulSet pods
+	var partOfIdentifier string
+
+	// Type assertion to get ClusterManagerRef/ClusterMasterRef
+	switch v := cr.(type) {
+	case *enterpriseApi.IndexerCluster:
+		if v.Spec.ClusterManagerRef.Name != "" {
+			partOfIdentifier = v.Spec.ClusterManagerRef.Name
+		} else if v.Spec.ClusterMasterRef.Name != "" {
+			partOfIdentifier = v.Spec.ClusterMasterRef.Name
+		}
+	}
+
+	labels := getSplunkLabels(cr.GetName(), instanceType, partOfIdentifier)
 
 	// Create PodDisruptionBudget spec
 	pdbName := GetSplunkStatefulsetName(instanceType, cr.GetName()) + "-pdb"

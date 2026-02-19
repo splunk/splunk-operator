@@ -67,7 +67,7 @@ type StandaloneReconciler struct {
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 
 // RBAC for rolling restart mechanism (pod eviction approach)
-//+kubebuilder:rbac:groups=core,resources=pods/eviction,verbs=create
+//+kubebuilder:rbac:groups=policy,resources=pods/eviction,verbs=create
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

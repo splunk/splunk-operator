@@ -56,7 +56,7 @@ type IngestorClusterReconciler struct {
 
 // RBAC for rolling restart mechanism
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;delete
-//+kubebuilder:rbac:groups=core,resources=pods/eviction,verbs=create
+//+kubebuilder:rbac:groups=policy,resources=pods/eviction,verbs=create
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;update;patch

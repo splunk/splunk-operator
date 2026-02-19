@@ -1038,6 +1038,14 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 				},
 			},
 		},
+		{
+			Name: "SPLUNK_POD_INTENT",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.annotations['splunk.com/pod-intent']",
+				},
+			},
+		},
 	}
 
 	// update variables for licensing, if configured
@@ -1149,8 +1157,21 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 
 	if clusterManagerURL != "" {
+		// Construct full URL for preStop.sh to use when checking peer status
+		// Format: https://<service-name>:<port>
+		fullClusterManagerURL := clusterManagerURL
+		if clusterManagerURL != "localhost" {
+			fullClusterManagerURL = fmt.Sprintf("https://%s:8089", clusterManagerURL)
+		}
+
 		extraEnv = append(extraEnv, corev1.EnvVar{
 			Name:  splcommon.ClusterManagerURL,
+			Value: fullClusterManagerURL,
+		})
+
+		// Also set the service name separately for peer name construction
+		extraEnv = append(extraEnv, corev1.EnvVar{
+			Name:  "SPLUNK_CLUSTER_MANAGER_SERVICE",
 			Value: clusterManagerURL,
 		})
 	}
