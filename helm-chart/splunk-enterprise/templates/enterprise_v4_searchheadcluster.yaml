@@ -28,6 +28,14 @@ items:
     appRepo: 
 {{ toYaml . | indent 6 }}
   {{- end }}
+  {{- with $.Values.searchHeadCluster.deployerNodeAffinity }}
+    deployerNodeAffinity: 
+{{ toYaml . | indent 6 }}
+  {{- end }}
+  {{- with $.Values.searchHeadCluster.deployerResourceSpec }}
+    deployerResourceSpec: 
+{{ toYaml . | indent 6 }}
+  {{- end }}
   {{- if $.Values.existingClusterManager }}
     clusterManagerRef:
       name: {{ $.Values.existingClusterManager.name }}
