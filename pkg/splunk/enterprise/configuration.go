@@ -428,7 +428,7 @@ func ValidateImagePullSecrets(ctx context.Context, c splcommon.ControllerClient,
 
 	// If configured, validated if the secret/s exist
 	for _, secret := range spec.ImagePullSecrets {
-		_, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), secret.Name)
+		_, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), secret.Name)
 		if err != nil {
 			scopedLog.Error(err, "Couldn't get secret in the imagePullSecrets config", "Secret", secret.Name)
 		}
@@ -1251,7 +1251,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 	volList := smartstore.VolList
 	for _, volume := range volList {
 		if volume.SecretRef != "" {
-			namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
+			namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), volume.SecretRef)
 			// Ideally, this should have been detected in Spec validation time
 			if err != nil {
 				*retError = fmt.Errorf("not able to access secret object = %s, reason: %s", volume.SecretRef, err)
