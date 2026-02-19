@@ -42,7 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// NewSplunkClientFunc funciton pointer type
+// NewSplunkClientFunc function pointer type
 type NewSplunkClientFunc func(managementURI, username, password string) *splclient.SplunkClient
 
 // ApplyIndexerClusterManager reconciles the state of a Splunk Enterprise indexer cluster.
@@ -55,7 +55,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyIndexerClusterManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "IndexerCluster"
 
@@ -259,7 +260,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
 		if err != nil {
-			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrive cluster manager spec failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrieve cluster manager spec failed %s", err.Error()))
 			return result, err
 		}
 		if cmMonitoringConsoleConfigRef != "" {
@@ -290,7 +291,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
 			if err != nil {
-				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintainance mode failed %s", err.Error()))
+				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintenance mode failed %s", err.Error()))
 				return result, err
 			}
 		}
@@ -331,7 +332,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyIndexerCluster")
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	eventPublisher := GetEventPublisher(ctx, cr)
 	cr.Kind = "IndexerCluster"
 
 	// validate and updates defaults for CR
@@ -515,7 +517,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
 		if err != nil {
-			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrive cluster master spec failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrieve cluster master spec failed %s", err.Error()))
 			return result, err
 		}
 		if cmMonitoringConsoleConfigRef != "" {
@@ -546,7 +548,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
 			if err != nil {
-				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintainance mode failed %s", err.Error()))
+				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintenance mode failed %s", err.Error()))
 				return result, err
 			}
 		}
@@ -639,6 +641,10 @@ func SetClusterMaintenanceMode(ctx context.Context, c splcommon.ControllerClient
 // ApplyIdxcSecret checks if any of the indexer's have a different idxc_secret from namespace scoped secret and changes it
 func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
 	var indIdxcSecret string
+
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+
 	// Get namespace scoped secret
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, mgr.c, mgr.cr.GetNamespace())
 	if err != nil {
@@ -665,6 +671,7 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 	nsIdxcSecret := string(namespaceSecret.Data[splcommon.IdxcSecret])
 
 	// Loop over all indexer pods and get individual pod's idxc password
+	howManyPodsHaveSecretChanged := 0
 	for i := int32(0); i <= replicas-1; i++ {
 		// Get Indexer's name
 		indexerPodName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), i)
@@ -730,13 +737,25 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 			// Change idxc secret key
 			err = idxcClient.SetIdxcSecret(nsIdxcSecret)
 			if err != nil {
+				// Emit event for password sync failure
+				if eventPublisher != nil {
+					eventPublisher.Warning(ctx, "PasswordSyncFailed",
+						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", indexerPodName, err.Error()))
+				}
 				return err
 			}
 			scopedLog.Info("Changed idxc secret")
 
+			howManyPodsHaveSecretChanged += 1
+
 			// Restart splunk instance on pod
 			err = idxcClient.RestartSplunk()
 			if err != nil {
+				// Emit event for password sync failure
+				if eventPublisher != nil {
+					eventPublisher.Warning(ctx, "PasswordSyncFailed",
+						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", indexerPodName, err.Error()))
+				}
 				return err
 			}
 			scopedLog.Info("Restarted splunk")
@@ -790,6 +809,12 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 		}
 	}
 
+	// Emit event for password sync completed
+	if eventPublisher != nil {
+		eventPublisher.Normal(ctx, "PasswordSyncCompleted",
+			fmt.Sprintf("Password synchronized for %d pods", howManyPodsHaveSecretChanged))
+	}
+
 	return nil
 }
 
@@ -797,6 +822,12 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 
 	var err error
+
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+
+	// Track last successful replica count to emit scale events after completion
+	previousReplicas := mgr.cr.Status.Replicas
 
 	// Assign client
 	if mgr.c == nil {
@@ -830,7 +861,27 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	}
 
 	// manage scaling and updates
-	return splctrl.UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
+	phase, err := splctrl.UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
+	if err != nil {
+		return phase, err
+	}
+
+	// Emit ScaledUp event only after a successful scale-up has completed
+	if phase == enterpriseApi.PhaseReady {
+		if desiredReplicas > previousReplicas && mgr.cr.Status.Replicas == desiredReplicas {
+			if eventPublisher != nil {
+				eventPublisher.Normal(ctx, "ScaledUp",
+					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", mgr.cr.GetName(), previousReplicas, desiredReplicas))
+			}
+		} else if desiredReplicas < previousReplicas && mgr.cr.Status.Replicas == desiredReplicas {
+			if eventPublisher != nil {
+				eventPublisher.Normal(ctx, "ScaledDown",
+					fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", mgr.cr.GetName(), previousReplicas, desiredReplicas))
+			}
+		}
+	}
+
+	return phase, nil
 }
 
 // PrepareScaleDown for indexerClusterPodManager prepares indexer pod to be removed via scale down event; it returns true when ready
@@ -976,6 +1027,9 @@ func getSiteRepFactorOriginCount(siteRepFactor string) int32 {
 // verifyRFPeers verifies the number of peers specified in the replicas section
 // of IndexerClsuster CR. If it is less than RF, than we set it to RF.
 func (mgr *indexerClusterPodManager) verifyRFPeers(ctx context.Context, c splcommon.ControllerClient) error {
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+
 	if mgr.c == nil {
 		mgr.c = c
 	}
@@ -992,8 +1046,14 @@ func (mgr *indexerClusterPodManager) verifyRFPeers(ctx context.Context, c splcom
 		replicationFactor = clusterInfo.ReplicationFactor
 	}
 
-	if mgr.cr.Spec.Replicas < replicationFactor {
-		mgr.log.Info("Changing number of replicas as it is less than RF number of peers", "replicas", mgr.cr.Spec.Replicas)
+	requestedReplicas := mgr.cr.Spec.Replicas
+	if requestedReplicas < replicationFactor {
+		mgr.log.Info("Changing number of replicas as it is less than RF number of peers", "replicas", requestedReplicas)
+		// Emit event indicating scaling below RF is blocked/adjusted
+		if eventPublisher != nil {
+			eventPublisher.Warning(ctx, "ScalingBlockedRF",
+				fmt.Sprintf("Cannot scale below replication factor: %d replicas required, %d requested. Adjust replicationFactor or replicas.", replicationFactor, requestedReplicas))
+		}
 		mgr.cr.Spec.Replicas = replicationFactor
 	}
 	return nil
@@ -1020,6 +1080,9 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 		mgr.cr.Status.MaintenanceMode = false
 		return fmt.Errorf("waiting for cluster manager to become ready")
 	}
+
+	oldInitialized := mgr.cr.Status.Initialized
+	oldIndexingReady := mgr.cr.Status.IndexingReady
 
 	// get indexer cluster info from cluster manager if it's ready
 	clusterInfo, err := GetClusterManagerInfoCall(ctx, mgr)
@@ -1059,6 +1122,39 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 	// truncate any extra peers that we didn't check (leftover from scale down)
 	if statefulSet.Status.Replicas < int32(len(mgr.cr.Status.Peers)) {
 		mgr.cr.Status.Peers = mgr.cr.Status.Peers[:statefulSet.Status.Replicas]
+	}
+
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+
+	// Emit events only on state transitions
+	if eventPublisher != nil {
+		// Compute current available peers for quorum-related events
+		var available int32
+		totalPeers := len(mgr.cr.Status.Peers)
+		for _, p := range mgr.cr.Status.Peers {
+			if p.Status == "Up" && p.Searchable {
+				available++
+			}
+		}
+
+		// Cluster just finished initializing when quorum becomes ready
+		if !oldIndexingReady && mgr.cr.Status.IndexingReady {
+			if !oldInitialized && mgr.cr.Status.Initialized {
+				eventPublisher.Normal(ctx, "ClusterInitialized",
+					fmt.Sprintf("Cluster '%s' initialized with %d peers", mgr.cr.GetName(), totalPeers))
+			}
+
+			// Cluster quorum just restored
+			eventPublisher.Normal(ctx, "ClusterQuorumRestored",
+				fmt.Sprintf("Cluster quorum restored: %d/%d peers available", available, totalPeers))
+		}
+
+		// Cluster quorum lost (transition out of indexing ready)
+		if oldIndexingReady && !mgr.cr.Status.IndexingReady {
+			eventPublisher.Warning(ctx, "ClusterQuorumLost",
+				fmt.Sprintf("Cluster quorum lost: %d/%d peers available. Investigate peer failures immediately.", available, totalPeers))
+		}
 	}
 
 	return nil
@@ -1113,23 +1209,19 @@ func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr
 
 // RetrieveCMSpec finds monitoringConsole ref from cm spec
 func RetrieveCMSpec(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (string, error) {
-	var monitoringConsoleRef string = ""
-
 	if len(cr.Spec.ClusterMasterRef.Name) > 0 && len(cr.Spec.ClusterManagerRef.Name) == 0 {
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.ClusterMasterRef.Name}
 		var cmCR enterpriseApiV3.ClusterMaster
 		err := client.Get(ctx, namespacedName, &cmCR)
 		if err == nil {
-			monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
-			return monitoringConsoleRef, err
+			return cmCR.Spec.MonitoringConsoleRef.Name, nil
 		}
 	} else if len(cr.Spec.ClusterManagerRef.Name) > 0 && len(cr.Spec.ClusterMasterRef.Name) == 0 {
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.ClusterManagerRef.Name}
 		var cmCR enterpriseApi.ClusterManager
 		err := client.Get(ctx, namespacedName, &cmCR)
 		if err == nil {
-			monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
-			return monitoringConsoleRef, err
+			return cmCR.Spec.MonitoringConsoleRef.Name, nil
 		}
 	}
 

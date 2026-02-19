@@ -108,8 +108,8 @@ type Spec struct {
 	// Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE environment variables)
 	Image string `json:"image"`
 
-	// Sets pull policy for all images (either “Always” or the default: “IfNotPresent”)
-	// +kubebuilder:validation:Enum=Always;IfNotPresent
+	// Sets pull policy for all images ("Always", "Never", or the default: "IfNotPresent")
+	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
 	ImagePullPolicy string `json:"imagePullPolicy"`
 
 	// Name of Scheduler to use for pod placement (defaults to “default-scheduler”)
@@ -154,7 +154,7 @@ const (
 	// PhaseTerminating means a custom resource is in the process of being removed
 	PhaseTerminating Phase = "Terminating"
 
-	// PhaseError means an error occured with custom resource management
+	// PhaseError means an error occurred with custom resource management
 	PhaseError Phase = "Error"
 )
 
@@ -335,7 +335,7 @@ type VolumeSpec struct {
 	Region string `json:"region"`
 }
 
-// VolumeAndTypeSpec used to add any custom varaibles for volume implementation
+// VolumeAndTypeSpec used to add any custom variables for volume implementation
 type VolumeAndTypeSpec struct {
 	VolumeSpec `json:",inline"`
 }
@@ -392,7 +392,7 @@ type AppSourceDefaultSpec struct {
 
 // PremiumAppsProps represents properties for premium apps such as ES
 type PremiumAppsProps struct {
-	// Type: enterpriseSecurity for now, can accomodate itsi etc.. later
+	// Type: enterpriseSecurity for now, can accommodate itsi etc.. later
 	// +optional
 	Type string `json:"type,omitempty"`
 
@@ -500,7 +500,7 @@ type AppSrcDeployInfo struct {
 type BundlePushStageType int
 
 const (
-	// BundlePushUninitialized indicates bundle push never happend
+	// BundlePushUninitialized indicates bundle push never happened
 	BundlePushUninitialized BundlePushStageType = iota
 	// BundlePushPending waiting for all the apps to be copied to the Pod
 	BundlePushPending

@@ -52,7 +52,7 @@ func ApplyKVService(ctx context.Context, client splcommon.ControllerClient, reco
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+	eventPublisher, _ := newK8EventPublisher(recorder, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "KVService"
 
