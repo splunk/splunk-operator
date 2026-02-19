@@ -1047,7 +1047,6 @@ func (c *SplunkClient) UpdateConfFile(scopedLog logr.Logger, fileName, property 
 		return err
 	}
 
-	scopedLog.Info("Validating conf file object creation", "fileName", fileName, "property", property)
 	expectedStatus := []int{200, 201, 409}
 	err = c.Do(request, expectedStatus, nil)
 	if err != nil {
@@ -1072,7 +1071,6 @@ func (c *SplunkClient) UpdateConfFile(scopedLog logr.Logger, fileName, property 
 		return err
 	}
 
-	scopedLog.Info("Validating conf file object update", "fileName", fileName, "property", property)
 	expectedStatus = []int{200, 201}
 	err = c.Do(request, expectedStatus, nil)
 	if err != nil {

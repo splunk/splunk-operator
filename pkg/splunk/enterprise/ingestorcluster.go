@@ -396,6 +396,8 @@ func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Contex
 				updateErr = err
 			}
 		}
+
+		scopedLog.Info("Updated conf files for pod", "pod", memberName)
 	}
 
 	return updateErr

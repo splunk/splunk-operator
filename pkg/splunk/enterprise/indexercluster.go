@@ -77,6 +77,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// updates status after function completes
 	cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
+		scopedLog.Info("Scaling up indexer cluster", "previousReplicas", cr.Status.Replicas, "newReplicas", cr.Spec.Replicas)
 		cr.Status.CredentialSecretVersion = "0"
 		cr.Status.ServiceAccount = ""
 	}
@@ -250,9 +251,12 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			scopedLog.Error(err, "Failed to resolve Queue/ObjectStorage config")
 			return result, err
 		}
+		scopedLog.Info("Resolved Queue/ObjectStorage config", "queue", qosCfg.Queue, "objectStorage", qosCfg.OS, "version", qosCfg.Version, "serviceAccount", cr.Spec.ServiceAccount)
 
 		secretChanged := cr.Status.CredentialSecretVersion != qosCfg.Version
 		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
+
+		scopedLog.Info("Checking for changes", "previousCredentialSecretVersion", cr.Status.CredentialSecretVersion, "previousServiceAccount", cr.Status.ServiceAccount, "secretChanged", secretChanged, "serviceAccountChanged", serviceAccountChanged)
 
 		// If queue is updated
 		if cr.Spec.QueueRef.Name != "" {
@@ -267,6 +271,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 				eventPublisher.Normal(ctx, "QueueConfigUpdated",
 					fmt.Sprintf("Queue/Pipeline configuration updated for %d indexers", cr.Spec.Replicas))
+				scopedLog.Info("Queue/Pipeline configuration updated", "readyReplicas", cr.Status.ReadyReplicas)
 
 				for i := int32(0); i < cr.Spec.Replicas; i++ {
 					idxcClient := mgr.getClient(ctx, i)
@@ -282,6 +287,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 				cr.Status.CredentialSecretVersion = qosCfg.Version
 				cr.Status.ServiceAccount = cr.Spec.ServiceAccount
+
+				scopedLog.Info("Updated status", "credentialSecretVersion", cr.Status.CredentialSecretVersion, "serviceAccount", cr.Status.ServiceAccount)
 			}
 		}
 
@@ -375,6 +382,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
+		scopedLog.Info("Scaling up indexer cluster", "previousReplicas", cr.Status.Replicas, "newReplicas", cr.Spec.Replicas)
 		cr.Status.CredentialSecretVersion = "0"
 		cr.Status.ServiceAccount = ""
 	}
@@ -551,9 +559,12 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			scopedLog.Error(err, "Failed to resolve Queue/ObjectStorage config")
 			return result, err
 		}
+		scopedLog.Info("Resolved Queue/ObjectStorage config", "queue", qosCfg.Queue, "objectStorage", qosCfg.OS, "version", qosCfg.Version, "serviceAccount", cr.Spec.ServiceAccount)
 
 		secretChanged := cr.Status.CredentialSecretVersion != qosCfg.Version
 		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
+
+		scopedLog.Info("Checking for changes", "previousCredentialSecretVersion", cr.Status.CredentialSecretVersion, "previousServiceAccount", cr.Status.ServiceAccount, "secretChanged", secretChanged, "serviceAccountChanged", serviceAccountChanged)
 
 		if cr.Spec.QueueRef.Name != "" {
 			if secretChanged || serviceAccountChanged {
@@ -567,6 +578,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 				eventPublisher.Normal(ctx, "QueueConfigUpdated",
 					fmt.Sprintf("Queue/Pipeline configuration updated for %d indexers", cr.Spec.Replicas))
+				scopedLog.Info("Queue/Pipeline configuration updated", "readyReplicas", cr.Status.ReadyReplicas)
 
 				for i := int32(0); i < cr.Spec.Replicas; i++ {
 					idxcClient := mgr.getClient(ctx, i)
@@ -582,6 +594,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 				cr.Status.CredentialSecretVersion = qosCfg.Version
 				cr.Status.ServiceAccount = cr.Spec.ServiceAccount
+
+				scopedLog.Info("Updated status", "credentialSecretVersion", cr.Status.CredentialSecretVersion, "serviceAccount", cr.Status.ServiceAccount)
 			}
 		}
 
@@ -1363,18 +1377,25 @@ func (mgr *indexerClusterPodManager) updateIndexerConfFiles(ctx context.Context,
 		queueInputs, queueOutputs, pipelineInputs := getQueueAndPipelineInputsForIndexerConfFiles(queue, os, accessKey, secretKey)
 
 		for _, pbVal := range queueOutputs {
+			if !strings.Contains(pbVal[0], "access_key") && !strings.Contains(pbVal[0], "secret_key") {
+				scopedLog.Info("Updating queue input in outputs.conf", "input", pbVal)
+			}
 			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
 
 		for _, pbVal := range queueInputs {
+			if !strings.Contains(pbVal[0], "access_key") && !strings.Contains(pbVal[0], "secret_key") {
+				scopedLog.Info("Updating queue input in inputs.conf", "input", pbVal)
+			}
 			if err := splunkClient.UpdateConfFile(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
 
 		for _, field := range pipelineInputs {
+			scopedLog.Info("Updating pipeline input in default-mode.conf", "input", field)
 			if err := splunkClient.UpdateConfFile(scopedLog, "default-mode", field[0], [][]string{{field[1], field[2]}}); err != nil {
 				updateErr = err
 			}
