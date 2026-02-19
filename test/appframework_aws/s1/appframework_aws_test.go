@@ -173,6 +173,7 @@ var _ = Describe("s1appfw test", func() {
 						Name: mcName,
 					},
 				},
+				Replicas:           1,
 				AppFrameworkConfig: appFrameworkSpec,
 			}
 
@@ -342,6 +343,7 @@ var _ = Describe("s1appfw test", func() {
 						Name: mcName,
 					},
 				},
+				Replicas:           1,
 				AppFrameworkConfig: appFrameworkSpec,
 			}
 
@@ -519,6 +521,7 @@ var _ = Describe("s1appfw test", func() {
 						Name: mcName,
 					},
 				},
+				Replicas:           1,
 				AppFrameworkConfig: appFrameworkSpec,
 			}
 
@@ -1012,6 +1015,7 @@ var _ = Describe("s1appfw test", func() {
 						Name: mcName,
 					},
 				},
+				Replicas:           1,
 				AppFrameworkConfig: appFrameworkSpec,
 			}
 
@@ -1296,6 +1300,7 @@ var _ = Describe("s1appfw test", func() {
 						Name: mcName,
 					},
 				},
+				Replicas:           1,
 				AppFrameworkConfig: appFrameworkSpec,
 			}
 
@@ -2043,6 +2048,7 @@ var _ = Describe("s1appfw test", func() {
 						Name: mcName,
 					},
 				},
+				Replicas:           1,
 				AppFrameworkConfig: appFrameworkSpec,
 			}
 
