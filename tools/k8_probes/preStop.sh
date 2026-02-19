@@ -27,14 +27,31 @@ MGMT_PORT="${SPLUNK_MGMT_PORT:-8089}"
 SPLUNK_USER="admin"
 SPLUNK_PASSWORD_FILE="/mnt/splunk-secrets/password"
 
-# Set max wait time based on role to align with termination grace period
-# Indexers get 270s (4.5 min), others get 90s (1.5 min)
-# This leaves 30-60s buffer for splunk stop to complete gracefully
+# Split timeout budget between decommission/detention and splunk stop to stay within grace period
+# Timeouts must leave buffer for Kubelet SIGTERM/SIGKILL
+#
+# Indexers: 1020s (17 min) grace = 900s (15 min) decommission + 90s stop + 30s buffer
+#   - Bucket migration during scale-down can take 15+ minutes
+#   - Restart decommission (enforce_counts=0) is much faster
+#
+# Search heads: 360s (6 min) grace = 300s (5 min) detention + 50s stop + 10s buffer
+#   - Cluster detention/removal typically needs 5 minutes
+#
+# Others: 120s (2 min) grace = 80s operations + 30s stop + 10s buffer
+#   - Standalone, cluster manager, etc.
 if [ "${SPLUNK_ROLE}" = "splunk_indexer" ]; then
-    MAX_WAIT_SECONDS="${PRESTOP_MAX_WAIT:-270}"  # 4.5 minutes for indexers (grace period 300s)
+    DECOMMISSION_MAX_WAIT="${PRESTOP_DECOMMISSION_WAIT:-900}"  # 15 minutes for decommission
+    STOP_MAX_WAIT="${PRESTOP_STOP_WAIT:-90}"                    # 90 seconds for splunk stop
+elif [ "${SPLUNK_ROLE}" = "splunk_search_head" ]; then
+    DECOMMISSION_MAX_WAIT="${PRESTOP_DECOMMISSION_WAIT:-300}"  # 5 minutes for detention
+    STOP_MAX_WAIT="${PRESTOP_STOP_WAIT:-50}"                    # 50 seconds for splunk stop
 else
-    MAX_WAIT_SECONDS="${PRESTOP_MAX_WAIT:-90}"   # 1.5 minutes for others (grace period 120s)
+    DECOMMISSION_MAX_WAIT="${PRESTOP_DECOMMISSION_WAIT:-80}"   # 80 seconds for other operations
+    STOP_MAX_WAIT="${PRESTOP_STOP_WAIT:-30}"                    # 30 seconds for splunk stop
 fi
+
+# For backward compatibility, keep MAX_WAIT_SECONDS for detention (search head removal)
+MAX_WAIT_SECONDS="${DECOMMISSION_MAX_WAIT}"
 
 # Get pod metadata from downward API (set via env vars in pod spec)
 POD_NAME="${POD_NAME:-unknown}"
@@ -45,9 +62,17 @@ log_info "Starting preStop hook for pod: ${POD_NAME}, role: ${SPLUNK_ROLE}"
 
 # Function to read pod intent annotation
 get_pod_intent() {
-    # Read intent from environment variable (set via Kubernetes downward API)
-    # This is more reliable than API calls and doesn't require RBAC permissions
-    local intent="${SPLUNK_POD_INTENT:-serve}"
+    # Read intent from downward API volume (mounted at /etc/podinfo/intent)
+    # This file updates dynamically when the annotation changes (unlike env vars)
+    # No RBAC permissions required
+    local intent_file="/etc/podinfo/intent"
+    local intent="serve"  # default
+
+    if [ -f "$intent_file" ]; then
+        intent=$(cat "$intent_file" 2>/dev/null || echo "serve")
+        # Trim whitespace
+        intent=$(echo "$intent" | tr -d '[:space:]')
+    fi
 
     # Handle case where annotation doesn't exist (empty string)
     if [ -z "$intent" ]; then
@@ -164,7 +189,7 @@ decommission_indexer() {
     fi
 
     # Wait for decommission to complete
-    log_info "Waiting for decommission to complete (max ${MAX_WAIT_SECONDS}s)..."
+    log_info "Waiting for decommission to complete (max ${DECOMMISSION_MAX_WAIT}s)..."
     local elapsed=0
     local check_interval=10
 
@@ -172,7 +197,7 @@ decommission_indexer() {
     # Peer name in CM is just the pod name (e.g., "splunk-idx-indexer-0")
     local peer_name="${POD_NAME}"
 
-    while [ $elapsed -lt $MAX_WAIT_SECONDS ]; do
+    while [ $elapsed -lt $DECOMMISSION_MAX_WAIT ]; do
         local status
         status=$(get_indexer_peer_status "$cm_url" "$peer_name")
 
@@ -198,7 +223,7 @@ decommission_indexer() {
         elapsed=$((elapsed + check_interval))
     done
 
-    log_error "Decommission timeout after ${MAX_WAIT_SECONDS}s - bucket migration may be incomplete"
+    log_error "Decommission timeout after ${DECOMMISSION_MAX_WAIT}s - bucket migration may be incomplete"
     return 1  # Signal failure so operator/finalizer can detect incomplete decommission
 }
 
@@ -250,19 +275,20 @@ detain_search_head() {
 
 # Function to gracefully stop Splunk
 stop_splunk() {
-    log_info "Stopping Splunk gracefully..."
+    log_info "Stopping Splunk gracefully (timeout: ${STOP_MAX_WAIT}s)..."
 
     if [ ! -x "$SPLUNK_BIN" ]; then
         log_error "Splunk binary not found at ${SPLUNK_BIN}"
         return 1
     fi
 
-    # Stop Splunk with timeout
-    if timeout ${MAX_WAIT_SECONDS} "$SPLUNK_BIN" stop; then
+    # Stop Splunk with split budget timeout
+    # This ensures decommission + stop stays within grace period
+    if timeout ${STOP_MAX_WAIT} "$SPLUNK_BIN" stop; then
         log_info "Splunk stopped successfully"
         return 0
     else
-        log_warn "Splunk stop timed out or failed, may need forceful termination"
+        log_warn "Splunk stop timed out or failed after ${STOP_MAX_WAIT}s, may need forceful termination"
         return 1
     fi
 }

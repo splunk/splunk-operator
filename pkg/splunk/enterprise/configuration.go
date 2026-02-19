@@ -973,6 +973,21 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		}
 	}
 
+	// Add downward API volume for pod metadata (intent annotation)
+	// This volume updates dynamically when annotations change, unlike env vars
+	addSplunkVolumeToTemplate(podTemplateSpec, "podinfo", "/etc/podinfo", corev1.VolumeSource{
+		DownwardAPI: &corev1.DownwardAPIVolumeSource{
+			Items: []corev1.DownwardAPIVolumeFile{
+				{
+					Path: "intent",
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.annotations['splunk.com/pod-intent']",
+					},
+				},
+			},
+		},
+	})
+
 	// update security context
 	runAsUser := int64(41812)
 	fsGroup := int64(41812)
@@ -1035,14 +1050,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
 					FieldPath: "metadata.namespace",
-				},
-			},
-		},
-		{
-			Name: "SPLUNK_POD_INTENT",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.annotations['splunk.com/pod-intent']",
 				},
 			},
 		},
@@ -1202,13 +1209,17 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	privileged := false
 
 	// Set termination grace period for graceful Splunk shutdown
-	// Splunk needs time to flush data, close connections, etc.
-	// Indexers need more time for decommissioning (moving buckets to other peers)
+	// Grace periods must accommodate role-specific operations:
+	// - Indexers: Bucket migration during scale-down (can take 15+ minutes)
+	// - Search heads: Cluster detention/removal (typically 5 minutes)
+	// - Others: Basic graceful shutdown (2 minutes)
 	var terminationGracePeriodSeconds int64
 	if instanceType == SplunkIndexer {
-		terminationGracePeriodSeconds = 300 // 5 minutes for indexers (decommission + stop)
+		terminationGracePeriodSeconds = 1020 // 17 minutes for indexers (15 min decommission + 1.5 min stop + buffer)
+	} else if instanceType == SplunkSearchHead {
+		terminationGracePeriodSeconds = 360  // 6 minutes for search heads (5 min detention + 1 min stop)
 	} else {
-		terminationGracePeriodSeconds = 120 // 2 minutes for other roles
+		terminationGracePeriodSeconds = 120  // 2 minutes for other roles (standalone, CM, etc.)
 	}
 	podTemplateSpec.Spec.TerminationGracePeriodSeconds = &terminationGracePeriodSeconds
 
