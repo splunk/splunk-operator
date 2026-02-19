@@ -23,6 +23,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -224,7 +225,7 @@ func TestIsPDBViolation(t *testing.T) {
 	}{
 		{
 			name:        "PDB violation error",
-			err:         fmt.Errorf("Cannot evict pod as it would violate the pod's disruption budget"),
+			err:         k8serrors.NewTooManyRequests("Cannot evict pod as it would violate the pod's disruption budget", 1),
 			wantViolate: true,
 		},
 		{
