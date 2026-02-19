@@ -10,6 +10,7 @@ on:
       - develop
       - main
       - feature**
+      - appframeworksS1-tests-stability-fix
     paths-ignore:
       - 'docs/**'
       - '*.md'
