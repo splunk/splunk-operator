@@ -59,13 +59,15 @@ spec:
       # Require SSL + password authentication
       - "hostssl all all 0.0.0.0/0 scram-sha-256"
 
+    # Enable connection pooler for clusters using this class
+    connectionPoolerEnabled: true
+
   cnpg:
     # Switchover method - minimal downtime via automated failover
     primaryUpdateMethod: switchover
 
     # Connection pooler configuration (PgBouncer)
     connectionPooler:
-      enabled: true
       # Number of PgBouncer pod replicas
       instances: 3
       # Pooling mode

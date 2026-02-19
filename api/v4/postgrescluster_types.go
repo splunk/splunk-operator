@@ -72,9 +72,11 @@ type PostgresClusterSpec struct {
 	// +kubebuilder:default={}
 	PgHBA []string `json:"pgHBA,omitempty"`
 
-	// ConnectionPooler contains connection pooler settings for this cluster.
+	// ConnectionPoolerEnabled controls whether PgBouncer connection pooling is deployed for this cluster.
+	// When set, takes precedence over the class-level connectionPoolerEnabled value.
+	// +kubebuilder:default=false
 	// +optional
-	ConnectionPooler *ConnectionPoolerEnable `json:"connectionPooler,omitempty"`
+	ConnectionPoolerEnabled *bool `json:"connectionPoolerEnabled,omitempty"`
 }
 
 // PostgresClusterStatus defines the observed state of PostgresCluster.

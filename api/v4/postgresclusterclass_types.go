@@ -88,6 +88,13 @@ type PosgresClusterClassConfig struct {
 	// Example: ["hostssl all all 0.0.0.0/0 scram-sha-256"]
 	// +optional
 	PgHBA []string `json:"pgHBA,omitempty"`
+
+	// ConnectionPoolerEnabled controls whether PgBouncer connection pooling is deployed.
+	// When true, creates RW and RO pooler deployments for clusters using this class.
+	// Can be overridden in PostgresCluster CR.
+	// +kubebuilder:default=false
+	// +optional
+	ConnectionPoolerEnabled *bool `json:"connectionPoolerEnabled,omitempty"`
 }
 
 // CNPGConfig contains CloudNativePG-specific configuration.

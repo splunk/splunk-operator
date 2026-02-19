@@ -34,12 +34,6 @@ const (
 // ConnectionPoolerConfig defines PgBouncer connection pooler configuration.
 // When enabled, creates RW and RO pooler deployments for clusters using this class.
 type ConnectionPoolerConfig struct {
-	// Enabled controls whether PgBouncer connection pooling is deployed.
-	// When true, creates RW and RO pooler deployments for the cluster.
-	// +kubebuilder:default=false
-	// +optional
-	Enabled *bool `json:"enabled,omitempty"`
-
 	// Instances is the number of PgBouncer pod replicas.
 	// Higher values provide better availability and load distribution.
 	// +kubebuilder:validation:Minimum=1
@@ -58,16 +52,6 @@ type ConnectionPoolerConfig struct {
 	// See: https://cloudnative-pg.io/docs/1.28/connection_pooling/#pgbouncer-configuration-options
 	// +optional
 	Config map[string]string `json:"config,omitempty"`
-}
-
-// ConnectionPoolerEnable defines connection pooler settings available at the PostgresCluster level.
-// Only the enabled toggle is exposed; all other pooler settings are controlled by the PostgresClusterClass.
-type ConnectionPoolerEnable struct {
-	// Enabled controls whether PgBouncer connection pooling is deployed for this cluster.
-	// When set, takes precedence over the class-level connectionPooler.enabled value.
-	// +kubebuilder:default=false
-	// +optional
-	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // ConnectionPoolerStatus contains the observed state of the connection pooler.

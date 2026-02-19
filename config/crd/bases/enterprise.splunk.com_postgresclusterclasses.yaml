@@ -81,12 +81,6 @@ spec:
                           Passed directly to CNPG Pooler spec.pgbouncer.parameters.
                           See: https://cloudnative-pg.io/docs/1.28/connection_pooling/#pgbouncer-configuration-options
                         type: object
-                      enabled:
-                        default: false
-                        description: |-
-                          Enabled controls whether PgBouncer connection pooling is deployed.
-                          When true, creates RW and RO pooler deployments for the cluster.
-                        type: boolean
                       instances:
                         default: 3
                         description: |-
@@ -126,6 +120,13 @@ spec:
                   These settings apply to PostgresCluster infrastructure.
                   Can be overridden in PostgresCluster CR.
                 properties:
+                  connectionPoolerEnabled:
+                    default: false
+                    description: |-
+                      ConnectionPoolerEnabled controls whether PgBouncer connection pooling is deployed.
+                      When true, creates RW and RO pooler deployments for clusters using this class.
+                      Can be overridden in PostgresCluster CR.
+                    type: boolean
                   instances:
                     default: 1
                     description: |-
