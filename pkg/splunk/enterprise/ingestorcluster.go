@@ -67,13 +67,13 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
 
-	// Track previous replicas for scaling events
-	previousReplicas := cr.Status.Replicas
+	// Track previous ready replicas for scaling events
+	previousReadyReplicas := cr.Status.ReadyReplicas
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		logger.InfoContext(ctx, "Scaling up ingestor cluster", "previousReplicas", previousReplicas, "newReplicas", cr.Spec.Replicas)
+		logger.InfoContext(ctx, "Scaling up ingestor cluster", "previousReplicas", cr.Status.Replicas, "newReplicas", cr.Spec.Replicas)
 		cr.Status.CredentialSecretVersion = "0"
 		cr.Status.ServiceAccount = ""
 	}
@@ -210,15 +210,17 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	}
 	cr.Status.Phase = phase
 
-	// Emit scaling events when phase is ready
+	// Emit scaling events when phase is ready and ready replicas changed to match desired
 	if phase == enterpriseApi.PhaseReady {
 		desiredReplicas := cr.Spec.Replicas
-		if desiredReplicas > previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
-			eventPublisher.Normal(ctx, "ScaledUp",
-				fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
-		} else if desiredReplicas < previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
-			eventPublisher.Normal(ctx, "ScaledDown",
-				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		if cr.Status.ReadyReplicas == desiredReplicas && previousReadyReplicas != desiredReplicas {
+			if desiredReplicas > previousReadyReplicas {
+				eventPublisher.Normal(ctx, "ScaledUp",
+					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReadyReplicas, desiredReplicas))
+			} else if desiredReplicas < previousReadyReplicas {
+				eventPublisher.Normal(ctx, "ScaledDown",
+					fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReadyReplicas, desiredReplicas))
+			}
 		}
 	}
 
