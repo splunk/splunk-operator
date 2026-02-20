@@ -72,6 +72,7 @@ jobs:
             managercrcrud,
             licensemanager,
             managerdeletecr,
+            indingsep,
           ]
     runs-on: ubuntu-latest
     needs: build-operator-image-distroless
@@ -95,6 +96,8 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
+      AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID: ${{ secrets.AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID }}
+      AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY: ${{ secrets.AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY }}
     steps:
       - name: Set Test Cluster Nodes and Parallel Runs
         run: >-
