@@ -377,6 +377,13 @@ func TestGetApplicablePodNameForAppFramework(t *testing.T) {
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
+
+	cr.TypeMeta.Kind = "IngestorCluster"
+	expectedPodName = "splunk-stack1-ingestor-0"
+	returnedPodName = getApplicablePodNameForAppFramework(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
 }
 
 func TestInitAppInstallPipeline(t *testing.T) {
@@ -1369,7 +1376,7 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 
 	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
 	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
-		t.Errorf("Unable to get the sts for SHC deployer")
+		t.Errorf("Unable to get the sts for LicenseManager")
 	}
 
 	// Test if STS works for Standalone
@@ -1383,7 +1390,21 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 
 	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
 	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
-		t.Errorf("Unable to get the sts for SHC deployer")
+		t.Errorf("Unable to get the sts for Standalone")
+	}
+
+	// Test if STS works for IngestorCluster
+	cr.TypeMeta.Kind = "IngestorCluster"
+	current = appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-ingestor",
+			Namespace: "test",
+		},
+	}
+
+	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
+	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
+		t.Errorf("Unable to get the sts for IngestorCluster")
 	}
 
 	// Negative testing
@@ -4335,6 +4356,32 @@ func TestAdjustClusterAppsFilePermissions(t *testing.T) {
 		t.Errorf("When the file permissions can't be modified, should return an error")
 	}
 	mockPodExecReturnContexts[0].StdErr = ""
+}
+
+func TestGetTelAppNameExtension(t *testing.T) {
+	crKinds := map[string]string{
+		"Standalone":        "stdaln",
+		"LicenseMaster":     "lmaster",
+		"LicenseManager":    "lmanager",
+		"SearchHeadCluster": "shc",
+		"ClusterMaster":     "cmaster",
+		"ClusterManager":    "cmanager",
+		"IngestorCluster":   "ingestor",
+	}
+
+	// Test all CR kinds
+	for k, v := range crKinds {
+		val, _ := getTelAppNameExtension(k)
+		if v != val {
+			t.Errorf("Invalid extension crkind %v, extension %v", k, v)
+		}
+	}
+
+	// Test error code
+	_, err := getTelAppNameExtension("incorrect value")
+	if err == nil {
+		t.Errorf("Expected error")
+	}
 }
 
 func TestAddTelAppCMaster(t *testing.T) {

@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -1030,4 +1031,52 @@ func (c *SplunkClient) RestartSplunk() error {
 	}
 	expectedStatus := []int{200}
 	return c.Do(request, expectedStatus, nil)
+}
+
+// Updates conf files and their properties
+// See https://help.splunk.com/en/splunk-enterprise/leverage-rest-apis/rest-api-reference/10.0/configuration-endpoints/configuration-endpoint-descriptions
+func (c *SplunkClient) UpdateConfFile(scopedLog logr.Logger, fileName, property string, propertyKVList [][]string) error {
+	// Creates an object in a conf file if it doesn't exist
+	endpoint := fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s", c.ManagementURI, fileName)
+	body := fmt.Sprintf("name=%s", property)
+
+	scopedLog.Info("Creating conf file object if it does not exist", "fileName", fileName, "property", property)
+	request, err := http.NewRequest("POST", endpoint, strings.NewReader(body))
+	if err != nil {
+		scopedLog.Error(err, "Failed to create conf file object if it does not exist", "fileName", fileName, "property", property)
+		return err
+	}
+
+	scopedLog.Info("Validating conf file object creation", "fileName", fileName, "property", property)
+	expectedStatus := []int{200, 201, 409}
+	err = c.Do(request, expectedStatus, nil)
+	if err != nil {
+		scopedLog.Error(err, fmt.Sprintf("Status not in %v for conf file object creation", expectedStatus), "fileName", fileName, "property", property)
+		return err
+	}
+
+	// Updates a property of an object in a conf file
+	endpoint = fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s/%s", c.ManagementURI, fileName, property)
+	body = ""
+	for _, kv := range propertyKVList {
+		body += fmt.Sprintf("%s=%s&", kv[0], kv[1])
+	}
+	if len(body) > 0 && body[len(body)-1] == '&' {
+		body = body[:len(body)-1]
+	}
+
+	scopedLog.Info("Updating conf file object", "fileName", fileName, "property", property, "body", body)
+	request, err = http.NewRequest("POST", endpoint, strings.NewReader(body))
+	if err != nil {
+		scopedLog.Error(err, "Failed to update conf file object", "fileName", fileName, "property", property, "body", body)
+		return err
+	}
+
+	scopedLog.Info("Validating conf file object update", "fileName", fileName, "property", property)
+	expectedStatus = []int{200, 201}
+	err = c.Do(request, expectedStatus, nil)
+	if err != nil {
+		scopedLog.Error(err, fmt.Sprintf("Status not in %v for conf file object update", expectedStatus), "fileName", fileName, "property", property, "body", body)
+	}
+	return err
 }

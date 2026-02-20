@@ -28,6 +28,7 @@ nav_order: 2
 - [App Framework Fields](#description-of-app-framework-specification-fields)
 - [App Framework Examples](#examples-of-app-framework-usage)
   - [Standalone](#how-to-use-the-app-framework-on-a-standalone-cr)
+  - [Ingestor Cluster](#how-to-use-the-app-framework-on-ingestor-cluster)
   - [Cluster Manager](#how-to-use-the-app-framework-on-indexer-cluster)
   - [Search Head Cluster](#how-to-use-the-app-framework-on-search-head-cluster)
   - [Multiple Scopes](#how-to-install-apps-for-both-local-and-cluster-scopes)
@@ -819,11 +820,11 @@ Copy your Splunk App or Add-on archive files to the unique folders on the remote
 
 
 ## Description of App Framework Specification fields
-The App Framework configuration is supported on the following Custom Resources: Standalone, ClusterManager, SearchHeadCluster, MonitoringConsole and LicenseManager. Configuring the App framework requires:
+The App Framework configuration is supported on the following Custom Resources: Standalone, IngestorCluster, ClusterManager, SearchHeadCluster, MonitoringConsole and LicenseManager. Configuring the App framework requires:
 
 * Remote Source of Apps: Define the remote storage location, including unique folders, and the path to each folder.
 * Destination of Apps: Define which Custom Resources need to be configured.
-* Scope of Apps: Define if the apps need to be installed and run locally (such as Standalone, Monitoring Console and License Manager,) or cluster-wide (such as Indexer Cluster, and Search Head Cluster.)
+* Scope of Apps: Define if the apps need to be installed and run locally (such as Standalone, Monitoring Console, License Manager and Ingestor Cluster) or cluster-wide (such as Indexer Cluster, and Search Head Cluster.)
 
 Here is a typical App framework configuration in a Custom Resource definition:
 
@@ -938,6 +939,7 @@ NOTE: If an app source name needs to be changed, make sure the name change is pe
     | Standalone        | local                                  | Yes                   | $SPLUNK_HOME/etc/apps            | N/A |
     | LicenseManager    | local                                  | Yes                   | $SPLUNK_HOME/etc/apps            | N/A |
     | MonitoringConsole | local                                  | Yes                   | $SPLUNK_HOME/etc/apps            | N/A |
+    | IngestorCluster   | local                                  | Yes                   | $SPLUNK_HOME/etc/apps            | N/A |
     | IndexerCluster    | N/A                                    | No                    | N/A                              | $SPLUNK_HOME/etc/peer-apps |
 
 * `volume` refers to the remote storage volume name configured under the `volumes` stanza (see previous section.)
@@ -1014,6 +1016,69 @@ volumes:
 ```
 
 Apply the Custom Resource specification: `kubectl apply -f Standalone.yaml`
+
+### How to use the App Framework on Ingestor Cluster
+
+In this example, you'll deploy Ingestor Cluster with a remote storage volume, the location of the app archive, and set the installation location for the Splunk Enterprise Pod instance by using `scope`.
+
+Example using s3: IngestorCluster.yaml
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: IngestorCluster
+metadata:
+  name: ic
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 600
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+      - name: networkApps
+        location: networkAppsLoc/
+      - name: authApps
+        location: authAppsLoc/
+    volumes:
+      - name: volume_app_repo
+        storageType: s3
+        provider: aws
+        path: bucket-app-framework/IngestorCluster-us/
+        endpoint: https://s3-us-west-2.amazonaws.com
+        region: us-west-2
+        secretRef: s3-secret
+```
+
+Volume variants for other providers (replace only the volumes stanza):
+
+Azure Blob volumes snippet:
+
+```yaml
+volumes:
+  - name: volume_app_repo
+    storageType: blob
+    provider: azure
+    path: bucket-app-framework/IngestorCluster-us/
+    endpoint: https://mystorageaccount.blob.core.windows.net
+    secretRef: azureblob-secret
+```
+
+GCP GCS volumes snippet:
+
+```yaml
+volumes:
+  - name: volume_app_repo
+    storageType: gcs
+    provider: gcp
+    path: bucket-app-framework/IngestorCluster-us/
+    endpoint: https://storage.googleapis.com
+    secretRef: gcs-secret
+```
+
+Apply the Custom Resource specification: `kubectl apply -f IngestorCluster.yaml`
 
 ### How to use the App Framework on Indexer Cluster
 
