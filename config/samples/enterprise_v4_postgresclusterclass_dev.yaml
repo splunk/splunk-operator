@@ -26,7 +26,14 @@ spec:
       limits:
         cpu: "1"
         memory: "2Gi"
+    connectionPoolerEnabled: true
 
   cnpg:
     # Restart method - tolerate downtime in dev
     primaryUpdateMethod: restart
+    connectionPooler:
+      instances: 2
+      mode: transaction
+      config:
+        max_client_conn: "100"
+

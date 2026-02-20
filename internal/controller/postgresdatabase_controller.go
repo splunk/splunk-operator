@@ -39,43 +39,6 @@ import (
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 )
 
-type reconcilePhases string
-type conditionTypes string
-type conditionReasons string
-type clusterReadyStatus string
-
-const (
-	retryDelay = time.Second * 15
-	// phases
-	ready        reconcilePhases = "Ready"
-	pending      reconcilePhases = "Pending"
-	provisioning reconcilePhases = "Provisioning"
-	failed       reconcilePhases = "Failed"
-
-	// Conditiontypes
-	clusterReady    conditionTypes = "ClusterReady"
-	secretsReady    conditionTypes = "SecretsReady"
-	usersReady      conditionTypes = "UsersReady"
-	databasesReady  conditionTypes = "DatabasesReady"
-	privilegesReady conditionTypes = "PrivilegesReady"
-
-	// Condition reasons
-	reasonNotFound               conditionReasons = "NotFound"
-	reasonProvisioning           conditionReasons = "Provisioning"
-	reasonClusterInfoFetchFailed conditionReasons = "ClusterInfoFetchNotPossible"
-	reasonAvailable              conditionReasons = "Available"
-	reasonConfiguring            conditionReasons = "Configuring"
-	reasonWaitingForCNPG         conditionReasons = "WaitingForCNPG"
-	reasonFailed                 conditionReasons = "Failed"
-	reasonCreating               conditionReasons = "Creating"
-
-	// Cluster status
-	ClusterNotFound         clusterReadyStatus = "NotFound"
-	ClusterNotReady         clusterReadyStatus = "NotReady"
-	ClusterNoProvisionerRef clusterReadyStatus = "NoProvisionerRef"
-	ClusterReady            clusterReadyStatus = "Ready"
-)
-
 // PostgresDatabaseReconciler reconciles a PostgresDatabase object
 type PostgresDatabaseReconciler struct {
 	client.Client
@@ -133,19 +96,19 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	logger.Info("Cluster validation done", "clusterName", cluster.Name, "status", clusterStatus)
 	switch clusterStatus {
 	case ClusterNotFound:
-		if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonNotFound, "Cluster CR not found", pending); err != nil {
+		if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterNotFound, "Cluster CR not found", pending); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 
 	case ClusterNotReady, ClusterNoProvisionerRef:
-		if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonProvisioning, "Cluster is not in ready state yet", pending); err != nil {
+		if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterProvisioning, "Cluster is not in ready state yet", pending); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 
 	case ClusterReady:
-		if err := updateStatus(clusterReady, metav1.ConditionTrue, reasonAvailable, "Cluster is operational", provisioning); err != nil {
+		if err := updateStatus(clusterReady, metav1.ConditionTrue, reasonClusterAvailable, "Cluster is operational", provisioning); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -190,7 +153,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// Spec is correct, verify status - are users reconciled?
 	allUsersReady, notReadyUsers, err := r.verifyUsersReady(ctx, postgresDB, cluster)
 	if err != nil {
-		if statusErr := updateStatus(usersReady, metav1.ConditionFalse, reasonFailed, fmt.Sprintf("User creation failed: %v", err), failed); statusErr != nil {
+		if statusErr := updateStatus(usersReady, metav1.ConditionFalse, reasonUsersCreationFailed, fmt.Sprintf("User creation failed: %v", err), failed); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
 		}
 		return ctrl.Result{}, err
@@ -206,7 +169,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// All users present in spec and reconciled in status
-	if err := updateStatus(usersReady, metav1.ConditionTrue, reasonAvailable, fmt.Sprintf("All %d users in PostgreSQL", len(desiredUsers)), provisioning); err != nil {
+	if err := updateStatus(usersReady, metav1.ConditionTrue, reasonUsersAvailable, fmt.Sprintf("All %d users in PostgreSQL", len(desiredUsers)), provisioning); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -259,7 +222,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// All phases complete - mark as reconciled
 	postgresDB.Status.ObservedGeneration = postgresDB.Generation
-	if err := updateStatus(databasesReady, metav1.ConditionTrue, reasonAvailable, fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)), ready); err != nil {
+	if err := updateStatus(databasesReady, metav1.ConditionTrue, reasonDatabasesAvailable, fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)), ready); err != nil {
 		return ctrl.Result{}, err
 	}
 
