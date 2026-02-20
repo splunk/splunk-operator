@@ -62,6 +62,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// Initialize as nil so syncStatus knows if the object was actually found/created.
 	var cnpgCluster *cnpgv1.Cluster
+	var poolerEnabled bool
 
 	// 1. Fetch the PostgresCluster instance, stop, if not found.
 	postgresCluster := &enterprisev4.PostgresCluster{}
@@ -77,7 +78,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// This deferred function will run at the end of the reconciliation process, regardless of whether it exits early due to an error or completes successfully.
 	// It ensures that we always attempt to sync the status of the PostgresCluster based on the final state of the CNPG Cluster and any errors that may have occurred.
 	defer func() {
-		if syncErr := r.syncStatus(ctx, postgresCluster, cnpgCluster, err); syncErr != nil {
+		if syncErr := r.syncStatus(ctx, postgresCluster, cnpgCluster, poolerEnabled, err); syncErr != nil {
 			err = errors.Join(err, fmt.Errorf("failed to sync status in deferred function: %w", syncErr))
 		}
 	}()
@@ -139,6 +140,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 	// 7. Reconcile Connection Pooler if enabled in class
+	poolerEnabled = r.isConnectionPoolerEnabled(postgresClusterClass, postgresCluster)
 	requeuePooler, poolerErr := r.reconcileConnectionPooler(ctx, postgresCluster, postgresClusterClass, cnpgCluster)
 	if poolerErr != nil {
 		logger.Error(poolerErr, "Failed to reconcile connection pooler")
@@ -268,8 +270,7 @@ func (r *PostgresClusterReconciler) reconcileConnectionPooler(
 		if err := r.deleteConnectionPoolers(ctx, postgresCluster); err != nil {
 			return false, err
 		}
-		postgresCluster.Status.ConnectionPoolerStatus = nil
-		meta.RemoveStatusCondition(&postgresCluster.Status.Conditions, "PoolerReady")
+		// ConnectionPoolerStatus and PoolerReady condition are cleared by syncStatus in the defer.
 		return false, nil
 	}
 
@@ -296,8 +297,11 @@ func (r *PostgresClusterReconciler) reconcileConnectionPooler(
 	}
 
 	// Check if poolers are ready — requeue if they're still provisioning.
-	poolersReady := r.syncPoolerStatus(ctx, postgresCluster)
-	return !poolersReady, nil
+	rwPooler := &cnpgv1.Pooler{}
+	rwErr := r.Get(ctx, types.NamespacedName{Name: poolerResourceName(postgresCluster.Name, "rw"), Namespace: postgresCluster.Namespace}, rwPooler)
+	roPooler := &cnpgv1.Pooler{}
+	roErr := r.Get(ctx, types.NamespacedName{Name: poolerResourceName(postgresCluster.Name, "ro"), Namespace: postgresCluster.Namespace}, roPooler)
+	return !(r.isPoolerReady(rwPooler, rwErr) && r.isPoolerReady(roPooler, roErr)), nil
 }
 
 // deleteConnectionPoolers removes RW and RO pooler resources if they exist.
@@ -392,7 +396,7 @@ func (r *PostgresClusterReconciler) buildCNPGPooler(
 }
 
 // syncStatus maps CNPG Cluster state to PostgresCluster object.
-func (r *PostgresClusterReconciler) syncStatus(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster, err error) error {
+func (r *PostgresClusterReconciler) syncStatus(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster, poolerEnabled bool, err error) error {
 	// will use Patch as we did for main reconciliation loop.
 	latestPGCluster := client.MergeFrom(postgresCluster.DeepCopy())
 
@@ -429,7 +433,12 @@ func (r *PostgresClusterReconciler) syncStatus(ctx context.Context, postgresClus
 			UID:        cnpgCluster.UID,
 		}
 
-		// ConnectionPoolerStatus and PoolerReady condition are set by reconcileConnectionPooler.
+		if poolerEnabled {
+			r.syncPoolerStatus(ctx, postgresCluster)
+		} else {
+			postgresCluster.Status.ConnectionPoolerStatus = nil
+			meta.RemoveStatusCondition(&postgresCluster.Status.Conditions, "PoolerReady")
+		}
 	}
 
 	if patchErr := r.Status().Patch(ctx, postgresCluster, latestPGCluster); patchErr != nil {
