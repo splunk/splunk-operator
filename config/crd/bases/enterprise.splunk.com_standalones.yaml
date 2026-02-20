@@ -6378,6 +6378,7 @@ spec:
                     type: integer
                 type: object
               replicas:
+                default: 1
                 description: Number of standalone pods
                 format: int32
                 type: integer

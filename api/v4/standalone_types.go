@@ -39,6 +39,7 @@ type StandaloneSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// Number of standalone pods
+	// +kubebuilder:default:=1
 	Replicas int32 `json:"replicas"`
 
 	//Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
