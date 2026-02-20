@@ -20,6 +20,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
@@ -32,7 +34,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	logs "sigs.k8s.io/controller-runtime/pkg/log"
-	"time"
 )
 
 // PostgresClusterReconciler reconciles a PostgresCluster object
@@ -51,6 +52,8 @@ const (
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusterclasses,verbs=get;list;watch
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters/status,verbs=get
+// +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=poolers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=poolers/status,verbs=get
 
 // Main reconciliation loop for PostgresCluster.
 func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
@@ -83,7 +86,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	postgresClusterClass := &enterprisev4.PostgresClusterClass{}
 	if getClusterClassErr := r.Get(ctx, client.ObjectKey{Name: postgresCluster.Spec.Class}, postgresClusterClass); getClusterClassErr != nil {
 		logger.Error(getClusterClassErr, "Unable to fetch referenced PostgresClusterClass", "className", postgresCluster.Spec.Class)
-		r.setCondition(postgresCluster, metav1.ConditionFalse, "ClusterClassNotFound", getClusterClassErr.Error())
+		r.setCondition(postgresCluster, "Ready", metav1.ConditionFalse, "ClusterClassNotFound", getClusterClassErr.Error())
 		return res, getClusterClassErr
 	}
 
@@ -101,15 +104,15 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		cnpgCluster = r.buildCNPGCluster(postgresCluster, mergedConfig)
 		if buildCNPGClusterErr := r.Create(ctx, cnpgCluster); buildCNPGClusterErr != nil {
 			logger.Error(buildCNPGClusterErr, "Failed to create CNPG Cluster")
-			r.setCondition(postgresCluster, metav1.ConditionFalse, "ClusterBuildFailed", buildCNPGClusterErr.Error())
+			r.setCondition(postgresCluster, "Ready", metav1.ConditionFalse, "ClusterBuildFailed", buildCNPGClusterErr.Error())
 			return res, buildCNPGClusterErr
 		}
-		r.setCondition(postgresCluster, metav1.ConditionTrue, "ClusterBuildSucceeded", fmt.Sprintf("CNPG cluster build Succeeded: %s", postgresCluster.Name))
+		r.setCondition(postgresCluster, "Ready", metav1.ConditionTrue, "ClusterBuildSucceeded", fmt.Sprintf("CNPG cluster build Succeeded: %s", postgresCluster.Name))
 		logger.Info("CNPG Cluster created successfully, requeueing for status update", "name", postgresCluster.Name)
 		return ctrl.Result{RequeueAfter: retryDelaytimer}, nil
 	} else if getCNPGClusterErr != nil {
 		logger.Error(getCNPGClusterErr, "Failed to get CNPG Cluster")
-		r.setCondition(postgresCluster, metav1.ConditionFalse, "ClusterGetFailed", getCNPGClusterErr.Error())
+		r.setCondition(postgresCluster, "Ready", metav1.ConditionFalse, "ClusterGetFailed", getCNPGClusterErr.Error())
 		return res, getCNPGClusterErr
 	} else {
 		cnpgCluster = existingCNPG
@@ -118,7 +121,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// 6. Synchronize the existing CNPG Cluster spec with the desired configuration.
 	if err := r.Get(ctx, types.NamespacedName{Name: cnpgCluster.Name, Namespace: cnpgCluster.Namespace}, cnpgCluster); err != nil {
 		logger.Error(err, "Failed to fetch CNPG Cluster for update check", "name", cnpgCluster.Name)
-		r.setCondition(postgresCluster, metav1.ConditionFalse, "ClusterGetFailed", fmt.Sprintf("Failed to fetch CNPG Cluster for update check: %v", err))
+		r.setCondition(postgresCluster, "Ready", metav1.ConditionFalse, "ClusterGetFailed", fmt.Sprintf("Failed to fetch CNPG Cluster for update check: %v", err))
 		return res, err
 	}
 	if !equality.Semantic.DeepEqual(cnpgCluster.Spec, desiredSpec) {
@@ -131,13 +134,24 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				return ctrl.Result{Requeue: true}, nil
 			}
 			logger.Error(patchCNPGClusterErr, "Failed to patch CNPG Cluster", "name", cnpgCluster.Name)
-			r.setCondition(postgresCluster, metav1.ConditionFalse, "ClusterUpdateFailed", patchCNPGClusterErr.Error())
+			r.setCondition(postgresCluster, "Ready", metav1.ConditionFalse, "ClusterUpdateFailed", patchCNPGClusterErr.Error())
 			return res, patchCNPGClusterErr
 		}
 	}
-	// 7. Report progress back to the user and manage the reconciliation lifecycle.
+	// 7. Reconcile Connection Pooler if enabled in class
+	requeuePooler, poolerErr := r.reconcileConnectionPooler(ctx, postgresCluster, postgresClusterClass, cnpgCluster)
+	if poolerErr != nil {
+		logger.Error(poolerErr, "Failed to reconcile connection pooler")
+		r.setCondition(postgresCluster, "Ready", metav1.ConditionFalse, "PoolerReconciliationFailed", poolerErr.Error())
+		return res, poolerErr
+	}
+	if requeuePooler {
+		return ctrl.Result{RequeueAfter: retryDelaytimer}, nil
+	}
+
+	// 8. Report progress back to the user and manage the reconciliation lifecycle.
 	logger.Info("Reconciliation completed successfully", "name", postgresCluster.Name)
-	r.setCondition(postgresCluster, metav1.ConditionTrue, "ClusterUpdateSucceeded", fmt.Sprintf("Reconciliation completed successfully: %s", postgresCluster.Name))
+	r.setCondition(postgresCluster, "Ready", metav1.ConditionTrue, "ClusterUpdateSucceeded", fmt.Sprintf("Reconciliation completed successfully: %s", postgresCluster.Name))
 	return res, nil
 }
 
@@ -221,6 +235,162 @@ func (r *PostgresClusterReconciler) buildCNPGCluster(postgresCluster *enterprise
 	return cnpgCluster
 }
 
+// poolerResourceName returns the CNPG Pooler resource name for a given cluster and type (rw/ro).
+func poolerResourceName(clusterName, poolerType string) string {
+	return fmt.Sprintf("%s-pooler-%s", clusterName, poolerType)
+}
+
+// isConnectionPoolerEnabled determines if connection pooler should be active.
+func (r *PostgresClusterReconciler) isConnectionPoolerEnabled(class *enterprisev4.PostgresClusterClass, cluster *enterprisev4.PostgresCluster) bool {
+	if cluster.Spec.ConnectionPoolerEnabled != nil {
+		return *cluster.Spec.ConnectionPoolerEnabled
+	}
+
+	return class.Spec.Config.ConnectionPoolerEnabled != nil &&
+		*class.Spec.Config.ConnectionPoolerEnabled
+}
+
+// reconcileConnectionPooler creates or deletes CNPG Pooler resources based on the effective enabled state.
+// Returns (requeue, error) — requeue is true when poolers were just created and may not be ready yet.
+func (r *PostgresClusterReconciler) reconcileConnectionPooler(
+	ctx context.Context,
+	postgresCluster *enterprisev4.PostgresCluster,
+	class *enterprisev4.PostgresClusterClass,
+	cnpgCluster *cnpgv1.Cluster,
+) (bool, error) {
+	logger := logs.FromContext(ctx)
+
+	if !r.isConnectionPoolerEnabled(class, postgresCluster) {
+		// Skip deletion if the cluster is not healthy — owner references handle cleanup via GC.
+		if cnpgCluster.Status.Phase != cnpgv1.PhaseHealthy {
+			return false, nil
+		}
+		if err := r.deleteConnectionPoolers(ctx, postgresCluster); err != nil {
+			return false, err
+		}
+		postgresCluster.Status.ConnectionPoolerStatus = nil
+		meta.RemoveStatusCondition(&postgresCluster.Status.Conditions, "PoolerReady")
+		return false, nil
+	}
+
+	if cnpgCluster.Status.Phase != cnpgv1.PhaseHealthy {
+		logger.Info("CNPG Cluster not healthy, waiting before creating poolers")
+		r.setCondition(postgresCluster, "PoolerReady", metav1.ConditionFalse, "ClusterNotHealthy", "Waiting for CNPG cluster to become healthy before creating poolers")
+		return false, nil
+	}
+
+	if class.Spec.CNPG == nil || class.Spec.CNPG.ConnectionPooler == nil {
+		logger.Info("Connection pooler enabled but config missing in class", "class", class.Name)
+		r.setCondition(postgresCluster, "PoolerReady", metav1.ConditionFalse, "PoolerConfigMissing", fmt.Sprintf("Connection pooler is enabled but cnpg.connectionPooler config is missing in class %s", class.Name))
+		return false, nil
+	}
+
+	// Create/Update RW Pooler
+	if err := r.ensureConnectionPooler(ctx, postgresCluster, class, cnpgCluster, "rw"); err != nil {
+		return false, fmt.Errorf("failed to reconcile RW pooler: %w", err)
+	}
+
+	// Create/Update RO Pooler
+	if err := r.ensureConnectionPooler(ctx, postgresCluster, class, cnpgCluster, "ro"); err != nil {
+		return false, fmt.Errorf("failed to reconcile RO pooler: %w", err)
+	}
+
+	// Check if poolers are ready — requeue if they're still provisioning.
+	poolersReady := r.syncPoolerStatus(ctx, postgresCluster)
+	return !poolersReady, nil
+}
+
+// deleteConnectionPoolers removes RW and RO pooler resources if they exist.
+func (r *PostgresClusterReconciler) deleteConnectionPoolers(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster) error {
+	logger := logs.FromContext(ctx)
+
+	for _, poolerType := range []string{"rw", "ro"} {
+		poolerName := poolerResourceName(postgresCluster.Name, poolerType)
+		pooler := &cnpgv1.Pooler{}
+
+		err := r.Get(ctx, types.NamespacedName{
+			Name:      poolerName,
+			Namespace: postgresCluster.Namespace,
+		}, pooler)
+
+		if apierrors.IsNotFound(err) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("failed to get pooler %s: %w", poolerName, err)
+		}
+
+		logger.Info("Deleting CNPG Pooler", "name", poolerName)
+		if err := r.Delete(ctx, pooler); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete pooler %s: %w", poolerName, err)
+		}
+	}
+
+	return nil
+}
+
+// ensureConnectionPooler creates a CNPG Pooler resource if it doesn't exist.
+// ensureConnectionPooler creates a CNPG Pooler resource if it doesn't exist.
+func (r *PostgresClusterReconciler) ensureConnectionPooler(
+	ctx context.Context,
+	postgresCluster *enterprisev4.PostgresCluster,
+	class *enterprisev4.PostgresClusterClass,
+	cnpgCluster *cnpgv1.Cluster,
+	poolerType string,
+) error {
+	poolerName := poolerResourceName(postgresCluster.Name, poolerType)
+
+	existingPooler := &cnpgv1.Pooler{}
+	err := r.Get(ctx, types.NamespacedName{
+		Name:      poolerName,
+		Namespace: postgresCluster.Namespace,
+	}, existingPooler)
+
+	if apierrors.IsNotFound(err) {
+		logs.FromContext(ctx).Info("Creating CNPG Pooler", "name", poolerName, "type", poolerType)
+		r.setCondition(postgresCluster, "PoolerReady", metav1.ConditionFalse, "PoolerCreating", fmt.Sprintf("Creating %s pooler", poolerType))
+		pooler := r.buildCNPGPooler(postgresCluster, class, cnpgCluster, poolerType)
+		return r.Create(ctx, pooler)
+	}
+
+	return err
+}
+
+// buildCNPGPooler constructs a CNPG Pooler object.
+func (r *PostgresClusterReconciler) buildCNPGPooler(
+	postgresCluster *enterprisev4.PostgresCluster,
+	class *enterprisev4.PostgresClusterClass,
+	cnpgCluster *cnpgv1.Cluster,
+	poolerType string,
+) *cnpgv1.Pooler {
+	cfg := class.Spec.CNPG.ConnectionPooler
+	poolerName := poolerResourceName(postgresCluster.Name, poolerType)
+
+	instances := *cfg.Instances
+	mode := cnpgv1.PgBouncerPoolMode(*cfg.Mode)
+
+	pooler := &cnpgv1.Pooler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      poolerName,
+			Namespace: postgresCluster.Namespace,
+		},
+		Spec: cnpgv1.PoolerSpec{
+			Cluster: cnpgv1.LocalObjectReference{
+				Name: cnpgCluster.Name,
+			},
+			Instances: &instances,
+			Type:      cnpgv1.PoolerType(poolerType),
+			PgBouncer: &cnpgv1.PgBouncerSpec{
+				PoolMode:   mode,
+				Parameters: cfg.Config,
+			},
+		},
+	}
+
+	ctrl.SetControllerReference(postgresCluster, pooler, r.Scheme)
+	return pooler
+}
+
 // syncStatus maps CNPG Cluster state to PostgresCluster object.
 func (r *PostgresClusterReconciler) syncStatus(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster, err error) error {
 	// will use Patch as we did for main reconciliation loop.
@@ -229,26 +399,26 @@ func (r *PostgresClusterReconciler) syncStatus(ctx context.Context, postgresClus
 	// If there's an error, we set the status to Error and include the error message in the condition.
 	if err != nil {
 		postgresCluster.Status.Phase = "Error"
-		r.setCondition(postgresCluster, metav1.ConditionFalse, "Error", fmt.Sprintf("Error during reconciliation: %v", err))
+		r.setCondition(postgresCluster, "Ready", metav1.ConditionFalse, "Error", fmt.Sprintf("Error during reconciliation: %v", err))
 		// CNPG not existing, set status to Pending. Direct running `switch` without CNPG cluster in place will cause a panic, so we need to check for that first.
 	} else if cnpgCluster == nil {
 		postgresCluster.Status.Phase = "Pending"
-		r.setCondition(postgresCluster, metav1.ConditionFalse, "ClusterNotFound", "Underlying CNPG cluster object has not been created yet")
+		r.setCondition(postgresCluster, "Ready", metav1.ConditionFalse, "ClusterNotFound", "Underlying CNPG cluster object has not been created yet")
 		// Cluster exists, map the CNPG Cluster status to our PostgresCluster status.
 	} else {
 		switch cnpgCluster.Status.Phase {
 		case cnpgv1.PhaseHealthy:
 			postgresCluster.Status.Phase = "Ready"
-			r.setCondition(postgresCluster, metav1.ConditionTrue, "ClusterHealthy", "CNPG cluster is in healthy state")
+			r.setCondition(postgresCluster, "Ready", metav1.ConditionTrue, "ClusterHealthy", "CNPG cluster is in healthy state")
 		case cnpgv1.PhaseUnrecoverable:
 			postgresCluster.Status.Phase = "Failed"
-			r.setCondition(postgresCluster, metav1.ConditionFalse, "ClusterCreationFailed", "CNPG cluster is in unrecoverable state")
+			r.setCondition(postgresCluster, "Ready", metav1.ConditionFalse, "ClusterCreationFailed", "CNPG cluster is in unrecoverable state")
 		case "":
 			postgresCluster.Status.Phase = "Pending"
-			r.setCondition(postgresCluster, metav1.ConditionFalse, "ClusterPending", "CNPG cluster is pending creation")
+			r.setCondition(postgresCluster, "Ready", metav1.ConditionFalse, "ClusterPending", "CNPG cluster is pending creation")
 		default:
 			postgresCluster.Status.Phase = "Provisioning"
-			r.setCondition(postgresCluster, metav1.ConditionFalse, "ClusterProvisioning", "CNPG cluster is being provisioned")
+			r.setCondition(postgresCluster, "Ready", metav1.ConditionFalse, "ClusterProvisioning", "CNPG cluster is being provisioned")
 		}
 		// Set the reference to the CNPG Cluster in the status.
 		postgresCluster.Status.ProvisionerRef = &corev1.ObjectReference{
@@ -258,6 +428,8 @@ func (r *PostgresClusterReconciler) syncStatus(ctx context.Context, postgresClus
 			Name:       cnpgCluster.Name,
 			UID:        cnpgCluster.UID,
 		}
+
+		// ConnectionPoolerStatus and PoolerReady condition are set by reconcileConnectionPooler.
 	}
 
 	if patchErr := r.Status().Patch(ctx, postgresCluster, latestPGCluster); patchErr != nil {
@@ -266,10 +438,10 @@ func (r *PostgresClusterReconciler) syncStatus(ctx context.Context, postgresClus
 	return nil
 }
 
-// setCondition sets the condition of the PostgresCluster status.
-func (r *PostgresClusterReconciler) setCondition(postgresCluster *enterprisev4.PostgresCluster, status metav1.ConditionStatus, reason, message string) {
+// setCondition sets a condition on the PostgresCluster status.
+func (r *PostgresClusterReconciler) setCondition(postgresCluster *enterprisev4.PostgresCluster, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&postgresCluster.Status.Conditions, metav1.Condition{
-		Type:               "Ready",
+		Type:               conditionType,
 		Status:             status,
 		Reason:             reason,
 		Message:            message,
@@ -277,11 +449,82 @@ func (r *PostgresClusterReconciler) setCondition(postgresCluster *enterprisev4.P
 	})
 }
 
+// syncPoolerStatus populates ConnectionPoolerStatus and the PoolerReady condition.
+// It returns true when all poolers are ready, false otherwise.
+// The caller decides how pooler readiness affects the overall phase.
+func (r *PostgresClusterReconciler) syncPoolerStatus(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster) bool {
+	rwPooler := &cnpgv1.Pooler{}
+	rwErr := r.Get(ctx, types.NamespacedName{
+		Name:      poolerResourceName(postgresCluster.Name, "rw"),
+		Namespace: postgresCluster.Namespace,
+	}, rwPooler)
+
+	roPooler := &cnpgv1.Pooler{}
+	roErr := r.Get(ctx, types.NamespacedName{
+		Name:      poolerResourceName(postgresCluster.Name, "ro"),
+		Namespace: postgresCluster.Namespace,
+	}, roPooler)
+
+	postgresCluster.Status.ConnectionPoolerStatus = &enterprisev4.ConnectionPoolerStatus{
+		Enabled: true,
+	}
+
+	rwReady := r.isPoolerReady(rwPooler, rwErr)
+	roReady := r.isPoolerReady(roPooler, roErr)
+
+	if rwReady && roReady {
+		rwDesired, rwScheduled := r.getPoolerInstanceCount(rwPooler)
+		roDesired, roScheduled := r.getPoolerInstanceCount(roPooler)
+		r.setCondition(postgresCluster, "PoolerReady", metav1.ConditionTrue, "AllInstancesReady", fmt.Sprintf("RW: %d/%d, RO: %d/%d", rwScheduled, rwDesired, roScheduled, roDesired))
+		return true
+	}
+
+	rwStatus := r.getPoolerStatusString(rwPooler, rwErr)
+	roStatus := r.getPoolerStatusString(roPooler, roErr)
+	r.setCondition(postgresCluster, "PoolerReady", metav1.ConditionFalse, "PoolersNotReady", fmt.Sprintf("RW: %s, RO: %s", rwStatus, roStatus))
+	return false
+}
+
+// isPoolerReady checks if a pooler has all instances scheduled.
+// Note: CNPG PoolerStatus only tracks scheduled instances, not ready pods.
+func (r *PostgresClusterReconciler) isPoolerReady(pooler *cnpgv1.Pooler, err error) bool {
+	if err != nil {
+		return false
+	}
+	desiredInstances := int32(1)
+	if pooler.Spec.Instances != nil {
+		desiredInstances = *pooler.Spec.Instances
+	}
+	return pooler.Status.Instances >= desiredInstances
+}
+
+// getPoolerInstanceCount returns the number of scheduled instances for a pooler.
+func (r *PostgresClusterReconciler) getPoolerInstanceCount(pooler *cnpgv1.Pooler) (desired int32, scheduled int32) {
+	desired = int32(1)
+	if pooler.Spec.Instances != nil {
+		desired = *pooler.Spec.Instances
+	}
+	return desired, pooler.Status.Instances
+}
+
+// getPoolerStatusString returns a human-readable status string for a pooler.
+func (r *PostgresClusterReconciler) getPoolerStatusString(pooler *cnpgv1.Pooler, err error) string {
+	if apierrors.IsNotFound(err) {
+		return "not found"
+	}
+	if err != nil {
+		return "error"
+	}
+	desired, scheduled := r.getPoolerInstanceCount(pooler)
+	return fmt.Sprintf("%d/%d", scheduled, desired)
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterprisev4.PostgresCluster{}).
 		Owns(&cnpgv1.Cluster{}).
+		Owns(&cnpgv1.Pooler{}).
 		Named("postgresCluster").
 		Complete(r)
 }
