@@ -313,6 +313,7 @@ SQS message queue inputs can be found in the table below.
 | region   | string | [Required] Region where the queue is located  |
 | endpoint   | string | [Optional, if not provided formed based on region] AWS SQS Service endpoint
 | dlq   | string | [Required] Name of the dead letter queue |
+| remoteQueueType | string | [Optional] Splunk remote queue type. Allowed values: `sqs_smartbus`, `sqs_smartbus_cp`. Defaults to `sqs_smartbus`. |
 
 Change of any of the queue inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
 

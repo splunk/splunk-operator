@@ -78,6 +78,13 @@ spec:
                     description: Name of the queue
                     minLength: 1
                     type: string
+                  remoteQueueType:
+                    default: sqs_smartbus
+                    description: Splunk remote queue type. Defaults to sqs_smartbus.
+                    enum:
+                    - sqs_smartbus
+                    - sqs_smartbus_cp
+                    type: string
                   volumes:
                     description: List of remote storage volumes
                     items:

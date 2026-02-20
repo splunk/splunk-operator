@@ -47,6 +47,7 @@ SQS message queue inputs can be found in the table below.
 | authRegion   | string | [Required] Region where the queue is located  |
 | endpoint   | string | [Optional, if not provided formed based on authRegion] AWS SQS Service endpoint
 | dlq   | string | [Required] Name of the dead letter queue |
+| remoteQueueType | string | [Optional] Splunk remote queue type. Allowed values: `sqs_smartbus`, `sqs_smartbus_cp`. Defaults to `sqs_smartbus`. |
 | volumes | []VolumeSpec | [Optional] List of remote storage volumes used to mount the credentials for queue and bucket access (must contain s3_access_key and s3_secret_key) |
 
 **SOK doesn't support update of any of the Queue inputs except from the volumes which allow the change of secrets.**

@@ -65,6 +65,12 @@ type SQSSpec struct {
 	Endpoint string `json:"endpoint"`
 
 	// +optional
+	// +kubebuilder:validation:Enum=sqs_smartbus;sqs_smartbus_cp
+	// +kubebuilder:default=sqs_smartbus
+	// Splunk remote queue type. Defaults to sqs_smartbus.
+	RemoteQueueType string `json:"remoteQueueType,omitempty"`
+
+	// +optional
 	// List of remote storage volumes
 	VolList []VolumeSpec `json:"volumes,omitempty"`
 }

@@ -29,6 +29,9 @@ spec:
     {{- if .authRegion }}
     authRegion: {{ .authRegion | quote }}
     {{- end }}
+    {{- if .remoteQueueType }}
+    remoteQueueType: {{ .remoteQueueType | quote }}
+    {{- end }}
     {{- if .volumes }}
     volumes:
     {{ toYaml . | indent 4 }}

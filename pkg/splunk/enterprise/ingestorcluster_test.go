@@ -478,6 +478,64 @@ func TestGetQueueAndPipelineInputsForIngestorConfFiles(t *testing.T) {
 	}, pipelineInputs)
 }
 
+func TestGetQueueAndPipelineInputsForIngestorConfFilesWithRemoteQueueTypeCP(t *testing.T) {
+	provider := "sqs_smartbus_cp"
+
+	queue := enterpriseApi.Queue{
+		Spec: enterpriseApi.QueueSpec{
+			Provider: "sqs",
+			SQS: enterpriseApi.SQSSpec{
+				Name:            "test-queue",
+				AuthRegion:      "us-west-2",
+				Endpoint:        "https://sqs.us-west-2.amazonaws.com",
+				DLQ:             "sqs-dlq-test",
+				RemoteQueueType: "sqs_smartbus_cp",
+			},
+		},
+	}
+
+	os := enterpriseApi.ObjectStorage{
+		Spec: enterpriseApi.ObjectStorageSpec{
+			Provider: "s3",
+			S3: enterpriseApi.S3Spec{
+				Endpoint: "https://s3.us-west-2.amazonaws.com",
+				Path:     "bucket/key",
+			},
+		},
+	}
+
+	key := "key"
+	secret := "secret"
+
+	queueInputs, pipelineInputs := getQueueAndPipelineInputsForIngestorConfFiles(&queue.Spec, &os.Spec, key, secret)
+
+	assert.Equal(t, 12, len(queueInputs))
+	assert.Equal(t, [][]string{
+		{"remote_queue.type", provider},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
+		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), "s3://" + os.Spec.S3.Path},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
+		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
+		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
+		{fmt.Sprintf("remote_queue.%s.send_interval", provider), "5s"},
+		{fmt.Sprintf("remote_queue.%s.access_key", provider), key},
+		{fmt.Sprintf("remote_queue.%s.secret_key", provider), secret},
+	}, queueInputs)
+
+	assert.Equal(t, 6, len(pipelineInputs))
+	assert.Equal(t, [][]string{
+		{"pipeline:remotequeueruleset", "disabled", "false"},
+		{"pipeline:ruleset", "disabled", "true"},
+		{"pipeline:remotequeuetyping", "disabled", "false"},
+		{"pipeline:remotequeueoutput", "disabled", "false"},
+		{"pipeline:typing", "disabled", "true"},
+		{"pipeline:indexerPipe", "disabled", "true"},
+	}, pipelineInputs)
+}
+
 func TestUpdateIngestorConfFiles(t *testing.T) {
 	c := spltest.NewMockClient()
 	ctx := context.TODO()
