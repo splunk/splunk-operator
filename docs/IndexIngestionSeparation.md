@@ -13,6 +13,10 @@ This separation enables:
 - Data durability: Off‑load buffer management and retry logic to a durable message queue.
 - Operational clarity: Separate monitoring dashboards for ingestion throughput vs indexing latency.
 
+## Splunk Support
+
+These features are supported for Splunk 10.2 and above versions.
+
 # Important Note
 
 > [!WARNING]
