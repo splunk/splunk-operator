@@ -1405,7 +1405,7 @@ func getQueueAndObjectStorageInputsForIndexerConfFiles(queue *enterpriseApi.Queu
 	} else if queue.Provider == "sqs_cp" {
 		queueProvider = "sqs_smartbus_cp"
 	}
-	if strings.HasPrefix(queue.Provider, "sqs") {
+	if queue.Provider == "sqs" || queue.Provider == "sqs_cp" {
 		authRegion = queue.SQS.AuthRegion
 		endpoint = queue.SQS.Endpoint
 		dlq = queue.SQS.DLQ

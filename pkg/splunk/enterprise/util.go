@@ -2670,7 +2670,7 @@ func ResolveQueueAndObjectStorage(ctx context.Context, c splcommon.ControllerCli
 		}
 	}
 
-	if cfg.Queue.Provider == "sqs" || cfg.Queue.Provider == "sqs_cp" && serviceAccount == "" {
+	if (cfg.Queue.Provider == "sqs" || cfg.Queue.Provider == "sqs_cp") && serviceAccount == "" {
 		for _, vol := range cfg.Queue.SQS.VolList {
 			if vol.SecretRef != "" {
 				accessKey, secretKey, version, err := GetQueueRemoteVolumeSecrets(ctx, vol, c, cr)
