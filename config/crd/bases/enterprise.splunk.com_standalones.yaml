@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.16.1
   name: standalones.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
@@ -347,6 +347,7 @@ spec:
                                     pod labels will be ignored. The default value is empty.
                                     The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                     Also, matchLabelKeys cannot be set when labelSelector isn't set.
+                                    This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                   items:
                                     type: string
                                   type: array
@@ -361,6 +362,7 @@ spec:
                                     pod labels will be ignored. The default value is empty.
                                     The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                     Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
+                                    This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                   items:
                                     type: string
                                   type: array
@@ -526,6 +528,7 @@ spec:
                                 pod labels will be ignored. The default value is empty.
                                 The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                 Also, matchLabelKeys cannot be set when labelSelector isn't set.
+                                This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                               items:
                                 type: string
                               type: array
@@ -540,6 +543,7 @@ spec:
                                 pod labels will be ignored. The default value is empty.
                                 The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                 Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
+                                This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                               items:
                                 type: string
                               type: array
@@ -702,6 +706,7 @@ spec:
                                     pod labels will be ignored. The default value is empty.
                                     The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                     Also, matchLabelKeys cannot be set when labelSelector isn't set.
+                                    This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                   items:
                                     type: string
                                   type: array
@@ -716,6 +721,7 @@ spec:
                                     pod labels will be ignored. The default value is empty.
                                     The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                     Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
+                                    This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                   items:
                                     type: string
                                   type: array
@@ -881,6 +887,7 @@ spec:
                                 pod labels will be ignored. The default value is empty.
                                 The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                 Also, matchLabelKeys cannot be set when labelSelector isn't set.
+                                This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                               items:
                                 type: string
                               type: array
@@ -895,6 +902,7 @@ spec:
                                 pod labels will be ignored. The default value is empty.
                                 The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                 Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
+                                This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                               items:
                                 type: string
                               type: array
@@ -1022,7 +1030,7 @@ spec:
                               type: object
                             type:
                               description: 'Type: enterpriseSecurity for now, can
-                                accommodate itsi etc.. later'
+                                accomodate itsi etc.. later'
                               type: string
                           type: object
                         scope:
@@ -1071,7 +1079,7 @@ spec:
                                 type: string
                             type: object
                           type:
-                            description: 'Type: enterpriseSecurity for now, can accommodate
+                            description: 'Type: enterpriseSecurity for now, can accomodate
                               itsi etc.. later'
                             type: string
                         type: object
@@ -1375,11 +1383,10 @@ spec:
                   environment variables)
                 type: string
               imagePullPolicy:
-                description: 'Sets pull policy for all images ("Always", "Never",
-                  or the default: "IfNotPresent")'
+                description: 'Sets pull policy for all images (either “Always” or
+                  the default: “IfNotPresent”)'
                 enum:
                 - Always
-                - Never
                 - IfNotPresent
                 type: string
               imagePullSecrets:
@@ -2016,12 +2023,13 @@ spec:
                         type: object
                       trafficDistribution:
                         description: |-
-                          TrafficDistribution offers a way to express preferences for how traffic
-                          is distributed to Service endpoints. Implementations can use this field
-                          as a hint, but are not required to guarantee strict adherence. If the
-                          field is not set, the implementation will apply its default routing
-                          strategy. If set to "PreferClose", implementations should prioritize
-                          endpoints that are in the same zone.
+                          TrafficDistribution offers a way to express preferences for how traffic is
+                          distributed to Service endpoints. Implementations can use this field as a
+                          hint, but are not required to guarantee strict adherence. If the field is
+                          not set, the implementation will apply its default routing strategy. If set
+                          to "PreferClose", implementations should prioritize endpoints that are
+                          topologically close (e.g., same zone).
+                          This is an alpha field and requires enabling ServiceTrafficDistribution feature.
                         type: string
                       type:
                         description: |-
@@ -2149,8 +2157,6 @@ spec:
                                     Ports is a list of records of service ports
                                     If used, every port defined in the service should have an entry in it
                                   items:
-                                    description: PortStatus represents the error condition
-                                      of a service port
                                     properties:
                                       error:
                                         description: |-
@@ -2491,6 +2497,7 @@ spec:
                         - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.
 
                         If this value is nil, the behavior is equivalent to the Honor policy.
+                        This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                       type: string
                     nodeTaintsPolicy:
                       description: |-
@@ -2501,6 +2508,7 @@ spec:
                         - Ignore: node taints are ignored. All nodes are included.
 
                         If this value is nil, the behavior is equivalent to the Ignore policy.
+                        This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                       type: string
                     topologyKey:
                       description: |-
@@ -2570,8 +2578,6 @@ spec:
                       description: |-
                         awsElasticBlockStore represents an AWS Disk resource that is attached to a
                         kubelet's host machine and then exposed to the pod.
-                        Deprecated: AWSElasticBlockStore is deprecated. All operations for the in-tree
-                        awsElasticBlockStore type are redirected to the ebs.csi.aws.com CSI driver.
                         More info: https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore
                       properties:
                         fsType:
@@ -2603,10 +2609,8 @@ spec:
                       - volumeID
                       type: object
                     azureDisk:
-                      description: |-
-                        azureDisk represents an Azure Data Disk mount on the host and bind mount to the pod.
-                        Deprecated: AzureDisk is deprecated. All operations for the in-tree azureDisk type
-                        are redirected to the disk.csi.azure.com CSI driver.
+                      description: azureDisk represents an Azure Data Disk mount on
+                        the host and bind mount to the pod.
                       properties:
                         cachingMode:
                           description: 'cachingMode is the Host Caching mode: None,
@@ -2644,10 +2648,8 @@ spec:
                       - diskURI
                       type: object
                     azureFile:
-                      description: |-
-                        azureFile represents an Azure File Service mount on the host and bind mount to the pod.
-                        Deprecated: AzureFile is deprecated. All operations for the in-tree azureFile type
-                        are redirected to the file.csi.azure.com CSI driver.
+                      description: azureFile represents an Azure File Service mount
+                        on the host and bind mount to the pod.
                       properties:
                         readOnly:
                           description: |-
@@ -2666,9 +2668,8 @@ spec:
                       - shareName
                       type: object
                     cephfs:
-                      description: |-
-                        cephFS represents a Ceph FS mount on the host that shares a pod's lifetime.
-                        Deprecated: CephFS is deprecated and the in-tree cephfs type is no longer supported.
+                      description: cephFS represents a Ceph FS mount on the host that
+                        shares a pod's lifetime
                       properties:
                         monitors:
                           description: |-
@@ -2720,8 +2721,6 @@ spec:
                     cinder:
                       description: |-
                         cinder represents a cinder volume attached and mounted on kubelets host machine.
-                        Deprecated: Cinder is deprecated. All operations for the in-tree cinder type
-                        are redirected to the cinder.csi.openstack.org CSI driver.
                         More info: https://examples.k8s.io/mysql-cinder-pd/README.md
                       properties:
                         fsType:
@@ -2831,7 +2830,8 @@ spec:
                       x-kubernetes-map-type: atomic
                     csi:
                       description: csi (Container Storage Interface) represents ephemeral
-                        storage that is handled by certain external CSI drivers.
+                        storage that is handled by certain external CSI drivers (Beta
+                        feature).
                       properties:
                         driver:
                           description: |-
@@ -3297,7 +3297,6 @@ spec:
                       description: |-
                         flexVolume represents a generic volume resource that is
                         provisioned/attached using an exec based plugin.
-                        Deprecated: FlexVolume is deprecated. Consider using a CSIDriver instead.
                       properties:
                         driver:
                           description: driver is the name of the driver to use for
@@ -3343,9 +3342,9 @@ spec:
                       - driver
                       type: object
                     flocker:
-                      description: |-
-                        flocker represents a Flocker volume attached to a kubelet's host machine. This depends on the Flocker control service being running.
-                        Deprecated: Flocker is deprecated and the in-tree flocker type is no longer supported.
+                      description: flocker represents a Flocker volume attached to
+                        a kubelet's host machine. This depends on the Flocker control
+                        service being running
                       properties:
                         datasetName:
                           description: |-
@@ -3361,8 +3360,6 @@ spec:
                       description: |-
                         gcePersistentDisk represents a GCE Disk resource that is attached to a
                         kubelet's host machine and then exposed to the pod.
-                        Deprecated: GCEPersistentDisk is deprecated. All operations for the in-tree
-                        gcePersistentDisk type are redirected to the pd.csi.storage.gke.io CSI driver.
                         More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk
                       properties:
                         fsType:
@@ -3398,7 +3395,7 @@ spec:
                     gitRepo:
                       description: |-
                         gitRepo represents a git repository at a particular revision.
-                        Deprecated: GitRepo is deprecated. To provision a container with a git repo, mount an
+                        DEPRECATED: GitRepo is deprecated. To provision a container with a git repo, mount an
                         EmptyDir into an InitContainer that clones the repo using git, then mount the EmptyDir
                         into the Pod's container.
                       properties:
@@ -3422,7 +3419,6 @@ spec:
                     glusterfs:
                       description: |-
                         glusterfs represents a Glusterfs mount on the host that shares a pod's lifetime.
-                        Deprecated: Glusterfs is deprecated and the in-tree glusterfs type is no longer supported.
                         More info: https://examples.k8s.io/volumes/glusterfs/README.md
                       properties:
                         endpoints:
@@ -3482,7 +3478,7 @@ spec:
                         The types of objects that may be mounted by this volume are defined by the container runtime implementation on a host machine and at minimum must include all valid types supported by the container image field.
                         The OCI object gets mounted in a single directory (spec.containers[*].volumeMounts.mountPath) by merging the manifest layers in the same way as for container images.
                         The volume will be mounted read-only (ro) and non-executable files (noexec).
-                        Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath) before 1.33.
+                        Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath).
                         The field spec.securityContext.fsGroupChangePolicy has no effect on this volume type.
                       properties:
                         pullPolicy:
@@ -3632,9 +3628,8 @@ spec:
                       - claimName
                       type: object
                     photonPersistentDisk:
-                      description: |-
-                        photonPersistentDisk represents a PhotonController persistent disk attached and mounted on kubelets host machine.
-                        Deprecated: PhotonPersistentDisk is deprecated and the in-tree photonPersistentDisk type is no longer supported.
+                      description: photonPersistentDisk represents a PhotonController
+                        persistent disk attached and mounted on kubelets host machine
                       properties:
                         fsType:
                           description: |-
@@ -3650,11 +3645,8 @@ spec:
                       - pdID
                       type: object
                     portworxVolume:
-                      description: |-
-                        portworxVolume represents a portworx volume attached and mounted on kubelets host machine.
-                        Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type
-                        are redirected to the pxd.portworx.com CSI driver when the CSIMigrationPortworx feature-gate
-                        is on.
+                      description: portworxVolume represents a portworx volume attached
+                        and mounted on kubelets host machine
                       properties:
                         fsType:
                           description: |-
@@ -4019,9 +4011,8 @@ spec:
                           x-kubernetes-list-type: atomic
                       type: object
                     quobyte:
-                      description: |-
-                        quobyte represents a Quobyte mount on the host that shares a pod's lifetime.
-                        Deprecated: Quobyte is deprecated and the in-tree quobyte type is no longer supported.
+                      description: quobyte represents a Quobyte mount on the host
+                        that shares a pod's lifetime
                       properties:
                         group:
                           description: |-
@@ -4060,7 +4051,6 @@ spec:
                     rbd:
                       description: |-
                         rbd represents a Rados Block Device mount on the host that shares a pod's lifetime.
-                        Deprecated: RBD is deprecated and the in-tree rbd type is no longer supported.
                         More info: https://examples.k8s.io/volumes/rbd/README.md
                       properties:
                         fsType:
@@ -4133,9 +4123,8 @@ spec:
                       - monitors
                       type: object
                     scaleIO:
-                      description: |-
-                        scaleIO represents a ScaleIO persistent volume attached and mounted on Kubernetes nodes.
-                        Deprecated: ScaleIO is deprecated and the in-tree scaleIO type is no longer supported.
+                      description: scaleIO represents a ScaleIO persistent volume
+                        attached and mounted on Kubernetes nodes.
                       properties:
                         fsType:
                           default: xfs
@@ -4267,9 +4256,8 @@ spec:
                           type: string
                       type: object
                     storageos:
-                      description: |-
-                        storageOS represents a StorageOS volume attached and mounted on Kubernetes nodes.
-                        Deprecated: StorageOS is deprecated and the in-tree storageos type is no longer supported.
+                      description: storageOS represents a StorageOS volume attached
+                        and mounted on Kubernetes nodes.
                       properties:
                         fsType:
                           description: |-
@@ -4314,10 +4302,8 @@ spec:
                           type: string
                       type: object
                     vsphereVolume:
-                      description: |-
-                        vsphereVolume represents a vSphere volume attached and mounted on kubelets host machine.
-                        Deprecated: VsphereVolume is deprecated. All operations for the in-tree vsphereVolume type
-                        are redirected to the csi.vsphere.vmware.com CSI driver.
+                      description: vsphereVolume represents a vSphere volume attached
+                        and mounted on kubelets host machine
                       properties:
                         fsType:
                           description: |-
@@ -4401,7 +4387,7 @@ spec:
                                   type: object
                                 type:
                                   description: 'Type: enterpriseSecurity for now,
-                                    can accommodate itsi etc.. later'
+                                    can accomodate itsi etc.. later'
                                   type: string
                               type: object
                             scope:
@@ -4452,7 +4438,7 @@ spec:
                                 type: object
                               type:
                                 description: 'Type: enterpriseSecurity for now, can
-                                  accommodate itsi etc.. later'
+                                  accomodate itsi etc.. later'
                                 type: string
                             type: object
                           scope:
@@ -4804,7 +4790,7 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    - description: Auxiliary message describing CR status
+    - description: Auxillary message describing CR status
       jsonPath: .status.message
       name: Message
       type: string
@@ -5122,6 +5108,7 @@ spec:
                                     pod labels will be ignored. The default value is empty.
                                     The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                     Also, matchLabelKeys cannot be set when labelSelector isn't set.
+                                    This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                   items:
                                     type: string
                                   type: array
@@ -5136,6 +5123,7 @@ spec:
                                     pod labels will be ignored. The default value is empty.
                                     The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                     Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
+                                    This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                   items:
                                     type: string
                                   type: array
@@ -5301,6 +5289,7 @@ spec:
                                 pod labels will be ignored. The default value is empty.
                                 The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                 Also, matchLabelKeys cannot be set when labelSelector isn't set.
+                                This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                               items:
                                 type: string
                               type: array
@@ -5315,6 +5304,7 @@ spec:
                                 pod labels will be ignored. The default value is empty.
                                 The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                 Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
+                                This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                               items:
                                 type: string
                               type: array
@@ -5477,6 +5467,7 @@ spec:
                                     pod labels will be ignored. The default value is empty.
                                     The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                     Also, matchLabelKeys cannot be set when labelSelector isn't set.
+                                    This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                   items:
                                     type: string
                                   type: array
@@ -5491,6 +5482,7 @@ spec:
                                     pod labels will be ignored. The default value is empty.
                                     The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                     Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
+                                    This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                   items:
                                     type: string
                                   type: array
@@ -5656,6 +5648,7 @@ spec:
                                 pod labels will be ignored. The default value is empty.
                                 The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                 Also, matchLabelKeys cannot be set when labelSelector isn't set.
+                                This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                               items:
                                 type: string
                               type: array
@@ -5670,6 +5663,7 @@ spec:
                                 pod labels will be ignored. The default value is empty.
                                 The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                 Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
+                                This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                               items:
                                 type: string
                               type: array
@@ -5797,7 +5791,7 @@ spec:
                               type: object
                             type:
                               description: 'Type: enterpriseSecurity for now, can
-                                accommodate itsi etc.. later'
+                                accomodate itsi etc.. later'
                               type: string
                           type: object
                         scope:
@@ -5846,7 +5840,7 @@ spec:
                                 type: string
                             type: object
                           type:
-                            description: 'Type: enterpriseSecurity for now, can accommodate
+                            description: 'Type: enterpriseSecurity for now, can accomodate
                               itsi etc.. later'
                             type: string
                         type: object
@@ -6150,11 +6144,10 @@ spec:
                   environment variables)
                 type: string
               imagePullPolicy:
-                description: 'Sets pull policy for all images ("Always", "Never",
-                  or the default: "IfNotPresent")'
+                description: 'Sets pull policy for all images (either “Always” or
+                  the default: “IfNotPresent”)'
                 enum:
                 - Always
-                - Never
                 - IfNotPresent
                 type: string
               imagePullSecrets:
@@ -6791,12 +6784,13 @@ spec:
                         type: object
                       trafficDistribution:
                         description: |-
-                          TrafficDistribution offers a way to express preferences for how traffic
-                          is distributed to Service endpoints. Implementations can use this field
-                          as a hint, but are not required to guarantee strict adherence. If the
-                          field is not set, the implementation will apply its default routing
-                          strategy. If set to "PreferClose", implementations should prioritize
-                          endpoints that are in the same zone.
+                          TrafficDistribution offers a way to express preferences for how traffic is
+                          distributed to Service endpoints. Implementations can use this field as a
+                          hint, but are not required to guarantee strict adherence. If the field is
+                          not set, the implementation will apply its default routing strategy. If set
+                          to "PreferClose", implementations should prioritize endpoints that are
+                          topologically close (e.g., same zone).
+                          This is an alpha field and requires enabling ServiceTrafficDistribution feature.
                         type: string
                       type:
                         description: |-
@@ -6924,8 +6918,6 @@ spec:
                                     Ports is a list of records of service ports
                                     If used, every port defined in the service should have an entry in it
                                   items:
-                                    description: PortStatus represents the error condition
-                                      of a service port
                                     properties:
                                       error:
                                         description: |-
@@ -7266,6 +7258,7 @@ spec:
                         - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.
 
                         If this value is nil, the behavior is equivalent to the Honor policy.
+                        This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                       type: string
                     nodeTaintsPolicy:
                       description: |-
@@ -7276,6 +7269,7 @@ spec:
                         - Ignore: node taints are ignored. All nodes are included.
 
                         If this value is nil, the behavior is equivalent to the Ignore policy.
+                        This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                       type: string
                     topologyKey:
                       description: |-
@@ -7345,8 +7339,6 @@ spec:
                       description: |-
                         awsElasticBlockStore represents an AWS Disk resource that is attached to a
                         kubelet's host machine and then exposed to the pod.
-                        Deprecated: AWSElasticBlockStore is deprecated. All operations for the in-tree
-                        awsElasticBlockStore type are redirected to the ebs.csi.aws.com CSI driver.
                         More info: https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore
                       properties:
                         fsType:
@@ -7378,10 +7370,8 @@ spec:
                       - volumeID
                       type: object
                     azureDisk:
-                      description: |-
-                        azureDisk represents an Azure Data Disk mount on the host and bind mount to the pod.
-                        Deprecated: AzureDisk is deprecated. All operations for the in-tree azureDisk type
-                        are redirected to the disk.csi.azure.com CSI driver.
+                      description: azureDisk represents an Azure Data Disk mount on
+                        the host and bind mount to the pod.
                       properties:
                         cachingMode:
                           description: 'cachingMode is the Host Caching mode: None,
@@ -7419,10 +7409,8 @@ spec:
                       - diskURI
                       type: object
                     azureFile:
-                      description: |-
-                        azureFile represents an Azure File Service mount on the host and bind mount to the pod.
-                        Deprecated: AzureFile is deprecated. All operations for the in-tree azureFile type
-                        are redirected to the file.csi.azure.com CSI driver.
+                      description: azureFile represents an Azure File Service mount
+                        on the host and bind mount to the pod.
                       properties:
                         readOnly:
                           description: |-
@@ -7441,9 +7429,8 @@ spec:
                       - shareName
                       type: object
                     cephfs:
-                      description: |-
-                        cephFS represents a Ceph FS mount on the host that shares a pod's lifetime.
-                        Deprecated: CephFS is deprecated and the in-tree cephfs type is no longer supported.
+                      description: cephFS represents a Ceph FS mount on the host that
+                        shares a pod's lifetime
                       properties:
                         monitors:
                           description: |-
@@ -7495,8 +7482,6 @@ spec:
                     cinder:
                       description: |-
                         cinder represents a cinder volume attached and mounted on kubelets host machine.
-                        Deprecated: Cinder is deprecated. All operations for the in-tree cinder type
-                        are redirected to the cinder.csi.openstack.org CSI driver.
                         More info: https://examples.k8s.io/mysql-cinder-pd/README.md
                       properties:
                         fsType:
@@ -7606,7 +7591,8 @@ spec:
                       x-kubernetes-map-type: atomic
                     csi:
                       description: csi (Container Storage Interface) represents ephemeral
-                        storage that is handled by certain external CSI drivers.
+                        storage that is handled by certain external CSI drivers (Beta
+                        feature).
                       properties:
                         driver:
                           description: |-
@@ -8072,7 +8058,6 @@ spec:
                       description: |-
                         flexVolume represents a generic volume resource that is
                         provisioned/attached using an exec based plugin.
-                        Deprecated: FlexVolume is deprecated. Consider using a CSIDriver instead.
                       properties:
                         driver:
                           description: driver is the name of the driver to use for
@@ -8118,9 +8103,9 @@ spec:
                       - driver
                       type: object
                     flocker:
-                      description: |-
-                        flocker represents a Flocker volume attached to a kubelet's host machine. This depends on the Flocker control service being running.
-                        Deprecated: Flocker is deprecated and the in-tree flocker type is no longer supported.
+                      description: flocker represents a Flocker volume attached to
+                        a kubelet's host machine. This depends on the Flocker control
+                        service being running
                       properties:
                         datasetName:
                           description: |-
@@ -8136,8 +8121,6 @@ spec:
                       description: |-
                         gcePersistentDisk represents a GCE Disk resource that is attached to a
                         kubelet's host machine and then exposed to the pod.
-                        Deprecated: GCEPersistentDisk is deprecated. All operations for the in-tree
-                        gcePersistentDisk type are redirected to the pd.csi.storage.gke.io CSI driver.
                         More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk
                       properties:
                         fsType:
@@ -8173,7 +8156,7 @@ spec:
                     gitRepo:
                       description: |-
                         gitRepo represents a git repository at a particular revision.
-                        Deprecated: GitRepo is deprecated. To provision a container with a git repo, mount an
+                        DEPRECATED: GitRepo is deprecated. To provision a container with a git repo, mount an
                         EmptyDir into an InitContainer that clones the repo using git, then mount the EmptyDir
                         into the Pod's container.
                       properties:
@@ -8197,7 +8180,6 @@ spec:
                     glusterfs:
                       description: |-
                         glusterfs represents a Glusterfs mount on the host that shares a pod's lifetime.
-                        Deprecated: Glusterfs is deprecated and the in-tree glusterfs type is no longer supported.
                         More info: https://examples.k8s.io/volumes/glusterfs/README.md
                       properties:
                         endpoints:
@@ -8257,7 +8239,7 @@ spec:
                         The types of objects that may be mounted by this volume are defined by the container runtime implementation on a host machine and at minimum must include all valid types supported by the container image field.
                         The OCI object gets mounted in a single directory (spec.containers[*].volumeMounts.mountPath) by merging the manifest layers in the same way as for container images.
                         The volume will be mounted read-only (ro) and non-executable files (noexec).
-                        Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath) before 1.33.
+                        Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath).
                         The field spec.securityContext.fsGroupChangePolicy has no effect on this volume type.
                       properties:
                         pullPolicy:
@@ -8407,9 +8389,8 @@ spec:
                       - claimName
                       type: object
                     photonPersistentDisk:
-                      description: |-
-                        photonPersistentDisk represents a PhotonController persistent disk attached and mounted on kubelets host machine.
-                        Deprecated: PhotonPersistentDisk is deprecated and the in-tree photonPersistentDisk type is no longer supported.
+                      description: photonPersistentDisk represents a PhotonController
+                        persistent disk attached and mounted on kubelets host machine
                       properties:
                         fsType:
                           description: |-
@@ -8425,11 +8406,8 @@ spec:
                       - pdID
                       type: object
                     portworxVolume:
-                      description: |-
-                        portworxVolume represents a portworx volume attached and mounted on kubelets host machine.
-                        Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type
-                        are redirected to the pxd.portworx.com CSI driver when the CSIMigrationPortworx feature-gate
-                        is on.
+                      description: portworxVolume represents a portworx volume attached
+                        and mounted on kubelets host machine
                       properties:
                         fsType:
                           description: |-
@@ -8794,9 +8772,8 @@ spec:
                           x-kubernetes-list-type: atomic
                       type: object
                     quobyte:
-                      description: |-
-                        quobyte represents a Quobyte mount on the host that shares a pod's lifetime.
-                        Deprecated: Quobyte is deprecated and the in-tree quobyte type is no longer supported.
+                      description: quobyte represents a Quobyte mount on the host
+                        that shares a pod's lifetime
                       properties:
                         group:
                           description: |-
@@ -8835,7 +8812,6 @@ spec:
                     rbd:
                       description: |-
                         rbd represents a Rados Block Device mount on the host that shares a pod's lifetime.
-                        Deprecated: RBD is deprecated and the in-tree rbd type is no longer supported.
                         More info: https://examples.k8s.io/volumes/rbd/README.md
                       properties:
                         fsType:
@@ -8908,9 +8884,8 @@ spec:
                       - monitors
                       type: object
                     scaleIO:
-                      description: |-
-                        scaleIO represents a ScaleIO persistent volume attached and mounted on Kubernetes nodes.
-                        Deprecated: ScaleIO is deprecated and the in-tree scaleIO type is no longer supported.
+                      description: scaleIO represents a ScaleIO persistent volume
+                        attached and mounted on Kubernetes nodes.
                       properties:
                         fsType:
                           default: xfs
@@ -9042,9 +9017,8 @@ spec:
                           type: string
                       type: object
                     storageos:
-                      description: |-
-                        storageOS represents a StorageOS volume attached and mounted on Kubernetes nodes.
-                        Deprecated: StorageOS is deprecated and the in-tree storageos type is no longer supported.
+                      description: storageOS represents a StorageOS volume attached
+                        and mounted on Kubernetes nodes.
                       properties:
                         fsType:
                           description: |-
@@ -9089,10 +9063,8 @@ spec:
                           type: string
                       type: object
                     vsphereVolume:
-                      description: |-
-                        vsphereVolume represents a vSphere volume attached and mounted on kubelets host machine.
-                        Deprecated: VsphereVolume is deprecated. All operations for the in-tree vsphereVolume type
-                        are redirected to the csi.vsphere.vmware.com CSI driver.
+                      description: vsphereVolume represents a vSphere volume attached
+                        and mounted on kubelets host machine
                       properties:
                         fsType:
                           description: |-
@@ -9176,7 +9148,7 @@ spec:
                                   type: object
                                 type:
                                   description: 'Type: enterpriseSecurity for now,
-                                    can accommodate itsi etc.. later'
+                                    can accomodate itsi etc.. later'
                                   type: string
                               type: object
                             scope:
@@ -9227,7 +9199,7 @@ spec:
                                 type: object
                               type:
                                 description: 'Type: enterpriseSecurity for now, can
-                                  accommodate itsi etc.. later'
+                                  accomodate itsi etc.. later'
                                 type: string
                             type: object
                           scope:
@@ -9406,7 +9378,7 @@ spec:
                     type: integer
                 type: object
               message:
-                description: Auxiliary message describing CR status
+                description: Auxillary message describing CR status
                 type: string
               phase:
                 description: current phase of the standalone instances
