@@ -24,8 +24,8 @@ import (
 
 // PostgresClusterSpec defines the desired state of PostgresCluster.
 // Validation rules ensure immutability of Class, and that Storage and PostgresVersion can only be set once and cannot be removed or downgraded.
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.postgresVersion) || semver(self.postgresVersion, true).compareTo(semver(oldSelf.postgresVersion, true)) >= 0",message="Postgres version cannot be downgraded"
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.storage) || (has(self.storage) && quantity(self.storage).compareTo(quantity(oldSelf.storage)) >= 0)",message="Storage size cannot be removed and can only be increased"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.postgresVersion) || (has(self.postgresVersion) && int(self.postgresVersion.split('.')[0]) >= int(oldSelf.postgresVersion.split('.')[0]))",messageExpression="!has(self.postgresVersion) ? 'postgresVersion cannot be removed once set (was: ' + oldSelf.postgresVersion + ')' : 'postgresVersion major version cannot be downgraded (from: ' + oldSelf.postgresVersion + ', to: ' + self.postgresVersion + ')'"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.storage) || (has(self.storage) && quantity(self.storage).compareTo(quantity(oldSelf.storage)) >= 0)",messageExpression="!has(self.storage) ? 'storage cannot be removed once set (was: ' + string(oldSelf.storage) + ')' : 'storage size cannot be decreased (from: ' + string(oldSelf.storage) + ', to: ' + string(self.storage) + ')'"
 type PostgresClusterSpec struct {
 	// This field is IMMUTABLE after creation.
 	// +kubebuilder:validation:Required
@@ -47,7 +47,6 @@ type PostgresClusterSpec struct {
 	// PostgresVersion is the PostgreSQL version (major or major.minor).
 	// Examples: "18" (latest 18.x), "18.1" (specific minor), "17", "16"
 	// +kubebuilder:validation:Pattern=`^[0-9]+(\.[0-9]+)?$`
-	// +kubebuilder:default="18"
 	// +optional
 	PostgresVersion *string `json:"postgresVersion,omitempty"`
 
