@@ -13,7 +13,6 @@ on:
 jobs:
   build-operator-image-arm-rhel:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_PREFIX }}/${{ github.event.inputs.splunk_image_repository_tag }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
@@ -39,11 +38,12 @@ jobs:
         sudo chmod +x operator-sdk_${OS}_${ARCH}
         sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
+      uses: aws-actions/configure-aws-credentials@v5
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+        role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+        role-session-name: github-${{ github.run_id }}
+        aws-region: ${{ vars.AWS_REGION }}
+        role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
@@ -97,9 +97,6 @@ jobs:
       AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID: ${{ secrets.AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID }}
       AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY: ${{ secrets.AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY }}
     steps:
-      - name: Set Test Cluster Name
-        run: |
-          echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Set Test Cluster Nodes and Parallel Runs
         run: >-
           if grep -q "appframework" <<< "${{ matrix.test }}"; then
@@ -108,6 +105,17 @@ jobs:
           fi
       - name: Checkcout code
         uses: actions/checkout@v2
+      - name: Set Test Cluster Name
+        id: set-cluster-name
+        uses: ./.github/actions/set-cluster-name
+        with:
+          test-type: integration
+          platform: arm-rhel
+          test-name: ${{ matrix.test }}
+          run-id: ${{ github.run_id }}
+      - name: Export cluster name to environment
+        run: |
+          echo "TEST_CLUSTER_NAME=${{ steps.set-cluster-name.outputs.cluster-name }}" >> $GITHUB_ENV
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
@@ -156,11 +164,12 @@ jobs:
         run: |
             echo "SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA" >> $GITHUB_ENV
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v5
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: github-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
@@ -173,7 +182,8 @@ jobs:
           make cluster-up
       - name: install metric server
         run: |
-          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+          curl -LO https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+          kubectl replace --force -f components.yaml || kubectl apply -f components.yaml
       - name: install k8s dashboard
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
@@ -183,6 +193,10 @@ jobs:
           mkdir -p ./bin
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run Integration test
+        timeout-minutes: 240
+        env:
+          TEST_S3_ACCESS_KEY_ID: ${{ vars.TEST_S3_ACCESS_KEY_ID }}
+          TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.TEST_S3_SECRET_ACCESS_KEY }}
         run: |
           make int-test
       - name: Collect Test Logs

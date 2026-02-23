@@ -1,8 +1,15 @@
+---
+title: Change Log
+parent: Reference
+nav_order: 1
+---
+
+
 # Splunk Operator for Kubernetes Change Log
 
 ## 3.0.0 (2025-09-08)
 
-* This is the 3.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 3.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * CSPL-3784: Update base image to latest ubi8-minimal version
 * CSPL-3675 Update Operator-SDK to v1.39
@@ -28,7 +35,7 @@
 
 ## 2.8.1 (2025-07-16)
 
-* This is the 2.8.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 2.8.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * Update `olm.maxOpenShiftVersion` version in operator's bundle
 
@@ -46,7 +53,7 @@
 
 ## 2.8.0 (2025-04-25)
 
-* This is the 2.8.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 2.8.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * CSPL-3586 - Certify FIPS 140-3 Compliance
 
@@ -98,7 +105,7 @@
 
 ## 2.7.1 (2025-01-28)
 
-* This is the 2.7.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 2.7.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * CSPL-3064 - Support for Distroless Image Creation in Splunk Operator for Kubernetes
 
@@ -126,7 +133,7 @@
 
 ## 2.7.0 (2024-12-04)
 
-* This is the 2.7.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 2.7.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * CPSL-2699 - Add Azure and GCP SDK support for AppFramework
 
@@ -160,7 +167,7 @@
 
 ## 2.6.1 (2024-08-27)
 
-* This is the 2.6.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 2.6.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * CSPL-2655 - Add default.meta in the telemetry addressing vulnerability
 
@@ -182,7 +189,7 @@
 
 ## 2.6.0 (2024-07-25)
 
-* This is the 2.6.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 2.6.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * CSPL-2721 - Modified Splunk Enterprise deployments upgrade path to speed up the process, updated ubi base image.
 
@@ -259,7 +266,7 @@ CSPL-2505: Pod Security standard set to restricted mode
 
 ## 2.4.0 (2023-10-13)
 
-* This is the 2.4.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 2.4.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * CSPL-2481: Fixed splunk operator usage examples
 
@@ -303,7 +310,7 @@ CSPL-2505: Pod Security standard set to restricted mode
 
 ## 2.3.0 (2023-06-28)
 
-* This is the 2.3.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 2.3.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.5 image with it
 
@@ -317,7 +324,7 @@ CSPL-2505: Pod Security standard set to restricted mode
 
 ## 2.2.1 (2023-03-13)
 
-* This is the 2.2.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 2.2.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.3-a2 image with it
 
@@ -327,7 +334,7 @@ CSPL-2505: Pod Security standard set to restricted mode
 
 ## 2.2.0 (2023-01-25)
 
-* This is the 2.2.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 2.2.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.3-a2 image with it
 
@@ -337,7 +344,7 @@ CSPL-2505: Pod Security standard set to restricted mode
 
 ## 2.1.1 (2022-12-07)
 
-* This is the 2.1.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 2.1.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.2 image with it
 
@@ -351,7 +358,7 @@ CSPL-2505: Pod Security standard set to restricted mode
 
 ## 2.1.0 (2022-11-22)
 
-* This is the 2.1.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 2.1.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.2 image with it
 
@@ -380,7 +387,7 @@ CSPL-2505: Pod Security standard set to restricted mode
 
 ## 2.0.0 (2022-07-26)
 
-* This is the 2.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 2.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.0 image with it
 
@@ -412,7 +419,7 @@ CSPL-2505: Pod Security standard set to restricted mode
 
 ## 1.1.0 (2022-04-12)
 
-* This is the 1.1.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 1.1.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2.6 image with it
 
@@ -443,19 +450,19 @@ CSPL-2505: Pod Security standard set to restricted mode
 * fix: For Minio connections trust admin to pick protocol
 
 ## 1.0.5 (2021-12-17)
-* This is the 1.0.5 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 1.0.5 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2.3.3 image with it
 
 * CSPL-1553: Modify apiVersion in cluster_role.yaml to rbac.authorization.k8s.io/v1 (for compatibility with Kubernetes 1.22+)
 
 ## 1.0.4 (2021-12-13)
-* This is the 1.0.4 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 1.0.4 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2.3.2 image with it
 
 ## 1.0.3 (2021-10-05)
-* This is the 1.0.3 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 1.0.3 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2.2 image with it
 
@@ -476,7 +483,7 @@ CSPL-2505: Pod Security standard set to restricted mode
 * Migration of CI/CD from circleCI to GitHub Actions
 
 ## 1.0.2 (2021-08-20)
-* This is the 1.0.2 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 1.0.2 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2.1-a2 image with it
 
@@ -492,7 +499,7 @@ CSPL-2505: Pod Security standard set to restricted mode
   * CSPL-1250 - [AppFramework] On App install/update to the Search Head Cluster(SHC), the deployer unnecessarily includes the apps which were installed in the previous bundle push along with the new/updated app. This can potentially delay the app install/update process
 
 ## 1.0.1 (2021-06-09)
-* This is the 1.0.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the 1.0.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2.0 image with it
 
@@ -508,7 +515,7 @@ CSPL-2505: Pod Security standard set to restricted mode
 * Functional Test automation increased parallelism
 
 ## 1.0.0 GA(2021-04-19)
-* This is the GA 1.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
+* This is the GA 1.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.1.3 image with it
 
