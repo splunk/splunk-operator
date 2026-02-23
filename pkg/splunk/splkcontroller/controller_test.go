@@ -24,10 +24,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	"testing"
 
-	"k8s.io/client-go/kubernetes/scheme"
-	ctrl2 "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/config"
-
 	"github.com/go-logr/logr"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"

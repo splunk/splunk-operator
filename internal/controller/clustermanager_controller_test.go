@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
-	"github.com/splunk/splunk-operator/internal/controller/testutils"
-
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 
