@@ -31,7 +31,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -45,7 +44,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		RequeueAfter: time.Second * 5,
 	}
 
-	logger := slog.With("func", "ApplyIngestorCluster")
+	logger := slog.With("func", "ApplyIngestorCluster", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
@@ -312,8 +311,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 // getClient for ingestorClusterPodManager returns a SplunkClient for the member n
 func (mgr *ingestorClusterPodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ingestorClusterPodManager.getClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+	logger := slog.With("func", "getClient", "name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
 
 	// Get Pod Name
 	memberName := GetSplunkStatefulsetPodName(SplunkIngestor, mgr.cr.GetName(), n)
@@ -325,7 +323,7 @@ func (mgr *ingestorClusterPodManager) getClient(ctx context.Context, n int32) *s
 	// Retrieve admin password from Pod
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
 	if err != nil {
-		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
+		logger.ErrorContext(ctx, "Couldn't retrieve the admin password from pod", "error", err.Error())
 	}
 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
@@ -363,10 +361,10 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 
 // updateIngestorConfFiles checks if Queue or Pipeline inputs are created for the first time and updates the conf file if so
 func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Context, newCR *enterpriseApi.IngestorCluster, queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string, k8s client.Client) error {
-	logger := slog.With("func", "updateIngestorConfFiles")
+	logger := slog.With("func", "updateIngestorConfFiles", "name", newCR.GetName(), "namespace", newCR.GetNamespace())
 
 	// Only update config for pods that exist
-	readyReplicas := newCR.Status.Replicas
+	readyReplicas := newCR.Status.ReadyReplicas
 
 	// List all pods for this IngestorCluster StatefulSet
 	var updateErr error
@@ -385,14 +383,14 @@ func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Contex
 			if !strings.Contains(input[0], "access_key") && !strings.Contains(input[0], "secret_key") {
 				logger.InfoContext(ctx, "Updating queue input in outputs.conf", "input", input)
 			}
-			if err := splunkClient.UpdateConfFile(logger, ctx, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{input}); err != nil {
+			if err := splunkClient.UpdateConfFile(ctx, logger, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{input}); err != nil {
 				updateErr = err
 			}
 		}
 
 		for _, input := range pipelineInputs {
 			logger.InfoContext(ctx, "Updating pipeline input in default-mode.conf", "input", input)
-			if err := splunkClient.UpdateConfFile(logger, ctx, "default-mode", input[0], [][]string{{input[1], input[2]}}); err != nil {
+			if err := splunkClient.UpdateConfFile(ctx, logger, "default-mode", input[0], [][]string{{input[1], input[2]}}); err != nil {
 				updateErr = err
 			}
 		}

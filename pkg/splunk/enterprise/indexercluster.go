@@ -53,7 +53,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		RequeueAfter: time.Second * 5,
 	}
 
-	logger := slog.With("func", "ApplyIndexerClusterManager")
+	logger := slog.With("func", "ApplyIndexerClusterManager", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
@@ -366,7 +366,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	logger := slog.With("func", "ApplyIndexerCluster")
+	logger := slog.With("func", "ApplyIndexerCluster", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	eventPublisher := GetEventPublisher(ctx, cr)
 	cr.Kind = "IndexerCluster"
@@ -374,6 +374,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// validate and updates defaults for CR
 	err := validateIndexerClusterSpec(ctx, client, cr)
 	if err != nil {
+		eventPublisher.Warning(ctx, "validateIndexerClusterSpec", fmt.Sprintf("validate indexercluster spec failed %s", err.Error()))
+		logger.ErrorContext(ctx, "Failed to validate indexercluster spec", "error", err.Error())
 		return result, err
 	}
 
@@ -926,7 +928,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 			return enterpriseApi.PhaseError, err
 		}
 	} else {
-		mgr.log.Info("Cluster Manager is not ready yet", "reason ", err)
+		mgr.log.InfoContext(ctx, "Cluster Manager is not ready yet", "error", err)
 		return enterpriseApi.PhaseError, err
 	}
 
@@ -1358,7 +1360,7 @@ var newSplunkClientForQueuePipeline = splclient.NewSplunkClient
 
 // updateIndexerConfFiles checks if Queue or Pipeline inputs are created for the first time and updates the conf file if so
 func (mgr *indexerClusterPodManager) updateIndexerConfFiles(ctx context.Context, newCR *enterpriseApi.IndexerCluster, queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string, k8s rclient.Client) error {
-	logger := slog.With("func", "updateIndexerConfFiles")
+	logger := slog.With("func", "updateIndexerConfFiles", "name", newCR.GetName(), "namespace", newCR.GetNamespace())
 
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.ReadyReplicas
@@ -1380,7 +1382,7 @@ func (mgr *indexerClusterPodManager) updateIndexerConfFiles(ctx context.Context,
 			if !strings.Contains(pbVal[0], "access_key") && !strings.Contains(pbVal[0], "secret_key") {
 				logger.InfoContext(ctx, "Updating queue input in outputs.conf", "input", pbVal)
 			}
-			if err := splunkClient.UpdateConfFile(logger, ctx, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{pbVal}); err != nil {
+			if err := splunkClient.UpdateConfFile(ctx, logger, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
@@ -1389,14 +1391,14 @@ func (mgr *indexerClusterPodManager) updateIndexerConfFiles(ctx context.Context,
 			if !strings.Contains(pbVal[0], "access_key") && !strings.Contains(pbVal[0], "secret_key") {
 				logger.InfoContext(ctx, "Updating queue input in inputs.conf", "input", pbVal)
 			}
-			if err := splunkClient.UpdateConfFile(logger, ctx, "inputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{pbVal}); err != nil {
+			if err := splunkClient.UpdateConfFile(ctx, logger, "inputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
 
 		for _, field := range pipelineInputs {
 			logger.InfoContext(ctx, "Updating pipeline input in default-mode.conf", "input", field)
-			if err := splunkClient.UpdateConfFile(logger, ctx, "default-mode", field[0], [][]string{{field[1], field[2]}}); err != nil {
+			if err := splunkClient.UpdateConfFile(ctx, logger, "default-mode", field[0], [][]string{{field[1], field[2]}}); err != nil {
 				updateErr = err
 			}
 		}

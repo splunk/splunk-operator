@@ -307,7 +307,7 @@ func TestGetMonitoringConsoleClient(t *testing.T) {
 			},
 		},
 	}
-	scopedLog := slog.With("name", "TestGetMonitoringConsoleClient")
+	scopedLog := slog.With("func", "TestGetMonitoringConsoleClient", "name", "stack1", "namespace", "test")
 
 	secrets := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -336,7 +336,7 @@ func TestGetClusterManagerClient(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
-	scopedLog := slog.With("name", "TestGetClusterManagerClient")
+	scopedLog := slog.With("func", "TestGetClusterManagerClient", "name", "stack1", "namespace", "test")
 	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -387,7 +387,7 @@ func TestGetClusterManagerClient(t *testing.T) {
 
 func getIndexerClusterPodManager(method string, mockHandlers []spltest.MockHTTPHandler, mockSplunkClient *spltest.MockHTTPClient, replicas int32) *indexerClusterPodManager {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	scopedLog := slog.With("name", method)
+	scopedLog := slog.With("func", method, "name", "stack1", "namespace", "test")
 	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -1029,7 +1029,7 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 func TestApplyIdxcSecret(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	method := "ApplyIdxcSecret"
-	scopedLog := slog.With("name", method)
+	scopedLog := slog.With("func", method, "name", "stack1", "namespace", "test")
 	var initObjectList []client.Object
 
 	ctx := context.TODO()
@@ -2744,7 +2744,7 @@ func TestPasswordSyncCompleted(t *testing.T) {
 	// Initialize a minimal pod manager for ApplyIdxcSecret
 	mgr := &indexerClusterPodManager{
 		c:   client,
-		log: slog.With("name", "TestPasswordSyncCompleted"),
+		log: slog.With("func", "TestPasswordSyncCompleted", "name", idxc.GetName(), "namespace", idxc.GetNamespace()),
 		cr:  &idxc,
 	}
 
@@ -3276,7 +3276,7 @@ func TestIdxcPasswordSyncFailedEvent(t *testing.T) {
 
 	mgr := &indexerClusterPodManager{
 		c:   c,
-		log: slog.With("name", "TestIdxcPasswordSyncFailedEvent"),
+		log: slog.With("func", "TestIdxcPasswordSyncFailedEvent", "name", idxc.GetName(), "namespace", idxc.GetNamespace()),
 		cr:  &idxc,
 		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
 			sc := splclient.NewSplunkClient(managementURI, username, password)
