@@ -22,9 +22,27 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ManagedRole represents a PostgreSQL role to be created and managed in the cluster.
+type ManagedRole struct {
+	// Name of the role/user to create.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	Name string `json:"name"`
+
+	// PasswordSecretRef references a Secret containing the password for this role.
+	// The Secret should have a key "password" with the password value.
+	// +optional
+	PasswordSecretRef *corev1.LocalObjectReference `json:"passwordSecretRef,omitempty"`
+
+	// Ensure controls whether the role should exist (present) or not (absent).
+	// +kubebuilder:validation:Enum=present;absent
+	// +kubebuilder:default=present
+	Ensure string `json:"ensure,omitempty"`
+}
+
 // PostgresClusterSpec defines the desired state of PostgresCluster.
 // Validation rules ensure immutability of Class, and that Storage and PostgresVersion can only be set once and cannot be removed or downgraded.
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.postgresVersion) || semver(self.postgresVersion, true).compareTo(semver(oldSelf.postgresVersion, true)) >= 0",message="Postgres version cannot be downgraded"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.storage) || (has(self.storage) && quantity(self.storage).compareTo(quantity(oldSelf.storage)) >= 0)",message="Storage size cannot be removed and can only be increased"
 type PostgresClusterSpec struct {
 	// This field is IMMUTABLE after creation.
@@ -77,6 +95,14 @@ type PostgresClusterSpec struct {
 	// +kubebuilder:default=false
 	// +optional
 	ConnectionPoolerEnabled *bool `json:"connectionPoolerEnabled,omitempty"`
+
+	// ManagedRoles contains PostgreSQL roles that should be created in the cluster.
+	// This field supports Server-Side Apply with per-role granularity, allowing
+	// multiple PostgresDatabase controllers to manage different roles independently.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	ManagedRoles []ManagedRole `json:"managedRoles,omitempty"`
 }
 
 // PostgresClusterStatus defines the observed state of PostgresCluster.
@@ -99,6 +125,25 @@ type PostgresClusterStatus struct {
 	// Only populated when connection pooler is enabled in the PostgresClusterClass.
 	// +optional
 	ConnectionPoolerStatus *ConnectionPoolerStatus `json:"connectionPoolerStatus,omitempty"`
+
+	// ManagedRolesStatus tracks the reconciliation status of managed roles.
+	// +optional
+	ManagedRolesStatus *ManagedRolesStatus `json:"managedRolesStatus,omitempty"`
+}
+
+// ManagedRolesStatus tracks the state of managed PostgreSQL roles.
+type ManagedRolesStatus struct {
+	// Reconciled contains roles that have been successfully created and are ready.
+	// +optional
+	Reconciled []string `json:"reconciled,omitempty"`
+
+	// Pending contains roles that are being created but not yet ready.
+	// +optional
+	Pending []string `json:"pending,omitempty"`
+
+	// Failed contains roles that failed to reconcile with error messages.
+	// +optional
+	Failed map[string]string `json:"failed,omitempty"`
 }
 
 // ConnectionPoolerStatus contains the observed state of the connection pooler.
