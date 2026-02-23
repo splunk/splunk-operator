@@ -186,7 +186,7 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						continue
 					}
 
-					if queue.Spec.Provider != "sqs" {
+					if queue.Spec.Provider != "sqs" && queue.Spec.Provider != "sqs_cp" {
 						continue
 					}
 

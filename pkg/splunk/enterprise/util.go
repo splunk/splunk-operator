@@ -2639,7 +2639,7 @@ func ResolveQueueAndObjectStorage(ctx context.Context, c splcommon.ControllerCli
 		}
 		cfg.Queue = queue.Spec
 	}
-	if cfg.Queue.Provider == "sqs" {
+	if cfg.Queue.Provider == "sqs" || cfg.Queue.Provider == "sqs_cp" {
 		if cfg.Queue.SQS.Endpoint == "" && cfg.Queue.SQS.AuthRegion != "" {
 			ep, err := resolveSQSEndpoint(ctx, cfg.Queue.SQS.AuthRegion)
 			if err != nil {
@@ -2670,7 +2670,7 @@ func ResolveQueueAndObjectStorage(ctx context.Context, c splcommon.ControllerCli
 		}
 	}
 
-	if cfg.Queue.Provider == "sqs" && serviceAccount == "" {
+	if cfg.Queue.Provider == "sqs" || cfg.Queue.Provider == "sqs_cp" && serviceAccount == "" {
 		for _, vol := range cfg.Queue.SQS.VolList {
 			if vol.SecretRef != "" {
 				accessKey, secretKey, version, err := GetQueueRemoteVolumeSecrets(ctx, vol, c, cr)
