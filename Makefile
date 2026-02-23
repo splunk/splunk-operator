@@ -59,7 +59,9 @@ BUNDLE_IMG ?= ${IMAGE_TAG_BASE}-bundle:v${VERSION}
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.31.0
+# Automatically derive the version from go.mod
+ENVTEST_VERSION := $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
+ENVTEST_K8S_VERSION := $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
 
 ignore-not-found ?= True
 
@@ -135,9 +137,18 @@ scheck: ## Run static check against code
 vet: setup/ginkgo	 ## Run go vet against code.
 	go vet ./...
 
-test: manifests generate fmt vet envtest ## Run tests.
+test: manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=unit_test.xml --output-dir=`pwd` -vv --trace --keep-going --timeout=3h --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/client ./pkg/splunk/util ./internal/controller ./pkg/splunk/splkcontroller
 
+
+##@ Documentation
+
+docs-preview: ## Preview documentation locally with Jekyll (requires Ruby and bundler)
+	@echo "Installing dependencies locally..."
+	@cd docs && bundle install --path vendor/bundle
+	@echo "Starting Jekyll server for documentation preview..."
+	@cd docs && bundle exec jekyll serve --livereload
+	@echo "Documentation available at http://localhost:4000/splunk-operator"
 
 ##@ Build
 
@@ -158,12 +169,12 @@ docker-push: ## Push docker image with the manager.
 # Defaults:
 #   Build Platform: linux/amd64,linux/arm64
 #   Build Base OS: registry.access.redhat.com/ubi8/ubi-minimal
-#   Build Base OS Version: 8.10-1755105495
+#   Build Base OS Version: 8.10-1770223153
 # Pass only what is required, the rest will be defaulted
 # Setup defaults for build arguments
 PLATFORMS ?= linux/amd64,linux/arm64
 BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal
-BASE_IMAGE_VERSION ?= 8.10-1755105495
+BASE_IMAGE_VERSION ?= 8.10-1770223153
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
@@ -174,15 +185,13 @@ docker-buildx:
         	docker buildx use project-v3-builder; \
         if echo "${BASE_IMAGE}" | grep -q "distroless"; then \
             DOCKERFILE="Dockerfile.distroless"; \
-            BUILD_TAG="${IMG}-distroless"; \
         else \
             DOCKERFILE="Dockerfile"; \
-            BUILD_TAG="${IMG}"; \
         fi; \
         docker buildx build --push --platform="${PLATFORMS}" \
             --build-arg BASE_IMAGE="${BASE_IMAGE}" \
             --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
-            --tag "$$BUILD_TAG" -f "$$DOCKERFILE" .; \
+            --tag "${IMG}" -f "$$DOCKERFILE" .; \
         - docker buildx rm project-v3-builder || true
 
 
@@ -217,7 +226,8 @@ $(LOCALBIN):
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.3
-CONTROLLER_TOOLS_VERSION ?= v0.16.1
+CONTROLLER_TOOLS_VERSION ?= v0.18.0
+GOLANGCI_LINT_VERSION ?= v2.1.0
 
 CONTROLLER_GEN = $(LOCALBIN)/controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
@@ -234,6 +244,44 @@ ENVTEST = $(LOCALBIN)/setup-envtest
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+
+.PHONY: setup-envtest
+setup-envtest: envtest ## Set up ENVTEST binaries for the correct version
+	@$(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path || { \
+	  echo "Error setting up envtest"; exit 1; }
+
+GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
+$(GOLANGCI_LINT): $(LOCALBIN)
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+.PHONY: lint
+lint: golangci-lint ## Run golangci-lint linter
+	$(GOLANGCI_LINT) run
+
+.PHONY: lint-fix
+lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
+	$(GOLANGCI_LINT) run --fix
+
+.PHONY: lint-config
+lint-config: golangci-lint ## Verify golangci-lint linter configuration
+	$(GOLANGCI_LINT) config verify
+
+# go-install-tool will 'go install' any package with custom target and target binary name
+# $1 - target path with name of binary
+# $2 - package url which can be installed
+# $3 - specific version of package
+define go-install-tool
+@[ -f "$(1)-$(3)" ] || { \
+set -e; \
+package=$(2)@$(3) ;\
+echo "Downloading $${package}" ;\
+rm -f $(1) || true ;\
+GOBIN=$(LOCALBIN) go install $${package} ;\
+mv $(1) $(1)-$(3) ;\
+} ;\
+ln -sf $(1)-$(3) $(1)
+endef
 
 ## Generate bundle manifests and metadata, then validate generated files.
 ## In addition, copy the newly generated crd files to helm crds.
@@ -266,7 +314,7 @@ ifeq (,$(shell which opm 2>/dev/null))
 	set -e ;\
 	mkdir -p $(dir $(OPM)) ;\
 	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
-	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.24.2/$${OS}-$${ARCH}-opm ;\
+	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.55.0/$${OS}-$${ARCH}-opm ;\
 	chmod +x $(OPM) ;\
 	}
 else
