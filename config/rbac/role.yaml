@@ -50,9 +50,12 @@ rules:
   - clustermanagers
   - clustermasters
   - indexerclusters
+  - ingestorclusters
   - licensemanagers
   - licensemasters
   - monitoringconsoles
+  - objectstorages
+  - queues
   - searchheadclusters
   - standalones
   verbs:
@@ -69,9 +72,12 @@ rules:
   - clustermanagers/finalizers
   - clustermasters/finalizers
   - indexerclusters/finalizers
+  - ingestorclusters/finalizers
   - licensemanagers/finalizers
   - licensemasters/finalizers
   - monitoringconsoles/finalizers
+  - objectstorages/finalizers
+  - queues/finalizers
   - searchheadclusters/finalizers
   - standalones/finalizers
   verbs:
@@ -82,9 +88,12 @@ rules:
   - clustermanagers/status
   - clustermasters/status
   - indexerclusters/status
+  - ingestorclusters/status
   - licensemanagers/status
   - licensemasters/status
   - monitoringconsoles/status
+  - objectstorages/status
+  - queues/status
   - searchheadclusters/status
   - standalones/status
   verbs:

@@ -10,8 +10,9 @@ resources:
 - bases/enterprise.splunk.com_monitoringconsoles.yaml
 - bases/enterprise.splunk.com_searchheadclusters.yaml
 - bases/enterprise.splunk.com_standalones.yaml
-- bases/platform.splunk.com_platformconfigs.yaml
-- bases/platform.splunk.com_tenantconfigs.yaml
+- bases/enterprise.splunk.com_ingestorclusters.yaml
+- bases/enterprise.splunk.com_queues.yaml
+- bases/enterprise.splunk.com_objectstorages.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 
@@ -22,6 +23,7 @@ patchesStrategicMerge:
 - patches/webhook_in_clustermanagers.yaml
 - patches/webhook_in_clustermasters.yaml
 - patches/webhook_in_indexerclusters.yaml
+- patches/webhook_in_ingestorclusters.yaml
 - patches/webhook_in_licensemasters.yaml
 - patches/webhook_in_licensemanagers.yaml
 - patches/webhook_in_monitoringconsoles.yaml
