@@ -306,7 +306,6 @@ func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec, customDefinedParameters m
 		normalizedConf.PgHBA = spec.PostgresConfiguration.PgHBA
 	}
 
-	// To prevent nil pointer dereference in case Bootstrap or InitDB is nil, we need to check for that before accessing the fields.
 	if spec.Bootstrap != nil && spec.Bootstrap.InitDB != nil {
 		normalizedConf.DefaultDatabase = spec.Bootstrap.InitDB.Database
 		normalizedConf.Owner = spec.Bootstrap.InitDB.Owner
