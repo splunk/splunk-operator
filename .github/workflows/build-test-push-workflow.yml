@@ -59,15 +59,27 @@ jobs:
           make setup/ginkgo
           go mod tidy
       - name: Run Unit Tests
+        id: run-unit-tests
         run: |
-          make test
+          mkdir -p /tmp/ci-diagnostics/unit-tests
+          set +e
+          make test 2>&1 | tee /tmp/ci-diagnostics/unit-tests/unit-test-console.log
+          test_exit=${PIPESTATUS[0]}
+          echo "test_exit_code=${test_exit}" >> "$GITHUB_OUTPUT"
+          exit ${test_exit}
       - name: Run Code Coverage
+        if: ${{ success() }}
         run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
-      - name: Upload Coverage artifacts
+      - name: Upload Unit Test artifacts
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4.4.0
         with:
-          name: coverage.out
-          path: coverage.out
+          name: unit-test-artifacts
+          path: |
+            /tmp/ci-diagnostics/unit-tests/**
+            unit_test.xml
+            coverage.out
+          if-no-files-found: warn
   build-operator-image:
     runs-on: ubuntu-latest
     needs: unit-tests
@@ -315,18 +327,119 @@ jobs:
           TEST_S3_ACCESS_KEY_ID: ${{ vars.TEST_S3_ACCESS_KEY_ID }}
           TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.TEST_S3_SECRET_ACCESS_KEY }}
         run: |
-          make int-test
-      - name: Collect Test Logs
-        if: ${{ always() }}
+          mkdir -p /tmp/ci-diagnostics/${{ matrix.test }}
+          set +e
+          make int-test 2>&1 | tee /tmp/ci-diagnostics/${{ matrix.test }}/int-test-console.log
+          test_exit=${PIPESTATUS[0]}
+          echo "test_exit_code=${test_exit}" >> "$GITHUB_OUTPUT"
+          if [[ ${test_exit} -ne 0 ]]; then
+            echo "::group::Quick failure diagnostics for Explain Error"
+            kubectl get nodes -o wide || true
+            kubectl get pods -A -o wide || true
+            kubectl get events -A --sort-by=.lastTimestamp | tail -n 200 || true
+            while read -r ns pod; do
+              [[ -z "${ns}" || -z "${pod}" ]] && continue
+              echo "---- ${ns}/${pod} ----"
+              kubectl logs -n "${ns}" "${pod}" --all-containers=true --tail=200 || true
+            done < <(kubectl get pods -A --no-headers 2>/dev/null | awk '/splunk|operator/ {print $1 " " $2}' | head -n 20)
+            echo "::endgroup::"
+          fi
+          exit ${test_exit}
+      - name: Collect Smoke Test Diagnostics
+        if: ${{ failure() || cancelled() }}
         run: |
-          mkdir -p /tmp/pod_logs
-          find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
-      - name: Archive Pod Logs
-        if: ${{ always() }}
+          DIAG_DIR="/tmp/ci-diagnostics/${{ matrix.test }}"
+          mkdir -p "${DIAG_DIR}/cluster" "${DIAG_DIR}/pod-logs" "${DIAG_DIR}/test-logs" "${DIAG_DIR}/splunkd-logs"
+          {
+            echo "run_id=${{ github.run_id }}"
+            echo "run_attempt=${{ github.run_attempt }}"
+            echo "job=${{ github.job }}"
+            echo "matrix_test=${{ matrix.test }}"
+            echo "cluster_name=${TEST_CLUSTER_NAME}"
+            echo "smoke_test_outcome=${{ steps.smoketest.outcome }}"
+            echo "smoke_test_exit_code=${{ steps.smoketest.outputs.test_exit_code }}"
+            date -u +"collected_at_utc=%Y-%m-%dT%H:%M:%SZ"
+          } > "${DIAG_DIR}/metadata.txt"
+
+          find . -type f \( -name "*.log" -o -name "inttest-*.xml" -o -name "*junit*.xml" \) -print0 | while IFS= read -r -d '' file; do
+            target="${DIAG_DIR}/test-logs/${file#./}"
+            mkdir -p "$(dirname "${target}")"
+            cp "${file}" "${target}"
+          done
+
+          kubectl version > "${DIAG_DIR}/cluster/kubectl-version.txt" 2>&1 || true
+          kubectl config current-context > "${DIAG_DIR}/cluster/current-context.txt" 2>&1 || true
+          kubectl get nodes -o wide > "${DIAG_DIR}/cluster/nodes.txt" 2>&1 || true
+          kubectl get namespaces -o wide > "${DIAG_DIR}/cluster/namespaces.txt" 2>&1 || true
+          kubectl get pods -A -o wide > "${DIAG_DIR}/cluster/pods-wide.txt" 2>&1 || true
+          kubectl get pvc -A > "${DIAG_DIR}/cluster/pvc.txt" 2>&1 || true
+          kubectl get statefulsets -A -o wide > "${DIAG_DIR}/cluster/statefulsets.txt" 2>&1 || true
+          kubectl get events -A --sort-by=.lastTimestamp > "${DIAG_DIR}/cluster/events.txt" 2>&1 || true
+          kubectl describe nodes > "${DIAG_DIR}/cluster/nodes-describe.txt" 2>&1 || true
+
+          mapfile -t target_namespaces < <(
+            {
+              echo "splunk-operator"
+              if [[ -n "${TEST_CLUSTER_NAME}" ]]; then
+                echo "${TEST_CLUSTER_NAME}"
+              fi
+              kubectl get namespaces -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep -E 'splunk|test' || true
+              kubectl get pods -A --no-headers 2>/dev/null | awk '/splunk|operator/ {print $1}' || true
+            } | awk 'NF' | sort -u
+          )
+
+          for ns in "${target_namespaces[@]}"; do
+            mkdir -p "${DIAG_DIR}/cluster/${ns}" "${DIAG_DIR}/pod-logs/${ns}"
+            kubectl get all -n "${ns}" -o wide > "${DIAG_DIR}/cluster/${ns}/all.txt" 2>&1 || true
+            kubectl describe all -n "${ns}" > "${DIAG_DIR}/cluster/${ns}/describe-all.txt" 2>&1 || true
+            kubectl get events -n "${ns}" --sort-by=.lastTimestamp > "${DIAG_DIR}/cluster/${ns}/events.txt" 2>&1 || true
+            kubectl get events -n "${ns}" -o yaml > "${DIAG_DIR}/cluster/${ns}/events.yaml" 2>&1 || true
+            while read -r pod; do
+              [[ -z "${pod}" ]] && continue
+              kubectl describe pod -n "${ns}" "${pod}" > "${DIAG_DIR}/cluster/${ns}/${pod}-describe.txt" 2>&1 || true
+              mapfile -t containers < <(kubectl get pod -n "${ns}" "${pod}" -o jsonpath='{range .spec.containers[*]}{.name}{"\n"}{end}' 2>/dev/null || true)
+              for container in "${containers[@]}"; do
+                [[ -z "${container}" ]] && continue
+                kubectl logs -n "${ns}" "${pod}" -c "${container}" --timestamps=true --since=24h > "${DIAG_DIR}/pod-logs/${ns}/${pod}-${container}.log" 2>&1 || true
+                kubectl logs -n "${ns}" "${pod}" -c "${container}" --timestamps=true --previous > "${DIAG_DIR}/pod-logs/${ns}/${pod}-${container}-previous.log" 2>&1 || true
+                # Collect Splunk internal splunkd logs from inside Splunk containers.
+                if [[ "${pod}" == *splunk* || "${container}" == *splunk* ]]; then
+                  SPLUNKD_DIR="${DIAG_DIR}/splunkd-logs/${ns}/${pod}-${container}"
+                  mkdir -p "${SPLUNKD_DIR}"
+                  if kubectl exec -n "${ns}" "${pod}" -c "${container}" -- test -d /opt/splunk/var/log/splunk >/dev/null 2>&1; then
+                    kubectl exec -n "${ns}" "${pod}" -c "${container}" -- ls -1 /opt/splunk/var/log/splunk > "${SPLUNKD_DIR}/directory-list.txt" 2>&1 || true
+                    # Try archiving all splunkd logs first (includes rotated files when present).
+                    kubectl exec -n "${ns}" "${pod}" -c "${container}" -- sh -c 'ls -1 /opt/splunk/var/log/splunk/splunkd*.log >/dev/null 2>&1 && tar -C /opt/splunk/var/log/splunk -czf - splunkd*.log' > "${SPLUNKD_DIR}/splunkd-logs.tar.gz" 2>/dev/null || true
+                    # Always keep direct text copies of current files for quick AI/readability.
+                    while read -r splunk_log; do
+                      [[ -z "${splunk_log}" ]] && continue
+                      log_name="$(basename "${splunk_log}")"
+                      kubectl exec -n "${ns}" "${pod}" -c "${container}" -- sh -c "cat '${splunk_log}'" > "${SPLUNKD_DIR}/${log_name}" 2>&1 || true
+                    done < <(kubectl exec -n "${ns}" "${pod}" -c "${container}" -- sh -c 'ls -1 /opt/splunk/var/log/splunk/splunkd*.log 2>/dev/null || true')
+                  fi
+                fi
+              done
+            done < <(kubectl get pods -n "${ns}" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+          done
+      - name: Add Smoke Test Summary
+        if: ${{ failure() || cancelled() }}
+        run: |
+          {
+            echo "### Smoke Test Diagnostics"
+            echo "- Test: \`${{ matrix.test }}\`"
+            echo "- Smoke test outcome: \`${{ steps.smoketest.outcome }}\`"
+            echo "- Exit code: \`${{ steps.smoketest.outputs.test_exit_code }}\`"
+            echo "- Cluster name: \`${TEST_CLUSTER_NAME}\`"
+            echo "- Artifact: \`smoke-test-diagnostics-${{ matrix.test }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Archive Smoke Test Diagnostics
+        if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@v4.4.0
         with:
-          name: "splunk-pods-logs--artifacts-${{ matrix.test }}"
-          path: "/tmp/pod_logs/**"
+          name: "smoke-test-diagnostics-${{ matrix.test }}"
+          path: "/tmp/ci-diagnostics/${{ matrix.test }}/**"
+          if-no-files-found: warn
+          retention-days: 14
       - name: Cleanup Test Case artifacts
         if: ${{ always() }}
         run: |
