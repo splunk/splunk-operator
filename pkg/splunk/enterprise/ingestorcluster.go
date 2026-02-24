@@ -455,6 +455,10 @@ func getQueueAndObjectStorageInputsForIngestorConfFiles(queue *enterpriseApi.Que
 	dlq := ""
 	if queue.Provider == "sqs" {
 		queueProvider = "sqs_smartbus"
+	} else if queue.Provider == "sqs_cp" {
+		queueProvider = "sqs_smartbus_cp"
+	}
+	if queue.Provider == "sqs" || queue.Provider == "sqs_cp" {
 		authRegion = queue.SQS.AuthRegion
 		endpoint = queue.SQS.Endpoint
 		dlq = queue.SQS.DLQ
@@ -464,7 +468,11 @@ func getQueueAndObjectStorageInputsForIngestorConfFiles(queue *enterpriseApi.Que
 	osEndpoint := ""
 	osProvider := ""
 	if os.Provider == "s3" {
-		osProvider = "sqs_smartbus"
+		if queueProvider == "sqs_smartbus" {
+			osProvider = "sqs_smartbus"
+		} else if queueProvider == "sqs_smartbus_cp" {
+			osProvider = "sqs_smartbus_cp"
+		}
 		osEndpoint = os.S3.Endpoint
 		path = os.S3.Path
 		if !strings.HasPrefix(path, "s3://") {
