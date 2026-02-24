@@ -17,6 +17,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"strings"
 	"time"
@@ -45,8 +46,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		RequeueAfter: time.Second * 5,
 	}
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyIngestorCluster")
+	logger := slog.With("func", "ApplyIngestorCluster", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
@@ -60,8 +60,8 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Validate and updates defaults for CR
 	err = validateIngestorClusterSpec(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "validateIngestorClusterSpec", fmt.Sprintf("validate ingestor cluster spec failed %s", err.Error()))
-		scopedLog.Error(err, "Failed to validate ingestor cluster spec")
+		eventPublisher.Warning(ctx, "ValidateIngestorClusterSpecFailure", fmt.Sprintf("validate Ingestor Cluster spec failed %s", err.Error()))
+		logger.ErrorContext(ctx, "Failed to validate Ingestor Cluster spec", "error", err.Error())
 		return result, err
 	}
 
@@ -334,8 +334,7 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 
 // updateIngestorConfFiles checks if Queue or Pipeline inputs are created for the first time and updates the conf file if so
 func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Context, newCR *enterpriseApi.IngestorCluster, queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string, k8s client.Client) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("updateIngestorConfFiles").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
+	logger := slog.With("func", "updateIngestorConfFiles", "name", newCR.GetName(), "namespace", newCR.GetNamespace())
 
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.Replicas
@@ -354,13 +353,13 @@ func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Contex
 		queueInputs, pipelineInputs := getQueueAndPipelineInputsForIngestorConfFiles(queue, os, accessKey, secretKey)
 
 		for _, input := range queueInputs {
-			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{input}); err != nil {
+			if err := splunkClient.UpdateConfFile(ctx, logger, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{input}); err != nil {
 				updateErr = err
 			}
 		}
 
 		for _, input := range pipelineInputs {
-			if err := splunkClient.UpdateConfFile(scopedLog, "default-mode", input[0], [][]string{{input[1], input[2]}}); err != nil {
+			if err := splunkClient.UpdateConfFile(ctx, logger, "default-mode", input[0], [][]string{{input[1], input[2]}}); err != nil {
 				updateErr = err
 			}
 		}
