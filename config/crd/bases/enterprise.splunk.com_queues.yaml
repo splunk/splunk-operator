@@ -58,6 +58,7 @@ spec:
                 description: Provider of queue resources
                 enum:
                 - sqs
+                - sqs_cp
                 type: string
               sqs:
                 description: sqs specific inputs
@@ -130,8 +131,8 @@ spec:
               rule: self.sqs.dlq == oldSelf.sqs.dlq
             - message: sqs.endpoint is immutable once created
               rule: self.sqs.endpoint == oldSelf.sqs.endpoint
-            - message: sqs must be provided when provider is sqs
-              rule: self.provider != 'sqs' || has(self.sqs)
+            - message: sqs must be provided when provider is sqs or sqs_cp
+              rule: (self.provider != 'sqs' && self.provider != 'sqs_cp') || has(self.sqs)
           status:
             description: QueueStatus defines the observed state of Queue
             properties:
