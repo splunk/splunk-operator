@@ -1,11 +1,11 @@
 apiVersion: enterprise.splunk.com/v4
 kind: PostgresDatabase
 metadata:
-  name: test-postgresdatabase
+  name: splunk-databases
   namespace: default
 spec:
   clusterRef:
-    name: postgres-cluster
+    name: postgresql-cluster-dev
   databases:
     - name: kvstore
       extensions:
@@ -16,5 +16,3 @@ spec:
       extensions:
         - pg_trgm
       deletionPolicy: Delete
-    - name: metrics
-      # No extensions, default deletion policy (Delete)

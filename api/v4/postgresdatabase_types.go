@@ -61,6 +61,9 @@ type PostgresDatabaseStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
 	Databases []DatabaseInfo `json:"databases,omitempty"`
+	// ObservedGeneration represents the .metadata.generation that the status was set based upon.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true
