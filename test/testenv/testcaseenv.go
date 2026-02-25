@@ -344,45 +344,56 @@ func (testenv *TestCaseEnv) createRoleBinding() error {
 }
 
 func (testenv *TestCaseEnv) attachPVCToOperator(name string) error {
-	var err error
-
 	// volume name which refers to PVC to be attached
 	volumeName := "app-staging"
-
 	namespacedName := client.ObjectKey{Name: testenv.operatorName, Namespace: testenv.namespace}
-	operator := &appsv1.Deployment{}
-	err = testenv.GetKubeClient().Get(context.TODO(), namespacedName, operator)
-	if err != nil {
-		testenv.Log.Error(err, "Unable to get operator", "operator name", testenv.operatorName)
-		return err
+
+	retryBackoff := wait.Backoff{
+		Duration: 100 * time.Millisecond,
+		Factor:   2.0,
+		Jitter:   0.1,
+		Steps:    5,
 	}
 
-	volume := corev1.Volume{
-		Name: volumeName,
-		VolumeSource: corev1.VolumeSource{
-			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-				ClaimName: name,
+	return wait.ExponentialBackoff(retryBackoff, func() (bool, error) {
+		operator := &appsv1.Deployment{}
+		err := testenv.GetKubeClient().Get(context.TODO(), namespacedName, operator)
+		if err != nil {
+			testenv.Log.Error(err, "Unable to get operator", "operator name", testenv.operatorName)
+			return false, err
+		}
+
+		volume := corev1.Volume{
+			Name: volumeName,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: name,
+				},
 			},
-		},
-	}
+		}
 
-	operator.Spec.Template.Spec.Volumes = append(operator.Spec.Template.Spec.Volumes, volume)
+		operator.Spec.Template.Spec.Volumes = append(operator.Spec.Template.Spec.Volumes, volume)
 
-	volumeMount := corev1.VolumeMount{
-		Name:      volumeName,
-		MountPath: splcommon.AppDownloadVolume,
-	}
+		volumeMount := corev1.VolumeMount{
+			Name:      volumeName,
+			MountPath: splcommon.AppDownloadVolume,
+		}
 
-	operator.Spec.Template.Spec.Containers[0].VolumeMounts = append(operator.Spec.Template.Spec.Containers[0].VolumeMounts, volumeMount)
+		operator.Spec.Template.Spec.Containers[0].VolumeMounts = append(operator.Spec.Template.Spec.Containers[0].VolumeMounts, volumeMount)
 
-	// update the operator deployment now
-	err = testenv.GetKubeClient().Update(context.TODO(), operator)
-	if err != nil {
-		testenv.Log.Error(err, "Unable to update operator", "operator name", testenv.operatorName)
-		return err
-	}
+		// update the operator deployment now
+		err = testenv.GetKubeClient().Update(context.TODO(), operator)
+		if err != nil {
+			if errors.IsConflict(err) {
+				testenv.Log.Info("Conflict updating operator, retrying", "operator name", testenv.operatorName)
+				return false, nil
+			}
+			testenv.Log.Error(err, "Unable to update operator", "operator name", testenv.operatorName)
+			return false, err
+		}
 
-	return err
+		return true, nil
+	})
 }
 
 func (testenv *TestCaseEnv) createOperator() error {
