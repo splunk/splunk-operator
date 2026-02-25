@@ -44,9 +44,11 @@ import (
 // NewSplunkClientFunc function pointer type
 type NewSplunkClientFunc func(managementURI, username, password string) *splclient.SplunkClient
 
-// applyIdxcQueueConfigToCM writes outputs.conf, inputs.conf, and default-mode.conf into the ClusterManager's
-// smartstore ConfigMap. The existing CM bundle push infrastructure distributes these files to all indexer peers
-// via manager-apps/splunk-operator/local/ — no pod-by-pod REST calls needed.
+// applyIdxcQueueConfigToCM builds and applies the ClusterManager queue config ConfigMap
+// (splunk-<cmName>-clustermanager-queue-config) with outputs.conf, inputs.conf, and default-mode.conf.
+// The CM bundle push infrastructure distributes these files to all indexer peers via manager-apps/
+// splunk-operator/local/ — no pod-by-pod REST calls needed. A dedicated init container on the CM pod
+// symlinks the conf files from the ConfigMap mount before Splunk starts.
 // Returns (true, nil) when content changed (bundle push trigger needed), (false, nil) when unchanged.
 func applyIdxcQueueConfigToCM(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (bool, error) {
 	cmName := cr.Spec.ClusterManagerRef.Name
@@ -64,37 +66,21 @@ func applyIdxcQueueConfigToCM(ctx context.Context, client splcommon.ControllerCl
 		return false, fmt.Errorf("applyIdxcQueueConfigToCM: failed to resolve queue/OS config: %w", err)
 	}
 
-	// Get or create the CM's smartstore ConfigMap
-	configMapName := GetSplunkSmartstoreConfigMapName(cmName, "ClusterManager")
-	namespacedName := types.NamespacedName{Name: configMapName, Namespace: cmNamespace}
-	cm, err := splctrl.GetConfigMap(ctx, client, namespacedName)
-	if err != nil {
-		// ConfigMap doesn't exist yet — create a minimal one with only queue config keys.
-		// ApplySmartstoreConfigMap will add indexes.conf/server.conf when it runs.
-		cm = &corev1.ConfigMap{}
-		cm.Name = configMapName
-		cm.Namespace = cmNamespace
-		cm.Data = make(map[string]string)
-		cm.SetOwnerReferences(append(cm.GetOwnerReferences(), splcommon.AsOwner(cmCR, true)))
+	// Build the dedicated CM queue config ConfigMap data.
+	// outputs.conf and inputs.conf differ: outputs adds send_interval and encoding_format.
+	// default-mode.conf uses isIndexer=true (no indexerPipe stanza).
+	inputs, outputs := getQueueAndObjectStorageInputsForIndexerConfFiles(&qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey)
+	data := map[string]string{
+		"app.conf":          generateQueueConfigAppConf("Splunk Operator ClusterManager Queue Config"),
+		"outputs.conf":      buildQueueConfStanza(qosCfg.Queue.SQS.Name, outputs),
+		"inputs.conf":       buildQueueConfStanza(qosCfg.Queue.SQS.Name, inputs),
+		"default-mode.conf": generateIdxcDefaultModeConf(),
+		"local.meta":        generateQueueConfigLocalMeta(),
 	}
 
-	if cm.Data == nil {
-		cm.Data = make(map[string]string)
-	}
-
-	// Build queue config content
-	outputsConf := generateIdxcOutputsConf(&qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey)
-	inputsConf := generateIdxcInputsConf(&qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey)
-	defaultModeConf := generateIdxcDefaultModeConf()
-
-	// Update queue config keys in the ConfigMap
-	cm.Data["outputs.conf"] = outputsConf
-	cm.Data["inputs.conf"] = inputsConf
-	cm.Data["default-mode.conf"] = defaultModeConf
-
-	changed, err := splctrl.ApplyConfigMap(ctx, client, cm)
+	changed, err := applyQueueConfigMap(ctx, client, GetCMQueueConfigMapName(cmName), cmNamespace, cmCR, data)
 	if err != nil {
-		return false, fmt.Errorf("applyIdxcQueueConfigToCM: failed to apply ConfigMap %s: %w", configMapName, err)
+		return false, fmt.Errorf("applyIdxcQueueConfigToCM: failed to apply ConfigMap: %w", err)
 	}
 
 	if changed {
@@ -1422,30 +1408,6 @@ func getQueueAndPipelineInputsForIndexerConfFiles(queue *enterpriseApi.QueueSpec
 	pipelineInputs = getPipelineInputsForConfFile(true)
 
 	return
-}
-
-// generateIdxcOutputsConf builds outputs.conf INI content for an IndexerCluster peer.
-// Uses the outputs slice (includes send_interval and encoding_format) from getQueueAndObjectStorageInputsForIndexerConfFiles.
-func generateIdxcOutputsConf(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) string {
-	_, outputs := getQueueAndObjectStorageInputsForIndexerConfFiles(queue, os, accessKey, secretKey)
-	var b strings.Builder
-	fmt.Fprintf(&b, "[remote_queue:%s]\n", queue.SQS.Name)
-	for _, kv := range outputs {
-		fmt.Fprintf(&b, "%s = %s\n", kv[0], kv[1])
-	}
-	return b.String()
-}
-
-// generateIdxcInputsConf builds inputs.conf INI content for an IndexerCluster peer.
-// Uses the inputs slice (base keys without send_interval/encoding_format).
-func generateIdxcInputsConf(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) string {
-	inputs, _ := getQueueAndObjectStorageInputsForIndexerConfFiles(queue, os, accessKey, secretKey)
-	var b strings.Builder
-	fmt.Fprintf(&b, "[remote_queue:%s]\n", queue.SQS.Name)
-	for _, kv := range inputs {
-		fmt.Fprintf(&b, "%s = %s\n", kv[0], kv[1])
-	}
-	return b.String()
 }
 
 // generateIdxcDefaultModeConf builds default-mode.conf INI content for an IndexerCluster peer.

@@ -777,16 +777,9 @@ var resetSymbolicLinks = func(ctx context.Context, client splcommon.ControllerCl
 	scopedLog := reqLogger.WithName("ResetSymbolicLinks").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Create command for symbolic link creation.
-	// Use the queue-aware command when queue config keys are present in the smartstore ConfigMap.
 	var command string
 	if crKind == "ClusterManager" || crKind == "ClusterMaster" {
 		command = setSymbolicLinkCmanager
-		smartStoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, SplunkClusterManager)
-		if smartStoreConfigMap != nil {
-			if _, hasQueueConfig := smartStoreConfigMap.Data["outputs.conf"]; hasQueueConfig {
-				command = setSymbolicLinkCmanagerWithQueue
-			}
-		}
 	} else {
 		return fmt.Errorf("invalid CR kind to reset symbolic links")
 	}
@@ -796,6 +789,17 @@ var resetSymbolicLinks = func(ctx context.Context, client splcommon.ControllerCl
 	if err != nil {
 		scopedLog.Error(err, "unable to run command on splunk pod")
 		return err
+	}
+
+	// Also reset queue config symlinks if the queue config ConfigMap exists.
+	queueConfigCMName := GetCMQueueConfigMapName(cr.GetName())
+	_, queueCMErr := splctrl.GetConfigMap(ctx, client, types.NamespacedName{Name: queueConfigCMName, Namespace: cr.GetNamespace()})
+	if queueCMErr == nil {
+		err = runCustomCommandOnSplunkPods(ctx, cr, replicas, setSymbolicLinkCmanagerQueueConfig, podExecClient)
+		if err != nil {
+			scopedLog.Error(err, "unable to reset queue config symbolic links on splunk pod")
+			return err
+		}
 	}
 
 	scopedLog.Info("Reset symbolic links successfully")

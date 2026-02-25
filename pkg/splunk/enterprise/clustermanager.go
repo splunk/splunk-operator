@@ -32,6 +32,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -311,17 +312,88 @@ func getClusterManagerStatefulSet(ctx context.Context, client splcommon.Controll
 	smartStoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, SplunkClusterManager)
 
 	if smartStoreConfigMap != nil {
-		// Use extended init container command when queue config keys are present in the ConfigMap.
-		cmd := commandForCMSmartstore
-		if _, hasQueueConfig := smartStoreConfigMap.Data["outputs.conf"]; hasQueueConfig {
-			cmd = commandForCMSmartstoreAndQueue
-		}
-		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, cmd, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
+		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForCMSmartstore, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
 	}
+
+	// If a queue config ConfigMap exists for this CM, add a separate init container and volume.
+	setupCMQueueConfigInitContainer(ctx, client, cr, ss)
 	// Setup App framework staging volume for apps
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, err
+}
+
+// setupCMQueueConfigInitContainer adds a dedicated init container and ConfigMap volume for queue config
+// to the ClusterManager StatefulSet if the queue config ConfigMap exists. This is a separate init container
+// from the smartstore "init" container — it runs independently and symlinks outputs.conf, inputs.conf,
+// and default-mode.conf from the queue config ConfigMap mount into manager-apps/splunk-operator/local/.
+func setupCMQueueConfigInitContainer(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, ss *appsv1.StatefulSet) {
+	configMapName := GetCMQueueConfigMapName(cr.GetName())
+	// Only add the init container if the queue config ConfigMap exists.
+	_, err := splctrl.GetConfigMap(ctx, client, types.NamespacedName{Name: configMapName, Namespace: cr.GetNamespace()})
+	if err != nil {
+		// ConfigMap doesn't exist yet — no queue config configured for this CM.
+		return
+	}
+
+	// Add queue config ConfigMap volume to pod spec.
+	ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
+		Name: cmQueueConfigVolName,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: configMapName,
+				},
+			},
+		},
+	})
+
+	// Determine etc volume mount name (ephemeral vs PVC)
+	var etcVolMntName string
+	if cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage {
+		etcVolMntName = fmt.Sprintf(splcommon.SplunkMountNamePrefix, splcommon.EtcVolumeStorage)
+	} else {
+		etcVolMntName = fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.EtcVolumeStorage)
+	}
+
+	runAsUser := int64(41812)
+	runAsNonRoot := true
+	privileged := false
+
+	initContainer := corev1.Container{
+		Name:            "init-cm-queue-config",
+		Image:           ss.Spec.Template.Spec.Containers[0].Image,
+		ImagePullPolicy: ss.Spec.Template.Spec.Containers[0].ImagePullPolicy,
+		Command:         []string{"bash", "-c", commandForCMQueueConfig},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: etcVolMntName, MountPath: "/opt/splk/etc"},
+			{Name: cmQueueConfigVolName, MountPath: cmQueueConfigMountPath},
+		},
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("0.25"),
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
+			},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser:                &runAsUser,
+			RunAsNonRoot:             &runAsNonRoot,
+			AllowPrivilegeEscalation: &[]bool{false}[0],
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+				Add:  []corev1.Capability{"NET_BIND_SERVICE"},
+			},
+			Privileged: &privileged,
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			},
+		},
+	}
+	ss.Spec.Template.Spec.InitContainers = append(ss.Spec.Template.Spec.InitContainers, initContainer)
 }
 
 // CheckIfsmartstoreConfigMapUpdatedToPod checks if the smartstore configMap is updated on Pod or not

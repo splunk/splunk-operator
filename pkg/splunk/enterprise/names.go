@@ -134,19 +134,28 @@ const (
 	// setSymbolicLinkCmanager
 	setSymbolicLinkCmanager = "ln -sfn /mnt/splunk-operator/local/indexes.conf /opt/splunk/etc/manager-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splunk/etc/manager-apps/splunk-operator/local/server.conf"
 
-	// commandForCMSmartstoreAndQueue extends commandForCMSmartstore with queue config symlinks.
-	// Used when the ClusterManager's associated IndexerCluster has a QueueRef.
-	commandForCMSmartstoreAndQueue = commandForCMSmartstore +
-		" && ln -sfn " + splcommon.OperatorMountLocalOutputsConf + " " + splcommon.OperatorClusterManagerAppsLocalOutputsConf +
-		" && ln -sfn " + splcommon.OperatorMountLocalInputsConf + " " + splcommon.OperatorClusterManagerAppsLocalInputsConf +
-		" && ln -sfn " + splcommon.OperatorMountLocalDefaultModeConf + " " + splcommon.OperatorClusterManagerAppsLocalDefaultModeConf
+	// cmQueueConfigMapTemplateStr is the ConfigMap name pattern: splunk-<name>-clustermanager-queue-config
+	cmQueueConfigMapTemplateStr = "splunk-%s-clustermanager-queue-config"
 
-	// setSymbolicLinkCmanagerWithQueue extends setSymbolicLinkCmanager with queue config symlinks.
-	// Used in resetSymbolicLinks when queue config is present in the smartstore ConfigMap.
-	setSymbolicLinkCmanagerWithQueue = setSymbolicLinkCmanager +
-		" && ln -sfn " + splcommon.OperatorMountLocalOutputsConf + " " + splcommon.OperatorClusterManagerAppsLocalOutputsConf +
-		" && ln -sfn " + splcommon.OperatorMountLocalInputsConf + " " + splcommon.OperatorClusterManagerAppsLocalInputsConf +
-		" && ln -sfn " + splcommon.OperatorMountLocalDefaultModeConf + " " + splcommon.OperatorClusterManagerAppsLocalDefaultModeConf
+	// cmQueueConfigVolName is the volume name for the CM queue config ConfigMap mount.
+	cmQueueConfigVolName = "mnt-splunk-cm-queue-config"
+
+	// cmQueueConfigMountPath is where the queue config ConfigMap is mounted on the CM pod.
+	cmQueueConfigMountPath = "/mnt/splunk-cm-queue-config"
+
+	// commandForCMQueueConfig is used in a dedicated init container on the ClusterManager pod
+	// to symlink queue config files (outputs.conf, inputs.conf, default-mode.conf) from the
+	// queue config ConfigMap mount into manager-apps/splunk-operator/local/.
+	// This init container runs independently of the smartstore init container.
+	commandForCMQueueConfig = "mkdir -p " + splcommon.OperatorClusterManagerAppsLocal +
+		" && ln -sfn " + cmQueueConfigMountPath + "/outputs.conf " + splcommon.OperatorClusterManagerAppsLocalOutputsConf +
+		" && ln -sfn " + cmQueueConfigMountPath + "/inputs.conf " + splcommon.OperatorClusterManagerAppsLocalInputsConf +
+		" && ln -sfn " + cmQueueConfigMountPath + "/default-mode.conf " + splcommon.OperatorClusterManagerAppsLocalDefaultModeConf
+
+	// setSymbolicLinkCmanagerQueueConfig resets queue config symlinks on the CM pod after a bundle push.
+	setSymbolicLinkCmanagerQueueConfig = "ln -sfn " + cmQueueConfigMountPath + "/outputs.conf " + splcommon.OperatorClusterManagerAppsLocalOutputsConf +
+		" && ln -sfn " + cmQueueConfigMountPath + "/inputs.conf " + splcommon.OperatorClusterManagerAppsLocalInputsConf +
+		" && ln -sfn " + cmQueueConfigMountPath + "/default-mode.conf " + splcommon.OperatorClusterManagerAppsLocalDefaultModeConf
 
 	// configToken used to track if the config is reflecting on Pod or not
 	configToken = "conftoken"
@@ -425,4 +434,9 @@ func GetManagerConfigMapName(namePrefix string) string {
 // GetIngestorQueueConfigMapName returns the name of the ingestor queue config ConfigMap
 func GetIngestorQueueConfigMapName(crName string) string {
 	return fmt.Sprintf(ingestorQueueConfigTemplateStr, crName)
+}
+
+// GetCMQueueConfigMapName returns the name of the ClusterManager queue config ConfigMap
+func GetCMQueueConfigMapName(cmName string) string {
+	return fmt.Sprintf(cmQueueConfigMapTemplateStr, cmName)
 }
