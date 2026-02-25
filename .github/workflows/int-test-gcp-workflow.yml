@@ -25,7 +25,7 @@ jobs:
 
       - name: Load Environment Variables
         id: dotenv
-        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+        uses: falti/dotenv-action@v1.1.5
         with:
           path: .env  # Adjust the path if your dotenv file is located elsewhere
 
@@ -123,7 +123,7 @@ jobs:
 
       - name: Load Environment Variables
         id: dotenv
-        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+        uses: falti/dotenv-action@v1.1.5
         with:
           path: .env
 
@@ -279,12 +279,12 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: integration-test-results-gcp-${{ matrix.test_focus.name }}
-          path: report-junit.xml
+          path: report-junit*.xml
       - name: Publish Integration Test Report
         uses: mikepenz/action-junit-report@v6
         if: always()
         with:
-          report_paths: 'report-junit.xml'
+          report_paths: 'report-junit*.xml'
           check_name: 'Integration Test Results (GCP) - ${{ matrix.test_focus.name }}'
           detailed_summary: true
       - name: Cleanup Test Case Artifacts
