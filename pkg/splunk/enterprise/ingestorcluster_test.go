@@ -615,9 +615,8 @@ func TestUpdateIngestorConfFiles(t *testing.T) {
 			},
 		},
 		Status: enterpriseApi.IngestorClusterStatus{
-			Replicas:                3,
-			ReadyReplicas:           3,
-			CredentialSecretVersion: "123",
+			Replicas:      3,
+			ReadyReplicas: 3,
 		},
 	}
 

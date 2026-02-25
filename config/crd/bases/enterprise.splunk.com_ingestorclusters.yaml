@@ -4612,11 +4612,6 @@ spec:
                     description: App Framework version info for future use
                     type: integer
                 type: object
-              credentialSecretVersion:
-                description: Credential secret version to track changes to the secret
-                  and trigger rolling restart of indexer cluster peers when the secret
-                  is updated
-                type: string
               message:
                 description: Auxillary message describing CR status
                 type: string
@@ -4646,11 +4641,6 @@ spec:
                 type: object
               selector:
                 description: Selector for pods used by HorizontalPodAutoscaler
-                type: string
-              serviceAccount:
-                description: Service account to track changes to the service account
-                  and trigger rolling restart of indexer cluster peers when the service
-                  account is updated
                 type: string
               telAppInstalled:
                 description: Telemetry App installation flag
