@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"reflect"
 	"strings"
@@ -361,6 +362,68 @@ var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.Inges
 		newSplunkClient: newSplunkClient,
 		c:               c,
 	}
+}
+
+// computeIngestorConfChecksum returns a SHA-256 hex digest of the combined conf content.
+// Stored in local.meta so Splunk detects content changes on app load.
+func computeIngestorConfChecksum(outputsConf, defaultModeConf string) string {
+	h := sha256.New()
+	h.Write([]byte(outputsConf))
+	h.Write([]byte(defaultModeConf))
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// generateIngestorOutputsConf builds outputs.conf INI content.
+// Reuses getQueueAndObjectStorageInputsForIngestorConfFiles for key-value pairs.
+// Credentials embedded when non-empty (same pattern as GetSmartstoreVolumesConfig).
+func generateIngestorOutputsConf(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) string {
+	kvPairs := getQueueAndObjectStorageInputsForIngestorConfFiles(queue, os, accessKey, secretKey)
+	var b strings.Builder
+	fmt.Fprintf(&b, "[remote_queue:%s]\n", queue.SQS.Name)
+	for _, kv := range kvPairs {
+		fmt.Fprintf(&b, "%s = %s\n", kv[0], kv[1])
+	}
+	return b.String()
+}
+
+// generateIngestorDefaultModeConf builds default-mode.conf INI content.
+// Reuses getPipelineInputsForConfFile(false) for the six pipeline stanzas.
+func generateIngestorDefaultModeConf() string {
+	pipelineInputs := getPipelineInputsForConfFile(false)
+	var b strings.Builder
+	for _, input := range pipelineInputs {
+		fmt.Fprintf(&b, "[%s]\n%s = %s\n\n", input[0], input[1], input[2])
+	}
+	return b.String()
+}
+
+// generateIngestorAppConf builds app.conf INI content.
+func generateIngestorAppConf() string {
+	return `[install]
+state = enabled
+allows_disable = false
+
+[package]
+check_for_updates = false
+
+[ui]
+is_visible = false
+is_manageable = false
+label = Splunk Operator Ingestor Queue Config
+description = Operator-managed queue and pipeline configuration for IngestorCluster
+`
+}
+
+// generateIngestorLocalMeta builds local.meta with system-level access and embedded checksum.
+// confChecksum is SHA-256 of outputsConf+defaultModeConf — produced by computeIngestorConfChecksum.
+func generateIngestorLocalMeta(confChecksum string) string {
+	return fmt.Sprintf(`[]
+access = read : [ * ], write : [ admin ]
+export = system
+
+[app/install]
+install_source_checksum = %s
+`, confChecksum)
 }
 
 // getPipelineInputsForConfFile returns a list of pipeline inputs for conf file
