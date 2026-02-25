@@ -289,6 +289,9 @@ func TestApplyIndexerCluster(t *testing.T) {
 
 func TestGetMonitoringConsoleClient(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	logger := slog.With("func", "TestGetMonitoringConsoleClient")
+
 	current := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -307,7 +310,6 @@ func TestGetMonitoringConsoleClient(t *testing.T) {
 			},
 		},
 	}
-	logger := slog.With("TestGetMonitoringConsoleClient")
 
 	secrets := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -336,7 +338,7 @@ func TestGetClusterManagerClient(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
-	logger := slog.With("TestGetClusterManagerClient")
+	logger := slog.With("func", "TestGetClusterManagerClient")
 	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -387,7 +389,7 @@ func TestGetClusterManagerClient(t *testing.T) {
 
 func getIndexerClusterPodManager(method string, mockHandlers []spltest.MockHTTPHandler, mockSplunkClient *spltest.MockHTTPClient, replicas int32) *indexerClusterPodManager {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	logger := slog.With(method)
+	logger := slog.With("func", method)
 	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -1029,7 +1031,7 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 func TestApplyIdxcSecret(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	method := "ApplyIdxcSecret"
-	logger := slog.With(method)
+	logger := slog.With("func", method)
 	var initObjectList []client.Object
 
 	ctx := context.TODO()
@@ -2186,6 +2188,92 @@ func TestGetQueueAndPipelineInputsForIndexerConfFiles(t *testing.T) {
 	}, pipelineChangedFields)
 }
 
+func TestGetQueueAndPipelineInputsForIndexerConfFilesSQSCP(t *testing.T) {
+	provider := "sqs_smartbus_cp"
+
+	queue := &enterpriseApi.Queue{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Queue",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "queue",
+		},
+		Spec: enterpriseApi.QueueSpec{
+			Provider: "sqs_cp",
+			SQS: enterpriseApi.SQSSpec{
+				Name:       "test-queue",
+				AuthRegion: "us-west-2",
+				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				DLQ:        "sqs-dlq-test",
+				VolList: []enterpriseApi.VolumeSpec{
+					{SecretRef: "secret"},
+				},
+			},
+		},
+	}
+
+	os := &enterpriseApi.ObjectStorage{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ObjectStorage",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "os",
+		},
+		Spec: enterpriseApi.ObjectStorageSpec{
+			Provider: "s3",
+			S3: enterpriseApi.S3Spec{
+				Endpoint: "https://s3.us-west-2.amazonaws.com",
+				Path:     "bucket/key",
+			},
+		},
+	}
+
+	key := "key"
+	secret := "secret"
+
+	queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields := getQueueAndPipelineInputsForIndexerConfFiles(&queue.Spec, &os.Spec, key, secret)
+	assert.Equal(t, 10, len(queueChangedFieldsInputs))
+	assert.Equal(t, [][]string{
+		{"remote_queue.type", provider},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
+		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), "s3://" + os.Spec.S3.Path},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
+		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
+		{fmt.Sprintf("remote_queue.%s.access_key", provider), key},
+		{fmt.Sprintf("remote_queue.%s.secret_key", provider), secret},
+	}, queueChangedFieldsInputs)
+
+	assert.Equal(t, 12, len(queueChangedFieldsOutputs))
+	assert.Equal(t, [][]string{
+		{"remote_queue.type", provider},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
+		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), "s3://" + os.Spec.S3.Path},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
+		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
+		{fmt.Sprintf("remote_queue.%s.access_key", provider), key},
+		{fmt.Sprintf("remote_queue.%s.secret_key", provider), secret},
+		{fmt.Sprintf("remote_queue.%s.send_interval", provider), "5s"},
+		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
+	}, queueChangedFieldsOutputs)
+
+	assert.Equal(t, 5, len(pipelineChangedFields))
+	assert.Equal(t, [][]string{
+		{"pipeline:remotequeueruleset", "disabled", "false"},
+		{"pipeline:ruleset", "disabled", "true"},
+		{"pipeline:remotequeuetyping", "disabled", "false"},
+		{"pipeline:remotequeueoutput", "disabled", "false"},
+		{"pipeline:typing", "disabled", "true"},
+	}, pipelineChangedFields)
+}
+
 func TestUpdateIndexerConfFiles(t *testing.T) {
 	c := spltest.NewMockClient()
 	ctx := context.TODO()
@@ -2744,7 +2832,7 @@ func TestPasswordSyncCompleted(t *testing.T) {
 	// Initialize a minimal pod manager for ApplyIdxcSecret
 	mgr := &indexerClusterPodManager{
 		c:   client,
-		log: slog.With("TestPasswordSyncCompleted"),
+		log: slog.With("func", "TestPasswordSyncCompleted"),
 		cr:  &idxc,
 	}
 
@@ -3276,7 +3364,7 @@ func TestIdxcPasswordSyncFailedEvent(t *testing.T) {
 
 	mgr := &indexerClusterPodManager{
 		c:   c,
-		log: slog.With("TestIdxcPasswordSyncFailedEvent"),
+		log: slog.With("func", "TestIdxcPasswordSyncFailedEvent"),
 		cr:  &idxc,
 		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
 			sc := splclient.NewSplunkClient(managementURI, username, password)
@@ -3333,4 +3421,80 @@ func (m *mockEventRecorder) Eventf(object pkgruntime.Object, eventType, reason, 
 
 func (m *mockEventRecorder) AnnotatedEventf(object pkgruntime.Object, annotations map[string]string, eventType, reason, messageFmt string, args ...interface{}) {
 	m.events = append(m.events, mockEvent{eventType: eventType, reason: reason, message: fmt.Sprintf(messageFmt, args...)})
+}
+
+func TestIdxcQueueConfigUpdatedEvent(t *testing.T) {
+	ctx := context.TODO()
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	crName := "test-idxc"
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: "test"},
+	}
+	cr.Spec.Replicas = 3
+
+	// Replicate the production conditional from ApplyIndexerClusterManager()
+	ep := GetEventPublisher(ctx, cr)
+	ep.Normal(ctx, "QueueConfigUpdated",
+		fmt.Sprintf("Queue/Pipeline configuration updated for %d indexers", cr.Spec.Replicas))
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "QueueConfigUpdated" {
+			found = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type for QueueConfigUpdated, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, "3") {
+				t.Errorf("Expected event message to contain replica count '3', got: %s", event.message)
+			}
+			if !strings.Contains(event.message, "Queue/Pipeline") {
+				t.Errorf("Expected event message to contain 'Queue/Pipeline', got: %s", event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected QueueConfigUpdated event to be published")
+	}
+}
+
+func TestIdxcIndexersRestartedEvent(t *testing.T) {
+	ctx := context.TODO()
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	crName := "test-idxc"
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: "test"},
+	}
+	cr.Spec.Replicas = 5
+
+	// Replicate the production conditional from ApplyIndexerClusterManager()
+	ep := GetEventPublisher(ctx, cr)
+	ep.Normal(ctx, "IndexersRestarted",
+		fmt.Sprintf("Restarted Splunk on %d indexer pods", cr.Spec.Replicas))
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "IndexersRestarted" {
+			found = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type for IndexersRestarted, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, "5") {
+				t.Errorf("Expected event message to contain replica count '5', got: %s", event.message)
+			}
+			if !strings.Contains(event.message, "Restarted Splunk") {
+				t.Errorf("Expected event message to contain 'Restarted Splunk', got: %s", event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected IndexersRestarted event to be published")
+	}
 }

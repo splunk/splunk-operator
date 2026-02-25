@@ -36,8 +36,8 @@ Queue inputs can be found in the table below. As of now, only SQS provider of me
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
-| provider   | string | [Required] Provider of message queue (Allowed values: sqs) |
-| sqs   | SQS | [Required if provider=sqs] SQS message queue inputs  |
+| provider   | string | [Required] Provider of message queue (Allowed values: sqs, sqs_cp) |
+| sqs   | SQS | [Required if provider=sqs or provider=sqs_cp] SQS message queue inputs  |
 
 SQS message queue inputs can be found in the table below.
 

@@ -1066,7 +1066,7 @@ func (c *SplunkClient) UpdateConfFile(ctx context.Context, logger *slog.Logger, 
 		body = body[:len(body)-1]
 	}
 
-	logger.InfoContext(ctx, "Updating conf file object", "fileName", fileName, "property", property, "body", body)
+	logger.InfoContext(ctx, "Updating conf file object", "fileName", fileName, "property", property)
 	request, err = http.NewRequest("POST", endpoint, strings.NewReader(body))
 	if err != nil {
 		logger.ErrorContext(ctx, "Failed to update conf file object", "fileName", fileName, "property", property, "error", err.Error())

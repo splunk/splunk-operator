@@ -30,11 +30,11 @@ const (
 // +kubebuilder:validation:XValidation:rule="self.sqs.authRegion == oldSelf.sqs.authRegion",message="sqs.authRegion is immutable once created"
 // +kubebuilder:validation:XValidation:rule="self.sqs.dlq == oldSelf.sqs.dlq",message="sqs.dlq is immutable once created"
 // +kubebuilder:validation:XValidation:rule="self.sqs.endpoint == oldSelf.sqs.endpoint",message="sqs.endpoint is immutable once created"
-// +kubebuilder:validation:XValidation:rule="self.provider != 'sqs' || has(self.sqs)",message="sqs must be provided when provider is sqs"
+// +kubebuilder:validation:XValidation:rule="(self.provider != 'sqs' && self.provider != 'sqs_cp') || has(self.sqs)",message="sqs must be provided when provider is sqs or sqs_cp"
 // QueueSpec defines the desired state of Queue
 type QueueSpec struct {
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=sqs
+	// +kubebuilder:validation:Enum=sqs;sqs_cp
 	// Provider of queue resources
 	Provider string `json:"provider"`
 

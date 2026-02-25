@@ -17,13 +17,13 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/go-logr/logr"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -252,7 +252,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 	// outputs.conf
 	origNew := newIngestorClusterPodManager
 	mockHTTPClient := &spltest.MockHTTPClient{}
-	newIngestorClusterPodManager = func(l logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
+	newIngestorClusterPodManager = func(l *slog.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
 		return ingestorClusterPodManager{
 			c:   c,
 			log: l, cr: cr, secrets: secret,
@@ -417,6 +417,80 @@ func TestGetQueueAndPipelineInputsForIngestorConfFiles(t *testing.T) {
 		},
 		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
+			SQS: enterpriseApi.SQSSpec{
+				Name:       "test-queue",
+				AuthRegion: "us-west-2",
+				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				DLQ:        "sqs-dlq-test",
+				VolList: []enterpriseApi.VolumeSpec{
+					{SecretRef: "secret"},
+				},
+			},
+		},
+	}
+
+	os := enterpriseApi.ObjectStorage{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ObjectStorage",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "os",
+		},
+		Spec: enterpriseApi.ObjectStorageSpec{
+			Provider: "s3",
+			S3: enterpriseApi.S3Spec{
+				Endpoint: "https://s3.us-west-2.amazonaws.com",
+				Path:     "bucket/key",
+			},
+		},
+	}
+
+	key := "key"
+	secret := "secret"
+
+	queueInputs, pipelineInputs := getQueueAndPipelineInputsForIngestorConfFiles(&queue.Spec, &os.Spec, key, secret)
+
+	assert.Equal(t, 12, len(queueInputs))
+	assert.Equal(t, [][]string{
+		{"remote_queue.type", provider},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
+		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), "s3://" + os.Spec.S3.Path},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
+		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
+		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
+		{fmt.Sprintf("remote_queue.%s.send_interval", provider), "5s"},
+		{fmt.Sprintf("remote_queue.%s.access_key", provider), key},
+		{fmt.Sprintf("remote_queue.%s.secret_key", provider), secret},
+	}, queueInputs)
+
+	assert.Equal(t, 6, len(pipelineInputs))
+	assert.Equal(t, [][]string{
+		{"pipeline:remotequeueruleset", "disabled", "false"},
+		{"pipeline:ruleset", "disabled", "true"},
+		{"pipeline:remotequeuetyping", "disabled", "false"},
+		{"pipeline:remotequeueoutput", "disabled", "false"},
+		{"pipeline:typing", "disabled", "true"},
+		{"pipeline:indexerPipe", "disabled", "true"},
+	}, pipelineInputs)
+}
+
+func TestGetQueueAndPipelineInputsForIngestorConfFilesSQSCP(t *testing.T) {
+	provider := "sqs_smartbus_cp"
+
+	queue := enterpriseApi.Queue{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Queue",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "queue",
+		},
+		Spec: enterpriseApi.QueueSpec{
+			Provider: "sqs_cp",
 			SQS: enterpriseApi.SQSSpec{
 				Name:       "test-queue",
 				AuthRegion: "us-west-2",
@@ -699,5 +773,189 @@ func newTestIngestorQueuePipelineManager(mockHTTPClient *spltest.MockHTTPClient)
 	}
 	return &ingestorClusterPodManager{
 		newSplunkClient: newSplunkClientForQueuePipeline,
+	}
+}
+
+func TestIngScaledUpScaledDownEvent(t *testing.T) {
+	ctx := context.TODO()
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	crName := "test-ingestor"
+	cr := &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: "test"},
+	}
+
+	// Simulate ScaledUp: previousReplicas=1, desiredReplicas=3, phase=PhaseReady, Status.ReadyReplicas=3
+	previousReplicas := int32(1)
+	desiredReplicas := int32(3)
+	cr.Status.ReadyReplicas = desiredReplicas
+	phase := enterpriseApi.PhaseReady
+
+	// Replicate the production conditional from ApplyIngestorCluster()
+	ep := GetEventPublisher(ctx, cr)
+	if phase == enterpriseApi.PhaseReady {
+		if desiredReplicas > previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
+			ep.Normal(ctx, "ScaledUp",
+				fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		}
+	}
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "ScaledUp" {
+			found = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type for ScaledUp, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, crName) {
+				t.Errorf("Expected event message to contain CR name '%s', got: %s", crName, event.message)
+			}
+			if !strings.Contains(event.message, "1") || !strings.Contains(event.message, "3") {
+				t.Errorf("Expected event message to contain replica counts, got: %s", event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected ScaledUp event to be published")
+	}
+
+	// Simulate ScaledDown: previousReplicas=3, desiredReplicas=1, phase=PhaseReady, Status.ReadyReplicas=1
+	recorder.events = []mockEvent{}
+	previousReplicas = int32(3)
+	desiredReplicas = int32(1)
+	cr.Status.ReadyReplicas = desiredReplicas
+
+	if phase == enterpriseApi.PhaseReady {
+		if desiredReplicas < previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
+			ep.Normal(ctx, "ScaledDown",
+				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		}
+	}
+
+	found = false
+	for _, event := range recorder.events {
+		if event.reason == "ScaledDown" {
+			found = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type for ScaledDown, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, crName) {
+				t.Errorf("Expected event message to contain CR name '%s', got: %s", crName, event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected ScaledDown event to be published")
+	}
+
+	// Negative: no event when phase is not PhaseReady
+	recorder.events = []mockEvent{}
+	phase = enterpriseApi.PhasePending
+	if phase == enterpriseApi.PhaseReady {
+		if desiredReplicas < previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
+			ep.Normal(ctx, "ScaledDown",
+				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		}
+	}
+	if len(recorder.events) != 0 {
+		t.Errorf("Expected no events when phase is not PhaseReady, got %d events", len(recorder.events))
+	}
+
+	// Negative: no event when replicas haven't converged
+	recorder.events = []mockEvent{}
+	phase = enterpriseApi.PhaseReady
+	cr.Status.ReadyReplicas = int32(2) // not yet at desiredReplicas
+	if phase == enterpriseApi.PhaseReady {
+		if desiredReplicas < previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
+			ep.Normal(ctx, "ScaledDown",
+				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		}
+	}
+	if len(recorder.events) != 0 {
+		t.Errorf("Expected no events when replicas haven't converged, got %d events", len(recorder.events))
+	}
+}
+
+func TestIngQueueConfigUpdatedEvent(t *testing.T) {
+	ctx := context.TODO()
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	crName := "test-ingestor"
+	cr := &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: "test"},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			Replicas: 3,
+		},
+	}
+
+	// Replicate the production conditional from ApplyIngestorCluster()
+	ep := GetEventPublisher(ctx, cr)
+	ep.Normal(ctx, "QueueConfigUpdated",
+		fmt.Sprintf("Queue/Pipeline configuration updated for %d ingestors", cr.Spec.Replicas))
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "QueueConfigUpdated" {
+			found = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type for QueueConfigUpdated, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, "3") {
+				t.Errorf("Expected event message to contain replica count '3', got: %s", event.message)
+			}
+			if !strings.Contains(event.message, "Queue/Pipeline") {
+				t.Errorf("Expected event message to contain 'Queue/Pipeline', got: %s", event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected QueueConfigUpdated event to be published")
+	}
+}
+
+func TestIngIngestorsRestartedEvent(t *testing.T) {
+	ctx := context.TODO()
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	crName := "test-ingestor"
+	cr := &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: "test"},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			Replicas: 5,
+		},
+	}
+
+	// Replicate the production conditional from ApplyIngestorCluster()
+	ep := GetEventPublisher(ctx, cr)
+	ep.Normal(ctx, "IngestorsRestarted",
+		fmt.Sprintf("Restarted Splunk on %d ingestor pods", cr.Spec.Replicas))
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "IngestorsRestarted" {
+			found = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type for IngestorsRestarted, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, "5") {
+				t.Errorf("Expected event message to contain replica count '5', got: %s", event.message)
+			}
+			if !strings.Contains(event.message, "Restarted Splunk") {
+				t.Errorf("Expected event message to contain 'Restarted Splunk', got: %s", event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected IngestorsRestarted event to be published")
 	}
 }

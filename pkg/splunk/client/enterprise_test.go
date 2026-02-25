@@ -704,7 +704,7 @@ func TestUpdateConfFile(t *testing.T) {
 	value := "myvalue"
 	fileName := "outputs"
 
-	ctx := context.Background()
+	ctx := context.TODO()
 	logger := slog.With("func", "TestUpdateConfFile", "fileName", fileName, "property", property)
 
 	// First request: create the property (object) if it doesn't exist
