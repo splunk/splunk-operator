@@ -705,7 +705,7 @@ func TestUpdateConfFile(t *testing.T) {
 	fileName := "outputs"
 
 	ctx := context.TODO()
-	logger := slog.With("func", "TestUpdateConfFile", "fileName", fileName, "property", property)
+	logger := slog.With("func", "TestUpdateConfFile")
 
 	// First request: create the property (object) if it doesn't exist
 	createBody := strings.NewReader(fmt.Sprintf("name=%s", property))

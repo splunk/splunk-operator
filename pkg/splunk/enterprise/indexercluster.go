@@ -225,15 +225,15 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	if !versionUpgrade {
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
-			eventPublisher.Warning(ctx, "UpdateManagerFailure", fmt.Sprintf("update of statefulset failed with error %s", err.Error()))
-			logger.ErrorContext(ctx, "Update of statefulset failed", "error", err.Error())
+			eventPublisher.Warning(ctx, "UpdateFailure", fmt.Sprintf("update of stateful set failed with error %s", err.Error()))
+			logger.ErrorContext(ctx, "Update of stateful set failed", "error", err.Error())
 			return result, err
 		}
 	} else {
 		// Delete the statefulset and recreate new one
 		err = client.Delete(ctx, statefulSet)
 		if err != nil {
-			eventPublisher.Warning(ctx, "DeleteManagerFailure", fmt.Sprintf(fmt.Sprintf("version mismatch for Indexer Cluster %s and Indexer container %s - delete of stateful set failed with error=%s", cr.Spec.Image, statefulSet.Spec.Template.Spec.Containers[0].Image, err.Error())))
+			eventPublisher.Warning(ctx, "DeleteFailure", fmt.Sprintf("version mismatch for Indexer Cluster %s and Indexer container %s - delete of stateful set failed with %s", cr.Spec.Image, statefulSet.Spec.Template.Spec.Containers[0].Image, err.Error()))
 			logger.ErrorContext(ctx, "Delete of stateful set failed", "error", err.Error())
 			return result, err
 		}
@@ -242,8 +242,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		statefulSet.ResourceVersion = ""
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
-			eventPublisher.Warning(ctx, "UpdateManagerFailure", fmt.Sprintf("update statefulset failed %s", err.Error()))
-			logger.ErrorContext(ctx, "Update of statefulset failed", "error", err.Error())
+			eventPublisher.Warning(ctx, "UpdateFailure", fmt.Sprintf("update of stateful set failed with %s", err.Error()))
+			logger.ErrorContext(ctx, "Update of stateful set failed", "error", err.Error())
 			return result, err
 		}
 	}
@@ -284,7 +284,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 					if err != nil {
 						return result, err
 					}
-					logger.InfoContext(ctx, "Restarted splunk", "indexer", i)
+					logger.DebugContext(ctx, "Restarted splunk", "indexer", i)
 				}
 
 				eventPublisher.Normal(ctx, "IndexersRestarted",
@@ -460,7 +460,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			result.Requeue = false
 		}
 		if err != nil {
-			eventPublisher.Warning(ctx, "DeleteFailure", fmt.Sprintf("delete custom resource failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "DeleteFailure", fmt.Sprintf("delete custom resource failed with %s", err.Error()))
 			logger.ErrorContext(ctx, "Delete custom resource failed", "error", err.Error())
 		}
 		return result, err
@@ -545,7 +545,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	if !versionUpgrade {
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
-			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("update of stateful set failed with %s", err.Error()))
+			eventPublisher.Warning(ctx, "UpdateFailure", fmt.Sprintf("update of stateful set failed with %s", err.Error()))
 			logger.ErrorContext(ctx, "Update of stateful set failed", "error", err.Error())
 			return result, err
 		}
@@ -553,7 +553,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		// Delete the statefulset and recreate new one
 		err = client.Delete(ctx, statefulSet)
 		if err != nil {
-			eventPublisher.Warning(ctx, "DeleteFailure", fmt.Sprintf(fmt.Sprintf("version mismatch for Indexer Cluster %s and Indexer container %s - delete of stateful set failed with error=%s", cr.Spec.Image, statefulSet.Spec.Template.Spec.Containers[0].Image, err.Error())))
+			eventPublisher.Warning(ctx, "DeleteFailure", fmt.Sprintf("version mismatch for Indexer Cluster %s and Indexer container %s - delete of stateful set failed with error=%s", cr.Spec.Image, statefulSet.Spec.Template.Spec.Containers[0].Image, err.Error()))
 			logger.ErrorContext(ctx, "Delete of stateful set failed", "error", err.Error())
 			return result, err
 		}
@@ -603,7 +603,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 					if err != nil {
 						return result, err
 					}
-					logger.InfoContext(ctx, "Restarted splunk", "indexer", i)
+					logger.DebugContext(ctx, "Restarted splunk", "indexer", i)
 				}
 
 				eventPublisher.Normal(ctx, "IndexersRestarted",
