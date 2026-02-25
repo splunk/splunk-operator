@@ -4,6 +4,7 @@ permissions:
   packages: write
   id-token: write
   pull-requests: write
+  checks: write
 on:
   schedule:
     - cron: "0 06 * * 0"
@@ -45,7 +46,7 @@ jobs:
         role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
     - name: Login to Amazon ECR
       id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v1
+      uses: aws-actions/amazon-ecr-login@v2
     - name: Build and Push Splunk Operator Image
       run: |
         make docker-buildx IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
@@ -155,7 +156,7 @@ jobs:
           role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
       - name: Tag and Push Splunk Enterprise Image to ECR
         run: |
           docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
@@ -249,7 +250,7 @@ jobs:
         aws-region: ${{ vars.AWS_REGION }}
         role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
     - name: Login to Amazon ECR
-      uses: aws-actions/amazon-ecr-login@v1
+      uses: aws-actions/amazon-ecr-login@v2
     - name: Pull Splunk Operator Image Locally
       run: |
         docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA

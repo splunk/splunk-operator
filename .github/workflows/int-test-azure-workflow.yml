@@ -2,6 +2,7 @@ name: Integration Test on Azure WorkFlow
 permissions:
   contents: read
   packages: write
+  checks: write
   pull-requests: write
 on:
   push:

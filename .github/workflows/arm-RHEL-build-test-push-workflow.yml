@@ -2,6 +2,7 @@ name: ARM RHEL Smoke Test WorkFlow
 permissions:
   contents: read
   packages: write
+  checks: write
   id-token: write
   pull-requests: write
 on:
@@ -46,7 +47,7 @@ jobs:
         role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
     - name: Login to Amazon ECR
       id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v1
+      uses: aws-actions/amazon-ecr-login@v2
     - name: Build and push Splunk Operator Image
       run: |
         export PLATFORMS=linux/arm64,linux/amd64
@@ -173,7 +174,7 @@ jobs:
           role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
       - name: Pull Splunk Enterprise Image
         run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Create EKS cluster
