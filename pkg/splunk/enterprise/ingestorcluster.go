@@ -31,6 +31,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -312,6 +313,88 @@ func buildAndApplyIngestorQueueConfigMap(ctx context.Context, c splcommon.Contro
 	return splctrl.ApplyConfigMap(ctx, c, configMap)
 }
 
+// setupIngestorInitContainer adds the queue config init container and ConfigMap volume to the
+// StatefulSet pod template. The init container symlinks conf files and copies local.meta before
+// Splunk starts, enabling zero-restart first-boot configuration.
+func setupIngestorInitContainer(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster, ss *appsv1.StatefulSet) error {
+	// Determine etc volume mount name (ephemeral vs PVC — mirrors setupInitContainer pattern)
+	var etcVolMntName string
+	if cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage {
+		etcVolMntName = fmt.Sprintf(splcommon.SplunkMountNamePrefix, splcommon.EtcVolumeStorage)
+	} else {
+		etcVolMntName = fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.EtcVolumeStorage)
+	}
+
+	// Add ConfigMap volume to pod spec
+	queueConfigVolName := "mnt-splunk-queue-config"
+	ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
+		Name: queueConfigVolName,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: GetIngestorQueueConfigMapName(cr.GetName()),
+				},
+			},
+		},
+	})
+
+	// Security context — same as setupInitContainer in util.go
+	runAsUser := int64(41812)
+	runAsNonRoot := true
+	privileged := false
+
+	initContainer := corev1.Container{
+		Name:            "init-ingestor-queue-config",
+		Image:           ss.Spec.Template.Spec.Containers[0].Image,
+		ImagePullPolicy: ss.Spec.Template.Spec.Containers[0].ImagePullPolicy,
+		Command:         []string{"bash", "-c", commandForIngestorQueueConfig},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: etcVolMntName, MountPath: "/opt/splk/etc"},
+			{Name: queueConfigVolName, MountPath: ingestorQueueConfigMountPath},
+		},
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("0.25"),
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
+			},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser:                &runAsUser,
+			RunAsNonRoot:             &runAsNonRoot,
+			AllowPrivilegeEscalation: &[]bool{false}[0],
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+				Add:  []corev1.Capability{"NET_BIND_SERVICE"},
+			},
+			Privileged: &privileged,
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			},
+		},
+	}
+	ss.Spec.Template.Spec.InitContainers = append(ss.Spec.Template.Spec.InitContainers, initContainer)
+
+	// Set ingestorQueueConfigRev annotation to ConfigMap ResourceVersion.
+	// When ConfigMap content changes the RV increments, the annotation changes,
+	// and the Restart EPIC detects the pod template diff and triggers a rolling restart.
+	cmRV, err := splctrl.GetConfigMapResourceVersion(ctx, c, types.NamespacedName{
+		Name:      GetIngestorQueueConfigMapName(cr.GetName()),
+		Namespace: cr.GetNamespace(),
+	})
+	if err == nil && cmRV != "" {
+		if ss.Spec.Template.ObjectMeta.Annotations == nil {
+			ss.Spec.Template.ObjectMeta.Annotations = make(map[string]string)
+		}
+		ss.Spec.Template.ObjectMeta.Annotations[ingestorQueueConfigRevAnnotation] = cmRV
+	}
+
+	return nil
+}
+
 // getIngestorStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise ingestors
 func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) (*appsv1.StatefulSet, error) {
 	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, cr.Spec.Replicas, []corev1.EnvVar{})
@@ -321,6 +404,11 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 
 	// Setup App framework staging volume for apps
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+
+	// Add queue config ConfigMap volume + init container + ingestorQueueConfigRev annotation
+	if err := setupIngestorInitContainer(ctx, client, cr, ss); err != nil {
+		return nil, err
+	}
 
 	return ss, nil
 }
