@@ -218,6 +218,30 @@ access = read : [ * ], write : [ admin ]
 	telLicenseInfoKey = "license_info"
 
 	managerConfigMapTemplateStr = "%smanager-config"
+
+	// ingestorQueueConfigAppName is the Splunk app directory name for ingestor queue config
+	ingestorQueueConfigAppName = "100-sok-ingestorcluster"
+
+	// ingestorQueueConfigTemplateStr is the ConfigMap name pattern: splunk-<name>-ingestor-queue-config
+	ingestorQueueConfigTemplateStr = "splunk-%s-ingestor-queue-config"
+
+	// ingestorQueueConfigRevAnnotation is the pod annotation key set to ConfigMap ResourceVersion.
+	// When content changes (credentials rotate, topology changes), RV increments → annotation changes
+	// → Restart EPIC detects change and restarts pods (PDB-aware). reload.outputs.remote_queue=never.
+	ingestorQueueConfigRevAnnotation = "ingestorQueueConfigRev"
+
+	// ingestorQueueConfigMountPath is the ConfigMap mount path inside the pod
+	ingestorQueueConfigMountPath = "/mnt/splunk-queue-config"
+
+	// commandForIngestorQueueConfig is the init container shell command.
+	// Creates app directory, symlinks conf files from ConfigMap mount, copies local.meta
+	// (NOT symlinked — Splunk replaces metadata symlinks with regular files when writing stanzas).
+	commandForIngestorQueueConfig = "mkdir -p /opt/splk/etc/apps/" + ingestorQueueConfigAppName + "/local && " +
+		"mkdir -p /opt/splk/etc/apps/" + ingestorQueueConfigAppName + "/metadata && " +
+		"ln -sfn " + ingestorQueueConfigMountPath + "/app.conf /opt/splk/etc/apps/" + ingestorQueueConfigAppName + "/local/app.conf && " +
+		"ln -sfn " + ingestorQueueConfigMountPath + "/outputs.conf /opt/splk/etc/apps/" + ingestorQueueConfigAppName + "/local/outputs.conf && " +
+		"ln -sfn " + ingestorQueueConfigMountPath + "/default-mode.conf /opt/splk/etc/apps/" + ingestorQueueConfigAppName + "/local/default-mode.conf && " +
+		"cp " + ingestorQueueConfigMountPath + "/local.meta /opt/splk/etc/apps/" + ingestorQueueConfigAppName + "/metadata/local.meta"
 )
 
 const (
@@ -382,4 +406,9 @@ func GetTelemetryConfigMapName(namePrefix string) string {
 // GetManagerConfigMapName returns the name of manager configmap
 func GetManagerConfigMapName(namePrefix string) string {
 	return fmt.Sprintf(managerConfigMapTemplateStr, namePrefix)
+}
+
+// GetIngestorQueueConfigMapName returns the name of the ingestor queue config ConfigMap
+func GetIngestorQueueConfigMapName(crName string) string {
+	return fmt.Sprintf(ingestorQueueConfigTemplateStr, crName)
 }
