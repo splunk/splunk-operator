@@ -2,6 +2,7 @@ name: Integration Test WorkFlow
 permissions:
   contents: read
   packages: write
+  checks: write
   id-token: write
   pull-requests: write
 on:
@@ -49,7 +50,7 @@ jobs:
         role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
     - name: Login to Amazon ECR
       id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v1
+      uses: aws-actions/amazon-ecr-login@v2
     - name: Build and push Splunk Operator Image
       run: |
         make docker-buildx IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
@@ -171,7 +172,7 @@ jobs:
           role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
       - name: Tag and Push Splunk Enterprise Image to ECR
         run: |
           docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}

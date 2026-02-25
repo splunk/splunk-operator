@@ -4,6 +4,7 @@ permissions:
   packages: write
   id-token: write
   pull-requests: write
+  checks: write
 on:
   schedule:
     - cron: "0 02 * * WED,SUN"
@@ -118,7 +119,7 @@ jobs:
           role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
       - name: Build and Push Splunk Operator Image
         run: |
           docker pull registry.access.redhat.com/ubi8/ubi-minimal:latest
