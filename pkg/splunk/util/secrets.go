@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
+
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -35,7 +37,7 @@ import (
 
 // GetSpecificSecretTokenFromPod retrieves a specific secret token's value from a Pod
 func GetSpecificSecretTokenFromPod(ctx context.Context, c splcommon.ControllerClient, PodName string, namespace string, secretToken string) (string, error) {
-	logger := slog.With("func", "GetSpecificSecretTokenFromPod")
+	logger := logging.FromContext(ctx).With("func", "GetSpecificSecretTokenFromPod")
 	logger.DebugContext(ctx, "Retrieving secret token from pod",
 		"pod", PodName,
 		"namespace", namespace,
@@ -591,10 +593,16 @@ func GetSecretByName(ctx context.Context, c splcommon.ControllerClient, namespac
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: name}
 	err := c.Get(ctx, namespacedName, &namespaceScopedSecret)
 	if err != nil {
-		logger.WarnContext(ctx, "Secret not found. Create secret to proceed",
-			"secret_name", name,
-			"namespace", namespace,
-			"error", err)
+		if k8serrors.IsNotFound(err) {
+			logger.WarnContext(ctx, "Secret not found. Create secret to proceed",
+				"secret_name", name,
+				"namespace", namespace)
+		} else {
+			logger.ErrorContext(ctx, "Failed to retrieve secret",
+				"secret_name", name,
+				"namespace", namespace,
+				"error", err)
+		}
 		return nil, err
 	}
 
