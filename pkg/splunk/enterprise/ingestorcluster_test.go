@@ -398,7 +398,7 @@ func TestGenerateIngestorDefaultModeConf(t *testing.T) {
 }
 
 func TestGenerateIngestorAppConf(t *testing.T) {
-	conf := generateIngestorAppConf()
+	conf := generateQueueConfigAppConf("Splunk Operator Ingestor Queue Config")
 	assert.Contains(t, conf, "[install]")
 	assert.Contains(t, conf, "state = enabled")
 	assert.Contains(t, conf, "[package]")
@@ -406,7 +406,7 @@ func TestGenerateIngestorAppConf(t *testing.T) {
 }
 
 func TestGenerateIngestorLocalMeta(t *testing.T) {
-	conf := generateIngestorLocalMeta("abc123")
+	conf := generateQueueConfigLocalMeta()
 	// install_source_checksum is not a valid local.meta field; it was removed to prevent parse errors.
 	assert.NotContains(t, conf, "install_source_checksum")
 	assert.Contains(t, conf, "export = system")

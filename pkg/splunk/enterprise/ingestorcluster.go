@@ -277,31 +277,35 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
+// applyQueueConfigMap is a shared helper that builds and idempotently applies a queue config
+// ConfigMap with the given name, namespace, owner, and data.
+// Returns (true, nil) when content changed, (false, nil) when unchanged.
+// Both IngestorCluster and ClusterManager (for IndexerCluster bundle push) use this.
+func applyQueueConfigMap(ctx context.Context, c splcommon.ControllerClient, configMapName, namespace string, owner splcommon.MetaObject, data map[string]string) (bool, error) {
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: namespace,
+		},
+		Data: data,
+	}
+	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(owner, true)))
+	return splctrl.ApplyConfigMap(ctx, c, configMap)
+}
+
 // buildAndApplyIngestorQueueConfigMap builds and idempotently applies the ingestor queue
 // config ConfigMap. Returns (true, nil) when content changed, (false, nil) when unchanged.
 // Called unconditionally on every reconcile — splctrl.ApplyConfigMap is the idempotency gate.
 func buildAndApplyIngestorQueueConfigMap(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster, qosCfg *QueueOSConfig) (bool, error) {
-	configMapName := GetIngestorQueueConfigMapName(cr.GetName())
-
 	outputsConf := generateIngestorOutputsConf(&qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey)
 	defaultModeConf := generateIngestorDefaultModeConf()
-	confChecksum := computeIngestorConfChecksum(outputsConf, defaultModeConf)
-
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      configMapName,
-			Namespace: cr.GetNamespace(),
-		},
-		Data: map[string]string{
-			"app.conf":          generateIngestorAppConf(),
-			"outputs.conf":      outputsConf,
-			"default-mode.conf": defaultModeConf,
-			"local.meta":        generateIngestorLocalMeta(confChecksum),
-		},
+	data := map[string]string{
+		"app.conf":          generateQueueConfigAppConf("Splunk Operator Ingestor Queue Config"),
+		"outputs.conf":      outputsConf,
+		"default-mode.conf": defaultModeConf,
+		"local.meta":        generateQueueConfigLocalMeta(),
 	}
-	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
-
-	return splctrl.ApplyConfigMap(ctx, c, configMap)
+	return applyQueueConfigMap(ctx, c, GetIngestorQueueConfigMapName(cr.GetName()), cr.GetNamespace(), cr, data)
 }
 
 // setupIngestorInitContainer adds the queue config init container and ConfigMap volume to the
@@ -425,17 +429,24 @@ func computeIngestorConfChecksum(outputsConf, defaultModeConf string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
+// buildQueueConfStanza builds an INI stanza for a remote_queue conf file.
+// stanzaName is used as the stanza header (e.g. queue.SQS.Name), kvPairs is the list of key-value pairs.
+// Shared by both IngestorCluster (outputs.conf) and ClusterManager (outputs.conf + inputs.conf).
+func buildQueueConfStanza(stanzaName string, kvPairs [][]string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "[remote_queue:%s]\n", stanzaName)
+	for _, kv := range kvPairs {
+		fmt.Fprintf(&b, "%s = %s\n", kv[0], kv[1])
+	}
+	return b.String()
+}
+
 // generateIngestorOutputsConf builds outputs.conf INI content.
 // Reuses getQueueAndObjectStorageInputsForIngestorConfFiles for key-value pairs.
 // Credentials embedded when non-empty (same pattern as GetSmartstoreVolumesConfig).
 func generateIngestorOutputsConf(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) string {
 	kvPairs := getQueueAndObjectStorageInputsForIngestorConfFiles(queue, os, accessKey, secretKey)
-	var b strings.Builder
-	fmt.Fprintf(&b, "[remote_queue:%s]\n", queue.SQS.Name)
-	for _, kv := range kvPairs {
-		fmt.Fprintf(&b, "%s = %s\n", kv[0], kv[1])
-	}
-	return b.String()
+	return buildQueueConfStanza(queue.SQS.Name, kvPairs)
 }
 
 // generateIngestorDefaultModeConf builds default-mode.conf INI content.
@@ -449,9 +460,10 @@ func generateIngestorDefaultModeConf() string {
 	return b.String()
 }
 
-// generateIngestorAppConf builds app.conf INI content.
-func generateIngestorAppConf() string {
-	return `[install]
+// generateQueueConfigAppConf builds app.conf INI content for a queue config Splunk app.
+// label is shown in the Splunk UI (e.g. "Splunk Operator Ingestor Queue Config").
+func generateQueueConfigAppConf(label string) string {
+	return fmt.Sprintf(`[install]
 state = enabled
 allows_disable = false
 
@@ -461,13 +473,13 @@ check_for_updates = false
 [ui]
 is_visible = false
 is_manageable = false
-label = Splunk Operator Ingestor Queue Config
-description = Operator-managed queue and pipeline configuration for IngestorCluster
-`
+label = %s
+`, label)
 }
 
-// generateIngestorLocalMeta builds local.meta with system-level access.
-func generateIngestorLocalMeta(confChecksum string) string {
+// generateQueueConfigLocalMeta builds local.meta with system-level access.
+// Shared by both IngestorCluster and ClusterManager queue config apps.
+func generateQueueConfigLocalMeta() string {
 	return `[]
 access = read : [ * ], write : [ admin ]
 export = system
