@@ -337,6 +337,9 @@ func setupCMQueueConfigInitContainer(ctx context.Context, client splcommon.Contr
 	}
 
 	// Add queue config ConfigMap volume to pod spec.
+	// defaultMode 420 (0644) must be set explicitly to match what Kubernetes stores —
+	// omitting it causes MergePodUpdates to see a diff on every reconcile (infinite update loop).
+	defaultMode := int32(420)
 	ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
 		Name: cmQueueConfigVolName,
 		VolumeSource: corev1.VolumeSource{
@@ -344,6 +347,7 @@ func setupCMQueueConfigInitContainer(ctx context.Context, client splcommon.Contr
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: configMapName,
 				},
+				DefaultMode: &defaultMode,
 			},
 		},
 	})
