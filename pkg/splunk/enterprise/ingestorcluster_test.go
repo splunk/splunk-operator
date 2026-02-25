@@ -302,7 +302,9 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 			}
 			return getIngestorStatefulSet(ctx, c, &cr)
 		}
-		configTester(t, "getIngestorStatefulSet()", f, want)
+		// Use configTester2 (no space-stripping) because the init container command string
+		// contains meaningful spaces that must be preserved in comparison.
+		configTester2(t, "getIngestorStatefulSet()", f, want)
 	}
 
 	// Define additional service port in CR and verify the statefulset has the new port
@@ -335,3 +337,76 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 	test(loadFixture(t, "statefulset_ingestor_with_labels.json"))
 }
 
+func TestComputeIngestorConfChecksum(t *testing.T) {
+	checksum := computeIngestorConfChecksum("outputs", "defaultmode")
+	// SHA-256 produces 64 hex chars
+	if len(checksum) != 64 {
+		t.Errorf("expected 64-char hex, got %d: %s", len(checksum), checksum)
+	}
+
+	// Deterministic
+	if computeIngestorConfChecksum("outputs", "defaultmode") != checksum {
+		t.Error("checksum is not deterministic")
+	}
+
+	// Sensitive to content change
+	if computeIngestorConfChecksum("outputs2", "defaultmode") == checksum {
+		t.Error("checksum did not change when outputs changed")
+	}
+}
+
+func TestGenerateIngestorOutputsConf(t *testing.T) {
+	queue := enterpriseApi.QueueSpec{
+		Provider: "sqs",
+		SQS: enterpriseApi.SQSSpec{
+			Name:       "test-queue",
+			AuthRegion: "us-west-2",
+			Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+			DLQ:        "dlq",
+		},
+	}
+	os := enterpriseApi.ObjectStorageSpec{
+		Provider: "s3",
+		S3: enterpriseApi.S3Spec{
+			Endpoint: "https://s3.amazonaws.com",
+			Path:     "bucket/key",
+		},
+	}
+
+	// IRSA: no credentials embedded
+	conf := generateIngestorOutputsConf(&queue, &os, "", "")
+	assert.Contains(t, conf, "[remote_queue:test-queue]")
+	assert.NotContains(t, conf, "access_key")
+
+	// Static creds: credentials embedded
+	conf = generateIngestorOutputsConf(&queue, &os, "AKID", "secret")
+	assert.Contains(t, conf, "access_key")
+}
+
+func TestGenerateIngestorDefaultModeConf(t *testing.T) {
+	conf := generateIngestorDefaultModeConf()
+	for _, stanza := range []string{
+		"pipeline:remotequeueruleset",
+		"pipeline:ruleset",
+		"pipeline:remotequeuetyping",
+		"pipeline:remotequeueoutput",
+		"pipeline:typing",
+		"pipeline:indexerPipe",
+	} {
+		assert.Contains(t, conf, stanza)
+	}
+}
+
+func TestGenerateIngestorAppConf(t *testing.T) {
+	conf := generateIngestorAppConf()
+	assert.Contains(t, conf, "[install]")
+	assert.Contains(t, conf, "state = enabled")
+	assert.Contains(t, conf, "[package]")
+	assert.Contains(t, conf, "[ui]")
+}
+
+func TestGenerateIngestorLocalMeta(t *testing.T) {
+	conf := generateIngestorLocalMeta("abc123")
+	assert.Contains(t, conf, "install_source_checksum = abc123")
+	assert.Contains(t, conf, "export = system")
+}
