@@ -275,6 +275,32 @@ func (testenv *TestCaseEnv) createNamespace() error {
 		return err
 	}
 
+	// Copy ECR pull secret into this namespace if IMAGE_PULL_SECRET is set
+	if secretName := os.Getenv("IMAGE_PULL_SECRET"); secretName != "" {
+		srcSecret := &corev1.Secret{}
+		srcKey := client.ObjectKey{Name: secretName, Namespace: os.Getenv("IMAGE_PULL_SECRET_NAMESPACE")}
+		if srcKey.Namespace == "" {
+			srcKey.Namespace = "splunk-operator"
+		}
+		if err := testenv.GetKubeClient().Get(context.TODO(), srcKey, srcSecret); err != nil {
+			testenv.Log.Info("IMAGE_PULL_SECRET not found in source namespace, skipping copy", "secret", secretName, "srcNamespace", srcKey.Namespace)
+		} else {
+			dstSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      srcSecret.Name,
+					Namespace: testenv.namespace,
+				},
+				Type: srcSecret.Type,
+				Data: srcSecret.Data,
+			}
+			if err := testenv.GetKubeClient().Create(context.TODO(), dstSecret); err != nil {
+				testenv.Log.Info("Unable to copy IMAGE_PULL_SECRET to namespace", "secret", secretName, "namespace", testenv.namespace, "err", err)
+			} else {
+				testenv.Log.Info("Copied IMAGE_PULL_SECRET to namespace", "secret", secretName, "namespace", testenv.namespace)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -347,45 +373,52 @@ func (testenv *TestCaseEnv) createRoleBinding() error {
 }
 
 func (testenv *TestCaseEnv) attachPVCToOperator(name string) error {
-	var err error
-
 	// volume name which refers to PVC to be attached
 	volumeName := "app-staging"
-
 	namespacedName := client.ObjectKey{Name: testenv.operatorName, Namespace: testenv.namespace}
-	operator := &appsv1.Deployment{}
-	err = testenv.GetKubeClient().Get(context.TODO(), namespacedName, operator)
-	if err != nil {
-		testenv.Log.Error(err, "Unable to get operator", "operator name", testenv.operatorName)
-		return err
+
+	// Retry on 409 Conflict — Kubernetes may mutate the Deployment between Get and Update
+	for attempt := 0; attempt < 5; attempt++ {
+		operator := &appsv1.Deployment{}
+		if err := testenv.GetKubeClient().Get(context.TODO(), namespacedName, operator); err != nil {
+			testenv.Log.Error(err, "Unable to get operator", "operator name", testenv.operatorName)
+			return err
+		}
+
+		// Only append if not already present (idempotent on retry)
+		hasVolume := false
+		for _, v := range operator.Spec.Template.Spec.Volumes {
+			if v.Name == volumeName {
+				hasVolume = true
+				break
+			}
+		}
+		if !hasVolume {
+			operator.Spec.Template.Spec.Volumes = append(operator.Spec.Template.Spec.Volumes, corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: name,
+					},
+				},
+			})
+			operator.Spec.Template.Spec.Containers[0].VolumeMounts = append(
+				operator.Spec.Template.Spec.Containers[0].VolumeMounts,
+				corev1.VolumeMount{Name: volumeName, MountPath: splcommon.AppDownloadVolume},
+			)
+		}
+
+		err := testenv.GetKubeClient().Update(context.TODO(), operator)
+		if err == nil {
+			return nil
+		}
+		if !errors.IsConflict(err) {
+			testenv.Log.Error(err, "Unable to update operator", "operator name", testenv.operatorName)
+			return err
+		}
+		testenv.Log.Info("Conflict updating operator deployment, retrying", "attempt", attempt+1)
 	}
-
-	volume := corev1.Volume{
-		Name: volumeName,
-		VolumeSource: corev1.VolumeSource{
-			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-				ClaimName: name,
-			},
-		},
-	}
-
-	operator.Spec.Template.Spec.Volumes = append(operator.Spec.Template.Spec.Volumes, volume)
-
-	volumeMount := corev1.VolumeMount{
-		Name:      volumeName,
-		MountPath: splcommon.AppDownloadVolume,
-	}
-
-	operator.Spec.Template.Spec.Containers[0].VolumeMounts = append(operator.Spec.Template.Spec.Containers[0].VolumeMounts, volumeMount)
-
-	// update the operator deployment now
-	err = testenv.GetKubeClient().Update(context.TODO(), operator)
-	if err != nil {
-		testenv.Log.Error(err, "Unable to update operator", "operator name", testenv.operatorName)
-		return err
-	}
-
-	return err
+	return fmt.Errorf("failed to attach PVC to operator %s after retries", testenv.operatorName)
 }
 
 func (testenv *TestCaseEnv) createOperator() error {

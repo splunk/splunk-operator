@@ -315,10 +315,44 @@ var _ = Describe("indingsep test", func() {
 			err = deployment.GetInstance(ctx, deployment.GetName()+"-ingest", ingest)
 			Expect(err).To(Succeed(), "Failed to get instance of Ingestor Cluster")
 
-			// Verify Ingestor Cluster Status
-			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
-			Expect(ingest.Status.CredentialSecretVersion).To(Not(Equal("")), "Ingestor queue status credential access secret version is empty")
-			Expect(ingest.Status.CredentialSecretVersion).To(Not(Equal("0")), "Ingestor queue status credential access secret version is 0")
+			// Verify ingestor queue config ConfigMap exists and has correct content
+			ingestorCMName := enterprise.GetIngestorQueueConfigMapName(ingest.GetName())
+			testcaseEnvInst.Log.Info("Verify ingestor queue config ConfigMap", "configMapName", ingestorCMName, "namespace", testcaseEnvInst.GetName())
+			cm, err := testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ingestorCMName)
+			Expect(err).To(Succeed(), "Failed to get ingestor queue config ConfigMap", "ConfigMap", ingestorCMName)
+			testcaseEnvInst.Log.Info("Ingestor queue config ConfigMap found", "configMapName", cm.Name, "keyCount", len(cm.Data))
+			Expect(cm.Data).To(HaveKey("outputs.conf"), "ConfigMap missing outputs.conf")
+			Expect(cm.Data).To(HaveKey("default-mode.conf"), "ConfigMap missing default-mode.conf")
+			Expect(cm.Data).To(HaveKey("app.conf"), "ConfigMap missing app.conf")
+			Expect(cm.Data).To(HaveKey("local.meta"), "ConfigMap missing local.meta")
+			snippetLen := min(120, len(cm.Data["outputs.conf"]))
+			testcaseEnvInst.Log.Info("outputs.conf content verified", "configMapName", ingestorCMName, "snippet", cm.Data["outputs.conf"][:snippetLen])
+			Expect(cm.Data["outputs.conf"]).To(ContainSubstring("remote_queue:"), "outputs.conf missing remote_queue stanza")
+			Expect(cm.Data["default-mode.conf"]).To(ContainSubstring("pipeline:remotequeueruleset"), "default-mode.conf missing pipeline stanza")
+
+			// Verify init container completed successfully on each ingestor pod
+			testcaseEnvInst.Log.Info("Verify init container status on ingestor pods", "ingestorName", ingest.GetName())
+			ingestorPodPrefix := "splunk-" + ingest.GetName() + "-ingestor"
+			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
+			for _, pod := range allPods {
+				if !strings.Contains(pod, ingestorPodPrefix) {
+					continue
+				}
+				testcaseEnvInst.Log.Info("Checking init container on pod", "pod", pod)
+				podObj := &v1.Pod{}
+				err = deployment.GetInstance(ctx, pod, podObj)
+				Expect(err).To(Succeed(), "Failed to get pod", "pod", pod)
+				foundInitContainer := false
+				for _, ics := range podObj.Status.InitContainerStatuses {
+					if ics.Name == "init-ingestor-queue-config" {
+						foundInitContainer = true
+						testcaseEnvInst.Log.Info("Init container status", "pod", pod, "container", ics.Name, "ready", ics.Ready, "restartCount", ics.RestartCount)
+						Expect(ics.Ready).To(BeTrue(), "Init container not ready", "pod", pod, "container", ics.Name)
+						Expect(ics.RestartCount).To(BeEquivalentTo(0), "Init container restarted", "pod", pod, "container", ics.Name)
+					}
+				}
+				Expect(foundInitContainer).To(BeTrue(), "init-ingestor-queue-config container not found on pod", "pod", pod)
+			}
 
 			// Get instance of current Indexer Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
@@ -338,37 +372,50 @@ var _ = Describe("indingsep test", func() {
 				defaultsConf := ""
 
 				if strings.Contains(pod, "ingest") || strings.Contains(pod, "idxc") {
+					// Select conf paths based on pod type:
+					// ingestor pods use the ConfigMap-based app path; indexer pods use system/local
+					var outputsPath, defaultsPath string
+					if strings.Contains(pod, "ingest") {
+						outputsPath = "opt/splunk/etc/apps/100-sok-ingestorcluster/local/outputs.conf"
+						defaultsPath = "opt/splunk/etc/apps/100-sok-ingestorcluster/local/default-mode.conf"
+					} else {
+						outputsPath = "opt/splunk/etc/system/local/outputs.conf"
+						defaultsPath = "opt/splunk/etc/system/local/default-mode.conf"
+					}
+
 					// Verify outputs.conf
-					testcaseEnvInst.Log.Info("Verify outputs.conf")
-					outputsPath := "opt/splunk/etc/system/local/outputs.conf"
+					testcaseEnvInst.Log.Info("Verify outputs.conf", "pod", pod, "path", outputsPath)
 					outputsConf, err := testenv.GetConfFile(pod, outputsPath, deployment.GetName())
-					Expect(err).To(Succeed(), "Failed to get outputs.conf from Ingestor Cluster pod")
+					Expect(err).To(Succeed(), "Failed to get outputs.conf from pod", "pod", pod)
+					snippetLen := min(80, len(outputsConf))
+					testcaseEnvInst.Log.Info("outputs.conf retrieved", "pod", pod, "snippet", outputsConf[:snippetLen])
 					testenv.ValidateContent(outputsConf, outputs, true)
 
 					// Verify default-mode.conf
-					testcaseEnvInst.Log.Info("Verify default-mode.conf")
-					defaultsPath := "opt/splunk/etc/system/local/default-mode.conf"
-					defaultsConf, err := testenv.GetConfFile(pod, defaultsPath, deployment.GetName())
-					Expect(err).To(Succeed(), "Failed to get default-mode.conf from Ingestor Cluster pod")
+					testcaseEnvInst.Log.Info("Verify default-mode.conf", "pod", pod, "path", defaultsPath)
+					defaultsConf, err = testenv.GetConfFile(pod, defaultsPath, deployment.GetName())
+					Expect(err).To(Succeed(), "Failed to get default-mode.conf from pod", "pod", pod)
+					snippetLen = min(80, len(defaultsConf))
+					testcaseEnvInst.Log.Info("default-mode.conf retrieved", "pod", pod, "snippet", defaultsConf[:snippetLen])
 					testenv.ValidateContent(defaultsConf, defaultsAll, true)
 
 					// Verify AWS env variables
-					testcaseEnvInst.Log.Info("Verify AWS env variables")
+					testcaseEnvInst.Log.Info("Verify AWS env variables", "pod", pod)
 					envVars, err := testenv.GetAWSEnv(pod, deployment.GetName())
-					Expect(err).To(Succeed(), "Failed to get AWS env variables from Ingestor Cluster pod")
+					Expect(err).To(Succeed(), "Failed to get AWS env variables from pod", "pod", pod)
 					testenv.ValidateContent(envVars, awsEnvVars, true)
 				}
 
 				if strings.Contains(pod, "ingest") {
-					// Verify default-mode.conf
-					testcaseEnvInst.Log.Info("Verify default-mode.conf")
+					// Verify ingest-specific default-mode.conf content
+					testcaseEnvInst.Log.Info("Verify ingest-specific default-mode.conf content", "pod", pod)
 					testenv.ValidateContent(defaultsConf, defaultsIngest, true)
 				} else if strings.Contains(pod, "idxc") {
 					// Verify inputs.conf
-					testcaseEnvInst.Log.Info("Verify inputs.conf")
+					testcaseEnvInst.Log.Info("Verify inputs.conf", "pod", pod)
 					inputsPath := "opt/splunk/etc/system/local/inputs.conf"
 					inputsConf, err := testenv.GetConfFile(pod, inputsPath, deployment.GetName())
-					Expect(err).To(Succeed(), "Failed to get inputs.conf from Indexer Cluster pod")
+					Expect(err).To(Succeed(), "Failed to get inputs.conf from Indexer Cluster pod", "pod", pod)
 					testenv.ValidateContent(inputsConf, inputs, true)
 				}
 			}

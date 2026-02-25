@@ -407,6 +407,8 @@ func TestGenerateIngestorAppConf(t *testing.T) {
 
 func TestGenerateIngestorLocalMeta(t *testing.T) {
 	conf := generateIngestorLocalMeta("abc123")
-	assert.Contains(t, conf, "install_source_checksum = abc123")
+	// install_source_checksum is not a valid local.meta field; it was removed to prevent parse errors.
+	assert.NotContains(t, conf, "install_source_checksum")
 	assert.Contains(t, conf, "export = system")
+	assert.Contains(t, conf, "access = read : [ * ], write : [ admin ]")
 }

@@ -311,7 +311,12 @@ func getClusterManagerStatefulSet(ctx context.Context, client splcommon.Controll
 	smartStoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, SplunkClusterManager)
 
 	if smartStoreConfigMap != nil {
-		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForCMSmartstore, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
+		// Use extended init container command when queue config keys are present in the ConfigMap.
+		cmd := commandForCMSmartstore
+		if _, hasQueueConfig := smartStoreConfigMap.Data["outputs.conf"]; hasQueueConfig {
+			cmd = commandForCMSmartstoreAndQueue
+		}
+		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, cmd, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
 	}
 	// Setup App framework staging volume for apps
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)

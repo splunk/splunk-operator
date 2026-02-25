@@ -134,6 +134,20 @@ const (
 	// setSymbolicLinkCmanager
 	setSymbolicLinkCmanager = "ln -sfn /mnt/splunk-operator/local/indexes.conf /opt/splunk/etc/manager-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splunk/etc/manager-apps/splunk-operator/local/server.conf"
 
+	// commandForCMSmartstoreAndQueue extends commandForCMSmartstore with queue config symlinks.
+	// Used when the ClusterManager's associated IndexerCluster has a QueueRef.
+	commandForCMSmartstoreAndQueue = commandForCMSmartstore +
+		" && ln -sfn " + splcommon.OperatorMountLocalOutputsConf + " " + splcommon.OperatorClusterManagerAppsLocalOutputsConf +
+		" && ln -sfn " + splcommon.OperatorMountLocalInputsConf + " " + splcommon.OperatorClusterManagerAppsLocalInputsConf +
+		" && ln -sfn " + splcommon.OperatorMountLocalDefaultModeConf + " " + splcommon.OperatorClusterManagerAppsLocalDefaultModeConf
+
+	// setSymbolicLinkCmanagerWithQueue extends setSymbolicLinkCmanager with queue config symlinks.
+	// Used in resetSymbolicLinks when queue config is present in the smartstore ConfigMap.
+	setSymbolicLinkCmanagerWithQueue = setSymbolicLinkCmanager +
+		" && ln -sfn " + splcommon.OperatorMountLocalOutputsConf + " " + splcommon.OperatorClusterManagerAppsLocalOutputsConf +
+		" && ln -sfn " + splcommon.OperatorMountLocalInputsConf + " " + splcommon.OperatorClusterManagerAppsLocalInputsConf +
+		" && ln -sfn " + splcommon.OperatorMountLocalDefaultModeConf + " " + splcommon.OperatorClusterManagerAppsLocalDefaultModeConf
+
 	// configToken used to track if the config is reflecting on Pod or not
 	configToken = "conftoken"
 

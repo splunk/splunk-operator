@@ -316,8 +316,11 @@ func setupIngestorInitContainer(ctx context.Context, c splcommon.ControllerClien
 		etcVolMntName = fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.EtcVolumeStorage)
 	}
 
-	// Add ConfigMap volume to pod spec
+	// Add ConfigMap volume to pod spec. defaultMode 420 (0644) matches what Kubernetes
+	// applies by default after admission — setting it explicitly prevents a spurious
+	// StatefulSet diff on every reconcile (current=420 vs revised=nil).
 	queueConfigVolName := "mnt-splunk-queue-config"
+	defaultMode := int32(420)
 	ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
 		Name: queueConfigVolName,
 		VolumeSource: corev1.VolumeSource{
@@ -325,6 +328,7 @@ func setupIngestorInitContainer(ctx context.Context, c splcommon.ControllerClien
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: GetIngestorQueueConfigMapName(cr.GetName()),
 				},
+				DefaultMode: &defaultMode,
 			},
 		},
 	})
@@ -368,6 +372,14 @@ func setupIngestorInitContainer(ctx context.Context, c splcommon.ControllerClien
 		},
 	}
 	ss.Spec.Template.Spec.InitContainers = append(ss.Spec.Template.Spec.InitContainers, initContainer)
+
+	// Also mount the ConfigMap volume in the main Splunk container so that the symlinks
+	// created by the init container resolve correctly at runtime.
+	ss.Spec.Template.Spec.Containers[0].VolumeMounts = append(ss.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+		Name:      queueConfigVolName,
+		MountPath: ingestorQueueConfigMountPath,
+		ReadOnly:  true,
+	})
 
 	// Set ingestorQueueConfigRev annotation to ConfigMap ResourceVersion.
 	// When ConfigMap content changes the RV increments, the annotation changes,
@@ -454,16 +466,12 @@ description = Operator-managed queue and pipeline configuration for IngestorClus
 `
 }
 
-// generateIngestorLocalMeta builds local.meta with system-level access and embedded checksum.
-// confChecksum is SHA-256 of outputsConf+defaultModeConf — produced by computeIngestorConfChecksum.
+// generateIngestorLocalMeta builds local.meta with system-level access.
 func generateIngestorLocalMeta(confChecksum string) string {
-	return fmt.Sprintf(`[]
+	return `[]
 access = read : [ * ], write : [ admin ]
 export = system
-
-[app/install]
-install_source_checksum = %s
-`, confChecksum)
+`
 }
 
 // getPipelineInputsForConfFile returns a list of pipeline inputs for conf file

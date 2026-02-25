@@ -44,6 +44,71 @@ import (
 // NewSplunkClientFunc function pointer type
 type NewSplunkClientFunc func(managementURI, username, password string) *splclient.SplunkClient
 
+// applyIdxcQueueConfigToCM writes outputs.conf, inputs.conf, and default-mode.conf into the ClusterManager's
+// smartstore ConfigMap. The existing CM bundle push infrastructure distributes these files to all indexer peers
+// via manager-apps/splunk-operator/local/ — no pod-by-pod REST calls needed.
+// Returns (true, nil) when content changed (bundle push trigger needed), (false, nil) when unchanged.
+func applyIdxcQueueConfigToCM(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (bool, error) {
+	cmName := cr.Spec.ClusterManagerRef.Name
+	cmNamespace := cr.GetNamespace()
+
+	// Fetch the ClusterManager CR so we can update its BundlePushTracker on content change
+	cmCR := &enterpriseApi.ClusterManager{}
+	if err := client.Get(ctx, types.NamespacedName{Name: cmName, Namespace: cmNamespace}, cmCR); err != nil {
+		return false, fmt.Errorf("applyIdxcQueueConfigToCM: failed to get ClusterManager %s: %w", cmName, err)
+	}
+
+	// Resolve Queue and ObjectStorage CRs to get credentials and endpoints
+	qosCfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, cr.Spec.QueueRef, cr.Spec.ObjectStorageRef, cr.Spec.ServiceAccount)
+	if err != nil {
+		return false, fmt.Errorf("applyIdxcQueueConfigToCM: failed to resolve queue/OS config: %w", err)
+	}
+
+	// Get or create the CM's smartstore ConfigMap
+	configMapName := GetSplunkSmartstoreConfigMapName(cmName, "ClusterManager")
+	namespacedName := types.NamespacedName{Name: configMapName, Namespace: cmNamespace}
+	cm, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	if err != nil {
+		// ConfigMap doesn't exist yet — create a minimal one with only queue config keys.
+		// ApplySmartstoreConfigMap will add indexes.conf/server.conf when it runs.
+		cm = &corev1.ConfigMap{}
+		cm.Name = configMapName
+		cm.Namespace = cmNamespace
+		cm.Data = make(map[string]string)
+		cm.SetOwnerReferences(append(cm.GetOwnerReferences(), splcommon.AsOwner(cmCR, true)))
+	}
+
+	if cm.Data == nil {
+		cm.Data = make(map[string]string)
+	}
+
+	// Build queue config content
+	outputsConf := generateIdxcOutputsConf(&qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey)
+	inputsConf := generateIdxcInputsConf(&qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey)
+	defaultModeConf := generateIdxcDefaultModeConf()
+
+	// Update queue config keys in the ConfigMap
+	cm.Data["outputs.conf"] = outputsConf
+	cm.Data["inputs.conf"] = inputsConf
+	cm.Data["default-mode.conf"] = defaultModeConf
+
+	changed, err := splctrl.ApplyConfigMap(ctx, client, cm)
+	if err != nil {
+		return false, fmt.Errorf("applyIdxcQueueConfigToCM: failed to apply ConfigMap %s: %w", configMapName, err)
+	}
+
+	if changed {
+		// Signal ClusterManager to run bundle push on next reconcile
+		cmCR.Status.BundlePushTracker.NeedToPushManagerApps = true
+		cmCR.Status.BundlePushTracker.LastCheckInterval = 0
+		if err := client.Status().Update(ctx, cmCR); err != nil {
+			return true, fmt.Errorf("applyIdxcQueueConfigToCM: failed to update ClusterManager BundlePushTracker: %w", err)
+		}
+	}
+
+	return changed, nil
+}
+
 // ApplyIndexerClusterManager reconciles the state of a Splunk Enterprise indexer cluster.
 func ApplyIndexerClusterManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
 
@@ -159,6 +224,16 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		return result, err
 	}
 
+	// Apply queue config to ClusterManager's smartstore ConfigMap for bundle push distribution.
+	// Called unconditionally — ApplyConfigMap skips write when content unchanged.
+	if cr.Spec.QueueRef.Name != "" && cr.Spec.ClusterManagerRef.Name != "" {
+		_, err = applyIdxcQueueConfigToCM(ctx, client, cr)
+		if err != nil {
+			eventPublisher.Warning(ctx, "applyIdxcQueueConfigToCM", fmt.Sprintf("failed to apply queue config to ClusterManager: %s", err.Error()))
+			return result, err
+		}
+	}
+
 	// create or update statefulset for the indexers
 	statefulSet, err := getIndexerStatefulSet(ctx, client, cr)
 	if err != nil {
@@ -245,40 +320,6 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		qosCfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, cr.Spec.QueueRef, cr.Spec.ObjectStorageRef, cr.Spec.ServiceAccount)
-		if err != nil {
-			scopedLog.Error(err, "Failed to resolve Queue/ObjectStorage config")
-			return result, err
-		}
-
-		secretChanged := cr.Status.CredentialSecretVersion != qosCfg.Version
-		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
-
-		// If queue is updated
-		if cr.Spec.QueueRef.Name != "" {
-			if secretChanged || serviceAccountChanged {
-				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
-				err = mgr.updateIndexerConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
-				if err != nil {
-					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
-					scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
-					return result, err
-				}
-
-				for i := int32(0); i < cr.Spec.Replicas; i++ {
-					idxcClient := mgr.getClient(ctx, i)
-					err = idxcClient.RestartSplunk()
-					if err != nil {
-						return result, err
-					}
-					scopedLog.Info("Restarted splunk", "indexer", i)
-				}
-
-				cr.Status.CredentialSecretVersion = qosCfg.Version
-				cr.Status.ServiceAccount = cr.Spec.ServiceAccount
-			}
-		}
-
 		//update MC
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
@@ -1381,6 +1422,41 @@ func getQueueAndPipelineInputsForIndexerConfFiles(queue *enterpriseApi.QueueSpec
 	pipelineInputs = getPipelineInputsForConfFile(true)
 
 	return
+}
+
+// generateIdxcOutputsConf builds outputs.conf INI content for an IndexerCluster peer.
+// Uses the outputs slice (includes send_interval and encoding_format) from getQueueAndObjectStorageInputsForIndexerConfFiles.
+func generateIdxcOutputsConf(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) string {
+	_, outputs := getQueueAndObjectStorageInputsForIndexerConfFiles(queue, os, accessKey, secretKey)
+	var b strings.Builder
+	fmt.Fprintf(&b, "[remote_queue:%s]\n", queue.SQS.Name)
+	for _, kv := range outputs {
+		fmt.Fprintf(&b, "%s = %s\n", kv[0], kv[1])
+	}
+	return b.String()
+}
+
+// generateIdxcInputsConf builds inputs.conf INI content for an IndexerCluster peer.
+// Uses the inputs slice (base keys without send_interval/encoding_format).
+func generateIdxcInputsConf(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) string {
+	inputs, _ := getQueueAndObjectStorageInputsForIndexerConfFiles(queue, os, accessKey, secretKey)
+	var b strings.Builder
+	fmt.Fprintf(&b, "[remote_queue:%s]\n", queue.SQS.Name)
+	for _, kv := range inputs {
+		fmt.Fprintf(&b, "%s = %s\n", kv[0], kv[1])
+	}
+	return b.String()
+}
+
+// generateIdxcDefaultModeConf builds default-mode.conf INI content for an IndexerCluster peer.
+// Uses getPipelineInputsForConfFile(true) — isIndexer=true omits the indexerPipe stanza.
+func generateIdxcDefaultModeConf() string {
+	pipelineInputs := getPipelineInputsForConfFile(true)
+	var b strings.Builder
+	for _, input := range pipelineInputs {
+		fmt.Fprintf(&b, "[%s]\n%s = %s\n\n", input[0], input[1], input[2])
+	}
+	return b.String()
 }
 
 // Tells if there is an image migration from 8.x.x to 9.x.x

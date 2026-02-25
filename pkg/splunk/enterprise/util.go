@@ -466,9 +466,9 @@ func GetQueueRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.Volum
 
 	version := namespaceScopedSecret.ResourceVersion
 
-	if accessKey == "" {
-		return "", "", "", errors.New("access Key is missing")
-	} else if secretKey == "" {
+	// Empty credentials are valid for IRSA mode (pod identity via service account token).
+	// Only return an error when one key is present but the other is missing.
+	if accessKey != "" && secretKey == "" {
 		return "", "", "", errors.New("secret Key is missing")
 	}
 
@@ -722,12 +722,19 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 
 	SplunkOperatorAppConfigMap.SetOwnerReferences(append(SplunkOperatorAppConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
-	// if existing configmap contains key conftoken then add that back
+	// if existing configmap contains key conftoken then add that back.
+	// Also preserve queue config keys (outputs.conf, inputs.conf, default-mode.conf) written by
+	// applyIdxcQueueConfigToCM so that CM reconcile does not overwrite them.
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
 	if err == nil && configMap != nil && configMap.Data != nil && reflect.ValueOf(configMap.Data).Kind() == reflect.Map {
 		if _, ok := configMap.Data[configToken]; ok {
 			SplunkOperatorAppConfigMap.Data[configToken] = configMap.Data[configToken]
+		}
+		for _, queueKey := range []string{"outputs.conf", "inputs.conf", "default-mode.conf"} {
+			if v, ok := configMap.Data[queueKey]; ok {
+				SplunkOperatorAppConfigMap.Data[queueKey] = v
+			}
 		}
 	}
 
@@ -769,10 +776,17 @@ var resetSymbolicLinks = func(ctx context.Context, client splcommon.ControllerCl
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ResetSymbolicLinks").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	// Create command for symbolic link creation
+	// Create command for symbolic link creation.
+	// Use the queue-aware command when queue config keys are present in the smartstore ConfigMap.
 	var command string
 	if crKind == "ClusterManager" || crKind == "ClusterMaster" {
 		command = setSymbolicLinkCmanager
+		smartStoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, SplunkClusterManager)
+		if smartStoreConfigMap != nil {
+			if _, hasQueueConfig := smartStoreConfigMap.Data["outputs.conf"]; hasQueueConfig {
+				command = setSymbolicLinkCmanagerWithQueue
+			}
+		}
 	} else {
 		return fmt.Errorf("invalid CR kind to reset symbolic links")
 	}
