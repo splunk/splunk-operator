@@ -39,7 +39,7 @@ jobs:
 
     - name: Dotenv Action
       id: dotenv
-      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      uses: falti/dotenv-action@v1.1.5
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v5
