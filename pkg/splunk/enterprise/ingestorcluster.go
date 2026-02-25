@@ -30,6 +30,7 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -282,6 +283,33 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 	}
 
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
+}
+
+// buildAndApplyIngestorQueueConfigMap builds and idempotently applies the ingestor queue
+// config ConfigMap. Returns (true, nil) when content changed, (false, nil) when unchanged.
+// Called unconditionally on every reconcile — splctrl.ApplyConfigMap is the idempotency gate.
+func buildAndApplyIngestorQueueConfigMap(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster, qosCfg *QueueOSConfig) (bool, error) {
+	configMapName := GetIngestorQueueConfigMapName(cr.GetName())
+
+	outputsConf := generateIngestorOutputsConf(&qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey)
+	defaultModeConf := generateIngestorDefaultModeConf()
+	confChecksum := computeIngestorConfChecksum(outputsConf, defaultModeConf)
+
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: cr.GetNamespace(),
+		},
+		Data: map[string]string{
+			"app.conf":          generateIngestorAppConf(),
+			"outputs.conf":      outputsConf,
+			"default-mode.conf": defaultModeConf,
+			"local.meta":        generateIngestorLocalMeta(confChecksum),
+		},
+	}
+	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
+
+	return splctrl.ApplyConfigMap(ctx, c, configMap)
 }
 
 // getIngestorStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise ingestors
