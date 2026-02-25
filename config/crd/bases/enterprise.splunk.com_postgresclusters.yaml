@@ -71,6 +71,51 @@ spec:
                 maximum: 10
                 minimum: 1
                 type: integer
+              managedRoles:
+                description: |-
+                  ManagedRoles contains PostgreSQL roles that should be created in the cluster.
+                  This field supports Server-Side Apply with per-role granularity, allowing
+                  multiple PostgresDatabase controllers to manage different roles independently.
+                items:
+                  description: ManagedRole represents a PostgreSQL role to be created
+                    and managed in the cluster.
+                  properties:
+                    ensure:
+                      default: present
+                      description: Ensure controls whether the role should exist (present)
+                        or not (absent).
+                      enum:
+                      - present
+                      - absent
+                      type: string
+                    name:
+                      description: Name of the role/user to create.
+                      maxLength: 63
+                      minLength: 1
+                      type: string
+                    passwordSecretRef:
+                      description: |-
+                        PasswordSecretRef references a Secret containing the password for this role.
+                        The Secret should have a key "password" with the password value.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                  required:
+                  - name
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               pgHBA:
                 default: []
                 description: |-
@@ -171,9 +216,6 @@ spec:
             - class
             type: object
             x-kubernetes-validations:
-            - message: Postgres version cannot be downgraded
-              rule: '!has(oldSelf.postgresVersion) || semver(self.postgresVersion,
-                true).compareTo(semver(oldSelf.postgresVersion, true)) >= 0'
             - message: Storage size cannot be removed and can only be increased
               rule: '!has(oldSelf.storage) || (has(self.storage) && quantity(self.storage).compareTo(quantity(oldSelf.storage))
                 >= 0)'
@@ -247,6 +289,29 @@ spec:
                     description: Enabled indicates whether pooler is active for this
                       cluster.
                     type: boolean
+                type: object
+              managedRolesStatus:
+                description: ManagedRolesStatus tracks the reconciliation status of
+                  managed roles.
+                properties:
+                  failed:
+                    additionalProperties:
+                      type: string
+                    description: Failed contains roles that failed to reconcile with
+                      error messages.
+                    type: object
+                  pending:
+                    description: Pending contains roles that are being created but
+                      not yet ready.
+                    items:
+                      type: string
+                    type: array
+                  reconciled:
+                    description: Reconciled contains roles that have been successfully
+                      created and are ready.
+                    items:
+                      type: string
+                    type: array
                 type: object
               phase:
                 description: |-

@@ -20,6 +20,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
@@ -128,7 +130,6 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	currentNormalizedSpec := normalizeCNPGClusterSpec(cnpgCluster.Spec, mergedConfig.PostgreSQLConfig)
 	desiredNormalizedSpec := normalizeCNPGClusterSpec(desiredSpec, mergedConfig.PostgreSQLConfig)
 	if !equality.Semantic.DeepEqual(currentNormalizedSpec, desiredNormalizedSpec) {
-		logger.Info("Desired CNPG Cluster spec is different from the current spec, need to patch", "name", cnpgCluster.Name)
 		originalCluster := cnpgCluster.DeepCopy()
 		cnpgCluster.Spec = desiredSpec
 		if patchCNPGClusterErr := r.Patch(ctx, cnpgCluster, client.MergeFrom(originalCluster)); patchCNPGClusterErr != nil {
@@ -143,7 +144,15 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		logger.Info("CNPG Cluster patched successfully, requeueing for status update", "name", cnpgCluster.Name)
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	}
-	// 7. Report progress back to the user and manage the reconciliation lifecycle.
+
+	// 7. Reconcile ManagedRoles from PostgresCluster to CNPG Cluster
+	if err := r.reconcileManagedRoles(ctx, postgresCluster, cnpgCluster); err != nil {
+		logger.Error(err, "Failed to reconcile managed roles")
+		r.setCondition(postgresCluster, metav1.ConditionFalse, "ManagedRolesFailed", err.Error())
+		return res, err
+	}
+
+	// 8. Report progress back to the user and manage the reconciliation lifecycle.
 	logger.Info("Reconciliation completed successfully", "name", postgresCluster.Name)
 	r.setCondition(postgresCluster, metav1.ConditionTrue, "ClusterUpdateSucceeded", fmt.Sprintf("Reconciliation completed successfully: %s", postgresCluster.Name))
 	return res, nil
@@ -285,6 +294,68 @@ func (r *PostgresClusterReconciler) setCondition(postgresCluster *enterprisev4.P
 		Message:            message,
 		ObservedGeneration: postgresCluster.Generation,
 	})
+}
+
+// reconcileManagedRoles synchronizes ManagedRoles from PostgresCluster spec to CNPG Cluster managed.roles using diff-based patching
+func (r *PostgresClusterReconciler) reconcileManagedRoles(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster) error {
+	logger := logs.FromContext(ctx)
+
+	// If no managed roles in PostgresCluster spec, nothing to do for now
+	// TODO: Should we remove roles from CNPG if they're removed from PostgresCluster?
+	if len(postgresCluster.Spec.ManagedRoles) == 0 {
+		logger.Info("No managed roles to reconcile")
+		return nil
+	}
+
+	// Convert PostgresCluster ManagedRoles to CNPG RoleConfiguration format
+	desiredRoles := []cnpgv1.RoleConfiguration{}
+	for _, role := range postgresCluster.Spec.ManagedRoles {
+		cnpgRole := cnpgv1.RoleConfiguration{
+			Name: role.Name,
+		}
+
+		if role.Ensure == "absent" {
+			cnpgRole.Ensure = cnpgv1.EnsureAbsent
+		} else {
+			cnpgRole.Ensure = cnpgv1.EnsurePresent
+		}
+
+		if role.PasswordSecretRef != nil {
+			cnpgRole.PasswordSecret = &cnpgv1.LocalObjectReference{
+				Name: role.PasswordSecretRef.Name,
+			}
+		}
+
+		desiredRoles = append(desiredRoles, cnpgRole)
+	}
+
+	var currentRoles []cnpgv1.RoleConfiguration
+	if cnpgCluster.Spec.Managed != nil && cnpgCluster.Spec.Managed.Roles != nil {
+		currentRoles = cnpgCluster.Spec.Managed.Roles
+	}
+
+	if equality.Semantic.DeepEqual(currentRoles, desiredRoles) {
+		logger.Info("CNPG Cluster roles already match desired state, no update needed")
+		return nil
+	}
+
+	logger.Info("CNPG Cluster roles differ from desired state, updating",
+		"currentCount", len(currentRoles),
+		"desiredCount", len(desiredRoles))
+
+	originalCluster := cnpgCluster.DeepCopy()
+
+	if cnpgCluster.Spec.Managed == nil {
+		cnpgCluster.Spec.Managed = &cnpgv1.ManagedConfiguration{}
+	}
+	cnpgCluster.Spec.Managed.Roles = desiredRoles
+
+	if err := r.Patch(ctx, cnpgCluster, client.MergeFrom(originalCluster)); err != nil {
+		return fmt.Errorf("failed to patch CNPG Cluster with managed roles: %w", err)
+	}
+
+	logger.Info("Successfully updated CNPG Cluster with managed roles", "roleCount", len(desiredRoles))
+	return nil
 }
 
 func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec, customDefinedParameters map[string]string) normalizedCNPGClusterSpec {

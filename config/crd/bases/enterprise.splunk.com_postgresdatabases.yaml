@@ -229,6 +229,11 @@ spec:
                       x-kubernetes-map-type: atomic
                   type: object
                 type: array
+              observedGeneration:
+                description: ObservedGeneration represents the .metadata.generation
+                  that the status was set based upon.
+                format: int64
+                type: integer
               phase:
                 type: string
             type: object
