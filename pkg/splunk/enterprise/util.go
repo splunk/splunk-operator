@@ -34,6 +34,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -449,6 +452,27 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 	}
 
 	return accessKey, secretKey, namespaceScopedSecret.ResourceVersion, nil
+}
+
+// GetQueueRemoteVolumeSecrets is used to retrieve access key and secrete key for Index & Ingestion separation
+func GetQueueRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject) (string, string, string, error) {
+	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	accessKey := string(namespaceScopedSecret.Data[s3AccessKey])
+	secretKey := string(namespaceScopedSecret.Data[s3SecretKey])
+
+	version := namespaceScopedSecret.ResourceVersion
+
+	if accessKey == "" {
+		return "", "", "", errors.New("access Key is missing")
+	} else if secretKey == "" {
+		return "", "", "", errors.New("secret Key is missing")
+	}
+
+	return accessKey, secretKey, version, nil
 }
 
 // getLocalAppFileName generates the local app file name
@@ -2311,6 +2335,48 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		origCR.(*enterpriseApi.Standalone).Status.DeepCopyInto(&latestStdlnCR.Status)
 		return latestStdlnCR, nil
 
+	case "IngestorCluster":
+		latestIngCR := &enterpriseApi.IngestorCluster{}
+		err = client.Get(ctx, namespacedName, latestIngCR)
+		if err != nil {
+			return nil, err
+		}
+
+		origCR.(*enterpriseApi.IngestorCluster).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.IngestorCluster).Status.Message = (*crError).Error()
+		}
+		origCR.(*enterpriseApi.IngestorCluster).Status.DeepCopyInto(&latestIngCR.Status)
+		return latestIngCR, nil
+
+	case "Queue":
+		latestQueueCR := &enterpriseApi.Queue{}
+		err = client.Get(ctx, namespacedName, latestQueueCR)
+		if err != nil {
+			return nil, err
+		}
+
+		origCR.(*enterpriseApi.Queue).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.Queue).Status.Message = (*crError).Error()
+		}
+		origCR.(*enterpriseApi.Queue).Status.DeepCopyInto(&latestQueueCR.Status)
+		return latestQueueCR, nil
+
+	case "ObjectStorage":
+		latestOsCR := &enterpriseApi.ObjectStorage{}
+		err = client.Get(ctx, namespacedName, latestOsCR)
+		if err != nil {
+			return nil, err
+		}
+
+		origCR.(*enterpriseApi.ObjectStorage).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.ObjectStorage).Status.Message = (*crError).Error()
+		}
+		origCR.(*enterpriseApi.ObjectStorage).Status.DeepCopyInto(&latestOsCR.Status)
+		return latestOsCR, nil
+
 	case "LicenseMaster":
 		latestLmCR := &enterpriseApiV3.LicenseMaster{}
 		err = client.Get(ctx, namespacedName, latestLmCR)
@@ -2486,6 +2552,8 @@ func getApplicablePodNameForK8Probes(cr splcommon.MetaObject, ordinalIdx int32) 
 		podType = "cluster-manager"
 	case "MonitoringConsole":
 		podType = "monitoring-console"
+	case "IngestorCluster":
+		podType = "ingestor"
 	}
 	return fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, ordinalIdx)
 }
@@ -2544,4 +2612,110 @@ func loadFixture(t *testing.T, filename string) string {
 		t.Fatalf("Failed to compact JSON from fixture %s: %v", filename, err)
 	}
 	return compactJSON.String()
+}
+
+// QueueOSConfig holds resolved Queue and ObjectStorage specs with credentials
+type QueueOSConfig struct {
+	Queue     enterpriseApi.QueueSpec
+	OS        enterpriseApi.ObjectStorageSpec
+	AccessKey string
+	SecretKey string
+	Version   string
+}
+
+// ResolveQueueAndObjectStorage fetches Queue and ObjectStorage CRs, resolves
+// their endpoints, and extracts credentials from the referenced secret.
+func ResolveQueueAndObjectStorage(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, queueRef, osRef corev1.ObjectReference, serviceAccount string) (*QueueOSConfig, error) {
+	cfg := &QueueOSConfig{}
+
+	if queueRef.Name != "" {
+		ns := cr.GetNamespace()
+		if queueRef.Namespace != "" {
+			ns = queueRef.Namespace
+		}
+		var queue enterpriseApi.Queue
+		if err := c.Get(ctx, types.NamespacedName{Name: queueRef.Name, Namespace: ns}, &queue); err != nil {
+			return nil, err
+		}
+		cfg.Queue = queue.Spec
+	}
+	if cfg.Queue.Provider == "sqs" || cfg.Queue.Provider == "sqs_cp" {
+		if cfg.Queue.SQS.Endpoint == "" && cfg.Queue.SQS.AuthRegion != "" {
+			ep, err := resolveSQSEndpoint(ctx, cfg.Queue.SQS.AuthRegion)
+			if err != nil {
+				return nil, err
+			}
+			cfg.Queue.SQS.Endpoint = ep
+		}
+	}
+
+	if osRef.Name != "" {
+		ns := cr.GetNamespace()
+		if osRef.Namespace != "" {
+			ns = osRef.Namespace
+		}
+		var os enterpriseApi.ObjectStorage
+		if err := c.Get(ctx, types.NamespacedName{Name: osRef.Name, Namespace: ns}, &os); err != nil {
+			return nil, err
+		}
+		cfg.OS = os.Spec
+	}
+	if cfg.OS.Provider == "s3" {
+		if cfg.OS.S3.Endpoint == "" && cfg.Queue.SQS.AuthRegion != "" {
+			ep, err := resolveS3Endpoint(ctx, cfg.Queue.SQS.AuthRegion)
+			if err != nil {
+				return nil, err
+			}
+			cfg.OS.S3.Endpoint = ep
+		}
+	}
+
+	if (cfg.Queue.Provider == "sqs" || cfg.Queue.Provider == "sqs_cp") && serviceAccount == "" {
+		for _, vol := range cfg.Queue.SQS.VolList {
+			if vol.SecretRef != "" {
+				accessKey, secretKey, version, err := GetQueueRemoteVolumeSecrets(ctx, vol, c, cr)
+				if err != nil {
+					return nil, err
+				}
+				cfg.AccessKey = accessKey
+				cfg.SecretKey = secretKey
+				cfg.Version = version
+			}
+		}
+	}
+
+	return cfg, nil
+}
+
+func resolveS3Endpoint(ctx context.Context, region string) (string, error) {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	if err != nil {
+		return "", err
+	}
+
+	client := s3.NewFromConfig(cfg)
+	params := s3.EndpointParameters{Region: &region}
+
+	ep, err := client.Options().EndpointResolverV2.ResolveEndpoint(ctx, params)
+	if err != nil {
+		return "", err
+	}
+	// Full endpoint URL as string:
+	return ep.URI.String(), nil
+}
+
+func resolveSQSEndpoint(ctx context.Context, region string) (string, error) {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	if err != nil {
+		return "", err
+	}
+
+	client := sqs.NewFromConfig(cfg)
+	params := sqs.EndpointParameters{Region: &region}
+
+	ep, err := client.Options().EndpointResolverV2.ResolveEndpoint(ctx, params)
+	if err != nil {
+		return "", err
+	}
+	return ep.URI.String(), nil
 }

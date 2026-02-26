@@ -208,6 +208,7 @@ deploy: manifests kustomize uninstall ## Deploy controller to the K8s cluster sp
 	$(SED) "s/value: WATCH_NAMESPACE_VALUE/value: \"${WATCH_NAMESPACE}\"/g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s/value: SPLUNK_GENERAL_TERMS_VALUE/value: \"${SPLUNK_GENERAL_TERMS}\"/g"  config/${ENVIRONMENT}/kustomization.yaml
+	$(SED) 's/\("sokVersion": \)"[^"]*"/\1"$(VERSION)"/' config/manager/controller_manager_telemetry.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} SPLUNK_GENERAL_TERMS=${SPLUNK_GENERAL_TERMS} $(KUSTOMIZE) build config/${ENVIRONMENT} | kubectl apply --server-side --force-conflicts -f -
 	$(SED) "s/namespace: ${NAMESPACE}/namespace: splunk-operator/g"  config/${ENVIRONMENT}/kustomization.yaml
@@ -283,7 +284,6 @@ ln -sf $(1)-$(3) $(1)
 endef
 
 ## Generate bundle manifests and metadata, then validate generated files.
-## In addition, copy the newly generated crd files to helm crds.
 .PHONY: bundle
 bundle: manifests kustomize
 	operator-sdk generate kustomize manifests -q
@@ -294,7 +294,6 @@ bundle: manifests kustomize
 	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle ${BUNDLE_GEN_FLAGS}
 	operator-sdk bundle validate ./bundle
 	operator-sdk bundle validate bundle --select-optional suite=operatorframework
-	cp bundle/manifests/enterprise.splunk.com* helm-chart/splunk-operator/crds
 
 .PHONY: bundle-build
 bundle-build: ## Build the bundle image.
@@ -395,6 +394,7 @@ run_clair_scan:
 
 # generate artifacts needed to deploy operator, this is current way of doing it, need to fix this
 generate-artifacts-namespace: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+	$(SED) 's/\("sokVersion": \)"[^"]*"/\1"$(VERSION)"/' config/manager/controller_manager_telemetry.yaml
 	mkdir -p release-${VERSION}
 	cp config/default/kustomization-namespace.yaml config/default/kustomization.yaml
 	cp config/rbac/kustomization-namespace.yaml config/rbac/kustomization.yaml
@@ -410,6 +410,7 @@ generate-artifacts-namespace: manifests kustomize ## Deploy controller to the K8
 
 # generate artifacts needed to deploy operator, this is current way of doing it, need to fix this
 generate-artifacts-cluster: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+	$(SED) 's/\("sokVersion": \)"[^"]*"/\1"$(VERSION)"/' config/manager/controller_manager_telemetry.yaml
 	mkdir -p release-${VERSION}
 	cp config/default/kustomization-cluster.yaml config/default/kustomization.yaml
 	cp config/rbac/kustomization-cluster.yaml config/rbac/kustomization.yaml

@@ -39,6 +39,7 @@ jobs:
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
     - name: Run FOSSA Test
+      if: ${{ secrets.FOSSA_API_TOKEN != '' }}
       uses: fossas/fossa-action@main
       with:
         api-key: ${{secrets.FOSSA_API_TOKEN}}
