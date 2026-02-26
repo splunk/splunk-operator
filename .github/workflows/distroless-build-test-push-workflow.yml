@@ -55,7 +55,7 @@ jobs:
       - name: Run Unit Tests
         run: make test
       - name: Run Code Coverage
-        run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
+        run: goveralls -shallow -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
       - name: Upload Coverage artifacts
         uses: actions/upload-artifact@v4.4.0
         with:

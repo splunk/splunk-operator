@@ -284,7 +284,6 @@ ln -sf $(1)-$(3) $(1)
 endef
 
 ## Generate bundle manifests and metadata, then validate generated files.
-## In addition, copy the newly generated crd files to helm crds.
 .PHONY: bundle
 bundle: manifests kustomize
 	operator-sdk generate kustomize manifests -q
@@ -295,7 +294,6 @@ bundle: manifests kustomize
 	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle ${BUNDLE_GEN_FLAGS}
 	operator-sdk bundle validate ./bundle
 	operator-sdk bundle validate bundle --select-optional suite=operatorframework
-	cp bundle/manifests/enterprise.splunk.com* helm-chart/splunk-operator/crds
 
 .PHONY: bundle-build
 bundle-build: ## Build the bundle image.
@@ -473,4 +471,3 @@ build-installer: manifests generate kustomize
 	mkdir -p dist
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
-
