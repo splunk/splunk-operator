@@ -195,7 +195,7 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 		},
 	}
 
-	//update podTemplate annotation with configMap resource version
+	// update podTemplate annotation with hash of configMap data
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMap}
 	monitoringConsoleConfigMap, err = splctrl.GetMCConfigMap(ctx, client, cr, namespacedName)
 	if err != nil {
