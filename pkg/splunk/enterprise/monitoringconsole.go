@@ -33,9 +33,11 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/splunk/splunk-operator/pkg/logging"
 )
 
 // ApplyMonitoringConsole reconciles the StatefulSet for N monitoring console instances of Splunk Enterprise.
@@ -46,10 +48,8 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyMonitoringConsole")
-
-	eventPublisher := GetEventPublisher(ctx, cr)
+	logger := logging.FromContext(ctx).With("func", "ApplyMonitoringConsole")
+	eventPublisher, _ := newK8EventPublisher(client, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "MonitoringConsole"
 
@@ -68,7 +68,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	err = validateMonitoringConsoleSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateMonitoringConsoleSpec", fmt.Sprintf("validate monitoringconsole spec failed %s", err.Error()))
-		scopedLog.Error(err, "Failed to validate monitoring console spec")
+		logger.ErrorContext(ctx, "Failed to validate monitoring console spec", "error", err)
 		return result, err
 	}
 
@@ -95,7 +95,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole)
 	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
+		logger.ErrorContext(ctx, "create or update general config failed", "error", err)
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
 		return result, err
 	}
@@ -207,15 +207,13 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 }
 
 // helper function to get the list of MonitoringConsole types in the current namespace
-func getMonitoringConsoleList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []rclient.ListOption) (enterpriseApi.MonitoringConsoleList, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getMonitoringConsoleList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-
+func getMonitoringConsoleList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.MonitoringConsoleList, error) {
+	logger := logging.FromContext(ctx).With("func", "getMonitoringConsoleList")
 	objectList := enterpriseApi.MonitoringConsoleList{}
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	if err != nil {
-		scopedLog.Error(err, "MonitoringConsole types not found in namespace", "namsespace", cr.GetNamespace())
+		logger.ErrorContext(ctx, "MonitoringConsole types not found in namespace", "namespace", cr.GetNamespace(), "error", err)
 		return objectList, err
 	}
 
@@ -375,11 +373,8 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 // changeMonitoringConsoleAnnotations updates the splunk/image-tag field of the MonitoringConsole annotations to trigger the reconcile loop
 // on update, and returns error if something is wrong.
 func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("changeMonitoringConsoleAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	// Get event publisher from context
-	eventPublisher := GetEventPublisher(ctx, cr)
+	logger := logging.FromContext(ctx).With("func", "changeMonitoringConsoleAnnotations")
+	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	monitoringConsoleInstance := &enterpriseApi.MonitoringConsole{}
 	if len(cr.Spec.MonitoringConsoleRef.Name) > 0 {
@@ -428,13 +423,13 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 	image, err := getCurrentImage(ctx, client, cr, SplunkClusterManager)
 	if err != nil {
 		eventPublisher.Warning(ctx, "changeMonitoringConsoleAnnotations", fmt.Sprintf("Could not get the ClusterManager Image. Reason %v", err))
-		scopedLog.Error(err, "Get ClusterManager Image failed with", "error", err)
+		logger.ErrorContext(ctx, "Get ClusterManager Image failed", "error", err)
 		return err
 	}
 	err = changeAnnotations(ctx, client, image, monitoringConsoleInstance)
 	if err != nil {
 		eventPublisher.Warning(ctx, "changeMonitoringConsoleAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
-		scopedLog.Error(err, "MonitoringConsole types update after changing annotations failed with", "error", err)
+		logger.ErrorContext(ctx, "MonitoringConsole types update after changing annotations failed", "error", err)
 		return err
 	}
 

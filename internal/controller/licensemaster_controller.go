@@ -18,9 +18,11 @@ package controller
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/splunk/splunk-operator/internal/controller/common"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	"github.com/pkg/errors"
@@ -47,6 +49,7 @@ type LicenseMasterReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	Logger   *slog.Logger
 }
 
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemasters,verbs=get;list;watch;create;update;patch;delete
@@ -77,6 +80,8 @@ type LicenseMasterReconciler struct {
 func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "LicenseMaster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "LicenseMaster")
+
+	ctx = logging.WithLogger(ctx, r.Logger.With("name", req.Name, "namespace", req.Namespace))
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("licensemaster", req.NamespacedName)
@@ -124,6 +129,7 @@ var ApplyLicenseMaster = func(ctx context.Context, client client.Client, instanc
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *LicenseMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Logger = r.Logger.With("controller", "LicenseMaster")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApiV3.LicenseMaster{}).
 		WithEventFilter(predicate.Or(

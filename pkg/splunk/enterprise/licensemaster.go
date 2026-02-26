@@ -27,10 +27,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -44,10 +44,8 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyLicenseMaster")
-
-	eventPublisher := GetEventPublisher(ctx, cr)
+	logger := logging.FromContext(ctx).With("func", "ApplyLicenseMaster")
+	eventPublisher, _ := newK8EventPublisher(client, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	var err error
@@ -61,7 +59,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	err = validateLicenseMasterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateLicenseMasterSpec", fmt.Sprintf("validate licensemaster spec failed %s", err.Error()))
-		scopedLog.Error(err, "Failed to validate license master spec")
+		logger.ErrorContext(ctx, "Failed to validate license master spec", "error", err)
 		return result, err
 	}
 
@@ -86,7 +84,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseMaster)
 	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
+		logger.ErrorContext(ctx, "create or update general config failed", "error", err)
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
 		return result, err
 	}
@@ -162,7 +160,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
+			logger.ErrorContext(ctx, "Error in deleting automated monitoring console resource", "error", err)
 		}
 
 		// Add a splunk operator telemetry app
@@ -216,16 +214,14 @@ func validateLicenseMasterSpec(ctx context.Context, c splcommon.ControllerClient
 
 // helper function to get the list of LicenseMaster types in the current namespace
 func getLicenseMasterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getLicenseMasterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-
+	logger := logging.FromContext(ctx).With("func", "getLicenseMasterList")
 	objectList := enterpriseApiV3.LicenseMasterList{}
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	numOfObjects := len(objectList.Items)
 
 	if err != nil {
-		scopedLog.Error(err, "LicenseMaster types not found in namespace", "namsespace", cr.GetNamespace())
+		logger.ErrorContext(ctx, "LicenseMaster types not found in namespace", "namespace", cr.GetNamespace(), "error", err)
 		return numOfObjects, err
 	}
 

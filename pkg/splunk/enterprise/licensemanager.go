@@ -22,22 +22,19 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/splunk/splunk-operator/pkg/logging"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 )
-
-// newSplunkClientFunc is a package-level variable for creating Splunk clients, allowing test injection.
-var newSplunkClientFunc = splclient.NewSplunkClient
 
 // ApplyLicenseManager reconciles the state for the Splunk Enterprise license manager.
 func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) (reconcile.Result, error) {
@@ -47,10 +44,8 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyLicenseManager")
-
-	eventPublisher := GetEventPublisher(ctx, cr)
+	logger := logging.FromContext(ctx).With("func", "ApplyLicenseManager")
+	eventPublisher, _ := newK8EventPublisher(client, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "LicenseManager"
 
@@ -64,8 +59,8 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	// validate and updates defaults for CR
 	err = validateLicenseManagerSpec(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "validateLicenseManagerSpec", fmt.Sprintf("validate license manager spec failed %s", err.Error()))
-		scopedLog.Error(err, "Failed to validate license manager spec")
+		eventPublisher.Warning(ctx, "validateLicenseManagerSpec", fmt.Sprintf("validate licensemanager spec failed %s", err.Error()))
+		logger.ErrorContext(ctx, "Failed to validate license manager spec", "error", err)
 		return result, err
 	}
 
@@ -90,7 +85,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseManager)
 	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
+		logger.ErrorContext(ctx, "create or update general config failed", "error", err)
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
 		return result, err
 	}
@@ -146,12 +141,6 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
-	// Check for license-related pod failures before updating
-	if err = checkLicenseRelatedPodFailures(ctx, client, cr, statefulSet); err != nil {
-		scopedLog.Error(err, "License check failed")
-		return result, err
-	}
-
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(ctx, client, statefulSet, 1)
 	if err != nil {
@@ -172,7 +161,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
+			logger.ErrorContext(ctx, "Error in deleting automated monitoring console resource", "error", err)
 		}
 
 		// Add a splunk operator telemetry app
@@ -231,81 +220,14 @@ func validateLicenseManagerSpec(ctx context.Context, c splcommon.ControllerClien
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
-// checkLicenseRelatedPodFailures checks license status via Splunk API
-// and publishes warning event when expired license is detected
-func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager, statefulSet *appsv1.StatefulSet) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("checkLicenseRelatedPodFailures")
-	eventPublisher := GetEventPublisher(ctx, cr)
-
-	replicas := int32(1)
-	if statefulSet.Spec.Replicas != nil {
-		replicas = *statefulSet.Spec.Replicas
-	}
-
-	for i := int32(0); i < replicas; i++ {
-		// Check if pod is ready before attempting API call
-		podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), i)
-		namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: podName}
-		var pod corev1.Pod
-		err := client.Get(ctx, namespacedName, &pod)
-		if err != nil {
-			scopedLog.Info("Pod not found, skipping license check", "podName", podName)
-			continue
-		}
-
-		// Only check license if pod is running
-		if pod.Status.Phase != corev1.PodRunning {
-			scopedLog.Info("Pod not in running state, skipping license check", "podName", podName, "phase", pod.Status.Phase)
-			continue
-		}
-
-		// Get admin password from namespace-scoped secret
-		defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
-		defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), defaultSecretObjName)
-		if err != nil {
-			return fmt.Errorf("failed to get namespace secret for license check: %w", err)
-		}
-
-		adminPassword := string(defaultSecret.Data["password"])
-		if adminPassword == "" {
-			return fmt.Errorf("admin password not found in secret %s", defaultSecretObjName)
-		}
-
-		// Create Splunk client
-		fqdnName := GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkLicenseManager, cr.GetName(), i, false)
-		splunkClient := newSplunkClientFunc(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPassword)
-
-		// Get license information from Splunk API
-		licenses, err := splunkClient.GetLicenseInfo()
-		if err != nil {
-			scopedLog.Error(err, "Failed to get license information from Splunk API", "podName", podName)
-			continue
-		}
-
-		// Check for expired licenses
-		for licenseName, licenseInfo := range licenses {
-			if licenseInfo.Status == "EXPIRED" {
-				eventPublisher.Warning(ctx, "LicenseExpired",
-					fmt.Sprintf("License '%s' has expired", licenseName))
-				scopedLog.Error(nil, "Detected expired license", "licenseName", licenseName, "title", licenseInfo.Title)
-			}
-		}
-	}
-
-	return nil
-}
-
 // helper function to get the list of LicenseManager types in the current namespace
 func getLicenseManagerList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.LicenseManagerList, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getLicenseManagerList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-
+	logger := logging.FromContext(ctx).With("func", "getLicenseManagerList")
 	objectList := enterpriseApi.LicenseManagerList{}
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	if err != nil {
-		scopedLog.Error(err, "LicenseManager types not found in namespace", "namsespace", cr.GetNamespace())
+		logger.ErrorContext(ctx, "LicenseManager types not found in namespace", "namespace", cr.GetNamespace(), "error", err)
 		return objectList, err
 	}
 

@@ -18,10 +18,12 @@ package controller
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -51,6 +53,7 @@ type StandaloneReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	Logger   *slog.Logger
 }
 
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=standalones,verbs=get;list;watch;create;update;patch;delete
@@ -81,6 +84,8 @@ type StandaloneReconciler struct {
 func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "Standalone")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "Standalone")
+
+	ctx = logging.WithLogger(ctx, r.Logger.With("name", req.Name, "namespace", req.Namespace))
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("standalone", req.NamespacedName)
@@ -128,6 +133,7 @@ var ApplyStandalone = func(ctx context.Context, client client.Client, instance *
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Logger = r.Logger.With("controller", "Standalone")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.Standalone{}).
 		WithEventFilter(predicate.Or(

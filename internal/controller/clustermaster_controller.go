@@ -18,10 +18,12 @@ package controller
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	"github.com/pkg/errors"
@@ -47,6 +49,7 @@ type ClusterMasterReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	Logger   *slog.Logger
 }
 
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=clustermasters,verbs=get;list;watch;create;update;patch;delete
@@ -78,6 +81,8 @@ func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// your logic here
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "ClusterMaster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "ClusterMaster")
+
+	ctx = logging.WithLogger(ctx, r.Logger.With("name", req.Name, "namespace", req.Namespace))
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("clustermaster", req.NamespacedName)
@@ -125,6 +130,7 @@ var ApplyClusterMaster = func(ctx context.Context, client client.Client, instanc
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Logger = r.Logger.With("controller", "ClusterMaster")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApiV3.ClusterMaster{}).
 		WithEventFilter(predicate.Or(

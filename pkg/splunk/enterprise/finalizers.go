@@ -19,12 +19,11 @@ import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func init() {
@@ -35,8 +34,7 @@ func init() {
 func DeleteSplunkPvc(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient) error {
 	objectKind := cr.GetObjectKind().GroupVersionKind().Kind
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("DeleteSplunkPvc")
+	logger := logging.FromContext(ctx).With("func", "DeleteSplunkPvc")
 
 	var components []string
 	switch objectKind {
@@ -59,7 +57,7 @@ func DeleteSplunkPvc(ctx context.Context, cr splcommon.MetaObject, c splcommon.C
 	case "IngestorCluster":
 		components = append(components, "ingestor")
 	default:
-		scopedLog.Info("Skipping PVC removal")
+		logger.DebugContext(ctx, "Skipping PVC removal")
 		return nil
 	}
 
@@ -79,7 +77,7 @@ func DeleteSplunkPvc(ctx context.Context, cr splcommon.MetaObject, c splcommon.C
 
 		// delete each PVC
 		for _, pvc := range pvclist.Items {
-			scopedLog.Info("Deleting PVC", "name", pvc.ObjectMeta.Name)
+			logger.InfoContext(ctx, "Deleting PVC", "name", pvc.ObjectMeta.Name)
 			if err := c.Delete(context.Background(), &pvc); err != nil {
 				return err
 			}
