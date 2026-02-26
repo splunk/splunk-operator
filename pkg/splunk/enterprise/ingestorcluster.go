@@ -23,6 +23,7 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
@@ -44,7 +45,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		RequeueAfter: time.Second * 5,
 	}
 
-	logger := slog.With("func", "ApplyIngestorCluster", "name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "ApplyIngestorCluster", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
@@ -311,7 +312,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 // getClient for ingestorClusterPodManager returns a SplunkClient for the member n
 func (mgr *ingestorClusterPodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
-	logger := slog.With("func", "getClient", "name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "getClient", "name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
 
 	// Get Pod Name
 	memberName := GetSplunkStatefulsetPodName(SplunkIngestor, mgr.cr.GetName(), n)
@@ -361,7 +362,7 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 
 // updateIngestorConfFiles checks if Queue or Pipeline inputs are created for the first time and updates the conf file if so
 func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Context, newCR *enterpriseApi.IngestorCluster, queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string, k8s client.Client) error {
-	logger := slog.With("func", "updateIngestorConfFiles", "name", newCR.GetName(), "namespace", newCR.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "updateIngestorConfFiles", "name", newCR.GetName(), "namespace", newCR.GetNamespace())
 
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.ReadyReplicas

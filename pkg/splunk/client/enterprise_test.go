@@ -19,12 +19,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -705,7 +705,7 @@ func TestUpdateConfFile(t *testing.T) {
 	fileName := "outputs"
 
 	ctx := context.TODO()
-	logger := slog.With("func", "TestUpdateConfFile", "name", "test", "namespace", "test")
+	logger := logging.FromContext(ctx).With("func", "TestUpdateConfFile", "name", "test", "namespace", "test")
 
 	// First request: create the property (object) if it doesn't exist
 	createBody := strings.NewReader(fmt.Sprintf("name=%s", property))

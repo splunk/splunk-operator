@@ -16,12 +16,29 @@
 package logging
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"os"
 	"strings"
 	"time"
 )
+
+type slogContextKey struct{}
+
+// WithLogger returns a new context with the given slog.Logger attached.
+func WithLogger(ctx context.Context, l *slog.Logger) context.Context {
+	return context.WithValue(ctx, slogContextKey{}, l)
+}
+
+// FromContext extracts the slog.Logger from the context.
+// Falls back to slog.Default() if none is set.
+func FromContext(ctx context.Context) *slog.Logger {
+	if l, ok := ctx.Value(slogContextKey{}).(*slog.Logger); ok {
+		return l
+	}
+	return slog.Default()
+}
 
 const (
 	EnvLogLevel     = "LOG_LEVEL"
