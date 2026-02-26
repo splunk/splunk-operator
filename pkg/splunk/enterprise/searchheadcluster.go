@@ -404,7 +404,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 	*/
 	if len(mgr.cr.Status.AdminPasswordChangedSecrets) > 0 {
 		for podSecretName := range mgr.cr.Status.AdminPasswordChangedSecrets {
-			podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr.GetNamespace(), mgr.cr.GetName(), podSecretName)
+			podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr.GetNamespace(), podSecretName)
 			if err != nil {
 				return fmt.Errorf("could not read secret %s, reason - %v", podSecretName, err)
 			}

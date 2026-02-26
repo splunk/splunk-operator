@@ -19,10 +19,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/splunk/splunk-operator/pkg/logging"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
@@ -30,19 +33,26 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // GetSpecificSecretTokenFromPod retrieves a specific secret token's value from a Pod
 func GetSpecificSecretTokenFromPod(ctx context.Context, c splcommon.ControllerClient, PodName string, namespace string, secretToken string) (string, error) {
+	logger := logging.FromContext(ctx).With("func", "GetSpecificSecretTokenFromPod")
+	logger.DebugContext(ctx, "Retrieving secret token from pod",
+		"pod", PodName,
+		"namespace", namespace,
+		"token_key", secretToken)
+
 	// Get Pod data
 	secret, err := GetSecretFromPod(ctx, c, PodName, namespace)
 	if err != nil {
 		return "", err
 	}
 
-	// Sanity checks
 	if secret.Data == nil {
+		logger.WarnContext(ctx, "Secret has nil data. Update secret with required data",
+			"secret_name", secret.Name,
+			"namespace", namespace)
 		return "", errors.New(invalidSecretDataError)
 	}
 
@@ -51,6 +61,10 @@ func GetSpecificSecretTokenFromPod(ctx context.Context, c splcommon.ControllerCl
 	}
 
 	if _, ok := secret.Data[secretToken]; !ok {
+		logger.WarnContext(ctx, "Secret is missing required field. Update secret with required data",
+			"secret_name", secret.Name,
+			"namespace", namespace,
+			"missing_field", secretToken)
 		return "", errors.New(invalidSecretDataError)
 	}
 
@@ -63,16 +77,28 @@ func GetSecretFromPod(ctx context.Context, c splcommon.ControllerClient, PodName
 	var currentSecret corev1.Secret
 	var secretName string
 
+	logger := slog.With("func", "GetSecretFromPod")
+	logger.DebugContext(ctx, "Retrieving secret from pod",
+		"pod", PodName,
+		"namespace", namespace)
+
 	// Get Pod
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: PodName}
 	err := c.Get(ctx, namespacedName, &currentPod)
 	if err != nil {
+		logger.WarnContext(ctx, "Pod not found",
+			"pod", PodName,
+			"namespace", namespace,
+			"error", err)
 		return nil, errors.New(splcommon.PodNotFoundError)
 	}
 
 	// Get Pod Spec Volumes
 	podSpecVolumes := currentPod.Spec.Volumes
 	if len(podSpecVolumes) == 0 {
+		logger.WarnContext(ctx, "Pod has no volumes configured",
+			"pod", PodName,
+			"namespace", namespace)
 		return nil, errors.New("empty pod spec volumes")
 	}
 
@@ -96,6 +122,10 @@ func GetSecretFromPod(ctx context.Context, c splcommon.ControllerClient, PodName
 	namespacedName = types.NamespacedName{Namespace: namespace, Name: secretName}
 	err = c.Get(ctx, namespacedName, &currentSecret)
 	if err != nil {
+		logger.WarnContext(ctx, "Secret not found for pod. Create secret to proceed",
+			"secret_name", secretName,
+			"pod", PodName,
+			"namespace", namespace)
 		return nil, errors.New(splcommon.SecretNotFoundError)
 	}
 
@@ -114,7 +144,7 @@ func GetSecretLabels() map[string]string {
 func SetSecretOwnerRef(ctx context.Context, client splcommon.ControllerClient, secretObjectName string, cr splcommon.MetaObject) error {
 	var err error
 
-	secret, err := GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), secretObjectName)
+	secret, err := GetSecretByName(ctx, client, cr.GetNamespace(), secretObjectName)
 	if err != nil {
 		return err
 	}
@@ -140,7 +170,7 @@ func RemoveSecretOwnerRef(ctx context.Context, client splcommon.ControllerClient
 	var err error
 	var refCount uint = 0
 
-	secret, err := GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), secretObjectName)
+	secret, err := GetSecretByName(ctx, client, cr.GetNamespace(), secretObjectName)
 	if err != nil {
 		return 0, err
 	}
@@ -167,6 +197,7 @@ func RemoveSecretOwnerRef(ctx context.Context, client splcommon.ControllerClient
 
 // RemoveUnwantedSecrets deletes all secrets whose version preceeds (latestVersion - MinimumVersionedSecrets)
 func RemoveUnwantedSecrets(ctx context.Context, c splcommon.ControllerClient, versionedSecretIdentifier, namespace string) error {
+	logger := slog.With("func", "RemoveUnwantedSecrets")
 	// retrieve the list of versioned namespace scoped secrets
 	_, latestVersion, list := GetExistingLatestVersionedSecret(ctx, c, namespace, versionedSecretIdentifier, true)
 	if latestVersion != -1 {
@@ -181,8 +212,18 @@ func RemoveUnwantedSecrets(ctx context.Context, c splcommon.ControllerClient, ve
 				// Delete secret
 				err := DeleteResource(ctx, c, &secret)
 				if err != nil {
+					logger.ErrorContext(ctx, "Failed to delete old versioned secret",
+						"secret_name", secret.GetName(),
+						"version", version,
+						"namespace", namespace,
+						"error", err)
 					return err
 				}
+				logger.InfoContext(ctx, "Deleted old versioned secret",
+					"secret_name", secret.GetName(),
+					"version", version,
+					"latest_version", latestVersion,
+					"namespace", namespace)
 			}
 		}
 	}
@@ -194,11 +235,19 @@ func RemoveUnwantedSecrets(ctx context.Context, c splcommon.ControllerClient, ve
 func GetNamespaceScopedSecret(ctx context.Context, c splcommon.ControllerClient, namespace string) (*corev1.Secret, error) {
 	var namespaceScopedSecret corev1.Secret
 
-	// Check if a namespace scoped secret exists
-	namespacedName := types.NamespacedName{Namespace: namespace, Name: splcommon.GetNamespaceScopedSecretName(namespace)}
+	logger := slog.With("func", "GetNamespaceScopedSecret")
+	name := splcommon.GetNamespaceScopedSecretName(namespace)
+	logger.DebugContext(ctx, "Retrieving namespace-scoped secret",
+		"secret_name", name,
+		"namespace", namespace)
+
+	namespacedName := types.NamespacedName{Namespace: namespace, Name: name}
 	err := c.Get(ctx, namespacedName, &namespaceScopedSecret)
 	if err != nil {
-		// Didn't find it
+		logger.WarnContext(ctx, "Namespace-scoped secret not found. Create secret to proceed",
+			"secret_name", name,
+			"namespace", namespace,
+			"error", err)
 		return nil, err
 	}
 
@@ -232,11 +281,7 @@ func GetVersionedSecretVersion(secretName string, versionedSecretIdentifier stri
 
 // GetExistingLatestVersionedSecret retrieves latest EXISTING versionedSecretIdentifier based secret existing currently in the namespace
 func GetExistingLatestVersionedSecret(ctx context.Context, c splcommon.ControllerClient, namespace string, versionedSecretIdentifier string, list bool) (*corev1.Secret, int, map[int]corev1.Secret) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("GetExistingLatestVersionedSecret").WithValues(
-		"versionedSecretIdentifier", versionedSecretIdentifier,
-		"namespace", namespace)
-
+	logger := slog.With("func", "GetExistingLatestVersionedSecret")
 	// Get list of secrets in K8S cluster
 	secretList := corev1.SecretList{}
 
@@ -251,7 +296,9 @@ func GetExistingLatestVersionedSecret(ctx context.Context, c splcommon.Controlle
 
 	err := c.List(ctx, &secretList, listOpts...)
 	if err != nil || len(secretList.Items) == 0 {
-		scopedLog.Info("Secrets not found in namespace")
+		logger.DebugContext(ctx, "No versioned secrets found in namespace",
+			"versioned_secret_identifier", versionedSecretIdentifier,
+			"namespace", namespace)
 		return nil, -1, nil
 	}
 
@@ -291,20 +338,7 @@ func GetExistingLatestVersionedSecret(ctx context.Context, c splcommon.Controlle
 
 // GetLatestVersionedSecret is used to create/retrieve latest versionedSecretIdentifier based secret, cr is optional for owner references(pass nil if not required)
 func GetLatestVersionedSecret(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, namespace string, versionedSecretIdentifier string) (*corev1.Secret, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("GetLatestVersionedSecret").WithValues(
-		"versionedSecretIdentifier", versionedSecretIdentifier,
-		"namespace", namespace)
-
-	// If CR is passed log it as well
-	if cr != nil {
-		scopedLog = reqLogger.WithName("GetLatestVersionedSecret").WithValues(
-			"versionedSecretIdentifier", versionedSecretIdentifier,
-			"cr", cr.GetName(),
-			"kind", cr.GetObjectKind(),
-			"namespace", namespace)
-	}
-
+	logger := slog.With("func", "GetLatestVersionedSecret")
 	var latestVersionedSecret *corev1.Secret
 	var err error
 
@@ -320,15 +354,23 @@ func GetLatestVersionedSecret(ctx context.Context, c splcommon.ControllerClient,
 	// Check if there is atleast one versionedSecretIdentifier based secret
 	if existingLatestVersion == -1 {
 		// No secret based on versionedSecretIdentifier, create one with version v1
-		scopedLog.Info("Creating first version secret")
+		logger.InfoContext(ctx, "Creating first version secret",
+			"versioned_secret_identifier", versionedSecretIdentifier,
+			"namespace", namespace)
 		latestVersionedSecret, _ = ApplySplunkSecret(ctx, c, cr, splunkReadableData, splcommon.GetVersionedSecretName(versionedSecretIdentifier, splcommon.FirstVersion), namespace)
 	} else {
 		// Check if contents of latest versionedSecretIdentifier based secret is different from that of namespace scoped secrets object
 		if !reflect.DeepEqual(splunkReadableData, existingLatestVersionedSecret.Data) {
 			// Different, create a newer version versionedSecretIdentifier based secret
 			latestVersionedSecret, err = ApplySplunkSecret(ctx, c, cr, splunkReadableData, splcommon.GetVersionedSecretName(versionedSecretIdentifier, strconv.Itoa(existingLatestVersion+1)), namespace)
-			scopedLog.Info("Data in the latest versioned secret is different from the namespace scoped secret, hence creating a new secret", "newSecretName", latestVersionedSecret.GetName(),
-				"newSecretVersion", existingLatestVersion+1, "oldSecretName", existingLatestVersionedSecret.GetName(), "oldSecretVersion", existingLatestVersion)
+			if latestVersionedSecret != nil {
+				logger.InfoContext(ctx, "Secret version changed",
+					"new_secret_name", latestVersionedSecret.GetName(),
+					"new_version", existingLatestVersion+1,
+					"old_secret_name", existingLatestVersionedSecret.GetName(),
+					"old_version", existingLatestVersion,
+					"namespace", namespace)
+			}
 			return latestVersionedSecret, err
 		}
 
@@ -379,6 +421,7 @@ splunk:
 
 // ApplySplunkSecret creates/updates a secret using secretData(which HAS to be of ansible readable format) or namespace scoped secret data if not specified
 func ApplySplunkSecret(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, secretData map[string][]byte, secretName string, namespace string) (*corev1.Secret, error) {
+	logger := slog.With("func", "ApplySplunkSecret")
 	var current corev1.Secret
 	var newSecretData map[string][]byte
 	var err error
@@ -417,6 +460,10 @@ func ApplySplunkSecret(ctx context.Context, c splcommon.ControllerClient, cr spl
 		// Didn't find secret, create it
 		err = CreateResource(ctx, c, &current)
 		if err != nil {
+			logger.ErrorContext(ctx, "Failed to create secret",
+				"secret_name", secretName,
+				"namespace", namespace,
+				"error", err)
 			return nil, err
 		}
 	} else {
@@ -425,6 +472,10 @@ func ApplySplunkSecret(ctx context.Context, c splcommon.ControllerClient, cr spl
 			current.Data = newSecretData
 			err = UpdateResource(ctx, c, &current)
 			if err != nil {
+				logger.ErrorContext(ctx, "Failed to update secret",
+					"secret_name", secretName,
+					"namespace", namespace,
+					"error", err)
 				return nil, err
 			}
 		}
@@ -437,12 +488,8 @@ func ApplySplunkSecret(ctx context.Context, c splcommon.ControllerClient, cr spl
 func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.ControllerClient, namespace string) (*corev1.Secret, error) {
 	var current corev1.Secret
 
+	logger := slog.With("func", "ApplyNamespaceScopedSecretObject")
 	name := splcommon.GetNamespaceScopedSecretName(namespace)
-
-	log := log.FromContext(ctx)
-	scopedLog := log.WithName("ApplyNamespaceScopedSecretObject").WithValues(
-		"name", splcommon.GetNamespaceScopedSecretName(namespace),
-		"namespace", namespace)
 
 	// Check if a namespace scoped K8S secrets object exists
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: splcommon.GetNamespaceScopedSecretName(namespace)}
@@ -452,7 +499,10 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 		var updateNeeded bool = false
 		for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
 			if _, ok := current.Data[tokenType]; !ok {
-				scopedLog.Info("Namespace scoped secret exists, missing value for token", "missingTokenType", tokenType)
+				logger.WarnContext(ctx, "Secret is missing required field. Update secret with required data",
+					"secret_name", name,
+					"namespace", namespace,
+					"missing_field", tokenType)
 				if current.Data == nil || reflect.ValueOf(current.Data).Kind() != reflect.Map {
 					current.Data = make(map[string][]byte)
 				}
@@ -468,7 +518,9 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 
 		// Updated the secret if needed
 		if updateNeeded {
-			scopedLog.Info("Updating namespace scoped secret due to a missing value for token")
+			logger.InfoContext(ctx, "Updating namespace-scoped secret with generated token values",
+				"secret_name", name,
+				"namespace", namespace)
 			err = UpdateResource(ctx, client, &current)
 			if err != nil {
 				return nil, err
@@ -477,12 +529,17 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 
 		return &current, nil
 	} else if err != nil && !k8serrors.IsNotFound(err) {
-		// get secret call failed with other than NotFound error return the err
+		logger.ErrorContext(ctx, "Unexpected API error retrieving namespace-scoped secret",
+			"secret_name", name,
+			"namespace", namespace,
+			"error", err)
 		return nil, err
 	}
 
 	// Make data
-	scopedLog.Info("Namespace scoped secret does not exist, creating and filling it with new values for all token types")
+	logger.InfoContext(ctx, "Namespace-scoped secret does not exist, creating with new token values",
+		"secret_name", name,
+		"namespace", namespace)
 	current.Data = make(map[string][]byte)
 	// Not found, update data by generating values for all types of tokens
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
@@ -508,7 +565,10 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 	retryCnt := 0
 	gerr := client.Get(ctx, namespacedName, &current)
 	for ; gerr != nil; gerr = client.Get(ctx, namespacedName, &current) {
-		scopedLog.Error(gerr, "Newly created resource still not in cache sleeping for 10 micro second", "secret", name, "error", gerr.Error())
+		logger.DebugContext(ctx, "Newly created secret not yet in cache, retrying",
+			"secret_name", name,
+			"namespace", namespace,
+			"error", gerr)
 		time.Sleep(10 * time.Microsecond)
 
 		// Avoid infinite loop
@@ -520,20 +580,36 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 	return &current, nil
 }
 
-// GetSecretByName retrieves namespace scoped secret object for a given name
-func GetSecretByName(ctx context.Context, c splcommon.ControllerClient, namespace string, logHandle string, name string) (*corev1.Secret, error) {
+// GetSecretByName retrieves namespace scoped secret object for a given name.
+func GetSecretByName(ctx context.Context, c splcommon.ControllerClient, namespace string, name string) (*corev1.Secret, error) {
 	var namespaceScopedSecret corev1.Secret
-	log := log.FromContext(ctx)
-	scopedLog := log.WithName("GetSecretByName").WithValues("logHandle: ", logHandle, "namespace: ", namespace)
+
+	logger := slog.With("func", "GetSecretByName")
+	logger.DebugContext(ctx, "Retrieving secret",
+		"secret_name", name,
+		"namespace", namespace)
 
 	// Check if a namespace scoped secret exists
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: name}
 	err := c.Get(ctx, namespacedName, &namespaceScopedSecret)
 	if err != nil {
-		// Didn't find it
-		scopedLog.Error(err, "Unable to get secret", "secret name", name)
+		if k8serrors.IsNotFound(err) {
+			logger.WarnContext(ctx, "Secret not found. Create secret to proceed",
+				"secret_name", name,
+				"namespace", namespace)
+		} else {
+			logger.ErrorContext(ctx, "Failed to retrieve secret",
+				"secret_name", name,
+				"namespace", namespace,
+				"error", err)
+		}
 		return nil, err
 	}
+
+	logger.DebugContext(ctx, "Secret retrieved successfully",
+		"secret_name", name,
+		"namespace", namespace,
+		"resource_version", namespaceScopedSecret.ResourceVersion)
 
 	return &namespaceScopedSecret, nil
 }

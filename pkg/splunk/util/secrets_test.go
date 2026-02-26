@@ -1023,8 +1023,52 @@ func TestGetNamespaceScopedSecretByName(t *testing.T) {
 	_, _ = ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	secretName := splcommon.GetNamespaceScopedSecretName("test")
 
-	secret, err := GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), secretName)
+	secret, err := GetSecretByName(ctx, c, cr.GetNamespace(), secretName)
 	if secret == nil || err != nil {
 		t.Error(err.Error())
+	}
+}
+
+func TestGetSecretByNameNotFound(t *testing.T) {
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+
+	notFoundErr := k8serrors.NewNotFound(
+		schema.GroupResource{Group: "", Resource: "secrets"},
+		"nonexistent-secret",
+	)
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = notFoundErr
+
+	secret, err := GetSecretByName(ctx, c, "test", "nonexistent-secret")
+	if secret != nil {
+		t.Error("Expected nil secret for NotFound error")
+	}
+	if err == nil {
+		t.Fatal("Expected error for NotFound")
+	}
+	if !k8serrors.IsNotFound(err) {
+		t.Errorf("Expected NotFound error, got: %v", err)
+	}
+}
+
+func TestGetSecretByNameAPIError(t *testing.T) {
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+
+	apiErr := errors.New("connection refused")
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = apiErr
+
+	secret, err := GetSecretByName(ctx, c, "test", "some-secret")
+	if secret != nil {
+		t.Error("Expected nil secret for API error")
+	}
+	if err == nil {
+		t.Fatal("Expected error for API failure")
+	}
+	if k8serrors.IsNotFound(err) {
+		t.Error("Expected non-NotFound error")
+	}
+	if err.Error() != "connection refused" {
+		t.Errorf("Expected 'connection refused' error, got: %v", err)
 	}
 }
