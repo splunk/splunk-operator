@@ -234,7 +234,7 @@ jobs:
       TAG: edge
     steps:
     - name: Set up cosign
-      uses: sigstore/cosign-installer@v4
+      uses: sigstore/cosign-installer@v4.0.0
     - uses: actions/checkout@v2
       with:
           ref: develop

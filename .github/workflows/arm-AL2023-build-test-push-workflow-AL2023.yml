@@ -80,7 +80,7 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
     - name: Set up cosign
-      uses: sigstore/cosign-installer@v4
+      uses: sigstore/cosign-installer@v4.0.0
 
     - uses: actions/checkout@v2
     - name: Dotenv Action
