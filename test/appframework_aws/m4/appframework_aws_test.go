@@ -1716,7 +1716,7 @@ var _ = Describe("m4appfw test", func() {
 			// Wait for SearchHeadCluster to reach Ready phase instead of using time.Sleep
 			err = testenv.WaitForSearchHeadClusterPhase(ctx, deployment, testcaseEnvInst.GetName(), shc.Name, enterpriseApi.PhaseReady, 60*time.Second)
 			Expect(err).To(Succeed(), "Timed out waiting for SearchHeadCluster to reach Ready phase")
-			
+
 			// Wait for polling interval to pass
 			testenv.WaitForAppInstall(ctx, deployment, testcaseEnvInst, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
 
