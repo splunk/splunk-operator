@@ -33,13 +33,14 @@ jobs:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      FOSSA_API_TOKEN: ${{ secrets.FOSSA_API_TOKEN }}
     steps:
     - uses: actions/checkout@v2
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
     - name: Run FOSSA Test
-      if: ${{ secrets.FOSSA_API_TOKEN != '' }}
+      if: ${{ env.FOSSA_API_TOKEN != '' }}
       uses: fossas/fossa-action@main
       with:
-        api-key: ${{secrets.FOSSA_API_TOKEN}}
+        api-key: ${{ env.FOSSA_API_TOKEN }}
