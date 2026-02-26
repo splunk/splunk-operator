@@ -92,7 +92,7 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
     - name: Set up cosign
-      uses: sigstore/cosign-installer@main
+      uses: sigstore/cosign-installer@v4
 
     - uses: actions/checkout@v2
     - name: Dotenv Action
@@ -150,7 +150,7 @@ jobs:
       IMAGE_NAME: ${{ secrets.ECR_REPOSITORY }}/splunk/splunk-operator:${{ github.sha }}
     steps:
     - name: Set up cosign
-      uses: sigstore/cosign-installer@main
+      uses: sigstore/cosign-installer@v4
     - uses: actions/checkout@v2
     - name: Dotenv Action
       id: dotenv
