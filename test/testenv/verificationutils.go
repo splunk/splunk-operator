@@ -22,12 +22,14 @@ import (
 	"fmt"
 	"math/rand"
 	"os/exec"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"time"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	gomega "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	wait "k8s.io/apimachinery/pkg/util/wait"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -1331,4 +1333,78 @@ func TriggerTelemetrySubmission(ctx context.Context, deployment *Deployment) {
 	}
 
 	logf.Log.Info("Successfully updated telemetry ConfigMap", "key", testKey, "value", jsonValue)
+}
+
+// WaitForEvent waits for an event instead of relying on time
+func WaitForEvent(ctx context.Context, deployment *Deployment, namespace, crName, eventReason string, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, 1*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+		eventList := &corev1.EventList{}
+		err := deployment.testenv.GetKubeClient().List(ctx, eventList, client.InNamespace(namespace))
+		if err != nil {
+			return false, nil
+		}
+
+		for _, event := range eventList.Items {
+			if event.InvolvedObject.Name == crName && event.Reason == eventReason {
+				return true, nil
+			}
+		}
+		return false, nil
+	})
+}
+
+// WaitForClusterManagerPhase waits for ClusterManager to reach expected phase
+func WaitForClusterManagerPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, 1*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+		cr := &enterpriseApi.ClusterManager{}
+		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, cr)
+		if err != nil {
+			return false, nil
+		}
+		return cr.Status.Phase == expectedPhase, nil
+	})
+}
+
+// WaitForSearchHeadClusterPhase waits for SearchHeadCluster to reach expected phase
+func WaitForSearchHeadClusterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, 1*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+		cr := &enterpriseApi.SearchHeadCluster{}
+		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, cr)
+		if err != nil {
+			return false, nil
+		}
+		return cr.Status.Phase == expectedPhase, nil
+	})
+}
+
+// WaitForMonitoringConsolePhase waits for MonitoringConsole to reach expected phase
+func WaitForMonitoringConsolePhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, 1*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+		cr := &enterpriseApi.MonitoringConsole{}
+		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, cr)
+		if err != nil {
+			return false, nil
+		}
+		return cr.Status.Phase == expectedPhase, nil
+	})
+}
+
+// WaitForClusterInitialized waits for ClusterInitialized event on IndexerCluster
+func WaitForClusterInitialized(ctx context.Context, deployment *Deployment, namespace, crName string, timeout time.Duration) error {
+	return WaitForEvent(ctx, deployment, namespace, crName, "ClusterInitialized", timeout)
+}
+
+// WaitForScaledUp waits for ScaledUp event on a CR (Standalone, IndexerCluster, SearchHeadCluster)
+func WaitForScaledUp(ctx context.Context, deployment *Deployment, namespace, crName string, timeout time.Duration) error {
+	return WaitForEvent(ctx, deployment, namespace, crName, "ScaledUp", timeout)
+}
+
+// WaitForScaledDown waits for ScaledDown event on a CR (Standalone, IndexerCluster, SearchHeadCluster)
+func WaitForScaledDown(ctx context.Context, deployment *Deployment, namespace, crName string, timeout time.Duration) error {
+	return WaitForEvent(ctx, deployment, namespace, crName, "ScaledDown", timeout)
+}
+
+// WaitForPasswordSyncCompleted waits for PasswordSyncCompleted event on IndexerCluster or SearchHeadCluster
+func WaitForPasswordSyncCompleted(ctx context.Context, deployment *Deployment, namespace, crName string, timeout time.Duration) error {
+	return WaitForEvent(ctx, deployment, namespace, crName, "PasswordSyncCompleted", timeout)
 }

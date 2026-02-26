@@ -806,6 +806,10 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Indexer Cluster go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
+			// Wait for ScaledUp event to confirm scaling completed successfully
+			err = testenv.WaitForScaledUp(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
+			Expect(err).To(Succeed(), "Timed out waiting for ScaledUp event on IndexerCluster")
+
 			// Verify New Indexer On Cluster Manager
 			indexerName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas-1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Checking for New Indexer %s On Cluster Manager", indexerName))
@@ -898,6 +902,10 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Indexer Cluster go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Wait for ScaledDown event to confirm scaling completed successfully
+			err = testenv.WaitForScaledDown(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
+			Expect(err).To(Succeed(), "Timed out waiting for ScaledDown event on IndexerCluster")
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
