@@ -22,7 +22,7 @@ jobs:
         ref: develop
     - name: Dotenv Action
       id: dotenv
-      uses: falti/dotenv-action@v1.1.5
+      uses: falti/dotenv-action@v1
     - name: Setup Go
       uses: actions/setup-go@v2
       with:
@@ -113,7 +113,7 @@ jobs:
           echo "TEST_CLUSTER_NAME=${{ steps.set-cluster-name.outputs.cluster-name }}" >> $GITHUB_ENV
       - name: Dotenv Action
         id: dotenv
-        uses: falti/dotenv-action@v1.1.5
+        uses: falti/dotenv-action@v1
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v3
         with:
@@ -141,7 +141,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2.5.0
       - name: Configure Docker Hub credentials
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN}}
@@ -239,7 +239,7 @@ jobs:
           ref: develop
     - name: Dotenv Action
       id: dotenv
-      uses: falti/dotenv-action@v1.1.5
+      uses: falti/dotenv-action@v1
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2.5.0
     - name: Configure AWS credentials
@@ -258,7 +258,7 @@ jobs:
       run: |
         docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}
     - name: Configure Docker Hub credentials
-      uses: docker/login-action@v1
+      uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
