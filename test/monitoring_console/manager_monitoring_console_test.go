@@ -468,10 +468,9 @@ var _ = Describe("Monitoring Console test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			time.Sleep(60 * time.Second)
-
-			// Check Cluster Manager in Monitoring Console Config Map
-			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterManagerServiceName, deployment.GetName())}, splcommon.ClusterManagerURL, mcName, true)
+			// Wait for Cluster Manager to appear in Monitoring Console Config Map
+			err = testenv.WaitForPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterManagerServiceName, deployment.GetName())}, splcommon.ClusterManagerURL, mcName, true, 2*time.Minute)
+			Expect(err).To(Succeed(), "Timed out waiting for Cluster Manager in MC ConfigMap")
 
 			// Check Deployer in Monitoring Console Config Map
 			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, true)
@@ -480,11 +479,9 @@ var _ = Describe("Monitoring Console test", func() {
 			shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), defaultSHReplicas, false, 0)
 			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
 
-			// Add a sleep here in case MC pod restarts to add peers
-			time.Sleep(300 * time.Second)
-
-			// Check Monitoring console Pod is configured with all search head
-			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, true, false)
+			// Wait for Monitoring console Pod to be configured with all search head
+			err = testenv.WaitForPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, true, false, 5*time.Minute)
+			Expect(err).To(Succeed(), "Timed out waiting for search heads in MC config")
 
 			// Check Monitoring console is configured with all Indexer in Name Space
 			indexerPods := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), defaultIndexerReplicas, false, 0)
@@ -661,11 +658,9 @@ var _ = Describe("Monitoring Console test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Adding a sleep, in case MC restarts to update peers list
-			time.Sleep(300 * time.Second)
-
-			// Check Monitoring console Pod is configured with all search head
-			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, true, false)
+			// Wait for Monitoring console Pod to be configured with all search head
+			err = testenv.WaitForPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, true, false, 5*time.Minute)
+			Expect(err).To(Succeed(), "Timed out waiting for search heads in MC config")
 
 			// Check Monitoring console is configured with all Indexer in Name Space
 			indexerPods := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), defaultIndexerReplicas, false, 0)

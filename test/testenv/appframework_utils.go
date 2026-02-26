@@ -11,6 +11,7 @@ import (
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
+	wait "k8s.io/apimachinery/pkg/util/wait"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -168,20 +169,17 @@ func GetPodAppInstallStatus(ctx context.Context, deployment *Deployment, podName
 	stdin := fmt.Sprintf("/opt/splunk/bin/splunk display app '%s' -auth admin:$(cat /mnt/splunk-secrets/password)", appname)
 	command := []string{"/bin/sh"}
 	var stdout, stderr string
-	var err error
-	for i := 0; i < 10; i++ {
-		stdout, stderr, err = deployment.PodExecCommand(ctx, podName, command, stdin, false)
-		if err == nil {
-			continue
-		} else if err != nil && i == 9 {
-			logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
-			return "", err
-		} else {
-			time.Sleep(1 * time.Second)
-		}
+	err := wait.PollUntilContextTimeout(ctx, PollInterval, 10*time.Second, true, func(ctx context.Context) (bool, error) {
+		var execErr error
+		stdout, stderr, execErr = deployment.PodExecCommand(ctx, podName, command, stdin, false)
+		return execErr == nil, nil
+	})
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stderr", stderr)
+		return "", err
 	}
 
-	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout)
 
 	return strings.TrimSuffix(stdout, "\n"), nil
 }
@@ -427,22 +425,27 @@ func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv,
 	return appFrameworkSpec
 }
 
-// WaitforPhaseChange Wait for 2 mins or when phase change on is seen on a CR for any particular app
+// WaitforPhaseChange Wait for timeout or when phase change is seen on a CR for any particular app
+// Deprecated: Use WaitForAppPhaseChange instead for better timeout control
 func WaitforPhaseChange(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appList []string) {
-	startTime := time.Now()
+	_ = WaitForAppPhaseChange(ctx, deployment, testenvInstance, name, crKind, appSourceName, appList, 2*time.Minute)
+}
 
-	for time.Since(startTime) <= time.Duration(2*time.Minute) {
+// WaitForAppPhaseChange waits for any app in the list to change from PhaseInstall to another phase
+func WaitForAppPhaseChange(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appList []string, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		for _, appName := range appList {
 			appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
 			if err != nil {
 				testenvInstance.Log.Error(err, "Failed to get app deployment info")
+				continue
 			}
 			if appDeploymentInfo.PhaseInfo.Phase != enterpriseApi.PhaseInstall {
-				return
+				return true, nil
 			}
 		}
-		time.Sleep(1 * time.Second)
-	}
+		return false, nil
+	})
 }
 
 // AppFrameWorkVerifications will perform several verifications needed between the different steps of App Framework tests

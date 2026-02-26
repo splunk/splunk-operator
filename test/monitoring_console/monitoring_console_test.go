@@ -107,10 +107,9 @@ var _ = Describe("Monitoring Console test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			time.Sleep(60 * time.Second)
-
-			// Check Cluster Master in Monitoring Console Config Map
-			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true)
+			// Wait for Cluster Master to appear in Monitoring Console Config Map
+			err = testenv.WaitForPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true, 2*time.Minute)
+			Expect(err).To(Succeed(), "Timed out waiting for Cluster Master in MC ConfigMap")
 
 			// Check Deployer in Monitoring Console Config Map
 			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, true)

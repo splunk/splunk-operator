@@ -324,10 +324,11 @@ var _ = Describe("licensemaster test", func() {
 				uploadedApps = append(uploadedApps, uploadedFiles...)
 			}
 
-			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			// Wait for LM to reach Ready phase (polls for state instead of fixed sleep)
+			err = testenv.WaitForLicenseMasterPhase(ctx, deployment, testcaseEnvInst.GetName(), deployment.GetName(), enterpriseApi.PhaseReady, 2*time.Minute)
+			Expect(err).To(Succeed(), "Timed out waiting for LicenseMaster to reach Ready phase")
 
-			// Wait for LM to be in READY status
+			// Verify LM stays in ready state
 			testenv.LicenseMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify apps are copied at the correct location on LM (/etc/apps/)

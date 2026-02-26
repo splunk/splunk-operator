@@ -30,6 +30,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	testenv "github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 var _ = Describe("s1appfw test", func() {
@@ -1370,17 +1371,10 @@ var _ = Describe("s1appfw test", func() {
 			// ############ Verify livenessProbe and readinessProbe config object and scripts############
 			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
 			ConfigMapName := enterprise.GetProbeConfigMapName(testcaseEnvInst.GetName())
-			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
-			if err != nil {
-				for i := 1; i < 10; i++ {
-					_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
-					if err == nil {
-						continue
-					} else {
-						time.Sleep(1 * time.Second)
-					}
-				}
-			}
+			err = wait.PollUntilContextTimeout(ctx, testenv.PollInterval, 10*time.Second, true, func(ctx context.Context) (bool, error) {
+				_, getErr := testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+				return getErr == nil, nil
+			})
 			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
 
 			// Verify App installation is in progress on Standalone

@@ -206,8 +206,10 @@ var _ = Describe("Ingest and Search Test", func() {
 
 			searchString := fmt.Sprintf("index=%s | stats count by host", indexName)
 
-			// Wait for ingestion lag prior to searching
-			time.Sleep(2 * time.Second)
+			// Wait for search results to be available instead of fixed sleep
+			err = testenv.WaitForSearchResultsNonEmpty(ctx, deployment, podName, searchString, 30*time.Second)
+			Expect(err).To(Succeed(), "Timed out waiting for search results")
+
 			searchResultsResp, err := testenv.PerformSearchSync(ctx, podName, searchString, deployment)
 			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", podName, searchString)
 

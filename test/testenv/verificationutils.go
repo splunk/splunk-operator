@@ -1408,3 +1408,140 @@ func WaitForScaledDown(ctx context.Context, deployment *Deployment, namespace, c
 func WaitForPasswordSyncCompleted(ctx context.Context, deployment *Deployment, namespace, crName string, timeout time.Duration) error {
 	return WaitForEvent(ctx, deployment, namespace, crName, "PasswordSyncCompleted", timeout)
 }
+
+// WaitForPodsInMCConfigMap waits for pods to appear in MC ConfigMap instead of using time.Sleep
+func WaitForPodsInMCConfigMap(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, pods []string, key string, mcName string, expected bool, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		mcConfigMap, err := GetMCConfigMap(ctx, deployment, testenvInstance.GetName(), mcName)
+		if err != nil {
+			return false, nil
+		}
+		for _, podName := range pods {
+			found := CheckPodNameInString(podName, mcConfigMap.Data[key])
+			if found != expected {
+				return false, nil
+			}
+		}
+		return true, nil
+	})
+}
+
+// WaitForPodsInMCConfigString waits for pods to appear in MC config string instead of using time.Sleep
+func WaitForPodsInMCConfigString(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, pods []string, mcName string, expected bool, checkPodIP bool, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		for _, podName := range pods {
+			var found bool
+			if checkPodIP {
+				podIP := GetPodIP(testenvInstance.GetName(), podName)
+				found = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podIP)
+			} else {
+				found = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podName)
+			}
+			if found != expected {
+				return false, nil
+			}
+		}
+		return true, nil
+	})
+}
+
+// WaitForAppPhase waits for an app to reach a specific phase on a CR
+func WaitForAppPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, crName string, crKind string, appSourceName string, appName string, expectedPhase enterpriseApi.AppPhaseType, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, crName, crKind, appSourceName, appName)
+		if err != nil {
+			return false, nil
+		}
+		return appDeploymentInfo.PhaseInfo.Phase == expectedPhase, nil
+	})
+}
+
+// WaitForAllAppsPhase waits for all apps in a list to reach a specific phase
+func WaitForAllAppsPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, crName string, crKind string, appSourceName string, appList []string, expectedPhase enterpriseApi.AppPhaseType, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		for _, appName := range appList {
+			appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, crName, crKind, appSourceName, appName)
+			if err != nil {
+				return false, nil
+			}
+			if appDeploymentInfo.PhaseInfo.Phase != expectedPhase {
+				return false, nil
+			}
+		}
+		return true, nil
+	})
+}
+
+// WaitForStandalonePhase waits for Standalone to reach expected phase
+func WaitForStandalonePhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		cr := &enterpriseApi.Standalone{}
+		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, cr)
+		if err != nil {
+			return false, nil
+		}
+		return cr.Status.Phase == expectedPhase, nil
+	})
+}
+
+// WaitForLicenseManagerPhase waits for LicenseManager to reach expected phase
+func WaitForLicenseManagerPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		cr := &enterpriseApi.LicenseManager{}
+		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, cr)
+		if err != nil {
+			return false, nil
+		}
+		return cr.Status.Phase == expectedPhase, nil
+	})
+}
+
+// WaitForLicenseMasterPhase waits for LicenseMaster to reach expected phase
+func WaitForLicenseMasterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		cr := &enterpriseApiV3.LicenseMaster{}
+		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, cr)
+		if err != nil {
+			return false, nil
+		}
+		return cr.Status.Phase == expectedPhase, nil
+	})
+}
+
+// WaitForIndexerClusterPhase waits for IndexerCluster to reach expected phase
+func WaitForIndexerClusterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		cr := &enterpriseApi.IndexerCluster{}
+		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, cr)
+		if err != nil {
+			return false, nil
+		}
+		return cr.Status.Phase == expectedPhase, nil
+	})
+}
+
+// WaitForSearchResultsNonEmpty waits for search results to return a non-empty "result" field
+func WaitForSearchResultsNonEmpty(ctx context.Context, deployment *Deployment, podName string, searchString string, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		searchResultsResp, err := PerformSearchSync(ctx, podName, searchString, deployment)
+		if err != nil {
+			return false, nil
+		}
+		var searchResults map[string]interface{}
+		if jsonErr := json.Unmarshal([]byte(searchResultsResp), &searchResults); jsonErr != nil {
+			return false, nil
+		}
+		return searchResults["result"] != nil, nil
+	})
+}
+
+// WaitForPodExecSuccess retries pod exec command until success or timeout
+func WaitForPodExecSuccess(ctx context.Context, deployment *Deployment, podName string, command []string, stdin string, timeout time.Duration) (string, error) {
+	var stdout string
+	err := wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		var err error
+		stdout, _, err = deployment.PodExecCommand(ctx, podName, command, stdin, false)
+		return err == nil, nil
+	})
+	return stdout, err
+}
