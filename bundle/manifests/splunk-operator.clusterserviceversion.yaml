@@ -63,7 +63,11 @@ metadata:
           "apiVersion": "enterprise.splunk.com/v4",
           "kind": "ClusterManager",
           "metadata": {
-            "name": "clustermanager-sample"
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "clustermanager-sample",
+            "namespace": "splunk-operator"
           },
           "spec": {}
         },
@@ -71,7 +75,26 @@ metadata:
           "apiVersion": "enterprise.splunk.com/v4",
           "kind": "IndexerCluster",
           "metadata": {
-            "name": "indexercluster-sample"
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "indexercluster-sample",
+            "namespace": "splunk-operator"
+          },
+          "spec": {
+            "clusterManagerRef": {
+              "name": "clustermanager-sample"
+            }
+          }
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "IngestorCluster",
+          "metadata": {
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "ingestorcluster-sample"
           },
           "spec": {}
         },
@@ -79,15 +102,55 @@ metadata:
           "apiVersion": "enterprise.splunk.com/v4",
           "kind": "LicenseManager",
           "metadata": {
-            "name": "licensemanager-sample"
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "licensemanager-sample",
+            "namespace": "splunk-operator"
           },
-          "spec": {}
+          "spec": {
+            "licenseUrl": "/mnt/licenses/enterprise.lic",
+            "volumes": [
+              {
+                "configMap": {
+                  "name": "splunk-licenses"
+                },
+                "name": "licenses"
+              }
+            ]
+          }
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
           "kind": "MonitoringConsole",
           "metadata": {
-            "name": "monitoringconsole-sample"
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "monitoringconsole-sample",
+            "namespace": "splunk-operator"
+          },
+          "spec": {}
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "ObjectStorage",
+          "metadata": {
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "objectstorage-sample"
+          },
+          "spec": {}
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "Queue",
+          "metadata": {
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "queue-sample"
           },
           "spec": {}
         },
@@ -95,15 +158,27 @@ metadata:
           "apiVersion": "enterprise.splunk.com/v4",
           "kind": "SearchHeadCluster",
           "metadata": {
-            "name": "searchheadcluster-sample"
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "searchheadcluster-sample",
+            "namespace": "splunk-operator"
           },
-          "spec": {}
+          "spec": {
+            "clusterManagerRef": {
+              "name": "clustermanager-sample"
+            }
+          }
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
           "kind": "Standalone",
           "metadata": {
-            "name": "standalone-sample"
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "standalone-sample",
+            "namespace": "splunk-operator"
           },
           "spec": {}
         }
@@ -111,16 +186,16 @@ metadata:
     capabilities: Seamless Upgrades
     categories: Big Data, Logging & Tracing, Monitoring, Security, AI/Machine Learning
     containerImage: splunk/splunk-operator@sha256:c4e0d314622699496f675760aad314520d050a66627fdf33e1e21fa28ca85d50
-    createdAt: "2025-09-08T10:17:59Z"
+    createdAt: "2026-02-26T02:21:47Z"
     description: The Splunk Operator for Kubernetes enables you to quickly and easily
       deploy Splunk Enterprise on your choice of private or public cloud provider.
       The Operator simplifies scaling and management of Splunk Enterprise by automating
       administrative workflows using Kubernetes best practices.
     olm.properties: '[{"type": "olm.maxOpenShiftVersion", "value": "4.19"}]'
-    operators.operatorframework.io/builder: operator-sdk-v1.39.0
+    operators.operatorframework.io/builder: operator-sdk-v1.42.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/splunk/splunk-operator
-  name: splunk-operator.v3.0.0
+  name: splunk-operator.v3.1.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -158,6 +233,11 @@ spec:
     - kind: IndexerCluster
       name: indexerclusters.enterprise.splunk.com
       version: v2
+    - description: IngestorCluster is the Schema for the ingestorclusters API
+      displayName: Ingestor Cluster
+      kind: IngestorCluster
+      name: ingestorclusters.enterprise.splunk.com
+      version: v4
     - description: LicenseManager is the Schema for a Splunk Enterprise license manager.
       displayName: License Manager
       kind: LicenseManager
@@ -183,6 +263,16 @@ spec:
       displayName: Monitoring Console
       kind: MonitoringConsole
       name: monitoringconsoles.enterprise.splunk.com
+      version: v4
+    - description: ObjectStorage is the Schema for the objectstorages API
+      displayName: Object Storage
+      kind: ObjectStorage
+      name: objectstorages.enterprise.splunk.com
+      version: v4
+    - description: Queue is the Schema for the queues API
+      displayName: Queue
+      kind: Queue
+      name: queues.enterprise.splunk.com
       version: v4
     - description: SearchHeadCluster is the Schema for a Splunk Enterprise search
         head cluster
@@ -231,25 +321,6 @@ spec:
       clusterPermissions:
       - rules:
         - apiGroups:
-          - apiextensions.k8s.io
-          resources:
-          - customresourcedefinitions
-          verbs:
-          - get
-          - list
-        - apiGroups:
-          - apps
-          resources:
-          - statefulsets
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
           - ""
           resources:
           - configmaps
@@ -271,14 +342,36 @@ spec:
           - update
           - watch
         - apiGroups:
+          - apiextensions.k8s.io
+          resources:
+          - customresourcedefinitions
+          verbs:
+          - get
+          - list
+        - apiGroups:
+          - apps
+          resources:
+          - statefulsets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
           - enterprise.splunk.com
           resources:
           - clustermanagers
           - clustermasters
           - indexerclusters
+          - ingestorclusters
           - licensemanagers
           - licensemasters
           - monitoringconsoles
+          - objectstorages
+          - queues
           - searchheadclusters
           - standalones
           verbs:
@@ -295,9 +388,12 @@ spec:
           - clustermanagers/finalizers
           - clustermasters/finalizers
           - indexerclusters/finalizers
+          - ingestorclusters/finalizers
           - licensemanagers/finalizers
           - licensemasters/finalizers
           - monitoringconsoles/finalizers
+          - objectstorages/finalizers
+          - queues/finalizers
           - searchheadclusters/finalizers
           - standalones/finalizers
           verbs:
@@ -308,9 +404,12 @@ spec:
           - clustermanagers/status
           - clustermasters/status
           - indexerclusters/status
+          - ingestorclusters/status
           - licensemanagers/status
           - licensemasters/status
           - monitoringconsoles/status
+          - objectstorages/status
+          - queues/status
           - searchheadclusters/status
           - standalones/status
           verbs:
@@ -351,7 +450,6 @@ spec:
               labels:
                 control-plane: controller-manager
                 name: splunk-operator
-                app.kubernetes.io/name: splunk-operator
             spec:
               containers:
               - args:
@@ -367,7 +465,7 @@ spec:
                     fieldRef:
                       fieldPath: metadata.annotations['olm.targetNamespaces']
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: docker.io/splunk/splunk:10.0.0
+                  value: docker.io/splunk/splunk:10.2.0
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: SPLUNK_GENERAL_TERMS
@@ -376,7 +474,7 @@ spec:
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.name
-                image: docker.io/splunk/splunk-operator:3.0.0
+                image: docker.io/splunk/splunk-operator:3.1.0
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -489,7 +587,7 @@ spec:
     name: Splunk Inc.
     url: www.splunk.com
   relatedImages:
-  - image: docker.io/splunk/splunk:10.0.0
+  - image: docker.io/splunk/splunk:10.2.0
     name: splunk-enterprise
-  replaces: splunk-operator.v2.8.1
-  version: 3.0.0
+  replaces: splunk-operator.v3.0.0
+  version: 3.1.0
