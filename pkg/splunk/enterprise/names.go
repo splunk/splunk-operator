@@ -201,10 +201,10 @@ access = read : [ * ], write : [ admin ]
 `
 
 	// Command to create telemetry app on non SHC scenarios
-	createTelAppNonShcString = "mkdir -p /opt/splunk/etc/apps/app_tel_for_sok/default/; mkdir -p /opt/splunk/etc/apps/app_tel_for_sok/metadata/; printf '%%s' \"%s\" > /opt/splunk/etc/apps/app_tel_for_sok/default/app.conf; printf '%%s' \"%s\" > /opt/splunk/etc/apps/app_tel_for_sok/metadata/default.meta"
+	createTelAppNonShcString = "mkdir -p /opt/splunk/etc/apps/app_tel_for_sok/default/; mkdir -p /opt/splunk/etc/apps/app_tel_for_sok/metadata/; echo -e \"%s\" > /opt/splunk/etc/apps/app_tel_for_sok/default/app.conf; echo -e \"%s\" > /opt/splunk/etc/apps/app_tel_for_sok/metadata/default.meta"
 
 	// Command to create telemetry app on SHC scenarios
-	createTelAppShcString = "mkdir -p %s/app_tel_for_sok/default/; mkdir -p %s/app_tel_for_sok/metadata/; printf '%%s' \"%s\" > %s/app_tel_for_sok/default/app.conf; printf '%%s' \"%s\" > %s/app_tel_for_sok/metadata/default.meta"
+	createTelAppShcString = "mkdir -p %s/app_tel_for_sok/default/; mkdir -p %s/app_tel_for_sok/metadata/; echo -e \"%s\" > %s/app_tel_for_sok/default/app.conf; echo -e \"%s\" > %s/app_tel_for_sok/metadata/default.meta"
 
 	// Command to reload app configuration
 	telAppReloadString = "curl -k -u admin:`cat /mnt/splunk-secrets/password` https://localhost:8089/services/apps/local/_reload"
