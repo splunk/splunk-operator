@@ -262,7 +262,7 @@ func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.Contro
 
 		// Get admin password from namespace-scoped secret
 		defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
-		defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
+		defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), defaultSecretObjName)
 		if err != nil {
 			return fmt.Errorf("failed to get namespace secret for license check: %w", err)
 		}

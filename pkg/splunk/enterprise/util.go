@@ -160,7 +160,7 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 		secretAccessKey = ""
 	} else {
 		// Get credentials through the secretRef
-		remoteDataClientSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), appSecretRef)
+		remoteDataClientSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), appSecretRef)
 		if err != nil {
 			// Emit event for missing secret
 			if k8serrors.IsNotFound(err) {
@@ -420,7 +420,7 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 	// Get event publisher from context
 	eventPublisher := GetEventPublisher(ctx, cr)
 
-	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
+	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), volume.SecretRef)
 	if err != nil {
 		// Emit event for missing secret
 		if k8serrors.IsNotFound(err) {
@@ -456,7 +456,7 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 
 // GetQueueRemoteVolumeSecrets is used to retrieve access key and secrete key for Index & Ingestion separation
 func GetQueueRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject) (string, string, string, error) {
-	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
+	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), volume.SecretRef)
 	if err != nil {
 		return "", "", "", err
 	}
