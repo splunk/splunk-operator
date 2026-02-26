@@ -5,7 +5,7 @@ permissions:
   id-token: write
   pull-requests: write
 on:
-  workflow_dispatch:  
+  workflow_dispatch:
     inputs:
       splunk_image_repository_tag:
         description: 'Splunk AL2023-based Docker Image repository and tag (e.g. repository-name:tag)'
@@ -49,8 +49,8 @@ jobs:
      - name: Run Unit Tests
        run: make test
      - name: Run Code Coverage
-       if: ${{ secrets.COVERALLS_TOKEN != '' }}
        run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
+       continue-on-error: true
      - name: Upload Coverage artifacts
        uses: actions/upload-artifact@v4.4.0
        with:
