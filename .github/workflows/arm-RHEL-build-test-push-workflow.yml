@@ -56,7 +56,6 @@ jobs:
         export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
         make docker-buildx PLATFORMS=$PLATFORMS BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=$IMG
   smoke-tests-arm-rhel:
-    timeout-minutes: 240
     strategy:
       fail-fast: false
       matrix:
@@ -74,7 +73,9 @@ jobs:
           ]
     runs-on: ubuntu-latest
     needs: build-operator-image-arm-rhel
+    timeout-minutes: 240
     env:
+      TEST_TIMEOUT: 225m
       CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_PREFIX }}/${{ github.event.inputs.splunk_image_repository_tag }}
@@ -197,6 +198,7 @@ jobs:
       - name: Run smoke test
         timeout-minutes: 240
         env:
+          TEST_TIMEOUT: 225m
           TEST_S3_ACCESS_KEY_ID: ${{ vars.TEST_S3_ACCESS_KEY_ID }}
           TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.TEST_S3_SECRET_ACCESS_KEY }}
         run: |

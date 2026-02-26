@@ -225,6 +225,8 @@ jobs:
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run Integration test
         timeout-minutes: 240
+        env:
+          TEST_TIMEOUT: 225m
         run: |
             make int-test
       - name: Collect Test Logs
