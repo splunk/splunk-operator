@@ -17,6 +17,8 @@ package enterprise
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"reflect"
 	"sort"
@@ -199,11 +201,39 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 	if err != nil {
 		return nil, err
 	}
-	ss.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
+	if ss.Spec.Template.ObjectMeta.Annotations == nil {
+		ss.Spec.Template.ObjectMeta.Annotations = make(map[string]string)
+	}
+	ss.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = getMonitoringConsoleConfigDataHash(monitoringConsoleConfigMap.Data)
 
 	// Setup App framework staging volume for apps
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 	return ss, nil
+}
+
+// getMonitoringConsoleConfigDataHash returns a stable hash for MC configMap data.
+// Hashing data (instead of configMap resourceVersion) avoids unnecessary MC restarts
+// when only metadata changes.
+func getMonitoringConsoleConfigDataHash(data map[string]string) string {
+	if len(data) == 0 {
+		return ""
+	}
+
+	keys := make([]string, 0, len(data))
+	for key := range data {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	hash := sha256.New()
+	for _, key := range keys {
+		hash.Write([]byte(key))
+		hash.Write([]byte{0})
+		hash.Write([]byte(data[key]))
+		hash.Write([]byte{0})
+	}
+
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 // helper function to get the list of MonitoringConsole types in the current namespace

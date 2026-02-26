@@ -475,6 +475,78 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 	cr.ObjectMeta.Labels["app.kubernetes.io/test-extra-label"] = "test-extra-label-value"
 	test(loadFixture(t, "statefulset_stack1_monitoring_console_with_service_account_1.json"))
 }
+
+func TestGetMonitoringConsoleConfigDataHash(t *testing.T) {
+	if got := getMonitoringConsoleConfigDataHash(nil); got != "" {
+		t.Errorf("Expected empty hash for nil data, got=%s", got)
+	}
+
+	dataA := map[string]string{"SPLUNK_SEARCH_HEAD_URL": "sh1,sh2", "SPLUNK_CLUSTER_MANAGER_URL": "cm1"}
+	dataB := map[string]string{"SPLUNK_CLUSTER_MANAGER_URL": "cm1", "SPLUNK_SEARCH_HEAD_URL": "sh1,sh2"}
+	dataC := map[string]string{"SPLUNK_CLUSTER_MANAGER_URL": "cm1", "SPLUNK_SEARCH_HEAD_URL": "sh1,sh3"}
+
+	hashA := getMonitoringConsoleConfigDataHash(dataA)
+	hashB := getMonitoringConsoleConfigDataHash(dataB)
+	hashC := getMonitoringConsoleConfigDataHash(dataC)
+
+	if hashA == "" {
+		t.Errorf("Expected non-empty hash for non-empty data")
+	}
+	if hashA != hashB {
+		t.Errorf("Expected stable hash for same data regardless of map iteration order")
+	}
+	if hashA == hashC {
+		t.Errorf("Expected different hash when data changes")
+	}
+}
+
+func TestGetMonitoringConsoleStatefulSetUsesConfigDataHash(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	cr := enterpriseApi.MonitoringConsole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Fatalf("Failed to create namespace scoped secret: %v", err)
+	}
+
+	monitoringConsoleConfigMapName := GetSplunkMonitoringconsoleConfigMapName(cr.GetName(), SplunkMonitoringConsole)
+	monitoringConsoleConfigMap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            monitoringConsoleConfigMapName,
+			Namespace:       "test",
+			ResourceVersion: "12345",
+		},
+		Data: map[string]string{
+			"SPLUNK_CLUSTER_MANAGER_URL": "cm1",
+			"SPLUNK_SEARCH_HEAD_URL":     "sh1,sh2",
+		},
+	}
+	c.AddObject(&monitoringConsoleConfigMap)
+
+	ss, err := getMonitoringConsoleStatefulSet(ctx, c, &cr)
+	if err != nil {
+		t.Fatalf("getMonitoringConsoleStatefulSet() returned error: %v", err)
+	}
+
+	got := ss.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev]
+	want := getMonitoringConsoleConfigDataHash(monitoringConsoleConfigMap.Data)
+
+	if got != want {
+		t.Errorf("Expected monitoringConsoleConfigRev to be data hash. got=%s want=%s", got, want)
+	}
+	if got == monitoringConsoleConfigMap.ResourceVersion {
+		t.Errorf("monitoringConsoleConfigRev must not use configMap resourceVersion")
+	}
+}
+
 func TestMonitoringConsoleSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	// Unset the SPLUNK_GENERAL_TERMS environment variable
 	os.Unsetenv("SPLUNK_GENERAL_TERMS")
