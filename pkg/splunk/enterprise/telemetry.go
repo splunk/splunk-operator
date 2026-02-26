@@ -471,7 +471,7 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 	scopedLog.Info("Got service FQDN", "serviceFQDN", serviceFQDN)
 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
-	defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
+	defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), defaultSecretObjName)
 	if err != nil {
 		scopedLog.Error(err, "Could not access default secret object")
 		return false

@@ -899,7 +899,7 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 	if len(mgr.cr.Status.IdxcPasswordChangedSecrets) > 0 {
 		for podSecretName := range mgr.cr.Status.IdxcPasswordChangedSecrets {
 			if mgr.cr.Status.IdxcPasswordChangedSecrets[podSecretName] {
-				podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr.GetNamespace(), mgr.cr.GetName(), podSecretName)
+				podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr.GetNamespace(), podSecretName)
 				if err != nil {
 					return fmt.Errorf("could not read secret %s, reason - %v", podSecretName, err)
 				}
