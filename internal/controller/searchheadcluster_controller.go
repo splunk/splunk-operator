@@ -18,10 +18,12 @@ package controller
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	"github.com/pkg/errors"
@@ -46,6 +48,7 @@ type SearchHeadClusterReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	Logger   *slog.Logger
 }
 
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=searchheadclusters,verbs=get;list;watch;create;update;patch;delete
@@ -76,6 +79,8 @@ type SearchHeadClusterReconciler struct {
 func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "SearchHeadCluster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "SearchHeadCluster")
+
+	ctx = logging.WithLogger(ctx, r.Logger.With("name", req.Name, "namespace", req.Namespace))
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("searchheadcluster", req.NamespacedName)
@@ -123,6 +128,7 @@ var ApplySearchHeadCluster = func(ctx context.Context, client client.Client, ins
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Logger = r.Logger.With("controller", "SearchHeadCluster")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.SearchHeadCluster{}).
 		WithEventFilter(predicate.Or(

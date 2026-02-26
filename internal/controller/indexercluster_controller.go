@@ -18,10 +18,12 @@ package controller
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
+	"github.com/splunk/splunk-operator/pkg/logging"
 
 	"github.com/pkg/errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
@@ -48,6 +50,7 @@ type IndexerClusterReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	Logger   *slog.Logger
 }
 
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=indexerclusters,verbs=get;list;watch;create;update;patch;delete
@@ -78,6 +81,8 @@ type IndexerClusterReconciler struct {
 func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "IndexerCluster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "IndexerCluster")
+
+	ctx = logging.WithLogger(ctx, r.Logger.With("name", req.Name, "namespace", req.Namespace))
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("indexercluster", req.NamespacedName)
@@ -129,6 +134,7 @@ var ApplyIndexerCluster = func(ctx context.Context, client client.Client, instan
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Logger = r.Logger.With("controller", "IndexerCluster")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.IndexerCluster{}).
 		WithEventFilter(predicate.Or(

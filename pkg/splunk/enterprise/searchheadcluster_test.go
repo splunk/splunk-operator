@@ -41,7 +41,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/go-logr/logr"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
@@ -184,7 +183,6 @@ func searchHeadClusterPodManagerTester(t *testing.T, method string, mockHandlers
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	// test for updating
-	scopedLog := logt.WithName(method)
 	cr := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -213,7 +211,6 @@ func searchHeadClusterPodManagerTester(t *testing.T, method string, mockHandlers
 	mockSplunkClient.AddHandlers(mockHandlers...)
 
 	mgr := &searchHeadClusterPodManager{
-		log:     scopedLog,
 		cr:      &cr,
 		secrets: secrets,
 		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
@@ -419,7 +416,6 @@ func TestApplyShcSecret(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()
 	method := "ApplyShcSecret"
-	scopedLog := logt.WithName(method)
 	var initObjectList []client.Object
 
 	c := spltest.NewMockClient()
@@ -513,7 +509,6 @@ func TestApplyShcSecret(t *testing.T) {
 	mockSplunkClient.AddHandlers(mockHandlers...)
 	mgr := &searchHeadClusterPodManager{
 		c:       c,
-		log:     scopedLog,
 		cr:      &cr,
 		secrets: secrets,
 		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
@@ -709,9 +704,8 @@ func TestShcPasswordSyncCompleted(t *testing.T) {
 
 	// Initialize a minimal pod manager for ApplyShcSecret
 	mgr := &searchHeadClusterPodManager{
-		c:   client,
-		log: logt.WithName("TestShcPasswordSyncCompleted"),
-		cr:  &shc,
+		c:  client,
+		cr: &shc,
 	}
 
 	// Use a mock PodExec client; replicas will be 0 so it won't be exercised
@@ -1647,9 +1641,8 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	}
 
 	// mock new search pod manager
-	newSearchHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
+	newSearchHeadClusterPodManager = func(client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
 		return searchHeadClusterPodManager{
-			log:     log,
 			cr:      cr,
 			secrets: secret,
 			newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
@@ -2227,9 +2220,8 @@ func TestShcPasswordSyncFailedEvent(t *testing.T) {
 	}
 
 	mgr := &searchHeadClusterPodManager{
-		c:   c,
-		log: logt.WithName("TestShcPasswordSyncFailedEvent"),
-		cr:  &shc,
+		c:  c,
+		cr: &shc,
 	}
 
 	// Configure mock pod exec client to return an error on shcluster-config command
