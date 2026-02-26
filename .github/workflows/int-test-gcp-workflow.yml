@@ -25,7 +25,7 @@ jobs:
 
       - name: Load Environment Variables
         id: dotenv
-        uses: falti/dotenv-action@v1.1.5
+        uses: falti/dotenv-action@v1
         with:
           path: .env  # Adjust the path if your dotenv file is located elsewhere
 
@@ -123,7 +123,7 @@ jobs:
 
       - name: Load Environment Variables
         id: dotenv
-        uses: falti/dotenv-action@v1.1.5
+        uses: falti/dotenv-action@v1
         with:
           path: .env
 

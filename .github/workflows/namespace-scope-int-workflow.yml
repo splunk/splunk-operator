@@ -72,7 +72,7 @@ jobs:
           echo "TEST_CLUSTER_NAME=${{ steps.set-cluster-name.outputs.cluster-name }}" >> $GITHUB_ENV
       - name: Dotenv Action
         id: dotenv
-        uses: falti/dotenv-action@v1.1.5
+        uses: falti/dotenv-action@v1
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v3
         with:
@@ -104,7 +104,7 @@ jobs:
           sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
           sudo chmod +x /usr/local/bin/operator-sdk
       - name: Configure Docker Hub credentials
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN}}

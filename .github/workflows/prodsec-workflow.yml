@@ -37,7 +37,7 @@ jobs:
     - uses: actions/checkout@v2
     - name: Dotenv Action
       id: dotenv
-      uses: falti/dotenv-action@v1.1.5
+      uses: falti/dotenv-action@v1
     - name: Run FOSSA Test
       uses: fossas/fossa-action@main
       with:
