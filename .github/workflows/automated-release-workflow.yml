@@ -28,7 +28,7 @@ jobs:
       SPLUNK_OPERATOR_RC_IMAGE_NAME: splunk/splunk-operator-rc
     steps:
     - name: Set up cosign
-      uses: sigstore/cosign-installer@v4
+      uses: sigstore/cosign-installer@v4.0.0
 
     - name: Checkout code
       uses: actions/checkout@v2
