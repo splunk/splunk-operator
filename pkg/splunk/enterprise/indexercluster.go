@@ -29,6 +29,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
@@ -51,7 +52,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	logger := slog.With("func", "ApplyIndexerClusterManager", "name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	logger := logging.FromContext(ctx).With("func", "ApplyIndexerClusterManager", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
@@ -375,7 +377,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	logger := slog.With("func", "ApplyIndexerCluster", "name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "ApplyIndexerCluster", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	eventPublisher := GetEventPublisher(ctx, cr)
 	cr.Kind = "IndexerCluster"
@@ -1395,7 +1397,7 @@ var newSplunkClientForQueuePipeline = splclient.NewSplunkClient
 
 // updateIndexerConfFiles checks if Queue or Pipeline inputs are created for the first time and updates the conf file if so
 func (mgr *indexerClusterPodManager) updateIndexerConfFiles(ctx context.Context, newCR *enterpriseApi.IndexerCluster, queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string, k8s rclient.Client) error {
-	logger := slog.With("func", "updateIndexerConfFiles", "name", newCR.GetName(), "namespace", newCR.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "updateIndexerConfFiles", "name", newCR.GetName(), "namespace", newCR.GetNamespace())
 
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.ReadyReplicas

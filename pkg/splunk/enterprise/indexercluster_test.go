@@ -45,6 +45,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -228,7 +229,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyIndexerClusterManager(context.Background(), c, cr.(*enterpriseApi.IndexerCluster))
+		_, err := ApplyIndexerClusterManager(context.TODO(), c, cr.(*enterpriseApi.IndexerCluster))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyIndexerClusterManager", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -238,7 +239,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyIndexerClusterManager(context.Background(), c, cr.(*enterpriseApi.IndexerCluster))
+		_, err := ApplyIndexerClusterManager(context.TODO(), c, cr.(*enterpriseApi.IndexerCluster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -290,7 +291,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 func TestGetMonitoringConsoleClient(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
-	logger := slog.With("func", "TestGetMonitoringConsoleClient")
+	logger := logging.FromContext(context.TODO()).With("func", "TestGetMonitoringConsoleClient", "name", "stack1", "namespace", "test")
 
 	current := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -338,7 +339,8 @@ func TestGetClusterManagerClient(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
-	logger := slog.With("func", "TestGetClusterManagerClient")
+	logger := logging.FromContext(ctx).With("func", "TestGetClusterManagerClient", "name", "stack1", "namespace", "test")
+
 	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -389,7 +391,8 @@ func TestGetClusterManagerClient(t *testing.T) {
 
 func getIndexerClusterPodManager(method string, mockHandlers []spltest.MockHTTPHandler, mockSplunkClient *spltest.MockHTTPClient, replicas int32) *indexerClusterPodManager {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	logger := slog.With("func", method)
+	logger := logging.FromContext(context.TODO()).With("func", method, "name", "stack1", "namespace", "test")
+
 	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -1031,7 +1034,8 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 func TestApplyIdxcSecret(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	method := "ApplyIdxcSecret"
-	logger := slog.With("func", method)
+	logger := logging.FromContext(context.TODO()).With("func", method, "name", "stack1", "namespace", "test")
+
 	var initObjectList []client.Object
 
 	ctx := context.TODO()
@@ -1329,19 +1333,19 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 	cm.Status.Phase = enterpriseApi.PhaseReady
 	// Empty ClusterManagerRef should return an error
 	cr.Spec.ClusterManagerRef.Name = ""
-	if _, err := ApplyIndexerClusterManager(context.Background(), c, &cr); err == nil {
+	if _, err := ApplyIndexerClusterManager(context.TODO(), c, &cr); err == nil {
 		t.Errorf("ApplyIndxerCluster() should have returned error")
 	}
 
 	cr.Spec.ClusterManagerRef.Name = "manager1"
 	// verifyRFPeers should return err here
-	if _, err := ApplyIndexerClusterManager(context.Background(), c, &cr); err == nil {
+	if _, err := ApplyIndexerClusterManager(context.TODO(), c, &cr); err == nil {
 		t.Errorf("ApplyIndxerCluster() should have returned error")
 	}
 
 	cm.Status.Phase = enterpriseApi.PhaseError
 	cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.StorageCapacity = "-abcd"
-	if _, err := ApplyIndexerClusterManager(context.Background(), c, &cr); err == nil {
+	if _, err := ApplyIndexerClusterManager(context.TODO(), c, &cr); err == nil {
 		t.Errorf("ApplyIndxerCluster() should have returned error")
 	}
 }
@@ -2832,7 +2836,7 @@ func TestPasswordSyncCompleted(t *testing.T) {
 	// Initialize a minimal pod manager for ApplyIdxcSecret
 	mgr := &indexerClusterPodManager{
 		c:   client,
-		log: slog.With("func", "TestPasswordSyncCompleted"),
+		log: logging.FromContext(ctx).With("func", "TestPasswordSyncCompleted", "name", idxc.GetName(), "namespace", idxc.GetNamespace()),
 		cr:  &idxc,
 	}
 
@@ -3364,7 +3368,7 @@ func TestIdxcPasswordSyncFailedEvent(t *testing.T) {
 
 	mgr := &indexerClusterPodManager{
 		c:   c,
-		log: slog.With("func", "TestIdxcPasswordSyncFailedEvent"),
+		log: logging.FromContext(ctx).With("func", "TestIdxcPasswordSyncFailedEvent", "name", idxc.GetName(), "namespace", idxc.GetNamespace()),
 		cr:  &idxc,
 		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
 			sc := splclient.NewSplunkClient(managementURI, username, password)

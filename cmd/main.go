@@ -17,21 +17,18 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
-	"path/filepath"
 	"time"
-
-	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 
 	intController "github.com/splunk/splunk-operator/internal/controller"
 	"github.com/splunk/splunk-operator/internal/controller/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
-	"github.com/splunk/splunk-operator/pkg/splunk/enterprise/validation"
-	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"github.com/splunk/splunk-operator/pkg/logging"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -52,7 +49,6 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	"github.com/splunk/splunk-operator/internal/controller"
 	//+kubebuilder:scaffold:imports
 	//extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
@@ -60,6 +56,11 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+
+	// Version information (set via ldflags at build time)
+	version   = "dev"
+	buildTime = "unknown"
+	gitCommit = "unknown"
 )
 
 func init() {
@@ -76,8 +77,11 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var pprofActive bool
-	var logEncoder string
-	var logLevel int
+
+	// Structured logging flags
+	var logLevel string
+	var logFormat string
+	var logAddSource bool
 
 	var leaseDuration time.Duration
 	var renewDeadline time.Duration
@@ -86,27 +90,22 @@ func main() {
 
 	var tlsOpts []func(*tls.Config)
 
-	// TLS certificate configuration for metrics
-	var metricsCertPath, metricsCertName, metricsCertKey string
-
-	flag.StringVar(&logEncoder, "log-encoder", "json", "log encoding ('json' or 'console')")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&pprofActive, "pprof", true, "Enable pprof endpoint")
-	flag.IntVar(&logLevel, "log-level", int(zapcore.InfoLevel), "set log level")
-	flag.IntVar(&leaseDurationSecond, "lease-duration", leaseDurationSecond, "manager lease duration in seconds")
-	flag.IntVar(&renewDeadlineSecond, "renew-duration", renewDeadlineSecond, "manager renew duration in seconds")
+
+	// Structured logging flags (can also be set via LOG_LEVEL, LOG_FORMAT, LOG_ADD_SOURCE env vars)
+	flag.StringVar(&logLevel, "log-level", "", "log level: debug, info, warn, error (overrides LOG_LEVEL env var)")
+	flag.StringVar(&logFormat, "log-format", "", "log output format: json, text (overrides LOG_FORMAT env var)")
+	flag.BoolVar(&logAddSource, "log-add-source", false, "add source file:line to log output (overrides LOG_ADD_SOURCE env var)")
+	flag.IntVar(&leaseDurationSecond, "lease-duration", int(leaseDurationSecond), "manager lease duration in seconds")
+	flag.IntVar(&renewDeadlineSecond, "renew-duration", int(renewDeadlineSecond), "manager renew duration in seconds")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.BoolVar(&secureMetrics, "metrics-secure", false,
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
-
-	// TLS certificate flags for metrics server
-	flag.StringVar(&metricsCertPath, "metrics-cert-path", "", "The directory that contains the metrics server certificate.")
-	flag.StringVar(&metricsCertName, "metrics-cert-name", "tls.crt", "The name of the metrics server certificate file.")
-	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
 	// More info:
@@ -154,29 +153,31 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	// Logging setup
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
-	// Configure metrics certificate watcher if metrics certs are provided
-	var metricsCertWatcher *certwatcher.CertWatcher
-	if len(metricsCertPath) > 0 {
-		setupLog.Info("Initializing metrics certificate watcher using provided certificates",
-			"metrics-cert-path", metricsCertPath, "metrics-cert-name", metricsCertName, "metrics-cert-key", metricsCertKey)
-
-		var err error
-		metricsCertWatcher, err = certwatcher.New(
-			filepath.Join(metricsCertPath, metricsCertName),
-			filepath.Join(metricsCertPath, metricsCertKey),
-		)
-		if err != nil {
-			setupLog.Error(err, "Failed to initialize metrics certificate watcher")
-			os.Exit(1)
-		}
-
-		metricsServerOptions.TLSOpts = append(metricsServerOptions.TLSOpts, func(config *tls.Config) {
-			config.GetCertificate = metricsCertWatcher.GetCertificate
-		})
+	// Initialize structured logging infrastructure
+	// Flags take precedence over environment variables
+	var addSourcePtr *bool
+	if logAddSource {
+		addSourcePtr = &logAddSource
 	}
+	logCfg := logging.LoadConfigWithFlags(logLevel, logFormat, addSourcePtr)
+	logger := logging.SetupLogger(logCfg,
+		slog.String("component", "splunk-operator"),
+		slog.String("version", version),
+		slog.String("build", gitCommit))
+
+	// Log startup information using slog
+	slog.Info("Splunk Operator starting",
+		slog.String("version", version),
+		slog.String("build_time", buildTime),
+		slog.String("git_commit", gitCommit),
+		slog.String("log_level", logging.LevelToString(logCfg.Level)),
+		slog.String("log_format", logCfg.Format),
+		slog.Bool("log_add_source", logCfg.AddSource))
+
+	_ = logger // logger is available for future use
+
+	// Logging setup (existing zap logger for controller-runtime compatibility)
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	baseOptions := ctrl.Options{
 		Metrics:                metricsServerOptions,
@@ -199,9 +200,8 @@ func main() {
 	}
 
 	if err = (&intController.ClusterManagerReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("clustermanager-controller"),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		fmt.Printf(" error - %v", err)
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterManager ")
@@ -209,123 +209,55 @@ func main() {
 	}
 	fmt.Printf("%v", err)
 	if err = (&intController.ClusterMasterReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("clustermaster-controller"),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterMaster")
 		os.Exit(1)
 	}
 	if err = (&intController.IndexerClusterReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("indexercluster-controller"),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "IndexerCluster")
 		os.Exit(1)
 	}
 	if err = (&intController.LicenseMasterReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("licensemaster-controller"),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LicenseMaster")
 		os.Exit(1)
 	}
 	if err = (&intController.LicenseManagerReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("licensemanager-controller"),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LicenseManager")
 		os.Exit(1)
 	}
 	if err = (&intController.MonitoringConsoleReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("monitoringconsole-controller"),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MonitoringConsole")
 		os.Exit(1)
 	}
 	if err = (&intController.SearchHeadClusterReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("searchheadcluster-controller"),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SearchHeadCluster")
 		os.Exit(1)
 	}
 	if err = (&intController.StandaloneReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("standalone-controller"),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Standalone")
 		os.Exit(1)
 	}
-	if err := (&controller.IngestorClusterReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("ingestorcluster-controller"),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "IngestorCluster")
-		os.Exit(1)
-	}
-	if err = (&intController.TelemetryReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Telemetry")
-		os.Exit(1)
-	}
-
-	// Setup centralized validation webhook server (opt-in via ENABLE_VALIDATION_WEBHOOK env var, defaults to false)
-	enableWebhooks := os.Getenv("ENABLE_VALIDATION_WEBHOOK")
-	if enableWebhooks == "true" {
-		// Parse optional timeout configurations from environment
-		readTimeout := 10 * time.Second
-		if val := os.Getenv("WEBHOOK_READ_TIMEOUT"); val != "" {
-			if d, err := time.ParseDuration(val); err == nil {
-				readTimeout = d
-			}
-		}
-		writeTimeout := 10 * time.Second
-		if val := os.Getenv("WEBHOOK_WRITE_TIMEOUT"); val != "" {
-			if d, err := time.ParseDuration(val); err == nil {
-				writeTimeout = d
-			}
-		}
-
-		webhookServer := validation.NewWebhookServer(validation.WebhookServerOptions{
-			Port:         9443,
-			CertDir:      "/tmp/k8s-webhook-server/serving-certs",
-			Validators:   validation.DefaultValidators,
-			ReadTimeout:  readTimeout,
-			WriteTimeout: writeTimeout,
-		})
-
-		// Add webhook server as a runnable to the manager
-		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-			return webhookServer.Start(ctx)
-		})); err != nil {
-			setupLog.Error(err, "unable to add webhook server to manager")
-			os.Exit(1)
-		}
-		setupLog.Info("Validation webhook enabled via ENABLE_VALIDATION_WEBHOOK=true")
-	} else {
-		setupLog.Info("Validation webhook disabled (set ENABLE_VALIDATION_WEBHOOK=true to enable)")
-	}
 	//+kubebuilder:scaffold:builder
-
-	// Register certificate watchers with the manager
-	if metricsCertWatcher != nil {
-		setupLog.Info("Adding metrics certificate watcher to manager")
-		if err := mgr.Add(metricsCertWatcher); err != nil {
-			setupLog.Error(err, "Unable to add metrics certificate watcher to manager")
-			os.Exit(1)
-		}
-	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
