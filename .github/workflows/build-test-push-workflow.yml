@@ -50,6 +50,7 @@ jobs:
         with:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
       - name: Install goveralls
+        if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.COVERALLS_TOKEN != '' }}
         run: |
           go version
           go install github.com/mattn/goveralls@latest
@@ -61,7 +62,7 @@ jobs:
         run: |
           make test
       - name: Run Code Coverage
-        if: ${{ secrets.COVERALLS_TOKEN != '' }}
+        if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.COVERALLS_TOKEN != '' }}
         run: goveralls -shallow -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
       - name: Upload Coverage artifacts
         uses: actions/upload-artifact@v4.4.0
@@ -69,6 +70,7 @@ jobs:
           name: coverage.out
           path: coverage.out
   build-operator-image:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     needs: [check-formating, unit-tests]
     env:
@@ -121,6 +123,7 @@ jobs:
         COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
         COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
   vulnerability-scan:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     permissions:
       actions: read
       contents: read
@@ -175,6 +178,7 @@ jobs:
       with:
         sarif_file: 'trivy-results.sarif'
   smoke-tests:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     needs: vulnerability-scan
     strategy:
       fail-fast: false

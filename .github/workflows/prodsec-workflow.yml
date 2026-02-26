@@ -17,6 +17,7 @@ on:
     - '*.md'
 jobs:
   semgrep:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     name: Semgrep Scanner
     runs-on: ubuntu-24.04
     env:
@@ -27,6 +28,7 @@ jobs:
     - uses: actions/checkout@v3
     - run: semgrep ci
   FOSSA-scanner:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
