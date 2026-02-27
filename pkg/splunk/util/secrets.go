@@ -71,6 +71,8 @@ var GetSpecificSecretTokenFromPod = func(ctx context.Context, c splcommon.Contro
 	return string(secret.Data[secretToken]), nil
 }
 
+var GetSpecificSecretTokenFromPodMock = GetSpecificSecretTokenFromPod
+
 // GetSecretFromPod retrieves secret data from a pod
 func GetSecretFromPod(ctx context.Context, c splcommon.ControllerClient, PodName string, namespace string) (*corev1.Secret, error) {
 	var currentPod corev1.Pod
