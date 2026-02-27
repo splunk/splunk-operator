@@ -108,6 +108,7 @@ type Spec struct {
 	Resources corev1.ResourceRequirements `json:"resources"`
 
 	// ServiceTemplate is a template used to create Kubernetes services
+	// +kubebuilder:pruning:PreserveUnknownFields
 	ServiceTemplate corev1.Service `json:"serviceTemplate"`
 
 	// TopologySpreadConstraint https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
