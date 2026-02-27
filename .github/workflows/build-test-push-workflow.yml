@@ -73,7 +73,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: unit-test-results
+          name: test-report-unit
           path: unit_test*.xml
       - name: Publish Unit Test Report
         uses: mikepenz/action-junit-report@v6
@@ -346,7 +346,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: "smoke-test-results-${{ matrix.test }}"
+          name: "test-report-smoke-${{ matrix.test }}"
           path: report-junit*.xml
       - name: Publish Smoke Test Report
         uses: mikepenz/action-junit-report@v6
