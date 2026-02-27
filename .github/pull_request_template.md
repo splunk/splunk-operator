@@ -10,6 +10,10 @@ _Highlight the updates in specific files_
 
 _How did you test these changes? What automated tests are added?_
 
+Suggested local gates:
+- `scripts/dev/pr_check.sh`
+- `scripts/dev/unit.sh`
+
 ### Related Issues
 
 _Jira tickets, GitHub issues, Support tickets..._

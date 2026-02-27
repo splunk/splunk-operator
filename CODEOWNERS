@@ -1,0 +1,10 @@
+# TODO: Replace this placeholder team with real owners.
+* @splunk/splunk-operator-for-kubernetes
+
+/api/ @splunk/splunk-operator-for-kubernetes
+/internal/controller/ @splunk/splunk-operator-for-kubernetes
+/pkg/splunk/enterprise/ @splunk/splunk-operator-for-kubernetes
+/test/ @splunk/splunk-operator-for-kubernetes
+/kuttl/ @splunk/splunk-operator-for-kubernetes
+/docs/ @splunk/splunk-operator-for-kubernetes
+/scripts/ @splunk/splunk-operator-for-kubernetes
