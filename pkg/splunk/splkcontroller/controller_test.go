@@ -18,12 +18,11 @@ package splkcontroller
 import (
 	"context"
 	"errors"
-	"net/http"
-	"testing"
-
 	"k8s.io/client-go/kubernetes/scheme"
+	"net/http"
 	ctrl2 "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/config"
+	"testing"
 
 	"github.com/go-logr/logr"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"

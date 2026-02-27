@@ -22,6 +22,9 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/pkg/platform-sdk/api"
+	"github.com/splunk/splunk-operator/pkg/platform-sdk/api/certificate"
+	"github.com/splunk/splunk-operator/pkg/platform-sdk/api/secret"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
@@ -35,7 +38,7 @@ import (
 )
 
 // ApplyStandalone reconciles the StatefulSet for N standalone instances of Splunk Enterprise.
-func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (reconcile.Result, error) {
+func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, sdkRuntime api.Runtime, cr *enterpriseApi.Standalone) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -202,7 +205,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	// create or update statefulset
-	statefulSet, err := getStandaloneStatefulSet(ctx, client, cr)
+	statefulSet, err := getStandaloneStatefulSet(ctx, client, sdkRuntime, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "getStandaloneStatefulSet", fmt.Sprintf("get standalone status set failed %s", err.Error()))
 		return result, err
@@ -287,7 +290,188 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 }
 
 // getStandaloneStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise standalone instances.
-func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (*appsv1.StatefulSet, error) {
+func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerClient, sdkRuntime api.Runtime, cr *enterpriseApi.Standalone) (*appsv1.StatefulSet, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getStandaloneStatefulSet").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	// Legacy mode: fall back to old implementation if SDK runtime is nil
+	if sdkRuntime == nil {
+		scopedLog.Info("Using legacy StatefulSet creation (SDK runtime not available)")
+		return getStandaloneStatefulSetLegacy(ctx, client, cr)
+	}
+
+	// Create SDK reconcile context
+	rctx := sdkRuntime.NewReconcileContext(ctx, cr.Namespace, cr.Name)
+
+	// 1. Ensure legacy namespace-scoped secret exists (SDK will use it as source)
+	// The SDK expects the legacy secret splunk-{namespace}-secret to exist before resolution
+	scopedLog.Info("Ensuring legacy namespace-scoped secret exists", "namespace", cr.Namespace)
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, cr.GetNamespace())
+	if err != nil {
+		scopedLog.Error(err, "Failed to create/update namespace-scoped secret")
+		return nil, fmt.Errorf("failed to ensure namespace-scoped secret: %w", err)
+	}
+
+	// 2. Resolve secrets using SDK
+	// Use a simple binding name like "{crName}-credentials" which will create versioned secrets
+	// The SDK will automatically look for the legacy source secret: splunk-{namespace}-secret
+	bindingName := fmt.Sprintf("%s-credentials", cr.Name)
+	scopedLog.Info("Resolving secret via SDK", "bindingName", bindingName, "namespace", cr.Namespace)
+
+	secretRef, err := rctx.ResolveSecret(secret.Binding{
+		Name:      bindingName,
+		Namespace: cr.Namespace,
+		Type:      secret.SecretTypeSplunk,
+		Keys:      []string{"password", "hec_token", "pass4SymmKey", "idxc_secret", "shc_secret"},
+	})
+	if err != nil {
+		scopedLog.Error(err, "Failed to resolve secret")
+		return nil, fmt.Errorf("failed to resolve secret: %w", err)
+	}
+	if !secretRef.Ready {
+		scopedLog.Info("Secret not ready", "error", secretRef.Error)
+		return nil, fmt.Errorf("secret not ready: %s", secretRef.Error)
+	}
+	scopedLog.Info("Secret resolved successfully", "secretName", secretRef.SecretName, "ready", secretRef.Ready)
+
+	// 3. TODO: Resolve certificates (optional - only if TLS enabled)
+	// This will be implemented in a future update
+	var tlsCert *certificate.Ref
+	_ = tlsCert // Avoid unused variable error
+
+	// Get common configurations
+	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(SplunkStandalone))
+	annotations := splcommon.GetIstioAnnotations(ports)
+	labels := getSplunkLabels(cr.GetName(), SplunkStandalone, cr.Spec.ClusterManagerRef.Name)
+	affinity := splcommon.AppendPodAntiAffinity(&cr.Spec.CommonSplunkSpec.Affinity, cr.GetName(), SplunkStandalone.ToString())
+
+	// Get probes
+	livenessProbe := getLivenessProbe(ctx, cr, SplunkStandalone, &cr.Spec.CommonSplunkSpec)
+	readinessProbe := getReadinessProbe(ctx, cr, SplunkStandalone, &cr.Spec.CommonSplunkSpec)
+	startupProbe := getStartupProbe(ctx, cr, SplunkStandalone, &cr.Spec.CommonSplunkSpec)
+
+	// 4. Build StatefulSet using SDK
+	builder := rctx.BuildStatefulSet().
+		// Basic configuration
+		WithName(GetSplunkStatefulsetName(SplunkStandalone, cr.GetName())).
+		WithNamespace(cr.GetNamespace()).
+		WithReplicas(cr.Spec.Replicas).
+		WithImage(cr.Spec.CommonSplunkSpec.Image).
+		WithImagePullPolicy(corev1.PullPolicy(cr.Spec.ImagePullPolicy)).
+		WithLabels(labels).
+		WithAnnotations(annotations).
+		// Ports
+		WithPorts(ports).
+		// Environment variables
+		WithEnv(corev1.EnvVar{Name: "SPLUNK_HOME", Value: "/opt/splunk"}).
+		WithEnv(corev1.EnvVar{Name: "SPLUNK_ROLE", Value: "splunk_standalone"}).
+		WithEnv(corev1.EnvVar{Name: "SPLUNK_START_ARGS", Value: "--accept-license"}).
+		WithEnv(corev1.EnvVar{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"}).
+		WithEnv(corev1.EnvVar{Name: "SPLUNK_DEFAULTS_URL", Value: "/mnt/splunk-secrets/default.yml"}).
+		WithEnv(corev1.EnvVar{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"}).
+		WithEnv(corev1.EnvVar{Name: "SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH", Value: GetLivenessDriverFilePath()}).
+		WithEnv(corev1.EnvVar{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"}).
+		WithEnv(corev1.EnvVar{Name: "SPLUNK_GENERAL_TERMS", Value: "--accept-sgt-current-at-splunk-com"}).
+		// Resources
+		WithResources(cr.Spec.CommonSplunkSpec.Resources).
+		// Security contexts
+		WithPodSecurityContext(getSplunkPodSecurityContext(&cr.Spec.CommonSplunkSpec)).
+		WithSecurityContext(getSplunkSecurityContext(&cr.Spec.CommonSplunkSpec)).
+		// Probes
+		WithLivenessProbe(livenessProbe).
+		WithReadinessProbe(readinessProbe).
+		WithStartupProbe(startupProbe).
+		// Affinity
+		WithAffinity(affinity).
+		// StatefulSet policies
+		WithServiceName(GetSplunkServiceName(SplunkStandalone, cr.GetName(), true)).
+		WithUpdateStrategy(appsv1.StatefulSetUpdateStrategy{
+			Type: appsv1.OnDeleteStatefulSetStrategyType,
+		}).
+		WithPVCRetentionPolicy(&appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+			WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+			WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+		}).
+		WithTerminationGracePeriodSeconds(30).
+		// SDK-managed resources
+		WithSecret(secretRef).
+		WithConfigMap(GetProbeConfigMapName(cr.Namespace))
+
+	// IMPORTANT: SDK doesn't auto-mount K8s secrets (only uses envFrom)
+	// But Splunk requires secret mounted as file at /mnt/splunk-secrets/default.yml
+	// So we manually add the volume and mount
+	secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
+	builder = builder.
+		WithVolume(corev1.Volume{
+			Name: "mnt-splunk-secrets",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  secretRef.SecretName,
+					DefaultMode: &secretVolDefaultMode,
+				},
+			},
+		}).
+		WithVolumeMount(corev1.VolumeMount{
+			Name:      "mnt-splunk-secrets",
+			MountPath: "/mnt/splunk-secrets",
+			ReadOnly:  true,
+		})
+
+	// Add certificates if enabled
+	if tlsCert != nil {
+		builder = builder.WithCertificate(tlsCert)
+	}
+
+	// Add storage volumes - check if ephemeral or PVC
+	if !cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage {
+		// Add PVC for /opt/splunk/etc
+		etcPVC, err := getSplunkVolumeClaims(cr, &cr.Spec.CommonSplunkSpec, labels, splcommon.EtcVolumeStorage, false)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get etc PVC: %w", err)
+		}
+		builder = builder.WithVolumeClaimTemplate(etcPVC)
+	}
+
+	if !cr.Spec.CommonSplunkSpec.VarVolumeStorageConfig.EphemeralStorage {
+		// Add PVC for /opt/splunk/var
+		varPVC, err := getSplunkVolumeClaims(cr, &cr.Spec.CommonSplunkSpec, labels, splcommon.VarVolumeStorage, false)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get var PVC: %w", err)
+		}
+		builder = builder.WithVolumeClaimTemplate(varPVC)
+	}
+
+	// Build the StatefulSet
+	ss, err := builder.Build()
+	if err != nil {
+		scopedLog.Error(err, "Failed to build StatefulSet")
+		return nil, fmt.Errorf("failed to build StatefulSet: %w", err)
+	}
+
+	// Post-build configuration: Add ephemeral volumes if needed
+	if cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage {
+		addEphemeralVolumes(ss, splcommon.EtcVolumeStorage)
+	}
+	if cr.Spec.CommonSplunkSpec.VarVolumeStorageConfig.EphemeralStorage {
+		addEphemeralVolumes(ss, splcommon.VarVolumeStorage)
+	}
+
+	// 5. Add SmartStore init container if needed (preserve existing logic)
+	smartStoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, SplunkStandalone)
+	if smartStoreConfigMap != nil {
+		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
+	}
+
+	// 6. Setup App framework staging volume (preserve existing logic)
+	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+
+	scopedLog.Info("StatefulSet built successfully using Platform SDK")
+	return ss, nil
+}
+
+// getStandaloneStatefulSetLegacy returns a StatefulSet using the legacy (pre-SDK) implementation.
+// This is used for backward compatibility when SDK runtime is not available (e.g., in old tests).
+func getStandaloneStatefulSetLegacy(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (*appsv1.StatefulSet, error) {
 	// get generic statefulset for Splunk Enterprise objects
 	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{})
 	if err != nil {

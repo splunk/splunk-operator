@@ -2190,6 +2190,7 @@ spec:
                         type: object
                     type: object
                 type: object
+                x-kubernetes-preserve-unknown-fields: true
               smartstore:
                 description: Splunk Smartstore configuration. Refer to indexes.conf.spec
                   and server.conf.spec on docs.splunk.com

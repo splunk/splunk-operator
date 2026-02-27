@@ -2043,6 +2043,7 @@ spec:
                         type: object
                     type: object
                 type: object
+                x-kubernetes-preserve-unknown-fields: true
               startupProbe:
                 description: StartupProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes
                 properties:
@@ -6315,6 +6316,7 @@ spec:
                         type: object
                     type: object
                 type: object
+                x-kubernetes-preserve-unknown-fields: true
               startupProbe:
                 description: StartupProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes
                 properties:

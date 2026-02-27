@@ -2668,7 +2668,7 @@ func TestUpdateCRStatus(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyStandalone(ctx, c, standalone)
+	_, err = ApplyStandalone(ctx, c, nil, standalone)
 	if err != nil {
 		t.Errorf("Apply standalone failed.")
 	}
