@@ -224,7 +224,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: helm-test-results
+          name: test-report-helm
           path: '**/kuttl-artifacts/*.xml'
       - name: Publish Helm Test Report
         uses: mikepenz/action-junit-report@v6

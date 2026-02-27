@@ -216,7 +216,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: "integration-test-results-${{ matrix.test }}"
+          name: "test-report-integration-${{ matrix.test }}"
           path: report-junit*.xml
       - name: Publish Integration Test Report
         uses: mikepenz/action-junit-report@v6
