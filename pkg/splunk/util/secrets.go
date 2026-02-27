@@ -36,7 +36,7 @@ import (
 )
 
 // GetSpecificSecretTokenFromPod retrieves a specific secret token's value from a Pod
-var GetSpecificSecretTokenFromPod = func(ctx context.Context, c splcommon.ControllerClient, PodName string, namespace string, secretToken string) (string, error) {
+func GetSpecificSecretTokenFromPod(ctx context.Context, c splcommon.ControllerClient, PodName string, namespace string, secretToken string) (string, error) {
 	logger := logging.FromContext(ctx).With("func", "GetSpecificSecretTokenFromPod")
 	logger.DebugContext(ctx, "Retrieving secret token from pod",
 		"pod", PodName,
