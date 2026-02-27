@@ -15,7 +15,8 @@ architecture:
   indexerReplicas: 3
   siteCount: 1
   shc: true
-  useClusterMaster: false
+  # Use legacy v3 control-plane readiness helpers
+  useLegacyClusterManager: false
 
 features:
   smartstore: false

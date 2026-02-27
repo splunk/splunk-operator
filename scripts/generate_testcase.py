@@ -304,7 +304,7 @@ def integration_flow(spec: dict):
     indexer_replicas = int(arch.get("indexerReplicas", 3) or 3)
     site_count = int(arch.get("siteCount", 3) or 3)
     shc = bool(arch.get("shc", True))
-    use_cluster_master = bool(arch.get("useClusterMaster", False))
+    use_legacy_cluster_manager = bool(arch.get("useLegacyClusterManager", False))
     features = spec.get("features", {}) if isinstance(spec.get("features", {}), dict) else {}
     use_smartstore = bool(features.get("smartstore", False))
     use_appframework = bool(features.get("appframework", False))
@@ -362,7 +362,9 @@ def integration_flow(spec: dict):
             )
             deploy_lines.append('Expect(err).To(Succeed(), "Unable to deploy single-site cluster")')
         ready_lines.append(
-            "testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)" if use_cluster_master else "testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)"
+            "testenv.LegacyClusterManagerReady(ctx, deployment, testcaseEnvInst)"
+            if use_legacy_cluster_manager
+            else "testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)"
         )
         if shc:
             ready_lines.append("testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)")
@@ -370,7 +372,9 @@ def integration_flow(spec: dict):
         ready_lines.append("testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)")
         if lm_enabled:
             ready_lines.append(
-                "testenv.LicenseMasterReady(ctx, deployment, testcaseEnvInst)" if use_cluster_master else "testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)"
+                "testenv.LegacyLicenseManagerReady(ctx, deployment, testcaseEnvInst)"
+                if use_legacy_cluster_manager
+                else "testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)"
             )
             notes.append("License Manager readiness requires a license file/configmap to be configured for the test env.")
         if mc_enabled:
@@ -388,7 +392,9 @@ def integration_flow(spec: dict):
             )
             deploy_lines.append('Expect(err).To(Succeed(), "Unable to deploy multisite cluster with SHC")')
         ready_lines.append(
-            "testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)" if use_cluster_master else "testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)"
+            "testenv.LegacyClusterManagerReady(ctx, deployment, testcaseEnvInst)"
+            if use_legacy_cluster_manager
+            else "testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)"
         )
         ready_lines.append(f"testenv.IndexersReady(ctx, deployment, testcaseEnvInst, {site_count})")
         ready_lines.append(f"testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, {site_count})")
@@ -405,7 +411,9 @@ def integration_flow(spec: dict):
             )
             deploy_lines.append('Expect(err).To(Succeed(), "Unable to deploy multisite cluster")')
         ready_lines.append(
-            "testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)" if use_cluster_master else "testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)"
+            "testenv.LegacyClusterManagerReady(ctx, deployment, testcaseEnvInst)"
+            if use_legacy_cluster_manager
+            else "testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)"
         )
         ready_lines.append(f"testenv.IndexersReady(ctx, deployment, testcaseEnvInst, {site_count})")
         ready_lines.append(f"testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, {site_count})")

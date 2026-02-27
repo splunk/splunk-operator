@@ -102,8 +102,7 @@ Run `make bundle` to refresh `bundle/manifests/*` and `helm-chart/splunk-operato
 - ClusterManager: `api/v4/clustermanager_types.go`, `internal/controller/clustermanager_controller.go`, `pkg/splunk/enterprise/clustermanager.go`
 - LicenseManager: `api/v4/licensemanager_types.go`, `internal/controller/licensemanager_controller.go`, `pkg/splunk/enterprise/licensemanager.go`
 - MonitoringConsole: `api/v4/monitoringconsole_types.go`, `internal/controller/monitoringconsole_controller.go`, `pkg/splunk/enterprise/monitoringconsole.go`
-- Legacy ClusterMaster: `api/v3/clustermaster_types.go`, `internal/controller/clustermaster_controller.go`, `pkg/splunk/enterprise/clustermaster.go`
-- Legacy LicenseMaster: `api/v3/licensemaster_types.go`, `internal/controller/licensemaster_controller.go`, `pkg/splunk/enterprise/licensemaster.go`
+- Legacy v3 control-plane types/controllers: search under `api/v3/`, `internal/controller/`, and `pkg/splunk/enterprise/`
 
 ## Output Contract
 - Changed files

@@ -26,14 +26,31 @@ import (
 
 	gomega "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splenterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var StabilizationDuration = time.Second * 20
+
+const (
+	telemetryConfigMapPrefix = "splunk-operator-"
+	telemetryLabelKey        = "name"
+	telemetryLabelValue      = "splunk-operator"
+	telemetryStatusKey       = "status"
+)
+
+type telemetryStatus struct {
+	LastTransmission string `json:"lastTransmission,omitempty"`
+	Test             string `json:"test,omitempty"`
+	SokVersion       string `json:"sokVersion,omitempty"`
+}
 
 // PodDetailsStruct captures output of kubectl get pods podname -o json
 type PodDetailsStruct struct {
@@ -186,6 +203,29 @@ func SingleSiteIndexersReady(ctx context.Context, deployment *Deployment, testen
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
+// IngestorReady verify ingestor cluster is in Ready status and does not flip-flop
+func IngestorReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
+	ingestor := &enterpriseApi.IngestorCluster{}
+	instanceName := fmt.Sprintf("%s-ingest", deployment.GetName())
+	gomega.Eventually(func() enterpriseApi.Phase {
+		err := deployment.GetInstance(ctx, instanceName, ingestor)
+		if err != nil {
+			return enterpriseApi.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for ingestor cluster phase to be ready", "instance", instanceName, "Phase", ingestor.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return ingestor.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+
+	// In a steady state, we should stay in Ready and not flip-flop around
+	gomega.Consistently(func() enterpriseApi.Phase {
+		_ = deployment.GetInstance(ctx, instanceName, ingestor)
+		testenvInstance.Log.Info("Check for Consistency ingestor cluster phase to be ready", "instance", instanceName, "Phase", ingestor.Status.Phase)
+		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-ingestor-")
+		return ingestor.Status.Phase
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+}
+
 // ClusterManagerReady verify Cluster Manager Instance is in ready status
 func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	// Ensure that the cluster-manager goes to Ready phase
@@ -210,6 +250,11 @@ func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 		testenvInstance.Log.Info("Check for Consistency cluster-manager phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
 		return cm.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+}
+
+// LegacyClusterManagerReady wraps the legacy v3 control-plane readiness check
+func LegacyClusterManagerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
+	ClusterMasterReady(ctx, deployment, testenvInstance)
 }
 
 // ClusterMasterReady verify Cluster Master Instance is in ready status
@@ -311,6 +356,109 @@ func VerifyRFSFMet(ctx context.Context, deployment *Deployment, testenvInstance 
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
+func getTelemetryConfigMap(ctx context.Context, deployment *Deployment) (*corev1.ConfigMap, string, error) {
+	operatorNamespace := deployment.testenv.GetName()
+	if deployment.testenv.IsOperatorInstalledClusterWide() == "true" {
+		operatorNamespace = "splunk-operator"
+	}
+	cmName := splenterprise.GetTelemetryConfigMapName(telemetryConfigMapPrefix)
+	cm := &corev1.ConfigMap{}
+	err := deployment.testenv.GetKubeClient().Get(ctx, crclient.ObjectKey{Name: cmName, Namespace: operatorNamespace}, cm)
+	return cm, operatorNamespace, err
+}
+
+func parseTelemetryStatus(cm *corev1.ConfigMap) (telemetryStatus, error) {
+	if cm == nil || cm.Data == nil {
+		return telemetryStatus{}, fmt.Errorf("telemetry configmap is empty")
+	}
+	raw, ok := cm.Data[telemetryStatusKey]
+	if !ok || strings.TrimSpace(raw) == "" {
+		return telemetryStatus{}, fmt.Errorf("telemetry status not found")
+	}
+	var status telemetryStatus
+	if err := json.Unmarshal([]byte(raw), &status); err != nil {
+		return telemetryStatus{}, err
+	}
+	return status, nil
+}
+
+// GetTelemetryLastSubmissionTime returns last telemetry transmission time (UTC) or zero time if unavailable
+func GetTelemetryLastSubmissionTime(ctx context.Context, deployment *Deployment) time.Time {
+	cm, _, err := getTelemetryConfigMap(ctx, deployment)
+	if err != nil {
+		deployment.testenv.Log.Info("Unable to get telemetry configmap", "error", err)
+		return time.Time{}
+	}
+	status, err := parseTelemetryStatus(cm)
+	if err != nil {
+		deployment.testenv.Log.Info("Unable to parse telemetry status", "error", err)
+		return time.Time{}
+	}
+	if status.LastTransmission == "" {
+		return time.Time{}
+	}
+	ts, err := time.Parse(time.RFC3339, status.LastTransmission)
+	if err != nil {
+		deployment.testenv.Log.Info("Unable to parse telemetry timestamp", "value", status.LastTransmission, "error", err)
+		return time.Time{}
+	}
+	return ts
+}
+
+// TriggerTelemetrySubmission updates telemetry configmap to request a new submission
+func TriggerTelemetrySubmission(ctx context.Context, deployment *Deployment) {
+	cmName := splenterprise.GetTelemetryConfigMapName(telemetryConfigMapPrefix)
+	cm, operatorNamespace, err := getTelemetryConfigMap(ctx, deployment)
+	create := false
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			create = true
+			cm = &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cmName,
+					Namespace: operatorNamespace,
+				},
+			}
+		} else {
+			gomega.Expect(err).ToNot(gomega.HaveOccurred(), "Unable to get telemetry configmap")
+		}
+	}
+
+	status, _ := parseTelemetryStatus(cm)
+	status.Test = "true"
+	status.LastTransmission = ""
+	statusBytes, err := json.MarshalIndent(status, "", "  ")
+	gomega.Expect(err).ToNot(gomega.HaveOccurred(), "Unable to marshal telemetry status")
+
+	if cm.Data == nil {
+		cm.Data = map[string]string{}
+	}
+	cm.Data[telemetryStatusKey] = string(statusBytes)
+
+	if cm.Labels == nil {
+		cm.Labels = map[string]string{}
+	}
+	cm.Labels[telemetryLabelKey] = telemetryLabelValue
+
+	if create {
+		err = deployment.testenv.GetKubeClient().Create(ctx, cm)
+	} else {
+		err = deployment.testenv.GetKubeClient().Update(ctx, cm)
+	}
+	gomega.Expect(err).ToNot(gomega.HaveOccurred(), "Unable to update telemetry configmap")
+}
+
+// VerifyTelemetry ensures telemetry lastTransmission is updated after triggering submission
+func VerifyTelemetry(ctx context.Context, deployment *Deployment, prev time.Time) {
+	gomega.Eventually(func() bool {
+		current := GetTelemetryLastSubmissionTime(ctx, deployment)
+		if prev.IsZero() {
+			return !current.IsZero()
+		}
+		return current.After(prev)
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
 // VerifyNoDisconnectedSHPresentOnCM is present on cluster manager
 func VerifyNoDisconnectedSHPresentOnCM(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	gomega.Consistently(func() bool {
@@ -351,6 +499,11 @@ func LicenseManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
 		return LicenseManager.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+}
+
+// LegacyLicenseManagerReady wraps the legacy v3 license control-plane readiness check
+func LegacyLicenseManagerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
+	LicenseMasterReady(ctx, deployment, testenvInstance)
 }
 
 // LicenseMasterReady verify LM is in ready status and does not flip flop

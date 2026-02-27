@@ -25,12 +25,12 @@ M1 (Multisite, no SHC)
 
 ## Readiness Helpers (test/testenv/verificationutils.go)
 - `StandaloneReady`
-- `ClusterManagerReady` or `ClusterMasterReady`
+- `ClusterManagerReady` or `LegacyClusterManagerReady`
 - `SearchHeadClusterReady`
 - `SingleSiteIndexersReady` or `IndexersReady`
 - `IndexerClusterMultisiteStatus`
 - `VerifyRFSFMet`
-- `LicenseManagerReady` or `LicenseMasterReady`
+- `LicenseManagerReady` or `LegacyLicenseManagerReady`
 - `VerifyMonitoringConsoleReady`
 
 ## SVA Validation (Integration)
