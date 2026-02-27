@@ -456,7 +456,7 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 
 // GetQueueRemoteVolumeSecrets is used to retrieve access key and secrete key for Index & Ingestion separation
 func GetQueueRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject) (string, string, string, error) {
-	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
+	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), volume.SecretRef)
 	if err != nil {
 		return "", "", "", err
 	}

@@ -1588,11 +1588,9 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 	mclient.AddHandler(wantRequest2, 200, string(response2), nil)
 	mclient.AddHandler(wantRequest3, 200, string(response3), nil)
 
-	// Mock GetSpecificSecretTokenFromPod to return a dummy password
-	// This allows VerifyRFPeers to execute its real logic with HTTP calls mocked via MockHTTPClient
-	savedGetSpecificSecretTokenFromPod := splutil.GetSpecificSecretTokenFromPod
-	defer func() { splutil.GetSpecificSecretTokenFromPod = savedGetSpecificSecretTokenFromPod }()
-	splutil.GetSpecificSecretTokenFromPod = func(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, secretToken string) (string, error) {
+	savedGetSpecificSecretTokenFromPod := splutil.GetSpecificSecretTokenFromPodMock
+	defer func() { splutil.GetSpecificSecretTokenFromPodMock = savedGetSpecificSecretTokenFromPod }()
+	splutil.GetSpecificSecretTokenFromPodMock = func(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, secretToken string) (string, error) {
 		return "dummypassword", nil
 	}
 

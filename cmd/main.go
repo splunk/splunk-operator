@@ -32,7 +32,6 @@ import (
 	"github.com/splunk/splunk-operator/internal/controller/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/logging"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise/validation"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 
