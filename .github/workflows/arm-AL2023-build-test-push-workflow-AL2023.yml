@@ -5,7 +5,7 @@ permissions:
   id-token: write
   pull-requests: write
 on:
-  workflow_dispatch:  
+  workflow_dispatch:
     inputs:
       splunk_image_repository_tag:
         description: 'Splunk AL2023-based Docker Image repository and tag (e.g. repository-name:tag)'
@@ -50,6 +50,7 @@ jobs:
        run: make test
      - name: Run Code Coverage
        run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
+       continue-on-error: true
      - name: Upload Coverage artifacts
        uses: actions/upload-artifact@v4.4.0
        with:
@@ -121,6 +122,7 @@ jobs:
                 appframeworksS1,
                 managersecret,
                 managermc,
+                indingsep,
                ]
     runs-on: ubuntu-latest
     env:
@@ -146,6 +148,8 @@ jobs:
       DEPLOYMENT_TYPE: ""
       ARM64: "true"
       GRAVITON_TESTING: "true"
+      AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID: ${{ secrets.AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID }}
+      AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY: ${{ secrets.AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY }}
     steps:
       - name: Chekcout code
         uses: actions/checkout@v2

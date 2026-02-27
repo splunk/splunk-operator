@@ -45,6 +45,43 @@ func NewStandalone(name, ns, image string) *enterpriseApi.Standalone {
 	return ad
 }
 
+// NewIngestorCluster returns new IngestorCluster instance with its config hash
+func NewIngestorCluster(name, ns, image string, os *enterpriseApi.ObjectStorage, queue *enterpriseApi.Queue) *enterpriseApi.IngestorCluster {
+	return &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{ImagePullPolicy: string(pullPolicy)},
+			},
+			Replicas: 3,
+			QueueRef: corev1.ObjectReference{
+				Name:      queue.Name,
+				Namespace: queue.Namespace,
+			},
+			ObjectStorageRef: corev1.ObjectReference{
+				Name:      os.Name,
+				Namespace: os.Namespace,
+			},
+		},
+	}
+}
+
+// NewQueue returns new Queue instance with its config hash
+func NewQueue(name, ns string, spec enterpriseApi.QueueSpec) *enterpriseApi.Queue {
+	return &enterpriseApi.Queue{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Spec:       spec,
+	}
+}
+
+// NewObjectStorage returns new ObjectStorage instance with its config hash
+func NewObjectStorage(name, ns string, spec enterpriseApi.ObjectStorageSpec) *enterpriseApi.ObjectStorage {
+	return &enterpriseApi.ObjectStorage{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Spec:       spec,
+	}
+}
+
 // NewSearchHeadCluster returns new serach head cluster instance with its config hash
 func NewSearchHeadCluster(name, ns, image string) *enterpriseApi.SearchHeadCluster {
 

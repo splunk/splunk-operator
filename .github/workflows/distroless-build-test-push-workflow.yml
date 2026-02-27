@@ -5,11 +5,17 @@ permissions:
   id-token: write
   pull-requests: write
 on:
-  pull_request: {}
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
   push:
     branches:
-    - main
-    - develop
+      - main
+      - develop
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
 jobs:
   check-formating:
     runs-on: ubuntu-latest
@@ -49,7 +55,8 @@ jobs:
       - name: Run Unit Tests
         run: make test
       - name: Run Code Coverage
-        run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
+        run: goveralls -shallow -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
+        continue-on-error: true
       - name: Upload Coverage artifacts
         uses: actions/upload-artifact@v4.4.0
         with:
@@ -174,6 +181,7 @@ jobs:
           managerappframeworkm4,
           managersecret,
           managermc,
+          indingsep,
         ]
     runs-on: ubuntu-latest
     env:
@@ -197,6 +205,8 @@ jobs:
       EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
+      AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID: ${{ secrets.AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID }}
+      AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY: ${{ secrets.AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY }}
     steps:
       - name: Chekcout code
         uses: actions/checkout@v2

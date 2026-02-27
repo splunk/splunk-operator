@@ -10,6 +10,9 @@ on:
       - develop
       - main
       - feature**
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
   workflow_dispatch:
 jobs:
   build-operator-image:
@@ -72,6 +75,8 @@ jobs:
       HELM_REPO_PATH: "../../../../helm-chart"
       INSTALL_OPERATOR: "true"
       TEST_VPC_ENDPOINT_URL: ${{ secrets.TEST_VPC_ENDPOINT_URL }}
+      AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID: ${{ secrets.AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID }}
+      AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY: ${{ secrets.AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY }}
     steps:
       - uses: chrisdickinson/setup-yq@3d931309f27270ebbafd53f2daee773a82ea1822
       - name: Checking YQ installation
@@ -113,8 +118,8 @@ jobs:
           version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
       - name: Install kuttl
         run: |
-          sudo curl -LO https://github.com/kudobuilder/kuttl/releases/download/v0.12.0/kuttl_0.12.0_linux_x86_64.tar.gz
-          sudo tar -xvzf kuttl_0.12.0_linux_x86_64.tar.gz
+          sudo curl -LO https://github.com/kudobuilder/kuttl/releases/download/v0.22.0/kuttl_0.22.0_linux_x86_64.tar.gz
+          sudo tar -xvzf kuttl_0.22.0_linux_x86_64.tar.gz
           sudo chmod +x  kubectl-kuttl
           sudo mv kubectl-kuttl /usr/local/bin/kubectl-kuttl
       - name: Install Python

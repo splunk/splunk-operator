@@ -6,6 +6,7 @@ metadata:
   creationTimestamp: null
   labels:
     name: splunk-operator
+    app.kubernetes.io/name: splunk-operator
   name: searchheadclusters.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com

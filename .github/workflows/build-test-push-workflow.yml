@@ -5,11 +5,17 @@ permissions:
   id-token: write
   pull-requests: write
 on:
-  pull_request: {}
+  pull_request:
+    paths-ignore:
+    - 'docs/**'
+    - '*.md'
   push:
     branches:
     - main
     - develop
+    paths-ignore:
+    - 'docs/**'
+    - '*.md'
 jobs:
   check-formating:
     runs-on: ubuntu-latest
@@ -23,12 +29,17 @@ jobs:
       with:
         go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
     - name: Check Source formatting
-      run: make fmt && if [[ $? -ne 0 ]]; then false; fi
+      run: |
+        UNFORMATTED=$(gofmt -l .)
+        if [ -n "$UNFORMATTED" ]; then
+          echo "These files are not formatted:"
+          echo "$UNFORMATTED"
+          exit 1
+        fi
     - name: Lint source code
       run: make vet && if [[ $? -ne 0 ]]; then false; fi
   unit-tests:
     runs-on: ubuntu-latest
-    needs: check-formating
     steps:
       - uses: actions/checkout@v2
       - name: Dotenv Action
@@ -50,7 +61,8 @@ jobs:
         run: |
           make test
       - name: Run Code Coverage
-        run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
+        run: goveralls -shallow -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
+        continue-on-error: true
       - name: Upload Coverage artifacts
         uses: actions/upload-artifact@v4.4.0
         with:
@@ -58,7 +70,7 @@ jobs:
           path: coverage.out
   build-operator-image:
     runs-on: ubuntu-latest
-    needs: unit-tests
+    needs: [check-formating, unit-tests]
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
@@ -174,6 +186,7 @@ jobs:
                 managerappframeworkm4,
                 managersecret,
                 managermc,
+                indingsep,
                ]
     runs-on: ubuntu-latest
     env:
@@ -197,6 +210,8 @@ jobs:
       EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
+      AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID: ${{ secrets.AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID }}
+      AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY: ${{ secrets.AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY }}
     steps:
       - name: Chekcout code
         uses: actions/checkout@v2
