@@ -428,7 +428,8 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed upgrade Indexer Cluster image")
 
 			// Wait for Cluster Manager to reach Ready phase after image upgrade
-			err = testenv.WaitForClusterManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), cm.Name, enterpriseApi.PhaseReady, 2*time.Minute)
+			// Image upgrades require longer timeout due to pod restarts
+			err = testenv.WaitForClusterManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), cm.Name, enterpriseApi.PhaseReady, 10*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for ClusterManager to reach Ready phase")
 
 			// Ensure Cluster Manager stays in Ready phase
