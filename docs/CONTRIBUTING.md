@@ -33,7 +33,7 @@ We only accept pull requests submitted from:
 * Individuals who have signed the [Splunk Contributor License Agreement](https://www.splunk.com/en_us/form/contributions.html)
 
 #### Code of Conduct
-All contributors are expected to read our [Code of Conduct](contributing/code-of-conduct.md) and observe it in all interactions involving this project.
+All contributors are expected to read our [Code of Conduct](../CODE_OF_CONDUCT.md) and observe it in all interactions involving this project.
 
 ## Contribution Workflow
 Help is always welcome! For example, documentation can always use improvement. There's always code that can be clarified, functionality that can be extended, and tests to be added to guarantee behavior. If you see something you think should be fixed, don't be afraid to own it.
@@ -167,6 +167,18 @@ Testing is the responsibility of all contributors. To run Unit Tests in Splunk O
 $ make test
 ```
 
+For agent-assisted or standardized local workflows, prefer the scripts under `scripts/dev/`:
+- `scripts/dev/unit.sh`
+- `scripts/dev/lint.sh`
+- `scripts/dev/pr_check.sh`
+
+#### Agentic Development Workflow
+This repo includes skills and harness scripts to make common workflows repeatable.
+Start with:
+- `AGENTS.md` (root) for repo map and conventions
+- `.agents/skills/*/SKILL.md` for skill workflows
+- `docs/agent/README.md` for agent-focused guidance
+
 #### Documentation
 We can always use improvements to our documentation! Anyone can contribute to these docs, whether you identify as a developer, an end user, or someone who just can’t stand seeing typos. What exactly is needed?
 
@@ -197,11 +209,7 @@ If you need help, tag one of the active maintainers of this project in a post or
 () Gaurav Gupta
 () Subba Gontla
 () Arjun Kondur
-() Kriti Ashok
-() Param Dhanoya
-() Victor Ebken
-() Ajeet Kumar
-() Jeff Rybczynski
-() Patrick Ogdin
+
+
 
 ```

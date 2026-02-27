@@ -1,0 +1,27 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  pr-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run PR check (fast)
+        env:
+          PR_CHECK_FLAGS: --fast
+        run: |
+          scripts/dev/pr_check.sh

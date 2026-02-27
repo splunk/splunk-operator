@@ -1,0 +1,88 @@
+# Testcase specification template
+# Save a copy and pass it to scripts/generate_testcase.py --spec <path>
+
+# Test type: kuttl or integration
+# - kuttl: generates kuttl/tests/<suite>/<name>/... with deploy/assert steps
+# - integration: generates test/<suite>/<name>_test.go scaffold
+
+type: kuttl
+suite: smoke
+name: c3-basic-ready
+
+architecture:
+  # Supported: S1, C3, M4, M1 (used by integration scaffolds)
+  name: C3
+  indexerReplicas: 3
+  siteCount: 1
+  shc: true
+  useClusterMaster: false
+
+features:
+  smartstore: false
+  appframework: false
+
+# Optional: extra readiness validations for integration tests
+# For C3 SVA, set `sva: C3` to auto-enable Monitoring Console + License Manager checks
+# (unless you explicitly set them to false).
+validations:
+  sva: "" # e.g., C3
+  monitoringConsole: false
+  monitoringConsoleName: "" # optional override (defaults to deployment name)
+  licenseManager: false # requires a license file/configmap to be configured
+
+# Optional: operator upgrade flow (KUTTL only)
+# When enabled, generator will create:
+#   00-install.yaml (helm install)
+#   01-assert-operator-ready.yaml
+#   02-upgrade.yaml (helm upgrade)
+#   03-assert-operator-image.yaml
+#   04-assert.yaml (CR readiness/resource asserts)
+upgrade:
+  enabled: false
+  method: helm
+  helmRelease: splunk-test
+  helmChartPathEnv: HELM_REPO_PATH
+  namespaceEnv: NAMESPACE
+  valuesFile: "" # optional values file to copy into test dir
+  operatorImageEnv: KUTTL_SPLUNK_OPERATOR_IMAGE
+  operatorImageNewEnv: KUTTL_SPLUNK_OPERATOR_NEW_IMAGE
+  enterpriseImageEnv: KUTTL_SPLUNK_ENTERPRISE_IMAGE
+  enterpriseImageNewEnv: KUTTL_SPLUNK_ENTERPRISE_NEW_IMAGE
+  extraHelmArgs: []
+
+# For a single-CR test, use `cr`. For multi-CR (C3/M4), use `crs` in deploy order.
+# cr:
+#   path: ./path/to/your-cr.yaml
+#   apiVersion: enterprise.splunk.com/v4
+#   kind: Standalone
+#   name: example-standalone
+
+crs:
+  - path: ./path/to/clustermanager.yaml
+    apiVersion: enterprise.splunk.com/v4
+    kind: ClusterManager
+    name: test
+  - path: ./path/to/indexercluster.yaml
+    apiVersion: enterprise.splunk.com/v4
+    kind: IndexerCluster
+    name: test
+  - path: ./path/to/searchheadcluster.yaml
+    apiVersion: enterprise.splunk.com/v4
+    kind: SearchHeadCluster
+    name: test
+
+expected:
+  phase: Ready
+  # Optional: path to extra KUTTL asserts (resources, fields) appended after phase checks
+  assert_path: ""
+
+# Optional: additional resources for KUTTL assertion generation (if assert_path is empty)
+resources:
+  - apiVersion: apps/v1
+    kind: StatefulSet
+    name: splunk-test-cluster-manager
+    status:
+      replicas: 1
+  - apiVersion: v1
+    kind: Secret
+    name: splunk-test-cluster-manager-secret-v1

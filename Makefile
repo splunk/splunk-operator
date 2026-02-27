@@ -140,6 +140,24 @@ vet: setup/ginkgo	 ## Run go vet against code.
 test: manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=unit_test.xml --output-dir=`pwd` -vv --trace --keep-going --timeout=3h --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/client ./pkg/splunk/util ./internal/controller ./pkg/splunk/splkcontroller
 
+.PHONY: verify verify-crd verify-bundle
+verify: verify-crd ## Verify generated artifacts (set VERIFY_BUNDLE=1 to include bundle)
+	@if [ "$(VERIFY_BUNDLE)" = "1" ]; then \
+		$(MAKE) verify-bundle; \
+	else \
+		echo "Skipping bundle verify (set VERIFY_BUNDLE=1 to enable)"; \
+	fi
+
+.PHONY: verify-repo
+verify-repo: ## Run repository verification script (see scripts/verify_repo.sh)
+	@./scripts/verify_repo.sh
+
+verify-crd: ## Regenerate and verify CRD/RBAC outputs
+	@./scripts/verify_crd.sh
+
+verify-bundle: ## Regenerate and verify bundle/helm outputs
+	@./scripts/verify_bundle.sh
+
 
 ##@ Documentation
 
