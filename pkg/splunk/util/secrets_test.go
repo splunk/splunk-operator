@@ -966,11 +966,12 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
-			"hec_token":    generateHECToken(),
-			"password":     splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"pass4SymmKey": splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"idxc_secret":  splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"shc_secret":   splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"hec_token":     generateHECToken(),
+			"password":      splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"pass4SymmKey":  splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"splunk_secret": splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"idxc_secret":   splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"shc_secret":    splcommon.GenerateSecret(splcommon.SecretBytes, 24),
 		},
 	}
 	spltest.ReconcileTester(t, "TestApplyNamespaceScopedSecretObject", "test", "test", createCalls, updateCalls, reconcile, false, &secret)

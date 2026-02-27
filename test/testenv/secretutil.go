@@ -164,11 +164,12 @@ func GetVersionedSecretNames(ns string, version int) []string {
 // GetSecretDataMap return the map with given secret values
 func GetSecretDataMap(hecToken string, password string, pass4SymmKey string, idxcSecret string, shcSecret string) map[string][]byte {
 	updatedSecretData := map[string][]byte{
-		"hec_token":    []byte(hecToken),
-		"password":     []byte(password),
-		"pass4SymmKey": []byte(pass4SymmKey),
-		"idxc_secret":  []byte(idxcSecret),
-		"shc_secret":   []byte(shcSecret),
+		"hec_token":     []byte(hecToken),
+		"password":      []byte(password),
+		"pass4SymmKey":  []byte(pass4SymmKey),
+		"splunk_secret": []byte(pass4SymmKey), // Use same value as pass4SymmKey for testing
+		"idxc_secret":   []byte(idxcSecret),
+		"shc_secret":    []byte(shcSecret),
 	}
 	return updatedSecretData
 }
