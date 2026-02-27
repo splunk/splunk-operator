@@ -47,7 +47,7 @@ If changes are needed outside the allowed paths, stop and propose a follow-up pl
 - `PROJECT` is the source of truth for kind and version mapping.
 - Use `docs/agent/CRD_MAP.md` for fast navigation to types, controllers, and enterprise logic.
 - Prefer the latest stable API version (typically `api/v4`).
-- Legacy kinds still use `api/v3` (ClusterMaster, LicenseMaster).
+- Legacy kinds still use `api/v3` (legacy cluster manager and legacy license manager).
 - Use `rg "type .*Spec" api -g "*_types.go"` to locate the spec struct.
 - If the field is shared across CRDs, check `api/v4/common_types.go` (and `api/v3/common_types.go` for legacy kinds).
 
