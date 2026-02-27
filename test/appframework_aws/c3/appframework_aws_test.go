@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -621,7 +620,7 @@ var _ = Describe("c3appfw test", func() {
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			// Wait for apps to reach Install phase before verification
 			for _, appSource := range allAppSourceInfo {
-				err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, 2*time.Minute)
+				err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, testenv.AppInstallTimeout)
 				Expect(err).To(Succeed(), "Timed out waiting for apps to reach Install phase on %s", appSource.CrName)
 			}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
@@ -1283,7 +1282,7 @@ var _ = Describe("c3appfw test", func() {
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
 			// Wait for apps to reach Install phase before verification
 			for _, appSource := range allAppSourceInfo {
-				err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, 2*time.Minute)
+				err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, testenv.AppInstallTimeout)
 				Expect(err).To(Succeed(), "Timed out waiting for apps to reach Install phase on %s", appSource.CrName)
 			}
 			ClusterMasterBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")

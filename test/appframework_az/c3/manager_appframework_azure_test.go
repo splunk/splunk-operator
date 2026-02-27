@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	"github.com/onsi/ginkgo/v2/types"
@@ -604,7 +603,7 @@ var _ = Describe("c3appfw test", func() {
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			// Wait for apps to reach Install phase before verification
 			for _, appSource := range allAppSourceInfo {
-				err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, 2*time.Minute)
+				err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, testenv.AppInstallTimeout)
 				Expect(err).To(Succeed(), "Timed out waiting for apps to reach Install phase on %s", appSource.CrName)
 			}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
@@ -1441,7 +1440,7 @@ var _ = Describe("c3appfw test", func() {
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
 			// Wait for apps to reach Install phase before verification
 			for _, appSource := range allAppSourceInfo {
-				err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, 2*time.Minute)
+				err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, testenv.AppInstallTimeout)
 				Expect(err).To(Succeed(), "Timed out waiting for apps to reach Install phase on %s", appSource.CrName)
 			}
 			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")

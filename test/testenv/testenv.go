@@ -51,8 +51,11 @@ const (
 	// defaultTestTimeout is the max timeout in seconds before async test failed.
 	defaultTestTimeout = 1000000
 
-	// PollInterval specifies the polling interval
+	// PollInterval specifies the polling interval for slow operations (waiting for full cluster readiness)
 	PollInterval = 5 * time.Second
+
+	// ShortPollInterval specifies the polling interval for fast-transitioning states
+	ShortPollInterval = 2 * time.Second
 
 	// ConsistentPollInterval is the interval to use to consistently check a state is stable
 	ConsistentPollInterval = 200 * time.Millisecond
@@ -62,6 +65,10 @@ const (
 
 	// DefaultTimeout is the max timeout before we failed.
 	DefaultTimeout = 2000 * time.Minute
+
+	// AppInstallTimeout is the timeout for waiting for apps to reach Install phase on a CR.
+	// C3 deployments require bundle push across all indexers and SHC deployer which can exceed 2 minutes.
+	AppInstallTimeout = 5 * time.Minute
 
 	// SearchHeadPod Template String for search head pod
 	SearchHeadPod = "splunk-%s-shc-search-head-%d"

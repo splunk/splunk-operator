@@ -6,11 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"testing"
+	"time"
+
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"testing"
-	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -234,10 +235,8 @@ func TestTelemetryUpdateLastTransmissionTime_RepeatedCalls(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "default"},
 		Data:       map[string]string{},
 	}
-	status := &TelemetryStatus{Test: "false"}
-	updateLastTransmissionTime(ctx, mockClient, cm, status)
+	status := &TelemetryStatus{Test: "false", LastTransmission: "1970-01-01T00:00:00Z"}
 	firstStatus := cm.Data[telStatusKey]
-	time.Sleep(1 * time.Second)
 	updateLastTransmissionTime(ctx, mockClient, cm, status)
 	secondStatus := cm.Data[telStatusKey]
 	if firstStatus == secondStatus {

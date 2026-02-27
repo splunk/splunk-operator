@@ -37,8 +37,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var StabilizationDuration = time.Second * 20
-
 // PodDetailsStruct captures output of kubectl get pods podname -o json
 type PodDetailsStruct struct {
 	Spec struct {
@@ -87,9 +85,6 @@ func VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, m
 		return monitoringConsole.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
-	// Stabilization period
-	time.Sleep(StabilizationDuration)
-
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
 		_ = deployment.GetInstance(ctx, mcName, monitoringConsole)
@@ -123,38 +118,16 @@ func StandaloneReady(ctx context.Context, deployment *Deployment, deploymentName
 func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	shc := &enterpriseApi.SearchHeadCluster{}
 	instanceName := fmt.Sprintf("%s-shc", deployment.GetName())
-	gomega.Eventually(func() enterpriseApi.Phase {
+	gomega.Eventually(func() bool {
 		err := deployment.GetInstance(ctx, instanceName, shc)
 		if err != nil {
-			return enterpriseApi.PhaseError
+			return false
 		}
-		testenvInstance.Log.Info("Waiting for Search head cluster phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
+		testenvInstance.Log.Info("Waiting for Search Head Cluster and Deployer phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase, "DeployerPhase", shc.Status.DeployerPhase)
 		DumpGetPods(testenvInstance.GetName())
 
-		return shc.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
-
-	gomega.Eventually(func() enterpriseApi.Phase {
-		err := deployment.GetInstance(ctx, instanceName, shc)
-		if err != nil {
-			return enterpriseApi.PhaseError
-		}
-		testenvInstance.Log.Info("Waiting for Deployer phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.DeployerPhase)
-		DumpGetPods(testenvInstance.GetName())
-
-		return shc.Status.DeployerPhase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
-
-	gomega.Eventually(func() enterpriseApi.Phase {
-		err := deployment.GetInstance(ctx, instanceName, shc)
-		if err != nil {
-			return enterpriseApi.PhaseError
-		}
-		testenvInstance.Log.Info("Waiting for Search Head Cluster phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
-		DumpGetPods(testenvInstance.GetName())
-
-		return shc.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+		return shc.Status.Phase == enterpriseApi.PhaseReady && shc.Status.DeployerPhase == enterpriseApi.PhaseReady
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.BeTrue())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
@@ -339,7 +312,7 @@ func VerifyRFSFMet(ctx context.Context, deployment *Deployment, testenvInstance 
 		rfSfStatus := CheckRFSF(ctx, deployment)
 		testenvInstance.Log.Info("Verifying RF SF is met", "Status", rfSfStatus)
 		return rfSfStatus
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(true))
 }
 
 // VerifyNoDisconnectedSHPresentOnCM is present on cluster manager
@@ -357,7 +330,7 @@ func VerifyNoSHCInNamespace(deployment *Deployment, testenvInstance *TestCaseEnv
 		shcStatus := SHCInNamespace(testenvInstance.GetName())
 		testenvInstance.Log.Info("Verifying no Search Head Cluster is present in namespace", "Status", shcStatus)
 		return shcStatus
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(false))
+	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(false))
 }
 
 // LicenseManagerReady verify LM is in ready status and does not flip flop
@@ -480,7 +453,7 @@ func VerifyRollingRestartFinished(ctx context.Context, deployment *Deployment) {
 		rollingRestartStatus := CheckRollingRestartStatus(ctx, deployment)
 		logf.Log.Info("Rolling Restart Status", "Active", rollingRestartStatus)
 		return rollingRestartStatus
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(true))
 }
 
 // VerifyConfOnPod Verify give conf and value on config file on pod
@@ -513,7 +486,7 @@ func VerifySearchHeadClusterPhase(ctx context.Context, deployment *Deployment, t
 		DumpGetPods(testenvInstance.GetName())
 
 		return shc.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseScalingUp))
+	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(enterpriseApi.PhaseScalingUp))
 }
 
 // VerifyIndexerClusterPhase verify the phase of idxc matches the given phase
@@ -528,7 +501,7 @@ func VerifyIndexerClusterPhase(ctx context.Context, deployment *Deployment, test
 		DumpGetPods(testenvInstance.GetName())
 
 		return idxc.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
+	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(phase))
 }
 
 // VerifyStandalonePhase verify the phase of Standalone CR
@@ -543,7 +516,7 @@ func VerifyStandalonePhase(ctx context.Context, deployment *Deployment, testenvI
 		DumpGetPods(testenvInstance.GetName())
 
 		return standalone.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
+	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(phase))
 }
 
 // VerifyMonitoringConsolePhase verify the phase of Monitoring Console CR
@@ -558,7 +531,7 @@ func VerifyMonitoringConsolePhase(ctx context.Context, deployment *Deployment, t
 		DumpGetPods(testenvInstance.GetName())
 
 		return mc.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
+	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(phase))
 }
 
 // GetResourceVersion get resource version id
@@ -653,7 +626,7 @@ func VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deploym
 		DumpGetPods(testenvInstance.GetName())
 
 		return newResourceVersion
-	}, deployment.GetTimeout(), PollInterval).ShouldNot(gomega.Equal(resourceVersion))
+	}, deployment.GetTimeout(), ShortPollInterval).ShouldNot(gomega.Equal(resourceVersion))
 }
 
 // VerifyCPULimits verifies value of CPU limits is as expected
@@ -738,7 +711,7 @@ func VerifyClusterManagerPhase(ctx context.Context, deployment *Deployment, test
 
 		// Test ClusterManager Phase to see if its ready
 		return cm.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
+	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(phase))
 }
 
 // VerifyClusterMasterPhase verify phase of cluster manager
@@ -754,7 +727,7 @@ func VerifyClusterMasterPhase(ctx context.Context, deployment *Deployment, teste
 
 		// Test ClusterManager Phase to see if its ready
 		return cm.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
+	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(phase))
 }
 
 // VerifySecretsOnPods Check whether the secret object info is mounted on given pods
