@@ -776,11 +776,13 @@ var _ = Describe("Monitoring Console test", func() {
 			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, true)
 
 			testcaseEnvInst.Log.Info("Verify Search Head Pods on Monitoring Console Pod after SHC Reconfig")
-			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcTwoName, true, false)
+			err = testenv.WaitForPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcTwoName, true, false, 5*time.Minute)
+			Expect(err).To(Succeed(), "Timed out waiting for search heads in MC two config after SHC reconfig")
 
 			// Check Monitoring console Two is configured with all Indexer in Name Space
 			testcaseEnvInst.Log.Info("Checking for Indexer Pod on MC TWO after SHC Reconfig")
-			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcTwoName, true, true)
+			err = testenv.WaitForPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcTwoName, true, true, 5*time.Minute)
+			Expect(err).To(Succeed(), "Timed out waiting for indexers in MC two config after SHC reconfig")
 
 			// ############################  VERIFICATION FOR MONITORING CONSOLE ONE POST SHC RECONFIG ###############################
 
@@ -800,7 +802,8 @@ var _ = Describe("Monitoring Console test", func() {
 			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, false)
 
 			testcaseEnvInst.Log.Info("Verify Search Head Pods NOT on Monitoring Console ONE Pod after Search Head Reconfig")
-			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, false, false)
+			err = testenv.WaitForPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, false, false, 5*time.Minute)
+			Expect(err).To(Succeed(), "Timed out waiting for search heads to be removed from MC one config after SHC reconfig")
 
 			// Check Monitoring console One is Not configured with all Indexer in Name Space
 			// CSPL-619

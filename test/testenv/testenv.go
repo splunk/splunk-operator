@@ -67,8 +67,8 @@ const (
 	DefaultTimeout = 2000 * time.Minute
 
 	// AppInstallTimeout is the timeout for waiting for apps to reach Install phase on a CR.
-	// C3 deployments require bundle push across all indexers and SHC deployer which can exceed 2 minutes.
-	AppInstallTimeout = 5 * time.Minute
+	// C3 deployments require bundle push across all indexers and SHC deployer which can exceed 5 minutes.
+	AppInstallTimeout = 10 * time.Minute
 
 	// SearchHeadPod Template String for search head pod
 	SearchHeadPod = "splunk-%s-shc-search-head-%d"
