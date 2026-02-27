@@ -280,7 +280,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: integration-test-results-gcp-${{ matrix.test_focus.name }}
+          name: test-report-integration-gcp-${{ matrix.test_focus.name }}
           path: report-junit*.xml
       - name: Publish Integration Test Report
         uses: mikepenz/action-junit-report@v6

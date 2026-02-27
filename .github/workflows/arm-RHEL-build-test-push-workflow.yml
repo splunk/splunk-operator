@@ -218,7 +218,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: "smoke-test-results-arm-rhel-${{ matrix.test }}"
+          name: "test-report-smoke-arm-rhel-${{ matrix.test }}"
           path: report-junit*.xml
       - name: Publish Smoke Test Report
         uses: mikepenz/action-junit-report@v6
