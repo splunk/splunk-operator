@@ -1,0 +1,3 @@
+interface:
+  display_name: "SOK Doc Updater"
+  short_description: "Update docs and examples"

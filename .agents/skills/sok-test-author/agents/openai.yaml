@@ -1,0 +1,3 @@
+interface:
+  display_name: "SOK Test Author"
+  short_description: "Write or update tests"
