@@ -118,6 +118,58 @@ func (testenv *TestCaseEnv) GetSplunkImage() string {
 	return testenv.splunkImage
 }
 
+// GetOperatorName returns operator deployment name for this test env
+func (testenv *TestCaseEnv) GetOperatorName() string {
+	return testenv.operatorName
+}
+
+// UpdateOperatorImage updates the operator deployment image and waits for rollout
+func (testenv *TestCaseEnv) UpdateOperatorImage(image string) error {
+	operatorNamespace := testenv.namespace
+	if testenv.clusterWideOperator == "true" {
+		operatorNamespace = "splunk-operator"
+	}
+	namespacedName := client.ObjectKey{Name: testenv.operatorName, Namespace: operatorNamespace}
+	operator := &appsv1.Deployment{}
+	err := testenv.GetKubeClient().Get(context.TODO(), namespacedName, operator)
+	if err != nil {
+		testenv.Log.Error(err, "Unable to get operator", "operator name", testenv.operatorName, "namespace", operatorNamespace)
+		return err
+	}
+
+	containerIndex := 0
+	for i, container := range operator.Spec.Template.Spec.Containers {
+		if container.Name == "manager" {
+			containerIndex = i
+			break
+		}
+	}
+	operator.Spec.Template.Spec.Containers[containerIndex].Image = image
+
+	err = testenv.GetKubeClient().Update(context.TODO(), operator)
+	if err != nil {
+		testenv.Log.Error(err, "Unable to update operator image", "operator name", testenv.operatorName, "namespace", operatorNamespace)
+		return err
+	}
+
+	operatorInstallTimeout := 5 * time.Minute
+	return wait.PollImmediate(PollInterval, operatorInstallTimeout, func() (bool, error) {
+		deployment := &appsv1.Deployment{}
+		err := testenv.GetKubeClient().Get(context.TODO(), namespacedName, deployment)
+		if err != nil {
+			testenv.Log.Error(err, "operator not found waiting", "operator name", testenv.operatorName, "namespace", operatorNamespace)
+			return false, nil
+		}
+		if deployment.Status.UpdatedReplicas < deployment.Status.Replicas {
+			return false, nil
+		}
+		if deployment.Status.ReadyReplicas < deployment.Status.Replicas {
+			return false, nil
+		}
+		return true, nil
+	})
+}
+
 // IsOperatorInstalledClusterWide returns if operator is installed clusterwide
 func (testenv *TestCaseEnv) IsOperatorInstalledClusterWide() string {
 	return testenv.clusterWideOperator
