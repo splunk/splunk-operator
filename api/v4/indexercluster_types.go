@@ -49,7 +49,9 @@ type IndexerClusterSpec struct {
 	// Object Storage reference
 	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
 
-	// Number of search head pods; a search head cluster will be created if > 1
+	// Number of indexer cluster peers
+	// +kubebuilder:default=3
+	// +kubebuilder:validation:Minimum=3
 	Replicas int32 `json:"replicas"`
 }
 

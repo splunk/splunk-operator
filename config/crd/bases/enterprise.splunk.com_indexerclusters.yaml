@@ -1092,19 +1092,25 @@ spec:
                 description: Storage configuration for /opt/splunk/etc volume
                 properties:
                   ephemeralStorage:
-                    description: |-
-                      If true, ephemeral (emptyDir) storage will be used
-                      default false
+                    default: false
+                    description: If true, ephemeral (emptyDir) storage will be used
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
-                      (default=”10Gi” for etc and "100Gi" for var)
+                      (default="10Gi" for etc and "100Gi" for var)
                     type: string
                   storageClassName:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: storageClassName and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
+                    == true)'
+                - message: storageCapacity and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
+                    == true)'
               extraEnv:
                 description: |-
                   ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
@@ -1230,12 +1236,13 @@ spec:
                   environment variables)
                 type: string
               imagePullPolicy:
+                default: IfNotPresent
                 description: 'Sets pull policy for all images ("Always", "Never",
                   or the default: "IfNotPresent")'
                 enum:
                 - Always
-                - Never
                 - IfNotPresent
+                - Never
                 type: string
               imagePullSecrets:
                 description: |-
@@ -1357,6 +1364,11 @@ spec:
                 minimum: 0
                 type: integer
               livenessProbe:
+                default:
+                  failureThreshold: 3
+                  initialDelaySeconds: 30
+                  periodSeconds: 30
+                  timeoutSeconds: 30
                 description: LivenessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
                 properties:
                   failureThreshold:
@@ -1433,6 +1445,11 @@ spec:
                 minimum: 0
                 type: integer
               readinessProbe:
+                default:
+                  failureThreshold: 3
+                  initialDelaySeconds: 10
+                  periodSeconds: 5
+                  timeoutSeconds: 5
                 description: ReadinessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes
                 properties:
                   failureThreshold:
@@ -2044,6 +2061,11 @@ spec:
                     type: object
                 type: object
               startupProbe:
+                default:
+                  failureThreshold: 12
+                  initialDelaySeconds: 40
+                  periodSeconds: 30
+                  timeoutSeconds: 30
                 description: StartupProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes
                 properties:
                   failureThreshold:
@@ -2285,19 +2307,25 @@ spec:
                 description: Storage configuration for /opt/splunk/var volume
                 properties:
                   ephemeralStorage:
-                    description: |-
-                      If true, ephemeral (emptyDir) storage will be used
-                      default false
+                    default: false
+                    description: If true, ephemeral (emptyDir) storage will be used
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
-                      (default=”10Gi” for etc and "100Gi" for var)
+                      (default="10Gi" for etc and "100Gi" for var)
                     type: string
                   storageClassName:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: storageClassName and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
+                    == true)'
+                - message: storageCapacity and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
+                    == true)'
               volumes:
                 description: List of one or more Kubernetes volumes. These will be
                   mounted in all pod containers as as /mnt/<name>
@@ -5278,19 +5306,25 @@ spec:
                 description: Storage configuration for /opt/splunk/etc volume
                 properties:
                   ephemeralStorage:
-                    description: |-
-                      If true, ephemeral (emptyDir) storage will be used
-                      default false
+                    default: false
+                    description: If true, ephemeral (emptyDir) storage will be used
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
-                      (default=”10Gi” for etc and "100Gi" for var)
+                      (default="10Gi" for etc and "100Gi" for var)
                     type: string
                   storageClassName:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: storageClassName and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
+                    == true)'
+                - message: storageCapacity and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
+                    == true)'
               extraEnv:
                 description: |-
                   ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
@@ -5416,12 +5450,13 @@ spec:
                   environment variables)
                 type: string
               imagePullPolicy:
+                default: IfNotPresent
                 description: 'Sets pull policy for all images ("Always", "Never",
                   or the default: "IfNotPresent")'
                 enum:
                 - Always
-                - Never
                 - IfNotPresent
+                - Never
                 type: string
               imagePullSecrets:
                 description: |-
@@ -5543,6 +5578,11 @@ spec:
                 minimum: 0
                 type: integer
               livenessProbe:
+                default:
+                  failureThreshold: 3
+                  initialDelaySeconds: 30
+                  periodSeconds: 30
+                  timeoutSeconds: 30
                 description: LivenessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
                 properties:
                   failureThreshold:
@@ -5705,6 +5745,11 @@ spec:
                 minimum: 0
                 type: integer
               readinessProbe:
+                default:
+                  failureThreshold: 3
+                  initialDelaySeconds: 10
+                  periodSeconds: 5
+                  timeoutSeconds: 5
                 description: ReadinessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes
                 properties:
                   failureThreshold:
@@ -5730,9 +5775,10 @@ spec:
                     type: integer
                 type: object
               replicas:
-                description: Number of search head pods; a search head cluster will
-                  be created if > 1
+                default: 3
+                description: Number of indexer cluster peers
                 format: int32
+                minimum: 3
                 type: integer
               resources:
                 description: resource requirements for the pod containers
@@ -6316,6 +6362,11 @@ spec:
                     type: object
                 type: object
               startupProbe:
+                default:
+                  failureThreshold: 12
+                  initialDelaySeconds: 40
+                  periodSeconds: 30
+                  timeoutSeconds: 30
                 description: StartupProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes
                 properties:
                   failureThreshold:
@@ -6557,19 +6608,25 @@ spec:
                 description: Storage configuration for /opt/splunk/var volume
                 properties:
                   ephemeralStorage:
-                    description: |-
-                      If true, ephemeral (emptyDir) storage will be used
-                      default false
+                    default: false
+                    description: If true, ephemeral (emptyDir) storage will be used
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
-                      (default=”10Gi” for etc and "100Gi" for var)
+                      (default="10Gi" for etc and "100Gi" for var)
                     type: string
                   storageClassName:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: storageClassName and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
+                    == true)'
+                - message: storageCapacity and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
+                    == true)'
               volumes:
                 description: List of one or more Kubernetes volumes. These will be
                   mounted in all pod containers as as /mnt/<name>
