@@ -291,10 +291,16 @@ func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.Controll
 			configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 			err = client.Create(ctx, configMap)
 			if err != nil {
+				// Reconcile can be re-entered quickly; if another loop created the ConfigMap after our Get()
+				// returned NotFound, treat AlreadyExists as success and continue.
+				if k8serrors.IsAlreadyExists(err) {
+					scopedLog.Info("ConfigMap already exists; continuing", "configmap", configMapName)
+					return nil
+				}
 				scopedLog.Error(err, "Failed to create config map")
 				return err
 			}
-			scopedLog.Info("Created new config map with ManualUpdate set to 'on'")
+			scopedLog.Info("Created new config map with manualUpdate set to 'off'")
 			return nil
 		}
 		scopedLog.Error(err, "Failed to get config map")
@@ -302,6 +308,9 @@ func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.Controll
 	}
 
 	// Check if the ManualUpdate field exists
+	if configMap.Data == nil {
+		configMap.Data = map[string]string{}
+	}
 	if _, exists := configMap.Data["manualUpdate"]; !exists {
 		configMap.Data["manualUpdate"] = "off"
 		err = client.Update(ctx, configMap)
@@ -309,7 +318,7 @@ func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.Controll
 			scopedLog.Error(err, "Failed to update config map with manualUpdate field")
 			return err
 		}
-		scopedLog.Info("Updated config map with manualUpdate set to 'on'")
+		scopedLog.Info("Updated config map with manualUpdate set to 'off'")
 	}
 
 	return nil

@@ -131,6 +131,8 @@ func newLicenseManager(name, ns, licenseConfigMapName, splunkImage string) *ente
 
 		Spec: enterpriseApi.LicenseManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{StorageClassName: DefaultStorageClassName},
+				VarVolumeStorageConfig: enterpriseApi.StorageClassSpec{StorageClassName: DefaultStorageClassName},
 				Volumes: []corev1.Volume{
 					{
 						Name: "licenses",
@@ -169,6 +171,8 @@ func newLicenseMaster(name, ns, licenseConfigMapName, splunkImage string) *enter
 
 		Spec: enterpriseApiV3.LicenseMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{StorageClassName: DefaultStorageClassName},
+				VarVolumeStorageConfig: enterpriseApi.StorageClassSpec{StorageClassName: DefaultStorageClassName},
 				Volumes: []corev1.Volume{
 					{
 						Name: "licenses",
@@ -607,6 +611,11 @@ func newPVC(name, ns, storage, storageClassName string) (*corev1.PersistentVolum
 
 func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAndTag string) *appsv1.Deployment {
 	var replicas int32 = 1
+	// Enable multi-container pod layout for tests when requested. Tests still work without it, but our goal
+	// is to validate the init + sidecar layout end-to-end.
+	podArch := strings.TrimSpace(os.Getenv("SPLUNK_POD_ARCH"))
+	initImg := strings.TrimSpace(os.Getenv("RELATED_IMAGE_SPLUNK_INIT"))
+	sidecarImg := strings.TrimSpace(os.Getenv("RELATED_IMAGE_SPLUNK_SIDECAR"))
 
 	operator := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -637,7 +646,7 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 							Name:            name,
 							Image:           operatorImageAndTag,
 							ImagePullPolicy: "Always",
-							Env: []corev1.EnvVar{
+							Env: append([]corev1.EnvVar{
 								{
 									Name: "WATCH_NAMESPACE",
 									ValueFrom: &corev1.EnvVarSource{
@@ -662,7 +671,7 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 									Name:  "SPLUNK_GENERAL_TERMS",
 									Value: "--accept-sgt-current-at-splunk-com",
 								},
-							},
+							}, buildMultiContainerEnv(podArch, initImg, sidecarImg)...),
 						},
 					},
 				},
@@ -671,6 +680,20 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 	}
 
 	return &operator
+}
+
+func buildMultiContainerEnv(podArch, initImg, sidecarImg string) []corev1.EnvVar {
+	var out []corev1.EnvVar
+	if podArch != "" {
+		out = append(out, corev1.EnvVar{Name: "SPLUNK_POD_ARCH", Value: podArch})
+	}
+	if initImg != "" {
+		out = append(out, corev1.EnvVar{Name: "RELATED_IMAGE_SPLUNK_INIT", Value: initImg})
+	}
+	if sidecarImg != "" {
+		out = append(out, corev1.EnvVar{Name: "RELATED_IMAGE_SPLUNK_SIDECAR", Value: sidecarImg})
+	}
+	return out
 }
 
 // newStandaloneWithLM creates and initializes CR for Standalone Kind with License Manager
@@ -779,6 +802,15 @@ func newMonitoringConsoleSpec(name, ns, LicenseManagerRef, splunkImage string) *
 
 // newMonitoringConsoleSpecWithGivenSpec returns MC Spec with given name, namespace and Spec
 func newMonitoringConsoleSpecWithGivenSpec(name string, ns string, spec enterpriseApi.MonitoringConsoleSpec) *enterpriseApi.MonitoringConsole {
+	// Many tests pass a custom spec that doesn't include StorageClassName, but the EKS
+	// test clusters we run against do not have a default StorageClass. Ensure PVCs bind.
+	if spec.EtcVolumeStorageConfig.StorageClassName == "" && !spec.EtcVolumeStorageConfig.EphemeralStorage {
+		spec.EtcVolumeStorageConfig.StorageClassName = DefaultStorageClassName
+	}
+	if spec.VarVolumeStorageConfig.StorageClassName == "" && !spec.VarVolumeStorageConfig.EphemeralStorage {
+		spec.VarVolumeStorageConfig.StorageClassName = DefaultStorageClassName
+	}
+
 	mcSpec := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "MonitoringConsole",
