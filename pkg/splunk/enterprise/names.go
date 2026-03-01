@@ -314,6 +314,16 @@ func GetSplunkImage(specImage string) string {
 	return name
 }
 
+// GetSplunkInitImage returns the docker image to use for the init container in multi-container mode.
+func GetSplunkInitImage() string {
+	return os.Getenv("RELATED_IMAGE_SPLUNK_INIT")
+}
+
+// GetSplunkSidecarImage returns the docker image to use for the sidecar container in multi-container mode.
+func GetSplunkSidecarImage() string {
+	return os.Getenv("RELATED_IMAGE_SPLUNK_SIDECAR")
+}
+
 // GetPortName uses a template to enrich a port name with protocol information for usage with mesh services
 func GetPortName(port string, protocol string) string {
 	return fmt.Sprintf(portNameTemplateStr, protocol, port)
