@@ -1113,10 +1113,10 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 					Port: intstr.FromInt(8080),
 				},
 			},
-			InitialDelaySeconds: 60,
-			TimeoutSeconds:      5,
-			PeriodSeconds:       10,
-			FailureThreshold:    3,
+			InitialDelaySeconds: livenessProbeDefaultDelaySec,
+			TimeoutSeconds:      livenessProbeTimeoutSec,
+			PeriodSeconds:       livenessProbePeriodSec,
+			FailureThreshold:    livenessProbeFailureThreshold,
 		}
 		startupProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -1125,10 +1125,10 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 					Port: intstr.FromInt(8080),
 				},
 			},
-			InitialDelaySeconds: 10,
-			TimeoutSeconds:      5,
-			PeriodSeconds:       10,
-			FailureThreshold:    30,
+			InitialDelaySeconds: startupProbeDefaultDelaySec,
+			TimeoutSeconds:      startupProbeTimeoutSec,
+			PeriodSeconds:       startupProbePeriodSec,
+			FailureThreshold:    startupProbeFailureThreshold,
 		}
 		readinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -1137,10 +1137,10 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 					Port: intstr.FromInt(8080),
 				},
 			},
-			InitialDelaySeconds: 10,
-			TimeoutSeconds:      5,
-			PeriodSeconds:       10,
-			FailureThreshold:    3,
+			InitialDelaySeconds: readinessProbeDefaultDelaySec,
+			TimeoutSeconds:      readinessProbeTimeoutSec,
+			PeriodSeconds:       readinessProbePeriodSec,
+			FailureThreshold:    readinessProbeFailureThreshold,
 		}
 
 		// Choose sidecar role. For SHC members we want strict gating until SHC join completes.
