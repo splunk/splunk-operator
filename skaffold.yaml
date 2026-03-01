@@ -21,7 +21,7 @@ build:
 manifests:
   kustomize:
     paths:
-    - config/default
+    - config/skaffold
 
 deploy:
   kubectl: {}
