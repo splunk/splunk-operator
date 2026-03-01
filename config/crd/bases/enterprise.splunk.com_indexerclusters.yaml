@@ -5775,10 +5775,8 @@ spec:
                     type: integer
                 type: object
               replicas:
-                default: 3
                 description: Number of indexer cluster peers
                 format: int32
-                minimum: 3
                 type: integer
               resources:
                 description: resource requirements for the pod containers

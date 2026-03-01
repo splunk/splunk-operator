@@ -50,8 +50,6 @@ type IndexerClusterSpec struct {
 	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
 
 	// Number of indexer cluster peers
-	// +kubebuilder:default=3
-	// +kubebuilder:validation:Minimum=3
 	Replicas int32 `json:"replicas"`
 }
 
