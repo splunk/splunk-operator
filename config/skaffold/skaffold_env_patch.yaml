@@ -11,8 +11,6 @@ spec:
         env:
         - name: WATCH_NAMESPACE
           value: ""
-        - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: docker.io/splunk/splunk
         - name: SPLUNK_GENERAL_TERMS
           value: "--accept-sgt-current-at-splunk-com"
 
@@ -22,4 +20,3 @@ spec:
           value: "667741767953.dkr.ecr.us-west-2.amazonaws.com/splunk-init:latest"
         - name: RELATED_IMAGE_SPLUNK_SIDECAR
           value: "667741767953.dkr.ecr.us-west-2.amazonaws.com/splunk-sidecar:latest"
-

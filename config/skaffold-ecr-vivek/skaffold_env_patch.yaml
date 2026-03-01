@@ -13,8 +13,6 @@ spec:
         # In Skaffold workflows we set concrete defaults here so `skaffold dev` works end-to-end.
         - name: WATCH_NAMESPACE
           value: ""
-        - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: docker.io/splunk/splunk
         - name: SPLUNK_GENERAL_TERMS
           # Update if your org requires a different SGT acceptance string.
           value: "--accept-sgt-current-at-splunk-com"
