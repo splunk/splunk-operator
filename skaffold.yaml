@@ -1,0 +1,45 @@
+apiVersion: skaffold/v4beta13
+kind: Config
+metadata:
+  name: splunk-operator
+
+build:
+  tagPolicy:
+    gitCommit: {}
+  local:
+    # Default profile is local-only (good for kind/minikube).
+    push: false
+    useBuildkit: true
+  artifacts:
+    # The operator deployment renders to docker.io/splunk/splunk-operator by default (config/default).
+    # The ecr-vivek profile switches both the artifact image and the kustomize overlay to ECR.
+  - image: docker.io/splunk/splunk-operator
+    context: .
+    docker:
+      dockerfile: Dockerfile
+
+manifests:
+  kustomize:
+    paths:
+    - config/default
+
+deploy:
+  kubectl: {}
+
+profiles:
+- name: ecr-vivek
+  build:
+    local:
+      push: true
+      useBuildkit: true
+    artifacts:
+    - image: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk-operator
+      context: .
+      docker:
+        dockerfile: Dockerfile
+      platforms:
+      - linux/amd64
+  manifests:
+    kustomize:
+      paths:
+      - config/skaffold-ecr-vivek
