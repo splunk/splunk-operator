@@ -34,6 +34,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -67,10 +68,6 @@ func TestApplyIngestorCluster(t *testing.T) {
 	provider := "sqs_smartbus"
 
 	queue := &enterpriseApi.Queue{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Queue",
-			APIVersion: "enterprise.splunk.com/v4",
-		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "queue",
 			Namespace: "test",
@@ -746,7 +743,7 @@ func TestUpdateIngestorConfFiles(t *testing.T) {
 
 func addRemoteQueueHandlersForIngestor(mockHTTPClient *spltest.MockHTTPClient, cr *enterpriseApi.IngestorCluster, queue *enterpriseApi.QueueSpec, confName, body string) {
 	for i := 0; i < int(cr.Status.ReadyReplicas); i++ {
-		podName := fmt.Sprintf("splunk-%s-ingestor-%d", cr.GetName(), i)
+		podName := GetSplunkStatefulsetPodName(SplunkIngestor, cr.GetName(), int32(i))
 		baseURL := fmt.Sprintf(
 			"https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/servicesNS/nobody/system/configs/%s",
 			podName, cr.GetName(), cr.GetNamespace(), confName,
@@ -774,188 +771,312 @@ func newTestIngestorQueuePipelineManager(mockHTTPClient *spltest.MockHTTPClient)
 	return &ingestorClusterPodManager{
 		newSplunkClient: newSplunkClientForQueuePipeline,
 	}
+
 }
 
-func TestIngScaledUpScaledDownEvent(t *testing.T) {
+func TestIngScaledUpQueueConfigUpdatedIngestorsRestartedScaledDownEvents(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
 	ctx := context.TODO()
 	recorder := &mockEventRecorder{events: []mockEvent{}}
 	eventPublisher := &K8EventPublisher{recorder: recorder}
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
-	crName := "test-ingestor"
+	scheme := runtime.NewScheme()
+	_ = enterpriseApi.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	queue := &enterpriseApi.Queue{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Queue",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "queue",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.QueueSpec{
+			Provider: "sqs",
+			SQS: enterpriseApi.SQSSpec{
+				Name:       "test-queue",
+				AuthRegion: "us-west-2",
+				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				DLQ:        "sqs-dlq-test",
+			},
+		},
+	}
+	_ = c.Create(ctx, queue)
+
+	objStorage := &enterpriseApi.ObjectStorage{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "os",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ObjectStorageSpec{
+			Provider: "s3",
+			S3: enterpriseApi.S3Spec{
+				Endpoint: "https://s3.us-west-2.amazonaws.com",
+				Path:     "bucket/key",
+			},
+		},
+	}
+	_ = c.Create(ctx, objStorage)
+
+	probeConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-probe-configmap",
+			Namespace: "test",
+		},
+	}
+	_ = c.Create(ctx, probeConfigMap)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secrets",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{"password": []byte("dummy")},
+	}
+	_ = c.Create(ctx, secret)
+
 	cr := &enterpriseApi.IngestorCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: "test"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ingestor",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			Replicas: 1,
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock:           true,
+				ServiceAccount: "sa",
+			},
+			QueueRef: corev1.ObjectReference{
+				Name:      queue.Name,
+				Namespace: queue.Namespace,
+			},
+			ObjectStorageRef: corev1.ObjectReference{
+				Name:      objStorage.Name,
+				Namespace: objStorage.Namespace,
+			},
+		},
+		Status: enterpriseApi.IngestorClusterStatus{
+			Replicas:                1,
+			CredentialSecretVersion: "",
+			ServiceAccount:          "sa",
+			TelAppInstalled:         true,
+		},
+	}
+	_ = c.Create(ctx, cr)
+
+	oneReplica := int32(1)
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetSplunkStatefulsetName(SplunkIngestor, cr.GetName()),
+			Namespace: cr.GetNamespace(),
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &oneReplica,
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "splunk",
+							Image: "splunk/splunk:latest",
+						},
+					},
+				},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:        oneReplica,
+			ReadyReplicas:   oneReplica,
+			CurrentRevision: "v1",
+			UpdateRevision:  "v1",
+		},
+	}
+	_ = c.Create(ctx, sts)
+
+	basePod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Volumes: []corev1.Volume{
+				{
+					Name: "mnt-splunk-secrets",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: "test-secrets",
+						},
+					},
+				},
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Ready: true},
+			},
+		},
+	}
+	pod := basePod.DeepCopy()
+	pod.ObjectMeta = metav1.ObjectMeta{
+		Name:      GetSplunkStatefulsetPodName(SplunkIngestor, cr.GetName(), 0),
+		Namespace: cr.GetNamespace(),
+		Labels: map[string]string{
+			"app.kubernetes.io/instance": GetSplunkStatefulsetName(SplunkIngestor, cr.GetName()),
+			"controller-revision-hash":   "v1",
+		},
+	}
+	_ = c.Create(ctx, pod)
+
+	_, err := ApplyIngestorCluster(ctx, c, cr)
+	assert.NoError(t, err)
+
+	// ===== Scale up (and trigger queue update + restart) =====
+	threeReplicas := int32(3)
+	cr.Spec.Replicas = threeReplicas
+	_ = c.Update(ctx, sts)
+	for i := int32(1); i < threeReplicas; i++ {
+		pod := basePod.DeepCopy()
+		pod.ObjectMeta = metav1.ObjectMeta{
+			Name:      GetSplunkStatefulsetPodName(SplunkIngestor, cr.GetName(), i),
+			Namespace: cr.GetNamespace(),
+			Labels: map[string]string{
+				"app.kubernetes.io/instance": GetSplunkStatefulsetName(SplunkIngestor, cr.GetName()),
+				"controller-revision-hash":   "v1",
+			},
+		}
+		_ = c.Create(ctx, pod)
 	}
 
-	// Simulate ScaledUp: previousReplicas=1, desiredReplicas=3, phase=PhaseReady, Status.ReadyReplicas=3
-	previousReplicas := int32(1)
-	desiredReplicas := int32(3)
-	cr.Status.ReadyReplicas = desiredReplicas
-	phase := enterpriseApi.PhaseReady
+	// Reconcile once so ApplyIngestorCluster can update the StatefulSet spec/template as needed.
+	_, err = ApplyIngestorCluster(ctx, c, cr)
+	assert.NoError(t, err)
 
-	// Replicate the production conditional from ApplyIngestorCluster()
-	ep := GetEventPublisher(ctx, cr)
-	if phase == enterpriseApi.PhaseReady {
-		if desiredReplicas > previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
-			ep.Normal(ctx, "ScaledUp",
-				fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+	// Now simulate the StatefulSet controller reporting the desired state as ready.
+	_ = c.Get(ctx, client.ObjectKey{Name: GetSplunkStatefulsetName(SplunkIngestor, cr.GetName()), Namespace: cr.GetNamespace()}, sts)
+	sts.Status.Replicas = threeReplicas
+	sts.Status.ReadyReplicas = threeReplicas
+	_ = c.Status().Update(ctx, sts)
+
+	mockHTTPClient := &spltest.MockHTTPClient{}
+	origNew := newIngestorClusterPodManager
+	newIngestorClusterPodManager = func(l *slog.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
+		return ingestorClusterPodManager{
+			c:       c,
+			log:     l,
+			cr:      cr,
+			secrets: secret,
+			newSplunkClient: func(uri, user, pass string) *splclient.SplunkClient {
+				return &splclient.SplunkClient{
+					ManagementURI: uri,
+					Username:      user,
+					Password:      pass,
+					Client:        mockHTTPClient,
+				}
+			},
 		}
 	}
 
-	found := false
+	propertyKVList := [][]string{
+		{"remote_queue.type", "sqs_smartbus"},
+		{fmt.Sprintf("remote_queue.%s.encoding_format", "sqs_smartbus"), "s2s"},
+		{fmt.Sprintf("remote_queue.%s.auth_region", "sqs_smartbus"), queue.Spec.SQS.AuthRegion},
+		{fmt.Sprintf("remote_queue.%s.endpoint", "sqs_smartbus"), queue.Spec.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", "sqs_smartbus"), objStorage.Spec.S3.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", "sqs_smartbus"), objStorage.Spec.S3.Path},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", "sqs_smartbus"), queue.Spec.SQS.DLQ},
+		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", "sqs_smartbus"), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", "sqs_smartbus"), "max_count"},
+		{fmt.Sprintf("remote_queue.%s.send_interval", "sqs_smartbus"), "5s"},
+	}
+	body := buildFormBody(propertyKVList)
+
+	crForHandlers := cr.DeepCopy()
+	crForHandlers.Status.ReadyReplicas = threeReplicas
+	addRemoteQueueHandlersForIngestor(mockHTTPClient, crForHandlers, &queue.Spec, "conf-outputs", body)
+
+	propertyKVList = [][]string{
+		{"pipeline:remotequeueruleset", "disabled", "false"},
+		{"pipeline:ruleset", "disabled", "true"},
+		{"pipeline:remotequeuetyping", "disabled", "false"},
+		{"pipeline:remotequeueoutput", "disabled", "false"},
+		{"pipeline:typing", "disabled", "true"},
+		{"pipeline:indexerPipe", "disabled", "true"},
+	}
+	for i := int32(0); i < threeReplicas; i++ {
+		podName := GetSplunkStatefulsetPodName(SplunkIngestor, cr.GetName(), i)
+		baseURL := fmt.Sprintf("https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/servicesNS/nobody/system/configs/conf-default-mode", podName, cr.GetName(), cr.GetNamespace())
+		for _, field := range propertyKVList {
+			req, _ := http.NewRequest("POST", baseURL, strings.NewReader(fmt.Sprintf("name=%s", field[0])))
+			mockHTTPClient.AddHandler(req, 200, "", nil)
+			updateURL := fmt.Sprintf("%s/%s", baseURL, field[0])
+			req, _ = http.NewRequest("POST", updateURL, strings.NewReader(fmt.Sprintf("%s=%s", field[1], field[2])))
+			mockHTTPClient.AddHandler(req, 200, "", nil)
+		}
+
+		baseURL = fmt.Sprintf("https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/services/server/control/restart", podName, cr.GetName(), cr.GetNamespace())
+		req, _ := http.NewRequest("POST", baseURL, nil)
+		mockHTTPClient.AddHandler(req, 200, "", nil)
+	}
+
+	cr.Status.ServiceAccount = ""
+	cr.Status.CredentialSecretVersion = "old"
+	_, err = ApplyIngestorCluster(ctx, c, cr)
+	assert.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseReady, cr.Status.Phase)
+	assert.Equal(t, threeReplicas, cr.Status.ReadyReplicas)
+
+	scaledUp := false
+	queueUpdated := false
+	ingestorsRestarted := false
 	for _, event := range recorder.events {
 		if event.reason == "ScaledUp" {
-			found = true
-			if event.eventType != corev1.EventTypeNormal {
-				t.Errorf("Expected Normal event type for ScaledUp, got %s", event.eventType)
-			}
-			if !strings.Contains(event.message, crName) {
-				t.Errorf("Expected event message to contain CR name '%s', got: %s", crName, event.message)
-			}
-			if !strings.Contains(event.message, "1") || !strings.Contains(event.message, "3") {
-				t.Errorf("Expected event message to contain replica counts, got: %s", event.message)
-			}
-			break
+			scaledUp = true
+		}
+		if event.reason == "QueueConfigUpdated" {
+			queueUpdated = true
+		}
+		if event.reason == "IngestorsRestarted" {
+			ingestorsRestarted = true
 		}
 	}
-	if !found {
-		t.Errorf("Expected ScaledUp event to be published")
-	}
+	assert.True(t, scaledUp)
+	assert.True(t, queueUpdated)
+	assert.True(t, ingestorsRestarted)
 
-	// Simulate ScaledDown: previousReplicas=3, desiredReplicas=1, phase=PhaseReady, Status.ReadyReplicas=1
+	// Stop mocking Splunk API calls before scaling down.
+	newIngestorClusterPodManager = origNew
+	// Reset event recorder so scale-down assertion isn't polluted.
 	recorder.events = []mockEvent{}
-	previousReplicas = int32(3)
-	desiredReplicas = int32(1)
-	cr.Status.ReadyReplicas = desiredReplicas
 
-	if phase == enterpriseApi.PhaseReady {
-		if desiredReplicas < previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
-			ep.Normal(ctx, "ScaledDown",
-				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
-		}
+	// ===== Scale down =====
+	cr.Spec.Replicas = oneReplica
+	cr.Status.Replicas = threeReplicas
+	cr.Status.ReadyReplicas = threeReplicas
+	cr.Status.CredentialSecretVersion = ""
+	cr.Status.ServiceAccount = "sa"
+
+	sts.Spec.Replicas = &oneReplica
+	_ = c.Update(ctx, sts)
+	sts.Status.Replicas = oneReplica
+	sts.Status.ReadyReplicas = oneReplica
+	_ = c.Status().Update(ctx, sts)
+	for i := int32(1); i < threeReplicas; i++ {
+		_ = c.Delete(ctx, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: GetSplunkStatefulsetPodName(SplunkIngestor, cr.GetName(), i), Namespace: cr.GetNamespace()}})
 	}
 
-	found = false
+	_, err = ApplyIngestorCluster(ctx, c, cr)
+	assert.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseReady, cr.Status.Phase)
+	assert.Equal(t, oneReplica, cr.Status.ReadyReplicas)
+
+	scaledDown := false
 	for _, event := range recorder.events {
 		if event.reason == "ScaledDown" {
-			found = true
-			if event.eventType != corev1.EventTypeNormal {
-				t.Errorf("Expected Normal event type for ScaledDown, got %s", event.eventType)
-			}
-			if !strings.Contains(event.message, crName) {
-				t.Errorf("Expected event message to contain CR name '%s', got: %s", crName, event.message)
-			}
+			scaledDown = true
 			break
 		}
 	}
-	if !found {
-		t.Errorf("Expected ScaledDown event to be published")
-	}
-
-	// Negative: no event when phase is not PhaseReady
-	recorder.events = []mockEvent{}
-	phase = enterpriseApi.PhasePending
-	if phase == enterpriseApi.PhaseReady {
-		if desiredReplicas < previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
-			ep.Normal(ctx, "ScaledDown",
-				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
-		}
-	}
-	if len(recorder.events) != 0 {
-		t.Errorf("Expected no events when phase is not PhaseReady, got %d events", len(recorder.events))
-	}
-
-	// Negative: no event when replicas haven't converged
-	recorder.events = []mockEvent{}
-	phase = enterpriseApi.PhaseReady
-	cr.Status.ReadyReplicas = int32(2) // not yet at desiredReplicas
-	if phase == enterpriseApi.PhaseReady {
-		if desiredReplicas < previousReplicas && cr.Status.ReadyReplicas == desiredReplicas {
-			ep.Normal(ctx, "ScaledDown",
-				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
-		}
-	}
-	if len(recorder.events) != 0 {
-		t.Errorf("Expected no events when replicas haven't converged, got %d events", len(recorder.events))
-	}
-}
-
-func TestIngQueueConfigUpdatedEvent(t *testing.T) {
-	ctx := context.TODO()
-	recorder := &mockEventRecorder{events: []mockEvent{}}
-	eventPublisher := &K8EventPublisher{recorder: recorder}
-	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
-
-	crName := "test-ingestor"
-	cr := &enterpriseApi.IngestorCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: "test"},
-		Spec: enterpriseApi.IngestorClusterSpec{
-			Replicas: 3,
-		},
-	}
-
-	// Replicate the production conditional from ApplyIngestorCluster()
-	ep := GetEventPublisher(ctx, cr)
-	ep.Normal(ctx, "QueueConfigUpdated",
-		fmt.Sprintf("Queue/Pipeline configuration updated for %d ingestors", cr.Spec.Replicas))
-
-	found := false
-	for _, event := range recorder.events {
-		if event.reason == "QueueConfigUpdated" {
-			found = true
-			if event.eventType != corev1.EventTypeNormal {
-				t.Errorf("Expected Normal event type for QueueConfigUpdated, got %s", event.eventType)
-			}
-			if !strings.Contains(event.message, "3") {
-				t.Errorf("Expected event message to contain replica count '3', got: %s", event.message)
-			}
-			if !strings.Contains(event.message, "Queue/Pipeline") {
-				t.Errorf("Expected event message to contain 'Queue/Pipeline', got: %s", event.message)
-			}
-			break
-		}
-	}
-	if !found {
-		t.Errorf("Expected QueueConfigUpdated event to be published")
-	}
-}
-
-func TestIngIngestorsRestartedEvent(t *testing.T) {
-	ctx := context.TODO()
-	recorder := &mockEventRecorder{events: []mockEvent{}}
-	eventPublisher := &K8EventPublisher{recorder: recorder}
-	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
-
-	crName := "test-ingestor"
-	cr := &enterpriseApi.IngestorCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: "test"},
-		Spec: enterpriseApi.IngestorClusterSpec{
-			Replicas: 5,
-		},
-	}
-
-	// Replicate the production conditional from ApplyIngestorCluster()
-	ep := GetEventPublisher(ctx, cr)
-	ep.Normal(ctx, "IngestorsRestarted",
-		fmt.Sprintf("Restarted Splunk on %d ingestor pods", cr.Spec.Replicas))
-
-	found := false
-	for _, event := range recorder.events {
-		if event.reason == "IngestorsRestarted" {
-			found = true
-			if event.eventType != corev1.EventTypeNormal {
-				t.Errorf("Expected Normal event type for IngestorsRestarted, got %s", event.eventType)
-			}
-			if !strings.Contains(event.message, "5") {
-				t.Errorf("Expected event message to contain replica count '5', got: %s", event.message)
-			}
-			if !strings.Contains(event.message, "Restarted Splunk") {
-				t.Errorf("Expected event message to contain 'Restarted Splunk', got: %s", event.message)
-			}
-			break
-		}
-	}
-	if !found {
-		t.Errorf("Expected IngestorsRestarted event to be published")
-	}
+	assert.True(t, scaledDown)
 }
