@@ -3,6 +3,8 @@ permissions:
   contents: read
   actions: read
 on:
+  push:
+    branches: [CSPL-3763-add-flay-test-analysis-tool] # TODO: remove before merging
   workflow_dispatch:
     inputs:
       start_date:
@@ -75,10 +77,12 @@ jobs:
 
             echo ""
 
-            if ls *_flip_rate_*.png 1>/dev/null 2>&1; then
-              echo "---"
-              echo "Heatmap uploaded as workflow artifact."
-            fi
+            for img in *_flip_rate_*.png; do
+              [[ -f "$img" ]] || continue
+              echo "### ${img%.png}"
+              echo "<img src=\"data:image/png;base64,$(base64 -w0 "$img")\" alt=\"${img}\" />"
+              echo ""
+            done
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload results
