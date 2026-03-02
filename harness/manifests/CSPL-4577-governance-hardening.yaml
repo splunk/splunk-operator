@@ -10,6 +10,7 @@ auto_merge_allowed: false
 merge_queue_required: true
 evaluation_suite: docs/agent/evals/policy-regression.yaml
 allowed_paths:
+  - .devcontainer/**
   - .agents/**
   - .github/**
   - .harness/**
@@ -28,6 +29,8 @@ allowed_paths:
   - internal/**
   - pkg/**
   - scripts/**
+  - skaffold.yaml
+  - config/skaffold/**
   - speckit/**
   - test/**
   - templates/**
