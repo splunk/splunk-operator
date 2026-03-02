@@ -20,9 +20,8 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"time"
-
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"time"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"

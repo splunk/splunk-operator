@@ -34,35 +34,7 @@ entries:
     - condition: splunk-operator.enabled
       name: splunk-operator
       repository: file://splunk-operator/helm-chart/splunk-operator
-      version: 3.0.0
-    description: A Helm chart for Splunk Enterprise managed by the Splunk Operator
-    digest: 9a4133aec6ca98096aaaf787b5a76681239ae877f224e42ad926830c355c369c
-    maintainers:
-    - email: vivekr@splunk.com
-      name: Vivek Reddy
-    - email: rlieberman@splunk.com
-      name: Raizel Lieberman
-    - email: patrykw@splunk.com
-      name: Patryk Wasielewski
-    - email: igorg@splunk.com
-      name: Igor Grzankowski
-    - email: kkoziol@splunk.com
-      name: Kasia Kozioł
-    - email: jbuczak@splunk.com
-      name: Jakub Buczak
-    name: splunk-enterprise
-    type: application
-    urls:
-    - https://splunk.github.io/splunk-operator/splunk-enterprise-3.0.0.tgz
-    version: 3.0.0
-  - apiVersion: v2
-    appVersion: 3.0.0
-    created: "2025-09-08T10:18:06.022991101Z"
-    dependencies:
-    - condition: splunk-operator.enabled
-      name: splunk-operator
-      repository: file://splunk-operator/helm-chart/splunk-operator
-      version: 3.0.0
+      version: 2.8.1
     description: A Helm chart for Splunk Enterprise managed by the Splunk Operator
     digest: db8d639d7332ad61a87bd2c7d1061cf03b0c155eea035ac11e065696d409ed32
     maintainers:
@@ -76,13 +48,11 @@ entries:
       name: Igor Grzankowski
     - email: kkoziol@splunk.com
       name: Kasia Kozioł
-    - email: jbuczak@splunk.com
-      name: Jakub Buczak
     name: splunk-enterprise
     type: application
     urls:
-    - https://splunk.github.io/splunk-operator/splunk-enterprise-3.0.0.tgz
-    version: 3.0.0
+    - https://splunk.github.io/splunk-operator/splunk-enterprise-2.8.1.tgz
+    version: 2.8.1
   - apiVersion: v2
     appVersion: 2.8.0
     created: "2025-09-22T12:48:31.495778-07:00"
@@ -104,8 +74,6 @@ entries:
       name: Igor Grzankowski
     - email: kkoziol@splunk.com
       name: Kasia Kozioł
-    - email: jbuczak@splunk.com
-      name: Jakub Buczak
     name: splunk-enterprise
     type: application
     urls:
@@ -357,8 +325,6 @@ entries:
       name: Igor Grzankowski
     - email: kkoziol@splunk.com
       name: Kasia Kozioł
-    - email: jbuczak@splunk.com
-      name: Jakub Buczak
     name: splunk-operator
     type: application
     urls:
@@ -380,13 +346,11 @@ entries:
       name: Igor Grzankowski
     - email: kkoziol@splunk.com
       name: Kasia Kozioł
-    - email: jbuczak@splunk.com
-      name: Jakub Buczak
     name: splunk-operator
     type: application
     urls:
-    - https://splunk.github.io/splunk-operator/splunk-operator-3.0.0.tgz
-    version: 3.0.0
+    - https://splunk.github.io/splunk-operator/splunk-operator-2.8.1.tgz
+    version: 2.8.1
   - apiVersion: v2
     appVersion: 2.8.0
     created: "2025-09-22T12:48:31.707126-07:00"
@@ -403,8 +367,6 @@ entries:
       name: Igor Grzankowski
     - email: kkoziol@splunk.com
       name: Kasia Kozioł
-    - email: jbuczak@splunk.com
-      name: Jakub Buczak
     name: splunk-operator
     type: application
     urls:

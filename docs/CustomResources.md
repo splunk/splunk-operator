@@ -1,10 +1,3 @@
----
-title: Custom Resources
-parent: Operate & Manage
-nav_order: 1
----
-
-
 # Custom Resource Guide
 
 The Splunk Operator provides a collection of
@@ -18,11 +11,8 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [LicenseManager Resource Spec Parameters](#licensemanager-resource-spec-parameters)
   - [Standalone Resource Spec Parameters](#standalone-resource-spec-parameters)
   - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
-  - [Queue Resource Spec Parameters](#queue-resource-spec-parameters)
   - [ClusterManager Resource Spec Parameters](#clustermanager-resource-spec-parameters)
   - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
-  - [IngestorCluster Resource Spec Parameters](#ingestorcluster-resource-spec-parameters)
-  - [ObjectStorage Resource Spec Parameters](#objectstorage-resource-spec-parameters)
   - [MonitoringConsole Resource Spec Parameters](#monitoringconsole-resource-spec-parameters)
   - [Examples of Guaranteed and Burstable QoS](#examples-of-guaranteed-and-burstable-qos)
     - [A Guaranteed QoS Class example:](#a-guaranteed-qos-class-example)
@@ -113,7 +103,7 @@ configuration parameters:
 | extraEnv       | [EnvVar](https://v1-17.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#envvar-v1-core)     | Sets the extra environment variables to be passed to the Splunk instance containers. WARNING: Setting environment variables used by Splunk or Ansible will affect Splunk installation and operation                           |
 | schedulerName         | string     | Name of [Scheduler](https://kubernetes.io/docs/concepts/scheduling/kube-scheduler/) to use for pod placement (defaults to "default-scheduler") |
 | affinity              | [Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#affinity-v1-core) | [Kubernetes Affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) rules that control how pods are assigned to particular nodes |
-| resources             | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | The settings for allocating [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance. The default settings should be considered for demo/test purposes.  Please see [Hardware Resource Requirements](https://github.com/splunk/splunk-operator/blob/develop/docs/GettingStarted.md#hardware-resources-requirements) for production values.|
+| resources             | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | The settings for allocating [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance. The default settings should be considered for demo/test purposes.  Please see [Hardware Resource Requirements](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#hardware-resources-requirements) for production values.|
 | serviceTemplate       | [Service](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#service-v1-core) | Template used to create Kubernetes [Services](https://kubernetes.io/docs/concepts/services-networking/service/) |
 | topologySpreadConstraint       | [TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/) | Template used to create Kubernetes [TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/) |
 
@@ -144,7 +134,7 @@ spec:
 
 The following additional configuration parameters may be used for all Splunk
 Enterprise resources, including: `Standalone`, `LicenseManager`,
-`SearchHeadCluster`, `ClusterManager`, `IndexerCluster` and `IngestorCluster`:
+`SearchHeadCluster`, `ClusterManager` and `IndexerCluster`:
 
 | Key                | Type    | Description                                                                   |
 | ------------------ | ------- | ----------------------------------------------------------------------------- |
@@ -225,97 +215,6 @@ the `SearchHeadCluster` resource provides the following `Spec` configuration par
 | -------- | ------- | ------------------------------------------------------------ |
 | replicas | integer | The number of search heads cluster members (minimum of 3, which is the default) |
 
-### Search Head Deployer Resource
-
-Since Search Head Deployer doesn't require as many resources as Search Head Peers themselves, then Splunk Operator for Kubernetes 2.7.1 introduced additional field for SearchHeadCluster spec to manage resources for the deployer separately.
-
-If provided, resources are managed separately for Search Head Deployer and Search Head Peers. Otherwise, either default values are used if resources are not defined at all or Search Head Peers resources are applied to Search Head Deployer as well.
-
-Additionally, node affinity specification was introduced for Search Head Deployer to separate it from Search Head Peers specification.
-
-| Key      | Type    | Description                                                  |
-| -------- | ------- | ------------------------------------------------------------ |
-| deployerNodeAffinity | *corev1.NodeAffinity | Search Head Deployer node affinity |
-| deployerResourceSpec | corev1.ResourceRequirements | Search Head Deployer resource specification |
-
-#### Example
-
-```
-deployerNodeAffinity:
-  preferredDuringSchedulingIgnoredDuringExecution:
-    ...
-  requiredDuringSchedulingIgnoredDuringExecution:
-    ...
-deployerResourceSpec:
-  claims:
-    ...
-  limits:
-    ...
-  requests:
-    ...
-```
-
-```
-apiVersion: enterprise.splunk.com/v4
-kind: SearchHeadCluster
-metadata:
-  name: shc
-  finalizers:
-    - enterprise.splunk.com/delete-pvc
-spec:
-  image: splunk/splunk: 9.4.4
-  serviceAccount: splunk-service-account
-  resources:
-    requests:
-      memory: "1024Mi"
-      cpu: "0.2"
-    limits:
-      memory: "10Gi"
-      cpu: "6"
-  deployerResourceSpec:
-    requests:
-      memory: "512Mi"
-      cpu: "0.1"
-    limits:
-      memory: "8Gi"
-      cpu: "4"
-```
-
-## Queue Resource Spec Parameters
-
-```yaml
-apiVersion: enterprise.splunk.com/v4
-kind: Queue
-metadata:
-  name: queue
-spec:
-  replicas: 3
-  provider: sqs
-  sqs:
-    name: sqs-test
-    region: us-west-2
-    endpoint: https://sqs.us-west-2.amazonaws.com
-    dlq: sqs-dlq-test
-```
-
-Queue inputs can be found in the table below. As of now, only SQS provider of message queue is supported.
-
-| Key        | Type    | Description                                       |
-| ---------- | ------- | ------------------------------------------------- |
-| provider   | string | [Required] Provider of message queue (Allowed values: sqs) |
-| sqs   | SQS | [Required if provider=sqs] SQS message queue inputs  |
-
-SQS message queue inputs can be found in the table below.
-
-| Key        | Type    | Description                                       |
-| ---------- | ------- | ------------------------------------------------- |
-| name   | string | [Required] Name of the queue |
-| region   | string | [Required] Region where the queue is located  |
-| endpoint   | string | [Optional, if not provided formed based on region] AWS SQS Service endpoint
-| dlq   | string | [Required] Name of the dead letter queue |
-
-Change of any of the queue inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
-
 ## ClusterManager Resource Spec Parameters
 ClusterManager resource does not have a required spec parameter, but to configure SmartStore, you can specify indexes and volume configuration as below -
 ```yaml
@@ -366,59 +265,6 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 | ---------- | ------- | ----------------------------------------------------- |
 | replicas   | integer | The number of indexer cluster members (minimum of 3, which is the default) |
 
-## IngestorCluster Resource Spec Parameters
-
-```yaml
-apiVersion: enterprise.splunk.com/v4
-kind: IngestorCluster
-metadata:
-  name: ic
-spec:
-  replicas: 3
-  queueRef: 
-    name: queue
-  objectStorageRef:
-    name: os
-```
-Note:  `queueRef` and `objectStorageRef` are required fields in case of IngestorCluster resource since they will be used to connect the IngestorCluster to Queue and ObjectStorage resources.
-
-In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
-and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
-the `IngestorCluster` resource provides the following `Spec` configuration parameters:
-
-| Key        | Type    | Description                                           |
-| ---------- | ------- | ----------------------------------------------------- |
-| replicas   | integer | The number of ingestor peers (minimum of 3 which is the default) |
-
-## ObjectStorage Resource Spec Parameters
-
-```yaml
-apiVersion: enterprise.splunk.com/v4
-kind: ObjectStorage
-metadata:
-  name: os
-spec:
-  provider: s3
-  s3:
-    path: s3://ingestion/smartbus-test
-    endpoint: https://s3.us-west-2.amazonaws.com
-```
-
-ObjectStorage inputs can be found in the table below. As of now, only S3 provider of object storage is supported.
-
-| Key        | Type    | Description                                       |
-| ---------- | ------- | ------------------------------------------------- |
-| provider   | string | [Required] Provider of object storage (Allowed values: s3) |
-| s3   | S3 | [Required if provider=s3] S3 object storage inputs  |
-
-S3 object storage inputs can be found in the table below.
-
-| Key        | Type    | Description                                       |
-| ---------- | ------- | ------------------------------------------------- |
-| path   | string | [Required] Remote storage location for messages that are larger than the underlying maximum message size  |
-| endpoint   | string | [Optional, if not provided formed based on region] S3-compatible service endpoint
-
-Change of any of the object storage inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
 
 ## MonitoringConsole Resource Spec Parameters
 
@@ -531,12 +377,9 @@ The Splunk Operator controller reconciles every Splunk Enterprise CR. However, t
 
 | Customer Resource Definition | Annotation |
 | ----------- | --------- |
-| queue.enterprise.splunk.com | "queue.enterprise.splunk.com/paused" |
 | clustermaster.enterprise.splunk.com | "clustermaster.enterprise.splunk.com/paused" |
 | clustermanager.enterprise.splunk.com | "clustermanager.enterprise.splunk.com/paused" |
 | indexercluster.enterprise.splunk.com | "indexercluster.enterprise.splunk.com/paused" |
-| ingestorcluster.enterprise.splunk.com | "ingestorcluster.enterprise.splunk.com/paused" |
-| objectstorage.enterprise.splunk.com | "objectstorage.enterprise.splunk.com/paused" |
 | licensemaster.enterprise.splunk.com | "licensemaster.enterprise.splunk.com/paused" |
 | monitoringconsole.enterprise.splunk.com | "monitoringconsole.enterprise.splunk.com/paused" |
 | searchheadcluster.enterprise.splunk.com | "searchheadcluster.enterprise.splunk.com/paused" |
@@ -606,7 +449,6 @@ Below is a table listing `app.kubernetes.io/name` values mapped to CRDs
 | clustermanager.enterprise.splunk.com | cluster-manager |
 | clustermaster.enterprise.splunk.com | cluster-master |
 | indexercluster.enterprise.splunk.com | indexer-cluster |
-| ingestorcluster.enterprise.splunk.com | ingestor-cluster |
 | licensemanager.enterprise.splunk.com | license-manager |
 | licensemaster.enterprise.splunk.com | license-master |
 | monitoringconsole.enterprise.splunk.com | monitoring-console |

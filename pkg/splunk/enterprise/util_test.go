@@ -2692,6 +2692,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		WithStatusSubresource(&enterpriseApiV3.LicenseMaster{}).
 		WithStatusSubresource(&enterpriseApiV3.ClusterMaster{}).
 		WithStatusSubresource(&enterpriseApi.IngestorCluster{})
+		WithStatusSubresource(&enterpriseApiV3.ClusterMaster{})
 	c := builder.Build()
 	ctx := context.TODO()
 
@@ -3310,6 +3311,7 @@ func TestGetCurrentImage(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.Queue{}).
 		WithStatusSubresource(&enterpriseApi.ObjectStorage{}).
 		WithStatusSubresource(&enterpriseApi.IngestorCluster{})
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
 	client := builder.Build()
 	client.Create(ctx, &current)
 	_, err := ApplyClusterManager(ctx, client, &current)

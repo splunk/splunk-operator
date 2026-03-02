@@ -59,7 +59,7 @@ BUNDLE_IMG ?= ${IMAGE_TAG_BASE}-bundle:v${VERSION}
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.34.0
+ENVTEST_K8S_VERSION = 1.31.0
 
 ignore-not-found ?= True
 
@@ -139,15 +139,6 @@ test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=unit_test.xml --output-dir=`pwd` -vv --trace --keep-going --timeout=3h --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/client ./pkg/splunk/util ./internal/controller ./pkg/splunk/splkcontroller
 
 
-##@ Documentation
-
-docs-preview: ## Preview documentation locally with Jekyll (requires Ruby and bundler)
-	@echo "Installing dependencies locally..."
-	@cd docs && bundle install --path vendor/bundle
-	@echo "Starting Jekyll server for documentation preview..."
-	@cd docs && bundle exec jekyll serve --livereload
-	@echo "Documentation available at http://localhost:4000/splunk-operator"
-
 ##@ Build
 
 build: setup/ginkgo manifests generate fmt vet ## Build manager binary.
@@ -167,12 +158,12 @@ docker-push: ## Push docker image with the manager.
 # Defaults:
 #   Build Platform: linux/amd64,linux/arm64
 #   Build Base OS: registry.access.redhat.com/ubi8/ubi-minimal
-#   Build Base OS Version: 8.10-1761032271
+#   Build Base OS Version: 8.10-1755105495
 # Pass only what is required, the rest will be defaulted
 # Setup defaults for build arguments
 PLATFORMS ?= linux/amd64,linux/arm64
 BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal
-BASE_IMAGE_VERSION ?= 8.10-1761032271
+BASE_IMAGE_VERSION ?= 8.10-1755105495
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
@@ -183,13 +174,15 @@ docker-buildx:
         	docker buildx use project-v3-builder; \
         if echo "${BASE_IMAGE}" | grep -q "distroless"; then \
             DOCKERFILE="Dockerfile.distroless"; \
+            BUILD_TAG="${IMG}-distroless"; \
         else \
             DOCKERFILE="Dockerfile"; \
+            BUILD_TAG="${IMG}"; \
         fi; \
         docker buildx build --push --platform="${PLATFORMS}" \
             --build-arg BASE_IMAGE="${BASE_IMAGE}" \
             --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
-            --tag "${IMG}" -f "$$DOCKERFILE" .; \
+            --tag "$$BUILD_TAG" -f "$$DOCKERFILE" .; \
         - docker buildx rm project-v3-builder || true
 
 

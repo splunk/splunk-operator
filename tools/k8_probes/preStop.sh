@@ -27,36 +27,40 @@ MGMT_PORT="${SPLUNK_MGMT_PORT:-8089}"
 SPLUNK_USER="admin"
 SPLUNK_PASSWORD_FILE="/mnt/splunk-secrets/password"
 
-# Split timeout budget between decommission/detention and splunk stop to stay within grace period
-# Timeouts must leave buffer for Kubelet SIGTERM/SIGKILL
+# Track total script execution time — must be set before the timeout block so
+# SCRIPT_START_TIME is anchored to when the script actually launched.
+SCRIPT_START_TIME=$(date +%s)
+
+# Split timeout budget between decommission/detention and splunk stop.
 #
-# Indexers: 1020s (17 min) grace = 900s (15 min) decommission + 90s stop + 30s buffer
-#   - Bucket migration during scale-down can take 15+ minutes
-#   - Restart decommission (enforce_counts=0) is much faster
+# TOTAL_BUDGET is computed from the actual (possibly overridden) DECOMMISSION_MAX_WAIT
+# and STOP_MAX_WAIT so that env-var overrides are reflected in the cumulative guard.
 #
-# Search heads: 360s (6 min) grace = 300s (5 min) detention + 50s stop + 10s buffer
-#   - Cluster detention/removal typically needs 5 minutes
-#
-# Others: 120s (2 min) grace = 80s operations + 30s stop + 10s buffer
-#   - Standalone, cluster manager, etc.
+# Grace periods vs budgets:
+#   Indexers:     1020s grace = 900s decommission + 90s stop + 30s buffer → budget 990s
+#   Search heads:  360s grace = 300s detention    + 50s stop + 10s buffer → budget 350s
+#   Others:        120s grace =  80s operations   + 30s stop + 10s buffer → budget 110s
 if [ "${SPLUNK_ROLE}" = "splunk_indexer" ]; then
-    DECOMMISSION_MAX_WAIT="${PRESTOP_DECOMMISSION_WAIT:-900}"  # 15 minutes for decommission
-    STOP_MAX_WAIT="${PRESTOP_STOP_WAIT:-90}"                    # 90 seconds for splunk stop
+    DECOMMISSION_MAX_WAIT="${PRESTOP_DECOMMISSION_WAIT:-900}"
+    STOP_MAX_WAIT="${PRESTOP_STOP_WAIT:-90}"
 elif [ "${SPLUNK_ROLE}" = "splunk_search_head" ]; then
-    DECOMMISSION_MAX_WAIT="${PRESTOP_DECOMMISSION_WAIT:-300}"  # 5 minutes for detention
-    STOP_MAX_WAIT="${PRESTOP_STOP_WAIT:-50}"                    # 50 seconds for splunk stop
+    DECOMMISSION_MAX_WAIT="${PRESTOP_DECOMMISSION_WAIT:-300}"
+    STOP_MAX_WAIT="${PRESTOP_STOP_WAIT:-50}"
 else
-    DECOMMISSION_MAX_WAIT="${PRESTOP_DECOMMISSION_WAIT:-80}"   # 80 seconds for other operations
-    STOP_MAX_WAIT="${PRESTOP_STOP_WAIT:-30}"                    # 30 seconds for splunk stop
+    DECOMMISSION_MAX_WAIT="${PRESTOP_DECOMMISSION_WAIT:-80}"
+    STOP_MAX_WAIT="${PRESTOP_STOP_WAIT:-30}"
 fi
 
-# For backward compatibility, keep MAX_WAIT_SECONDS for detention (search head removal)
+# TOTAL_BUDGET is the sum of the two phases; stop_splunk() will clamp its timeout
+# to whatever budget remains, preventing decommission overrun from stealing stop time.
+TOTAL_BUDGET=$((DECOMMISSION_MAX_WAIT + STOP_MAX_WAIT))
+
+# Alias used by the search-head detention wait loop (kept for readability).
 MAX_WAIT_SECONDS="${DECOMMISSION_MAX_WAIT}"
 
-# Get pod metadata from downward API (set via env vars in pod spec)
+# Pod metadata — supplied by the pod spec as standard env vars.
 POD_NAME="${POD_NAME:-unknown}"
 POD_NAMESPACE="${POD_NAMESPACE:-default}"
-SPLUNK_ROLE="${SPLUNK_ROLE:-unknown}"
 
 log_info "Starting preStop hook for pod: ${POD_NAME}, role: ${SPLUNK_ROLE}"
 
@@ -205,17 +209,17 @@ decommission_indexer() {
 
         case "$status" in
             "Down"|"GracefulShutdown")
-                log_info "Decommission complete, peer status: $status"
+                log_info "Decommission complete after ${elapsed}s, peer status: $status"
                 return 0
                 ;;
             "Decommissioning"|"ReassigningPrimaries")
-                log_info "Decommission in progress, status: $status"
+                log_info "Decommission in progress (${elapsed}s elapsed), status: $status"
                 ;;
             "Up")
-                log_warn "Peer still up, decommission may not have started"
+                log_warn "Peer still up (${elapsed}s elapsed), decommission may not have started"
                 ;;
             *)
-                log_warn "Unknown peer status: $status"
+                log_warn "Unknown peer status (${elapsed}s elapsed): $status"
                 ;;
         esac
 
@@ -260,11 +264,11 @@ detain_search_head() {
 
     while [ $elapsed -lt $MAX_WAIT_SECONDS ]; do
         if ! check_search_head_in_cluster; then
-            log_info "Search head successfully removed from cluster"
+            log_info "Search head successfully removed from cluster after ${elapsed}s"
             return 0
         fi
 
-        log_info "Still registered in cluster, waiting..."
+        log_info "Still registered in cluster (${elapsed}s elapsed), waiting..."
         sleep $check_interval
         elapsed=$((elapsed + check_interval))
     done
@@ -275,20 +279,36 @@ detain_search_head() {
 
 # Function to gracefully stop Splunk
 stop_splunk() {
-    log_info "Stopping Splunk gracefully (timeout: ${STOP_MAX_WAIT}s)..."
-
     if [ ! -x "$SPLUNK_BIN" ]; then
         log_error "Splunk binary not found at ${SPLUNK_BIN}"
         return 1
     fi
 
-    # Stop Splunk with split budget timeout
-    # This ensures decommission + stop stays within grace period
-    if timeout ${STOP_MAX_WAIT} "$SPLUNK_BIN" stop; then
+    # Calculate actual remaining time based on total budget and elapsed time
+    local current_time elapsed_time remaining_time actual_stop_timeout
+    current_time=$(date +%s)
+    elapsed_time=$((current_time - SCRIPT_START_TIME))
+    remaining_time=$((TOTAL_BUDGET - elapsed_time))
+
+    # Use the smaller of STOP_MAX_WAIT or remaining_time to stay within budget
+    if [ $remaining_time -le 0 ]; then
+        log_warn "Total budget exhausted (${elapsed_time}s elapsed), attempting immediate stop"
+        actual_stop_timeout=5  # Minimal grace for stop
+    elif [ $remaining_time -lt $STOP_MAX_WAIT ]; then
+        actual_stop_timeout=$remaining_time
+        log_info "Adjusting stop timeout from ${STOP_MAX_WAIT}s to ${actual_stop_timeout}s (remaining budget)"
+    else
+        actual_stop_timeout=$STOP_MAX_WAIT
+    fi
+
+    log_info "Stopping Splunk gracefully (timeout: ${actual_stop_timeout}s, elapsed: ${elapsed_time}s, budget: ${TOTAL_BUDGET}s)..."
+
+    # Stop Splunk with calculated timeout to ensure we stay within grace period
+    if timeout ${actual_stop_timeout} "$SPLUNK_BIN" stop; then
         log_info "Splunk stopped successfully"
         return 0
     else
-        log_warn "Splunk stop timed out or failed after ${STOP_MAX_WAIT}s, may need forceful termination"
+        log_warn "Splunk stop timed out or failed after ${actual_stop_timeout}s, may need forceful termination"
         return 1
     fi
 }
