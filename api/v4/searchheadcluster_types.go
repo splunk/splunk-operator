@@ -40,6 +40,8 @@ type SearchHeadClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// Number of search head pods; a search head cluster will be created if > 1
+	// +optional
+	// +kubebuilder:default=3
 	Replicas int32 `json:"replicas"`
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
