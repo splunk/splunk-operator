@@ -137,12 +137,23 @@ func (testenv *TestCaseEnv) UpdateOperatorImage(image string) error {
 		return err
 	}
 
-	containerIndex := 0
+	if len(operator.Spec.Template.Spec.Containers) == 0 {
+		err = fmt.Errorf("operator deployment %s/%s has no containers to update", operatorNamespace, testenv.operatorName)
+		testenv.Log.Error(err, "Unable to update operator image")
+		return err
+	}
+
+	containerIndex := -1
 	for i, container := range operator.Spec.Template.Spec.Containers {
 		if container.Name == "manager" {
 			containerIndex = i
 			break
 		}
+	}
+	if containerIndex == -1 {
+		err = fmt.Errorf("manager container not found in operator deployment %s/%s", operatorNamespace, testenv.operatorName)
+		testenv.Log.Error(err, "Unable to update operator image")
+		return err
 	}
 	operator.Spec.Template.Spec.Containers[containerIndex].Image = image
 
