@@ -1433,7 +1433,14 @@ func WaitForAppPhase(ctx context.Context, deployment *Deployment, testenvInstanc
 func WaitForAllAppsPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, crName string, crKind string, appSourceName string, appList []string, expectedPhase enterpriseApi.AppPhaseType, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		for _, appName := range appList {
-			appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, crName, crKind, appSourceName, appName)
+			lookupAppName := appName
+			if appInfo, ok := AppInfo[appName]; ok {
+				if appFileName, ok := appInfo["filename"]; ok && appFileName != "" {
+					lookupAppName = appFileName
+				}
+			}
+
+			appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, crName, crKind, appSourceName, lookupAppName)
 			if err != nil {
 				return false, nil
 			}
