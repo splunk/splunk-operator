@@ -48,8 +48,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplySearchHeadCluster")
-	eventPublisher, _ := newK8EventPublisher(client, cr)
 
+	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "SearchHeadCluster"
 
@@ -303,6 +303,9 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 // ApplyShcSecret checks if any of the search heads have a different shc_secret from namespace scoped secret and changes it
 func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+
 	// Get namespace scoped secret
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, mgr.c, mgr.cr.GetNamespace())
 	if err != nil {
@@ -332,6 +335,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 	nsAdminSecret := string(namespaceSecret.Data["password"])
 
 	// Loop over all sh pods and get individual pod's shc_secret
+	howManyPodsHaveSecretChanged := 0
 	for i := int32(0); i <= replicas-1; i++ {
 		// Get search head pod's name
 		shPodName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), i)
@@ -372,11 +376,16 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 
 			_, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 			if err != nil {
+				// Emit event for password sync failure
+				if eventPublisher != nil {
+					eventPublisher.Warning(ctx, "PasswordSyncFailed",
+						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
+				}
 				return err
 			}
 			scopedLog.Info("shcSecret changed")
 
-			// Note: Restart will be triggered via rolling restart mechanism after all secrets are updated
+// Note: Restart will be triggered via rolling restart mechanism after all secrets are updated
 			// The handleSearchHeadClusterRollingRestart() function will detect the change and trigger
 			// a zero-downtime rolling restart of all pods
 
@@ -438,6 +447,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		Update the admin password on secret mounted on SHC pod to ensure successful authentication.
 	*/
 	if len(mgr.cr.Status.AdminPasswordChangedSecrets) > 0 {
+
 		for podSecretName := range mgr.cr.Status.AdminPasswordChangedSecrets {
 			podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr.GetNamespace(), mgr.cr.GetName(), podSecretName)
 			if err != nil {
@@ -450,6 +460,12 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			}
 			scopedLog.Info("admin password changed on the secret mounted on pod")
 		}
+	}
+
+	// Emit event for password sync completed
+	if eventPublisher != nil {
+		eventPublisher.Normal(ctx, "PasswordSyncCompleted",
+			fmt.Sprintf("Password synchronized for %d pods", howManyPodsHaveSecretChanged))
 	}
 
 	return nil

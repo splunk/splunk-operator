@@ -1,10 +1,17 @@
 name: Integration Test on GCP Workflow
-
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+  checks: write
 on:
   push:
     branches:
       - develop
       - main
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
@@ -18,7 +25,7 @@ jobs:
 
       - name: Load Environment Variables
         id: dotenv
-        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+        uses: falti/dotenv-action@v1
         with:
           path: .env  # Adjust the path if your dotenv file is located elsewhere
 
@@ -62,7 +69,7 @@ jobs:
   create-cluster-and-run-tests:
     strategy:
       matrix:
-        test_focus: 
+        test_focus:
           - { order: 1, name: "c3_gcp_sanity" }
           - { order: 2, name: "c3_mgr_gcp_sanity" }
           - { order: 3, name: "m4_gcp_sanity" }
@@ -116,7 +123,7 @@ jobs:
 
       - name: Load Environment Variables
         id: dotenv
-        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+        uses: falti/dotenv-action@v1
         with:
           path: .env
 
@@ -124,7 +131,7 @@ jobs:
         uses: google-github-actions/auth@v1
         with:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-      
+
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
         with:
@@ -183,7 +190,7 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-    
+
       - name: Install Go Lint
         run: |
           go version
@@ -203,7 +210,7 @@ jobs:
           username: _json_key
           password: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
-      - name: Pull Splunk Enterprise Image 
+      - name: Pull Splunk Enterprise Image
         run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
 
       - name: Pull Splunk Operator Image Locally
@@ -226,7 +233,7 @@ jobs:
         with:
           cluster_name: ${{ env.CLUSTER_NAME }}
           location: ${{ env.GCP_ZONE }}
-  
+
       - name: Install Metrics Server
         run: |
           curl -LO https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
@@ -244,12 +251,15 @@ jobs:
       - name: Verify kubectl Configuration
         run: |
           kubectl config current-context
-      
+
       - name: Apply StorageClass
         run: |
           kubectl apply -f test/gcp-storageclass.yaml
 
       - name: Run Integration Tests
+        timeout-minutes: 240
+        env:
+          TEST_TIMEOUT: 225m
         run: |
           export GCP_SERVICE_ACCOUNT_KEY=${{ secrets.GCP_SERVICE_ACCOUNT_KEY_BASE64 }}
           make int-test
@@ -262,10 +272,23 @@ jobs:
 
       - name: Archive Pod Logs
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: splunk-pods-logs-artifacts-${{ matrix.test_focus.name }}
           path: /tmp/pod_logs/**
+      - name: Upload Integration Test Results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-report-integration-gcp-${{ matrix.test_focus.name }}
+          path: report-junit*.xml
+      - name: Publish Integration Test Report
+        uses: mikepenz/action-junit-report@v6
+        if: always()
+        with:
+          report_paths: 'report-junit*.xml'
+          check_name: 'Integration Test Results (GCP) - ${{ matrix.test_focus.name }}'
+          detailed_summary: true
       - name: Cleanup Test Case Artifacts
         if: ${{ always() }}
         run: |

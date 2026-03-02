@@ -13,6 +13,10 @@ This separation enables:
 - Data durability: Off‑load buffer management and retry logic to a durable message queue.
 - Operational clarity: Separate monitoring dashboards for ingestion throughput vs indexing latency.
 
+## Splunk Support
+
+These features are supported for Splunk 10.2 and above versions.
+
 # Important Note
 
 > [!WARNING]
@@ -32,16 +36,16 @@ Queue inputs can be found in the table below. As of now, only SQS provider of me
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
-| provider   | string | [Required] Provider of message queue (Allowed values: sqs) |
-| sqs   | SQS | [Required if provider=sqs] SQS message queue inputs  |
+| provider   | string | [Required] Provider of message queue (Allowed values: sqs, sqs_cp) |
+| sqs   | SQS | [Required if provider=sqs or provider=sqs_cp] SQS message queue inputs  |
 
 SQS message queue inputs can be found in the table below.
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | name   | string | [Required] Name of the queue |
-| region   | string | [Required] Region where the queue is located  |
-| endpoint   | string | [Optional, if not provided formed based on region] AWS SQS Service endpoint
+| authRegion   | string | [Required] Region where the queue is located  |
+| endpoint   | string | [Optional, if not provided formed based on authRegion] AWS SQS Service endpoint
 | dlq   | string | [Required] Name of the dead letter queue |
 | volumes | []VolumeSpec | [Optional] List of remote storage volumes used to mount the credentials for queue and bucket access (must contain s3_access_key and s3_secret_key) |
 
@@ -57,7 +61,7 @@ spec:
   provider: sqs
   sqs:
     name: sqs-test
-    region: us-west-2
+    authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: sqs-dlq-test
     volumes:
@@ -67,7 +71,7 @@ spec:
 
 # ObjectStorage
 
-ObjectStorage is introduced to store large message (messages that exceed the size of messages that can be stored in SQS) store information to be shared among IngestorCluster and IndexerCluster.
+ObjectStorage is introduced to store large messages (messages that exceed the size of messages that can be stored in SQS) to be shared among IngestorCluster and IndexerCluster.
 
 ## Spec
 
@@ -83,7 +87,7 @@ S3 object storage inputs can be found in the table below.
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | path   | string | [Required] Remote storage location for messages that are larger than the underlying maximum message size  |
-| endpoint   | string | [Optional, if not provided formed based on region] S3-compatible service endpoint
+| endpoint   | string | [Optional, if not provided formed based on authRegion] S3-compatible service endpoint
 
 **SOK doesn't support update of any of the ObjectStorage inputs.**
 
@@ -96,7 +100,7 @@ metadata:
 spec:
   provider: s3
   s3:
-    path: s3://ingestion/smartbus-test
+    path: ingestion/smartbus-test
     endpoint: https://s3.us-west-2.amazonaws.com
 ```
 
@@ -213,7 +217,7 @@ queue:
   provider: sqs
   sqs:
     name: sqs-test
-    region: us-west-2
+    authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: sqs-dlq-test
     volumes:
@@ -228,7 +232,7 @@ objectStorage:
   provider: s3
   s3:
     endpoint: https://s3.us-west-2.amazonaws.com
-    path: s3://ingestion/smartbus-test
+    path: ingestion/smartbus-test
 ```
 
 ```
@@ -269,7 +273,7 @@ To be able to configure ingestion and indexing resources correctly in a secure m
 
 ## Example
 
-The example presented below configures the ingestor-sa service account by using esctl utility. It sets up the service account for cluster-name cluster in region us-west-2 with AmazonS3FullAccess and AmazonSQSFullAccess access policies. 
+The example presented below configures the ingestor-sa service account by using eksctl utility. It sets up the service account for cluster-name cluster in region us-west-2 with AmazonS3FullAccess and AmazonSQSFullAccess access policies. 
 
 ```
 eksctl create iamserviceaccount \                                                                                                                                          
@@ -452,7 +456,7 @@ Application installation is supported for Ingestor Cluster instances. However, a
 
 Therefore, to be able to enforce Splunk restart for each of the Ingestor Cluster pods, it is recommended to add/update IngestorCluster CR annotations/labels and apply the new configuration which will trigger the rolling restart of Splunk pods for Ingestor Cluster. 
 
-We are under the investigation on how to make it fully automated. What is more, ideally, update of annotations and labels should not trigger pod restart at all and we are investigating on how to fix this behaviour eventually.
+Ideally, update of annotations and labels should not trigger pod restart at all and it is under the investigation on how to stop this from happening and handle restart automatically.
 
 # Example
 
@@ -584,7 +588,7 @@ spec:
   provider: sqs
   sqs:
     name: sqs-test
-    region: us-west-2
+    authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: sqs-dlq-test
 ```
@@ -616,7 +620,7 @@ Metadata:
   UID:               12345678-1234-5678-1234-012345678911
 Spec:
   Sqs:
-    Region:                        us-west-2
+    Auth Region:                        us-west-2
     DLQ:                           sqs-dlq-test
     Endpoint:                      https://sqs.us-west-2.amazonaws.com
     Name:                          sqs-test
@@ -642,7 +646,7 @@ spec:
   provider: s3
   s3:
     endpoint: https://s3.us-west-2.amazonaws.com
-    path: s3://ingestion/smartbus-test
+    path: ingestion/smartbus-test
 ```
 
 ```
@@ -673,7 +677,7 @@ Metadata:
 Spec:
   S3:
     Endpoint:  https://s3.us-west-2.amazonaws.com
-    Path:      s3://ingestion/smartbus-test
+    Path:      ingestion/smartbus-test
   Provider:    s3
 Status:
   Message:  
@@ -749,7 +753,7 @@ Status:
     Is Deployment In Progress:  false
     Last App Info Check Time:   0
     Version:                    0
-  Queue Bucket Access Secret Version:  33744270
+  Credential Secret Version:  33744270
   Message:                      
   Phase:                        Ready
   Ready Replicas:               3

@@ -16,6 +16,7 @@
 package client
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -789,7 +790,7 @@ func (c *SplunkClient) AutomateMCApplyChanges() error {
 	return err
 }
 
-// GetMonitoringconsoleServerRoles to retrive server roles of the local host or SplunkMonitoringConsole
+// GetMonitoringconsoleServerRoles to retrieve server roles of the local host or SplunkMonitoringConsole
 func (c *SplunkClient) GetMonitoringconsoleServerRoles() (*MCServerRolesInfo, error) {
 	apiResponseServerRoles := struct {
 		Entry []struct {
@@ -953,6 +954,70 @@ func (c *SplunkClient) SetIdxcSecret(idxcSecret string) error {
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	expectedStatus := []int{200}
 	return c.Do(request, expectedStatus, nil)
+}
+
+type TelemetryResponse struct {
+	Message       string `json:"message"`
+	MetricValueID string `json:"metricValueId"`
+}
+
+func (c *SplunkClient) SendTelemetry(path string, body []byte) (*TelemetryResponse, error) {
+	endpoint := fmt.Sprintf("%s%s", c.ManagementURI, path)
+	request, err := http.NewRequest("POST", endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	expectedStatus := []int{201}
+	var response TelemetryResponse
+
+	err = c.Do(request, expectedStatus, &response)
+	if err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
+// LicenseInfo represents license information from Splunk
+type LicenseInfo struct {
+	Title          string `json:"title"`
+	Status         string `json:"status"`
+	ExpirationTime int64  `json:"expiration_time"`
+	ID             string `json:"guid"`
+	Type           string `json:"type"`
+}
+
+// LicenseResponse represents the API response from /services/licenser/licenses
+type LicenseResponse struct {
+	Entry []struct {
+		Name    string      `json:"name"`
+		Content LicenseInfo `json:"content"`
+	} `json:"entry"`
+}
+
+// GetLicenseInfo retrieves license information from Splunk instance
+// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTlicense#licenser.2Flicenses
+func (c *SplunkClient) GetLicenseInfo() (map[string]LicenseInfo, error) {
+	endpoint := fmt.Sprintf("%s/services/licenser/licenses?output_mode=json", c.ManagementURI)
+	request, err := http.NewRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response LicenseResponse
+	expectedStatus := []int{200}
+	err = c.Do(request, expectedStatus, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert response to map
+	licenses := make(map[string]LicenseInfo)
+	for _, entry := range response.Entry {
+		licenses[entry.Name] = entry.Content
+	}
+
+	return licenses, nil
 }
 
 // RestartSplunk restarts specific Splunk instance

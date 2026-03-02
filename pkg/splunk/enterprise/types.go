@@ -138,6 +138,10 @@ type PipelineWorker struct {
 
 	// indicates a fan out worker
 	fanOut bool
+
+	// Optional injected pod exec client for testing (avoids real network I/O)
+	// If nil, runPodCopyWorker will create a real client
+	podExecClient splutil.PodExecClientImpl
 }
 
 // PipelinePhase represents one phase in the overall installation pipeline
@@ -254,7 +258,7 @@ func (instanceType InstanceType) ToRole() string {
 	case SplunkMonitoringConsole:
 		role = "splunk_monitor"
 	case SplunkIngestor:
-		role = "splunk_standalone" // TODO: change this to a new role when we have one (splunk_ingestor)
+		role = "splunk_ingestor"
 	}
 	return role
 }

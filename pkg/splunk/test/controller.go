@@ -349,11 +349,32 @@ func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		return nil
 	}
 
-	dummySchemaResource := schema.GroupResource{
-		Group:    obj.GetObjectKind().GroupVersionKind().Group,
-		Resource: obj.GetObjectKind().GroupVersionKind().Kind,
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	if gvk.Empty() {
+		// Infer GVK from object type
+		typeName := reflect.TypeOf(obj).Elem().Name()
+		// Determine group based on type
+		var group, version string
+		switch obj.(type) {
+		case *corev1.Pod, *corev1.Service, *corev1.ConfigMap, *corev1.Secret:
+			group, version = "", "v1"
+		case *appsv1.StatefulSet, *appsv1.Deployment:
+			group, version = "apps", "v1"
+		default:
+			group, version = "enterprise.splunk.com", "v4"
+		}
+		gvk = schema.GroupVersionKind{
+			Group:   group,
+			Version: version,
+			Kind:    typeName,
+		}
 	}
-	c.NotFoundError = k8serrors.NewNotFound(dummySchemaResource, obj.GetName())
+
+	dummySchemaResource := schema.GroupResource{
+		Group:    gvk.Group,
+		Resource: gvk.Kind,
+	}
+	c.NotFoundError = k8serrors.NewNotFound(dummySchemaResource, key.Name)
 	return c.NotFoundError
 }
 
@@ -835,7 +856,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	// test scale up (zero ready so far; wait for ready)
 	revised = current.DeepCopy()
 	current.Status.ReadyReplicas = 0
-	scaleUpCalls := map[string][]MockFuncCall{"Get": {funcCalls[0]}}
+	scaleUpCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 0 ready")
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhasePending, revised, scaleUpCalls, nil, current)
 
@@ -850,7 +871,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	replicas = 1
 	current.Status.Replicas = 1
 	current.Status.ReadyReplicas = 1
-	updateCalls = map[string][]MockFuncCall{"Get": {funcCalls[0]}, "Update": {funcCalls[0]}}
+	updateCalls = map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}, "Update": {funcCalls[0]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, Update Replicas 1=>2")
 	PodManagerUpdateTester(t, methodPlus, mgr, 2, enterpriseApi.PhaseScalingUp, revised, updateCalls, nil, current, pod)
 
@@ -868,7 +889,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
 	}
 	scaleDownCalls := map[string][]MockFuncCall{
-		"Get":    {funcCalls[0], pvcCalls[0], pvcCalls[1]},
+		"Get":    {funcCalls[0], funcCalls[0], pvcCalls[0], pvcCalls[1]},
 		"Update": {funcCalls[0]},
 		"Delete": pvcCalls,
 	}
@@ -886,7 +907,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	replicas = 1
 	current.Status.Replicas = 1
 	current.Status.ReadyReplicas = 1
-	podCalls := []MockFuncCall{funcCalls[0], {MetaName: "*v1.Pod-test-splunk-stack1-0"}}
+	podCalls := []MockFuncCall{funcCalls[0], funcCalls[0], {MetaName: "*v1.Pod-test-splunk-stack1-0"}}
 	getPodCalls := map[string][]MockFuncCall{"Get": podCalls}
 	//getPodCalls := map[string][]MockFuncCall{}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "Pod not found")

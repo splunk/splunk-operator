@@ -1,18 +1,16 @@
-/*
-Copyright 2025.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package controller
 
@@ -25,6 +23,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -37,13 +36,15 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
 // IngestorClusterReconciler reconciles a IngestorCluster object
 type IngestorClusterReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=ingestorclusters,verbs=get;list;watch;create;update;patch;delete
@@ -53,13 +54,6 @@ type IngestorClusterReconciler struct {
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=queues;objectstorages,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=queues/status;objectstorages/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=queues/finalizers;objectstorages/finalizers,verbs=update
-
-// RBAC for rolling restart mechanism
-//+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;delete
-//+kubebuilder:rbac:groups=policy,resources=pods/eviction,verbs=create
-//+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch
-//+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
-//+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;update;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -101,6 +95,9 @@ func (r *IngestorClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+
+	// Pass event recorder through context
+	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
 	result, err := ApplyIngestorCluster(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
@@ -172,7 +169,7 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						continue
 					}
 
-					if queue.Spec.Provider != "sqs" {
+					if queue.Spec.Provider != "sqs" && queue.Spec.Provider != "sqs_cp" {
 						continue
 					}
 
@@ -262,5 +259,6 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Named("ingestor-cluster-controller").
 		Complete(r)
 }

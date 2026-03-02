@@ -15,6 +15,12 @@ package enterprise
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime/debug"
+	"testing"
+	"time"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -27,13 +33,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"os"
-	"path/filepath"
-	"runtime/debug"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"testing"
-	"time"
 )
 
 func init() {
@@ -1180,7 +1181,7 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 	cm.Spec.Image = "splunk/splunk:latest"
 	// Create the instances
 	client.Create(ctx, cm)
-	_, err := ApplyClusterManager(ctx, client, cm)
+	_, err := ApplyClusterManager(ctx, client, cm, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}

@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2025 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -52,7 +52,7 @@ var (
 		Provider: "s3",
 		S3: enterpriseApi.S3Spec{
 			Endpoint: "https://s3.us-west-2.amazonaws.com",
-			Path:     "s3://index-ingest-separation-test-bucket/smartbus-test",
+			Path:     "index-ingest-separation-test-bucket/smartbus-test",
 		},
 	}
 	serviceAccountName = "index-ingest-sa"

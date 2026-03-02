@@ -26,12 +26,14 @@ import (
 	"github.com/pkg/errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -44,7 +46,8 @@ import (
 // IndexerClusterReconciler reconciles a IndexerCluster object
 type IndexerClusterReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=indexerclusters,verbs=get;list;watch;create;update;patch;delete
@@ -103,6 +106,9 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+
+	// Pass event recorder through context
+	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
 	result, err := ApplyIndexerCluster(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
@@ -180,9 +186,9 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						continue
 					}
 
-					if queue.Spec.Provider != "sqs" {
+				if queue.Spec.Provider != "sqs" && queue.Spec.Provider != "sqs_cp" {
 						continue
-					}
+			}
 
 					for _, vol := range queue.Spec.SQS.VolList {
 						if vol.SecretRef == secret.Name {
@@ -282,5 +288,6 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Named("indexer-cluster-controller").
 		Complete(r)
 }

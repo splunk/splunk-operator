@@ -35,14 +35,13 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// NewSplunkClientFunc funciton pointer type
+// NewSplunkClientFunc function pointer type
 type NewSplunkClientFunc func(managementURI, username, password string) *splclient.SplunkClient
 
 // ApplyIndexerClusterManager reconciles the state of a Splunk Enterprise indexer cluster.
@@ -55,7 +54,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyIndexerClusterManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "IndexerCluster"
 
@@ -77,7 +77,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// updates status after function completes
 	cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.QueueBucketAccessSecretVersion = "0"
+		cr.Status.CredentialSecretVersion = "0"
+		cr.Status.ServiceAccount = ""
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
@@ -158,13 +159,6 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		return result, err
 	}
 
-	// Create or update PodDisruptionBudget for high availability during rolling restarts
-	err = ApplyPodDisruptionBudget(ctx, client, cr, SplunkIndexer, cr.Spec.Replicas)
-	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyPodDisruptionBudget", fmt.Sprintf("create/update PodDisruptionBudget failed %s", err.Error()))
-		return result, err
-	}
-
 	// create or update statefulset for the indexers
 	statefulSet, err := getIndexerStatefulSet(ctx, client, cr)
 	if err != nil {
@@ -178,10 +172,11 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// splunk instances were not able to support this option, then cluster manager fails to transfer, this leads
 	// to splunkd restart at the peer level. For more information refer
 	// https://splunk.atlassian.net/browse/SPL-223386?jql=text%20~%20%22The%20downloaded%20bundle%20checksum%20doesn%27t%20match%20the%20activeBundleChecksum%22
-	// On Operator side we have set statefulset update strategy to RollingUpdate with preStop hooks for graceful shutdown.
-	// Before updating a pod, the preStop hook decommissions the indexer. However, if splunkd is not running due to
-	// the above splunk enterprise 9.0.0 issue, the preStop hook will fail. In this case, the rolling update will stop
-	// and manual intervention is required to fix the issue.
+	// On Operator side we have set statefulset update strategy to OnDelete, so pods need to be
+	// deleted by operator manually.  Before deleting the pod, operator controller code tries to decommission
+	// the splunk instance, but splunkd is not running due to above splunk enterprise 9.0.0 issue. So controller
+	// fail and returns. This goes on in a loop and we always try the same pod instance and rest of the replicas
+	// are still in older version
 	// As a temporary fix for 9.0.0 , if the image version do not  match with pod image version we delete the
 	// splunk statefulset for indexer
 
@@ -250,84 +245,37 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		// Queue
-		queue := enterpriseApi.Queue{}
-		if cr.Spec.QueueRef.Name != "" {
-			ns := cr.GetNamespace()
-			if cr.Spec.QueueRef.Namespace != "" {
-				ns = cr.Spec.QueueRef.Namespace
-			}
-			err = client.Get(ctx, types.NamespacedName{
-				Name:      cr.Spec.QueueRef.Name,
-				Namespace: ns,
-			}, &queue)
-			if err != nil {
-				return result, err
-			}
-		}
-		if queue.Spec.Provider == "sqs" {
-			if queue.Spec.SQS.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
-				queue.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", queue.Spec.SQS.AuthRegion)
-			}
+		qosCfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, cr.Spec.QueueRef, cr.Spec.ObjectStorageRef, cr.Spec.ServiceAccount)
+		if err != nil {
+			scopedLog.Error(err, "Failed to resolve Queue/ObjectStorage config")
+			return result, err
 		}
 
-		// Object Storage
-		os := enterpriseApi.ObjectStorage{}
-		if cr.Spec.ObjectStorageRef.Name != "" {
-			ns := cr.GetNamespace()
-			if cr.Spec.ObjectStorageRef.Namespace != "" {
-				ns = cr.Spec.ObjectStorageRef.Namespace
-			}
-			err = client.Get(ctx, types.NamespacedName{
-				Name:      cr.Spec.ObjectStorageRef.Name,
-				Namespace: ns,
-			}, &os)
-			if err != nil {
-				return result, err
-			}
-		}
-		if os.Spec.Provider == "s3" {
-			if os.Spec.S3.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
-				os.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queue.Spec.SQS.AuthRegion)
-			}
-		}
-
-		// Secret reference
-		accessKey, secretKey, version := "", "", ""
-		if queue.Spec.Provider == "sqs" && cr.Spec.ServiceAccount == "" {
-			for _, vol := range queue.Spec.SQS.VolList {
-				if vol.SecretRef != "" {
-					accessKey, secretKey, version, err = GetQueueRemoteVolumeSecrets(ctx, vol, client, cr)
-					if err != nil {
-						scopedLog.Error(err, "Failed to get queue remote volume secrets")
-						return result, err
-					}
-				}
-			}
-		}
-
-		secretChanged := cr.Status.QueueBucketAccessSecretVersion != version
+		secretChanged := cr.Status.CredentialSecretVersion != qosCfg.Version
+		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
 
 		// If queue is updated
 		if cr.Spec.QueueRef.Name != "" {
-			if secretChanged {
+			if secretChanged || serviceAccountChanged {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
-				err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, client)
+				err = mgr.updateIndexerConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
 				if err != nil {
 					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
 					scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
 					return result, err
 				}
 
-				// Trigger rolling restart for queue/pipeline credential changes
-				err = triggerIndexerRollingRestart(ctx, client, cr, "Queue/Pipeline credentials changed")
-				if err != nil {
-					eventPublisher.Warning(ctx, "triggerIndexerRollingRestart", fmt.Sprintf("Failed to trigger rolling restart: %s", err.Error()))
-					return result, err
+				for i := int32(0); i < cr.Spec.Replicas; i++ {
+					idxcClient := mgr.getClient(ctx, i)
+					err = idxcClient.RestartSplunk()
+					if err != nil {
+						return result, err
+					}
+					scopedLog.Info("Restarted splunk", "indexer", i)
 				}
-				scopedLog.Info("Triggered rolling restart for queue/pipeline credential change")
 
-				cr.Status.QueueBucketAccessSecretVersion = version
+				cr.Status.CredentialSecretVersion = qosCfg.Version
+				cr.Status.ServiceAccount = cr.Spec.ServiceAccount
 			}
 		}
 
@@ -335,7 +283,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
 		if err != nil {
-			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrive cluster manager spec failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrieve cluster manager spec failed %s", err.Error()))
 			return result, err
 		}
 		if cmMonitoringConsoleConfigRef != "" {
@@ -366,7 +314,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
 			if err != nil {
-				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintainance mode failed %s", err.Error()))
+				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintenance mode failed %s", err.Error()))
 				return result, err
 			}
 		}
@@ -375,21 +323,6 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		cr.Status.IndexerSecretChanged = []bool{}
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
 		cr.Status.IdxcPasswordChangedSecrets = make(map[string]bool)
-
-		// V3 FIX #2: PVC cleanup removed - handled by pod finalizer synchronously
-		// PVCs are now deleted by the finalizer BEFORE the pod is removed
-
-		// Handle rolling restart mechanism
-		// This runs after everything else is ready to check for config changes
-		restartResult, restartErr := handleIndexerClusterRollingRestart(ctx, client, cr)
-		if restartErr != nil {
-			scopedLog.Error(restartErr, "Rolling restart handler failed")
-			// Don't return error, just log it - we don't want to block other operations
-		}
-		// If restart handler wants to requeue, honor that
-		if restartResult.Requeue || restartResult.RequeueAfter > 0 {
-			result = restartResult
-		}
 
 		result.Requeue = false
 		// Set indexer cluster CR as owner reference for clustermanager
@@ -422,7 +355,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyIndexerCluster")
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	eventPublisher := GetEventPublisher(ctx, cr)
 	cr.Kind = "IndexerCluster"
 
 	// validate and updates defaults for CR
@@ -435,7 +369,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.QueueBucketAccessSecretVersion = "0"
+		cr.Status.CredentialSecretVersion = "0"
+		cr.Status.ServiceAccount = ""
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
@@ -519,13 +454,6 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
-	// Create or update PodDisruptionBudget for high availability during rolling restarts
-	err = ApplyPodDisruptionBudget(ctx, client, cr, SplunkIndexer, cr.Spec.Replicas)
-	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyPodDisruptionBudget", fmt.Sprintf("create/update PodDisruptionBudget failed %s", err.Error()))
-		return result, err
-	}
-
 	// create or update statefulset for the indexers
 	statefulSet, err := getIndexerStatefulSet(ctx, client, cr)
 	if err != nil {
@@ -539,10 +467,11 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// splunk instances were not able to support this option, then cluster master fails to transfer, this leads
 	// to splunkd restart at the peer level. For more information refer
 	// https://splunk.atlassian.net/browse/SPL-223386?jql=text%20~%20%22The%20downloaded%20bundle%20checksum%20doesn%27t%20match%20the%20activeBundleChecksum%22
-	// On Operator side we have set statefulset update strategy to RollingUpdate with preStop hooks for graceful shutdown.
-	// Before updating a pod, the preStop hook decommissions the indexer. However, if splunkd is not running due to
-	// the above splunk enterprise 9.0.0 issue, the preStop hook will fail. In this case, the rolling update will stop
-	// and manual intervention is required to fix the issue.
+	// On Operator side we have set statefulset update strategy to OnDelete, so pods need to be
+	// deleted by operator manually.  Before deleting the pod, operator controller code tries to decommission
+	// the splunk instance, but splunkd is not running due to above splunk enterprise 9.0.0 issue. So controller
+	// fail and returns. This goes on in a loop and we always try the same pod instance and rest of the replicas
+	// are still in older version
 	// As a fix for 9.0.0 , if the image version do not  match with pod image version we delete the
 	// splunk statefulset for indexer
 
@@ -611,83 +540,36 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		// Queue
-		queue := enterpriseApi.Queue{}
-		if cr.Spec.QueueRef.Name != "" {
-			ns := cr.GetNamespace()
-			if cr.Spec.QueueRef.Namespace != "" {
-				ns = cr.Spec.QueueRef.Namespace
-			}
-			err = client.Get(context.Background(), types.NamespacedName{
-				Name:      cr.Spec.QueueRef.Name,
-				Namespace: ns,
-			}, &queue)
-			if err != nil {
-				return result, err
-			}
-		}
-		if queue.Spec.Provider == "sqs" {
-			if queue.Spec.SQS.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
-				queue.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", queue.Spec.SQS.AuthRegion)
-			}
+		qosCfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, cr.Spec.QueueRef, cr.Spec.ObjectStorageRef, cr.Spec.ServiceAccount)
+		if err != nil {
+			scopedLog.Error(err, "Failed to resolve Queue/ObjectStorage config")
+			return result, err
 		}
 
-		// Object Storage
-		os := enterpriseApi.ObjectStorage{}
-		if cr.Spec.ObjectStorageRef.Name != "" {
-			ns := cr.GetNamespace()
-			if cr.Spec.ObjectStorageRef.Namespace != "" {
-				ns = cr.Spec.ObjectStorageRef.Namespace
-			}
-			err = client.Get(context.Background(), types.NamespacedName{
-				Name:      cr.Spec.ObjectStorageRef.Name,
-				Namespace: ns,
-			}, &os)
-			if err != nil {
-				return result, err
-			}
-		}
-		if os.Spec.Provider == "s3" {
-			if os.Spec.S3.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
-				os.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queue.Spec.SQS.AuthRegion)
-			}
-		}
-
-		// Secret reference
-		accessKey, secretKey, version := "", "", ""
-		if queue.Spec.Provider == "sqs" && cr.Spec.ServiceAccount == "" {
-			for _, vol := range queue.Spec.SQS.VolList {
-				if vol.SecretRef != "" {
-					accessKey, secretKey, version, err = GetQueueRemoteVolumeSecrets(ctx, vol, client, cr)
-					if err != nil {
-						scopedLog.Error(err, "Failed to get queue remote volume secrets")
-						return result, err
-					}
-				}
-			}
-		}
-
-		secretChanged := cr.Status.QueueBucketAccessSecretVersion != version
+		secretChanged := cr.Status.CredentialSecretVersion != qosCfg.Version
+		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
 
 		if cr.Spec.QueueRef.Name != "" {
-			if secretChanged {
+			if secretChanged || serviceAccountChanged {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
-				err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, client)
+				err = mgr.updateIndexerConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
 				if err != nil {
 					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
 					scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
 					return result, err
 				}
 
-				// Trigger rolling restart for queue/pipeline credential changes
-				err = triggerIndexerRollingRestart(ctx, client, cr, "Queue/Pipeline credentials changed")
-				if err != nil {
-					eventPublisher.Warning(ctx, "triggerIndexerRollingRestart", fmt.Sprintf("Failed to trigger rolling restart: %s", err.Error()))
-					return result, err
+				for i := int32(0); i < cr.Spec.Replicas; i++ {
+					idxcClient := mgr.getClient(ctx, i)
+					err = idxcClient.RestartSplunk()
+					if err != nil {
+						return result, err
+					}
+					scopedLog.Info("Restarted splunk", "indexer", i)
 				}
-				scopedLog.Info("Triggered rolling restart for queue/pipeline credential change")
 
-				cr.Status.QueueBucketAccessSecretVersion = version
+				cr.Status.CredentialSecretVersion = qosCfg.Version
+				cr.Status.ServiceAccount = cr.Spec.ServiceAccount
 			}
 		}
 
@@ -695,7 +577,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
 		if err != nil {
-			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrive cluster master spec failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrieve cluster master spec failed %s", err.Error()))
 			return result, err
 		}
 		if cmMonitoringConsoleConfigRef != "" {
@@ -726,7 +608,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
 			if err != nil {
-				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintainance mode failed %s", err.Error()))
+				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintenance mode failed %s", err.Error()))
 				return result, err
 			}
 		}
@@ -735,21 +617,6 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		cr.Status.IndexerSecretChanged = []bool{}
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
 		cr.Status.IdxcPasswordChangedSecrets = make(map[string]bool)
-
-		// V3 FIX #2: PVC cleanup removed - handled by pod finalizer synchronously
-		// PVCs are now deleted by the finalizer BEFORE the pod is removed
-
-		// Handle rolling restart mechanism
-		// This runs after everything else is ready to check for config changes
-		restartResult, restartErr := handleIndexerClusterRollingRestart(ctx, client, cr)
-		if restartErr != nil {
-			scopedLog.Error(restartErr, "Rolling restart handler failed")
-			// Don't return error, just log it - we don't want to block other operations
-		}
-		// If restart handler wants to requeue, honor that
-		if restartResult.Requeue || restartResult.RequeueAfter > 0 {
-			result = restartResult
-		}
 
 		result.Requeue = false
 		// Set indexer cluster CR as owner reference for clustermaster
@@ -835,6 +702,10 @@ func SetClusterMaintenanceMode(ctx context.Context, c splcommon.ControllerClient
 // ApplyIdxcSecret checks if any of the indexer's have a different idxc_secret from namespace scoped secret and changes it
 func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
 	var indIdxcSecret string
+
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+
 	// Get namespace scoped secret
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, mgr.c, mgr.cr.GetNamespace())
 	if err != nil {
@@ -861,6 +732,7 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 	nsIdxcSecret := string(namespaceSecret.Data[splcommon.IdxcSecret])
 
 	// Loop over all indexer pods and get individual pod's idxc password
+	howManyPodsHaveSecretChanged := 0
 	for i := int32(0); i <= replicas-1; i++ {
 		// Get Indexer's name
 		indexerPodName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), i)
@@ -926,13 +798,28 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 			// Change idxc secret key
 			err = idxcClient.SetIdxcSecret(nsIdxcSecret)
 			if err != nil {
+				// Emit event for password sync failure
+				if eventPublisher != nil {
+					eventPublisher.Warning(ctx, "PasswordSyncFailed",
+						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", indexerPodName, err.Error()))
+				}
 				return err
 			}
 			scopedLog.Info("Changed idxc secret")
 
-			// Note: Restart will be triggered via rolling restart mechanism after all secrets are updated
-			// The handleIndexerClusterRollingRestart() function will detect the change and trigger
-			// a zero-downtime rolling restart of all pods
+			howManyPodsHaveSecretChanged += 1
+
+			// Restart splunk instance on pod
+			err = idxcClient.RestartSplunk()
+			if err != nil {
+				// Emit event for password sync failure
+				if eventPublisher != nil {
+					eventPublisher.Warning(ctx, "PasswordSyncFailed",
+						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", indexerPodName, err.Error()))
+				}
+				return err
+			}
+			scopedLog.Info("Restarted splunk")
 
 			// Keep a track of all the secrets on pods to change their idxc secret below
 			mgr.cr.Status.IdxcPasswordChangedSecrets[podSecret.GetName()] = true
@@ -983,6 +870,12 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 		}
 	}
 
+	// Emit event for password sync completed
+	if eventPublisher != nil {
+		eventPublisher.Normal(ctx, "PasswordSyncCompleted",
+			fmt.Sprintf("Password synchronized for %d pods", howManyPodsHaveSecretChanged))
+	}
+
 	return nil
 }
 
@@ -990,6 +883,12 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 
 	var err error
+
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+
+	// Track last successful replica count to emit scale events after completion
+	previousReplicas := mgr.cr.Status.Replicas
 
 	// Assign client
 	if mgr.c == nil {
@@ -1023,7 +922,27 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	}
 
 	// manage scaling and updates
-	return splctrl.UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
+	phase, err := splctrl.UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
+	if err != nil {
+		return phase, err
+	}
+
+	// Emit ScaledUp event only after a successful scale-up has completed
+	if phase == enterpriseApi.PhaseReady {
+		if desiredReplicas > previousReplicas && mgr.cr.Status.Replicas == desiredReplicas {
+			if eventPublisher != nil {
+				eventPublisher.Normal(ctx, "ScaledUp",
+					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", mgr.cr.GetName(), previousReplicas, desiredReplicas))
+			}
+		} else if desiredReplicas < previousReplicas && mgr.cr.Status.Replicas == desiredReplicas {
+			if eventPublisher != nil {
+				eventPublisher.Normal(ctx, "ScaledDown",
+					fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", mgr.cr.GetName(), previousReplicas, desiredReplicas))
+			}
+		}
+	}
+
+	return phase, nil
 }
 
 // PrepareScaleDown for indexerClusterPodManager prepares indexer pod to be removed via scale down event; it returns true when ready
@@ -1059,18 +978,24 @@ func (mgr *indexerClusterPodManager) FinishRecycle(ctx context.Context, n int32)
 	return mgr.cr.Status.Peers[n].Status == "Up", nil
 }
 
-// decommission for indexerClusterPodManager waits for indexer pod decommission to complete; it returns true when ready
-// NOTE: Decommission is now handled by preStop hook in the pod lifecycle.
-// This function only monitors the decommission status and waits for completion.
+// decommission for indexerClusterPodManager decommissions an indexer pod; it returns true when ready
 func (mgr *indexerClusterPodManager) decommission(ctx context.Context, n int32, enforceCounts bool) (bool, error) {
 	peerName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
 
 	switch mgr.cr.Status.Peers[n].Status {
 	case "Up":
-		// Decommission should be initiated by preStop hook when pod terminates
-		// Operator just waits for it to progress
-		mgr.log.Info("Waiting for preStop hook to initiate decommission", "peerName", peerName)
-		return false, nil
+		podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, getApplicablePodNameForK8Probes(mgr.cr, n))
+		err := setProbeLevelOnSplunkPod(ctx, podExecClient, livenessProbeLevelOne)
+		if err != nil {
+			// Don't return error here. We may be reconciling several times, and the actual Pod status is down, but
+			// not yet reflecting on the Cluster Master, in which case, the podExec fails, though the decommission is
+			// going fine.
+			mgr.log.Info("Unable to lower the liveness probe level", "peerName", peerName, "enforceCounts", enforceCounts)
+		}
+
+		mgr.log.Info("Decommissioning indexer cluster peer", "peerName", peerName, "enforceCounts", enforceCounts)
+		c := mgr.getClient(ctx, n)
+		return false, c.DecommissionIndexerClusterPeer(enforceCounts)
 
 	case "Decommissioning":
 		mgr.log.Info("Waiting for decommission to complete", "peerName", peerName)
@@ -1163,30 +1088,35 @@ func getSiteRepFactorOriginCount(siteRepFactor string) int32 {
 // verifyRFPeers verifies the number of peers specified in the replicas section
 // of IndexerClsuster CR. If it is less than RF, than we set it to RF.
 func (mgr *indexerClusterPodManager) verifyRFPeers(ctx context.Context, c splcommon.ControllerClient) error {
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+
 	if mgr.c == nil {
 		mgr.c = c
 	}
+	cm := mgr.getClusterManagerClient(ctx)
+	clusterInfo, err := cm.GetClusterInfo(false)
+	if err != nil {
+		return fmt.Errorf("could not get cluster info from cluster manager")
+	}
+	var replicationFactor int32
+	// if it is a multisite indexer cluster, check site_replication_factor
+	if clusterInfo.MultiSite == "true" {
+		replicationFactor = getSiteRepFactorOriginCount(clusterInfo.SiteReplicationFactor)
+	} else { // for single site, check replication factor
+		replicationFactor = clusterInfo.ReplicationFactor
+	}
 
-	// TEMPORARILY DISABLED FOR TESTING: Allow replicas < RF for scale testing
-	// This allows us to test with 1-2 replicas even if RF is 3
-	// cm := mgr.getClusterManagerClient(ctx)
-	// clusterInfo, err := cm.GetClusterInfo(false)
-	// if err != nil {
-	// 	return fmt.Errorf("could not get cluster info from cluster manager")
-	// }
-
-	// var replicationFactor int32
-	// // if it is a multisite indexer cluster, check site_replication_factor
-	// if clusterInfo.MultiSite == "true" {
-	// 	replicationFactor = getSiteRepFactorOriginCount(clusterInfo.SiteReplicationFactor)
-	// } else { // for single site, check replication factor
-	// 	replicationFactor = clusterInfo.ReplicationFactor
-	// }
-
-	// if mgr.cr.Spec.Replicas < replicationFactor {
-	// 	mgr.log.Info("Changing number of replicas as it is less than RF number of peers", "replicas", mgr.cr.Spec.Replicas)
-	// 	mgr.cr.Spec.Replicas = replicationFactor
-	// }
+	requestedReplicas := mgr.cr.Spec.Replicas
+	if requestedReplicas < replicationFactor {
+		mgr.log.Info("Changing number of replicas as it is less than RF number of peers", "replicas", requestedReplicas)
+		// Emit event indicating scaling below RF is blocked/adjusted
+		if eventPublisher != nil {
+			eventPublisher.Warning(ctx, "ScalingBlockedRF",
+				fmt.Sprintf("Cannot scale below replication factor: %d replicas required, %d requested. Adjust replicationFactor or replicas.", replicationFactor, requestedReplicas))
+		}
+		mgr.cr.Spec.Replicas = replicationFactor
+	}
 	return nil
 }
 
@@ -1211,6 +1141,9 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 		mgr.cr.Status.MaintenanceMode = false
 		return fmt.Errorf("waiting for cluster manager to become ready")
 	}
+
+	oldInitialized := mgr.cr.Status.Initialized
+	oldIndexingReady := mgr.cr.Status.IndexingReady
 
 	// get indexer cluster info from cluster manager if it's ready
 	clusterInfo, err := GetClusterManagerInfoCall(ctx, mgr)
@@ -1250,6 +1183,39 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 	// truncate any extra peers that we didn't check (leftover from scale down)
 	if statefulSet.Status.Replicas < int32(len(mgr.cr.Status.Peers)) {
 		mgr.cr.Status.Peers = mgr.cr.Status.Peers[:statefulSet.Status.Replicas]
+	}
+
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+
+	// Emit events only on state transitions
+	if eventPublisher != nil {
+		// Compute current available peers for quorum-related events
+		var available int32
+		totalPeers := len(mgr.cr.Status.Peers)
+		for _, p := range mgr.cr.Status.Peers {
+			if p.Status == "Up" && p.Searchable {
+				available++
+			}
+		}
+
+		// Cluster just finished initializing when quorum becomes ready
+		if !oldIndexingReady && mgr.cr.Status.IndexingReady {
+			if !oldInitialized && mgr.cr.Status.Initialized {
+				eventPublisher.Normal(ctx, "ClusterInitialized",
+					fmt.Sprintf("Cluster '%s' initialized with %d peers", mgr.cr.GetName(), totalPeers))
+			}
+
+			// Cluster quorum just restored
+			eventPublisher.Normal(ctx, "ClusterQuorumRestored",
+				fmt.Sprintf("Cluster quorum restored: %d/%d peers available", available, totalPeers))
+		}
+
+		// Cluster quorum lost (transition out of indexing ready)
+		if oldIndexingReady && !mgr.cr.Status.IndexingReady {
+			eventPublisher.Warning(ctx, "ClusterQuorumLost",
+				fmt.Sprintf("Cluster quorum lost: %d/%d peers available. Investigate peer failures immediately.", available, totalPeers))
+		}
 	}
 
 	return nil
@@ -1305,23 +1271,19 @@ func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr
 
 // RetrieveCMSpec finds monitoringConsole ref from cm spec
 func RetrieveCMSpec(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (string, error) {
-	var monitoringConsoleRef string = ""
-
 	if len(cr.Spec.ClusterMasterRef.Name) > 0 && len(cr.Spec.ClusterManagerRef.Name) == 0 {
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.ClusterMasterRef.Name}
 		var cmCR enterpriseApiV3.ClusterMaster
 		err := client.Get(ctx, namespacedName, &cmCR)
 		if err == nil {
-			monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
-			return monitoringConsoleRef, err
+			return cmCR.Spec.MonitoringConsoleRef.Name, nil
 		}
 	} else if len(cr.Spec.ClusterManagerRef.Name) > 0 && len(cr.Spec.ClusterMasterRef.Name) == 0 {
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.ClusterManagerRef.Name}
 		var cmCR enterpriseApi.ClusterManager
 		err := client.Get(ctx, namespacedName, &cmCR)
 		if err == nil {
-			monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
-			return monitoringConsoleRef, err
+			return cmCR.Spec.MonitoringConsoleRef.Name, nil
 		}
 	}
 
@@ -1435,21 +1397,43 @@ func imageUpdatedTo9(previousImage string, currentImage string) bool {
 // getQueueAndObjectStorageInputsForIndexerConfFiles returns a list of queue and object storage inputs for conf files
 func getQueueAndObjectStorageInputsForIndexerConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) (inputs, outputs [][]string) {
 	queueProvider := ""
+	authRegion := ""
+	endpoint := ""
+	dlq := ""
 	if queue.Provider == "sqs" {
 		queueProvider = "sqs_smartbus"
+	} else if queue.Provider == "sqs_cp" {
+		queueProvider = "sqs_smartbus_cp"
 	}
+	if queue.Provider == "sqs" || queue.Provider == "sqs_cp" {
+		authRegion = queue.SQS.AuthRegion
+		endpoint = queue.SQS.Endpoint
+		dlq = queue.SQS.DLQ
+	}
+
+	path := ""
+	osEndpoint := ""
 	osProvider := ""
 	if os.Provider == "s3" {
-		osProvider = "sqs_smartbus"
+		if queueProvider == "sqs_smartbus" {
+			osProvider = "sqs_smartbus"
+		} else if queueProvider == "sqs_smartbus_cp" {
+			osProvider = "sqs_smartbus_cp"
+		}
+		osEndpoint = os.S3.Endpoint
+		path = os.S3.Path
+		if !strings.HasPrefix(path, "s3://") {
+			path = "s3://" + path
+		}
 	}
 
 	inputs = append(inputs,
 		[]string{"remote_queue.type", queueProvider},
-		[]string{fmt.Sprintf("remote_queue.%s.auth_region", queueProvider), queue.SQS.AuthRegion},
-		[]string{fmt.Sprintf("remote_queue.%s.endpoint", queueProvider), queue.SQS.Endpoint},
-		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", osProvider), os.S3.Endpoint},
-		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.path", osProvider), os.S3.Path},
-		[]string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", queueProvider), queue.SQS.DLQ},
+		[]string{fmt.Sprintf("remote_queue.%s.auth_region", queueProvider), authRegion},
+		[]string{fmt.Sprintf("remote_queue.%s.endpoint", queueProvider), endpoint},
+		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", osProvider), osEndpoint},
+		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.path", osProvider), path},
+		[]string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", queueProvider), dlq},
 		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", queueProvider), "4"},
 		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", queueProvider), "max_count"},
 	)
@@ -1468,131 +1452,3 @@ func getQueueAndObjectStorageInputsForIndexerConfFiles(queue *enterpriseApi.Queu
 
 	return inputs, outputs
 }
-
-// ============================================================================
-// Rolling Restart Functions for IndexerCluster
-// ============================================================================
-
-// NOTE: restart_required detection removed for IndexerCluster
-// Cluster Manager (CM) handles restart coordination for indexers
-// Operator only triggers restarts for secret changes via StatefulSet annotation updates
-
-// triggerIndexerRollingRestart triggers a rolling restart by updating the StatefulSet pod template annotation
-func triggerIndexerRollingRestart(
-	ctx context.Context,
-	c rclient.Client,
-	cr *enterpriseApi.IndexerCluster,
-	reason string,
-) error {
-	scopedLog := log.FromContext(ctx).WithName("triggerIndexerRollingRestart")
-
-	// Get current StatefulSet
-	statefulSetName := fmt.Sprintf("splunk-%s-indexer", cr.Name)
-	statefulSet := &appsv1.StatefulSet{}
-	err := c.Get(ctx, types.NamespacedName{
-		Name:      statefulSetName,
-		Namespace: cr.Namespace,
-	}, statefulSet)
-	if err != nil {
-		return fmt.Errorf("failed to get StatefulSet: %w", err)
-	}
-
-	// Update pod template with restart annotation
-	if statefulSet.Spec.Template.Annotations == nil {
-		statefulSet.Spec.Template.Annotations = make(map[string]string)
-	}
-
-	now := time.Now().Format(time.RFC3339)
-	statefulSet.Spec.Template.Annotations["splunk.com/restartedAt"] = now
-	statefulSet.Spec.Template.Annotations["splunk.com/restartReason"] = reason
-
-	scopedLog.Info("Triggering rolling restart via StatefulSet update",
-		"reason", reason,
-		"timestamp", now,
-		"replicas", *statefulSet.Spec.Replicas)
-
-	// Update StatefulSet - Kubernetes handles rolling restart automatically
-	err = c.Update(ctx, statefulSet)
-	if err != nil {
-		return fmt.Errorf("failed to update StatefulSet: %w", err)
-	}
-
-	scopedLog.Info("Successfully triggered rolling restart")
-	return nil
-}
-
-// monitorIndexerRollingRestartProgress monitors the progress of an ongoing rolling restart
-func monitorIndexerRollingRestartProgress(
-	ctx context.Context,
-	c rclient.Client,
-	cr *enterpriseApi.IndexerCluster,
-) (reconcile.Result, error) {
-	scopedLog := log.FromContext(ctx).WithName("monitorIndexerRollingRestartProgress")
-
-	// Get current StatefulSet
-	statefulSetName := fmt.Sprintf("splunk-%s-indexer", cr.Name)
-	statefulSet := &appsv1.StatefulSet{}
-	err := c.Get(ctx, types.NamespacedName{
-		Name:      statefulSetName,
-		Namespace: cr.Namespace,
-	}, statefulSet)
-	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("failed to get StatefulSet: %w", err)
-	}
-
-	// Check if rolling restart is complete
-	// Complete when: currentRevision == updateRevision AND all replicas updated and ready
-	if statefulSet.Status.CurrentRevision == statefulSet.Status.UpdateRevision &&
-		statefulSet.Status.UpdatedReplicas == statefulSet.Status.Replicas &&
-		statefulSet.Status.ReadyReplicas == statefulSet.Status.Replicas {
-
-		scopedLog.Info("Rolling restart completed successfully",
-			"revision", statefulSet.Status.CurrentRevision,
-			"replicas", statefulSet.Status.Replicas)
-
-		now := metav1.Now()
-		cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseCompleted
-		cr.Status.RestartStatus.LastRestartTime = &now
-		cr.Status.RestartStatus.Message = fmt.Sprintf(
-			"Rolling restart completed successfully at %s. All %d pods restarted.",
-			now.Format(time.RFC3339),
-			statefulSet.Status.Replicas)
-
-		return reconcile.Result{}, nil
-	}
-
-	// Still in progress - update status with current progress
-	cr.Status.RestartStatus.Message = fmt.Sprintf(
-		"Rolling restart in progress: %d/%d pods updated, %d/%d ready",
-		statefulSet.Status.UpdatedReplicas,
-		statefulSet.Status.Replicas,
-		statefulSet.Status.ReadyReplicas,
-		statefulSet.Status.Replicas)
-
-	scopedLog.Info("Rolling restart in progress",
-		"updated", statefulSet.Status.UpdatedReplicas,
-		"ready", statefulSet.Status.ReadyReplicas,
-		"target", statefulSet.Status.Replicas,
-		"currentRevision", statefulSet.Status.CurrentRevision,
-		"updateRevision", statefulSet.Status.UpdateRevision)
-
-	// Check again in 30 seconds
-	return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
-}
-
-// handleIndexerClusterRollingRestart uses per-pod eviction like IngestorCluster
-// Changed from consensus-based to individual pod eviction for better responsiveness
-func handleIndexerClusterRollingRestart(
-	ctx context.Context,
-	c rclient.Client,
-	cr *enterpriseApi.IndexerCluster,
-) (reconcile.Result, error) {
-	// IndexerCluster restart orchestration is handled by Cluster Manager (CM)
-	// Operator only handles finalizer cleanup during scale-down/restart
-	// StatefulSet rolling updates will trigger pod restarts naturally
-	return reconcile.Result{}, nil
-}
-
-// NOTE: IndexerCluster restart orchestration removed
-// Cluster Manager (CM) handles restart coordination for indexers
-// Operator only manages finalizers for scale-down/restart cleanup

@@ -1,18 +1,16 @@
-/*
-Copyright 2025.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package v4
 
@@ -36,6 +34,8 @@ type IngestorClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// Number of ingestor pods
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=1
 	Replicas int32 `json:"replicas"`
 
 	// Splunk Enterprise app repository that specifies remote app location and scope for Splunk app management
@@ -81,6 +81,12 @@ type IngestorClusterStatus struct {
 
 	// Rolling restart status
 	RestartStatus RestartStatus `json:"restartStatus,omitempty"`
+
+	// Credential secret version to track changes to the secret and trigger rolling restart of indexer cluster peers when the secret is updated
+	CredentialSecretVersion string `json:"credentialSecretVersion,omitempty"`
+
+	// Service account to track changes to the service account and trigger rolling restart of indexer cluster peers when the service account is updated
+	ServiceAccount string `json:"serviceAccount,omitempty"`
 }
 
 // RestartStatus tracks the state of rolling restart operations
@@ -130,6 +136,7 @@ const (
 	// RestartPhaseFailed indicates restart operation failed
 	RestartPhaseFailed RestartPhase = "Failed"
 )
+
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

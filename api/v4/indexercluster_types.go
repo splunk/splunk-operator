@@ -49,7 +49,7 @@ type IndexerClusterSpec struct {
 	// Object Storage reference
 	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
 
-	// Number of search head pods; a search head cluster will be created if > 1
+	// Number of indexer cluster peers
 	Replicas int32 `json:"replicas"`
 }
 
@@ -120,7 +120,7 @@ type IndexerClusterStatus struct {
 	// status of each indexer cluster peer
 	Peers []IndexerClusterMemberStatus `json:"peers"`
 
-	// Auxillary message describing CR status
+	// Auxiliary message describing CR status
 	Message string `json:"message"`
 
 	// Queue and bucket access secret version
@@ -128,6 +128,12 @@ type IndexerClusterStatus struct {
 
 	// Rolling restart status
 	RestartStatus RestartStatus `json:"restartStatus,omitempty"`
+
+	// Credential secret version to track changes to the secret and trigger rolling restart of indexer cluster peers when the secret is updated
+	CredentialSecretVersion string `json:"credentialSecretVersion,omitempty"`
+
+	// Service account to track changes to the service account and trigger rolling restart of indexer cluster peers when the service account is updated
+	ServiceAccount string `json:"serviceAccount,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -143,7 +149,7 @@ type IndexerClusterStatus struct {
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of indexer peers"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready indexer peers"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of indexer cluster"
-// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
+// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxiliary message describing CR status"
 // +kubebuilder:storageversion
 type IndexerCluster struct {
 	metav1.TypeMeta   `json:",inline"`

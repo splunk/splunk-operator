@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.16.1
+    controller-gen.kubebuilder.io/version: v0.18.0
   name: queues.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
@@ -58,6 +58,7 @@ spec:
                 description: Provider of queue resources
                 enum:
                 - sqs
+                - sqs_cp
                 type: string
               sqs:
                 description: sqs specific inputs
@@ -85,21 +86,28 @@ spec:
                       properties:
                         endpoint:
                           description: Remote volume URI
+                          minLength: 1
                           type: string
                         name:
                           description: Remote volume name
+                          minLength: 1
                           type: string
                         path:
                           description: Remote volume path
+                          minLength: 1
                           type: string
                         provider:
                           description: 'App Package Remote Store provider. Supported
                             values: aws, minio, azure, gcp.'
+                          enum:
+                          - aws
+                          - minio
+                          - azure
+                          - gcp
                           type: string
                         region:
                           description: Region of the remote storage volume where apps
-                            reside. Used for aws, if provided. Not used for minio
-                            and azure.
+                            reside. Required for aws, optional for azure and gcp.
                           type: string
                         secretRef:
                           description: Secret object name
@@ -108,8 +116,19 @@ spec:
                           description: 'Remote Storage type. Supported values: s3,
                             blob, gcs. s3 works with aws or minio providers, whereas
                             blob works with azure provider, gcs works for gcp.'
+                          enum:
+                          - s3
+                          - blob
+                          - gcs
                           type: string
+                      required:
+                      - endpoint
+                      - name
+                      - path
                       type: object
+                      x-kubernetes-validations:
+                      - message: region is required when provider is aws
+                        rule: self.provider != 'aws' || size(self.region) > 0
                     type: array
                 required:
                 - dlq
@@ -130,8 +149,8 @@ spec:
               rule: self.sqs.dlq == oldSelf.sqs.dlq
             - message: sqs.endpoint is immutable once created
               rule: self.sqs.endpoint == oldSelf.sqs.endpoint
-            - message: sqs must be provided when provider is sqs
-              rule: self.provider != 'sqs' || has(self.sqs)
+            - message: sqs must be provided when provider is sqs or sqs_cp
+              rule: (self.provider != 'sqs' && self.provider != 'sqs_cp') || has(self.sqs)
           status:
             description: QueueStatus defines the observed state of Queue
             properties:
@@ -159,8 +178,4 @@ spec:
     served: true
     storage: true
     subresources:
-      scale:
-        labelSelectorPath: .status.selector
-        specReplicasPath: .spec.replicas
-        statusReplicasPath: .status.replicas
       status: {}

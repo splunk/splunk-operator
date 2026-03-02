@@ -27,6 +27,7 @@ import (
 
 	"github.com/pkg/errors"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/stretchr/testify/assert"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -60,6 +62,7 @@ func TestApplyLicenseManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-license-manager-secret-v1"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-license-manager-0"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
 		{MetaName: "*v4.LicenseManager-test-stack1"},
 		{MetaName: "*v4.LicenseManager-test-stack1"},
@@ -77,7 +80,7 @@ func TestApplyLicenseManager(t *testing.T) {
 		{ListOpts: listOpts},
 	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[6], funcCalls[10], funcCalls[11]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[11], funcCalls[13], funcCalls[13]}
+	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[13], funcCalls[13], funcCalls[14], funcCalls[15]}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[5]}, "List": {listmockCall[0]}}
 	current := enterpriseApi.LicenseManager{
 		TypeMeta: metav1.TypeMeta{
@@ -839,24 +842,53 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	mclient.AddHandler(wantRequest2, 200, string(response2), nil)
 
 	// mock the verify RF peer funciton
+	savedVerifyRFPeers := VerifyRFPeers
+	defer func() { VerifyRFPeers = savedVerifyRFPeers }()
 	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
 		return nil
 	}
 
 	// Mock the addTelApp function for unit tests
+	savedAddTelApp := addTelApp
+	defer func() { addTelApp = savedAddTelApp }()
 	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
 		return nil
 	}
+
+	// Initialize GlobalResourceTracker to enable app framework
+	initGlobalResourceTracker()
 
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
 	_ = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
+	savedGetAppsList := GetAppsList
+	defer func() { GetAppsList = savedGetAppsList }()
 	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
 		RemoteDataListResponse := splclient.RemoteDataListResponse{}
 		return RemoteDataListResponse, nil
 	}
+
+	// Mock GetPodExecClient to return a mock client that simulates pod operations locally
+	savedGetPodExecClient := splutil.GetPodExecClient
+	splutil.GetPodExecClient = func(client splcommon.ControllerClient, cr splcommon.MetaObject, targetPodName string) splutil.PodExecClientImpl {
+		mockClient := &spltest.MockPodExecClient{
+			Client:        client,
+			Cr:            cr,
+			TargetPodName: targetPodName,
+		}
+		// Add mock responses for common commands
+		ctx := context.TODO()
+		// Mock mkdir command (used by createDirOnSplunkPods)
+		mockClient.AddMockPodExecReturnContext(ctx, "mkdir -p", &spltest.MockPodExecReturnContext{
+			StdOut: "",
+			StdErr: "",
+			Err:    nil,
+		})
+		return mockClient
+	}
+	defer func() { splutil.GetPodExecClient = savedGetPodExecClient }()
 
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
@@ -1201,7 +1233,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermanager)
+	_, err = ApplyClusterManager(ctx, c, clustermanager, nil)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
@@ -1275,7 +1307,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermanager)
+	_, err = ApplyClusterManager(ctx, c, clustermanager, nil)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
@@ -1325,5 +1357,219 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for license manager with app framework  %v", err)
 		debug.PrintStack()
+	}
+}
+
+func TestCheckLicenseRelatedPodFailures(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	type testCase struct {
+		name           string
+		createPod      bool
+		podPhase       corev1.PodPhase
+		createSecret   bool
+		password       string
+		mockHTTPBody   string
+		mockHTTPStatus int
+		mockHTTPErr    error
+		expectEvent    bool
+		expectedReason string
+		expectError    bool
+	}
+
+	// Build mock API response with an expired license
+	expiredLicenseResponse := splclient.LicenseResponse{
+		Entry: []struct {
+			Name    string                `json:"name"`
+			Content splclient.LicenseInfo `json:"content"`
+		}{
+			{
+				Name: "enterprise-eval",
+				Content: splclient.LicenseInfo{
+					Title:          "Splunk Enterprise Evaluation",
+					Status:         "EXPIRED",
+					ExpirationTime: 1609459200,
+				},
+			},
+		},
+	}
+	expiredBody, _ := json.Marshal(expiredLicenseResponse)
+
+	// Build mock API response with a valid license
+	validLicenseResponse := splclient.LicenseResponse{
+		Entry: []struct {
+			Name    string                `json:"name"`
+			Content splclient.LicenseInfo `json:"content"`
+		}{
+			{
+				Name: "enterprise",
+				Content: splclient.LicenseInfo{
+					Title:          "Splunk Enterprise",
+					Status:         "VALID",
+					ExpirationTime: 1893456000,
+				},
+			},
+		},
+	}
+	validBody, _ := json.Marshal(validLicenseResponse)
+
+	tests := []testCase{
+		{
+			name:        "Pod does not exist",
+			createPod:   false,
+			expectEvent: false,
+		},
+		{
+			name:        "Pod not in running state",
+			createPod:   true,
+			podPhase:    corev1.PodPending,
+			expectEvent: false,
+		},
+		{
+			name:         "Pod running but no secret",
+			createPod:    true,
+			podPhase:     corev1.PodRunning,
+			createSecret: false,
+			expectEvent:  false,
+			expectError:  true,
+		},
+		{
+			name:         "Pod running with empty password",
+			createPod:    true,
+			podPhase:     corev1.PodRunning,
+			createSecret: true,
+			password:     "",
+			expectEvent:  false,
+			expectError:  true,
+		},
+		{
+			name:           "API call fails gracefully",
+			createPod:      true,
+			podPhase:       corev1.PodRunning,
+			createSecret:   true,
+			password:       "testpassword",
+			mockHTTPStatus: 500,
+			mockHTTPBody:   `{"error": "internal server error"}`,
+			mockHTTPErr:    nil,
+			expectEvent:    false,
+			expectError:    false,
+		},
+		{
+			name:           "Expired license emits LicenseExpired event",
+			createPod:      true,
+			podPhase:       corev1.PodRunning,
+			createSecret:   true,
+			password:       "testpassword",
+			mockHTTPStatus: 200,
+			mockHTTPBody:   string(expiredBody),
+			expectEvent:    true,
+			expectedReason: "LicenseExpired",
+		},
+		{
+			name:           "Valid license emits no event",
+			createPod:      true,
+			podPhase:       corev1.PodRunning,
+			createSecret:   true,
+			password:       "testpassword",
+			mockHTTPStatus: 200,
+			mockHTTPBody:   string(validBody),
+			expectEvent:    false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			lm := enterpriseApi.LicenseManager{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+				},
+				Spec: enterpriseApi.LicenseManagerSpec{
+					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+						Mock: true,
+					},
+				},
+			}
+
+			c := spltest.NewMockClient()
+			fakeRecorder := record.NewFakeRecorder(10)
+			eventPublisher := &K8EventPublisher{recorder: fakeRecorder, instance: &lm}
+			ctx := context.WithValue(context.TODO(), splcommon.EventPublisherKey, eventPublisher)
+
+			statefulSet := &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "splunk-test-license-manager",
+					Namespace: "test",
+				},
+			}
+
+			if tc.createPod {
+				pod := &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "splunk-test-license-manager-0",
+						Namespace: "test",
+					},
+					Status: corev1.PodStatus{
+						Phase: tc.podPhase,
+					},
+				}
+				c.Create(ctx, pod)
+			}
+
+			if tc.createSecret {
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "splunk-test-secret",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"password": []byte(tc.password),
+					},
+				}
+				c.Create(ctx, secret)
+			}
+
+			// Override newSplunkClientFunc to inject mock HTTP client when API call is expected
+			if tc.password != "" && tc.createSecret {
+				mockHTTPClient := &spltest.MockHTTPClient{}
+				wantRequest, _ := http.NewRequest("GET",
+					"https://splunk-test-license-manager-0.splunk-test-license-manager-headless.test.svc.cluster.local:8089/services/licenser/licenses?output_mode=json", nil)
+				mockHTTPClient.AddHandler(wantRequest, tc.mockHTTPStatus, tc.mockHTTPBody, tc.mockHTTPErr)
+
+				origFunc := newSplunkClientFunc
+				newSplunkClientFunc = func(managementURI, username, password string) *splclient.SplunkClient {
+					client := splclient.NewSplunkClient(managementURI, username, password)
+					client.Client = mockHTTPClient
+					return client
+				}
+				defer func() { newSplunkClientFunc = origFunc }()
+			}
+
+			err := checkLicenseRelatedPodFailures(ctx, c, &lm, statefulSet)
+
+			if tc.expectError {
+				assert.Error(t, err, "Expected an error but got none")
+			} else {
+				assert.NoError(t, err, "Expected no error but got one")
+			}
+
+			// Check events from the fake recorder
+			if tc.expectEvent {
+				select {
+				case event := <-fakeRecorder.Events:
+					assert.Contains(t, event, tc.expectedReason, "Event reason mismatch")
+					assert.Contains(t, event, "Warning", "Event type mismatch")
+				default:
+					t.Errorf("Expected %s event to be published, but none were", tc.expectedReason)
+				}
+			} else {
+				select {
+				case event := <-fakeRecorder.Events:
+					t.Errorf("Expected no events, but got: %s", event)
+				default:
+					// No events, as expected
+				}
+			}
+		})
 	}
 }
