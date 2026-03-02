@@ -3,8 +3,6 @@ permissions:
   contents: read
   actions: read
 on:
-  push:
-    branches: [CSPL-3763-add-flay-test-analysis-tool] # TODO: remove before merging
   workflow_dispatch:
     inputs:
       start_date:
@@ -75,14 +73,6 @@ jobs:
               done
             fi
 
-            echo ""
-
-            for img in *_flip_rate_*.png; do
-              [[ -f "$img" ]] || continue
-              echo "### ${img%.png}"
-              echo "<img src=\"data:image/png;base64,$(base64 -w0 "$img")\" alt=\"${img}\" />"
-              echo ""
-            done
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload results
