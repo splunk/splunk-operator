@@ -601,12 +601,23 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			// Wait for apps to reach Install phase before verification
+			// Wait for apps to reach Install phase before verification (local scope only)
+			// Cluster-scoped apps reach PhaseInstall only after bundle push completes;
+			// their phase is validated after AppFrameWorkVerifications below.
 			for _, appSource := range allAppSourceInfo {
-				err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, testenv.AppInstallTimeout)
-				Expect(err).To(Succeed(), "Timed out waiting for apps to reach Install phase on %s", appSource.CrName)
+				if appSource.CrAppScope != enterpriseApi.ScopeCluster {
+					err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, testenv.AppInstallTimeout)
+					Expect(err).To(Succeed(), "Timed out waiting for apps to reach Install phase on %s", appSource.CrName)
+				}
 			}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			// Validate cluster-scoped apps also reached Install phase (bundle push already done by AppFrameWorkVerifications)
+			for _, appSource := range allAppSourceInfo {
+				if appSource.CrAppScope == enterpriseApi.ScopeCluster {
+					err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, testenv.AppInstallTimeout)
+					Expect(err).To(Succeed(), "Timed out waiting for cluster-scoped apps to reach Install phase on %s", appSource.CrName)
+				}
+			}
 
 			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
@@ -1092,7 +1103,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration,managerappframeworkazurec3, appframeworkazure, azure_sanity: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", func() {
+		It("c3, integration,managerappframeworkazurec3, appframeworkazure, azure_sanity: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1227,7 +1238,23 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListLocal, CrAppFileList: localappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListCluster, CrAppFileList: clusterappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
+			// Wait for apps to reach Install phase before verification (local scope only)
+			// Cluster-scoped apps reach PhaseInstall only after bundle push completes;
+			// their phase is validated after AppFrameWorkVerifications below.
+			for _, appSource := range allAppSourceInfo {
+				if appSource.CrAppScope != enterpriseApi.ScopeCluster {
+					err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, testenv.AppInstallTimeout)
+					Expect(err).To(Succeed(), "Timed out waiting for apps to reach Install phase on %s", appSource.CrName)
+				}
+			}
 			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			// Validate cluster-scoped apps also reached Install phase (bundle push already done by AppFrameWorkVerifications)
+			for _, appSource := range allAppSourceInfo {
+				if appSource.CrAppScope == enterpriseApi.ScopeCluster {
+					err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, testenv.AppInstallTimeout)
+					Expect(err).To(Succeed(), "Timed out waiting for cluster-scoped apps to reach Install phase on %s", appSource.CrName)
+				}
+			}
 
 			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
