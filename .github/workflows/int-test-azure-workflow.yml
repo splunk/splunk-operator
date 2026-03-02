@@ -2,6 +2,7 @@ name: Integration Test on Azure WorkFlow
 permissions:
   contents: read
   packages: write
+  checks: write
   pull-requests: write
 on:
   push:
@@ -22,7 +23,7 @@ jobs:
     - uses: actions/checkout@v2
     - name: Dotenv Action
       id: dotenv
-      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      uses: falti/dotenv-action@v1
     - name: Setup Go
       uses: actions/setup-go@v2
       with:
@@ -69,7 +70,7 @@ jobs:
       uses: actions/checkout@v2
     - name: Dotenv Action
       id: dotenv
-      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      uses: falti/dotenv-action@v1
     - name: Set Cluster Name
       run: |
         echo "TEST_CLUSTER_NAME=az${{ github.run_id }}" >> $GITHUB_ENV
@@ -144,7 +145,7 @@ jobs:
         uses: actions/checkout@v2
       - name: Dotenv Action
         id: dotenv
-        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+        uses: falti/dotenv-action@v1
       - name: Change splunk enterprise to release image on main branches
         if: github.ref == 'refs/heads/main'
         run: |
@@ -173,7 +174,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2.5.0
       - name: Configure Docker Hub credentials
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN}}
@@ -224,6 +225,8 @@ jobs:
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run Integration test
         timeout-minutes: 240
+        env:
+          TEST_TIMEOUT: 225m
         run: |
             make int-test
       - name: Collect Test Logs
@@ -233,10 +236,23 @@ jobs:
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
       - name: Archive Pod Logs
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4.4.0
+        uses: actions/upload-artifact@v6
         with:
           name: "splunk-pods-logs--artifacts-appframeworkazure"
           path: "/tmp/pod_logs/**"
+      - name: Upload Integration Test Results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: "test-report-integration-azure"
+          path: report-junit*.xml
+      - name: Publish Integration Test Report
+        uses: mikepenz/action-junit-report@v6
+        if: always()
+        with:
+          report_paths: 'report-junit*.xml'
+          check_name: 'Integration Test Results (Azure)'
+          detailed_summary: true
       - name: Cleanup Test Case artifacts
         if: ${{ always() }}
         run: |
