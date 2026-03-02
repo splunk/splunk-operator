@@ -34,6 +34,7 @@ import (
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logs "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -41,6 +42,12 @@ import (
 type PostgresClusterReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+}
+
+// Used for applying changes both from PostgresCluster and PostgresClusterClass.
+type MergedConfig struct {
+	Spec *enterprisev4.PostgresClusterSpec
+	CNPG *enterprisev4.CNPGConfig
 }
 
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters,verbs=get;list;watch;create;update;patch;delete
@@ -74,6 +81,35 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// helper function to update status with less boilerplate.
 	updateStatus := func(conditionType conditionTypes, status metav1.ConditionStatus, reason conditionReasons, message string, clusterPhase reconcileClusterPhases) error {
 		return (r.updateStatus(ctx, postgresCluster, conditionType, status, reason, message, clusterPhase))
+	}
+
+	// finalizer handling must be done before any other processing, to ensure cleanup on deletion and to prevent creating CNPG clusters for PostgresCluster instances that are being deleted.
+	finalizerErr := r.handleFinalizer(ctx, postgresCluster)
+	if finalizerErr != nil {
+		logger.Error(finalizerErr, "Failed to handle finalizer")
+		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterDeleteFailed, fmt.Sprintf("Failed to delete resources during cleanup: %v", finalizerErr), failedClusterPhase); statusErr != nil {
+			logger.Error(statusErr, "Failed to update status")
+		}
+		return ctrl.Result{}, finalizerErr
+	}
+	if postgresCluster.GetDeletionTimestamp() != nil {
+		logger.Info("PostgresCluster is being deleted, cleanup complete")
+		return ctrl.Result{}, nil
+	}
+
+	// Add finalizer if not present
+	if !controllerutil.ContainsFinalizer(postgresCluster, postgresClusterFinalizerName) {
+		controllerutil.AddFinalizer(postgresCluster, postgresClusterFinalizerName)
+		if err := r.Update(ctx, postgresCluster); err != nil {
+			if apierrors.IsConflict(err) {
+				logger.Info("Conflict while adding finalizer, will retry on next reconcile")
+				return ctrl.Result{Requeue: true}, nil
+			}
+			logger.Error(err, "Failed to add finalizer to PostgresCluster")
+			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
+		}
+		logger.Info("Finalizer added successfully")
+		return ctrl.Result{}, nil
 	}
 
 	// 2. Load the referenced PostgresClusterClass.
@@ -170,8 +206,8 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// 7. If CNPG Cluster exists, compare the current spec with the desired spec and update if necessary.
 	cnpgCluster = existingCNPG
-	currentNormalizedSpec := normalizeCNPGClusterSpec(cnpgCluster.Spec, mergedConfig.PostgreSQLConfig)
-	desiredNormalizedSpec := normalizeCNPGClusterSpec(desiredSpec, mergedConfig.PostgreSQLConfig)
+	currentNormalizedSpec := normalizeCNPGClusterSpec(cnpgCluster.Spec, mergedConfig.Spec.PostgreSQLConfig)
+	desiredNormalizedSpec := normalizeCNPGClusterSpec(desiredSpec, mergedConfig.Spec.PostgreSQLConfig)
 
 	if !equality.Semantic.DeepEqual(currentNormalizedSpec, desiredNormalizedSpec) {
 		logger.Info("Detected drift in CNPG Cluster spec, patching", "name", cnpgCluster.Name)
@@ -206,7 +242,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// 7b. Reconcile Connection Pooler
-	poolerEnabled = mergedConfig.ConnectionPoolerEnabled != nil && *mergedConfig.ConnectionPoolerEnabled
+	poolerEnabled = mergedConfig.Spec.ConnectionPoolerEnabled != nil && *mergedConfig.Spec.ConnectionPoolerEnabled
 	switch {
 	case !poolerEnabled:
 		// Pooler disabled — delete if they exist
@@ -221,7 +257,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		meta.RemoveStatusCondition(&postgresCluster.Status.Conditions, string(poolerReady))
 
 	case !r.poolerExists(ctx, postgresCluster, readWriteEndpoint) || !r.poolerExists(ctx, postgresCluster, readOnlyEndpoint):
-		if mergedConfig.ConnectionPoolerConfig == nil {
+		if mergedConfig.CNPG.ConnectionPooler == nil {
 			logger.Info("Connection pooler enabled but no config found in class or cluster spec, skipping",
 				"class", postgresCluster.Spec.Class,
 				"cluster", postgresCluster.Name,
@@ -237,7 +273,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		if cnpgCluster.Status.Phase != cnpgv1.PhaseHealthy {
-			logger.Info("CNPG Cluster not healthy yet, skipping pooler creation", "clusterPhase", cnpgCluster.Status.Phase)
+			logger.Info("CNPG Cluster not healthy yet, pending pooler creation", "clusterPhase", cnpgCluster.Status.Phase)
 			if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonCNPGClusterNotHealthy,
 				"Waiting for CNPG cluster to become healthy before creating poolers", pendingClusterPhase,
 			); statusErr != nil {
@@ -336,10 +372,9 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 // getMergedConfig merges the configuration from the PostgresClusterClass into the PostgresClusterSpec, giving precedence to the PostgresClusterSpec values.
-func (r *PostgresClusterReconciler) getMergedConfig(clusterClass *enterprisev4.PostgresClusterClass, cluster *enterprisev4.PostgresCluster) (*enterprisev4.PostgresClusterSpec, error) {
+func (r *PostgresClusterReconciler) getMergedConfig(clusterClass *enterprisev4.PostgresClusterClass, cluster *enterprisev4.PostgresCluster) (*MergedConfig, error) {
 	resultConfig := cluster.Spec.DeepCopy()
 	classDefaults := clusterClass.Spec.Config
-	CNPGDefaults := clusterClass.Spec.CNPG
 
 	if resultConfig.Instances == nil {
 		resultConfig.Instances = classDefaults.Instances
@@ -364,46 +399,34 @@ func (r *PostgresClusterReconciler) getMergedConfig(clusterClass *enterprisev4.P
 		return nil, fmt.Errorf("invalid configuration for class %s: instances, postgresVersion and storage are required", clusterClass.Name)
 	}
 
-	// Ensure that maps and slices are initialized to empty if they are still nil after merging, to prevent potential nil pointer dereferences later on.
 	if resultConfig.PostgreSQLConfig == nil {
 		resultConfig.PostgreSQLConfig = make(map[string]string)
 	}
 	if resultConfig.PgHBA == nil {
 		resultConfig.PgHBA = make([]string, 0)
 	}
-	// Ensure that Resources is initialized to an empty struct if it's still nil after merging, to prevent potential nil pointer dereferences later on.
 	if resultConfig.Resources == nil {
 		resultConfig.Resources = &corev1.ResourceRequirements{}
 	}
-	// Check if connection pooler is enabled and set the field accordingly, giving precedence to the cluster spec over class defaults.
-	if cluster.Spec.ConnectionPoolerEnabled != nil {
-		resultConfig.ConnectionPoolerEnabled = cluster.Spec.ConnectionPoolerEnabled
-	} else if classDefaults.ConnectionPoolerEnabled != nil {
-		resultConfig.ConnectionPoolerEnabled = classDefaults.ConnectionPoolerEnabled
-	}
 
-	// Merge ConnectionPooler config: cluster spec takes precedence over class
-	if cluster.Spec.ConnectionPoolerConfig != nil {
-		resultConfig.ConnectionPoolerConfig = cluster.Spec.ConnectionPoolerConfig
-	} else if CNPGDefaults != nil && CNPGDefaults.ConnectionPooler != nil {
-		resultConfig.ConnectionPoolerConfig = CNPGDefaults.ConnectionPooler
-	}
-
-	return resultConfig, nil
+	return &MergedConfig{
+		Spec: resultConfig,
+		CNPG: clusterClass.Spec.CNPG, 
+	}, nil
 }
 
 // buildCNPGClusterSpec builds the desired CNPG ClusterSpec.
 // IMPORTANT: any field added here must also be added to normalizedCNPGClusterSpec and normalizeCNPGClusterSpec,
 // otherwise it will not be included in drift detection and changes will be silently ignored.
-func (r *PostgresClusterReconciler) buildCNPGClusterSpec(mergedConfig *enterprisev4.PostgresClusterSpec, secretName string) cnpgv1.ClusterSpec {
+func (r *PostgresClusterReconciler) buildCNPGClusterSpec(mergedConfig *MergedConfig, secretName string) cnpgv1.ClusterSpec {
 
 	// 3. Build the Spec
 	spec := cnpgv1.ClusterSpec{
-		ImageName: fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", *mergedConfig.PostgresVersion),
-		Instances: int(*mergedConfig.Instances),
+		ImageName: fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", *mergedConfig.Spec.PostgresVersion),
+		Instances: int(*mergedConfig.Spec.Instances),
 		PostgresConfiguration: cnpgv1.PostgresConfiguration{
-			Parameters: mergedConfig.PostgreSQLConfig,
-			PgHBA:      mergedConfig.PgHBA,
+			Parameters: mergedConfig.Spec.PostgreSQLConfig,
+			PgHBA:      mergedConfig.Spec.PgHBA,
 		},
 		SuperuserSecret: &cnpgv1.LocalObjectReference{
 			Name: secretName,
@@ -420,9 +443,9 @@ func (r *PostgresClusterReconciler) buildCNPGClusterSpec(mergedConfig *enterpris
 			},
 		},
 		StorageConfiguration: cnpgv1.StorageConfiguration{
-			Size: mergedConfig.Storage.String(),
+			Size: mergedConfig.Spec.Storage.String(),
 		},
-		Resources: *mergedConfig.Resources,
+		Resources: *mergedConfig.Spec.Resources,
 	}
 
 	return spec
@@ -431,7 +454,7 @@ func (r *PostgresClusterReconciler) buildCNPGClusterSpec(mergedConfig *enterpris
 // build CNPGCluster builds the CNPG Cluster object based on the PostgresCluster resource and merged configuration.
 func (r *PostgresClusterReconciler) buildCNPGCluster(
 	postgresCluster *enterprisev4.PostgresCluster,
-	mergedConfig *enterprisev4.PostgresClusterSpec,
+	mergedConfig *MergedConfig,
 	secretName string,
 ) *cnpgv1.Cluster {
 	cnpgCluster := &cnpgv1.Cluster{
@@ -454,7 +477,7 @@ func poolerResourceName(clusterName, poolerType string) string {
 func (r *PostgresClusterReconciler) createOrUpdateConnectionPooler(
 	ctx context.Context,
 	postgresCluster *enterprisev4.PostgresCluster,
-	mergedConfig *enterprisev4.PostgresClusterSpec,
+	mergedConfig *MergedConfig,
 	cnpgCluster *cnpgv1.Cluster,
 ) error {
 	// Create/Update RW Pooler
@@ -522,7 +545,7 @@ func (r *PostgresClusterReconciler) deleteConnectionPoolers(ctx context.Context,
 func (r *PostgresClusterReconciler) createConnectionPooler(
 	ctx context.Context,
 	postgresCluster *enterprisev4.PostgresCluster,
-	mergedConfig *enterprisev4.PostgresClusterSpec,
+	mergedConfig *MergedConfig,
 	cnpgCluster *cnpgv1.Cluster,
 	poolerType string,
 ) error {
@@ -547,11 +570,11 @@ func (r *PostgresClusterReconciler) createConnectionPooler(
 // buildCNPGPooler constructs a CNPG Pooler object.
 func (r *PostgresClusterReconciler) buildCNPGPooler(
 	postgresCluster *enterprisev4.PostgresCluster,
-	mergedConfig *enterprisev4.PostgresClusterSpec,
+	mergedConfig *MergedConfig,
 	cnpgCluster *cnpgv1.Cluster,
 	poolerType string,
 ) *cnpgv1.Pooler {
-	cfg := mergedConfig.ConnectionPoolerConfig
+	cfg := mergedConfig.CNPG.ConnectionPooler
 	poolerName := poolerResourceName(postgresCluster.Name, poolerType)
 
 	instances := *cfg.Instances
@@ -864,6 +887,8 @@ func (r *PostgresClusterReconciler) reconcileManagedRoles(ctx context.Context, p
 	return nil
 }
 
+// normalizedCNPGClusterSpec is a subset of cnpgv1.ClusterSpec fields that we care about for drift detection.
+// Any field that is included in buildCNPGClusterSpec and should be considered for drift detection must be added here, and populated in normalizeCNPGClusterSpec.
 func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec, customDefinedParameters map[string]string) normalizedCNPGClusterSpec {
 	normalizedConf := normalizedCNPGClusterSpec{
 		ImageName: spec.ImageName,
@@ -997,6 +1022,89 @@ func generateRandomSuffix() (string, error) {
 		return "", err
 	}
 	return strings.ToLower(suff), nil
+}
+
+// deleteCNPGCluster deletes the CNPG cluster and its associated resources if they exist.
+func (r *PostgresClusterReconciler) deleteCNPGCluster(ctx context.Context, cnpgCluster *cnpgv1.Cluster) error {
+	logger := logs.FromContext(ctx)
+	// TODO: add logic to decide to delete cluster if one has customer DBs configured, to prevent data loss
+	if cnpgCluster == nil {
+		logger.Info("CNPG Cluster not found, skipping deletion")
+		return nil
+	}
+	logger.Info("Deleting CNPG Cluster", "name", cnpgCluster.Name)
+	if err := r.Delete(ctx, cnpgCluster); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete CNPG Cluster: %w", err)
+	}
+	return nil
+}
+
+// Adding finalizer logic here to ensure poolers and other resources are cleaned up when PostgresCluster is deleted.
+
+func (r *PostgresClusterReconciler) handleFinalizer(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster) error {
+	logger := logs.FromContext(ctx)
+
+	if postgresCluster.GetDeletionTimestamp() == nil {
+		return nil
+	}
+	if !controllerutil.ContainsFinalizer(postgresCluster, postgresClusterFinalizerName) {
+		return nil
+	}
+
+	logger.Info("Processing finalizer cleanup for PostgresCluster")
+
+	// Fetch the CNPG cluster for cleanup
+	var cnpgCluster *cnpgv1.Cluster
+	existingCNPG := &cnpgv1.Cluster{}
+	err := r.Get(ctx, types.NamespacedName{Name: postgresCluster.Name, Namespace: postgresCluster.Namespace}, existingCNPG)
+	if err == nil {
+		cnpgCluster = existingCNPG
+	} else if !apierrors.IsNotFound(err) {
+		logger.Error(err, "Failed to fetch CNPG cluster during cleanup")
+		return fmt.Errorf("failed to fetch CNPG cluster during cleanup: %w", err)
+	}
+
+	// Handle CNPG cluster based on deletion policy
+	if cnpgCluster != nil {
+		if postgresCluster.Spec.ClusterDeletionPolicy == clusterDeletionPolicyDelete {
+			logger.Info("ClusterDeletionPolicy is set to 'Delete', deleting CNPG Cluster", "policy", postgresCluster.Spec.ClusterDeletionPolicy)
+			if err := r.deleteCNPGCluster(ctx, cnpgCluster); err != nil {
+				logger.Error(err, "Failed to delete CNPG Cluster")
+				return fmt.Errorf("failed to delete CNPG Cluster: %w", err)
+			}
+		} else {
+			logger.Info("ClusterDeletionPolicy is set to 'Retain', retaining CNPG Cluster", "policy", postgresCluster.Spec.ClusterDeletionPolicy)
+			originalCluster := cnpgCluster.DeepCopy()
+			if err := controllerutil.RemoveOwnerReference(postgresCluster, cnpgCluster, r.Scheme); err != nil {
+				logger.Error(err, "Failed to remove owner reference from CNPG Cluster")
+				return fmt.Errorf("failed to remove owner reference: %w", err)
+			}
+			// Update the CNPG cluster immediately after removing owner reference
+			if err := r.Patch(ctx, cnpgCluster, client.MergeFrom(originalCluster)); err != nil {
+				logger.Error(err, "Failed to update CNPG Cluster after removing owner reference")
+				return fmt.Errorf("failed to update CNPG cluster: %w", err)
+			}
+			logger.Info("Removed owner reference from CNPG Cluster")
+		}
+	} else {
+		logger.Info("CNPG Cluster not found, skipping owner reference removal")
+	}
+
+	// Delete connection poolers
+	if err := r.deleteConnectionPoolers(ctx, postgresCluster); err != nil {
+		logger.Error(err, "Failed to delete connection poolers during cleanup")
+		return fmt.Errorf("failed to delete connection poolers: %w", err)
+	}
+
+	// Remove finalizer after successful cleanup
+	controllerutil.RemoveFinalizer(postgresCluster, postgresClusterFinalizerName)
+	if err := r.Update(ctx, postgresCluster); err != nil {
+		logger.Error(err, "Failed to remove finalizer from PostgresCluster")
+		return fmt.Errorf("failed to remove finalizer: %w", err)
+	}
+
+	logger.Info("Finalizer removed, cleanup complete")
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

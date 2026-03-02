@@ -22,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// +kubebuilder:validation:XValidation:rule="!has(self.config) || !has(self.config.connectionPoolerEnabled) || !self.config.connectionPoolerEnabled || (has(self.cnpg) && has(self.cnpg.connectionPooler))",message="cnpg.connectionPooler must be set when config.connectionPoolerEnabled is true"
 // PostgresClusterClassSpec defines the desired state of PostgresClusterClass.
 // PostgresClusterClass is immutable after creation - it serves as a template for Cluster CRs.
 type PostgresClusterClassSpec struct {
