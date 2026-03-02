@@ -59,7 +59,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Validate and updates defaults for CR
 	err = validateIngestorClusterSpec(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "ValidateIngestorClusterSpecFailure", "Validate Ingestor Cluster spec failed. Check operator logs for details.")
+		eventPublisher.Warning(ctx, "ValidateIngestorClusterSpecFailed", "Validate Ingestor Cluster spec failed. Check operator logs for details.")
 		logger.ErrorContext(ctx, "Failed to validate Ingestor Cluster spec", "error", err.Error())
 		return result, err
 	}
@@ -91,7 +91,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err = initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
-			eventPublisher.Warning(ctx, "AppInfoStatusInitializationFailure", "Init and check app info status failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, "AppInfoStatusInitializationFailed", "Init and check app info status failed. Check operator logs for details.")
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
 		}
@@ -102,7 +102,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIngestor)
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplySplunkConfigFailure", "Apply of general config failed. Check operator logs for details.")
+		eventPublisher.Warning(ctx, "ApplySplunkConfigFailed", "Apply of general config failed. Check operator logs for details.")
 		logger.ErrorContext(ctx, "create or update general config failed", "error", err.Error())
 		return result, err
 	}
@@ -112,7 +112,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), false)
 			if err != nil {
-				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMapFailure", "Apply of monitoring console config map failed. Check operator logs for details.")
+				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMapFailed", "Apply of monitoring console config map failed. Check operator logs for details.")
 				return result, err
 			}
 		}
@@ -141,14 +141,14 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Create or update a headless service for ingestor cluster
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, true))
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyServiceFailure", "Apply of headless service failed. Check operator logs for details.")
+		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Apply of headless service failed. Check operator logs for details.")
 		return result, err
 	}
 
 	// Create or update a regular service for ingestor cluster
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, false))
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyServiceFailure", "Apply of service failed. Check operator logs for details.")
+		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Apply of service failed. Check operator logs for details.")
 		return result, err
 	}
 
@@ -190,14 +190,14 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Create or update statefulset for the ingestors
 	statefulSet, err := getIngestorStatefulSet(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "GetIngestorStatefulSetFailure", "Get stateful set failed. Check operator logs for details.")
+		eventPublisher.Warning(ctx, "GetIngestorStatefulSetFailed", "Get stateful set failed. Check operator logs for details.")
 		return result, err
 	}
 
 	// Make changes to respective mc configmap when changing/removing mcRef from spec
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, make([]corev1.EnvVar, 0))
 	if err != nil {
-		eventPublisher.Warning(ctx, "MonitoringConsoleRefValidationFailure", "Monitoring console reference validation failed. Check operator logs for details.")
+		eventPublisher.Warning(ctx, "MonitoringConsoleRefValidationFailed", "Monitoring console reference validation failed. Check operator logs for details.")
 		return result, err
 	}
 
@@ -205,7 +205,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	phase, err := mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 	if err != nil {
-		eventPublisher.Warning(ctx, "UpdateStatefulSetFailure", "Stateful set update failed. Check operator logs for details.")
+		eventPublisher.Warning(ctx, "UpdateStatefulSetFailed", "Stateful set update failed. Check operator logs for details.")
 		return result, err
 	}
 	cr.Status.Phase = phase
@@ -243,7 +243,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			ingMgr := newIngestorClusterPodManager(logger, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 			err = ingMgr.updateIngestorConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
 			if err != nil {
-				eventPublisher.Warning(ctx, "UpdateConfFilesFailure", "Failed to update conf file for Queue/Pipeline config. Check operator logs for details.")
+				eventPublisher.Warning(ctx, "UpdateConfFilesFailed", "Failed to update conf file for Queue/Pipeline config. Check operator logs for details.")
 				logger.ErrorContext(ctx, "Failed to update conf file for Queue/Pipeline config", "error", err.Error())
 				return result, err
 			}
@@ -274,13 +274,13 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			eventPublisher.Warning(ctx, "MCReferencesDeletionFailure", "Delete of reference to automated MC failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, "MCReferencesDeletionFailed", "Delete of reference to automated MC failed. Check operator logs for details.")
 			logger.ErrorContext(ctx, "Delete of reference to automated MC failed", "error", err.Error())
 		}
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), true)
 			if err != nil {
-				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMapFailure", "Apply of monitoring console environment config map failed. Check operator logs for details.")
+				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMapFailed", "Apply of monitoring console environment config map failed. Check operator logs for details.")
 				return result, err
 			}
 		}
@@ -384,14 +384,14 @@ func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Contex
 			if !strings.Contains(input[0], "access_key") && !strings.Contains(input[0], "secret_key") {
 				logger.DebugContext(ctx, "Updating queue input in outputs.conf", "input", input)
 			}
-			if err := splunkClient.UpdateConfFile(ctx, logger, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{input}); err != nil {
+			if err := splunkClient.UpdateConfFile(ctx, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{input}); err != nil {
 				updateErr = err
 			}
 		}
 
 		for _, input := range pipelineInputs {
 			logger.DebugContext(ctx, "Updating pipeline input in default-mode.conf", "input", input)
-			if err := splunkClient.UpdateConfFile(ctx, logger, "default-mode", input[0], [][]string{{input[1], input[2]}}); err != nil {
+			if err := splunkClient.UpdateConfFile(ctx, "default-mode", input[0], [][]string{{input[1], input[2]}}); err != nil {
 				updateErr = err
 			}
 		}

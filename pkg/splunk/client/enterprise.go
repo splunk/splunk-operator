@@ -22,13 +22,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -1036,7 +1036,9 @@ func (c *SplunkClient) RestartSplunk() error {
 
 // Updates conf files and their properties
 // See https://help.splunk.com/en/splunk-enterprise/leverage-rest-apis/rest-api-reference/10.0/configuration-endpoints/configuration-endpoint-descriptions
-func (c *SplunkClient) UpdateConfFile(ctx context.Context, logger *slog.Logger, fileName, property string, propertyKVList [][]string) error {
+func (c *SplunkClient) UpdateConfFile(ctx context.Context, fileName, property string, propertyKVList [][]string) error {
+	logger := logging.FromContext(ctx).With("func", "UpdateConfFile")
+
 	// Creates an object in a conf file if it doesn't exist
 	endpoint := fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s", c.ManagementURI, fileName)
 	body := fmt.Sprintf("name=%s", property)
