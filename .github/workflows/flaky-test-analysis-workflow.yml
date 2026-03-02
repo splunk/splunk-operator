@@ -3,6 +3,8 @@ permissions:
   contents: read
   actions: read
 on:
+  push:
+    branches: [CSPL-3763-add-flay-test-analysis-tool] # TODO: remove before merging
   workflow_dispatch:
     inputs:
       start_date:
