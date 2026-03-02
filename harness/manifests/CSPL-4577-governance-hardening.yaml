@@ -3,6 +3,11 @@ change_id: CSPL-4577
 title: KEP-first harness governance hardening
 spec_file: docs/specs/CSPL-4577-agentic-harness-governance.md
 owner: @splunk/splunk-operator-for-kubernetes
+delivery_mode: agent
+risk_tier: medium
+human_approvals_required: 1
+auto_merge_allowed: false
+merge_queue_required: true
 evaluation_suite: docs/agent/evals/policy-regression.yaml
 allowed_paths:
   - .agents/**
@@ -23,6 +28,7 @@ allowed_paths:
   - internal/**
   - pkg/**
   - scripts/**
+  - speckit/**
   - test/**
   - templates/**
   - scripts/dev/**
@@ -34,5 +40,7 @@ forbidden_paths:
 required_commands:
   - scripts/dev/spec_check.sh
   - scripts/dev/harness_manifest_check.sh
+  - scripts/dev/risk_policy_check.sh
   - scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml
+  - scripts/dev/harness_run.sh --fast
   - scripts/dev/pr_check.sh --fast

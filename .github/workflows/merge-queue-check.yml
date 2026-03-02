@@ -1,0 +1,35 @@
+name: Merge Queue Check
+
+on:
+  merge_group:
+    branches:
+      - main
+      - develop
+
+jobs:
+  merge-queue-pr-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run merge queue harness check
+        run: |
+          set -euo pipefail
+          BASE_REF="${{ github.event.merge_group.base_ref }}"
+          if [[ -z "${BASE_REF}" ]]; then
+            BASE_REF=develop
+          fi
+
+          HARNESS_BASE_REF="${BASE_REF}" \
+          PR_CHECK_FLAGS=--fast \
+          scripts/dev/pr_check.sh

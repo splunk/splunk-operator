@@ -220,6 +220,11 @@ for manifest in "${manifest_files[@]}"; do
   title="$(extract_scalar "title" "${manifest}")"
   spec_file="$(extract_scalar "spec_file" "${manifest}")"
   owner="$(extract_scalar "owner" "${manifest}")"
+  delivery_mode="$(extract_scalar "delivery_mode" "${manifest}")"
+  risk_tier="$(extract_scalar "risk_tier" "${manifest}")"
+  human_approvals_required="$(extract_scalar "human_approvals_required" "${manifest}")"
+  auto_merge_allowed="$(extract_scalar "auto_merge_allowed" "${manifest}")"
+  merge_queue_required="$(extract_scalar "merge_queue_required" "${manifest}")"
   evaluation_suite="$(extract_scalar "evaluation_suite" "${manifest}")"
 
   if ! has_value "${version}"; then
@@ -236,6 +241,21 @@ for manifest in "${manifest_files[@]}"; do
   fi
   if ! has_value "${owner}"; then
     errors+=("${manifest}: missing required key 'owner'")
+  fi
+  if ! has_value "${delivery_mode}"; then
+    errors+=("${manifest}: missing required key 'delivery_mode'")
+  fi
+  if ! has_value "${risk_tier}"; then
+    errors+=("${manifest}: missing required key 'risk_tier'")
+  fi
+  if ! has_value "${human_approvals_required}"; then
+    errors+=("${manifest}: missing required key 'human_approvals_required'")
+  fi
+  if ! has_value "${auto_merge_allowed}"; then
+    errors+=("${manifest}: missing required key 'auto_merge_allowed'")
+  fi
+  if ! has_value "${merge_queue_required}"; then
+    errors+=("${manifest}: missing required key 'merge_queue_required'")
   fi
   if ! has_value "${evaluation_suite}"; then
     errors+=("${manifest}: missing required key 'evaluation_suite'")
@@ -266,15 +286,20 @@ for manifest in "${manifest_files[@]}"; do
 
   has_spec_cmd=false
   has_pr_cmd=false
+  has_risk_cmd=false
   for cmd in "${required_commands[@]}"; do
     [[ "${cmd}" == scripts/dev/spec_check.sh* ]] && has_spec_cmd=true
     [[ "${cmd}" == scripts/dev/pr_check.sh* ]] && has_pr_cmd=true
+    [[ "${cmd}" == scripts/dev/risk_policy_check.sh* ]] && has_risk_cmd=true
   done
   if [[ "${has_spec_cmd}" != "true" ]]; then
     errors+=("${manifest}: required_commands missing scripts/dev/spec_check.sh")
   fi
   if [[ "${has_pr_cmd}" != "true" ]]; then
     errors+=("${manifest}: required_commands missing scripts/dev/pr_check.sh")
+  fi
+  if [[ "${has_risk_cmd}" != "true" ]]; then
+    errors+=("${manifest}: required_commands missing scripts/dev/risk_policy_check.sh")
   fi
 
   if grep -Eq '^allowed_paths:[[:space:]]*$' "${manifest}"; then

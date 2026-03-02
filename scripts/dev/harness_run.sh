@@ -102,13 +102,14 @@ fi
 
 run_step spec_check scripts/dev/spec_check.sh "${base_args[@]}"
 run_step manifest_check scripts/dev/harness_manifest_check.sh "${base_args[@]}"
+run_step risk_policy_check scripts/dev/risk_policy_check.sh "${base_args[@]}"
 run_step harness_eval scripts/dev/harness_eval.sh --suite "${suite}"
 
 if [[ "${skip_pr_check}" != "true" ]]; then
   if [[ "${run_fast}" == "true" ]]; then
-    run_step pr_check bash -lc "SKIP_SPEC_CHECK=1 SKIP_MANIFEST_CHECK=1 SKIP_HARNESS_EVAL=1 PR_CHECK_FLAGS=--fast scripts/dev/pr_check.sh"
+    run_step pr_check bash -lc "SKIP_SPEC_CHECK=1 SKIP_MANIFEST_CHECK=1 SKIP_RISK_POLICY_CHECK=1 SKIP_HARNESS_EVAL=1 PR_CHECK_FLAGS=--fast scripts/dev/pr_check.sh"
   else
-    run_step pr_check bash -lc "SKIP_SPEC_CHECK=1 SKIP_MANIFEST_CHECK=1 SKIP_HARNESS_EVAL=1 scripts/dev/pr_check.sh"
+    run_step pr_check bash -lc "SKIP_SPEC_CHECK=1 SKIP_MANIFEST_CHECK=1 SKIP_RISK_POLICY_CHECK=1 SKIP_HARNESS_EVAL=1 scripts/dev/pr_check.sh"
   fi
 fi
 

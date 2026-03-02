@@ -5,7 +5,7 @@
 - Owners: Splunk Operator maintainers
 - Reviewers: Splunk Operator maintainers
 - Created: 2026-02-27
-- Last Updated: 2026-03-02
+- Last Updated: 2026-03-02 (Spec Kit bridge + risk policy + scorecard)
 - Related Links: Jira CSPL-4577, PR #1738
 
 ## Summary
@@ -40,7 +40,14 @@ scoped edits, and deterministic harness validation.
    evaluation corpus in `docs/agent/evals/`.
 5. Add `scripts/dev/harness_run.sh` to produce run artifacts under
    `.harness/runs/` with per-step logs and summaries.
-6. Wire all checks into `scripts/dev/pr_check.sh` and CI `pr-check`.
+6. Add `scripts/dev/speckit_bridge.sh` so Spec Kit outputs can bootstrap KEP
+   and manifest artifacts in a deterministic way.
+7. Add `scripts/dev/risk_policy_check.sh` for risk-tiered governance
+   (approvals, merge queue, and required validation depth).
+8. Add `scripts/dev/autonomy_scorecard.sh` and a CI workflow to publish
+   autonomy metrics for each PR.
+9. Add merge queue CI workflow and branch policy documentation.
+10. Wire all checks into `scripts/dev/pr_check.sh` and CI `pr-check`.
 
 ## API/CRD Impact
 - No CRD schema changes.
@@ -57,15 +64,23 @@ scoped edits, and deterministic harness validation.
 - Governance/harness:
   - `scripts/dev/spec_check.sh`
   - `scripts/dev/harness_manifest_check.sh`
+  - `scripts/dev/risk_policy_check.sh`
   - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
+  - `scripts/dev/harness_run.sh --skip-pr-check`
+  - `scripts/dev/autonomy_scorecard.sh --base-ref develop`
   - `scripts/dev/pr_check.sh`
 
 ## Harness Validation
 - `scripts/dev/spec_check.sh`
 - `scripts/dev/harness_manifest_check.sh`
+- `scripts/dev/risk_policy_check.sh`
 - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
+- `scripts/dev/harness_run.sh`
+- `scripts/dev/autonomy_scorecard.sh`
 - `scripts/dev/pr_check.sh`
 - CI workflow `PR Check` (`.github/workflows/pr-check.yml`)
+- CI workflow `Merge Queue Check` (`.github/workflows/merge-queue-check.yml`)
+- CI workflow `Autonomy Scorecard` (`.github/workflows/autonomy-scorecard.yml`)
 
 ## Risks
 - Risk: Additional workflow overhead for contributors.
@@ -79,7 +94,8 @@ scoped edits, and deterministic harness validation.
 Rollout:
 1. Merge KEP-lite docs, scripts, and CI wiring.
 2. Require harness manifests for non-trivial implementation PRs.
-3. Monitor failures and tighten policies incrementally.
+3. Enable branch protection and merge queue with required status checks.
+4. Monitor failures and tighten policies incrementally.
 
 Rollback:
 1. Set `SKIP_MANIFEST_CHECK=1` and/or `SKIP_HARNESS_EVAL=1` in emergency CI.
@@ -92,3 +108,6 @@ Rollback:
 - [x] Replayable harness policy evaluation suite added.
 - [x] Harness run artifacts are generated with logs and summaries.
 - [x] CI `pr-check` includes governance + harness gates.
+- [x] Risk-tier policy checks are enforced for changed manifests.
+- [x] Spec Kit bridge is available for planning-to-implementation handoff.
+- [x] Autonomy scorecard is published for each PR.

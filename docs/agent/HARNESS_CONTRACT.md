@@ -11,16 +11,20 @@ This document defines the minimum harness contract for agent-driven changes.
 ## Required Local Gates
 - `scripts/dev/spec_check.sh`
 - `scripts/dev/harness_manifest_check.sh`
+- `scripts/dev/risk_policy_check.sh`
 - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
 - `scripts/dev/pr_check.sh`
 
 ## Required CI Gate
 - `.github/workflows/pr-check.yml` job `pr-check`
+- `.github/workflows/merge-queue-check.yml` job `merge-queue-pr-check`
+- `.github/workflows/autonomy-scorecard.yml` job `autonomy-scorecard` (reporting)
 
 ## Output Contract
 Every implementation PR should report:
 - governing KEP path and status
 - harness manifest path
+- risk tier and delivery mode
 - changed files summary
 - commands run
 - results and known risks
@@ -41,5 +45,6 @@ Every implementation PR should report:
 ## Failure Policy
 - If `spec_check.sh` fails, the change is not merge-ready.
 - If `harness_manifest_check.sh` fails, the change is not merge-ready.
+- If `risk_policy_check.sh` fails, the change is not merge-ready.
 - If `harness_eval.sh` fails, governance regressions must be fixed first.
 - If harness checks fail, fix the implementation or update the spec and tests.

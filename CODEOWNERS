@@ -9,4 +9,5 @@
 /docs/specs/ @splunk/splunk-operator-for-kubernetes
 /docs/agent/ @splunk/splunk-operator-for-kubernetes
 /harness/ @splunk/splunk-operator-for-kubernetes
+/speckit/ @splunk/splunk-operator-for-kubernetes
 /scripts/ @splunk/splunk-operator-for-kubernetes

@@ -18,6 +18,8 @@ Maintainers are listed in `MAINTAINERS.md`.
 
 ## KEP-First Policy
 Non-trivial changes must start with a KEP-lite document under `docs/specs/`.
+Spec Kit planning artifacts may be created under `speckit/specs/`, but KEP is
+the governance source of truth.
 
 Non-trivial includes:
 - API/CRD or webhook behavior changes
@@ -44,10 +46,13 @@ Validation is harness-driven, not ad hoc:
 - `scripts/dev/spec_check.sh` enforces KEP structure and lifecycle validity.
 - `scripts/dev/harness_manifest_check.sh` enforces machine-readable KEP linkage
   and scope policy.
+- `scripts/dev/risk_policy_check.sh` enforces risk-tier review/merge policy.
 - `scripts/dev/harness_eval.sh` enforces replayable governance regression checks.
 - `scripts/dev/harness_run.sh` generates auditable run artifacts.
+- `scripts/dev/autonomy_scorecard.sh` generates autonomy metrics for each diff.
 - `scripts/dev/pr_check.sh` runs repository verification gates.
 - CI `PR Check` runs these checks on pull requests.
+- CI merge queue check runs equivalent fast gates for queued merges.
 
 Any emergency bypass must be explicit and documented in the PR with rationale
 and rollback.
@@ -55,7 +60,9 @@ and rollback.
 ## Pull Request Requirements
 Each non-trivial PR must include:
 - governing KEP path under `docs/specs/`
+- optional Spec Kit path under `speckit/specs/` if used
 - harness manifest path under `harness/manifests/`
+- risk tier and delivery mode from manifest
 - harness results
 - risk and rollback notes
 

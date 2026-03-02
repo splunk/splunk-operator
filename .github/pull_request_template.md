@@ -10,9 +10,14 @@ _Highlight the updates in specific files_
 
 _Link the KEP in `docs/specs/` and include status (`Draft`, `In Review`, `Approved`, `Implemented`, `Superseded`)._
 
+### Spec Kit Plan
+
+_Link the Spec Kit folder in `speckit/specs/<id>-<slug>/` used for planning._
+
 ### Harness Manifest
 
 _Link the machine-readable manifest in `harness/manifests/` used for this PR._
+_Include risk tier and delivery mode from the manifest._
 
 ### Testing and Verification
 
@@ -21,9 +26,11 @@ _How did you test these changes? What automated tests are added?_
 Suggested local gates:
 - `scripts/dev/spec_check.sh`
 - `scripts/dev/harness_manifest_check.sh`
+- `scripts/dev/risk_policy_check.sh`
 - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
 - `scripts/dev/harness_run.sh --fast`
 - `scripts/dev/pr_check.sh`
+- `scripts/dev/autonomy_scorecard.sh --base-ref <target-branch>`
 - `scripts/dev/unit.sh`
 
 ### Related Issues

@@ -26,6 +26,11 @@ if [[ "${SKIP_MANIFEST_CHECK:-0}" != "1" ]]; then
   ./scripts/dev/harness_manifest_check.sh "${spec_args[@]}"
 fi
 
+if [[ "${SKIP_RISK_POLICY_CHECK:-0}" != "1" ]]; then
+  echo "Running risk policy check: ./scripts/dev/risk_policy_check.sh ${spec_args[*]}"
+  ./scripts/dev/risk_policy_check.sh "${spec_args[@]}"
+fi
+
 if [[ "${SKIP_HARNESS_EVAL:-0}" != "1" ]]; then
   suite="${HARNESS_EVAL_SUITE:-docs/agent/evals/policy-regression.yaml}"
   echo "Running harness eval: ./scripts/dev/harness_eval.sh --suite ${suite}"

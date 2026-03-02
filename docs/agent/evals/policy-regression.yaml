@@ -16,6 +16,18 @@ cases:
   - id: pr_check_eval_gate
     file: scripts/dev/pr_check.sh
     pattern: "harness_eval.sh"
+  - id: pr_check_risk_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "risk_policy_check.sh"
+  - id: speckit_bridge_script
+    file: scripts/dev/speckit_bridge.sh
+    pattern: "bootstrap --change-id"
+  - id: risk_policy_script
+    file: scripts/dev/risk_policy_check.sh
+    pattern: "risk_tier"
+  - id: scorecard_script
+    file: scripts/dev/autonomy_scorecard.sh
+    pattern: "autonomy_score"
   - id: scope_check_base_ref
     file: scripts/dev/scope_check.sh
     pattern: "--base-ref"
@@ -28,3 +40,15 @@ cases:
   - id: manifest_doc
     file: docs/agent/HARNESS_MANIFEST.md
     pattern: "## Required Fields"
+  - id: merge_queue_workflow
+    file: .github/workflows/merge-queue-check.yml
+    pattern: "merge_group"
+  - id: scorecard_workflow
+    file: .github/workflows/autonomy-scorecard.yml
+    pattern: "Autonomy Scorecard"
+  - id: speckit_bridge_doc
+    file: docs/agent/SPECKIT_KEP_BRIDGE.md
+    pattern: "scripts/dev/speckit_bridge.sh bootstrap"
+  - id: branch_policy_doc
+    file: docs/agent/BRANCH_POLICY.md
+    pattern: "## Merge Queue"

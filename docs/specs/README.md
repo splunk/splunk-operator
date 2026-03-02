@@ -7,6 +7,9 @@ non-trivial behavior changes in Splunk Operator.
 We use a Kubernetes KEP-inspired format so design intent, rollout safety, and
 validation are reviewable before implementation.
 
+Spec Kit planning docs can live under `speckit/specs/`, but the KEP in
+`docs/specs/` is the governance source of truth used by harness checks.
+
 ## When a KEP Is Required
 A KEP is required for non-trivial changes, including:
 - CRD/API changes
@@ -38,6 +41,8 @@ Use a stable file name:
   `harness/manifests/`.
 - Each harness manifest must reference a KEP file in this directory with status
   `Approved` or `Implemented`.
+- Each harness manifest should declare `risk_tier` and review/merge policy.
+- Risk-tier policy is validated by `scripts/dev/risk_policy_check.sh`.
 - Keep KEP status and acceptance/graduation criteria current as work lands.
 
 ## Required KEP Sections

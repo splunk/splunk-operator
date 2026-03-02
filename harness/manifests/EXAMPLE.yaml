@@ -3,6 +3,11 @@ change_id: CSPL-0000
 title: Example change title
 spec_file: docs/specs/CSPL-0000-example.md
 owner: @splunk/splunk-operator-for-kubernetes
+delivery_mode: agent
+risk_tier: medium
+human_approvals_required: 1
+auto_merge_allowed: false
+merge_queue_required: true
 evaluation_suite: docs/agent/evals/policy-regression.yaml
 allowed_paths:
   - api/**
@@ -12,6 +17,7 @@ allowed_paths:
   - docs/**
   - harness/manifests/**
   - scripts/dev/**
+  - speckit/**
   - .harness/**
 forbidden_paths:
   - vendor/**
@@ -20,5 +26,7 @@ forbidden_paths:
 required_commands:
   - scripts/dev/spec_check.sh
   - scripts/dev/harness_manifest_check.sh
+  - scripts/dev/risk_policy_check.sh
   - scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml
+  - scripts/dev/harness_run.sh --fast
   - scripts/dev/pr_check.sh --fast
