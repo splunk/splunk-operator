@@ -52,6 +52,9 @@ cases:
   - id: scorecard_workflow
     file: .github/workflows/autonomy-scorecard.yml
     pattern: "Autonomy Scorecard"
+  - id: pr_check_label_event
+    file: .github/workflows/pr-check.yml
+    pattern: "labeled"
   - id: speckit_bridge_doc
     file: docs/agent/SPECKIT_KEP_BRIDGE.md
     pattern: "scripts/dev/speckit_bridge.sh bootstrap"
