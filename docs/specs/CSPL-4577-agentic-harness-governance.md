@@ -44,10 +44,12 @@ scoped edits, and deterministic harness validation.
    and manifest artifacts in a deterministic way.
 7. Add `scripts/dev/risk_policy_check.sh` for risk-tiered governance
    (approvals, merge queue, and required validation depth).
-8. Add `scripts/dev/autonomy_scorecard.sh` and a CI workflow to publish
+8. Add `scripts/dev/risk_label_check.sh` so PR labels must match manifest
+   `risk_tier`.
+9. Add `scripts/dev/autonomy_scorecard.sh` and a CI workflow to publish
    autonomy metrics for each PR.
-9. Add merge queue CI workflow and branch policy documentation.
-10. Wire all checks into `scripts/dev/pr_check.sh` and CI `pr-check`.
+10. Add merge queue CI workflow and branch policy documentation.
+11. Wire all checks into `scripts/dev/pr_check.sh` and CI `pr-check`.
 
 ## API/CRD Impact
 - No CRD schema changes.
@@ -65,6 +67,7 @@ scoped edits, and deterministic harness validation.
   - `scripts/dev/spec_check.sh`
   - `scripts/dev/harness_manifest_check.sh`
   - `scripts/dev/risk_policy_check.sh`
+  - `scripts/dev/risk_label_check.sh --labels risk:medium`
   - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
   - `scripts/dev/harness_run.sh --skip-pr-check`
   - `scripts/dev/autonomy_scorecard.sh --base-ref develop`
@@ -74,6 +77,7 @@ scoped edits, and deterministic harness validation.
 - `scripts/dev/spec_check.sh`
 - `scripts/dev/harness_manifest_check.sh`
 - `scripts/dev/risk_policy_check.sh`
+- `scripts/dev/risk_label_check.sh`
 - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
 - `scripts/dev/harness_run.sh`
 - `scripts/dev/autonomy_scorecard.sh`

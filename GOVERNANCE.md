@@ -47,6 +47,7 @@ Validation is harness-driven, not ad hoc:
 - `scripts/dev/harness_manifest_check.sh` enforces machine-readable KEP linkage
   and scope policy.
 - `scripts/dev/risk_policy_check.sh` enforces risk-tier review/merge policy.
+- `scripts/dev/risk_label_check.sh` enforces PR label alignment with risk tier.
 - `scripts/dev/harness_eval.sh` enforces replayable governance regression checks.
 - `scripts/dev/harness_run.sh` generates auditable run artifacts.
 - `scripts/dev/autonomy_scorecard.sh` generates autonomy metrics for each diff.

@@ -25,6 +25,7 @@ forbidden_paths:
 required_commands:
   - scripts/dev/spec_check.sh
   - scripts/dev/risk_policy_check.sh
+  - scripts/dev/risk_label_check.sh --labels risk:<tier>
   - scripts/dev/pr_check.sh --fast
 ```
 
@@ -56,3 +57,7 @@ required_commands:
 - risk-tier value constraints
 - minimum approval and merge-queue policy by tier
 - deeper required command expectations for medium/high risk changes
+
+`scripts/dev/risk_label_check.sh` enforces:
+- exactly one PR risk label (`risk:low|risk:medium|risk:high`)
+- label tier must match manifest `risk_tier`

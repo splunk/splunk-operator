@@ -23,3 +23,4 @@ pass harness checks.
 - `evals/policy-regression.yaml` is the replayable governance regression corpus
 - `.github/workflows/autonomy-scorecard.yml` publishes autonomy score reports
 - `scripts/dev/autonomy_scorecard.sh` generates score metrics for current diff
+- `scripts/dev/risk_label_check.sh` validates PR risk label versus manifest tier

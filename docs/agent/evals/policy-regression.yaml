@@ -19,12 +19,18 @@ cases:
   - id: pr_check_risk_gate
     file: scripts/dev/pr_check.sh
     pattern: "risk_policy_check.sh"
+  - id: pr_check_risk_label_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "risk_label_check.sh"
   - id: speckit_bridge_script
     file: scripts/dev/speckit_bridge.sh
     pattern: "bootstrap --change-id"
   - id: risk_policy_script
     file: scripts/dev/risk_policy_check.sh
     pattern: "risk_tier"
+  - id: risk_label_script
+    file: scripts/dev/risk_label_check.sh
+    pattern: "risk:"
   - id: scorecard_script
     file: scripts/dev/autonomy_scorecard.sh
     pattern: "autonomy_score"

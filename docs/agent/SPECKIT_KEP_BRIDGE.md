@@ -29,6 +29,7 @@ Generated artifacts:
    - `scripts/dev/spec_check.sh`
    - `scripts/dev/harness_manifest_check.sh`
    - `scripts/dev/risk_policy_check.sh`
+   - `scripts/dev/risk_label_check.sh --labels risk:<tier>`
    - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
    - `scripts/dev/harness_run.sh --fast`
    - `scripts/dev/pr_check.sh --fast`

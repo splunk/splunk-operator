@@ -28,5 +28,7 @@ jobs:
           SPEC_CHECK_BASE_REF: ${{ github.base_ref }}
           HARNESS_BASE_REF: ${{ github.base_ref }}
           HARNESS_EVAL_SUITE: docs/agent/evals/policy-regression.yaml
+          RISK_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          ENFORCE_RISK_LABEL_CHECK: "1"
         run: |
           scripts/dev/pr_check.sh

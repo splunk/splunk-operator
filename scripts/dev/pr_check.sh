@@ -31,6 +31,15 @@ if [[ "${SKIP_RISK_POLICY_CHECK:-0}" != "1" ]]; then
   ./scripts/dev/risk_policy_check.sh "${spec_args[@]}"
 fi
 
+if [[ "${SKIP_RISK_LABEL_CHECK:-0}" != "1" ]]; then
+  label_args=()
+  if [[ -n "${RISK_LABELS:-}" ]]; then
+    label_args+=(--labels "${RISK_LABELS}")
+  fi
+  echo "Running risk label check: ./scripts/dev/risk_label_check.sh ${spec_args[*]} ${label_args[*]}"
+  ./scripts/dev/risk_label_check.sh "${spec_args[@]}" "${label_args[@]}"
+fi
+
 if [[ "${SKIP_HARNESS_EVAL:-0}" != "1" ]]; then
   suite="${HARNESS_EVAL_SUITE:-docs/agent/evals/policy-regression.yaml}"
   echo "Running harness eval: ./scripts/dev/harness_eval.sh --suite ${suite}"

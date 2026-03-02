@@ -107,9 +107,9 @@ run_step harness_eval scripts/dev/harness_eval.sh --suite "${suite}"
 
 if [[ "${skip_pr_check}" != "true" ]]; then
   if [[ "${run_fast}" == "true" ]]; then
-    run_step pr_check bash -lc "SKIP_SPEC_CHECK=1 SKIP_MANIFEST_CHECK=1 SKIP_RISK_POLICY_CHECK=1 SKIP_HARNESS_EVAL=1 PR_CHECK_FLAGS=--fast scripts/dev/pr_check.sh"
+    run_step pr_check bash -lc "SKIP_SPEC_CHECK=1 SKIP_MANIFEST_CHECK=1 SKIP_RISK_POLICY_CHECK=1 SKIP_RISK_LABEL_CHECK=1 SKIP_HARNESS_EVAL=1 PR_CHECK_FLAGS=--fast scripts/dev/pr_check.sh"
   else
-    run_step pr_check bash -lc "SKIP_SPEC_CHECK=1 SKIP_MANIFEST_CHECK=1 SKIP_RISK_POLICY_CHECK=1 SKIP_HARNESS_EVAL=1 scripts/dev/pr_check.sh"
+    run_step pr_check bash -lc "SKIP_SPEC_CHECK=1 SKIP_MANIFEST_CHECK=1 SKIP_RISK_POLICY_CHECK=1 SKIP_RISK_LABEL_CHECK=1 SKIP_HARNESS_EVAL=1 scripts/dev/pr_check.sh"
   fi
 fi
 

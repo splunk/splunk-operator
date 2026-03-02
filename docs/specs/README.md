@@ -43,6 +43,7 @@ Use a stable file name:
   `Approved` or `Implemented`.
 - Each harness manifest should declare `risk_tier` and review/merge policy.
 - Risk-tier policy is validated by `scripts/dev/risk_policy_check.sh`.
+- PR risk label must match manifest `risk_tier` (`risk:low|risk:medium|risk:high`).
 - Keep KEP status and acceptance/graduation criteria current as work lands.
 
 ## Required KEP Sections

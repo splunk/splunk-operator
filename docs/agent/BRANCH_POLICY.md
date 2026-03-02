@@ -23,6 +23,15 @@ Require these checks before merge:
 - `Semgrep Scanner`
 - `FOSSA-scanner`
 
+## Required Labels
+For non-trivial PRs with manifest changes, include exactly one risk label:
+- `risk:low`
+- `risk:medium`
+- `risk:high`
+
+`scripts/dev/risk_label_check.sh` validates that PR label matches manifest
+`risk_tier`.
+
 ## Merge Queue
 Enable merge queue on protected branches and require:
 - `.github/workflows/merge-queue-check.yml` job `merge-queue-pr-check`

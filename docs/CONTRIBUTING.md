@@ -65,12 +65,14 @@ For non-trivial changes, start with Spec Kit + KEP-lite before implementation:
 4. Move KEP status to `Approved` before implementation.
 5. Use `risk_tier` and scope in `harness/manifests/*.yaml` as execution policy.
 6. Keep KEP in sync and move status to `Implemented` when merged.
+7. Add one PR label that matches manifest risk tier (`risk:low|risk:medium|risk:high`).
 
 The PR harness enforces this with:
 ```bash
 $ scripts/dev/spec_check.sh
 $ scripts/dev/harness_manifest_check.sh
 $ scripts/dev/risk_policy_check.sh
+$ scripts/dev/risk_label_check.sh --labels risk:<tier>
 ```
 
 #### Pull requests
@@ -100,6 +102,7 @@ To make a pull request against this project:
     $ scripts/dev/spec_check.sh
     $ scripts/dev/harness_manifest_check.sh
     $ scripts/dev/risk_policy_check.sh
+    $ scripts/dev/risk_label_check.sh --labels risk:<tier>
     $ scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml
     $ scripts/dev/harness_run.sh --fast
     $ scripts/dev/pr_check.sh
@@ -203,6 +206,7 @@ For agent-assisted or standardized local workflows, prefer the scripts under `sc
 - `scripts/dev/spec_check.sh`
 - `scripts/dev/harness_manifest_check.sh`
 - `scripts/dev/risk_policy_check.sh`
+- `scripts/dev/risk_label_check.sh`
 - `scripts/dev/harness_eval.sh`
 - `scripts/dev/harness_run.sh`
 - `scripts/dev/autonomy_scorecard.sh`

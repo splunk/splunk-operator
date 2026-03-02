@@ -19,6 +19,10 @@ _Link the Spec Kit folder in `speckit/specs/<id>-<slug>/` used for planning._
 _Link the machine-readable manifest in `harness/manifests/` used for this PR._
 _Include risk tier and delivery mode from the manifest._
 
+### Risk Label
+
+_Set exactly one PR label matching manifest tier: `risk:low`, `risk:medium`, or `risk:high`._
+
 ### Testing and Verification
 
 _How did you test these changes? What automated tests are added?_
@@ -27,6 +31,7 @@ Suggested local gates:
 - `scripts/dev/spec_check.sh`
 - `scripts/dev/harness_manifest_check.sh`
 - `scripts/dev/risk_policy_check.sh`
+- `scripts/dev/risk_label_check.sh --labels risk:<tier>`
 - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
 - `scripts/dev/harness_run.sh --fast`
 - `scripts/dev/pr_check.sh`

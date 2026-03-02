@@ -31,5 +31,6 @@ jobs:
           fi
 
           HARNESS_BASE_REF="${BASE_REF}" \
+          SKIP_RISK_LABEL_CHECK=1 \
           PR_CHECK_FLAGS=--fast \
           scripts/dev/pr_check.sh
