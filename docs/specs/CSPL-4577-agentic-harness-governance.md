@@ -5,7 +5,7 @@
 - Owners: Splunk Operator maintainers
 - Reviewers: Splunk Operator maintainers
 - Created: 2026-02-27
-- Last Updated: 2026-03-02
+- Last Updated: 2026-03-02 (tool portability update)
 - Related Links: Jira CSPL-4577, PR #1738
 
 ## Problem
@@ -33,6 +33,8 @@ design record or a deterministic harness gate tied to the design intent.
 3. Wire `spec_check.sh` into `scripts/dev/pr_check.sh` and PR workflow.
 4. Update governance and contribution docs to make this process explicit.
 5. Update PR templates so every PR links spec and harness evidence.
+6. Ensure `spec_check.sh` works in runner environments that may not have `rg`
+   installed by using a `grep` fallback.
 
 ## Harness Validation
 - `scripts/dev/spec_check.sh`

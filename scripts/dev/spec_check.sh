@@ -160,6 +160,31 @@ required_sections=(
   "## Rollout and Rollback"
 )
 
+has_rg=false
+if command -v rg >/dev/null 2>&1; then
+  has_rg=true
+fi
+
+match_status() {
+  local file="$1"
+  local pattern='^(- )?Status:[[:space:]]*(Draft|In Review|Approved|Implemented|Superseded)[[:space:]]*$'
+  if [[ "${has_rg}" == "true" ]]; then
+    rg -q "${pattern}" "${file}"
+  else
+    grep -Eq "${pattern}" "${file}"
+  fi
+}
+
+has_section() {
+  local section="$1"
+  local file="$2"
+  if [[ "${has_rg}" == "true" ]]; then
+    rg -Fq "${section}" "${file}"
+  else
+    grep -Fq "${section}" "${file}"
+  fi
+}
+
 errors=()
 for spec in "${spec_files[@]}"; do
   if [[ ! -f "${spec}" ]]; then
@@ -167,13 +192,12 @@ for spec in "${spec_files[@]}"; do
     continue
   fi
 
-  if ! rg -q "^- Status:[[:space:]]*(Draft|In Review|Approved|Implemented|Superseded)[[:space:]]*$" "${spec}" \
-    && ! rg -q "^Status:[[:space:]]*(Draft|In Review|Approved|Implemented|Superseded)[[:space:]]*$" "${spec}"; then
+  if ! match_status "${spec}"; then
     errors+=("${spec}: missing or invalid Status field")
   fi
 
   for section in "${required_sections[@]}"; do
-    if ! rg -Fq "${section}" "${spec}"; then
+    if ! has_section "${section}" "${spec}"; then
       errors+=("${spec}: missing section '${section}'")
     fi
   done
