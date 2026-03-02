@@ -51,7 +51,6 @@ jobs:
        run: make test
      - name: Run Code Coverage
        run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
-       continue-on-error: true
      - name: Upload Coverage artifacts
        uses: actions/upload-artifact@v6
        with:
