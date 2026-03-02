@@ -1,0 +1,93 @@
+name: Flaky Test Analysis
+permissions:
+  contents: read
+  actions: read
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: 'Start date (YYYY-MM-DD). Defaults to 7 days before yesterday.'
+        required: false
+      end_date:
+        description: 'End date (YYYY-MM-DD). Defaults to yesterday.'
+        required: false
+      top_n:
+        description: 'Number of flakiest tests to report'
+        required: false
+        default: '20'
+      window_size:
+        description: 'Window size in days for flip rate calculation'
+        required: false
+        default: '1'
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install flaky-tests-detection
+
+      - name: Run flaky test analysis
+        env:
+          GH_TOKEN: ${{ github.token }}
+          START_DATE: ${{ inputs.start_date }}
+          END_DATE: ${{ inputs.end_date }}
+          TOP_N: ${{ inputs.top_n }}
+          WINDOW_SIZE: ${{ inputs.window_size }}
+          RESULTS_FILE: flaky-results.txt
+        run: ./tools/flaky-test-analysis.sh
+
+      - name: Generate job summary
+        if: always()
+        run: |
+          {
+            echo "## Flaky Test Analysis"
+            echo ""
+            echo "**Date range:** \`${START_DATE:-last 7 days}\` .. \`${END_DATE:-yesterday}\`"
+            echo "**Top N:** ${{ inputs.top_n || '20' }} | **Window size:** ${{ inputs.window_size || '1' }} day(s)"
+            echo ""
+
+            if [[ ! -f flaky-results.txt ]]; then
+              echo "> No results produced. Check the workflow logs."
+              exit 0
+            fi
+
+            # Extract the score lines (format: suite::[It] description --- score: N)
+            flaky_lines=$(grep -E ' --- score: ' flaky-results.txt || true)
+
+            if [[ -z "$flaky_lines" ]]; then
+              echo "> No flaky tests detected in this period."
+            else
+              echo "| Score | Suite | Test |"
+              echo "|------:|-------|------|"
+              echo "$flaky_lines" | while IFS= read -r line; do
+                score=$(echo "$line" | sed -E 's/.* --- score: (.+)/\1/')
+                suite=$(echo "$line" | sed -E 's/^([^:]+)::.*/\1/')
+                test_name=$(echo "$line" | sed -E 's/^[^:]+::\[It\] (.*) --- score:.*/\1/')
+                echo "| ${score} | ${suite} | ${test_name} |"
+              done
+            fi
+
+            echo ""
+
+            if ls *_flip_rate_*.png 1>/dev/null 2>&1; then
+              echo "---"
+              echo "Heatmap uploaded as workflow artifact."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flaky-test-results
+          path: |
+            flaky-results.txt
+            *_flip_rate_*.png
+          if-no-files-found: ignore
+          retention-days: 30
