@@ -24,7 +24,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -705,7 +704,6 @@ func TestUpdateConfFile(t *testing.T) {
 	fileName := "outputs"
 
 	ctx := context.TODO()
-	logger := logging.FromContext(ctx).With("func", "TestUpdateConfFile", "name", "test", "namespace", "test")
 
 	// First request: create the property (object) if it doesn't exist
 	createBody := strings.NewReader(fmt.Sprintf("name=%s", property))
@@ -722,7 +720,7 @@ func TestUpdateConfFile(t *testing.T) {
 	c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
 	c.Client = mockSplunkClient
 
-	err := c.UpdateConfFile(ctx, logger, fileName, property, [][]string{{key, value}})
+	err := c.UpdateConfFile(ctx, fileName, property, [][]string{{key, value}})
 	if err != nil {
 		t.Errorf("UpdateConfFile err = %v", err)
 	}
@@ -732,7 +730,7 @@ func TestUpdateConfFile(t *testing.T) {
 	mockSplunkClient = &spltest.MockHTTPClient{}
 	mockSplunkClient.AddHandler(wantCreateRequest, 500, "", nil)
 	c.Client = mockSplunkClient
-	err = c.UpdateConfFile(ctx, logger, fileName, property, [][]string{{key, value}})
+	err = c.UpdateConfFile(ctx, fileName, property, [][]string{{key, value}})
 	if err == nil {
 		t.Errorf("UpdateConfFile expected error on create, got nil")
 	}
@@ -742,7 +740,7 @@ func TestUpdateConfFile(t *testing.T) {
 	mockSplunkClient.AddHandler(wantCreateRequest, 201, "", nil)
 	mockSplunkClient.AddHandler(wantUpdateRequest, 500, "", nil)
 	c.Client = mockSplunkClient
-	err = c.UpdateConfFile(ctx, logger, fileName, property, [][]string{{key, value}})
+	err = c.UpdateConfFile(ctx, fileName, property, [][]string{{key, value}})
 	if err == nil {
 		t.Errorf("UpdateConfFile expected error on update, got nil")
 	}

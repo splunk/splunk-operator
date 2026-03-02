@@ -229,7 +229,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyIndexerClusterManager(context.Background(), c, cr.(*enterpriseApi.IndexerCluster))
+		_, err := ApplyIndexerClusterManager(context.TODO(), c, cr.(*enterpriseApi.IndexerCluster))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyIndexerClusterManager", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -239,7 +239,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyIndexerClusterManager(context.Background(), c, cr.(*enterpriseApi.IndexerCluster))
+		_, err := ApplyIndexerClusterManager(context.TODO(), c, cr.(*enterpriseApi.IndexerCluster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -290,6 +290,9 @@ func TestApplyIndexerCluster(t *testing.T) {
 
 func TestGetMonitoringConsoleClient(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	logger := logging.FromContext(context.TODO()).With("func", "TestGetMonitoringConsoleClient", "name", "stack1", "namespace", "test")
+
 	current := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -308,7 +311,6 @@ func TestGetMonitoringConsoleClient(t *testing.T) {
 			},
 		},
 	}
-	scopedLog := logging.FromContext(context.Background()).With("func", "TestGetMonitoringConsoleClient", "name", "stack1", "namespace", "test")
 
 	secrets := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -321,7 +323,7 @@ func TestGetMonitoringConsoleClient(t *testing.T) {
 	}
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	mgr := &indexerClusterPodManager{
-		log:     scopedLog,
+		log:     logger,
 		cr:      &current,
 		secrets: secrets,
 		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
@@ -337,7 +339,8 @@ func TestGetClusterManagerClient(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
-	scopedLog := logging.FromContext(ctx).With("func", "TestGetClusterManagerClient", "name", "stack1", "namespace", "test")
+	logger := logging.FromContext(ctx).With("func", "TestGetClusterManagerClient", "name", "stack1", "namespace", "test")
+
 	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -369,7 +372,7 @@ func TestGetClusterManagerClient(t *testing.T) {
 	}
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	mgr := &indexerClusterPodManager{
-		log:     scopedLog,
+		log:     logger,
 		cr:      &cr,
 		secrets: secrets,
 		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
@@ -388,7 +391,8 @@ func TestGetClusterManagerClient(t *testing.T) {
 
 func getIndexerClusterPodManager(method string, mockHandlers []spltest.MockHTTPHandler, mockSplunkClient *spltest.MockHTTPClient, replicas int32) *indexerClusterPodManager {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	scopedLog := logging.FromContext(context.Background()).With("func", method, "name", "stack1", "namespace", "test")
+	logger := logging.FromContext(context.TODO()).With("func", method, "name", "stack1", "namespace", "test")
+
 	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -422,7 +426,7 @@ func getIndexerClusterPodManager(method string, mockHandlers []spltest.MockHTTPH
 	}
 
 	mgr := &indexerClusterPodManager{
-		log:     scopedLog,
+		log:     logger,
 		cr:      &cr,
 		secrets: secrets,
 		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
@@ -1030,7 +1034,8 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 func TestApplyIdxcSecret(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	method := "ApplyIdxcSecret"
-	scopedLog := logging.FromContext(context.Background()).With("func", method, "name", "stack1", "namespace", "test")
+	logger := logging.FromContext(context.TODO()).With("func", method, "name", "stack1", "namespace", "test")
+
 	var initObjectList []client.Object
 
 	ctx := context.TODO()
@@ -1155,7 +1160,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 	mockSplunkClient.AddHandlers(mockHandlers...)
 	mgr := &indexerClusterPodManager{
 		c:       c,
-		log:     scopedLog,
+		log:     logger,
 		cr:      &cr,
 		secrets: secrets,
 		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
@@ -1328,19 +1333,19 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 	cm.Status.Phase = enterpriseApi.PhaseReady
 	// Empty ClusterManagerRef should return an error
 	cr.Spec.ClusterManagerRef.Name = ""
-	if _, err := ApplyIndexerClusterManager(context.Background(), c, &cr); err == nil {
+	if _, err := ApplyIndexerClusterManager(context.TODO(), c, &cr); err == nil {
 		t.Errorf("ApplyIndxerCluster() should have returned error")
 	}
 
 	cr.Spec.ClusterManagerRef.Name = "manager1"
 	// verifyRFPeers should return err here
-	if _, err := ApplyIndexerClusterManager(context.Background(), c, &cr); err == nil {
+	if _, err := ApplyIndexerClusterManager(context.TODO(), c, &cr); err == nil {
 		t.Errorf("ApplyIndxerCluster() should have returned error")
 	}
 
 	cm.Status.Phase = enterpriseApi.PhaseError
 	cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.StorageCapacity = "-abcd"
-	if _, err := ApplyIndexerClusterManager(context.Background(), c, &cr); err == nil {
+	if _, err := ApplyIndexerClusterManager(context.TODO(), c, &cr); err == nil {
 		t.Errorf("ApplyIndxerCluster() should have returned error")
 	}
 }
