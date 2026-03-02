@@ -5,19 +5,7 @@ resources:
 - ../default
 
 patches:
-- target:
+- path: manager_patch.yaml
+  target:
     kind: Deployment
     name: controller-manager
-  patch: |-
-    - op: replace
-      path: /spec/template/spec/containers/0/imagePullPolicy
-      value: IfNotPresent
-    - op: replace
-      path: /spec/template/spec/containers/0/env/0/value
-      value: ""
-    - op: replace
-      path: /spec/template/spec/containers/0/env/1/value
-      value: splunk/splunk:10.0.0
-    - op: replace
-      path: /spec/template/spec/containers/0/env/3/value
-      value: --accept-sgt-current-at-splunk-com

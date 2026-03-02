@@ -210,6 +210,7 @@ For agent-assisted or standardized local workflows, prefer the scripts under `sc
 - `scripts/dev/harness_eval.sh`
 - `scripts/dev/harness_run.sh`
 - `scripts/dev/autonomy_scorecard.sh`
+- `scripts/dev/script_sanity_check.sh`
 - `scripts/dev/unit.sh`
 - `scripts/dev/lint.sh`
 - `scripts/dev/skaffold_dev.sh`

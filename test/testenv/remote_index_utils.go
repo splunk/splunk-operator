@@ -86,11 +86,24 @@ func RollHotToWarm(ctx context.Context, deployment *Deployment, podName string, 
 	return true
 }
 
+const (
+	// Queue credential volumes are used for secret lookup. The remaining fields are
+	// populated to satisfy CRD schema validation for VolumeSpec.
+	queueVolumeDefaultEndpoint = "https://s3.us-west-2.amazonaws.com"
+	queueVolumeDefaultPath     = "index-ingest-separation-test-bucket/queue-creds"
+	queueVolumeDefaultProvider = "aws"
+	queueVolumeDefaultType     = "s3"
+)
+
 // GenerateQueueVolumeSpec return VolumeSpec struct with given values
 func GenerateQueueVolumeSpec(name, secretRef string) enterpriseApi.VolumeSpec {
 	return enterpriseApi.VolumeSpec{
 		Name:      name,
+		Endpoint:  queueVolumeDefaultEndpoint,
+		Path:      queueVolumeDefaultPath,
 		SecretRef: secretRef,
+		Provider:  queueVolumeDefaultProvider,
+		Type:      queueVolumeDefaultType,
 	}
 }
 
