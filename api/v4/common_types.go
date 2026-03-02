@@ -480,18 +480,18 @@ type AppFrameworkSpec struct {
 	//    1. If no value or 0 is specified then it means periodic polling is disabled.
 	//    2. If anything less than min is specified then we set it to 1 min.
 	//    3. If anything more than the max value is specified then we set it to 1 day.
-	// +kubebuilder:validation:Optional
+	// +optional
 	AppsRepoPollInterval int64 `json:"appsRepoPollIntervalSeconds,omitempty"`
 
 	// App installation period within a reconcile. Apps will be installed during this period before the next reconcile is attempted.
 	// Note: Do not change this setting unless instructed to do so by Splunk Support
-	// +kubebuilder:validation:Optional
+	// +optional
 	// +kubebuilder:validation:Minimum:=30
 	// +kubebuilder:default:=90
 	SchedulerYieldInterval uint64 `json:"appInstallPeriodSeconds,omitempty"`
 
 	// Maximum number of retries to install Apps
-	// +kubebuilder:validation:Optional
+	// +optional
 	// +kubebuilder:validation:Minimum:=0
 	// +kubebuilder:default:=2
 	PhaseMaxRetries uint32 `json:"installMaxRetries,omitempty"`
@@ -500,7 +500,7 @@ type AppFrameworkSpec struct {
 	VolList []VolumeSpec `json:"volumes,omitempty"`
 
 	// List of App sources on remote storage
-	// +kubebuilder:validation:Optional
+	// +optional
 	// +listType=map
 	// +listMapKey=name
 	AppSources []AppSourceSpec `json:"appSources,omitempty"`
