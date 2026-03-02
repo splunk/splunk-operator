@@ -1,0 +1,30 @@
+version: v1
+name: harness-policy-regression
+cases:
+  - id: kep_template_summary
+    file: docs/specs/SPEC_TEMPLATE.md
+    pattern: "## Summary"
+  - id: kep_template_graduation
+    file: docs/specs/SPEC_TEMPLATE.md
+    pattern: "## Graduation Criteria"
+  - id: spec_readme_kep_policy
+    file: docs/specs/README.md
+    pattern: "# KEP-Lite Workflow"
+  - id: pr_check_manifest_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "harness_manifest_check.sh"
+  - id: pr_check_eval_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "harness_eval.sh"
+  - id: scope_check_base_ref
+    file: scripts/dev/scope_check.sh
+    pattern: "--base-ref"
+  - id: codeowners_specs
+    file: CODEOWNERS
+    pattern: "/docs/specs/"
+  - id: codeowners_harness
+    file: CODEOWNERS
+    pattern: "/harness/"
+  - id: manifest_doc
+    file: docs/agent/HARNESS_MANIFEST.md
+    pattern: "## Required Fields"

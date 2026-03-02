@@ -5,63 +5,90 @@
 - Owners: Splunk Operator maintainers
 - Reviewers: Splunk Operator maintainers
 - Created: 2026-02-27
-- Last Updated: 2026-03-02 (tool portability update)
+- Last Updated: 2026-03-02
 - Related Links: Jira CSPL-4577, PR #1738
 
-## Problem
-The repo had useful agent skills and scripts, but no hard requirement for
-spec-first changes. This allowed implementation to move ahead without a durable
-design record or a deterministic harness gate tied to the design intent.
+## Summary
+Adopt a production-grade, KEP-driven harness workflow so non-trivial Splunk
+Operator changes are governed by reviewed design docs, machine-readable
+implementation manifests, deterministic checks, and auditable run artifacts.
+
+## Motivation
+The repository had useful agent skills and helper scripts, but governance and
+execution contracts were still partly implicit. That allowed implementation to
+move ahead without a strongly enforced linkage between approved design intent,
+scoped edits, and deterministic harness validation.
 
 ## Goals
-- Enforce a spec-first workflow for non-trivial changes.
-- Keep approved specs versioned in-repo as part of deliverables.
-- Make harness validation mandatory in PR checks.
-- Keep the workflow lightweight enough for daily development.
+- Use KEP-lite docs as the design system of record for non-trivial changes.
+- Require machine-readable harness manifests for non-trivial implementation PRs.
+- Enforce policy, scope, and quality gates in local and CI workflows.
+- Keep validation replayable and auditable for maintainers and contributors.
 
 ## Non-Goals
-- Replace existing CI pipelines with a new system.
-- Introduce external policy engines.
-- Require specs for typo-only or formatting-only edits.
+- Replace all existing CI workflows with a new framework.
+- Introduce external policy engines or paid governance tooling.
+- Require KEP files for typo-only or formatting-only edits.
 
 ## Proposal
-1. Add `docs/specs/` with a required template and lifecycle states.
-2. Add `scripts/dev/spec_check.sh` that:
-   - identifies non-trivial changed paths,
-   - requires at least one changed spec file for such changes,
-   - validates required spec sections.
-3. Wire `spec_check.sh` into `scripts/dev/pr_check.sh` and PR workflow.
-4. Update governance and contribution docs to make this process explicit.
-5. Update PR templates so every PR links spec and harness evidence.
-6. Ensure `spec_check.sh` works in runner environments that may not have `rg`
-   installed by using a `grep` fallback.
+1. Convert `docs/specs/` to a KEP-lite format aligned with Kubernetes-style
+   design sections.
+2. Enforce KEP structure and lifecycle checks via `scripts/dev/spec_check.sh`.
+3. Add `scripts/dev/harness_manifest_check.sh` to validate machine-readable
+   implementation manifests and spec linkage.
+4. Add replayable policy evaluations via `scripts/dev/harness_eval.sh` and an
+   evaluation corpus in `docs/agent/evals/`.
+5. Add `scripts/dev/harness_run.sh` to produce run artifacts under
+   `.harness/runs/` with per-step logs and summaries.
+6. Wire all checks into `scripts/dev/pr_check.sh` and CI `pr-check`.
+
+## API/CRD Impact
+- No CRD schema changes.
+- Process and governance changes only.
+
+## Reconcile/State Impact
+- No controller reconcile behavior changes.
+- No status phase or condition semantics changed.
+
+## Test Plan
+- Unit: not applicable for this governance-only change.
+- Integration (Ginkgo): not applicable.
+- KUTTL: not applicable.
+- Governance/harness:
+  - `scripts/dev/spec_check.sh`
+  - `scripts/dev/harness_manifest_check.sh`
+  - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
+  - `scripts/dev/pr_check.sh`
 
 ## Harness Validation
 - `scripts/dev/spec_check.sh`
+- `scripts/dev/harness_manifest_check.sh`
+- `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
 - `scripts/dev/pr_check.sh`
-- CI workflow `PR Check` must pass on `develop` and `main` pull requests.
+- CI workflow `PR Check` (`.github/workflows/pr-check.yml`)
 
 ## Risks
-- Risk: Increased friction for small functional changes.
-  - Mitigation: narrow spec requirement to non-trivial paths only.
-- Risk: Spec quality could degrade into boilerplate.
-  - Mitigation: enforce required sections and reviewer ownership.
-- Risk: Process drift over time.
-  - Mitigation: include governance text and PR template prompts.
+- Risk: Additional workflow overhead for contributors.
+  - Mitigation: templates, scripts, and clear docs keep overhead predictable.
+- Risk: false positives from path/scope checks.
+  - Mitigation: explicit allowed/forbidden patterns in manifests.
+- Risk: process drift.
+  - Mitigation: replayable eval suite and required PR gates.
 
 ## Rollout and Rollback
 Rollout:
-1. Merge governance/docs/script/CI updates together.
-2. Require spec references in new PRs.
-3. Track misses and tune path matching as needed.
+1. Merge KEP-lite docs, scripts, and CI wiring.
+2. Require harness manifests for non-trivial implementation PRs.
+3. Monitor failures and tighten policies incrementally.
 
 Rollback:
-1. Set `SKIP_SPEC_CHECK=1` in CI as emergency bypass.
-2. Revert `spec_check.sh` integration in `pr_check.yml` if necessary.
-3. Keep spec docs intact for auditability.
+1. Set `SKIP_MANIFEST_CHECK=1` and/or `SKIP_HARNESS_EVAL=1` in emergency CI.
+2. Revert harness script integration in `scripts/dev/pr_check.sh` if needed.
+3. Retain KEP docs for auditability.
 
-## Acceptance Criteria
-- [x] Spec template and lifecycle documented in-repo.
-- [x] Harness enforces spec-first behavior for non-trivial changes.
-- [x] Governance and contribution docs describe the policy.
-- [x] PR templates require spec and harness evidence.
+## Graduation Criteria
+- [x] KEP-lite template and lifecycle documented in-repo.
+- [x] Harness manifest and scope checks enforced for non-trivial changes.
+- [x] Replayable harness policy evaluation suite added.
+- [x] Harness run artifacts are generated with logs and summaries.
+- [x] CI `pr-check` includes governance + harness gates.

@@ -3,11 +3,12 @@
 These documents are the system of record for agent-assisted development in this repo.
 They are short, concrete, and intended to be read by Codex skills and humans.
 
-Spec-first governance lives in `docs/specs/`. For non-trivial code changes, agents
-must update a governing spec and pass `scripts/dev/spec_check.sh`.
+KEP-first governance lives in `docs/specs/`. For non-trivial implementation
+changes, agents must link an approved KEP via `harness/manifests/*.yaml` and
+pass harness checks.
 
 ## Index
-- `../specs/` contains governing design specs and lifecycle state
+- `../specs/` contains KEP-lite design docs and lifecycle state
 - `CRD_MAP.md` maps kinds to API versions, types, controllers, and enterprise logic files
 - `RECONCILE_FLOW.md` outlines the reconciliation flow, gates, and status phases
 - `TEST_MATRIX.md` lists unit and integration test paths and environment variables
@@ -16,3 +17,5 @@ must update a governing spec and pass `scripts/dev/spec_check.sh`.
 - `OPERATIONS.md` provides debug commands, log access, and pprof access notes
 - `RELEASE_FLOW.md` provides a concise release checklist and artifact map
 - `HARNESS_CONTRACT.md` defines required harness gates and output contract
+- `HARNESS_MANIFEST.md` defines the machine-readable harness manifest format
+- `evals/policy-regression.yaml` is the replayable governance regression corpus

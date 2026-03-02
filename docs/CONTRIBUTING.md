@@ -55,17 +55,19 @@ We'd also like to hear your feature suggestions. Feel free to submit them as iss
 Look through our [issue tracker](https://github.com/splunk/splunk-operator/issues) to find problems to fix! Feel free to comment and tag corresponding stakeholders or full-time maintainers of this project with any questions or concerns.
 
 #### Spec-First Workflow
-For non-trivial changes, start with a spec under `docs/specs/` before
+For non-trivial changes, start with a KEP-lite spec under `docs/specs/` before
 implementation:
 1. Copy `docs/specs/SPEC_TEMPLATE.md` to a new file such as
    `docs/specs/CSPL-XXXX-topic.md`.
-2. Fill in problem, proposal, harness validation, risks, and rollback.
-3. Mark status as `Draft` or `In Review` and request review.
-4. Keep the spec in sync with implementation and update status as work lands.
+2. Fill in KEP sections and request review.
+3. Move status to `Approved` before implementation.
+4. Add a manifest in `harness/manifests/` linking the approved spec and scope.
+5. Keep the KEP in sync and move status to `Implemented` when merged.
 
 The PR harness enforces this with:
 ```bash
 $ scripts/dev/spec_check.sh
+$ scripts/dev/harness_manifest_check.sh
 ```
 
 #### Pull requests
@@ -89,10 +91,17 @@ To make a pull request against this project:
     ```bash
     $ cp docs/specs/SPEC_TEMPLATE.md docs/specs/CSPL-XXXX-your-topic.md
     ```
+1. Add a harness manifest for non-trivial implementation changes.
+    ```bash
+    $ cp harness/manifests/EXAMPLE.yaml harness/manifests/CSPL-XXXX-your-topic.yaml
+    ```
 1. Run harness and tests to verify your changes.
     ```
     $ cd splunk-operator
     $ scripts/dev/spec_check.sh
+    $ scripts/dev/harness_manifest_check.sh
+    $ scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml
+    $ scripts/dev/harness_run.sh --fast
     $ scripts/dev/pr_check.sh
     $ make test
     ```
@@ -190,6 +199,9 @@ $ make test
 
 For agent-assisted or standardized local workflows, prefer the scripts under `scripts/dev/`:
 - `scripts/dev/spec_check.sh`
+- `scripts/dev/harness_manifest_check.sh`
+- `scripts/dev/harness_eval.sh`
+- `scripts/dev/harness_run.sh`
 - `scripts/dev/unit.sh`
 - `scripts/dev/lint.sh`
 - `scripts/dev/pr_check.sh`

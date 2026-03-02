@@ -11,13 +11,25 @@ fi
 cd "${repo_root}"
 
 spec_args=()
-if [[ -n "${SPEC_CHECK_BASE_REF:-}" ]]; then
-  spec_args+=(--base-ref "${SPEC_CHECK_BASE_REF}")
+base_ref="${SPEC_CHECK_BASE_REF:-${HARNESS_BASE_REF:-}}"
+if [[ -n "${base_ref}" ]]; then
+  spec_args+=(--base-ref "${base_ref}")
 fi
 
 if [[ "${SKIP_SPEC_CHECK:-0}" != "1" ]]; then
   echo "Running spec check: ./scripts/dev/spec_check.sh ${spec_args[*]}"
   ./scripts/dev/spec_check.sh "${spec_args[@]}"
+fi
+
+if [[ "${SKIP_MANIFEST_CHECK:-0}" != "1" ]]; then
+  echo "Running harness manifest check: ./scripts/dev/harness_manifest_check.sh ${spec_args[*]}"
+  ./scripts/dev/harness_manifest_check.sh "${spec_args[@]}"
+fi
+
+if [[ "${SKIP_HARNESS_EVAL:-0}" != "1" ]]; then
+  suite="${HARNESS_EVAL_SUITE:-docs/agent/evals/policy-regression.yaml}"
+  echo "Running harness eval: ./scripts/dev/harness_eval.sh --suite ${suite}"
+  ./scripts/dev/harness_eval.sh --suite "${suite}"
 fi
 
 args=()

@@ -1,0 +1,24 @@
+version: v1
+change_id: CSPL-0000
+title: Example change title
+spec_file: docs/specs/CSPL-0000-example.md
+owner: @splunk/splunk-operator-for-kubernetes
+evaluation_suite: docs/agent/evals/policy-regression.yaml
+allowed_paths:
+  - api/**
+  - internal/**
+  - pkg/**
+  - test/**
+  - docs/**
+  - harness/manifests/**
+  - scripts/dev/**
+  - .harness/**
+forbidden_paths:
+  - vendor/**
+  - bin/**
+  - .git/**
+required_commands:
+  - scripts/dev/spec_check.sh
+  - scripts/dev/harness_manifest_check.sh
+  - scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml
+  - scripts/dev/pr_check.sh --fast

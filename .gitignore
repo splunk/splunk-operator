@@ -100,3 +100,5 @@ test/secret/*.log
 kubeconfig
 .devcontainer/devcontainer.json
 kuttl-artifacts/*
+.harness/runs/*
+!.harness/runs/.gitkeep

@@ -8,7 +8,11 @@ _Highlight the updates in specific files_
 
 ### Governing Spec
 
-_Link the spec in `docs/specs/` and include status (`Draft`, `In Review`, `Approved`, `Implemented`, `Superseded`)._
+_Link the KEP in `docs/specs/` and include status (`Draft`, `In Review`, `Approved`, `Implemented`, `Superseded`)._
+
+### Harness Manifest
+
+_Link the machine-readable manifest in `harness/manifests/` used for this PR._
 
 ### Testing and Verification
 
@@ -16,6 +20,9 @@ _How did you test these changes? What automated tests are added?_
 
 Suggested local gates:
 - `scripts/dev/spec_check.sh`
+- `scripts/dev/harness_manifest_check.sh`
+- `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
+- `scripts/dev/harness_run.sh --fast`
 - `scripts/dev/pr_check.sh`
 - `scripts/dev/unit.sh`
 

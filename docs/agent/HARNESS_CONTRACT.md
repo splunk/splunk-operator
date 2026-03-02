@@ -3,12 +3,15 @@
 This document defines the minimum harness contract for agent-driven changes.
 
 ## Inputs
-- Governing spec in `docs/specs/`
+- Governing KEP in `docs/specs/`
+- Harness manifest in `harness/manifests/`
 - Code change set
 - Target branch and CI context
 
 ## Required Local Gates
 - `scripts/dev/spec_check.sh`
+- `scripts/dev/harness_manifest_check.sh`
+- `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
 - `scripts/dev/pr_check.sh`
 
 ## Required CI Gate
@@ -16,11 +19,27 @@ This document defines the minimum harness contract for agent-driven changes.
 
 ## Output Contract
 Every implementation PR should report:
-- governing spec path and status
+- governing KEP path and status
+- harness manifest path
 - changed files summary
 - commands run
 - results and known risks
 
+## Scope Contract
+- Non-trivial implementation PRs must include a changed manifest under
+  `harness/manifests/`.
+- The manifest must define `allowed_paths`, `forbidden_paths`, and
+  `required_commands`.
+- Changed files must satisfy the manifest scope policy.
+
+## Runtime Audit Contract
+- Harness runs should emit artifacts under `.harness/runs/<timestamp>-<sha>/`:
+  - step logs
+  - `trace.tsv`
+  - `summary.txt`
+
 ## Failure Policy
 - If `spec_check.sh` fails, the change is not merge-ready.
+- If `harness_manifest_check.sh` fails, the change is not merge-ready.
+- If `harness_eval.sh` fails, governance regressions must be fixed first.
 - If harness checks fail, fix the implementation or update the spec and tests.

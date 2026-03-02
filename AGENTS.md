@@ -14,14 +14,20 @@ The Splunk Operator is a Kubernetes operator that manages Splunk Enterprise depl
 
 For non-trivial changes, agents must follow this order:
 1. Identify or create a governing spec in `docs/specs/`.
-2. Ensure spec status is at least `In Review` before large edits.
-3. Implement code changes scoped to the agreed spec.
+2. Drive the spec through review until status is `Approved`.
+3. Add a harness manifest in `harness/manifests/` that links the approved spec
+   and declares allowed/forbidden paths.
+4. Implement code changes scoped to the manifest policy.
 4. Validate with harness commands:
    - `scripts/dev/spec_check.sh`
+   - `scripts/dev/harness_manifest_check.sh`
+   - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
    - `scripts/dev/pr_check.sh`
-5. Update spec status and acceptance criteria with implementation progress.
+5. Record a run artifact with `scripts/dev/harness_run.sh` for auditability.
+6. Update spec status and graduation criteria with implementation progress.
 
-If non-trivial code changes exist without a spec update, `spec_check.sh` should fail.
+If non-trivial code changes exist without a valid harness manifest linked to an
+approved spec, `harness_manifest_check.sh` should fail.
 
 ## Repository Structure
 

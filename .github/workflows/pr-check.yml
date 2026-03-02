@@ -26,5 +26,7 @@ jobs:
         env:
           PR_CHECK_FLAGS: --fast
           SPEC_CHECK_BASE_REF: ${{ github.base_ref }}
+          HARNESS_BASE_REF: ${{ github.base_ref }}
+          HARNESS_EVAL_SUITE: docs/agent/evals/policy-regression.yaml
         run: |
           scripts/dev/pr_check.sh

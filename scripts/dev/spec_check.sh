@@ -5,9 +5,10 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/dev/spec_check.sh [--base-ref <branch>] [--help]
 
-Checks spec-first policy for changed files.
-- Non-trivial code changes require at least one changed spec file under docs/specs/.
-- Changed spec files must include required status and section headings.
+Checks KEP-lite quality for changed files.
+- Validates changed docs/specs/*.md files for required status and sections.
+- Non-trivial code changes are linked to KEPs via harness manifests (checked by
+  scripts/dev/harness_manifest_check.sh).
 
 Options:
   --base-ref <branch>  Compare HEAD against origin/<branch> (CI mode).
@@ -86,6 +87,31 @@ collect_changed_files_ci() {
   git diff --name-only --diff-filter=ACMRT "${merge_base}...HEAD"
 }
 
+has_rg=false
+if command -v rg >/dev/null 2>&1; then
+  has_rg=true
+fi
+
+has_section() {
+  local section="$1"
+  local file="$2"
+  if [[ "${has_rg}" == "true" ]]; then
+    rg -Fq "${section}" "${file}"
+  else
+    grep -Fq "${section}" "${file}"
+  fi
+}
+
+match_status() {
+  local file="$1"
+  local pattern='^(- )?Status:[[:space:]]*(Draft|In Review|Approved|Implemented|Superseded)[[:space:]]*$'
+  if [[ "${has_rg}" == "true" ]]; then
+    rg -q "${pattern}" "${file}"
+  else
+    grep -Eq "${pattern}" "${file}"
+  fi
+}
+
 declare -A seen=()
 changed_files=()
 
@@ -112,23 +138,8 @@ if [[ ${#changed_files[@]} -eq 0 ]]; then
   exit 0
 fi
 
-is_non_trivial_path() {
-  case "$1" in
-    api/*|cmd/*|config/*|internal/*|kuttl/*|pkg/*|scripts/*|test/*|Makefile|go.mod|go.sum|PROJECT)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
 spec_files=()
-non_trivial=false
 for file in "${changed_files[@]}"; do
-  if is_non_trivial_path "${file}"; then
-    non_trivial=true
-  fi
   case "${file}" in
     docs/specs/*.md)
       base_name="$(basename "${file}")"
@@ -139,51 +150,25 @@ for file in "${changed_files[@]}"; do
   esac
 done
 
-if [[ "${non_trivial}" != "true" ]]; then
-  echo "spec_check: no non-trivial code paths changed."
+if [[ ${#spec_files[@]} -eq 0 ]]; then
+  echo "spec_check: no changed KEP files detected."
   exit 0
 fi
 
-if [[ ${#spec_files[@]} -eq 0 ]]; then
-  echo "spec_check: non-trivial changes detected but no spec file changed." >&2
-  echo "Add a spec under docs/specs/ (for example: docs/specs/CSPL-XXXX-topic.md)." >&2
-  exit 1
-fi
-
 required_sections=(
-  "## Problem"
+  "## Summary"
+  "## Motivation"
   "## Goals"
   "## Non-Goals"
   "## Proposal"
+  "## API/CRD Impact"
+  "## Reconcile/State Impact"
+  "## Test Plan"
   "## Harness Validation"
   "## Risks"
   "## Rollout and Rollback"
+  "## Graduation Criteria"
 )
-
-has_rg=false
-if command -v rg >/dev/null 2>&1; then
-  has_rg=true
-fi
-
-match_status() {
-  local file="$1"
-  local pattern='^(- )?Status:[[:space:]]*(Draft|In Review|Approved|Implemented|Superseded)[[:space:]]*$'
-  if [[ "${has_rg}" == "true" ]]; then
-    rg -q "${pattern}" "${file}"
-  else
-    grep -Eq "${pattern}" "${file}"
-  fi
-}
-
-has_section() {
-  local section="$1"
-  local file="$2"
-  if [[ "${has_rg}" == "true" ]]; then
-    rg -Fq "${section}" "${file}"
-  else
-    grep -Fq "${section}" "${file}"
-  fi
-}
 
 errors=()
 for spec in "${spec_files[@]}"; do
