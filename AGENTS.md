@@ -10,6 +10,19 @@ The Splunk Operator is a Kubernetes operator that manages Splunk Enterprise depl
 - **Test Framework**: Ginkgo/Gomega
 - **CRD API Versions**: v1, v1alpha2, v1alpha3, v1beta1, v2, v3, v4
 
+## Spec-First Agent Workflow
+
+For non-trivial changes, agents must follow this order:
+1. Identify or create a governing spec in `docs/specs/`.
+2. Ensure spec status is at least `In Review` before large edits.
+3. Implement code changes scoped to the agreed spec.
+4. Validate with harness commands:
+   - `scripts/dev/spec_check.sh`
+   - `scripts/dev/pr_check.sh`
+5. Update spec status and acceptance criteria with implementation progress.
+
+If non-trivial code changes exist without a spec update, `spec_check.sh` should fail.
+
 ## Repository Structure
 
 ```

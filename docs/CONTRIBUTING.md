@@ -17,6 +17,7 @@ This document is the single source of truth on contributing towards this codebas
   - [Contribution Workflow](#contribution-workflow)
       - [Bug reports and feature requests](#bug-reports-and-feature-requests)
       - [Fixing issues](#fixing-issues)
+      - [Spec-First Workflow](#spec-first-workflow)
       - [Pull requests](#pull-requests)
       - [Maintainer Workflow for External Contributions](#maintainer-workflow-for-external-contributions)
       - [Code Review](#code-review)
@@ -53,6 +54,20 @@ We'd also like to hear your feature suggestions. Feel free to submit them as iss
 #### Fixing issues
 Look through our [issue tracker](https://github.com/splunk/splunk-operator/issues) to find problems to fix! Feel free to comment and tag corresponding stakeholders or full-time maintainers of this project with any questions or concerns.
 
+#### Spec-First Workflow
+For non-trivial changes, start with a spec under `docs/specs/` before
+implementation:
+1. Copy `docs/specs/SPEC_TEMPLATE.md` to a new file such as
+   `docs/specs/CSPL-XXXX-topic.md`.
+2. Fill in problem, proposal, harness validation, risks, and rollback.
+3. Mark status as `Draft` or `In Review` and request review.
+4. Keep the spec in sync with implementation and update status as work lands.
+
+The PR harness enforces this with:
+```bash
+$ scripts/dev/spec_check.sh
+```
+
 #### Pull requests
 A pull request informs the project's core developers about the changes you want to review and merge. Once you submit a pull request, it enters a stage of code review where you and others can discuss its potential modifications and add more commits later on.
 
@@ -70,9 +85,15 @@ To make a pull request against this project:
     # Create your feature/bugfix branch
     $ git checkout -b your-branch-name develop
     ```
-1. Run tests to verify your environment.
+1. Create or update the governing spec for non-trivial changes.
+    ```bash
+    $ cp docs/specs/SPEC_TEMPLATE.md docs/specs/CSPL-XXXX-your-topic.md
+    ```
+1. Run harness and tests to verify your changes.
     ```
     $ cd splunk-operator
+    $ scripts/dev/spec_check.sh
+    $ scripts/dev/pr_check.sh
     $ make test
     ```
 1. Push your changes once your tests have passed.
@@ -168,6 +189,7 @@ $ make test
 ```
 
 For agent-assisted or standardized local workflows, prefer the scripts under `scripts/dev/`:
+- `scripts/dev/spec_check.sh`
 - `scripts/dev/unit.sh`
 - `scripts/dev/lint.sh`
 - `scripts/dev/pr_check.sh`

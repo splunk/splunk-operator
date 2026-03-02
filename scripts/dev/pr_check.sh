@@ -10,6 +10,16 @@ fi
 
 cd "${repo_root}"
 
+spec_args=()
+if [[ -n "${SPEC_CHECK_BASE_REF:-}" ]]; then
+  spec_args+=(--base-ref "${SPEC_CHECK_BASE_REF}")
+fi
+
+if [[ "${SKIP_SPEC_CHECK:-0}" != "1" ]]; then
+  echo "Running spec check: ./scripts/dev/spec_check.sh ${spec_args[*]}"
+  ./scripts/dev/spec_check.sh "${spec_args[@]}"
+fi
+
 args=()
 if [[ "${RUN_ALL:-}" == "1" ]]; then
   args+=(--all)
