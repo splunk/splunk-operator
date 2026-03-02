@@ -40,7 +40,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -50,7 +49,6 @@ type IndexerClusterReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
-	Logger   *slog.Logger
 }
 
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=indexerclusters,verbs=get;list;watch;create;update;patch;delete
@@ -82,10 +80,8 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "IndexerCluster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "IndexerCluster")
 
-	ctx = logging.WithLogger(ctx, r.Logger.With("name", req.Name, "namespace", req.Namespace))
-
-	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("indexercluster", req.NamespacedName)
+	logger := slog.Default().With("controller", "IndexerCluster", "name", req.Name, "namespace", req.Namespace)
+	ctx = logging.WithLogger(ctx, logger)
 
 	// Fetch the IndexerCluster
 	instance := &enterpriseApi.IndexerCluster{}
@@ -110,14 +106,14 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}
 
-	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+	logger.InfoContext(ctx, "start", "CR version", instance.GetResourceVersion())
 
 	// Pass event recorder through context
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
 	result, err := ApplyIndexerCluster(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
-		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+		logger.InfoContext(ctx, "Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
 	}
 
 	return result, err
@@ -134,7 +130,6 @@ var ApplyIndexerCluster = func(ctx context.Context, client client.Client, instan
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.Logger = r.Logger.With("controller", "IndexerCluster")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.IndexerCluster{}).
 		WithEventFilter(predicate.Or(

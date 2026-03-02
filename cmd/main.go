@@ -173,7 +173,7 @@ func main() {
 		addSourcePtr = &logAddSource
 	}
 	logCfg := logging.LoadConfigWithFlags(logLevel, logFormat, addSourcePtr)
-	logger := logging.SetupLogger(logCfg,
+	_ = logging.SetupLogger(logCfg,
 		slog.String("component", "splunk-operator"),
 		slog.String("version", version),
 		slog.String("build", gitCommit))
@@ -235,7 +235,6 @@ func main() {
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("clustermanager-controller"),
-		Logger:   logger,
 	}).SetupWithManager(mgr); err != nil {
 		fmt.Printf(" error - %v", err)
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterManager ")
@@ -246,7 +245,6 @@ func main() {
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("clustermaster-controller"),
-		Logger:   logger,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterMaster")
 		os.Exit(1)
@@ -255,7 +253,6 @@ func main() {
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("indexercluster-controller"),
-		Logger:   logger,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "IndexerCluster")
 		os.Exit(1)
@@ -264,7 +261,6 @@ func main() {
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("licensemaster-controller"),
-		Logger:   logger,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LicenseMaster")
 		os.Exit(1)
@@ -273,7 +269,6 @@ func main() {
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("licensemanager-controller"),
-		Logger:   logger,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LicenseManager")
 		os.Exit(1)
@@ -282,7 +277,6 @@ func main() {
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("monitoringconsole-controller"),
-		Logger:   logger,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MonitoringConsole")
 		os.Exit(1)
@@ -291,7 +285,6 @@ func main() {
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("searchheadcluster-controller"),
-		Logger:   logger,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SearchHeadCluster")
 		os.Exit(1)
@@ -300,7 +293,6 @@ func main() {
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("standalone-controller"),
-		Logger:   logger,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Standalone")
 		os.Exit(1)

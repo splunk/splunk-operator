@@ -39,7 +39,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -49,7 +48,6 @@ type ClusterManagerReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
-	Logger   *slog.Logger
 }
 
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=clustermanagers,verbs=get;list;watch;create;update;patch;delete
@@ -82,10 +80,8 @@ func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "ClusterManager")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "ClusterManager")
 
-	ctx = logging.WithLogger(ctx, r.Logger.With("name", req.Name, "namespace", req.Namespace))
-
-	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("clustermanager", req.NamespacedName)
+	logger := slog.Default().With("controller", "ClusterManager", "name", req.Name, "namespace", req.Namespace)
+	ctx = logging.WithLogger(ctx, logger)
 
 	// Fetch the ClusterManager
 	instance := &enterpriseApi.ClusterManager{}
@@ -110,14 +106,14 @@ func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}
 
-	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+	logger.InfoContext(ctx, "start", "CR version", instance.GetResourceVersion())
 
 	// Pass event recorder through context
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
 	result, err := ApplyClusterManager(ctx, r.Client, instance, nil)
 	if result.Requeue && result.RequeueAfter != 0 {
-		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+		logger.InfoContext(ctx, "Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
 	}
 
 	return result, err
@@ -129,7 +125,6 @@ var ApplyClusterManager = func(ctx context.Context, client client.Client, instan
 }
 
 func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.Logger = r.Logger.With("controller", "ClusterManager")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.ClusterManager{}).
 		WithEventFilter(predicate.Or(

@@ -38,7 +38,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -48,7 +47,6 @@ type SearchHeadClusterReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
-	Logger   *slog.Logger
 }
 
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=searchheadclusters,verbs=get;list;watch;create;update;patch;delete
@@ -80,10 +78,8 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "SearchHeadCluster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "SearchHeadCluster")
 
-	ctx = logging.WithLogger(ctx, r.Logger.With("name", req.Name, "namespace", req.Namespace))
-
-	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("searchheadcluster", req.NamespacedName)
+	logger := slog.Default().With("controller", "SearchHeadCluster", "name", req.Name, "namespace", req.Namespace)
+	ctx = logging.WithLogger(ctx, logger)
 
 	// Fetch the SearchHeadCluster
 	instance := &enterpriseApi.SearchHeadCluster{}
@@ -108,14 +104,14 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+	logger.InfoContext(ctx, "start", "CR version", instance.GetResourceVersion())
 
 	// Pass event recorder through context
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
 	result, err := ApplySearchHeadCluster(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
-		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+		logger.InfoContext(ctx, "Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
 	}
 
 	return result, err
@@ -128,7 +124,6 @@ var ApplySearchHeadCluster = func(ctx context.Context, client client.Client, ins
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.Logger = r.Logger.With("controller", "SearchHeadCluster")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.SearchHeadCluster{}).
 		WithEventFilter(predicate.Or(
