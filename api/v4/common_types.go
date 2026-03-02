@@ -92,10 +92,13 @@ type Spec struct {
 	Image string `json:"image"`
 
 	// Sets pull policy for all images ("Always", "Never", or the default: "IfNotPresent")
-	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
+	// +kubebuilder:validation:Enum=Always;IfNotPresent;Never
+	// +kubebuilder:default=IfNotPresent
+	// +optional
 	ImagePullPolicy string `json:"imagePullPolicy"`
 
 	// Name of Scheduler to use for pod placement (defaults to “default-scheduler”)
+	// +optional
 	SchedulerName string `json:"schedulerName"`
 
 	// Kubernetes Affinity rules that control how pods are assigned to particular nodes.
@@ -164,12 +167,15 @@ type CommonSplunkSpec struct {
 	Spec `json:",inline"`
 
 	// Storage configuration for /opt/splunk/etc volume
+	// +optional
 	EtcVolumeStorageConfig StorageClassSpec `json:"etcVolumeStorageConfig"`
 
 	// Storage configuration for /opt/splunk/var volume
+	// +optional
 	VarVolumeStorageConfig StorageClassSpec `json:"varVolumeStorageConfig"`
 
 	// List of one or more Kubernetes volumes. These will be mounted in all pod containers as as /mnt/<name>
+	// +optional
 	Volumes []corev1.Volume `json:"volumes"`
 
 	// Inline map of default.yml overrides used to initialize the environment
@@ -210,10 +216,12 @@ type CommonSplunkSpec struct {
 	// ServiceAccount is the service account used by the pods deployed by the CRD.
 	// If not specified uses the default serviceAccount for the namespace as per
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#use-the-default-service-account-to-access-the-api-server
+	// +optional
 	ServiceAccount string `json:"serviceAccount"`
 
 	// ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
 	// WARNING: Setting environment variables used by Splunk or Ansible will affect Splunk installation and operation
+	// +optional
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
 
 	// ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe
@@ -227,45 +235,64 @@ type CommonSplunkSpec struct {
 	LivenessInitialDelaySeconds int32 `json:"livenessInitialDelaySeconds"`
 
 	// LivenessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
+	// +optional
+	// +kubebuilder:default:={"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3}
 	LivenessProbe *Probe `json:"livenessProbe,omitempty"`
 
 	// ReadinessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes
+	// +optional
+	// +kubebuilder:default:={"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3}
 	ReadinessProbe *Probe `json:"readinessProbe,omitempty"`
 
 	// StartupProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes
+	// +optional
+	// +kubebuilder:default:={"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12}
 	StartupProbe *Probe `json:"startupProbe,omitempty"`
 
 	// Sets imagePullSecrets if image is being pulled from a private registry.
 	// See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // StorageClassSpec defines storage class configuration
+// +kubebuilder:validation:XValidation:rule="!(size(self.storageClassName) > 0 && self.ephemeralStorage == true)",message="storageClassName and ephemeralStorage are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(size(self.storageCapacity) > 0 && self.ephemeralStorage == true)",message="storageCapacity and ephemeralStorage are mutually exclusive"
 type StorageClassSpec struct {
 	// Name of StorageClass to use for persistent volume claims
+	// +optional
 	StorageClassName string `json:"storageClassName"`
 
-	// Storage capacity to request persistent volume claims (default=”10Gi” for etc and "100Gi" for var)
+	// Storage capacity to request persistent volume claims (default="10Gi" for etc and "100Gi" for var)
+	// +optional
 	StorageCapacity string `json:"storageCapacity"`
 
 	// If true, ephemeral (emptyDir) storage will be used
-	// default false
 	// +optional
+	// +kubebuilder:default=false
 	EphemeralStorage bool `json:"ephemeralStorage"`
 }
 
 // SmartStoreSpec defines Splunk indexes and remote storage volume configuration
 type SmartStoreSpec struct {
 	// List of remote storage volumes
+	// +optional
+	// +listType=map
+	// +listMapKey=name
 	VolList []VolumeSpec `json:"volumes,omitempty"`
 
 	// List of Splunk indexes
+	// +optional
+	// +listType=map
+	// +listMapKey=name
 	IndexList []IndexSpec `json:"indexes,omitempty"`
 
 	// Default configuration for indexes
+	// +optional
 	Defaults IndexConfDefaultsSpec `json:"defaults,omitempty"`
 
 	// Defines Cache manager settings
+	// +optional
 	CacheManagerConf CacheManagerSpec `json:"cacheManager,omitempty"`
 }
 
@@ -274,18 +301,23 @@ type CacheManagerSpec struct {
 	IndexAndCacheManagerCommonSpec `json:",inline"`
 
 	// Eviction policy to use
+	// +optional
 	EvictionPolicy string `json:"evictionPolicy,omitempty"`
 
 	// Max cache size per partition
+	// +optional
 	MaxCacheSizeMB uint `json:"maxCacheSize,omitempty"`
 
 	// Additional size beyond 'minFreeSize' before eviction kicks in
+	// +optional
 	EvictionPaddingSizeMB uint `json:"evictionPadding,omitempty"`
 
 	// Maximum number of buckets that can be downloaded from remote storage in parallel
+	// +optional
 	MaxConcurrentDownloads uint `json:"maxConcurrentDownloads,omitempty"`
 
 	// Maximum number of buckets that can be uploaded to remote storage in parallel
+	// +optional
 	MaxConcurrentUploads uint `json:"maxConcurrentUploads,omitempty"`
 }
 
@@ -295,26 +327,38 @@ type IndexConfDefaultsSpec struct {
 }
 
 // VolumeSpec defines remote volume config
+// +kubebuilder:validation:XValidation:rule="self.provider != 'aws' || size(self.region) > 0",message="region is required when provider is aws"
 type VolumeSpec struct {
 	// Remote volume name
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
 	// Remote volume URI
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Endpoint string `json:"endpoint"`
 
 	// Remote volume path
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Path string `json:"path"`
 
 	// Secret object name
+	// +optional
 	SecretRef string `json:"secretRef"`
 
 	// Remote Storage type. Supported values: s3, blob, gcs. s3 works with aws or minio providers, whereas blob works with azure provider, gcs works for gcp.
+	// +kubebuilder:validation:Enum=s3;blob;gcs
 	Type string `json:"storageType"`
 
 	// App Package Remote Store provider. Supported values: aws, minio, azure, gcp.
+	// +optional
+	// +kubebuilder:validation:Enum=aws;minio;azure;gcp
 	Provider string `json:"provider"`
 
-	// Region of the remote storage volume where apps reside. Used for aws, if provided. Not used for minio and azure.
+	// Region of the remote storage volume where apps reside. Required for aws, optional for azure and gcp.
+	// +optional
 	Region string `json:"region"`
 }
 
@@ -326,9 +370,12 @@ type VolumeAndTypeSpec struct {
 // IndexSpec defines Splunk index name and storage path
 type IndexSpec struct {
 	// Splunk index name
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
 	// Index location relative to the remote volume path
+	// +optional
 	RemotePath string `json:"remotePath,omitempty"`
 
 	IndexAndCacheManagerCommonSpec `json:",inline"`
@@ -340,21 +387,26 @@ type IndexSpec struct {
 type IndexAndGlobalCommonSpec struct {
 
 	// Remote Volume name
+	// +optional
 	VolName string `json:"volumeName,omitempty"`
 
 	// MaxGlobalDataSizeMB defines the maximum amount of space for warm and cold buckets of an index
+	// +optional
 	MaxGlobalDataSizeMB uint `json:"maxGlobalDataSizeMB,omitempty"`
 
 	// MaxGlobalDataSizeMB defines the maximum amount of cumulative space for warm and cold buckets of an index
+	// +optional
 	MaxGlobalRawDataSizeMB uint `json:"maxGlobalRawDataSizeMB,omitempty"`
 }
 
 // IndexAndCacheManagerCommonSpec defines configurations that can be configured at index level or at server level
 type IndexAndCacheManagerCommonSpec struct {
 	// Time period relative to the bucket's age, during which the bucket is protected from cache eviction
+	// +optional
 	HotlistRecencySecs uint `json:"hotlistRecencySecs,omitempty"`
 
 	// Time period relative to the bucket's age, during which the bloom filter file is protected from cache eviction
+	// +optional
 	HotlistBloomFilterRecencyHours uint `json:"hotlistBloomFilterRecencyHours,omitempty"`
 }
 
@@ -377,6 +429,7 @@ type AppSourceDefaultSpec struct {
 type PremiumAppsProps struct {
 	// Type: enterpriseSecurity for now, can accommodate itsi etc.. later
 	// +optional
+	// +kubebuilder:validation:Enum=enterpriseSecurity
 	Type string `json:"type,omitempty"`
 
 	// Enterpreise Security App defaults
@@ -403,9 +456,13 @@ type EsDefaults struct {
 // AppSourceSpec defines list of App package (*.spl, *.tgz) locations on remote volumes
 type AppSourceSpec struct {
 	// Logical name for the set of apps placed in this location. Logical name must be unique to the appRepo
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
 	// Location relative to the volume path
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Location string `json:"location"`
 
 	AppSourceDefaultSpec `json:",inline"`
@@ -423,17 +480,18 @@ type AppFrameworkSpec struct {
 	//    1. If no value or 0 is specified then it means periodic polling is disabled.
 	//    2. If anything less than min is specified then we set it to 1 min.
 	//    3. If anything more than the max value is specified then we set it to 1 day.
+	// +optional
 	AppsRepoPollInterval int64 `json:"appsRepoPollIntervalSeconds,omitempty"`
 
 	// App installation period within a reconcile. Apps will be installed during this period before the next reconcile is attempted.
 	// Note: Do not change this setting unless instructed to do so by Splunk Support
-	// +kubebuilder:validation:Optional
+	// +optional
 	// +kubebuilder:validation:Minimum:=30
 	// +kubebuilder:default:=90
 	SchedulerYieldInterval uint64 `json:"appInstallPeriodSeconds,omitempty"`
 
 	// Maximum number of retries to install Apps
-	// +kubebuilder:validation:Optional
+	// +optional
 	// +kubebuilder:validation:Minimum:=0
 	// +kubebuilder:default:=2
 	PhaseMaxRetries uint32 `json:"installMaxRetries,omitempty"`
@@ -442,9 +500,13 @@ type AppFrameworkSpec struct {
 	VolList []VolumeSpec `json:"volumes,omitempty"`
 
 	// List of App sources on remote storage
+	// +optional
+	// +listType=map
+	// +listMapKey=name
 	AppSources []AppSourceSpec `json:"appSources,omitempty"`
 
 	// Maximum number of apps that can be downloaded at same time
+	// +optional
 	MaxConcurrentAppDownloads uint64 `json:"maxConcurrentAppDownloads,omitempty"`
 }
 
