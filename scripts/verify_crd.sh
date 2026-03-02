@@ -15,6 +15,20 @@ if ! command -v git >/dev/null 2>&1; then
   exit 1
 fi
 
+expected_controller_gen_version="$(
+  awk -F'?=' '/^CONTROLLER_TOOLS_VERSION[[:space:]]*\\?=/{gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit}' Makefile
+)"
+if [[ -n "${expected_controller_gen_version}" ]]; then
+  current_controller_gen_version=""
+  if [[ -x "${repo_root}/bin/controller-gen" ]]; then
+    current_controller_gen_version="$("${repo_root}/bin/controller-gen" --version 2>/dev/null || true)"
+  fi
+  if [[ "${current_controller_gen_version}" != *"${expected_controller_gen_version}"* ]]; then
+    echo "Installing controller-gen ${expected_controller_gen_version} for deterministic CRD generation..."
+    GOBIN="${repo_root}/bin" go install "sigs.k8s.io/controller-tools/cmd/controller-gen@${expected_controller_gen_version}"
+  fi
+fi
+
 printf "Running CRD/RBAC generation...\n"
 make generate
 make manifests

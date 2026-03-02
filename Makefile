@@ -58,6 +58,7 @@ BUNDLE_IMG ?= ${IMAGE_TAG_BASE}-bundle:v${VERSION}
 
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
+SKAFFOLD_PROFILE ?= dev-kind
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 # Automatically derive the version from go.mod
 ENVTEST_VERSION := $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
@@ -151,6 +152,13 @@ verify: verify-crd ## Verify generated artifacts (set VERIFY_BUNDLE=1 to include
 .PHONY: verify-repo
 verify-repo: ## Run repository verification script (see scripts/verify_repo.sh)
 	@./scripts/verify_repo.sh
+
+.PHONY: skaffold-dev skaffold-smoke
+skaffold-dev: ## Run skaffold inner loop (default profile: dev-kind)
+	@SKAFFOLD_PROFILE=$(SKAFFOLD_PROFILE) ./scripts/dev/skaffold_dev.sh
+
+skaffold-smoke: ## Run skaffold smoke deploy + rollout check and cleanup
+	@SKAFFOLD_PROFILE=ci-smoke SKAFFOLD_CLEANUP=1 ./scripts/dev/skaffold_ci_smoke.sh
 
 verify-crd: ## Regenerate and verify CRD/RBAC outputs
 	@./scripts/verify_crd.sh

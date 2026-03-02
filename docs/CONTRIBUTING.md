@@ -182,7 +182,7 @@ A PR is easy to review if you:
 * Write good commit messages, concise and descriptive.
 * Break large changes into a logical series of smaller patches. Patches individually make easily understandable changes, and in aggregate, solve a broader issue.
 
-Reviewers are highly encouraged to revisit the [Code of Conduct](contributing/code-of-conduct.md) and must go above and beyond to promote a collaborative, respectful community.
+Reviewers are highly encouraged to revisit the [Code of Conduct](../CODE_OF_CONDUCT.md) and must go above and beyond to promote a collaborative, respectful community.
 
 When reviewing PRs from others, [The Gentle Art of Patch Review](http://sage.thesharps.us/2014/09/01/the-gentle-art-of-patch-review/) suggests an iterative series of focuses, designed to lead new contributors to positive collaboration without inundating them initially with nuances:
 * Is the idea behind the contribution sound?
@@ -212,7 +212,11 @@ For agent-assisted or standardized local workflows, prefer the scripts under `sc
 - `scripts/dev/autonomy_scorecard.sh`
 - `scripts/dev/unit.sh`
 - `scripts/dev/lint.sh`
+- `scripts/dev/skaffold_dev.sh`
+- `scripts/dev/skaffold_ci_smoke.sh`
 - `scripts/dev/pr_check.sh`
+
+For a consistent local environment across contributors and agents, open the repo in the devcontainer at `.devcontainer/`.
 
 #### Agentic Development Workflow
 This repo includes skills and harness scripts to make common workflows repeatable.

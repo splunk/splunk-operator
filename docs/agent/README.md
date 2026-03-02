@@ -15,6 +15,8 @@ pass harness checks.
 - `TESTCASE_SPEC.yaml` is a template for generating new integration/KUTTL tests
 - `TESTCASE_PATTERNS.md` maps SVA patterns and features to test helpers
 - `OPERATIONS.md` provides debug commands, log access, and pprof access notes
+- `../../skaffold.yaml` defines shared local/CI deployment workflows
+- `../../.devcontainer/` defines the reproducible local/agent development environment
 - `RELEASE_FLOW.md` provides a concise release checklist and artifact map
 - `HARNESS_CONTRACT.md` defines required harness gates and output contract
 - `HARNESS_MANIFEST.md` defines the machine-readable harness manifest format

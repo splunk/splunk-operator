@@ -134,6 +134,8 @@ Other make targets include (more info below):
 
 For agent-assisted development, see `docs/agent/README.md`.
 Useful scripts include `scripts/verify_crd.sh`, `scripts/verify_bundle.sh`, `scripts/verify_repo.sh`, `scripts/debug_reconcile.sh`, and `scripts/generate_testcase.py`.
+For Skaffold workflows, use `make skaffold-dev` (inner loop) and `make skaffold-smoke` (one-shot smoke deploy).
+For a reproducible local toolchain, use the devcontainer in `.devcontainer/`.
 
 ## Deploying the Splunk Operator
 `make deploy` command will deploy all the necessary resources to run Splunk Operator like RBAC policies, services, configmaps, deployment. Operator will be installed in `splunk-operator` namespace. If `splunk-operator` namespace does not exist, it will create the namespace. By default `make deploy` will install operator clusterwide. Operator will watch all the namespaces for any splunk enterprise custom resources.

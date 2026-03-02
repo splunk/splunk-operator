@@ -6,6 +6,11 @@
 `kubectl get events -n <ns> --sort-by=.lastTimestamp`
 `kubectl logs -n splunk-operator deploy/splunk-operator-controller-manager -c manager --since=30m`
 
+## Skaffold Workflows
+`scripts/dev/skaffold_dev.sh`
+`scripts/dev/skaffold_ci_smoke.sh`
+`skaffold run -p ci-smoke`
+
 ## Operator Metrics and pprof
 The operator registers pprof handlers on the metrics server when `--pprof=true` (default).
 Default metrics bind address is `:8080` with `--metrics-secure=false`.

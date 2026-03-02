@@ -103,7 +103,17 @@ make deploy IMG=<your-image> NAMESPACE=<namespace> ENVIRONMENT=<env>
 
 # Undeploy operator from cluster
 make undeploy
+
+# Run skaffold inner loop on kind
+make skaffold-dev
+
+# Run one-shot skaffold smoke deploy and cleanup
+make skaffold-smoke
 ```
+
+### Devcontainer
+
+Use `.devcontainer/` to get a consistent local/agent toolchain (Go, kubectl, operator-sdk, kind, skaffold).
 
 ### Documentation Commands
 

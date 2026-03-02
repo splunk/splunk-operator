@@ -1,0 +1,38 @@
+{
+  "name": "splunk-operator-dev",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      "GO_VERSION": "1.25.7",
+      "KUBECTL_VERSION": "v1.29.1",
+      "OPERATOR_SDK_VERSION": "v1.42.0",
+      "SKAFFOLD_VERSION": "v2.16.1",
+      "KIND_VERSION": "v0.29.0"
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "containerEnv": {
+    "CLUSTER_PROVIDER": "kind",
+    "TEST_CLUSTER_PLATFORM": "kind"
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "remoteUser": "vscode",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.Go",
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+        "redhat.vscode-yaml",
+        "github.vscode-github-actions"
+      ],
+      "settings": {
+        "go.useLanguageServer": true,
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}

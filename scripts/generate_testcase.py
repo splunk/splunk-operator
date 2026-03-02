@@ -175,7 +175,46 @@ def generate_kuttl(spec: dict, repo_root: Path, force: bool, dry_run: bool):
             f"{extra}"
         ).strip()
 
-        install_step = f\"\"\"---\napiVersion: kuttl.dev/v1beta1\nkind: TestStep\ncommands:\n  - command: {install_cmd}\n    namespaced: true\n\"\"\"\n+        ready_assert = \"\"\"---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: splunk-operator-controller-manager\nstatus:\n  readyReplicas: 1\n  availableReplicas: 1\n\"\"\"\n+        upgrade_step = f\"\"\"---\napiVersion: kuttl.dev/v1beta1\nkind: TestStep\ncommands:\n  - command: {upgrade_cmd}\n    namespaced: true\n\"\"\"\n+        image_check_cmd = (\n+            f\"kubectl -n ${{{namespace_env}}} get deploy splunk-operator-controller-manager \"\n+            f\"-o jsonpath='{{{{.spec.template.spec.containers[?(@.name==\\\\\\\"manager\\\\\\\")].image}}}}' \"\n+            f\"| grep -q \\\"${{{operator_image_new_env}}}\\\"\"\n+        )\n+        image_assert_step = f\"\"\"---\napiVersion: kuttl.dev/v1beta1\nkind: TestStep\ncommands:\n  - command: {image_check_cmd}\n    namespaced: true\n\"\"\"\n+\n+        write_text(test_dir / \"00-install.yaml\", install_step, force)\n+        write_text(test_dir / \"01-assert-operator-ready.yaml\", ready_assert, force)\n+        write_text(test_dir / \"02-upgrade.yaml\", upgrade_step, force)\n+        write_text(test_dir / \"03-assert-operator-image.yaml\", image_assert_step, force)\n+
+        install_step = f"""---
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: {install_cmd}
+    namespaced: true
+"""
+        ready_assert = """---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: splunk-operator-controller-manager
+status:
+  readyReplicas: 1
+  availableReplicas: 1
+"""
+        upgrade_step = f"""---
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: {upgrade_cmd}
+    namespaced: true
+"""
+        image_check_cmd = (
+            f"kubectl -n ${{{namespace_env}}} get deploy splunk-operator-controller-manager "
+            f"-o jsonpath='{{{{.spec.template.spec.containers[?(@.name==\\\"manager\\\")].image}}}}' "
+            f"| grep -q \"${{{operator_image_new_env}}}\""
+        )
+        image_assert_step = f"""---
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: {image_check_cmd}
+    namespaced: true
+"""
+
+        write_text(test_dir / "00-install.yaml", install_step, force)
+        write_text(test_dir / "01-assert-operator-ready.yaml", ready_assert, force)
+        write_text(test_dir / "02-upgrade.yaml", upgrade_step, force)
+        write_text(test_dir / "03-assert-operator-image.yaml", image_assert_step, force)
     for index, cr in enumerate(crs):
         api_version = cr.get("apiVersion", "")
         kind = cr.get("kind", "")
@@ -357,8 +396,9 @@ def integration_flow(spec: dict):
                 deploy_lines.append('lmRef := ""')
                 if lm_enabled:
                     deploy_lines.append("lmRef = deployment.GetName()")
+            mc_ref_arg = "mcRef" if mc_enabled else '""'
             deploy_lines.append(
-                f'err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), {indexer_replicas}, {go_shc}, {"mcRef" if mc_enabled else "\"\""})'
+                f"err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), {indexer_replicas}, {go_shc}, {mc_ref_arg})"
             )
             deploy_lines.append('Expect(err).To(Succeed(), "Unable to deploy single-site cluster")')
         ready_lines.append(
@@ -462,7 +502,7 @@ def integration_template(spec: dict) -> str:
         post_upgrade_ready = ready_snippet
     notes_snippet = ""
     if notes:
-        notes_snippet = indent_block("\n".join([f\"// NOTE: {n}\" for n in notes]), 12)
+        notes_snippet = indent_block("\n".join([f"// NOTE: {n}" for n in notes]), 12)
     extra_imports = ""
     if upgrade_enabled:
         extra_imports = "    \"os\"\\n"
