@@ -1,0 +1,3 @@
+interface:
+  display_name: "SOK Build"
+  short_description: "Build operator artifacts"

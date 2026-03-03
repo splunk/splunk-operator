@@ -16,6 +16,9 @@ cases:
   - id: pr_check_eval_gate
     file: scripts/dev/pr_check.sh
     pattern: "harness_eval.sh"
+  - id: pr_check_skill_lint_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "skill_lint.sh"
   - id: pr_check_script_sanity_gate
     file: scripts/dev/pr_check.sh
     pattern: "script_sanity_check.sh"

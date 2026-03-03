@@ -14,6 +14,7 @@ This document defines the minimum harness contract for agent-driven changes.
 - `scripts/dev/risk_policy_check.sh`
 - `scripts/dev/risk_label_check.sh --labels risk:<tier>` (optional local, required in PR CI)
 - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
+- `scripts/dev/skill_lint.sh`
 - `scripts/dev/script_sanity_check.sh`
 - `scripts/dev/pr_check.sh`
 

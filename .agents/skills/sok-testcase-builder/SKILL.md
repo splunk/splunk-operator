@@ -8,6 +8,10 @@ description: Create new Splunk Operator integration (Ginkgo) or KUTTL tests from
 ## Overview
 Generate scaffolds for new integration or KUTTL tests based on a CR spec and expected results.
 
+## Preconditions
+- Input spec includes target CR kind, expected phase/resource outcomes, and test type.
+- Destination test suite location is chosen.
+
 ## Workflow
 1. Determine test type: integration (Ginkgo) or KUTTL.
 2. Identify the SVA architecture (S1, C3, M4, M1), features (smartstore, appframework), and any SVA validations.
@@ -50,6 +54,10 @@ Note: YAML specs require `pyyaml` (`python3 -m pip install pyyaml`).
 - List created/edited files
 - Provide the test command to run
 - Call out any TODOs left in the scaffold
+
+## Pass / Fail Criteria
+- Pass: scaffold files are created deterministically from spec and include required assertions/TODO markers.
+- Fail: scaffold generation is incomplete or expected validation blocks are missing.
 
 ## Key References
 - Spec template: `docs/agent/TESTCASE_SPEC.yaml`

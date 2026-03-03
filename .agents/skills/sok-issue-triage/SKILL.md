@@ -8,6 +8,10 @@ description: Turn a Splunk Operator issue report into scope, impacted components
 ## Overview
 Convert issue context into a PR-ready plan with scope, changes, tests, and risks.
 
+## Preconditions
+- Issue statement, expected behavior, and current behavior are available.
+- Any missing context is listed as open questions before planning.
+
 ## Scope
 Allowed paths:
 - `.agents/**`
@@ -57,10 +61,9 @@ This skill should not change product code. If code changes are required, stop an
 - Prefer `make test` for unit coverage.
 - Propose an integration test or minimal stub when behavior is user-visible.
 
-## Definition of Done
-- Scope, impacted components, and change list are explicit.
-- Test plan is concrete and executable.
-- Risks and open questions are called out.
+## Pass / Fail Criteria
+- Pass: plan includes explicit scope, impacted files, test commands, risks, and open questions.
+- Fail: plan is ambiguous, missing verification, or lacks risk coverage.
 
 ## Key Paths
 - API types: `api/v*/`

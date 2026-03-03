@@ -46,6 +46,11 @@ if [[ "${SKIP_HARNESS_EVAL:-0}" != "1" ]]; then
   ./scripts/dev/harness_eval.sh --suite "${suite}"
 fi
 
+if [[ "${SKIP_SKILL_LINT:-0}" != "1" ]]; then
+  echo "Running skill contract lint: ./scripts/dev/skill_lint.sh"
+  ./scripts/dev/skill_lint.sh
+fi
+
 if [[ "${SKIP_SCRIPT_SANITY:-0}" != "1" ]]; then
   echo "Running script sanity checks: ./scripts/dev/script_sanity_check.sh"
   ./scripts/dev/script_sanity_check.sh

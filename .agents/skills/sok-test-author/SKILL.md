@@ -8,6 +8,10 @@ description: Write or update Splunk Operator tests (unit/envtest/integration/KUT
 ## Overview
 Create or update tests for operator behavior, using existing testenv helpers and patterns.
 
+## Preconditions
+- Expected behavior is defined (input spec + expected status/resources).
+- Test target type is known (unit/envtest, Ginkgo integration, or KUTTL).
+
 ## Scope
 Allowed paths:
 - `test/**`
@@ -38,10 +42,9 @@ If product code changes are required, stop and hand off to the appropriate skill
 - Lint/format: `scripts/dev/lint.sh`
 - KUTTL scaffolds: `python3 scripts/generate_testcase.py --spec docs/agent/TESTCASE_SPEC.yaml`
 
-## Definition of Done
-- Tests compile and run (or a clear reason is recorded).
-- Assertions cover the intended behavior and failure modes.
-- Test names and suite structure match repo conventions.
+## Pass / Fail Criteria
+- Pass: tests compile/run (or are explicitly marked as scaffold) and assertions map to expected behavior.
+- Fail: tests do not compile, are missing core assertions, or cannot be executed/reasoned about.
 
 ## Output Contract
 - Changed files

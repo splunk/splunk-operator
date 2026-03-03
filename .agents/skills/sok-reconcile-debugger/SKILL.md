@@ -8,6 +8,10 @@ description: Debug reconcile loops, stuck status phases, or app framework pipeli
 ## Overview
 Diagnose reconciliation failures and produce a clear root cause, fix, and regression test plan.
 
+## Preconditions
+- A failing CR instance, logs, or reproducible symptom is available.
+- Namespace/kind/name and operator version are known.
+
 ## Scope
 Allowed paths:
 - `api/**`
@@ -77,10 +81,9 @@ Use `./scripts/debug_reconcile.sh <kind> <name> <namespace>` to capture these in
 - If the bug is integration-only, add a minimal test stub under `test/` or `kuttl/`.
 - Prefer helper scripts when available: `scripts/dev/unit.sh`, `scripts/dev/pr_check.sh`.
 
-## Definition of Done
-- Root cause is clearly identified and reproducible.
-- Fix is minimal, idempotent, and avoids new reconcile loops.
-- Regression test is added or explicitly scoped as follow-up.
+## Pass / Fail Criteria
+- Pass: root cause is reproducible, fix is minimal/idempotent, and regression coverage is defined.
+- Fail: issue cannot be traced to a concrete gate or fix/validation is incomplete.
 
 ## Key Paths
 - Controllers: `internal/controller/`

@@ -1,0 +1,3 @@
+interface:
+  display_name: "SOK Test"
+  short_description: "Run standard test workflows"

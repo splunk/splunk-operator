@@ -8,6 +8,10 @@ description: Prepare or verify a Splunk Operator release checklist, including co
 ## Overview
 Produce a release readiness checklist tailored to this repo's build, bundle, and documentation flow.
 
+## Preconditions
+- Target release version and branch are identified.
+- Planned compatibility targets (Splunk/Kubernetes/platform) are available.
+
 ## Workflow
 1. Gather release context (version, target Splunk Enterprise versions, Kubernetes support).
 2. Verify CRD and bundle artifacts.
@@ -42,6 +46,10 @@ Produce a release readiness checklist tailored to this repo's build, bundle, and
 ## Output Contract
 - Use `assets/release-checklist.md` for the final checklist.
 - Call out any missing inputs needed to finish the checklist.
+
+## Pass / Fail Criteria
+- Pass: checklist covers compatibility, generated artifacts, images, docs, and open risks.
+- Fail: required release inputs are missing or validation steps are incomplete.
 
 ## Key Paths
 - Release docs: `docs/README.md`, `docs/ChangeLog.md`, `docs/SplunkOperatorUpgrade.md`, `docs/Install.md`

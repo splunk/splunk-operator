@@ -8,6 +8,11 @@ description: Create a new CRD and controller skeleton (operator-sdk), wire RBAC,
 ## Overview
 Scaffold and wire a new CRD + controller end-to-end, with RBAC, samples, tests, and docs.
 
+## Preconditions
+- New CRD scope, API group/version/kind, and ownership are agreed.
+- `operator-sdk` scaffolding flow is available.
+- A spec/issue reference exists for non-trivial API additions.
+
 ## Scope
 Allowed paths:
 - `api/**`
@@ -43,12 +48,9 @@ If changes are needed outside the allowed paths, stop and propose a follow-up pl
 - Prefer scripts when available: `scripts/dev/unit.sh`, `scripts/dev/lint.sh`, `scripts/dev/pr_check.sh`.
 - Ensure CRD output is updated in `config/crd/bases/` and, if tracked, `bundle/` and `helm-chart/`.
 
-## Definition of Done
-- New CRD types are generated and registered in `PROJECT`/`cmd/main.go`.
-- RBAC and CRD manifests are regenerated and verified.
-- Sample YAML exists under `config/samples/`.
-- At least one test (unit or integration stub) is added.
-- Docs/examples updated for the new CRD.
+## Pass / Fail Criteria
+- Pass: CRD/controller scaffolding compiles, generated artifacts are in sync, and tests/docs are present.
+- Fail: registration/generation is incomplete, or validation artifacts are missing.
 
 ## Output Contract
 - Changed files

@@ -20,6 +20,7 @@ pass harness checks.
 - `RELEASE_FLOW.md` provides a concise release checklist and artifact map
 - `HARNESS_CONTRACT.md` defines required harness gates and output contract
 - `HARNESS_MANIFEST.md` defines the machine-readable harness manifest format
+- `SKILL_ALIGNMENT.md` defines the shared skill contract and splcore-to-SOK mapping
 - `SPECKIT_KEP_BRIDGE.md` explains Spec Kit to KEP to harness-manifest mapping
 - `BRANCH_POLICY.md` defines branch protection and merge-queue requirements
 - `evals/policy-regression.yaml` is the replayable governance regression corpus

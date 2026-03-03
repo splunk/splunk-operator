@@ -8,6 +8,10 @@ description: Analyze CI failures, map them to local repro commands, and propose 
 ## Overview
 Turn CI failures into a local repro and a minimal fix with a validation plan.
 
+## Preconditions
+- CI failure context is available (failed job URL or logs).
+- Local repo state matches the branch under investigation.
+
 ## Scope
 Allowed paths:
 - `scripts/**`
@@ -37,10 +41,9 @@ If changes are needed outside the allowed paths, stop and propose a follow-up pl
 - PR gate: `scripts/dev/pr_check.sh`
 - Repo verify: `./scripts/verify_repo.sh`
 
-## Definition of Done
-- CI failure is reproducible locally or explained why not.
-- Fix is minimal and validated with a local repro command.
-- Regression risk is noted.
+## Pass / Fail Criteria
+- Pass: failure is reproduced (or clearly explained), a minimal fix is validated, and regression risk is called out.
+- Fail: reproduction/fix is incomplete or validation evidence is missing.
 
 ## Output Contract
 - Changed files

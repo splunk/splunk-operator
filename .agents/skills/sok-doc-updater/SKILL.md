@@ -8,6 +8,10 @@ description: Update Splunk Operator docs and examples for a change. Use when a c
 ## Overview
 Keep docs, examples, and user-facing guidance in sync with code changes.
 
+## Preconditions
+- Product behavior change and impacted docs are known.
+- If code changes are still pending, defer this skill until code scope is stable.
+
 ## Scope
 Allowed paths:
 - `docs/**`
@@ -32,10 +36,9 @@ If product code changes are required, stop and hand off to the appropriate skill
 3. Verify examples are consistent with current CRD schema.
 4. Provide a short summary and a test/validation note if applicable.
 
-## Definition of Done
-- Docs and examples are consistent with current CRD schema.
-- User-facing behavior is clearly described.
-- Any required follow-up (tests or validation) is documented.
+## Pass / Fail Criteria
+- Pass: docs/examples match current behavior and schema, with follow-ups called out.
+- Fail: docs are incomplete, inconsistent, or missing validation notes.
 
 ## Output Contract
 - Changed files

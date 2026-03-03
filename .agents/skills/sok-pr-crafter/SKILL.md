@@ -8,6 +8,10 @@ description: Generate clean PR descriptions, checklists, and risk notes. Use aft
 ## Overview
 Create a PR-ready summary and checklist from the current diff and test results.
 
+## Preconditions
+- Code changes are complete for this pass.
+- Test commands were run (or explicitly skipped with reason).
+
 ## Scope
 Allowed paths:
 - `templates/**`
@@ -33,10 +37,9 @@ This skill should not change product code. If changes are required, stop and han
 3. Call out risks, rollbacks, and compatibility notes.
 4. Format output using `templates/pull_request.md`.
 
-## Definition of Done
-- PR summary matches the actual diff and behavior.
-- Tests section is accurate and explicit.
-- Risks/rollback are captured if relevant.
+## Pass / Fail Criteria
+- Pass: PR content accurately reflects diff/tests/risks and matches template expectations.
+- Fail: summary is inconsistent with code or validation evidence is missing.
 
 ## Output Contract
 - Changed files

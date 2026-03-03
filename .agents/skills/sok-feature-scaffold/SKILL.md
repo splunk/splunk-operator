@@ -8,6 +8,11 @@ description: Add or change Splunk Operator behavior by introducing a new field i
 ## Overview
 Implement CRD-driven features end-to-end with code, tests, and docs in this repository.
 
+## Preconditions
+- Feature scope is agreed (target CRD kind, field shape, expected behavior).
+- A spec/issue reference exists for non-trivial changes.
+- Operator SDK/controller-gen workflow is available locally via Make targets.
+
 ## Scope
 Allowed paths:
 - `api/**`
@@ -76,11 +81,9 @@ Run `make bundle` to refresh `bundle/manifests/*` and `helm-chart/splunk-operato
 - Update `docs/CustomResources.md` for spec fields.
 - Update any feature-specific doc under `docs/` and add an example manifest if needed.
 
-## Definition of Done
-- CRD/schema generation is updated and verified.
-- Reconcile logic is idempotent and status updates are gated.
-- Tests added/updated for the new behavior.
-- Docs/examples reflect the new field or behavior.
+## Pass / Fail Criteria
+- Pass: schema/manifests are in sync, reconcile logic is idempotent, tests/docs are updated.
+- Fail: generation mismatch, missing test coverage, or behavior not wired end-to-end.
 
 ## Assets
 - Use `assets/pr-template.md` for the PR summary format.

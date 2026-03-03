@@ -22,7 +22,7 @@ Run the repo's standard unit and integration tests, and summarize failures consi
 3. If tests fail, summarize the failure and propose next steps.
 4. When CRDs or bundles changed, run `make verify` to confirm generated outputs.
 
-## Prerequisites
+## Preconditions
 - Go toolchain and `ginkgo`
 - Docker and `kubectl`
 - `kind` installed for local integration tests
@@ -50,6 +50,16 @@ These are defined in `test/env.sh` and can be overridden in your shell.
 - Provide the failing test names or package paths.
 - Include the first error and any repeated error pattern.
 - Suggest the most likely code area to inspect.
+
+## Pass / Fail Criteria
+- Pass: requested test commands complete with actionable output and no unresolved errors.
+- Fail: commands fail without a reproducible triage summary or required follow-up.
+
+## Output Contract
+- Changed files
+- Commands run
+- Results
+- PR-ready summary
 
 ## Key Paths
 - Test harness: `test/README.md`

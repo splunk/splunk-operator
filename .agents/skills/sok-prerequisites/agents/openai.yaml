@@ -1,0 +1,3 @@
+interface:
+  display_name: "SOK Prerequisites"
+  short_description: "Validate local prerequisites"
