@@ -93,6 +93,7 @@ const (
 	queueVolumeDefaultPath     = "index-ingest-separation-test-bucket/queue-creds"
 	queueVolumeDefaultProvider = "aws"
 	queueVolumeDefaultType     = "s3"
+	queueVolumeDefaultRegion   = "us-west-2"
 )
 
 // GenerateQueueVolumeSpec return VolumeSpec struct with given values
@@ -104,6 +105,7 @@ func GenerateQueueVolumeSpec(name, secretRef string) enterpriseApi.VolumeSpec {
 		SecretRef: secretRef,
 		Provider:  queueVolumeDefaultProvider,
 		Type:      queueVolumeDefaultType,
+		Region:    queueVolumeDefaultRegion,
 	}
 }
 

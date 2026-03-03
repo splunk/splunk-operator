@@ -23,4 +23,7 @@ func TestGenerateQueueVolumeSpecHasRequiredFields(t *testing.T) {
 	if vol.Type == "" {
 		t.Fatal("storage type must not be empty")
 	}
+	if vol.Region == "" {
+		t.Fatal("region must not be empty for aws provider")
+	}
 }
