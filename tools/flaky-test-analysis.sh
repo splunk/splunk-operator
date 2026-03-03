@@ -125,9 +125,11 @@ mkdir -p "$OUTPUT_DIR"
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 
+dl_current=0
 echo "$artifacts_json" | jq -r '.[] | "\(.id)\t\(.name)\t\(.workflow_run_id)"' | \
   while IFS=$'\t' read -r art_id art_name run_id; do
-    echo "  Downloading: ${art_name} (run ${run_id})..."
+    dl_current=$((dl_current + 1))
+    echo "  [${dl_current}/${artifact_count}] ${art_name} (run ${run_id})..."
     zipfile="${tmpdir}/${art_id}.zip"
     if gh api "repos/${REPO}/actions/artifacts/${art_id}/zip" > "$zipfile" 2>/dev/null; then
       unzip -qo "$zipfile" -d "$tmpdir/extract" 2>/dev/null
@@ -151,8 +153,7 @@ echo ""
 echo "Normalizing classnames (stripping Ginkgo random suffixes)..."
 for f in "${OUTPUT_DIR}"/*.xml; do
   [[ -f "$f" ]] || continue
-  sed -i.bak -E 's/classname="Running (.+)-[a-z0-9]{3}"/classname="\1"/g' "$f"
-  rm -f "${f}.bak"
+  sed -E 's/classname="Running (.+)-[a-z0-9]{3}"/classname="\1"/g' "$f" > "${f}.tmp" && mv "${f}.tmp" "$f"
 done
 echo "Done."
 
@@ -189,7 +190,8 @@ echo ""
 
 RESULTS_FILE="${RESULTS_FILE:-flaky-results.txt}"
 
-"$PYTHON" -m flaky_tests_detection.check_flakes \
+PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}" "$PYTHON" -c \
+  "import importlib; importlib.import_module('flaky-test-analysis-mpl-config'); from flaky_tests_detection.check_flakes import main; main()" \
   --junit-files="${OUTPUT_DIR}" \
   --grouping-option=days \
   --window-size="${WINDOW_SIZE}" \
