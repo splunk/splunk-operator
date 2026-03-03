@@ -95,11 +95,11 @@ type Spec struct {
 	// +kubebuilder:validation:Enum=Always;IfNotPresent;Never
 	// +kubebuilder:default=IfNotPresent
 	// +optional
-	ImagePullPolicy string `json:"imagePullPolicy"`
+	ImagePullPolicy string `json:"imagePullPolicy,omitempty"`
 
 	// Name of Scheduler to use for pod placement (defaults to “default-scheduler”)
 	// +optional
-	SchedulerName string `json:"schedulerName"`
+	SchedulerName string `json:"schedulerName,omitempty"`
 
 	// Kubernetes Affinity rules that control how pods are assigned to particular nodes.
 	Affinity corev1.Affinity `json:"affinity"`
@@ -168,15 +168,15 @@ type CommonSplunkSpec struct {
 
 	// Storage configuration for /opt/splunk/etc volume
 	// +optional
-	EtcVolumeStorageConfig StorageClassSpec `json:"etcVolumeStorageConfig"`
+	EtcVolumeStorageConfig StorageClassSpec `json:"etcVolumeStorageConfig,omitempty"`
 
 	// Storage configuration for /opt/splunk/var volume
 	// +optional
-	VarVolumeStorageConfig StorageClassSpec `json:"varVolumeStorageConfig"`
+	VarVolumeStorageConfig StorageClassSpec `json:"varVolumeStorageConfig,omitempty"`
 
 	// List of one or more Kubernetes volumes. These will be mounted in all pod containers as as /mnt/<name>
 	// +optional
-	Volumes []corev1.Volume `json:"volumes"`
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
 
 	// Inline map of default.yml overrides used to initialize the environment
 	Defaults string `json:"defaults"`
@@ -217,7 +217,7 @@ type CommonSplunkSpec struct {
 	// If not specified uses the default serviceAccount for the namespace as per
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#use-the-default-service-account-to-access-the-api-server
 	// +optional
-	ServiceAccount string `json:"serviceAccount"`
+	ServiceAccount string `json:"serviceAccount,omitempty"`
 
 	// ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
 	// WARNING: Setting environment variables used by Splunk or Ansible will affect Splunk installation and operation
@@ -261,16 +261,16 @@ type CommonSplunkSpec struct {
 type StorageClassSpec struct {
 	// Name of StorageClass to use for persistent volume claims
 	// +optional
-	StorageClassName string `json:"storageClassName"`
+	StorageClassName string `json:"storageClassName,omitempty"`
 
 	// Storage capacity to request persistent volume claims (default="10Gi" for etc and "100Gi" for var)
 	// +optional
-	StorageCapacity string `json:"storageCapacity"`
+	StorageCapacity string `json:"storageCapacity,omitempty"`
 
 	// If true, ephemeral (emptyDir) storage will be used
 	// +optional
 	// +kubebuilder:default=false
-	EphemeralStorage bool `json:"ephemeralStorage"`
+	EphemeralStorage bool `json:"ephemeralStorage,omitempty"`
 }
 
 // SmartStoreSpec defines Splunk indexes and remote storage volume configuration
@@ -346,7 +346,7 @@ type VolumeSpec struct {
 
 	// Secret object name
 	// +optional
-	SecretRef string `json:"secretRef"`
+	SecretRef string `json:"secretRef,omitempty"`
 
 	// Remote Storage type. Supported values: s3, blob, gcs. s3 works with aws or minio providers, whereas blob works with azure provider, gcs works for gcp.
 	// +kubebuilder:validation:Enum=s3;blob;gcs
@@ -355,11 +355,11 @@ type VolumeSpec struct {
 	// App Package Remote Store provider. Supported values: aws, minio, azure, gcp.
 	// +optional
 	// +kubebuilder:validation:Enum=aws;minio;azure;gcp
-	Provider string `json:"provider"`
+	Provider string `json:"provider,omitempty"`
 
 	// Region of the remote storage volume where apps reside. Required for aws, optional for azure and gcp.
 	// +optional
-	Region string `json:"region"`
+	Region string `json:"region,omitempty"`
 }
 
 // VolumeAndTypeSpec used to add any custom variables for volume implementation

@@ -49,7 +49,6 @@ type SQSSpec struct {
 	// Name of the queue
 	Name string `json:"name"`
 
-	// +optional
 	// +kubebuilder:validation:Pattern=`^(?:us|ap|eu|me|af|sa|ca|cn|il)(?:-[a-z]+){1,3}-\d$`
 	// Auth Region of the resources
 	AuthRegion string `json:"authRegion"`
@@ -62,7 +61,7 @@ type SQSSpec struct {
 	// +optional
 	// +kubebuilder:validation:Pattern=`^https?://[^\s/$.?#].[^\s]*$`
 	// Amazon SQS Service endpoint
-	Endpoint string `json:"endpoint"`
+	Endpoint string `json:"endpoint,omitempty"`
 
 	// +optional
 	// List of remote storage volumes
