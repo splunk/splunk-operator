@@ -153,6 +153,23 @@ verify: verify-crd ## Verify generated artifacts (set VERIFY_BUNDLE=1 to include
 verify-repo: ## Run repository verification script (see scripts/verify_repo.sh)
 	@./scripts/verify_repo.sh
 
+.PHONY: doc-first-check commit-discipline-check appframework-parity-check start-change
+doc-first-check: ## Enforce doc-first governance for changed implementation paths
+	@./scripts/dev/doc_first_check.sh
+
+commit-discipline-check: ## Enforce incremental commit discipline on current branch
+	@./scripts/dev/commit_discipline_check.sh
+
+appframework-parity-check: ## Enforce AppFramework parity evidence for gated paths
+	@./scripts/dev/appframework_parity_check.sh
+
+start-change: ## Create docs/changes/<date>-<topic>.md from template (use TOPIC=...)
+	@if [ -z "$(TOPIC)" ]; then \
+		echo "Usage: make start-change TOPIC=<short-topic>"; \
+		exit 1; \
+	fi
+	@./scripts/dev/start_change.sh "$(TOPIC)"
+
 .PHONY: skaffold-dev skaffold-smoke
 skaffold-dev: ## Run skaffold inner loop (default profile: dev-kind)
 	@SKAFFOLD_PROFILE=$(SKAFFOLD_PROFILE) ./scripts/dev/skaffold_dev.sh

@@ -26,6 +26,21 @@ if [[ "${SKIP_MANIFEST_CHECK:-0}" != "1" ]]; then
   ./scripts/dev/harness_manifest_check.sh "${spec_args[@]}"
 fi
 
+if [[ "${SKIP_DOC_FIRST_CHECK:-0}" != "1" ]]; then
+  echo "Running doc-first check: ./scripts/dev/doc_first_check.sh ${spec_args[*]}"
+  ./scripts/dev/doc_first_check.sh "${spec_args[@]}"
+fi
+
+if [[ "${SKIP_COMMIT_DISCIPLINE_CHECK:-0}" != "1" ]]; then
+  echo "Running commit discipline check: ./scripts/dev/commit_discipline_check.sh ${spec_args[*]}"
+  ./scripts/dev/commit_discipline_check.sh "${spec_args[@]}"
+fi
+
+if [[ "${SKIP_APPFRAMEWORK_PARITY_CHECK:-0}" != "1" ]]; then
+  echo "Running appframework parity check: ./scripts/dev/appframework_parity_check.sh ${spec_args[*]}"
+  ./scripts/dev/appframework_parity_check.sh "${spec_args[@]}"
+fi
+
 if [[ "${SKIP_RISK_POLICY_CHECK:-0}" != "1" ]]; then
   echo "Running risk policy check: ./scripts/dev/risk_policy_check.sh ${spec_args[*]}"
   ./scripts/dev/risk_policy_check.sh "${spec_args[@]}"

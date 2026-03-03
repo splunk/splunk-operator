@@ -13,6 +13,15 @@ cases:
   - id: pr_check_manifest_gate
     file: scripts/dev/pr_check.sh
     pattern: "harness_manifest_check.sh"
+  - id: pr_check_doc_first_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "doc_first_check.sh"
+  - id: pr_check_commit_discipline_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "commit_discipline_check.sh"
+  - id: pr_check_appframework_parity_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "appframework_parity_check.sh"
   - id: pr_check_eval_gate
     file: scripts/dev/pr_check.sh
     pattern: "harness_eval.sh"
@@ -67,3 +76,9 @@ cases:
   - id: branch_policy_doc
     file: docs/agent/BRANCH_POLICY.md
     pattern: "## Merge Queue"
+  - id: doc_first_template_sections
+    file: docs/changes/TEMPLATE.md
+    pattern: "## Harness Coverage Plan"
+  - id: appframework_parity_doc
+    file: docs/agent/APPFRAMEWORK_PARITY.md
+    pattern: "## Required Evidence"

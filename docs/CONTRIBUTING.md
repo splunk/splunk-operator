@@ -205,11 +205,15 @@ For agent-assisted or standardized local workflows, prefer the scripts under `sc
 - `scripts/dev/speckit_bridge.sh`
 - `scripts/dev/spec_check.sh`
 - `scripts/dev/harness_manifest_check.sh`
+- `scripts/dev/doc_first_check.sh`
+- `scripts/dev/commit_discipline_check.sh`
+- `scripts/dev/appframework_parity_check.sh`
 - `scripts/dev/risk_policy_check.sh`
 - `scripts/dev/risk_label_check.sh`
 - `scripts/dev/harness_eval.sh`
 - `scripts/dev/harness_run.sh`
 - `scripts/dev/autonomy_scorecard.sh`
+- `scripts/dev/start_change.sh`
 - `scripts/dev/skill_lint.sh`
 - `scripts/dev/script_sanity_check.sh`
 - `scripts/dev/unit.sh`

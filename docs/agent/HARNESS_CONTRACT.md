@@ -11,6 +11,9 @@ This document defines the minimum harness contract for agent-driven changes.
 ## Required Local Gates
 - `scripts/dev/spec_check.sh`
 - `scripts/dev/harness_manifest_check.sh`
+- `scripts/dev/doc_first_check.sh`
+- `scripts/dev/commit_discipline_check.sh`
+- `scripts/dev/appframework_parity_check.sh`
 - `scripts/dev/risk_policy_check.sh`
 - `scripts/dev/risk_label_check.sh --labels risk:<tier>` (optional local, required in PR CI)
 - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
