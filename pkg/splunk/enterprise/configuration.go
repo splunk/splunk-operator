@@ -1221,9 +1221,9 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	if instanceType == SplunkIndexer {
 		terminationGracePeriodSeconds = 1020 // 17 minutes for indexers (15 min decommission + 1.5 min stop + buffer)
 	} else if instanceType == SplunkSearchHead {
-		terminationGracePeriodSeconds = 360  // 6 minutes for search heads (5 min detention + 1 min stop)
+		terminationGracePeriodSeconds = 360 // 6 minutes for search heads (5 min detention + 1 min stop)
 	} else {
-		terminationGracePeriodSeconds = 120  // 2 minutes for other roles (standalone, CM, etc.)
+		terminationGracePeriodSeconds = 120 // 2 minutes for other roles (standalone, CM, etc.)
 	}
 	podTemplateSpec.Spec.TerminationGracePeriodSeconds = &terminationGracePeriodSeconds
 

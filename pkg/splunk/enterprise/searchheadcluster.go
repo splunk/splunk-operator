@@ -385,7 +385,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			}
 			scopedLog.Info("shcSecret changed")
 
-// Note: Restart will be triggered via rolling restart mechanism after all secrets are updated
+			// Note: Restart will be triggered via rolling restart mechanism after all secrets are updated
 			// The handleSearchHeadClusterRollingRestart() function will detect the change and trigger
 			// a zero-downtime rolling restart of all pods
 

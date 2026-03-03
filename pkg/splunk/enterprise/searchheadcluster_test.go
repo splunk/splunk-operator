@@ -69,9 +69,9 @@ func TestApplySearchHeadCluster(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	funcCalls := []spltest.MockFuncCall{
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},           // 0
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},           // 1
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},           // 2
+		{MetaName: "*v1.Secret-test-splunk-test-secret"}, // 0
+		{MetaName: "*v1.Secret-test-splunk-test-secret"}, // 1
+		{MetaName: "*v1.Secret-test-splunk-test-secret"}, // 2
 
 		{MetaName: "*v1.ConfigMap-test-splunk-search-head-stack1-configmap"}, // 3
 
@@ -87,51 +87,51 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"}, // 10
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"}, // 11
 
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},            // 12
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},               // 12
 		{MetaName: "*v1.Secret-test-splunk-stack1-deployer-secret-v1"}, // 13
 
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},    // 14
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"}, // 15
 
-		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"}, // 16
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},             // 17
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},      // 16
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},                  // 17
 		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secret-v1"}, // 18
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"}, // 19
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"}, // 20
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},      // 19
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},      // 20
 
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},     // 21
-		{MetaName: "*v4.SearchHeadCluster-test-stack1"},      // 22
-		{MetaName: "*v4.SearchHeadCluster-test-stack1"},      // 23
+		{MetaName: "*v1.Secret-test-splunk-test-secret"}, // 21
+		{MetaName: "*v4.SearchHeadCluster-test-stack1"},  // 22
+		{MetaName: "*v4.SearchHeadCluster-test-stack1"},  // 23
 	}
 
 	createFuncCalls := []spltest.MockFuncCall{
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},                               // 0
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},                               // 1
-		{MetaName: "*v1.ConfigMap-test-splunk-search-head-stack1-configmap"},           // 2
-		{MetaName: "*v1.Service-test-splunk-stack1-search-head-headless"},              // 3
-		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},               // 4
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},                     // 0
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},                     // 1
+		{MetaName: "*v1.ConfigMap-test-splunk-search-head-stack1-configmap"}, // 2
+		{MetaName: "*v1.Service-test-splunk-stack1-search-head-headless"},    // 3
+		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},     // 4
 
 		{MetaName: "*v1.PodDisruptionBudget-test-splunk-stack1-search-head-pdb"}, // 5
 
 		{MetaName: "*v1.Service-test-splunk-stack1-deployer-service"}, // 6
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},     // 7
 
-		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},       // 8
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},                   // 9
-		{MetaName: "*v1.Secret-test-splunk-stack1-deployer-secret-v1"},     // 10
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},          // 11
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},          // 12
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},       // 13
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},   // 8
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},               // 9
+		{MetaName: "*v1.Secret-test-splunk-stack1-deployer-secret-v1"}, // 10
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},      // 11
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},      // 12
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},   // 13
 
-		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},             // 14
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},                         // 15
-		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secret-v1"},        // 16
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},             // 17
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},             // 18
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},             // 19
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},                         // 20
-		{MetaName: "*v4.SearchHeadCluster-test-stack1"},                          // 21
-		{MetaName: "*v4.SearchHeadCluster-test-stack1"},                          // 22
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},      // 14
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},                  // 15
+		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secret-v1"}, // 16
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},      // 17
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},      // 18
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},      // 19
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},                  // 20
+		{MetaName: "*v4.SearchHeadCluster-test-stack1"},                   // 21
+		{MetaName: "*v4.SearchHeadCluster-test-stack1"},                   // 22
 	}
 
 	labels := map[string]string{

@@ -180,12 +180,12 @@ func TestPodIntentAnnotations(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	tests := []struct {
-		name       string
-		podOrdinal int32
-		annotation string
-		replicas   int32
+		name        string
+		podOrdinal  int32
+		annotation  string
+		replicas    int32
 		newReplicas int32
-		wantIntent string
+		wantIntent  string
 	}{
 		{
 			name:        "Scale down - pod marked for deletion",
@@ -303,7 +303,7 @@ func TestFinalizerHandling(t *testing.T) {
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"app": "test"},
+					Labels:     map[string]string{"app": "test"},
 					Finalizers: []string{"splunk.com/pod-cleanup"},
 				},
 				Spec: corev1.PodSpec{
@@ -480,11 +480,11 @@ func TestStatefulSetRollingUpdateMutualExclusion(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	tests := []struct {
-		name              string
-		replicas          int32
-		updatedReplicas   int32
-		shouldBlockEvict  bool
-		description       string
+		name             string
+		replicas         int32
+		updatedReplicas  int32
+		shouldBlockEvict bool
+		description      string
 	}{
 		{
 			name:             "No rolling update in progress",

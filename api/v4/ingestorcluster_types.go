@@ -134,7 +134,6 @@ const (
 	RestartPhaseFailed RestartPhase = "Failed"
 )
 
-
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 

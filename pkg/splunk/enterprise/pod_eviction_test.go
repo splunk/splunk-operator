@@ -322,10 +322,10 @@ func TestScaleDownWithIntentAnnotation(t *testing.T) {
 // TestRestartVsScaleDownIntent tests distinguishing between restart and scale-down
 func TestRestartVsScaleDownIntent(t *testing.T) {
 	tests := []struct {
-		name        string
-		intent      string
+		name            string
+		intent          string
 		shouldRebalance bool
-		description string
+		description     string
 	}{
 		{
 			name:            "Scale-down intent",
@@ -431,8 +431,8 @@ func TestPodDeletionHandlerWithIntent(t *testing.T) {
 	_ = corev1.AddToScheme(scheme)
 
 	tests := []struct {
-		name           string
-		intent         string
+		name            string
+		intent          string
 		shouldDeletePVC bool
 	}{
 		{
@@ -510,9 +510,9 @@ func TestTerminationGracePeriod(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	tests := []struct {
-		name                 string
-		role                 string
-		wantGracePeriod      int64
+		name            string
+		role            string
+		wantGracePeriod int64
 	}{
 		{
 			name:            "Indexer - 5 minutes",
