@@ -3,6 +3,9 @@ permissions:
   contents: read
   actions: read
 on:
+  push:
+    branches:
+      - CSPL-3763-add-flay-test-analysis-tool
   workflow_dispatch:
     inputs:
       start_date:
@@ -74,6 +77,10 @@ jobs:
             fi
 
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate failure stats summary
+        if: always()
+        run: python3 tools/test-failure-stats.py ./junit-reports >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload results
         if: always()
