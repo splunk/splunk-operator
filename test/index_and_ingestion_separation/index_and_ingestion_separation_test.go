@@ -81,7 +81,15 @@ var _ = Describe("indingsep test", func() {
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
 			// Secret reference
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec("queue-secret-ref-volume", testcaseEnvInst.GetIndexIngestSepSecretName())}
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec(
+				"queue-secret-ref-volume",
+				objectStorage.S3.Endpoint,
+				objectStorage.S3.Path,
+				testcaseEnvInst.GetIndexIngestSepSecretName(),
+				"aws",
+				"s3",
+				queue.SQS.AuthRegion,
+			)}
 			queue.SQS.VolList = volumeSpec
 
 			// Deploy Queue
@@ -159,7 +167,15 @@ var _ = Describe("indingsep test", func() {
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
 			// Secret reference
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec("queue-secret-ref-volume", testcaseEnvInst.GetIndexIngestSepSecretName())}
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec(
+				"queue-secret-ref-volume",
+				objectStorage.S3.Endpoint,
+				objectStorage.S3.Path,
+				testcaseEnvInst.GetIndexIngestSepSecretName(),
+				"aws",
+				"s3",
+				queue.SQS.AuthRegion,
+			)}
 			queue.SQS.VolList = volumeSpec
 
 			// Deploy Queue
@@ -269,7 +285,15 @@ var _ = Describe("indingsep test", func() {
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
 			// Secret reference
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec("queue-secret-ref-volume", testcaseEnvInst.GetIndexIngestSepSecretName())}
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec(
+				"queue-secret-ref-volume",
+				objectStorage.S3.Endpoint,
+				objectStorage.S3.Path,
+				testcaseEnvInst.GetIndexIngestSepSecretName(),
+				"aws",
+				"s3",
+				queue.SQS.AuthRegion,
+			)}
 			queue.SQS.VolList = volumeSpec
 
 			// Deploy Queue
