@@ -1138,34 +1138,3 @@ func (c *SplunkClient) CheckRestartRequired() (bool, string, error) {
 	// No entries or 404 response means no restart required
 	return false, "", nil
 }
-
-// ReloadSplunk reloads Splunk configuration without restarting splunkd
-// Calls POST /services/server/control/restart with mode=reload
-//
-// ⚠️ WARNING: This function is BROKEN and should NOT be used!
-// The mode=reload parameter is IGNORED by Splunk - this triggers a FULL RESTART of splunkd.
-// Splunk never implemented the mode parameter; this endpoint always performs full restart.
-// See: ServerControlHandler.cpp:136 (Splunk source) - doRestart() always called regardless of parameters
-//
-// IMPACT: Calling this function will restart ALL pods simultaneously (total downtime).
-// RECOMMENDATION: Remove this function or reimplement to use component-specific reload endpoints:
-//   - For SSL certificates: POST /services/server/control/reload_ssl_config
-//   - For other configs: Use rolling restart mechanism instead
-//
-// This function is currently NOT USED anywhere in the operator codebase.
-func (c *SplunkClient) ReloadSplunk() error {
-	url := c.ManagementURI + "/services/server/control/restart?mode=reload&output_mode=json"
-
-	request, err := http.NewRequest("POST", url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create reload request: %w", err)
-	}
-
-	// Reload can take time, so accept 200 (success) or 202 (accepted)
-	err = c.Do(request, []int{200, 202}, nil)
-	if err != nil {
-		return fmt.Errorf("failed to reload splunk: %w", err)
-	}
-
-	return nil
-}
