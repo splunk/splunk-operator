@@ -123,9 +123,6 @@ type IndexerClusterStatus struct {
 	// Auxiliary message describing CR status
 	Message string `json:"message"`
 
-	// Queue and bucket access secret version
-	QueueBucketAccessSecretVersion string `json:"queueBucketAccessSecretVersion,omitempty"`
-
 	// Rolling restart status
 	RestartStatus RestartStatus `json:"restartStatus,omitempty"`
 
