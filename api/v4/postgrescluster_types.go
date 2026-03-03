@@ -45,6 +45,7 @@ type ManagedRole struct {
 // Validation rules ensure immutability of Class, and that Storage and PostgresVersion can only be set once and cannot be removed or downgraded.
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.postgresVersion) || (has(self.postgresVersion) && int(self.postgresVersion.split('.')[0]) >= int(oldSelf.postgresVersion.split('.')[0]))",messageExpression="!has(self.postgresVersion) ? 'postgresVersion cannot be removed once set (was: ' + oldSelf.postgresVersion + ')' : 'postgresVersion major version cannot be downgraded (from: ' + oldSelf.postgresVersion + ', to: ' + self.postgresVersion + ')'"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.storage) || (has(self.storage) && quantity(self.storage).compareTo(quantity(oldSelf.storage)) >= 0)",messageExpression="!has(self.storage) ? 'storage cannot be removed once set (was: ' + string(oldSelf.storage) + ')' : 'storage size cannot be decreased (from: ' + string(oldSelf.storage) + ', to: ' + string(self.storage) + ')'"
+// +kubebuilder:validation:XValidation:rule="!has(self.connectionPoolerEnabled) || !self.connectionPoolerEnabled || has(self.connectionPoolerConfig)",message="connectionPoolerConfig must be set when connectionPoolerEnabled is true"
 type PostgresClusterSpec struct {
 	// This field is IMMUTABLE after creation.
 	// +kubebuilder:validation:Required
@@ -110,6 +111,19 @@ type PostgresClusterSpec struct {
 	ManagedRoles []ManagedRole `json:"managedRoles,omitempty"`
 }
 
+// PostgresClusterResources defines references to Kubernetes resources related to the PostgresCluster, such as ConfigMaps and Secrets.
+type PostgresClusterResources struct {
+	// ConfigMapRef references the ConfigMap with connection endpoints.
+	// Contains: CLUSTER_ENDPOINTS, POOLER_ENDPOINTS (if connection pooler enabled)
+	// +optional
+	ConfigMapRef *corev1.LocalObjectReference `json:"configMapRef,omitempty"`
+
+	// SecretRef references the Secret with superuser credentials.
+	// Contains: passwords for superuser
+	// +optional
+	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+}
+
 // PostgresClusterStatus defines the observed state of PostgresCluster.
 type PostgresClusterStatus struct {
 	// Phase represents the current phase of the PostgresCluster.
@@ -134,6 +148,10 @@ type PostgresClusterStatus struct {
 	// ManagedRolesStatus tracks the reconciliation status of managed roles.
 	// +optional
 	ManagedRolesStatus *ManagedRolesStatus `json:"managedRolesStatus,omitempty"`
+
+	// Resources contains references to related Kubernetes resources like ConfigMaps and Secrets.
+	// +optional
+	Resources *PostgresClusterResources `json:"resources,omitempty"`
 }
 
 // ManagedRolesStatus tracks the state of managed PostgreSQL roles.

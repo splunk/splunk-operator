@@ -58,6 +58,37 @@ spec:
                 x-kubernetes-validations:
                 - message: class is immutable
                   rule: self == oldSelf
+              connectionPoolerConfig:
+                description: |-
+                  ConnectionPoolerConfig overrides the connection pooler configuration from the class.
+                  Only takes effect when connection pooling is enabled.
+                properties:
+                  config:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Config contains PgBouncer configuration parameters.
+                      Passed directly to CNPG Pooler spec.pgbouncer.parameters.
+                      See: https://cloudnative-pg.io/docs/1.28/connection_pooling/#pgbouncer-configuration-options
+                    type: object
+                  instances:
+                    default: 3
+                    description: |-
+                      Instances is the number of PgBouncer pod replicas.
+                      Higher values provide better availability and load distribution.
+                    format: int32
+                    maximum: 10
+                    minimum: 1
+                    type: integer
+                  mode:
+                    default: transaction
+                    description: Mode defines the connection pooling strategy.
+                    enum:
+                    - session
+                    - transaction
+                    - statement
+                    type: string
+                type: object
               connectionPoolerEnabled:
                 default: false
                 description: |-
@@ -128,7 +159,6 @@ spec:
                   type: string
                 type: array
               postgresVersion:
-                default: "18"
                 description: |-
                   PostgresVersion is the PostgreSQL version (major or major.minor).
                   Examples: "18" (latest 18.x), "18.1" (specific minor), "17", "16"
@@ -216,9 +246,22 @@ spec:
             - class
             type: object
             x-kubernetes-validations:
-            - message: Storage size cannot be removed and can only be increased
+            - messageExpression: '!has(self.postgresVersion) ? ''postgresVersion cannot
+                be removed once set (was: '' + oldSelf.postgresVersion + '')'' : ''postgresVersion
+                major version cannot be downgraded (from: '' + oldSelf.postgresVersion
+                + '', to: '' + self.postgresVersion + '')'''
+              rule: '!has(oldSelf.postgresVersion) || (has(self.postgresVersion) &&
+                int(self.postgresVersion.split(''.'')[0]) >= int(oldSelf.postgresVersion.split(''.'')[0]))'
+            - messageExpression: '!has(self.storage) ? ''storage cannot be removed
+                once set (was: '' + string(oldSelf.storage) + '')'' : ''storage size
+                cannot be decreased (from: '' + string(oldSelf.storage) + '', to:
+                '' + string(self.storage) + '')'''
               rule: '!has(oldSelf.storage) || (has(self.storage) && quantity(self.storage).compareTo(quantity(oldSelf.storage))
                 >= 0)'
+            - message: connectionPoolerConfig must be set when connectionPoolerEnabled
+                is true
+              rule: '!self.connectionPoolerEnabled || self.connectionPoolerConfig
+                != null'
           status:
             description: PostgresClusterStatus defines the observed state of PostgresCluster.
             properties:
@@ -363,6 +406,43 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              resources:
+                description: Resources contains references to related Kubernetes resources
+                  like ConfigMaps and Secrets.
+                properties:
+                  configMapRef:
+                    description: |-
+                      ConfigMapRef references the ConfigMap with connection endpoints.
+                      Contains: CLUSTER_ENDPOINTS, POOLER_ENDPOINTS (if connection pooler enabled)
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  secretRef:
+                    description: |-
+                      SecretRef references the Secret with superuser credentials.
+                      Contains: passwords for superuser
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                type: object
             type: object
         type: object
     served: true

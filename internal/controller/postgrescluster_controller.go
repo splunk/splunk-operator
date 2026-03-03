@@ -19,7 +19,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/sethvargo/go-password/password"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -28,6 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	logs "sigs.k8s.io/controller-runtime/pkg/log"
@@ -92,17 +96,58 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, mergeErr
 	}
 
-	// 4. Build the desired CNPG Cluster spec based on the merged configuration.
-	desiredSpec := r.buildCNPGClusterSpec(mergedConfig)
+	// 4. Ensure PostgresCluster secret exists before creating CNPG cluster.
 
-	// 5. Fetch existing CNPG Cluster or create it if it doesn't exist yet.
+	var postgresSecretName string
+	// Check if we already have a secret referenced in the status
+
+	if postgresCluster.Status.Resources != nil && postgresCluster.Status.Resources.SecretRef != nil {
+		postgresSecretName = postgresCluster.Status.Resources.SecretRef.Name
+	} else {
+		// If not, check if we have an orphaned secret (created, but status update failed previously)
+		// TODO: simplify this logic by always creating the secret with a deterministic name based on the cluster name and a fixed suffix, and relying on owner references to clean it up when the PostgresCluster is deleted. This would eliminate the need to search for existing secrets and handle orphaned resources.
+		secretList := &corev1.SecretList{}
+		if err := r.List(ctx, secretList, client.InNamespace(postgresCluster.Namespace)); err == nil {
+			for _, s := range secretList.Items {
+				if metav1.IsControlledBy(&s, postgresCluster) && s.Type == corev1.SecretTypeOpaque {
+					postgresSecretName = s.Name
+					break
+				}
+			}
+		}
+		// Generate secret using the cluster name and a random suffix to avoid collisions.
+		if postgresSecretName == "" {
+			suffix, err := generateRandomSuffix()
+			if err != nil {
+				logger.Error(err, "Failed to generate random suffix for PostgresCluster secret")
+				if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonUserSecretFailed, fmt.Sprintf("Failed to generate random suffix for PostgresCluster secret: %v", err), failedClusterPhase); statusErr != nil {
+					logger.Error(statusErr, "Failed to update status")
+				}
+				return ctrl.Result{}, err
+			}
+			postgresSecretName = fmt.Sprintf("%s%s%s", postgresCluster.Name, defaultSecretSuffix, suffix)
+		}
+	}
+	logger.Info("Creating PostgresCluster secret", "name", postgresSecretName)
+	if err := r.generateSecret(ctx, postgresCluster, postgresSecretName); err != nil {
+		logger.Error(err, "Failed to ensure PostgresCluster secret", "name", postgresSecretName)
+		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonUserSecretFailed, fmt.Sprintf("Failed to generate PostgresCluster secret: %v", err), failedClusterPhase); statusErr != nil {
+			logger.Error(statusErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// 5. Build the desired CNPG Cluster spec based on the merged configuration.
+	desiredSpec := r.buildCNPGClusterSpec(mergedConfig, postgresSecretName)
+
+	// 6. Fetch existing CNPG Cluster or create it if it doesn't exist yet.
 	existingCNPG := &cnpgv1.Cluster{}
 	err := r.Get(ctx, types.NamespacedName{Name: postgresCluster.Name, Namespace: postgresCluster.Namespace}, existingCNPG)
 	switch {
 	case apierrors.IsNotFound(err):
 		// CNPG Cluster doesn't exist, create it and requeue for status update.
 		logger.Info("CNPG Cluster not found, creating", "name", postgresCluster.Name)
-		newCluster := r.buildCNPGCluster(postgresCluster, mergedConfig)
+		newCluster := r.buildCNPGCluster(postgresCluster, mergedConfig, postgresSecretName)
 		if err = r.Create(ctx, newCluster); err != nil {
 			logger.Error(err, "Failed to create CNPG Cluster")
 			if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterBuildFailed, fmt.Sprintf("Failed to create CNPG Cluster: %v", err), failedClusterPhase); statusErr != nil {
@@ -122,9 +167,9 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		return ctrl.Result{}, err
 	}
-	cnpgCluster = existingCNPG
 
-	// 6. If CNPG Cluster exists, compare the current spec with the desired spec and update if necessary.
+	// 7. If CNPG Cluster exists, compare the current spec with the desired spec and update if necessary.
+	cnpgCluster = existingCNPG
 	currentNormalizedSpec := normalizeCNPGClusterSpec(cnpgCluster.Spec, mergedConfig.PostgreSQLConfig)
 	desiredNormalizedSpec := normalizeCNPGClusterSpec(desiredSpec, mergedConfig.PostgreSQLConfig)
 
@@ -238,9 +283,53 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	// 8. Report progress back to the user and manage the reconciliation lifecycle.
+	// 8. If CNPG is ready, generate ConfigMap
+	if cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy {
+		logger.Info("CNPG Cluster is ready, reconciling ConfigMap for connection details")
+		desiredConfigMap, err := r.generateConfigMap(ctx, postgresCluster, cnpgCluster, postgresSecretName)
+		if err != nil {
+			logger.Error(err, "Failed to reconcile ConfigMap")
+			if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonConfigMapFailed, fmt.Sprintf("Failed to reconcile ConfigMap: %v", err), failedClusterPhase); statusErr != nil {
+				logger.Error(statusErr, "Failed to update status")
+			}
+			return ctrl.Result{}, err
+		}
+
+		existingConfigMap := &corev1.ConfigMap{}
+		err = r.Get(ctx, types.NamespacedName{Namespace: desiredConfigMap.Namespace, Name: desiredConfigMap.Name}, existingConfigMap)
+		if apierrors.IsNotFound(err) {
+			logger.Info("Creating ConfigMap")
+			if err := r.Create(ctx, desiredConfigMap); err != nil {
+				logger.Error(err, "Failed to create ConfigMap")
+				return ctrl.Result{}, err
+			}
+		} else if err != nil {
+			logger.Error(err, "Failed to fetch ConfigMap")
+			return ctrl.Result{}, err
+		} else if !equality.Semantic.DeepEqual(existingConfigMap.Data, desiredConfigMap.Data) {
+			logger.Info("ConfigMap data has changed, updating")
+			existingConfigMap.Data = desiredConfigMap.Data
+			if err := r.Update(ctx, existingConfigMap); err != nil {
+				logger.Error(err, "Failed to update ConfigMap")
+				return ctrl.Result{}, err
+			}
+		} else {
+			logger.Info("ConfigMap data unchanged, skipping update")
+		}
+
+		if postgresCluster.Status.Resources == nil {
+			postgresCluster.Status.Resources = &enterprisev4.PostgresClusterResources{}
+		}
+		postgresCluster.Status.Resources.ConfigMapRef = &corev1.LocalObjectReference{Name: desiredConfigMap.Name}
+		logger.Info("ConfigMap reconciled and reference updated in status", "configMap", desiredConfigMap.Name)
+	}
+
+	// 9. Report progress back to the user and manage the reconciliation lifecycle.
 	if err := r.syncStatus(ctx, postgresCluster, cnpgCluster); err != nil {
 		logger.Error(err, "Failed to sync final status")
+		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonStatusSyncFailed, fmt.Sprintf("Failed to sync final status: %v", err), failedClusterPhase); statusErr != nil {
+			logger.Error(statusErr, "Failed to update status")
+		}
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
@@ -306,7 +395,7 @@ func (r *PostgresClusterReconciler) getMergedConfig(clusterClass *enterprisev4.P
 // buildCNPGClusterSpec builds the desired CNPG ClusterSpec.
 // IMPORTANT: any field added here must also be added to normalizedCNPGClusterSpec and normalizeCNPGClusterSpec,
 // otherwise it will not be included in drift detection and changes will be silently ignored.
-func (r *PostgresClusterReconciler) buildCNPGClusterSpec(mergedConfig *enterprisev4.PostgresClusterSpec) cnpgv1.ClusterSpec {
+func (r *PostgresClusterReconciler) buildCNPGClusterSpec(mergedConfig *enterprisev4.PostgresClusterSpec, secretName string) cnpgv1.ClusterSpec {
 
 	// 3. Build the Spec
 	spec := cnpgv1.ClusterSpec{
@@ -316,10 +405,18 @@ func (r *PostgresClusterReconciler) buildCNPGClusterSpec(mergedConfig *enterpris
 			Parameters: mergedConfig.PostgreSQLConfig,
 			PgHBA:      mergedConfig.PgHBA,
 		},
+		SuperuserSecret: &cnpgv1.LocalObjectReference{
+			Name: secretName,
+		},
+		EnableSuperuserAccess: ptr.To(true),
+
 		Bootstrap: &cnpgv1.BootstrapConfiguration{
 			InitDB: &cnpgv1.BootstrapInitDB{
 				Database: defaultDatabaseName,
-				Owner:    defaultUsername,
+				Owner:    superUsername,
+				Secret: &cnpgv1.LocalObjectReference{
+					Name: secretName,
+				},
 			},
 		},
 		StorageConfiguration: cnpgv1.StorageConfiguration{
@@ -335,13 +432,14 @@ func (r *PostgresClusterReconciler) buildCNPGClusterSpec(mergedConfig *enterpris
 func (r *PostgresClusterReconciler) buildCNPGCluster(
 	postgresCluster *enterprisev4.PostgresCluster,
 	mergedConfig *enterprisev4.PostgresClusterSpec,
+	secretName string,
 ) *cnpgv1.Cluster {
 	cnpgCluster := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      postgresCluster.Name,
 			Namespace: postgresCluster.Namespace,
 		},
-		Spec: r.buildCNPGClusterSpec(mergedConfig),
+		Spec: r.buildCNPGClusterSpec(mergedConfig, secretName),
 	}
 	ctrl.SetControllerReference(postgresCluster, cnpgCluster, r.Scheme)
 	return cnpgCluster
@@ -349,7 +447,7 @@ func (r *PostgresClusterReconciler) buildCNPGCluster(
 
 // poolerResourceName returns the CNPG Pooler resource name for a given cluster and type (rw/ro).
 func poolerResourceName(clusterName, poolerType string) string {
-	return fmt.Sprintf("%s-pooler-%s", clusterName, poolerType)
+	return fmt.Sprintf("%s%s%s", clusterName, defaultPoolerSuffix, poolerType)
 }
 
 // createOrUpdateConnectionPooler creates or updates CNPG Pooler resources.
@@ -620,7 +718,6 @@ func (r *PostgresClusterReconciler) updateStatus(
 		Message:            message,
 		ObservedGeneration: postgresCluster.Generation,
 	})
-
 	if err := r.Status().Update(ctx, postgresCluster); err != nil {
 		return fmt.Errorf("failed to update PostgresCluster status: %w", err)
 	}
@@ -653,14 +750,16 @@ func (r *PostgresClusterReconciler) syncPoolerStatus(ctx context.Context, postgr
 	rwDesired, rwScheduled := r.getPoolerInstanceCount(rwPooler)
 	roDesired, roScheduled := r.getPoolerInstanceCount(roPooler)
 
-	r.updateStatus(
+	if err := r.updateStatus(
 		ctx,
 		postgresCluster,
 		poolerReady,
 		metav1.ConditionTrue,
 		reasonAllInstancesReady,
 		fmt.Sprintf("%s: %d/%d, %s: %d/%d", readWriteEndpoint, rwScheduled, rwDesired, readOnlyEndpoint, roScheduled, roDesired),
-		readyClusterPhase) // Not sure if we should use this phase here
+		readyClusterPhase); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -791,12 +890,123 @@ func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec, customDefinedParameters m
 	return normalizedConf
 }
 
+// generateConfigMap generates a ConfigMap with connection details for the PostgresCluster.
+func (r *PostgresClusterReconciler) generateConfigMap(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster, secretName string) (config *corev1.ConfigMap, err error) {
+	logger := logs.FromContext(ctx)
+	var configMapName string
+
+	if postgresCluster.Status.Resources != nil && postgresCluster.Status.Resources.ConfigMapRef != nil {
+		configMapName = postgresCluster.Status.Resources.ConfigMapRef.Name
+	} else {
+		// TODO: apply simplified logic, get rid of random suffixed ConfigMaps.
+		cmList := &corev1.ConfigMapList{}
+		if err := r.List(ctx, cmList, client.InNamespace(postgresCluster.Namespace)); err == nil {
+			for _, cm := range cmList.Items {
+				if metav1.IsControlledBy(&cm, postgresCluster) && strings.HasPrefix(cm.Name, postgresCluster.Name+defaultConfigSuffix) {
+					configMapName = cm.Name
+					break
+				}
+			}
+		}
+		if configMapName == "" {
+			suffix, err := generateRandomSuffix()
+			if err != nil {
+				logger.Error(err, "Failed to generate random suffix for ConfigMap")
+				return nil, err
+			}
+			configMapName = fmt.Sprintf("%s%s%s", postgresCluster.Name, defaultConfigSuffix, suffix)
+		}
+	}
+	if postgresCluster.Status.Resources != nil && postgresCluster.Status.Resources.ConfigMapRef != nil {
+		configMapName = postgresCluster.Status.Resources.ConfigMapRef.Name
+	}
+
+	data := map[string]string{
+		"CLUSTER_RW_ENDPOINT":   fmt.Sprintf("%s-rw.%s", cnpgCluster.Name, cnpgCluster.Namespace),
+		"CLUSTER_RO_ENDPOINT":   fmt.Sprintf("%s-ro.%s", cnpgCluster.Name, cnpgCluster.Namespace),
+		"CLUSTER_R_ENDPOINT":    fmt.Sprintf("%s-r.%s", cnpgCluster.Name, cnpgCluster.Namespace),
+		"DEFAULT_CLUSTER_PORT":  defaultPort,
+		"SUPER_USER_NAME":       superUsername,
+		"SUPER_USER_SECRET_REF": secretName,
+	}
+	if r.poolerExists(ctx, postgresCluster, readWriteEndpoint) && r.poolerExists(ctx, postgresCluster, readOnlyEndpoint) {
+		data["CLUSTER_POOLER_RW_ENDPOINT"] = fmt.Sprintf("%s.%s", poolerResourceName(cnpgCluster.Name, readWriteEndpoint), cnpgCluster.Namespace)
+		data["CLUSTER_POOLER_RO_ENDPOINT"] = fmt.Sprintf("%s.%s", poolerResourceName(cnpgCluster.Name, readOnlyEndpoint), cnpgCluster.Namespace)
+	}
+
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: postgresCluster.Namespace,
+			Labels:    map[string]string{"app.kubernetes.io/managed-by": "postgrescluster-controller"},
+		},
+		Data: data,
+	}
+	if err := ctrl.SetControllerReference(postgresCluster, configMap, r.Scheme); err != nil {
+		return nil, err
+	}
+	return configMap, nil
+}
+
+// generateSecret creates a Kubernetes Secret with credentials for the default postgres user if it doesn't already exist.
+func (r *PostgresClusterReconciler) generateSecret(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, secretName string) error {
+	existing := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: postgresCluster.Namespace}, existing)
+
+	// If secret does not exist, create it
+	if apierrors.IsNotFound(err) {
+		password, err := generatePassword()
+		if err != nil {
+			return err
+		}
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: postgresCluster.Namespace,
+			},
+			StringData: map[string]string{
+				"username": superUsername,
+				"password": password,
+			},
+			Type: corev1.SecretTypeOpaque,
+		}
+		// Set owner reference
+		// TODO: update finalizer to retain secret if PostgresCluster is deleted, but CNPG is not. Otherwise, CNPG will delete the secret when the PostgresCluster is deleted, which may cause issues if the user wants to keep the CNPG cluster running after deleting the PostgresCluster.
+		if err := ctrl.SetControllerReference(postgresCluster, secret, r.Scheme); err != nil {
+			return err
+		}
+		if err := r.Create(ctx, secret); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+	if postgresCluster.Status.Resources == nil {
+		postgresCluster.Status.Resources = &enterprisev4.PostgresClusterResources{}
+	}
+	postgresCluster.Status.Resources.SecretRef = &corev1.LocalObjectReference{Name: secretName}
+
+	return nil
+}
+
+// generateRandomSuffix returns a short random alphanumeric suffix.
+func generateRandomSuffix() (string, error) {
+	suff, err := password.Generate(5, 5, 0, true, false)
+	if err != nil {
+		fmt.Printf("Error generating random suffix: %v", err)
+		return "", err
+	}
+	return strings.ToLower(suff), nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterprisev4.PostgresCluster{}).
 		Owns(&cnpgv1.Cluster{}).
 		Owns(&cnpgv1.Pooler{}).
+		Owns(&corev1.ConfigMap{}).
+		Owns(&corev1.Secret{}).
 		Named("postgresCluster").
 		Complete(r)
 }

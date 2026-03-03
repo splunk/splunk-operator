@@ -24,4 +24,4 @@ spec:
       memory: "1Gi"
   # Enable connection pooler for this cluster
   # Takes precedence over the class-level connectionPoolerEnabled value
-  connectionPoolerEnabled: true
+  # connectionPoolerEnabled: true
