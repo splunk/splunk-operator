@@ -65,8 +65,15 @@ resolve_base_ref() {
     return 0
   fi
 
+  local origin_head_ref
+  origin_head_ref="$(git symbolic-ref -q refs/remotes/origin/HEAD || true)"
+  if [[ -n "${origin_head_ref}" ]] && git show-ref --verify --quiet "${origin_head_ref}"; then
+    printf '%s\n' "${origin_head_ref}"
+    return 0
+  fi
+
   local fallback
-  for fallback in refs/remotes/origin/develop refs/remotes/origin/main refs/remotes/origin/master; do
+  for fallback in refs/remotes/origin/develop refs/remotes/origin/main; do
     if git show-ref --verify --quiet "${fallback}"; then
       printf '%s\n' "${fallback}"
       return 0
