@@ -36,6 +36,7 @@ jobs:
         run: pip install flaky-tests-detection
 
       - name: Run flaky test analysis
+        id: run
         env:
           GH_TOKEN: ${{ github.token }}
           START_DATE: ${{ inputs.start_date }}
@@ -43,7 +44,10 @@ jobs:
           TOP_N: ${{ inputs.top_n }}
           WINDOW_SIZE: ${{ inputs.window_size }}
           RESULTS_FILE: flaky-results.txt
-        run: ./tools/flaky-test-analysis.sh
+        run: |
+          ./tools/flaky-test-analysis.sh
+          echo "start=${START_DATE:-$(date -u -d '7 days ago' +%Y-%m-%d)}" >> "$GITHUB_OUTPUT"
+          echo "end=${END_DATE:-$(date -u -d 'yesterday' +%Y-%m-%d)}" >> "$GITHUB_OUTPUT"
 
       - name: Generate job summary
         if: always()
@@ -51,7 +55,7 @@ jobs:
           {
             echo "## Flaky Test Analysis"
             echo ""
-            echo "**Date range:** \`${START_DATE:-last 7 days}\` .. \`${END_DATE:-yesterday}\`"
+            echo "**Date range:** \`${{ steps.run.outputs.start }}\` .. \`${{ steps.run.outputs.end }}\`"
             echo "**Top N:** ${{ inputs.top_n || '20' }} | **Window size:** ${{ inputs.window_size || '1' }} day(s)"
             echo ""
 
@@ -86,7 +90,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: flaky-test-results
+          name: flaky-test-results-${{ steps.run.outputs.start }}-to-${{ steps.run.outputs.end }}
           path: |
             flaky-results.txt
             *_flip_rate_*.png

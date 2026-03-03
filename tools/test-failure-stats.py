@@ -93,11 +93,8 @@ def build_stats(junit_dir: Path):
     return stats, files_parsed
 
 
-def short_name(full_name: str, max_len: int = 120) -> str:
-    name = re.sub(r"^\[It\]\s*", "", full_name)
-    if len(name) > max_len:
-        return name[: max_len - 3] + "..."
-    return name
+def clean_name(full_name: str) -> str:
+    return re.sub(r"^\[It\]\s*", "", full_name)
 
 
 def write_markdown(stats: dict[str, TestRecord], files_parsed: int):
@@ -131,7 +128,7 @@ def write_markdown(stats: dict[str, TestRecord], files_parsed: int):
         classname, name = key.split("::", 1)
         rate = rec.failures / rec.runs * 100 if rec.runs > 0 else 0
         last_fail = max(rec.failure_dates) if rec.failure_dates else "n/a"
-        display = short_name(name).replace("|", "\\|")
+        display = clean_name(name).replace("|", "\\|")
         print(
             f"| {i} | {rec.failures} | {rec.runs} | {rate:.1f}% "
             f"| {rec.timeouts} | {last_fail} | `{classname}` | {display} |"
