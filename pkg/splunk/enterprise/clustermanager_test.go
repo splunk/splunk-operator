@@ -581,7 +581,6 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
-		{MetaName: "*v1.Pod-test-splunk-stack1-cluster-manager-0"},
 		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 		{MetaName: "*v4.ClusterManager-test-stack1"},
 		{MetaName: "*v4.ClusterManager-test-stack1"},
@@ -623,7 +622,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{ListOpts: listOpts},
 		{ListOpts: listOpts1},
 	}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[12], funcCalls[14]}, "List": {listmockCall[0], listmockCall[0], listmockCall[1]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[15]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[12], funcCalls[14]}, "List": {listmockCall[0], listmockCall[1]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[15]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.ClusterManager{

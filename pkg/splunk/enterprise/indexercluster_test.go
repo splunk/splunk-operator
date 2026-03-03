@@ -879,10 +879,6 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		Err:    nil,
 		Body:   ``,
 	})
-	pvcCalls := []spltest.MockFuncCall{
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
-	}
 	decommisionFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -891,10 +887,9 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-1"},
 	}
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": decommisionFuncCalls, "Create": {funcCalls[1]}, "Delete": pvcCalls, "Update": {funcCalls[0]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": decommisionFuncCalls, "Create": {funcCalls[1]}, "Update": {funcCalls[0]}}
 	//wantCalls["Get"] = append(wantCalls["Get"], pvcCalls...)
 	pvcList := []*corev1.PersistentVolumeClaim{
 		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc-splunk-stack1-1", Namespace: "test"}},

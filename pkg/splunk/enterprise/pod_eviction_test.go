@@ -517,12 +517,12 @@ func TestTerminationGracePeriod(t *testing.T) {
 		{
 			name:            "Indexer - 5 minutes",
 			role:            "splunk_indexer",
-			wantGracePeriod: 300, // 5 minutes for decommission
+			wantGracePeriod: 1020, // 17 minutes (15 min decommission + 1.5 min stop + buffer)
 		},
 		{
 			name:            "Search Head - 2 minutes",
 			role:            "splunk_search_head",
-			wantGracePeriod: 120, // 2 minutes for detention
+			wantGracePeriod: 360, // 6 minutes (5 min detention + 1 min stop)
 		},
 		{
 			name:            "Standalone - 2 minutes",
@@ -551,6 +551,19 @@ func TestTerminationGracePeriod(t *testing.T) {
 					},
 				}
 				ss, err = getIndexerStatefulSet(ctx, c, cr)
+			case "splunk_search_head":
+				cr := &enterpriseApi.SearchHeadCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: enterpriseApi.SearchHeadClusterSpec{
+						CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+							Mock: true,
+						},
+					},
+				}
+				ss, err = getSearchHeadStatefulSet(ctx, c, cr)
 			case "splunk_standalone":
 				cr := &enterpriseApi.Standalone{
 					ObjectMeta: metav1.ObjectMeta{

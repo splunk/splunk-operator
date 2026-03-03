@@ -29,6 +29,8 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -467,4 +469,92 @@ func getQueueAndObjectStorageInputsForIngestorConfFiles(queue *enterpriseApi.Que
 	}
 
 	return
+}
+
+// ============================================================================
+// Pod Eviction (for SOK/Cloud config changes)
+// ============================================================================
+
+// checkAndEvictIngestorsIfNeeded checks each ingestor pod individually for
+// restart_required and evicts pods that need restart.
+func checkAndEvictIngestorsIfNeeded(
+	ctx context.Context,
+	c client.Client,
+	cr *enterpriseApi.IngestorCluster,
+) error {
+	scopedLog := log.FromContext(ctx).WithName("checkAndEvictIngestorsIfNeeded")
+
+	secret := &corev1.Secret{}
+	secretName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
+	err := c.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
+	if err != nil {
+		scopedLog.Error(err, "Failed to get splunk secret")
+		return fmt.Errorf("failed to get splunk secret: %w", err)
+	}
+	password := string(secret.Data["password"])
+
+	for i := int32(0); i < cr.Spec.Replicas; i++ {
+		podName := fmt.Sprintf("splunk-%s-ingestor-%d", cr.Name, i)
+
+		pod := &corev1.Pod{}
+		err := c.Get(ctx, types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod)
+		if err != nil {
+			scopedLog.Error(err, "Failed to get pod", "pod", podName)
+			continue
+		}
+
+		if pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+		if !isPodReady(pod) {
+			continue
+		}
+		if pod.Status.PodIP == "" {
+			continue
+		}
+
+		managementURI := fmt.Sprintf("https://%s:8089", pod.Status.PodIP)
+		splunkClient := splclient.NewSplunkClient(managementURI, "admin", password)
+
+		restartRequired, message, err := splunkClient.CheckRestartRequired()
+		if err != nil {
+			scopedLog.Error(err, "Failed to check restart required", "pod", podName)
+			continue
+		}
+		if !restartRequired {
+			continue
+		}
+
+		scopedLog.Info("Pod needs restart, evicting", "pod", podName, "message", message)
+
+		err = evictPod(ctx, c, pod)
+		if err != nil {
+			if isPDBViolation(err) {
+				scopedLog.Info("PDB blocked eviction, will retry", "pod", podName)
+				continue
+			}
+			return err
+		}
+
+		scopedLog.Info("Pod eviction initiated", "pod", podName)
+		return nil
+	}
+
+	return nil
+}
+
+// evictPod evicts a pod using the Kubernetes Eviction API (respects PodDisruptionBudget)
+func evictPod(ctx context.Context, c client.Client, pod *corev1.Pod) error {
+	eviction := &policyv1.Eviction{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+		},
+	}
+	return c.SubResource("eviction").Create(ctx, pod, eviction)
+}
+
+// isPDBViolation checks if an error is due to a PodDisruptionBudget violation
+func isPDBViolation(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "Cannot evict pod")
 }

@@ -186,9 +186,9 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						continue
 					}
 
-				if queue.Spec.Provider != "sqs" && queue.Spec.Provider != "sqs_cp" {
+					if queue.Spec.Provider != "sqs" && queue.Spec.Provider != "sqs_cp" {
 						continue
-			}
+					}
 
 					for _, vol := range queue.Spec.SQS.VolList {
 						if vol.SecretRef == secret.Name {

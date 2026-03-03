@@ -670,9 +670,10 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 	preStopScriptLocation, _ := filepath.Abs(GetPreStopScriptLocation())
 	data, err = ReadFile(ctx, preStopScriptLocation)
 	if err != nil {
-		return &configMap, err
+		scopedLog.Info("preStop script not found, skipping", "location", preStopScriptLocation)
+	} else {
+		configMap.Data[GetPreStopScriptName()] = data
 	}
-	configMap.Data[GetPreStopScriptName()] = data
 
 	// Apply the configured config map
 	_, err = splctrl.ApplyConfigMap(ctx, client, &configMap)
