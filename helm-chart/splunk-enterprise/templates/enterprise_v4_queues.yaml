@@ -31,7 +31,7 @@ spec:
     {{- end }}
     {{- if .volumes }}
     volumes:
-    {{ toYaml .volumes | indent 4 }}
+{{ toYaml .volumes | nindent 4 }}
     {{- end }}
   {{- end }}
 {{- end }}
