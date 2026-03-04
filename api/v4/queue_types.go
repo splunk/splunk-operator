@@ -65,7 +65,20 @@ type SQSSpec struct {
 
 	// +optional
 	// List of remote storage volumes
-	VolList []VolumeSpec `json:"volumes,omitempty"`
+	VolList []SQSVolumeSpec `json:"volumes,omitempty"`
+}
+
+// SQSVolumeSpec defines a volume reference for SQS queue authentication
+type SQSVolumeSpec struct {
+	// Remote volume name
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Remote volume secret ref
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	SecretRef string `json:"secretRef"`
 }
 
 // QueueStatus defines the observed state of Queue
