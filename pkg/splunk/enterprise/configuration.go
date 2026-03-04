@@ -294,7 +294,7 @@ func ValidateImagePullPolicy(imagePullPolicy *string) error {
 	case "IfNotPresent":
 		break
 	default:
-		return fmt.Errorf("ImagePullPolicy must be one of \"Always\", \"IfNotPresent\"; value=\"%s\"", *imagePullPolicy)
+		return fmt.Errorf("ImagePullPolicy must be one of \"Always\" or \"IfNotPresent\"; value=\"%s\"", *imagePullPolicy)
 	}
 	return nil
 }
