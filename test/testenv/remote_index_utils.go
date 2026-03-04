@@ -86,11 +86,16 @@ func RollHotToWarm(ctx context.Context, deployment *Deployment, podName string, 
 	return true
 }
 
-// GenerateQueueVolumeSpec return VolumeSpec struct with given values
-func GenerateQueueVolumeSpec(name, secretRef string) enterpriseApi.VolumeSpec {
+// GenerateQueueVolumeSpec returns a fully populated VolumeSpec for Queue CRs.
+func GenerateQueueVolumeSpec(name, secretRef, endpoint, path, provider, storageType, region string) enterpriseApi.VolumeSpec {
 	return enterpriseApi.VolumeSpec{
 		Name:      name,
+		Endpoint:  endpoint,
+		Path:      path,
 		SecretRef: secretRef,
+		Provider:  provider,
+		Type:      storageType,
+		Region:    region,
 	}
 }
 
