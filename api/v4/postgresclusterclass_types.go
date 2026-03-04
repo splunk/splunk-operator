@@ -114,6 +114,7 @@ const (
 
 // ConnectionPoolerConfig defines PgBouncer connection pooler configuration.
 // When enabled, creates RW and RO pooler deployments for clusters using this class.
+// +kubebuilder:validation:XValidation:rule="!self.connectionPoolerEnabled || self.connectionPoolerConfig != null || (self.cnpg != null && self.cnpg.connectionPooler != null)",message="connectionPoolerConfig must be set in cluster spec or class when connectionPoolerEnabled is true"
 type ConnectionPoolerConfig struct {
 	// Instances is the number of PgBouncer pod replicas.
 	// Higher values provide better availability and load distribution.
