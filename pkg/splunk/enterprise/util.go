@@ -2700,7 +2700,6 @@ func resolveS3Endpoint(ctx context.Context, region string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Full endpoint URL as string:
 	return ep.URI.String(), nil
 }
 

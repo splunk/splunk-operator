@@ -17,6 +17,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -27,7 +28,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -1035,23 +1036,25 @@ func (c *SplunkClient) RestartSplunk() error {
 
 // Updates conf files and their properties
 // See https://help.splunk.com/en/splunk-enterprise/leverage-rest-apis/rest-api-reference/10.0/configuration-endpoints/configuration-endpoint-descriptions
-func (c *SplunkClient) UpdateConfFile(scopedLog logr.Logger, fileName, property string, propertyKVList [][]string) error {
+func (c *SplunkClient) UpdateConfFile(ctx context.Context, fileName, property string, propertyKVList [][]string) error {
+	logger := logging.FromContext(ctx).With("func", "UpdateConfFile")
+
 	// Creates an object in a conf file if it doesn't exist
 	endpoint := fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s", c.ManagementURI, fileName)
 	body := fmt.Sprintf("name=%s", property)
 
-	scopedLog.Info("Creating conf file object if it does not exist", "fileName", fileName, "property", property)
+	logger.InfoContext(ctx, "Creating conf file object if it does not exist", "fileName", fileName, "property", property)
 	request, err := http.NewRequest("POST", endpoint, strings.NewReader(body))
 	if err != nil {
-		scopedLog.Error(err, "Failed to create conf file object if it does not exist", "fileName", fileName, "property", property)
+		logger.ErrorContext(ctx, "Failed to create conf file object if it does not exist", "fileName", fileName, "property", property, "error", err.Error())
 		return err
 	}
 
-	scopedLog.Info("Validating conf file object creation", "fileName", fileName, "property", property)
+	logger.InfoContext(ctx, "Validating conf file object creation", "fileName", fileName, "property", property)
 	expectedStatus := []int{200, 201, 409}
 	err = c.Do(request, expectedStatus, nil)
 	if err != nil {
-		scopedLog.Error(err, fmt.Sprintf("Status not in %v for conf file object creation", expectedStatus), "fileName", fileName, "property", property)
+		logger.ErrorContext(ctx, fmt.Sprintf("Status not in %v for conf file object creation", expectedStatus), "fileName", fileName, "property", property, "error", err.Error())
 		return err
 	}
 
@@ -1065,18 +1068,18 @@ func (c *SplunkClient) UpdateConfFile(scopedLog logr.Logger, fileName, property 
 		body = body[:len(body)-1]
 	}
 
-	scopedLog.Info("Updating conf file object", "fileName", fileName, "property", property, "body", body)
+	logger.InfoContext(ctx, "Updating conf file object", "fileName", fileName, "property", property)
 	request, err = http.NewRequest("POST", endpoint, strings.NewReader(body))
 	if err != nil {
-		scopedLog.Error(err, "Failed to update conf file object", "fileName", fileName, "property", property, "body", body)
+		logger.ErrorContext(ctx, "Failed to update conf file object", "fileName", fileName, "property", property, "error", err.Error())
 		return err
 	}
 
-	scopedLog.Info("Validating conf file object update", "fileName", fileName, "property", property)
+	logger.InfoContext(ctx, "Validating conf file object update", "fileName", fileName, "property", property)
 	expectedStatus = []int{200, 201}
 	err = c.Do(request, expectedStatus, nil)
 	if err != nil {
-		scopedLog.Error(err, fmt.Sprintf("Status not in %v for conf file object update", expectedStatus), "fileName", fileName, "property", property, "body", body)
+		logger.ErrorContext(ctx, fmt.Sprintf("Status not in %v for conf file object update", expectedStatus), "fileName", fileName, "property", property, "error", err.Error())
 	}
 	return err
 }
