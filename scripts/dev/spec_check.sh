@@ -143,7 +143,7 @@ for file in "${changed_files[@]}"; do
   case "${file}" in
     docs/specs/*.md)
       base_name="$(basename "${file}")"
-      if [[ "${base_name}" != "README.md" && "${base_name}" != "SPEC_TEMPLATE.md" ]]; then
+      if [[ "${base_name}" != "README.md" && "${base_name}" != "SPEC_TEMPLATE.md" && "${base_name}" != "COMPONENT_KEP_INDEX.md" ]]; then
         spec_files+=("${file}")
       fi
       ;;

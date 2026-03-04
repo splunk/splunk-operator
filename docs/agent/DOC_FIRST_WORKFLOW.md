@@ -18,4 +18,5 @@ For implementation-gated changes, this repository requires a change-intent file 
 - `## Constitution Impact`
 - `## Harness Coverage Plan`
 - `## Test Plan`
+- `## Runtime Issue Tracker Review`
 - `## Implementation Log`

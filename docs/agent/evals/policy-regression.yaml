@@ -22,6 +22,15 @@ cases:
   - id: pr_check_appframework_parity_gate
     file: scripts/dev/pr_check.sh
     pattern: "appframework_parity_check.sh"
+  - id: pr_check_keps_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "keps_check.sh"
+  - id: pr_check_harness_parity_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "harness_engineering_parity_check.sh"
+  - id: pr_check_constitution_runtime_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "constitution_runtime_policy_check.sh"
   - id: pr_check_eval_gate
     file: scripts/dev/pr_check.sh
     pattern: "harness_eval.sh"
@@ -49,6 +58,15 @@ cases:
   - id: scorecard_script
     file: scripts/dev/autonomy_scorecard.sh
     pattern: "autonomy_score"
+  - id: keps_check_script
+    file: scripts/dev/keps_check.sh
+    pattern: "COMPONENT_KEP_INDEX.md"
+  - id: harness_parity_script
+    file: scripts/dev/harness_engineering_parity_check.sh
+    pattern: "HARNESS_ENGINEERING_PARITY.md"
+  - id: constitution_runtime_script
+    file: scripts/dev/constitution_runtime_policy_check.sh
+    pattern: "RUNTIME_ISSUE_TRACKER.md"
   - id: scope_check_base_ref
     file: scripts/dev/scope_check.sh
     pattern: "--base-ref"
@@ -82,3 +100,15 @@ cases:
   - id: appframework_parity_doc
     file: docs/agent/APPFRAMEWORK_PARITY.md
     pattern: "## Required Evidence"
+  - id: component_kep_index_doc
+    file: docs/specs/COMPONENT_KEP_INDEX.md
+    pattern: "# Component to KEP Index"
+  - id: harness_engineering_parity_doc
+    file: docs/engineering/HARNESS_ENGINEERING_PARITY.md
+    pattern: "# Harness Engineering Parity"
+  - id: engineering_constitution_doc
+    file: docs/engineering/CONSTITUTION.md
+    pattern: "# Engineering Constitution"
+  - id: runtime_issue_tracker_doc
+    file: docs/testing/RUNTIME_ISSUE_TRACKER.md
+    pattern: "# Runtime Issue Tracker"

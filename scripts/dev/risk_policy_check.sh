@@ -250,14 +250,29 @@ for manifest in "${manifest_files[@]}"; do
   mapfile -t required_commands < <(extract_list "required_commands" "${manifest}")
   has_harness_run=false
   has_unit=false
+  has_keps=false
+  has_harness_parity=false
+  has_constitution_runtime=false
   for cmd in "${required_commands[@]}"; do
     [[ "${cmd}" == scripts/dev/harness_run.sh* ]] && has_harness_run=true
     [[ "${cmd}" == scripts/dev/unit.sh* || "${cmd}" == make\ test* ]] && has_unit=true
+    [[ "${cmd}" == scripts/dev/keps_check.sh* ]] && has_keps=true
+    [[ "${cmd}" == scripts/dev/harness_engineering_parity_check.sh* ]] && has_harness_parity=true
+    [[ "${cmd}" == scripts/dev/constitution_runtime_policy_check.sh* ]] && has_constitution_runtime=true
   done
 
   if [[ "${risk_tier}" == "medium" || "${risk_tier}" == "high" ]]; then
     if [[ "${has_harness_run}" != "true" ]]; then
       errors+=("${manifest}: required_commands must include scripts/dev/harness_run.sh for ${risk_tier} risk")
+    fi
+    if [[ "${has_keps}" != "true" ]]; then
+      errors+=("${manifest}: required_commands must include scripts/dev/keps_check.sh for ${risk_tier} risk")
+    fi
+    if [[ "${has_harness_parity}" != "true" ]]; then
+      errors+=("${manifest}: required_commands must include scripts/dev/harness_engineering_parity_check.sh for ${risk_tier} risk")
+    fi
+    if [[ "${has_constitution_runtime}" != "true" ]]; then
+      errors+=("${manifest}: required_commands must include scripts/dev/constitution_runtime_policy_check.sh for ${risk_tier} risk")
     fi
   fi
 

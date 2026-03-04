@@ -14,6 +14,9 @@ This document defines the minimum harness contract for agent-driven changes.
 - `scripts/dev/doc_first_check.sh`
 - `scripts/dev/commit_discipline_check.sh`
 - `scripts/dev/appframework_parity_check.sh`
+- `scripts/dev/keps_check.sh`
+- `scripts/dev/harness_engineering_parity_check.sh`
+- `scripts/dev/constitution_runtime_policy_check.sh`
 - `scripts/dev/risk_policy_check.sh`
 - `scripts/dev/risk_label_check.sh --labels risk:<tier>` (optional local, required in PR CI)
 - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
@@ -51,6 +54,9 @@ Every implementation PR should report:
 ## Failure Policy
 - If `spec_check.sh` fails, the change is not merge-ready.
 - If `harness_manifest_check.sh` fails, the change is not merge-ready.
+- If `keps_check.sh` fails, map impacted components to referenced approved IDs.
+- If `harness_engineering_parity_check.sh` fails, update parity matrix status/evidence.
+- If `constitution_runtime_policy_check.sh` fails, update constitution/runtime policy evidence.
 - If `risk_policy_check.sh` fails, the change is not merge-ready.
 - If `risk_label_check.sh` fails in CI, the PR risk label must be corrected.
 - If `harness_eval.sh` fails, governance regressions must be fixed first.

@@ -22,5 +22,9 @@
 ## Test Plan
 - Unit/integration/e2e commands that validate behavior.
 
+## Runtime Issue Tracker Review
+- `docs/testing/RUNTIME_ISSUE_TRACKER.md` updated, or
+- Explicit note that no new runtime issues were observed.
+
 ## Implementation Log
 - Timestamped notes for key implementation decisions.

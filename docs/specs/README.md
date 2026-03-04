@@ -36,6 +36,11 @@ Use a stable file name:
 - `CSPL-<ticket>-<short-kebab-title>.md`
 - `GH-<issue>-<short-kebab-title>.md`
 
+## Component Mapping
+- `COMPONENT_KEP_INDEX.md` maps implementation components to approved change IDs.
+- Keep component mappings current as specs are approved and implemented.
+- `scripts/dev/keps_check.sh` enforces this mapping for implementation-gated changes.
+
 ## Review and Merge Policy
 - Non-trivial code PRs must include a machine-readable harness manifest in
   `harness/manifests/`.

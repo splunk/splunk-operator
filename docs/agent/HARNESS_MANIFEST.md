@@ -27,6 +27,9 @@ required_commands:
   - scripts/dev/doc_first_check.sh
   - scripts/dev/commit_discipline_check.sh
   - scripts/dev/appframework_parity_check.sh
+  - scripts/dev/keps_check.sh
+  - scripts/dev/harness_engineering_parity_check.sh
+  - scripts/dev/constitution_runtime_policy_check.sh
   - scripts/dev/risk_policy_check.sh
   - scripts/dev/risk_label_check.sh --labels risk:<tier>
   - scripts/dev/skill_lint.sh
@@ -56,7 +59,7 @@ required_commands:
 - risk and delivery fields exist
 - `allowed_paths`, `forbidden_paths`, and `required_commands` exist
 - `required_commands` include `scripts/dev/spec_check.sh`, `scripts/dev/risk_policy_check.sh`, and `scripts/dev/pr_check.sh`
-- `required_commands` should include `scripts/dev/doc_first_check.sh`, `scripts/dev/commit_discipline_check.sh`, and `scripts/dev/appframework_parity_check.sh` for governance parity
+- `required_commands` should include `scripts/dev/doc_first_check.sh`, `scripts/dev/commit_discipline_check.sh`, `scripts/dev/appframework_parity_check.sh`, `scripts/dev/keps_check.sh`, `scripts/dev/harness_engineering_parity_check.sh`, and `scripts/dev/constitution_runtime_policy_check.sh` for governance parity
 - changed files satisfy manifest scope policy
 
 `scripts/dev/risk_policy_check.sh` enforces:

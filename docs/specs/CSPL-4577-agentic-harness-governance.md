@@ -5,7 +5,7 @@
 - Owners: Splunk Operator maintainers
 - Reviewers: Splunk Operator maintainers
 - Created: 2026-02-27
-- Last Updated: 2026-03-02 (Spec Kit bridge + risk policy + scorecard)
+- Last Updated: 2026-03-03 (governance hardening pass: KEP mapping, parity matrix, constitution/runtime policy)
 - Related Links: Jira CSPL-4577, PR #1738
 
 ## Summary
@@ -50,6 +50,7 @@ scoped edits, and deterministic harness validation.
    autonomy metrics for each PR.
 10. Add merge queue CI workflow and branch policy documentation.
 11. Wire all checks into `scripts/dev/pr_check.sh` and CI `pr-check`.
+12. Add component-to-KEP mapping and parity matrix validation, plus constitution/runtime issue policy checks.
 
 ## API/CRD Impact
 - No CRD schema changes.
@@ -66,6 +67,12 @@ scoped edits, and deterministic harness validation.
 - Governance/harness:
   - `scripts/dev/spec_check.sh`
   - `scripts/dev/harness_manifest_check.sh`
+  - `scripts/dev/doc_first_check.sh`
+  - `scripts/dev/commit_discipline_check.sh`
+  - `scripts/dev/appframework_parity_check.sh`
+  - `scripts/dev/keps_check.sh`
+  - `scripts/dev/harness_engineering_parity_check.sh`
+  - `scripts/dev/constitution_runtime_policy_check.sh`
   - `scripts/dev/risk_policy_check.sh`
   - `scripts/dev/risk_label_check.sh --labels risk:medium`
   - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
@@ -76,6 +83,12 @@ scoped edits, and deterministic harness validation.
 ## Harness Validation
 - `scripts/dev/spec_check.sh`
 - `scripts/dev/harness_manifest_check.sh`
+- `scripts/dev/doc_first_check.sh`
+- `scripts/dev/commit_discipline_check.sh`
+- `scripts/dev/appframework_parity_check.sh`
+- `scripts/dev/keps_check.sh`
+- `scripts/dev/harness_engineering_parity_check.sh`
+- `scripts/dev/constitution_runtime_policy_check.sh`
 - `scripts/dev/risk_policy_check.sh`
 - `scripts/dev/risk_label_check.sh`
 - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
@@ -115,3 +128,6 @@ Rollback:
 - [x] Risk-tier policy checks are enforced for changed manifests.
 - [x] Spec Kit bridge is available for planning-to-implementation handoff.
 - [x] Autonomy scorecard is published for each PR.
+- [x] Component-to-KEP mapping validation is enforced.
+- [x] Harness engineering parity matrix validation is enforced.
+- [x] Constitution and runtime issue governance validation is enforced.

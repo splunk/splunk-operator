@@ -33,6 +33,9 @@ Suggested local gates:
 - `scripts/dev/doc_first_check.sh`
 - `scripts/dev/commit_discipline_check.sh`
 - `scripts/dev/appframework_parity_check.sh`
+- `scripts/dev/keps_check.sh`
+- `scripts/dev/harness_engineering_parity_check.sh`
+- `scripts/dev/constitution_runtime_policy_check.sh`
 - `scripts/dev/risk_policy_check.sh`
 - `scripts/dev/risk_label_check.sh --labels risk:<tier>`
 - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`

@@ -34,6 +34,9 @@
 - Full governance fast-pass via `PR_CHECK_FLAGS=--fast scripts/dev/pr_check.sh`.
 - Validate policy regression suite includes new gate references.
 
+## Runtime Issue Tracker Review
+- Added governance bootstrap entries in `docs/testing/RUNTIME_ISSUE_TRACKER.md` to track rollout risks.
+
 ## Implementation Log
 - 2026-03-03: Added new governance check scripts and integrated them into `pr_check.sh`.
 - 2026-03-03: Added `docs/changes/` doc-first workflow artifacts and a helper creator script.

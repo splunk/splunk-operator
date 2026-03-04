@@ -102,14 +102,20 @@ fi
 
 run_step spec_check scripts/dev/spec_check.sh "${base_args[@]}"
 run_step manifest_check scripts/dev/harness_manifest_check.sh "${base_args[@]}"
+run_step doc_first_check scripts/dev/doc_first_check.sh "${base_args[@]}"
+run_step commit_discipline_check scripts/dev/commit_discipline_check.sh "${base_args[@]}"
+run_step appframework_parity_check scripts/dev/appframework_parity_check.sh "${base_args[@]}"
+run_step keps_check scripts/dev/keps_check.sh "${base_args[@]}"
+run_step harness_engineering_parity_check scripts/dev/harness_engineering_parity_check.sh
+run_step constitution_runtime_policy_check scripts/dev/constitution_runtime_policy_check.sh "${base_args[@]}"
 run_step risk_policy_check scripts/dev/risk_policy_check.sh "${base_args[@]}"
 run_step harness_eval scripts/dev/harness_eval.sh --suite "${suite}"
 
 if [[ "${skip_pr_check}" != "true" ]]; then
   if [[ "${run_fast}" == "true" ]]; then
-    run_step pr_check bash -lc "SKIP_SPEC_CHECK=1 SKIP_MANIFEST_CHECK=1 SKIP_RISK_POLICY_CHECK=1 SKIP_RISK_LABEL_CHECK=1 SKIP_HARNESS_EVAL=1 PR_CHECK_FLAGS=--fast scripts/dev/pr_check.sh"
+    run_step pr_check bash -lc "SKIP_SPEC_CHECK=1 SKIP_MANIFEST_CHECK=1 SKIP_DOC_FIRST_CHECK=1 SKIP_COMMIT_DISCIPLINE_CHECK=1 SKIP_APPFRAMEWORK_PARITY_CHECK=1 SKIP_KEPS_CHECK=1 SKIP_HARNESS_PARITY_CHECK=1 SKIP_CONSTITUTION_RUNTIME_CHECK=1 SKIP_RISK_POLICY_CHECK=1 SKIP_RISK_LABEL_CHECK=1 SKIP_HARNESS_EVAL=1 PR_CHECK_FLAGS=--fast scripts/dev/pr_check.sh"
   else
-    run_step pr_check bash -lc "SKIP_SPEC_CHECK=1 SKIP_MANIFEST_CHECK=1 SKIP_RISK_POLICY_CHECK=1 SKIP_RISK_LABEL_CHECK=1 SKIP_HARNESS_EVAL=1 scripts/dev/pr_check.sh"
+    run_step pr_check bash -lc "SKIP_SPEC_CHECK=1 SKIP_MANIFEST_CHECK=1 SKIP_DOC_FIRST_CHECK=1 SKIP_COMMIT_DISCIPLINE_CHECK=1 SKIP_APPFRAMEWORK_PARITY_CHECK=1 SKIP_KEPS_CHECK=1 SKIP_HARNESS_PARITY_CHECK=1 SKIP_CONSTITUTION_RUNTIME_CHECK=1 SKIP_RISK_POLICY_CHECK=1 SKIP_RISK_LABEL_CHECK=1 SKIP_HARNESS_EVAL=1 scripts/dev/pr_check.sh"
   fi
 fi
 

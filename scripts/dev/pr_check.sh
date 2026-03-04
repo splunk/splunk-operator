@@ -41,6 +41,21 @@ if [[ "${SKIP_APPFRAMEWORK_PARITY_CHECK:-0}" != "1" ]]; then
   ./scripts/dev/appframework_parity_check.sh "${spec_args[@]}"
 fi
 
+if [[ "${SKIP_KEPS_CHECK:-0}" != "1" ]]; then
+  echo "Running KEP/component mapping check: ./scripts/dev/keps_check.sh ${spec_args[*]}"
+  ./scripts/dev/keps_check.sh "${spec_args[@]}"
+fi
+
+if [[ "${SKIP_HARNESS_PARITY_CHECK:-0}" != "1" ]]; then
+  echo "Running harness engineering parity check: ./scripts/dev/harness_engineering_parity_check.sh"
+  ./scripts/dev/harness_engineering_parity_check.sh
+fi
+
+if [[ "${SKIP_CONSTITUTION_RUNTIME_CHECK:-0}" != "1" ]]; then
+  echo "Running constitution/runtime policy check: ./scripts/dev/constitution_runtime_policy_check.sh ${spec_args[*]}"
+  ./scripts/dev/constitution_runtime_policy_check.sh "${spec_args[@]}"
+fi
+
 if [[ "${SKIP_RISK_POLICY_CHECK:-0}" != "1" ]]; then
   echo "Running risk policy check: ./scripts/dev/risk_policy_check.sh ${spec_args[*]}"
   ./scripts/dev/risk_policy_check.sh "${spec_args[@]}"

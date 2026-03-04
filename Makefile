@@ -153,7 +153,7 @@ verify: verify-crd ## Verify generated artifacts (set VERIFY_BUNDLE=1 to include
 verify-repo: ## Run repository verification script (see scripts/verify_repo.sh)
 	@./scripts/verify_repo.sh
 
-.PHONY: doc-first-check commit-discipline-check appframework-parity-check start-change
+.PHONY: doc-first-check commit-discipline-check appframework-parity-check keps-check harness-parity-check constitution-runtime-check start-change
 doc-first-check: ## Enforce doc-first governance for changed implementation paths
 	@./scripts/dev/doc_first_check.sh
 
@@ -162,6 +162,15 @@ commit-discipline-check: ## Enforce incremental commit discipline on current bra
 
 appframework-parity-check: ## Enforce AppFramework parity evidence for gated paths
 	@./scripts/dev/appframework_parity_check.sh
+
+keps-check: ## Validate impacted components map to referenced approved IDs
+	@./scripts/dev/keps_check.sh
+
+harness-parity-check: ## Validate harness-engineering parity matrix structure and evidence
+	@./scripts/dev/harness_engineering_parity_check.sh
+
+constitution-runtime-check: ## Validate constitution and runtime issue governance policy
+	@./scripts/dev/constitution_runtime_policy_check.sh
 
 start-change: ## Create docs/changes/<date>-<topic>.md from template (use TOPIC=...)
 	@if [ -z "$(TOPIC)" ]; then \

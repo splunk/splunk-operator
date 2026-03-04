@@ -12,4 +12,5 @@ Each change-intent file must contain:
 - `## Constitution Impact`
 - `## Harness Coverage Plan`
 - `## Test Plan`
+- `## Runtime Issue Tracker Review`
 - `## Implementation Log`

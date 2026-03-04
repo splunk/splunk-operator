@@ -185,6 +185,7 @@ required_sections=(
   "## Constitution Impact"
   "## Harness Coverage Plan"
   "## Test Plan"
+  "## Runtime Issue Tracker Review"
   "## Implementation Log"
 )
 

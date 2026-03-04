@@ -24,6 +24,10 @@ pass harness checks.
 - `DOC_FIRST_WORKFLOW.md` defines required change-intent sections and flow
 - `COMMIT_DISCIPLINE.md` defines commit slicing rules for implementation changes
 - `APPFRAMEWORK_PARITY.md` defines appframework parity evidence rules
+- `../specs/COMPONENT_KEP_INDEX.md` maps components to approved KEP/change IDs
+- `../engineering/HARNESS_ENGINEERING_PARITY.md` tracks harness-engineering parity status and evidence
+- `../engineering/CONSTITUTION.md` defines always-on engineering rules
+- `../testing/RUNTIME_ISSUE_TRACKER.md` tracks runtime issue lifecycle with evidence
 - `SKILL_ALIGNMENT.md` defines the shared skill contract and splcore-to-SOK mapping
 - `SPECKIT_KEP_BRIDGE.md` explains Spec Kit to KEP to harness-manifest mapping
 - `BRANCH_POLICY.md` defines branch protection and merge-queue requirements
@@ -31,3 +35,6 @@ pass harness checks.
 - `.github/workflows/autonomy-scorecard.yml` publishes autonomy score reports
 - `scripts/dev/autonomy_scorecard.sh` generates score metrics for current diff
 - `scripts/dev/risk_label_check.sh` validates PR risk label versus manifest tier
+- `scripts/dev/keps_check.sh` validates component-to-KEP mapping in changed scope
+- `scripts/dev/harness_engineering_parity_check.sh` validates parity matrix status/evidence quality
+- `scripts/dev/constitution_runtime_policy_check.sh` enforces constitution + runtime issue governance
