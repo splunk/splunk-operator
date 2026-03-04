@@ -288,15 +288,13 @@ func ValidateImagePullPolicy(imagePullPolicy *string) error {
 	}
 	switch *imagePullPolicy {
 	case "":
-		*imagePullPolicy = "Never"
+		*imagePullPolicy = "IfNotPresent"
 	case "Always":
 		break
 	case "IfNotPresent":
 		break
-	case "Never":
-		break
 	default:
-		return fmt.Errorf("ImagePullPolicy must be one of \"Always\", \"IfNotPresent\", or \"Never\"; value=\"%s\"", *imagePullPolicy)
+		return fmt.Errorf("ImagePullPolicy must be one of \"Always\", \"IfNotPresent\"; value=\"%s\"", *imagePullPolicy)
 	}
 	return nil
 }
