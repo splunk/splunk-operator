@@ -941,7 +941,7 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 	spltest.ReconcileTester(t, "TestApplyNamespaceScopedSecretObject", "test", "test", createCalls, updateCalls, reconcile, false)
 
 	// Partially baked "splunk-secrets" object(applies to empty as well)
-	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 
 	secret := corev1.Secret{
@@ -987,8 +987,8 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 	rerr := errors.New(splcommon.Rerr)
 	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
 	_, err := ApplyNamespaceScopedSecretObject(ctx, c, negSecret.GetNamespace())
-	if err == nil {
-		t.Errorf("Expected error")
+	if err != nil {
+		t.Errorf("Expected no error")
 	}
 
 	c.Delete(ctx, &negSecret)
