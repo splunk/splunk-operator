@@ -1,0 +1,3 @@
+interface:
+  display_name: "SOK Feature Scaffold"
+  short_description: "Scaffold CRD-driven feature changes"

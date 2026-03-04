@@ -99,5 +99,8 @@ bin/
 bundle_*/
 test/secret/*.log
 kubeconfig
-.devcontainer/devcontainer.json
 kuttl-artifacts/*
+.harness/runs/*
+!.harness/runs/.gitkeep
+.harness/scorecards/*
+!.harness/scorecards/.gitkeep

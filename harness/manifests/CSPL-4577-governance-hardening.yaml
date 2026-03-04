@@ -1,0 +1,58 @@
+version: v1
+change_id: CSPL-4577
+title: KEP-first harness governance hardening
+spec_file: docs/specs/CSPL-4577-agentic-harness-governance.md
+owner: @splunk/splunk-operator-for-kubernetes
+delivery_mode: agent
+risk_tier: medium
+human_approvals_required: 1
+auto_merge_allowed: false
+merge_queue_required: true
+evaluation_suite: docs/agent/evals/policy-regression.yaml
+allowed_paths:
+  - .devcontainer/**
+  - .agents/**
+  - .github/**
+  - .harness/**
+  - AGENTS.md
+  - CODEOWNERS
+  - CODE_OF_CONDUCT.md
+  - GOVERNANCE.md
+  - MAINTAINERS.md
+  - Makefile
+  - README.md
+  - SECURITY.md
+  - SUPPORT.md
+  - api/**
+  - docs/**
+  - harness/**
+  - internal/**
+  - pkg/**
+  - scripts/**
+  - skaffold.yaml
+  - config/skaffold/**
+  - speckit/**
+  - test/**
+  - templates/**
+  - scripts/dev/**
+  - .gitignore
+forbidden_paths:
+  - vendor/**
+  - bin/**
+  - .git/**
+required_commands:
+  - scripts/dev/spec_check.sh
+  - scripts/dev/harness_manifest_check.sh
+  - scripts/dev/doc_first_check.sh
+  - scripts/dev/commit_discipline_check.sh
+  - scripts/dev/appframework_parity_check.sh
+  - scripts/dev/keps_check.sh
+  - scripts/dev/harness_engineering_parity_check.sh
+  - scripts/dev/constitution_runtime_policy_check.sh
+  - scripts/dev/risk_policy_check.sh
+  - scripts/dev/risk_label_check.sh --labels risk:medium
+  - scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml
+  - scripts/dev/skill_lint.sh
+  - scripts/dev/script_sanity_check.sh
+  - scripts/dev/harness_run.sh --fast
+  - scripts/dev/pr_check.sh --fast

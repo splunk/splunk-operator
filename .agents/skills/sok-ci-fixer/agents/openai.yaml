@@ -1,0 +1,3 @@
+interface:
+  display_name: "SOK CI Fixer"
+  short_description: "Triage and fix CI failures"

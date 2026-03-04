@@ -1,0 +1,67 @@
+name: Skaffold Smoke
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - skaffold.yaml
+      - config/skaffold/**
+      - scripts/dev/skaffold_*.sh
+      - .devcontainer/**
+      - Dockerfile
+      - config/default/**
+      - config/manager/**
+  workflow_dispatch:
+
+jobs:
+  skaffold-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.29.1
+
+      - name: Install skaffold
+        run: |
+          curl -fsSLo skaffold https://storage.googleapis.com/skaffold/releases/v2.16.1/skaffold-linux-amd64
+          sudo install skaffold /usr/local/bin/skaffold
+          skaffold version
+
+      - name: Install kind
+        run: |
+          curl -fsSLo kind https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64
+          sudo install kind /usr/local/bin/kind
+          kind version
+
+      - name: Create kind cluster
+        run: |
+          kind create cluster --name skaffold-smoke
+          kubectl cluster-info
+
+      - name: Skaffold smoke deploy
+        env:
+          SKAFFOLD_PROFILE: ci-smoke
+          SKAFFOLD_CLEANUP: "1"
+          OPERATOR_NAMESPACE: splunk-operator
+        run: scripts/dev/skaffold_ci_smoke.sh
+
+      - name: Dump diagnostics on failure
+        if: failure()
+        run: |
+          kubectl get pods -A || true
+          kubectl -n splunk-operator get deploy,pods,events || true
+          kubectl -n splunk-operator logs deploy/splunk-operator-controller-manager -c manager --tail=200 || true
+
+      - name: Delete kind cluster
+        if: always()
+        run: kind delete cluster --name skaffold-smoke

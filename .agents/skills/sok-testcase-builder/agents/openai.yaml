@@ -1,0 +1,3 @@
+interface:
+  display_name: "SOK Testcase Builder"
+  short_description: "Generate integration/KUTTL testcases"

@@ -1,0 +1,3 @@
+interface:
+  display_name: "SOK Commit PR"
+  short_description: "Commit and manage draft PR"

@@ -1,0 +1,11 @@
+## CRD Change Checklist
+- [ ] Update the correct `api/v*/` spec or status struct
+- [ ] Add JSON tags and `omitempty` consistently
+- [ ] Add kubebuilder markers for validation or defaults
+- [ ] Run `make manifests`
+- [ ] Verify `config/rbac/role.yaml` if RBAC markers changed
+- [ ] If bundle/Helm CRDs are tracked, run `make bundle`
+- [ ] Run `make verify` (optionally `VERIFY_BUNDLE=1`) to confirm outputs
+- [ ] Verify generated YAML under `config/crd/bases/` and `bundle/manifests/`
+- [ ] Update docs under `docs/`
+- [ ] Add or update tests

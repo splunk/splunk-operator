@@ -1,0 +1,3 @@
+interface:
+  display_name: "SOK Reconcile Debugger"
+  short_description: "Debug reconcile loops and stuck phases"

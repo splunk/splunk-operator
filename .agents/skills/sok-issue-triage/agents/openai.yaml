@@ -1,0 +1,3 @@
+interface:
+  display_name: "SOK Issue Triage"
+  short_description: "Turn issues into implementation plans"

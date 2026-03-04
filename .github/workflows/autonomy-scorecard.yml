@@ -1,0 +1,44 @@
+name: Autonomy Scorecard
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+jobs:
+  autonomy-scorecard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate scorecard
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          args=()
+          if [[ -n "${{ github.base_ref }}" ]]; then
+            args+=(--base-ref "${{ github.base_ref }}")
+          fi
+
+          scripts/dev/autonomy_scorecard.sh \
+            "${args[@]}" \
+            --suite docs/agent/evals/policy-regression.yaml \
+            --output artifacts/autonomy-scorecard.json \
+            --markdown artifacts/autonomy-scorecard.md
+
+      - name: Publish summary
+        run: |
+          cat artifacts/autonomy-scorecard.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: autonomy-scorecard
+          path: artifacts/autonomy-scorecard.*

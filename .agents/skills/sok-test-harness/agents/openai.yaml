@@ -1,0 +1,3 @@
+interface:
+  display_name: "SOK Test Harness"
+  short_description: "Run and triage test workflows"

@@ -10,6 +10,36 @@ The Splunk Operator is a Kubernetes operator that manages Splunk Enterprise depl
 - **Test Framework**: Ginkgo/Gomega
 - **CRD API Versions**: v1, v1alpha2, v1alpha3, v1beta1, v2, v3, v4
 
+## Spec-First Agent Workflow
+
+For non-trivial changes, agents must follow this order:
+1. Bootstrap planning with Spec Kit:
+   - `scripts/dev/speckit_bridge.sh bootstrap --change-id <ID> --title "<title>"`
+2. Drive the generated KEP in `docs/specs/` through review until status is `Approved`.
+3. Set execution policy in `harness/manifests/`:
+   - scope (`allowed_paths`, `forbidden_paths`)
+   - governance (`risk_tier`, `human_approvals_required`, `merge_queue_required`)
+4. Implement code changes scoped to the manifest policy.
+5. Validate with harness commands:
+   - `scripts/dev/spec_check.sh`
+   - `scripts/dev/harness_manifest_check.sh`
+   - `scripts/dev/doc_first_check.sh`
+   - `scripts/dev/commit_discipline_check.sh`
+   - `scripts/dev/appframework_parity_check.sh`
+   - `scripts/dev/keps_check.sh`
+   - `scripts/dev/harness_engineering_parity_check.sh`
+   - `scripts/dev/constitution_runtime_policy_check.sh`
+   - `scripts/dev/risk_policy_check.sh`
+   - `scripts/dev/risk_label_check.sh --labels risk:<tier>`
+   - `scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml`
+   - `scripts/dev/harness_run.sh --fast`
+   - `scripts/dev/autonomy_scorecard.sh`
+   - `scripts/dev/pr_check.sh`
+6. Update spec status and graduation criteria with implementation progress.
+
+If non-trivial code changes exist without a valid harness manifest linked to an
+approved spec, `harness_manifest_check.sh` should fail.
+
 ## Repository Structure
 
 ```
@@ -79,7 +109,17 @@ make deploy IMG=<your-image> NAMESPACE=<namespace> ENVIRONMENT=<env>
 
 # Undeploy operator from cluster
 make undeploy
+
+# Run skaffold inner loop on kind
+make skaffold-dev
+
+# Run one-shot skaffold smoke deploy and cleanup
+make skaffold-smoke
 ```
+
+### Devcontainer
+
+Use `.devcontainer/` to get a consistent local/agent toolchain (Go, kubectl, operator-sdk, kind, skaffold).
 
 ### Documentation Commands
 

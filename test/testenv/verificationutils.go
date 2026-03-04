@@ -20,22 +20,37 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os/exec"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"time"
 
 	gomega "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splenterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var StabilizationDuration = time.Second * 20
+
+const (
+	telemetryConfigMapPrefix = "splunk-operator-"
+	telemetryLabelKey        = "name"
+	telemetryLabelValue      = "splunk-operator"
+	telemetryStatusKey       = "status"
+)
+
+type telemetryStatus struct {
+	LastTransmission string `json:"lastTransmission,omitempty"`
+	Test             string `json:"test,omitempty"`
+	SokVersion       string `json:"sokVersion,omitempty"`
+}
 
 // PodDetailsStruct captures output of kubectl get pods podname -o json
 type PodDetailsStruct struct {
@@ -58,6 +73,7 @@ type PodDetailsStruct struct {
 
 	Status struct {
 		ContainerStatuses []struct {
+			Name        string `json:"name"`
 			ContainerID string `json:"containerID"`
 			Image       string `json:"image"`
 			ImageID     string `json:"imageID"`
@@ -187,31 +203,26 @@ func SingleSiteIndexersReady(ctx context.Context, deployment *Deployment, testen
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
-// IngestorsReady verify ingestors go to ready state
+// IngestorReady verify ingestor cluster is in Ready status and does not flip-flop
 func IngestorReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
-	ingest := &enterpriseApi.IngestorCluster{}
+	ingestor := &enterpriseApi.IngestorCluster{}
 	instanceName := fmt.Sprintf("%s-ingest", deployment.GetName())
-
 	gomega.Eventually(func() enterpriseApi.Phase {
-		err := deployment.GetInstance(ctx, instanceName, ingest)
+		err := deployment.GetInstance(ctx, instanceName, ingestor)
 		if err != nil {
 			return enterpriseApi.PhaseError
 		}
-
-		testenvInstance.Log.Info("Waiting for ingestor instance's phase to be ready", "instance", instanceName, "phase", ingest.Status.Phase)
+		testenvInstance.Log.Info("Waiting for ingestor cluster phase to be ready", "instance", instanceName, "Phase", ingestor.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-
-		return ingest.Status.Phase
+		return ingestor.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, instanceName, ingest)
-
-		testenvInstance.Log.Info("Check for Consistency ingestor instance's phase to be ready", "instance", instanceName, "phase", ingest.Status.Phase)
-		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-ingest-")
-
-		return ingest.Status.Phase
+		_ = deployment.GetInstance(ctx, instanceName, ingestor)
+		testenvInstance.Log.Info("Check for Consistency ingestor cluster phase to be ready", "instance", instanceName, "Phase", ingestor.Status.Phase)
+		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-ingestor-")
+		return ingestor.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
@@ -239,6 +250,11 @@ func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 		testenvInstance.Log.Info("Check for Consistency cluster-manager phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
 		return cm.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+}
+
+// LegacyClusterManagerReady wraps the legacy v3 control-plane readiness check
+func LegacyClusterManagerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
+	ClusterMasterReady(ctx, deployment, testenvInstance)
 }
 
 // ClusterMasterReady verify Cluster Master Instance is in ready status
@@ -340,6 +356,109 @@ func VerifyRFSFMet(ctx context.Context, deployment *Deployment, testenvInstance 
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
+func getTelemetryConfigMap(ctx context.Context, deployment *Deployment) (*corev1.ConfigMap, string, error) {
+	operatorNamespace := deployment.testenv.GetName()
+	if deployment.testenv.IsOperatorInstalledClusterWide() == "true" {
+		operatorNamespace = "splunk-operator"
+	}
+	cmName := splenterprise.GetTelemetryConfigMapName(telemetryConfigMapPrefix)
+	cm := &corev1.ConfigMap{}
+	err := deployment.testenv.GetKubeClient().Get(ctx, crclient.ObjectKey{Name: cmName, Namespace: operatorNamespace}, cm)
+	return cm, operatorNamespace, err
+}
+
+func parseTelemetryStatus(cm *corev1.ConfigMap) (telemetryStatus, error) {
+	if cm == nil || cm.Data == nil {
+		return telemetryStatus{}, fmt.Errorf("telemetry configmap is empty")
+	}
+	raw, ok := cm.Data[telemetryStatusKey]
+	if !ok || strings.TrimSpace(raw) == "" {
+		return telemetryStatus{}, fmt.Errorf("telemetry status not found")
+	}
+	var status telemetryStatus
+	if err := json.Unmarshal([]byte(raw), &status); err != nil {
+		return telemetryStatus{}, err
+	}
+	return status, nil
+}
+
+// GetTelemetryLastSubmissionTime returns last telemetry transmission time (UTC) or zero time if unavailable
+func GetTelemetryLastSubmissionTime(ctx context.Context, deployment *Deployment) time.Time {
+	cm, _, err := getTelemetryConfigMap(ctx, deployment)
+	if err != nil {
+		deployment.testenv.Log.Info("Unable to get telemetry configmap", "error", err)
+		return time.Time{}
+	}
+	status, err := parseTelemetryStatus(cm)
+	if err != nil {
+		deployment.testenv.Log.Info("Unable to parse telemetry status", "error", err)
+		return time.Time{}
+	}
+	if status.LastTransmission == "" {
+		return time.Time{}
+	}
+	ts, err := time.Parse(time.RFC3339, status.LastTransmission)
+	if err != nil {
+		deployment.testenv.Log.Info("Unable to parse telemetry timestamp", "value", status.LastTransmission, "error", err)
+		return time.Time{}
+	}
+	return ts
+}
+
+// TriggerTelemetrySubmission updates telemetry configmap to request a new submission
+func TriggerTelemetrySubmission(ctx context.Context, deployment *Deployment) {
+	cmName := splenterprise.GetTelemetryConfigMapName(telemetryConfigMapPrefix)
+	cm, operatorNamespace, err := getTelemetryConfigMap(ctx, deployment)
+	create := false
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			create = true
+			cm = &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cmName,
+					Namespace: operatorNamespace,
+				},
+			}
+		} else {
+			gomega.Expect(err).ToNot(gomega.HaveOccurred(), "Unable to get telemetry configmap")
+		}
+	}
+
+	status, _ := parseTelemetryStatus(cm)
+	status.Test = "true"
+	status.LastTransmission = ""
+	statusBytes, err := json.MarshalIndent(status, "", "  ")
+	gomega.Expect(err).ToNot(gomega.HaveOccurred(), "Unable to marshal telemetry status")
+
+	if cm.Data == nil {
+		cm.Data = map[string]string{}
+	}
+	cm.Data[telemetryStatusKey] = string(statusBytes)
+
+	if cm.Labels == nil {
+		cm.Labels = map[string]string{}
+	}
+	cm.Labels[telemetryLabelKey] = telemetryLabelValue
+
+	if create {
+		err = deployment.testenv.GetKubeClient().Create(ctx, cm)
+	} else {
+		err = deployment.testenv.GetKubeClient().Update(ctx, cm)
+	}
+	gomega.Expect(err).ToNot(gomega.HaveOccurred(), "Unable to update telemetry configmap")
+}
+
+// VerifyTelemetry ensures telemetry lastTransmission is updated after triggering submission
+func VerifyTelemetry(ctx context.Context, deployment *Deployment, prev time.Time) {
+	gomega.Eventually(func() bool {
+		current := GetTelemetryLastSubmissionTime(ctx, deployment)
+		if prev.IsZero() {
+			return !current.IsZero()
+		}
+		return current.After(prev)
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
 // VerifyNoDisconnectedSHPresentOnCM is present on cluster manager
 func VerifyNoDisconnectedSHPresentOnCM(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	gomega.Consistently(func() bool {
@@ -380,6 +499,11 @@ func LicenseManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
 		return LicenseManager.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+}
+
+// LegacyLicenseManagerReady wraps the legacy v3 license control-plane readiness check
+func LegacyLicenseManagerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
+	LicenseMasterReady(ctx, deployment, testenvInstance)
 }
 
 // LicenseMasterReady verify LM is in ready status and does not flip flop
@@ -1027,11 +1151,7 @@ func VerifyAppListPhase(ctx context.Context, deployment *Deployment, testenvInst
 				appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
 				if err != nil {
 					testenvInstance.Log.Error(err, "Failed to get app deployment info")
-					return phase // Continue polling
-				}
-				if appDeploymentInfo.AppName == "" {
-					testenvInstance.Log.Info(fmt.Sprintf("App deployment info not found yet for app %s (CR %s/%s, AppSource %s), continuing to poll", appName, crKind, name, appSourceName))
-					return phase // Continue polling
+					return phase
 				}
 				testenvInstance.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase should not be %s", crKind, name, appName, phase), "Actual Phase", appDeploymentInfo.PhaseInfo.Phase, "App State", appDeploymentInfo)
 				return appDeploymentInfo.PhaseInfo.Phase
@@ -1044,11 +1164,7 @@ func VerifyAppListPhase(ctx context.Context, deployment *Deployment, testenvInst
 				appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
 				if err != nil {
 					testenvInstance.Log.Error(err, "Failed to get app deployment info")
-					return enterpriseApi.PhaseDownload // Continue polling
-				}
-				if appDeploymentInfo.AppName == "" {
-					testenvInstance.Log.Info(fmt.Sprintf("App deployment info not found yet for app %s (CR %s/%s, AppSource %s), continuing to poll", appName, crKind, name, appSourceName))
-					return enterpriseApi.PhaseDownload // Continue polling
+					return enterpriseApi.PhaseDownload
 				}
 				testenvInstance.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase), "Actual Phase", appDeploymentInfo.PhaseInfo.Phase, "App Phase Status", appDeploymentInfo.PhaseInfo.Status, "App State", appDeploymentInfo)
 				if appDeploymentInfo.PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
@@ -1252,83 +1368,102 @@ func VerifyFilesInDirectoryOnPod(ctx context.Context, deployment *Deployment, te
 	}
 }
 
-func GetTelemetryLastSubmissionTime(ctx context.Context, deployment *Deployment) string {
-	const (
-		configMapName = "splunk-operator-manager-telemetry"
-		statusKey     = "status"
-	)
-	type telemetryStatus struct {
-		LastTransmission string `json:"lastTransmission"`
+// VerifyOperatorImage verifies the operator pod is running the expected image
+func VerifyOperatorImage(ctx context.Context, testenvInstance *TestCaseEnv, expectedImage string) {
+	_ = ctx // reserved for future use
+	var ns string
+	if testenvInstance.clusterWideOperator != "true" {
+		ns = testenvInstance.GetName()
+	} else {
+		ns = "splunk-operator"
 	}
-
-	cm := &corev1.ConfigMap{}
-	err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: configMapName, Namespace: "splunk-operator"}, cm)
-	if err != nil {
-		logf.Log.Error(err, "GetTelemetryLastSubmissionTime: failed to retrieve configmap")
-		return ""
-	}
-
-	statusVal, ok := cm.Data[statusKey]
-	if !ok || statusVal == "" {
-		logf.Log.Info("GetTelemetryLastSubmissionTime: failed to retrieve status")
-		return ""
-	}
-	logf.Log.Info("GetTelemetryLastSubmissionTime: retrieved status", "status", statusVal)
-
-	var status telemetryStatus
-	if err := json.Unmarshal([]byte(statusVal), &status); err != nil {
-		logf.Log.Error(err, "GetTelemetryLastSubmissionTime: failed to unmarshal status", "statusVal", statusVal)
-		return ""
-	}
-	return status.LastTransmission
-}
-
-// VerifyTelemetry checks that the telemetry ConfigMap has a non-empty lastTransmission field in its status key.
-func VerifyTelemetry(ctx context.Context, deployment *Deployment, prevVal string) {
-	logf.Log.Info("VerifyTelemetry: start")
+	timeout := time.Duration(SpecifiedTestTimeout) * time.Second
 	gomega.Eventually(func() bool {
-		currentVal := GetTelemetryLastSubmissionTime(ctx, deployment)
-		if currentVal != "" && currentVal != prevVal {
-			logf.Log.Info("VerifyTelemetry: success", "previous", prevVal, "current", currentVal)
-			return true
+		operatorPod := GetOperatorPodName(testenvInstance)
+		if operatorPod == "" {
+			logf.Log.Info("Operator pod not found yet", "namespace", ns)
+			return false
 		}
-		return false
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+		return podImageContains(ns, operatorPod, expectedImage)
+	}, timeout, PollInterval).Should(gomega.Equal(true))
 }
 
-// TriggerTelemetrySubmission updates or adds the 'test_submission' key in the telemetry ConfigMap with a JSON value containing a random number.
-func TriggerTelemetrySubmission(ctx context.Context, deployment *Deployment) {
-	const (
-		configMapName = "splunk-operator-manager-telemetry"
-		testKey       = "test_submission"
-	)
+// VerifyPodImageContains verifies the pod is running a container image that contains expectedImage
+func VerifyPodImageContains(ns string, podName string, expectedImage string) {
+	timeout := time.Duration(SpecifiedTestTimeout) * time.Second
+	gomega.Eventually(func() bool {
+		return podImageContains(ns, podName, expectedImage)
+	}, timeout, PollInterval).Should(gomega.Equal(true))
+}
 
-	// Generate a random number
-	rand.Seed(time.Now().UnixNano())
-	randomNumber := rand.Intn(1000)
+// VerifySplunkPodImagesContain verifies all Splunk pods (excluding operator) are running expected image
+func VerifySplunkPodImagesContain(ns string, expectedImage string) {
+	timeout := time.Duration(SpecifiedTestTimeout) * time.Second
+	gomega.Eventually(func() bool {
+		pods := DumpGetPods(ns)
+		checked := 0
+		for _, pod := range pods {
+			if !isSplunkWorkloadPod(pod) {
+				continue
+			}
+			checked++
+			if !podImageContains(ns, pod, expectedImage) {
+				return false
+			}
+		}
+		if checked == 0 {
+			logf.Log.Info("No Splunk pods found yet", "namespace", ns)
+			return false
+		}
+		return true
+	}, timeout, PollInterval).Should(gomega.Equal(true))
+}
 
-	// Create the JSON value
-	jsonValue, err := json.Marshal(map[string]int{"value": randomNumber})
-	if err != nil {
-		logf.Log.Error(err, "Failed to marshal JSON value")
-		return
+// podImageContains checks if any container image or imageID on the pod contains expectedImage
+func podImageContains(ns string, podName string, expectedImage string) bool {
+	if podName == "" {
+		logf.Log.Info("Pod name is empty; cannot verify image", "namespace", ns)
+		return false
 	}
-
-	// Update the ConfigMap
-	cm := &corev1.ConfigMap{}
-	err = deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: configMapName, Namespace: "splunk-operator"}, cm)
+	output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
 	if err != nil {
-		logf.Log.Error(err, "Failed to get ConfigMap")
-		return
+		cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return false
 	}
-
-	// Update the test_submission key
-	cm.Data[testKey] = string(jsonValue)
-	err = deployment.testenv.GetKubeClient().Update(ctx, cm)
+	restResponse := PodDetailsStruct{}
+	err = json.Unmarshal([]byte(output), &restResponse)
 	if err != nil {
-		logf.Log.Error(err, "Failed to update ConfigMap")
-		return
+		logf.Log.Error(err, "Failed to parse pod JSON")
+		return false
 	}
+	found := false
+	images := []string{}
+	for _, status := range restResponse.Status.ContainerStatuses {
+		if status.Image != "" {
+			images = append(images, status.Image)
+		}
+		if status.ImageID != "" {
+			images = append(images, status.ImageID)
+		}
+		if strings.Contains(status.Image, expectedImage) || strings.Contains(status.ImageID, expectedImage) {
+			found = true
+		}
+	}
+	logf.Log.Info("Pod image check", "pod", podName, "expected", expectedImage, "found", found, "images", images)
+	return found
+}
 
-	logf.Log.Info("Successfully updated telemetry ConfigMap", "key", testKey, "value", jsonValue)
+func isOperatorPod(podName string) bool {
+	return strings.HasPrefix(podName, "splunk-op") || strings.HasPrefix(podName, "splunk-operator")
+}
+
+func isSplunkWorkloadPod(podName string) bool {
+	if podName == "" {
+		return false
+	}
+	if isOperatorPod(podName) {
+		return false
+	}
+	return strings.HasPrefix(podName, "splunk-")
 }

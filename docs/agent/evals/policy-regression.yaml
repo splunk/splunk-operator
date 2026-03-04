@@ -1,0 +1,114 @@
+version: v1
+name: harness-policy-regression
+cases:
+  - id: kep_template_summary
+    file: docs/specs/SPEC_TEMPLATE.md
+    pattern: "## Summary"
+  - id: kep_template_graduation
+    file: docs/specs/SPEC_TEMPLATE.md
+    pattern: "## Graduation Criteria"
+  - id: spec_readme_kep_policy
+    file: docs/specs/README.md
+    pattern: "# KEP-Lite Workflow"
+  - id: pr_check_manifest_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "harness_manifest_check.sh"
+  - id: pr_check_doc_first_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "doc_first_check.sh"
+  - id: pr_check_commit_discipline_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "commit_discipline_check.sh"
+  - id: pr_check_appframework_parity_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "appframework_parity_check.sh"
+  - id: pr_check_keps_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "keps_check.sh"
+  - id: pr_check_harness_parity_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "harness_engineering_parity_check.sh"
+  - id: pr_check_constitution_runtime_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "constitution_runtime_policy_check.sh"
+  - id: pr_check_eval_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "harness_eval.sh"
+  - id: pr_check_skill_lint_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "skill_lint.sh"
+  - id: pr_check_script_sanity_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "script_sanity_check.sh"
+  - id: pr_check_risk_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "risk_policy_check.sh"
+  - id: pr_check_risk_label_gate
+    file: scripts/dev/pr_check.sh
+    pattern: "risk_label_check.sh"
+  - id: speckit_bridge_script
+    file: scripts/dev/speckit_bridge.sh
+    pattern: "bootstrap --change-id"
+  - id: risk_policy_script
+    file: scripts/dev/risk_policy_check.sh
+    pattern: "risk_tier"
+  - id: risk_label_script
+    file: scripts/dev/risk_label_check.sh
+    pattern: "risk:"
+  - id: scorecard_script
+    file: scripts/dev/autonomy_scorecard.sh
+    pattern: "autonomy_score"
+  - id: keps_check_script
+    file: scripts/dev/keps_check.sh
+    pattern: "COMPONENT_KEP_INDEX.md"
+  - id: harness_parity_script
+    file: scripts/dev/harness_engineering_parity_check.sh
+    pattern: "HARNESS_ENGINEERING_PARITY.md"
+  - id: constitution_runtime_script
+    file: scripts/dev/constitution_runtime_policy_check.sh
+    pattern: "RUNTIME_ISSUE_TRACKER.md"
+  - id: scope_check_base_ref
+    file: scripts/dev/scope_check.sh
+    pattern: "--base-ref"
+  - id: codeowners_specs
+    file: CODEOWNERS
+    pattern: "/docs/specs/"
+  - id: codeowners_harness
+    file: CODEOWNERS
+    pattern: "/harness/"
+  - id: manifest_doc
+    file: docs/agent/HARNESS_MANIFEST.md
+    pattern: "## Required Fields"
+  - id: merge_queue_workflow
+    file: .github/workflows/merge-queue-check.yml
+    pattern: "merge_group"
+  - id: scorecard_workflow
+    file: .github/workflows/autonomy-scorecard.yml
+    pattern: "Autonomy Scorecard"
+  - id: pr_check_label_event
+    file: .github/workflows/pr-check.yml
+    pattern: "labeled"
+  - id: speckit_bridge_doc
+    file: docs/agent/SPECKIT_KEP_BRIDGE.md
+    pattern: "scripts/dev/speckit_bridge.sh bootstrap"
+  - id: branch_policy_doc
+    file: docs/agent/BRANCH_POLICY.md
+    pattern: "## Merge Queue"
+  - id: doc_first_template_sections
+    file: docs/changes/TEMPLATE.md
+    pattern: "## Harness Coverage Plan"
+  - id: appframework_parity_doc
+    file: docs/agent/APPFRAMEWORK_PARITY.md
+    pattern: "## Required Evidence"
+  - id: component_kep_index_doc
+    file: docs/specs/COMPONENT_KEP_INDEX.md
+    pattern: "# Component to KEP Index"
+  - id: harness_engineering_parity_doc
+    file: docs/engineering/HARNESS_ENGINEERING_PARITY.md
+    pattern: "# Harness Engineering Parity"
+  - id: engineering_constitution_doc
+    file: docs/engineering/CONSTITUTION.md
+    pattern: "# Engineering Constitution"
+  - id: runtime_issue_tracker_doc
+    file: docs/testing/RUNTIME_ISSUE_TRACKER.md
+    pattern: "# Runtime Issue Tracker"

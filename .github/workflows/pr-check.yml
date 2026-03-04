@@ -1,0 +1,40 @@
+name: PR Check
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+      - unlabeled
+    branches:
+      - main
+      - develop
+
+jobs:
+  pr-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run PR check (fast)
+        env:
+          PR_CHECK_FLAGS: --fast
+          SPEC_CHECK_BASE_REF: ${{ github.base_ref }}
+          HARNESS_BASE_REF: ${{ github.base_ref }}
+          HARNESS_EVAL_SUITE: docs/agent/evals/policy-regression.yaml
+          RISK_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          ENFORCE_RISK_LABEL_CHECK: "1"
+        run: |
+          scripts/dev/pr_check.sh

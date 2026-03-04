@@ -1,0 +1,3 @@
+interface:
+  display_name: "SOK New CRD Controller"
+  short_description: "Scaffold a new CRD + controller"

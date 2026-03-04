@@ -58,6 +58,7 @@ BUNDLE_IMG ?= ${IMAGE_TAG_BASE}-bundle:v${VERSION}
 
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
+SKAFFOLD_PROFILE ?= dev-kind
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 # Automatically derive the version from go.mod
 ENVTEST_VERSION := $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
@@ -140,6 +141,57 @@ vet: setup/ginkgo	 ## Run go vet against code.
 test: manifests generate fmt vet setup-envtest ## Run tests.
 	REPORT_FILE="unit_test-$$(date +%Y%m%d-%H%M%S)$${GITHUB_RUN_ID:+-$$GITHUB_RUN_ID}.xml"; \
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=$$REPORT_FILE --output-dir=`pwd` -vv --trace --keep-going --timeout=$${TEST_TIMEOUT:-170m} --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/client ./pkg/splunk/util ./internal/controller ./pkg/splunk/splkcontroller
+
+.PHONY: verify verify-crd verify-bundle
+verify: verify-crd ## Verify generated artifacts (set VERIFY_BUNDLE=1 to include bundle)
+	@if [ "$(VERIFY_BUNDLE)" = "1" ]; then \
+		$(MAKE) verify-bundle; \
+	else \
+		echo "Skipping bundle verify (set VERIFY_BUNDLE=1 to enable)"; \
+	fi
+
+.PHONY: verify-repo
+verify-repo: ## Run repository verification script (see scripts/verify_repo.sh)
+	@./scripts/verify_repo.sh
+
+.PHONY: doc-first-check commit-discipline-check appframework-parity-check keps-check harness-parity-check constitution-runtime-check start-change
+doc-first-check: ## Enforce doc-first governance for changed implementation paths
+	@./scripts/dev/doc_first_check.sh
+
+commit-discipline-check: ## Enforce incremental commit discipline on current branch
+	@./scripts/dev/commit_discipline_check.sh
+
+appframework-parity-check: ## Enforce AppFramework parity evidence for gated paths
+	@./scripts/dev/appframework_parity_check.sh
+
+keps-check: ## Validate impacted components map to referenced approved IDs
+	@./scripts/dev/keps_check.sh
+
+harness-parity-check: ## Validate harness-engineering parity matrix structure and evidence
+	@./scripts/dev/harness_engineering_parity_check.sh
+
+constitution-runtime-check: ## Validate constitution and runtime issue governance policy
+	@./scripts/dev/constitution_runtime_policy_check.sh
+
+start-change: ## Create docs/changes/<date>-<topic>.md from template (use TOPIC=...)
+	@if [ -z "$(TOPIC)" ]; then \
+		echo "Usage: make start-change TOPIC=<short-topic>"; \
+		exit 1; \
+	fi
+	@./scripts/dev/start_change.sh "$(TOPIC)"
+
+.PHONY: skaffold-dev skaffold-smoke
+skaffold-dev: ## Run skaffold inner loop (default profile: dev-kind)
+	@SKAFFOLD_PROFILE=$(SKAFFOLD_PROFILE) ./scripts/dev/skaffold_dev.sh
+
+skaffold-smoke: ## Run skaffold smoke deploy + rollout check and cleanup
+	@SKAFFOLD_PROFILE=ci-smoke SKAFFOLD_CLEANUP=1 ./scripts/dev/skaffold_ci_smoke.sh
+
+verify-crd: ## Regenerate and verify CRD/RBAC outputs
+	@./scripts/verify_crd.sh
+
+verify-bundle: ## Regenerate and verify bundle/helm outputs
+	@./scripts/verify_bundle.sh
 
 
 ##@ Documentation

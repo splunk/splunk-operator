@@ -1,0 +1,39 @@
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: splunk-operator
+
+build:
+  local:
+    push: false
+    useBuildkit: true
+  artifacts:
+  - image: docker.io/splunk/splunk-operator
+    docker:
+      dockerfile: Dockerfile
+
+manifests:
+  kustomize:
+    paths:
+    - config/skaffold
+
+deploy:
+  kubectl:
+    flags:
+      apply:
+      - --server-side
+      - --force-conflicts
+
+profiles:
+- name: dev-kind
+  activation:
+  - kubeContext: kind-.*
+  portForward:
+  - resourceType: deployment
+    resourceName: splunk-operator-controller-manager
+    namespace: splunk-operator
+    port: 8081
+
+- name: ci-smoke
+  activation:
+  - env: SKAFFOLD_CI_SMOKE=true

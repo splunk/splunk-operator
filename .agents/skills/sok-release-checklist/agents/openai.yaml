@@ -1,0 +1,3 @@
+interface:
+  display_name: "SOK Release Checklist"
+  short_description: "Verify release readiness checklist"

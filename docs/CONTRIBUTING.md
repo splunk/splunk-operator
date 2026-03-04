@@ -17,6 +17,7 @@ This document is the single source of truth on contributing towards this codebas
   - [Contribution Workflow](#contribution-workflow)
       - [Bug reports and feature requests](#bug-reports-and-feature-requests)
       - [Fixing issues](#fixing-issues)
+      - [Spec-First Workflow](#spec-first-workflow)
       - [Pull requests](#pull-requests)
       - [Maintainer Workflow for External Contributions](#maintainer-workflow-for-external-contributions)
       - [Code Review](#code-review)
@@ -33,7 +34,7 @@ We only accept pull requests submitted from:
 * Individuals who have signed the [Splunk Contributor License Agreement](https://www.splunk.com/en_us/form/contributions.html)
 
 #### Code of Conduct
-All contributors are expected to read our [Code of Conduct](contributing/code-of-conduct.md) and observe it in all interactions involving this project.
+All contributors are expected to read our [Code of Conduct](../CODE_OF_CONDUCT.md) and observe it in all interactions involving this project.
 
 ## Contribution Workflow
 Help is always welcome! For example, documentation can always use improvement. There's always code that can be clarified, functionality that can be extended, and tests to be added to guarantee behavior. If you see something you think should be fixed, don't be afraid to own it.
@@ -53,6 +54,27 @@ We'd also like to hear your feature suggestions. Feel free to submit them as iss
 #### Fixing issues
 Look through our [issue tracker](https://github.com/splunk/splunk-operator/issues) to find problems to fix! Feel free to comment and tag corresponding stakeholders or full-time maintainers of this project with any questions or concerns.
 
+#### Spec-First Workflow
+For non-trivial changes, start with Spec Kit + KEP-lite before implementation:
+1. Bootstrap planning, KEP, and manifest:
+   ```bash
+   $ scripts/dev/speckit_bridge.sh bootstrap --change-id CSPL-XXXX --title "your title"
+   ```
+2. Refine `speckit/specs/<id>-<slug>/spec.md`, `plan.md`, and `tasks.md`.
+3. Fill KEP sections and request review.
+4. Move KEP status to `Approved` before implementation.
+5. Use `risk_tier` and scope in `harness/manifests/*.yaml` as execution policy.
+6. Keep KEP in sync and move status to `Implemented` when merged.
+7. Add one PR label that matches manifest risk tier (`risk:low|risk:medium|risk:high`).
+
+The PR harness enforces this with:
+```bash
+$ scripts/dev/spec_check.sh
+$ scripts/dev/harness_manifest_check.sh
+$ scripts/dev/risk_policy_check.sh
+$ scripts/dev/risk_label_check.sh --labels risk:<tier>
+```
+
 #### Pull requests
 A pull request informs the project's core developers about the changes you want to review and merge. Once you submit a pull request, it enters a stage of code review where you and others can discuss its potential modifications and add more commits later on.
 
@@ -70,9 +92,21 @@ To make a pull request against this project:
     # Create your feature/bugfix branch
     $ git checkout -b your-branch-name develop
     ```
-1. Run tests to verify your environment.
+1. Create or update the governing spec for non-trivial changes.
+    ```bash
+    $ scripts/dev/speckit_bridge.sh bootstrap --change-id CSPL-XXXX --title "your title"
+    ```
+1. Run harness and tests to verify your changes.
     ```
     $ cd splunk-operator
+    $ scripts/dev/spec_check.sh
+    $ scripts/dev/harness_manifest_check.sh
+    $ scripts/dev/risk_policy_check.sh
+    $ scripts/dev/risk_label_check.sh --labels risk:<tier>
+    $ scripts/dev/harness_eval.sh --suite docs/agent/evals/policy-regression.yaml
+    $ scripts/dev/harness_run.sh --fast
+    $ scripts/dev/pr_check.sh
+    $ scripts/dev/autonomy_scorecard.sh --base-ref develop
     $ make test
     ```
 1. Push your changes once your tests have passed.
@@ -148,7 +182,7 @@ A PR is easy to review if you:
 * Write good commit messages, concise and descriptive.
 * Break large changes into a logical series of smaller patches. Patches individually make easily understandable changes, and in aggregate, solve a broader issue.
 
-Reviewers are highly encouraged to revisit the [Code of Conduct](contributing/code-of-conduct.md) and must go above and beyond to promote a collaborative, respectful community.
+Reviewers are highly encouraged to revisit the [Code of Conduct](../CODE_OF_CONDUCT.md) and must go above and beyond to promote a collaborative, respectful community.
 
 When reviewing PRs from others, [The Gentle Art of Patch Review](http://sage.thesharps.us/2014/09/01/the-gentle-art-of-patch-review/) suggests an iterative series of focuses, designed to lead new contributors to positive collaboration without inundating them initially with nuances:
 * Is the idea behind the contribution sound?
@@ -166,6 +200,36 @@ Testing is the responsibility of all contributors. To run Unit Tests in Splunk O
 ```
 $ make test
 ```
+
+For agent-assisted or standardized local workflows, prefer the scripts under `scripts/dev/`:
+- `scripts/dev/speckit_bridge.sh`
+- `scripts/dev/spec_check.sh`
+- `scripts/dev/harness_manifest_check.sh`
+- `scripts/dev/doc_first_check.sh`
+- `scripts/dev/commit_discipline_check.sh`
+- `scripts/dev/appframework_parity_check.sh`
+- `scripts/dev/risk_policy_check.sh`
+- `scripts/dev/risk_label_check.sh`
+- `scripts/dev/harness_eval.sh`
+- `scripts/dev/harness_run.sh`
+- `scripts/dev/autonomy_scorecard.sh`
+- `scripts/dev/start_change.sh`
+- `scripts/dev/skill_lint.sh`
+- `scripts/dev/script_sanity_check.sh`
+- `scripts/dev/unit.sh`
+- `scripts/dev/lint.sh`
+- `scripts/dev/skaffold_dev.sh`
+- `scripts/dev/skaffold_ci_smoke.sh`
+- `scripts/dev/pr_check.sh`
+
+For a consistent local environment across contributors and agents, open the repo in the devcontainer at `.devcontainer/`.
+
+#### Agentic Development Workflow
+This repo includes skills and harness scripts to make common workflows repeatable.
+Start with:
+- `AGENTS.md` (root) for repo map and conventions
+- `.agents/skills/*/SKILL.md` for skill workflows
+- `docs/agent/README.md` for agent-focused guidance
 
 #### Documentation
 We can always use improvements to our documentation! Anyone can contribute to these docs, whether you identify as a developer, an end user, or someone who just can’t stand seeing typos. What exactly is needed?
@@ -197,11 +261,7 @@ If you need help, tag one of the active maintainers of this project in a post or
 () Gaurav Gupta
 () Subba Gontla
 () Arjun Kondur
-() Kriti Ashok
-() Param Dhanoya
-() Victor Ebken
-() Ajeet Kumar
-() Jeff Rybczynski
-() Patrick Ogdin
+
+
 
 ```
