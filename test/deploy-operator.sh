@@ -55,16 +55,22 @@ if [  "${CLUSTER_WIDE}" == "true" ]; then
   # sleep before checking for deployment, in slow clusters deployment call may not even started
   # in those cases, kubectl will fail with error:  no matching resources found
   sleep 2
-  kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=600s -n splunk-operator
+  kubectl rollout status deployment/splunk-operator-controller-manager -n splunk-operator --timeout=600s
+  if [ $? -ne 0 ]; then
+    echo "rollout status for operator deployment timed out; falling back to pod readiness diagnostics..."
+    kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=120s -n splunk-operator
+  fi
   if [ $? -ne 0 ]; then
     echo "kubectl get pods -n kube-system ---"
     kubectl get pods -n kube-system
-    echo "kubectl get deployement ebs-csi-controller -n kube-system ---"
-    kubectl get deployement ebs-csi-controller -n kube-system
+    echo "kubectl get deployment ebs-csi-controller -n kube-system ---"
+    kubectl get deployment ebs-csi-controller -n kube-system
     echo "kubectl describe pvc -n splunk-operator ---"
     kubectl describe pvc -n splunk-operator
     echo "kubectl describe pv ---"
     kubectl describe pv
+    echo "kubectl get events -n splunk-operator --sort-by=.lastTimestamp ---"
+    kubectl get events -n splunk-operator --sort-by=.lastTimestamp || true
     echo "kubectl describe pod -n splunk-operator ---"
     kubectl describe pod -n splunk-operator
     echo "Operator installation not ready..."

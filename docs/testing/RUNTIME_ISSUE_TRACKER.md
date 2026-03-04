@@ -1,6 +1,6 @@
 # Runtime Issue Tracker
 
-Last updated: `2026-03-03` (UTC)
+Last updated: `2026-03-04` (UTC)
 
 This file tracks runtime and integration issues discovered during operator
 validation (unit/integration/KUTTL/kind/cluster runs).
@@ -16,6 +16,7 @@ validation (unit/integration/KUTTL/kind/cluster runs).
 | ID | Status | Issue | Evidence | Impact | Next Action |
 |---|---|---|---|---|---|
 | `OP-4577-001` | Open | Governance hardening rollout pending validation on mixed CI providers. | 2026-03-03 initial capture during CSPL-4577 rollout. | Temporary uncertainty across GitHub and downstream pipelines. | Track failures to closure while enabling new governance gates incrementally. |
+| `OP-4577-002` | In Progress | EKS smoke setup can fail when IAM OIDC provider quota is exhausted, causing downstream EBS/PVC/operator readiness failures. | 2026-03-04 GitHub run `22648768822`: `LimitExceeded: Cannot exceed quota for OpenIdConnectProvidersPerAccount: 100`, then `FailedScheduling ... VolumeBinding: context deadline exceeded` and operator readiness timeout. | Long-running smoke jobs fail late with infra symptoms unrelated to feature behavior. | Add OIDC quota preflight and fail-fast checks in EKS bootstrap; wait for EBS CSI readiness before running tests. |
 
 ## Test Harness Issues
 

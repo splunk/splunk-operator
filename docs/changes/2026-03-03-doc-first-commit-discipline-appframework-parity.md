@@ -41,3 +41,4 @@
 - 2026-03-03: Added new governance check scripts and integrated them into `pr_check.sh`.
 - 2026-03-03: Added `docs/changes/` doc-first workflow artifacts and a helper creator script.
 - 2026-03-03: Updated harness docs, eval suite, and manifest required commands.
+- 2026-03-04: Hardened EKS smoke bootstrap scripts with OIDC quota preflight, EBS CSI readiness waits, and improved operator rollout diagnostics.
