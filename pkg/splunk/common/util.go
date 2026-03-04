@@ -140,7 +140,34 @@ func CompareServicePorts(a []corev1.ServicePort, b []corev1.ServicePort) bool {
 // CompareEnvs is a generic comparer of two Kubernetes Env variables.
 // It returns true if there are material differences between them, or false otherwise.
 func CompareEnvs(a []corev1.EnvVar, b []corev1.EnvVar) bool {
-	return sortAndCompareSlices(a, b, SortFieldName)
+	// Kubernetes defaults EnvVarSource FieldRef/ResourceFieldRef apiVersion
+	// on persisted Pod specs. Normalize these defaults before comparing to
+	// prevent false diffs that can keep resources stuck in Updating state.
+	return sortAndCompareSlices(normalizeEnvsForCompare(a), normalizeEnvsForCompare(b), SortFieldName)
+}
+
+func normalizeEnvsForCompare(envs []corev1.EnvVar) []corev1.EnvVar {
+	if len(envs) == 0 {
+		return envs
+	}
+
+	normalized := make([]corev1.EnvVar, len(envs))
+	copy(normalized, envs)
+
+	for i := range normalized {
+		if normalized[i].ValueFrom == nil {
+			continue
+		}
+
+		if normalized[i].ValueFrom.FieldRef != nil && normalized[i].ValueFrom.FieldRef.APIVersion == "" {
+			fieldRefCopy := *normalized[i].ValueFrom.FieldRef
+			fieldRefCopy.APIVersion = "v1"
+			normalized[i].ValueFrom.FieldRef = &fieldRefCopy
+		}
+
+	}
+
+	return normalized
 }
 
 // CompareTolerations compares the 2 list of tolerations

@@ -450,6 +450,28 @@ func TestCompareEnvs(t *testing.T) {
 	a = []corev1.EnvVar{aEnv, cEnv}
 	b = []corev1.EnvVar{cEnv}
 	test(true)
+
+	podNameNoDefaultAPIVersion := corev1.EnvVar{
+		Name: "POD_NAME",
+		ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: "metadata.name",
+			},
+		},
+	}
+	podNameWithDefaultAPIVersion := corev1.EnvVar{
+		Name: "POD_NAME",
+		ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{
+				APIVersion: "v1",
+				FieldPath:  "metadata.name",
+			},
+		},
+	}
+	a = []corev1.EnvVar{podNameNoDefaultAPIVersion}
+	b = []corev1.EnvVar{podNameWithDefaultAPIVersion}
+	test(false)
+
 }
 
 func TestCompareVolumeMounts(t *testing.T) {
