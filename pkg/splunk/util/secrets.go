@@ -461,13 +461,14 @@ func ApplySplunkSecret(ctx context.Context, c splcommon.ControllerClient, cr spl
 }
 
 // ApplyNamespaceScopedSecretObject retrieves the namespace scoped K8S secret object without auto-generating any secrets
+// It validates all secrets documented in PasswordManagement: hec_token, password, pass4SymmKey, idxc_secret, shc_secret
 func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.ControllerClient, namespace string) (*corev1.Secret, error) {
 	var current corev1.Secret
 
 	name := splcommon.GetNamespaceScopedSecretName(namespace)
 
-	log := log.FromContext(ctx)
-	scopedLog := log.WithName("ApplyNamespaceScopedSecretObject").WithValues(
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyNamespaceScopedSecretObject").WithValues(
 		"name", splcommon.GetNamespaceScopedSecretName(namespace),
 		"namespace", namespace)
 
@@ -475,6 +476,12 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: splcommon.GetNamespaceScopedSecretName(namespace)}
 	err := client.Get(ctx, namespacedName, &current)
 	if err == nil {
+		// Validate existing secrets according to PasswordManagement documentation
+		err = validateNamespaceScopedSecrets(scopedLog, &current)
+		if err != nil {
+			return nil, err
+		}
+
 		// Generate values for only missing types of tokens them
 		var updateNeeded bool = false
 		for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
@@ -537,11 +544,44 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 	return &current, nil
 }
 
+// validateNamespaceScopedSecrets validates that all Splunk secret tokens that exist are not empty
+// and meet their specific requirements
+// Validates secrets documented in PasswordManagement: hec_token, password, pass4SymmKey, idxc_secret, shc_secret
+func validateNamespaceScopedSecrets(scopedLog interface {
+	Info(msg string, keysAndValues ...interface{})
+	Error(err error, msg string, keysAndValues ...interface{})
+}, secret *corev1.Secret) error {
+	if secret.Data == nil {
+		return fmt.Errorf("secret data is nil for namespace scoped secret %s", secret.GetName())
+	}
+
+	// Validate each documented secret token type
+	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
+		if secretValue, exists := secret.Data[tokenType]; exists {
+			var err error
+			if tokenType == "hec_token" {
+				err = ValidateHECToken(secretValue)
+			} else {
+				err = ValidateSecret(secretValue)
+			}
+
+			if err != nil {
+				scopedLog.Error(err, "Validation failed for secret", "secret", tokenType)
+				return fmt.Errorf("validation failed for secret %s: %w", tokenType, err)
+			}
+
+			scopedLog.Info("Namespace scoped secret validation passed", "secret", tokenType)
+		}
+	}
+
+	return nil
+}
+
 // GetSecretByName retrieves namespace scoped secret object for a given name
 func GetSecretByName(ctx context.Context, c splcommon.ControllerClient, namespace string, logHandle string, name string) (*corev1.Secret, error) {
 	var namespaceScopedSecret corev1.Secret
-	log := log.FromContext(ctx)
-	scopedLog := log.WithName("GetSecretByName").WithValues("logHandle: ", logHandle, "namespace: ", namespace)
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("GetSecretByName").WithValues("logHandle: ", logHandle, "namespace: ", namespace)
 
 	// Check if a namespace scoped secret exists
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: name}
