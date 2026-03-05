@@ -639,8 +639,16 @@ func (testenv *TestCaseEnv) createIndexIngestSepSecret() error {
 	secretName := testenv.indexIngestSepSecret
 	ns := testenv.namespace
 
-	data := map[string][]byte{"s3_access_key": []byte(os.Getenv("AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID")),
-		"s3_secret_key": []byte(os.Getenv("AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY"))}
+	accessKey := os.Getenv("TEST_S3_ACCESS_KEY_ID")
+	if accessKey == "" {
+		accessKey = os.Getenv("AWS_ACCESS_KEY_ID")
+	}
+	secretKey := os.Getenv("TEST_S3_SECRET_ACCESS_KEY")
+	if secretKey == "" {
+		secretKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
+	}
+	data := map[string][]byte{"s3_access_key": []byte(accessKey),
+		"s3_secret_key": []byte(secretKey)}
 	secret := newSecretSpec(ns, secretName, data)
 
 	if err := testenv.GetKubeClient().Create(context.TODO(), secret); err != nil {

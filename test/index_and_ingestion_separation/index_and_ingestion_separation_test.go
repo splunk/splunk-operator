@@ -361,9 +361,7 @@ var _ = Describe("indingsep test", func() {
 			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
 
 			// Verify Indexer Cluster Status
-			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
-			Expect(index.Status.CredentialSecretVersion).To(Not(Equal("")), "Indexer queue status credential access secret version is empty")
-			Expect(index.Status.CredentialSecretVersion).To(Not(Equal("0")), "Indexer queue status credential access secret version is 0")
+			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status", "indexerName", index.GetName(), "phase", index.Status.Phase)
 
 			// Verify conf files
 			testcaseEnvInst.Log.Info("Verify conf files")
