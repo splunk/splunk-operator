@@ -419,6 +419,74 @@ func TestDecommissionIndexerClusterPeer(t *testing.T) {
 	splunkClientErrorTester(t, test)
 }
 
+func TestCheckRestartRequired(t *testing.T) {
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/messages/restart_required?output_mode=json", nil)
+
+	t.Run("entry present returns restart required", func(t *testing.T) {
+		body := `{"entry":[{"name":"RESTART_REQUIRED","content":{"message":"RESTART_REQUIRED:INITIATE_RESTART"}}]}`
+		test := func(c SplunkClient) error {
+			restartRequired, message, err := c.CheckRestartRequired()
+			if err != nil {
+				return err
+			}
+			if !restartRequired {
+				t.Errorf("restartRequired=%t; want true", restartRequired)
+			}
+			if message != "RESTART_REQUIRED:INITIATE_RESTART" {
+				t.Errorf("message=%s; want RESTART_REQUIRED:INITIATE_RESTART", message)
+			}
+			return nil
+		}
+		splunkClientTester(t, "TestCheckRestartRequired", 200, body, wantRequest, test)
+	})
+
+	t.Run("no entries returns no restart required", func(t *testing.T) {
+		body := `{"entry":[]}`
+		test := func(c SplunkClient) error {
+			restartRequired, message, err := c.CheckRestartRequired()
+			if err != nil {
+				return err
+			}
+			if restartRequired {
+				t.Errorf("restartRequired=%t; want false", restartRequired)
+			}
+			if message != "" {
+				t.Errorf("message=%s; want empty", message)
+			}
+			return nil
+		}
+		splunkClientTester(t, "TestCheckRestartRequired", 200, body, wantRequest, test)
+	})
+
+	t.Run("404 returns no restart required", func(t *testing.T) {
+		test := func(c SplunkClient) error {
+			restartRequired, message, err := c.CheckRestartRequired()
+			if err != nil {
+				return err
+			}
+			if restartRequired {
+				t.Errorf("restartRequired=%t; want false", restartRequired)
+			}
+			if message != "" {
+				t.Errorf("message=%s; want empty", message)
+			}
+			return nil
+		}
+		splunkClientTester(t, "TestCheckRestartRequired", 404, `{"entry":[]}`, wantRequest, test)
+	})
+
+	t.Run("500 returns error", func(t *testing.T) {
+		test := func(c SplunkClient) error {
+			_, _, err := c.CheckRestartRequired()
+			if err == nil {
+				t.Errorf("CheckRestartRequired() err=nil; want error")
+			}
+			return nil
+		}
+		splunkClientTester(t, "TestCheckRestartRequired", 500, "", wantRequest, test)
+	})
+}
+
 func TestAutomateMCApplyChanges(t *testing.T) {
 	request1, _ := http.NewRequest("GET", "https://localhost:8089/services/server/info/server-info?count=0&output_mode=json", nil)
 	request2, _ := http.NewRequest("GET", "https://localhost:8089/services/search/distributed/peers?count=0&output_mode=json", nil)

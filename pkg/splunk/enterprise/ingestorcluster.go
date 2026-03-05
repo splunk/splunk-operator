@@ -151,6 +151,13 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		return result, err
 	}
 
+	// Create or update PodDisruptionBudget for high availability during rolling restarts.
+	err = ApplyPodDisruptionBudget(ctx, client, cr, SplunkIngestor, cr.Spec.Replicas)
+	if err != nil {
+		eventPublisher.Warning(ctx, "ApplyPodDisruptionBudget", fmt.Sprintf("create/update PodDisruptionBudget failed %s", err.Error()))
+		return result, err
+	}
+
 	// If we are using App Framework and are scaling up, we should re-populate the
 	// config map with all the appSource entries
 	// This is done so that the new pods
@@ -230,17 +237,16 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 				return result, err
 			}
 
-			for i := int32(0); i < cr.Spec.Replicas; i++ {
-				ingClient := mgr.getClient(ctx, i)
-				err = ingClient.RestartSplunk()
-				if err != nil {
-					return result, err
-				}
-				scopedLog.Info("Restarted splunk", "ingestor", i)
-			}
-
 			cr.Status.CredentialSecretVersion = qosCfg.Version
 			cr.Status.ServiceAccount = cr.Spec.ServiceAccount
+		}
+
+		// Handle ingestor rolling restart using per-pod eviction.
+		// This checks each pod's restart_required endpoint and evicts one pod at a time.
+		restartErr := checkAndEvictIngestorsIfNeeded(ctx, client, cr)
+		if restartErr != nil {
+			scopedLog.Error(restartErr, "Failed to check/evict ingestor pods")
+			// Don't return error; avoid blocking other reconcile operations.
 		}
 
 		// Upgrade fron automated MC to MC CRD
@@ -475,6 +481,16 @@ func getQueueAndObjectStorageInputsForIngestorConfFiles(queue *enterpriseApi.Que
 // Pod Eviction (for SOK/Cloud config changes)
 // ============================================================================
 
+type ingestorRestartChecker interface {
+	CheckRestartRequired() (bool, string, error)
+}
+
+var newIngestorRestartChecker = func(managementURI, username, password string) ingestorRestartChecker {
+	return splclient.NewSplunkClient(managementURI, username, password)
+}
+
+var evictIngestorPod = evictPod
+
 // checkAndEvictIngestorsIfNeeded checks each ingestor pod individually for
 // restart_required and evicts pods that need restart.
 func checkAndEvictIngestorsIfNeeded(
@@ -514,7 +530,7 @@ func checkAndEvictIngestorsIfNeeded(
 		}
 
 		managementURI := fmt.Sprintf("https://%s:8089", pod.Status.PodIP)
-		splunkClient := splclient.NewSplunkClient(managementURI, "admin", password)
+		splunkClient := newIngestorRestartChecker(managementURI, "admin", password)
 
 		restartRequired, message, err := splunkClient.CheckRestartRequired()
 		if err != nil {
@@ -527,7 +543,7 @@ func checkAndEvictIngestorsIfNeeded(
 
 		scopedLog.Info("Pod needs restart, evicting", "pod", podName, "message", message)
 
-		err = evictPod(ctx, c, pod)
+		err = evictIngestorPod(ctx, c, pod)
 		if err != nil {
 			if isPDBViolation(err) {
 				scopedLog.Info("PDB blocked eviction, will retry", "pod", podName)

@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/onsi/ginkgo/types"
@@ -395,6 +396,156 @@ var _ = Describe("indingsep test", func() {
 					Expect(err).To(Succeed(), "Failed to get inputs.conf from Indexer Cluster pod")
 					testenv.ValidateContent(inputsConf, inputs, true)
 				}
+			}
+		})
+	})
+
+	Context("Ingestor rolling restart behavior", func() {
+		It("indingsep, integration, indingsep: Splunk Operator creates PodDisruptionBudget for IngestorCluster", func() {
+			// Secret reference
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec(
+				"queue-secret-ref-volume",
+				testcaseEnvInst.GetIndexIngestSepSecretName(),
+				objectStorage.S3.Endpoint,
+				objectStorage.S3.Path,
+				"aws",
+				"s3",
+				queue.SQS.AuthRegion,
+			)}
+			queueWithSecret := queue
+			queueWithSecret.SQS.VolList = volumeSpec
+
+			// Deploy Queue and ObjectStorage
+			testcaseEnvInst.Log.Info("Deploy Queue")
+			q, err := deployment.DeployQueue(ctx, "queue", queueWithSecret)
+			Expect(err).To(Succeed(), "Unable to deploy Queue")
+
+			testcaseEnvInst.Log.Info("Deploy ObjectStorage")
+			objStorage, err := deployment.DeployObjectStorage(ctx, "os", objectStorage)
+			Expect(err).To(Succeed(), "Unable to deploy ObjectStorage")
+
+			// Deploy Ingestor Cluster
+			ingestorName := deployment.GetName() + "-ingest"
+			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
+			_, err = deployment.DeployIngestorCluster(ctx, ingestorName, 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, "")
+			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
+			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
+
+			pdbName := enterprise.GetSplunkStatefulsetName(enterprise.SplunkIngestor, ingestorName) + "-pdb"
+			pdb := &policyv1.PodDisruptionBudget{}
+			Eventually(func() error {
+				return deployment.GetInstance(ctx, pdbName, pdb)
+			}, deployment.GetTimeout(), PollInterval).Should(Succeed(), "Expected ingestor PodDisruptionBudget to exist")
+
+			Expect(pdb.Spec.MinAvailable).ToNot(BeNil(), "ingestor PodDisruptionBudget MinAvailable should be set")
+			Expect(pdb.Spec.MinAvailable.IntVal).To(Equal(int32(2)), "ingestor PodDisruptionBudget MinAvailable should allow one pod disruption for 3 replicas")
+		})
+
+		It("indingsep, integration, indingsep: Splunk Operator rolls Ingestor pods and applies updated queue secrets", func() {
+			// Secret reference
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec(
+				"queue-secret-ref-volume",
+				testcaseEnvInst.GetIndexIngestSepSecretName(),
+				objectStorage.S3.Endpoint,
+				objectStorage.S3.Path,
+				"aws",
+				"s3",
+				queue.SQS.AuthRegion,
+			)}
+			queueWithSecret := queue
+			queueWithSecret.SQS.VolList = volumeSpec
+
+			// Deploy Queue and ObjectStorage
+			testcaseEnvInst.Log.Info("Deploy Queue")
+			q, err := deployment.DeployQueue(ctx, "queue", queueWithSecret)
+			Expect(err).To(Succeed(), "Unable to deploy Queue")
+
+			testcaseEnvInst.Log.Info("Deploy ObjectStorage")
+			objStorage, err := deployment.DeployObjectStorage(ctx, "os", objectStorage)
+			Expect(err).To(Succeed(), "Unable to deploy ObjectStorage")
+
+			// Deploy Ingestor Cluster
+			ingestorName := deployment.GetName() + "-ingest"
+			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
+			_, err = deployment.DeployIngestorCluster(ctx, ingestorName, 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, "")
+			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
+			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
+
+			ingest := &enterpriseApi.IngestorCluster{}
+			err = deployment.GetInstance(ctx, ingestorName, ingest)
+			Expect(err).To(Succeed(), "Failed to get instance of Ingestor Cluster")
+			initialSecretVersion := ingest.Status.CredentialSecretVersion
+			Expect(initialSecretVersion).ToNot(Equal(""), "Ingestor credential secret version should be initialized")
+			Expect(initialSecretVersion).ToNot(Equal("0"), "Ingestor credential secret version should not be zero")
+
+			ingestorPods := []string{
+				fmt.Sprintf(testenv.IngestorPod, ingestorName, 0),
+				fmt.Sprintf(testenv.IngestorPod, ingestorName, 1),
+				fmt.Sprintf(testenv.IngestorPod, ingestorName, 2),
+			}
+			initialPodStartTime := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			for _, pod := range ingestorPods {
+				_, found := initialPodStartTime[pod]
+				Expect(found).To(BeTrue(), "Expected ingestor pod start time to be captured before secret update", "pod", pod)
+			}
+
+			updatedAccessKey := "updated-access-key-" + testenv.RandomDNSName(6)
+			updatedSecretKey := "updated-secret-key-" + testenv.RandomDNSName(10)
+			updatedSecretData := map[string][]byte{
+				"s3_access_key": []byte(updatedAccessKey),
+				"s3_secret_key": []byte(updatedSecretKey),
+			}
+
+			err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), testcaseEnvInst.GetIndexIngestSepSecretName(), updatedSecretData)
+			Expect(err).To(Succeed(), "Unable to update index and ingestion separation secret")
+
+			// Ingestor should remain healthy through rolling restart and finish with a new secret version.
+			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
+			Eventually(func() string {
+				latest := &enterpriseApi.IngestorCluster{}
+				getErr := deployment.GetInstance(ctx, ingestorName, latest)
+				if getErr != nil {
+					return ""
+				}
+				return latest.Status.CredentialSecretVersion
+			}, deployment.GetTimeout(), PollInterval).ShouldNot(Equal(initialSecretVersion))
+
+			// Verify all ingestor pods were recreated by rolling eviction.
+			Eventually(func() bool {
+				currentStartTime := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+				for _, pod := range ingestorPods {
+					initial, ok := initialPodStartTime[pod]
+					if !ok {
+						return false
+					}
+					current, ok := currentStartTime[pod]
+					if !ok {
+						return false
+					}
+					if !current.After(initial) {
+						return false
+					}
+				}
+				return true
+			}, deployment.GetTimeout(), PollInterval).Should(BeTrue(), "Expected all ingestor pods to be recreated after secret update")
+
+			// Verify updated credentials are rendered in outputs.conf on all ingestor pods.
+			outputsPath := "opt/splunk/etc/system/local/outputs.conf"
+			for _, pod := range ingestorPods {
+				Eventually(func() string {
+					outputsConf, confErr := testenv.GetConfFile(pod, outputsPath, testcaseEnvInst.GetName())
+					if confErr != nil {
+						return ""
+					}
+					return outputsConf
+				}, deployment.GetTimeout(), PollInterval).Should(ContainSubstring("remote_queue.sqs_smartbus.access_key = " + updatedAccessKey))
+				Eventually(func() string {
+					outputsConf, confErr := testenv.GetConfFile(pod, outputsPath, testcaseEnvInst.GetName())
+					if confErr != nil {
+						return ""
+					}
+					return outputsConf
+				}, deployment.GetTimeout(), PollInterval).Should(ContainSubstring("remote_queue.sqs_smartbus.secret_key = " + updatedSecretKey))
 			}
 		})
 	})
