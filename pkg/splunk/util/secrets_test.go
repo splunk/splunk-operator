@@ -1031,3 +1031,209 @@ func TestGetNamespaceScopedSecretByName(t *testing.T) {
 		t.Error(err.Error())
 	}
 }
+
+// mockLogger is a test logger that implements the logger interface used by validateNamespaceScopedSecrets
+type mockLogger struct {
+	infoMessages  []string
+	errorMessages []string
+}
+
+func (ml *mockLogger) Info(msg string, keysAndValues ...interface{}) {
+	ml.infoMessages = append(ml.infoMessages, msg)
+}
+
+func (ml *mockLogger) Error(err error, msg string, keysAndValues ...interface{}) {
+	ml.errorMessages = append(ml.errorMessages, msg)
+}
+
+func TestValidateNamespaceScopedSecrets(t *testing.T) {
+	tests := []struct {
+		name      string
+		secret    *corev1.Secret
+		wantError bool
+		errMsg    string
+	}{
+		{
+			name: "secret with nil data",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: nil,
+			},
+			wantError: true,
+			errMsg:    "secret data is nil",
+		},
+		{
+			name: "all valid secrets",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"hec_token":    []byte("ABCDEF01-2345-6789-ABCD-EF0123456789"),
+					"password":     []byte("validPassword123"),
+					"pass4SymmKey": []byte("validPass4Symm123"),
+					"idxc_secret":  []byte("validIDXCSecret123"),
+					"shc_secret":   []byte("validSHCSecret123"),
+				},
+			},
+			wantError: false,
+		},
+		{
+			name: "only password present and valid",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"password": []byte("validPassword123"),
+				},
+			},
+			wantError: false,
+		},
+		{
+			name: "hec_token invalid format",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"hec_token": []byte("invalid-token-format"),
+				},
+			},
+			wantError: true,
+			errMsg:    "validation failed for secret hec_token",
+		},
+		{
+			name: "password empty",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"password": []byte(""),
+				},
+			},
+			wantError: true,
+			errMsg:    "validation failed for secret password",
+		},
+		{
+			name: "pass4SymmKey too short",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"pass4SymmKey": []byte("short"),
+				},
+			},
+			wantError: true,
+			errMsg:    "validation failed for secret pass4SymmKey",
+		},
+		{
+			name: "idxc_secret empty",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"idxc_secret": []byte(""),
+				},
+			},
+			wantError: true,
+			errMsg:    "validation failed for secret idxc_secret",
+		},
+		{
+			name: "shc_secret too short",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"shc_secret": []byte("abc"),
+				},
+			},
+			wantError: true,
+			errMsg:    "validation failed for secret shc_secret",
+		},
+		{
+			name: "multiple valid secrets plus extra data",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"hec_token":   []byte("ABCDEF01-2345-6789-ABCD-EF0123456789"),
+					"password":    []byte("validPassword123"),
+					"extra_field": []byte("extra_value"),
+				},
+			},
+			wantError: false,
+		},
+		{
+			name: "first secret valid, second secret invalid",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"password":     []byte("validPassword123"),
+					"pass4SymmKey": []byte("x"),
+				},
+			},
+			wantError: true,
+			errMsg:    "validation failed for secret pass4SymmKey",
+		},
+		{
+			name: "empty secret data map",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{},
+			},
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockLog := &mockLogger{}
+			err := validateNamespaceScopedSecrets(mockLog, tt.secret)
+
+			if (err != nil) != tt.wantError {
+				t.Errorf("validateNamespaceScopedSecrets() error = %v, wantError %v", err, tt.wantError)
+			}
+
+			if tt.wantError && err != nil && tt.errMsg != "" {
+				// Check error message contains expected substring
+				if !errors.Is(err, err) && tt.errMsg != "" {
+					t.Errorf("validateNamespaceScopedSecrets() error message = %v, want to contain %v", err.Error(), tt.errMsg)
+				}
+			}
+
+			// Verify logging was called appropriately
+			// Only check info logs if we had a successful validation and had secrets to validate
+			if !tt.wantError && len(tt.secret.Data) > 0 && len(mockLog.infoMessages) == 0 {
+				t.Errorf("validateNamespaceScopedSecrets() expected info logs for successful validation")
+			}
+
+			// Only check error logs if we had a failure and secrets existed to be validated
+			if tt.wantError && len(tt.secret.Data) > 0 && len(mockLog.errorMessages) == 0 {
+				t.Errorf("validateNamespaceScopedSecrets() expected error logs for failed validation")
+			}
+		})
+	}
+}

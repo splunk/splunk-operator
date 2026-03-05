@@ -405,3 +405,115 @@ func TestSuppressHarmlessErrorMessages(t *testing.T) {
 		t.Errorf("Known messages did not get suppressed.")
 	}
 }
+
+func TestValidateHECToken(t *testing.T) {
+	tests := []struct {
+		name      string
+		tokenVal  []byte
+		wantError bool
+		errMsg    string
+	}{
+		{
+			name:      "valid HEC token",
+			tokenVal:  []byte("ABCDEF01-2345-6789-ABCD-EF0123456789"),
+			wantError: false,
+		},
+		{
+			name:      "empty HEC token",
+			tokenVal:  []byte(""),
+			wantError: true,
+			errMsg:    "hec_token is empty",
+		},
+		{
+			name:      "HEC token too short",
+			tokenVal:  []byte("ABCDEF01-2345-6789-ABCD-EF"),
+			wantError: true,
+			errMsg:    "hec_token has invalid length",
+		},
+		{
+			name:      "HEC token too long",
+			tokenVal:  []byte("ABCDEF01-2345-6789-ABCD-EF0123456789-EXTRA"),
+			wantError: true,
+			errMsg:    "hec_token has invalid length",
+		},
+		{
+			name:      "HEC token wrong format - no dashes",
+			tokenVal:  []byte("ABCDEF0123456789ABCDEF0123456789ABCD"),
+			wantError: true,
+			errMsg:    "hec_token does not match UUID-like format",
+		},
+		{
+			name:      "HEC token wrong format - only one dash",
+			tokenVal:  []byte("ABCDEF0123456789-ABCDEF0123456789ABC"),
+			wantError: true,
+			errMsg:    "hec_token does not match UUID-like format",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateHECToken(tt.tokenVal)
+			if (err != nil) != tt.wantError {
+				t.Errorf("ValidateHECToken() error = %v, wantError %v", err, tt.wantError)
+			}
+			if tt.wantError && err != nil && !strings.Contains(err.Error(), tt.errMsg) {
+				t.Errorf("ValidateHECToken() error message = %v, want to contain %v", err.Error(), tt.errMsg)
+			}
+		})
+	}
+}
+
+func TestValidateSecret(t *testing.T) {
+	tests := []struct {
+		name      string
+		tokenVal  []byte
+		wantError bool
+		errMsg    string
+	}{
+		{
+			name:      "valid secret - 8 characters",
+			tokenVal:  []byte("12345678"),
+			wantError: false,
+		},
+		{
+			name:      "valid secret - 24 characters",
+			tokenVal:  []byte("123456789012345678901234"),
+			wantError: false,
+		},
+		{
+			name:      "valid secret - long",
+			tokenVal:  []byte("thisIsAVeryLongSecretTokenWithMoreCharacters"),
+			wantError: false,
+		},
+		{
+			name:      "empty secret",
+			tokenVal:  []byte(""),
+			wantError: true,
+			errMsg:    "secret is empty",
+		},
+		{
+			name:      "secret too short - 7 characters",
+			tokenVal:  []byte("1234567"),
+			wantError: true,
+			errMsg:    "secret is too short",
+		},
+		{
+			name:      "secret too short - 1 character",
+			tokenVal:  []byte("1"),
+			wantError: true,
+			errMsg:    "secret is too short",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSecret(tt.tokenVal)
+			if (err != nil) != tt.wantError {
+				t.Errorf("ValidateSecret() error = %v, wantError %v", err, tt.wantError)
+			}
+			if tt.wantError && err != nil && !strings.Contains(err.Error(), tt.errMsg) {
+				t.Errorf("ValidateSecret() error message = %v, want to contain %v", err.Error(), tt.errMsg)
+			}
+		})
+	}
+}
