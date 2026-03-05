@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -71,6 +72,43 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// Create closure for status updates
 	updateStatus := func(conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcilePhases) error {
 		return r.updateStatus(ctx, postgresDB, conditionType, conditionStatus, reason, message, phase)
+	}
+
+	// Finalizer logic: clean up managed users and databases from CNPG when PostgresDatabase is deleted
+	if !postgresDB.ObjectMeta.DeletionTimestamp.IsZero() {
+		// Remove CNPG Database CRs owned by this PostgresDatabase
+		if err := r.removeDatabases(ctx, postgresDB); err != nil {
+			logger.Error(err, "Failed to delete CNPG Databases during cleanup")
+			if statusErr := updateStatus(databasesReady, metav1.ConditionFalse, reasonDatabasesCleanupFailed, fmt.Sprintf("Failed to delete databases during cleanup: %v", err), failed); statusErr != nil {
+				logger.Error(statusErr, "Failed to update status")
+			}
+			return ctrl.Result{}, err
+		}
+		// Remove managed users from PostgresCluster via SSA (release field ownership)
+		if err := r.removeUsersFromCluster(ctx, postgresDB); err != nil {
+			logger.Error(err, "Failed to remove users during cleanup")
+			if statusErr := updateStatus(usersReady, metav1.ConditionFalse, reasonUsersCleanupFailed, fmt.Sprintf("Failed to remove users during cleanup: %v", err), failed); statusErr != nil {
+				logger.Error(statusErr, "Failed to update status")
+			}
+			return ctrl.Result{}, err
+		}
+		// Remove finalizer after cleanup
+		controllerutil.RemoveFinalizer(postgresDB, postgresDatabaseFinalizerName)
+		if err := r.Update(ctx, postgresDB); err != nil {
+			logger.Error(err, "Failed to remove finalizer from PostgresDatabase")
+			return ctrl.Result{}, err
+		}
+		logger.Info("Cleanup complete for PostgresDatabase", "name", postgresDB.Name)
+		return ctrl.Result{}, nil
+	}
+	// Object is not being deleted — ensure finalizer is registered
+	if !controllerutil.ContainsFinalizer(postgresDB, postgresDatabaseFinalizerName) {
+		controllerutil.AddFinalizer(postgresDB, postgresDatabaseFinalizerName)
+		if err := r.Update(ctx, postgresDB); err != nil {
+			logger.Error(err, "Failed to add finalizer to PostgresDatabase")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil // requeue via watch
 	}
 
 	// skip if spec unchanged and all work complete
@@ -341,19 +379,27 @@ func (r *PostgresDatabaseReconciler) createUsers(
 			})
 	}
 
-	// Patch PostgresCluster with SSA to add our roles
-	// SSA with per-role granularity allows multiple PostgresDatabase CRs to manage different roles
-	rolePatch := &enterprisev4.PostgresCluster{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "enterprise.splunk.com/v4",
-			Kind:       "PostgresCluster",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name,
-			Namespace: cluster.Namespace,
-		},
-		Spec: enterprisev4.PostgresClusterSpec{
-			ManagedRoles: allRoles,
+	// Build unstructured SSA patch with only managedRoles — avoids Go zero-value fields
+	// (like spec.class) leaking into the patch and causing SSA ownership conflicts.
+	roles := make([]interface{}, len(allRoles))
+	for i, role := range allRoles {
+		roles[i] = map[string]interface{}{
+			"name":   role.Name,
+			"ensure": role.Ensure,
+		}
+	}
+
+	rolePatch := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "enterprise.splunk.com/v4",
+			"kind":       "PostgresCluster",
+			"metadata": map[string]interface{}{
+				"name":      cluster.Name,
+				"namespace": cluster.Namespace,
+			},
+			"spec": map[string]interface{}{
+				"managedRoles": roles,
+			},
 		},
 	}
 
@@ -533,6 +579,77 @@ func (r *PostgresDatabaseReconciler) updateStatus(
 	})
 	db.Status.Phase = string(phase)
 	return r.Status().Update(ctx, db)
+}
+
+// removeUsersFromCluster removes managed roles from the PostgresCluster by patching with an empty roles list
+// using the same SSA field manager, which releases ownership of the roles this PostgresDatabase previously managed.
+func (r *PostgresDatabaseReconciler) removeUsersFromCluster(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+) error {
+	logger := log.FromContext(ctx)
+
+	// Find the referenced PostgresCluster
+	cluster := &enterprisev4.PostgresCluster{}
+	if err := r.Get(ctx, types.NamespacedName{Name: postgresDB.Spec.ClusterRef.Name, Namespace: postgresDB.Namespace}, cluster); err != nil {
+		if errors.IsNotFound(err) {
+			logger.Info("PostgresCluster already deleted, skipping user cleanup")
+			return nil
+		}
+		return fmt.Errorf("failed to get PostgresCluster for user cleanup: %w", err)
+	}
+
+	// Patch with empty managedRoles using unstructured to avoid Go zero-value fields
+	// leaking into the patch. Using the same field manager releases ownership of roles
+	// that this PostgresDatabase previously managed.
+	rolePatch := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "enterprise.splunk.com/v4",
+			"kind":       "PostgresCluster",
+			"metadata": map[string]interface{}{
+				"name":      cluster.Name,
+				"namespace": cluster.Namespace,
+			},
+			"spec": map[string]interface{}{
+				"managedRoles": []interface{}{},
+			},
+		},
+	}
+
+	fieldManager := fmt.Sprintf("postgresdatabase-%s", postgresDB.Name)
+	if err := r.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManager)); err != nil {
+		return fmt.Errorf("failed to release user ownership from PostgresCluster: %w", err)
+	}
+
+	logger.Info("Released managed role ownership from PostgresCluster", "postgresDatabase", postgresDB.Name, "postgresCluster", cluster.Name)
+	return nil
+}
+
+// removeDatabases deletes all CNPG Database CRs owned by this PostgresDatabase.
+func (r *PostgresDatabaseReconciler) removeDatabases(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+) error {
+	logger := log.FromContext(ctx)
+
+	cnpgDBList := &cnpgv1.DatabaseList{}
+	if err := r.List(ctx, cnpgDBList,
+		client.InNamespace(postgresDB.Namespace),
+		client.MatchingFields{".metadata.controller": postgresDB.Name},
+	); err != nil {
+		return fmt.Errorf("failed to list CNPG Databases for cleanup: %w", err)
+	}
+
+	for i := range cnpgDBList.Items {
+		db := &cnpgDBList.Items[i]
+		logger.Info("Deleting CNPG Database", "name", db.Name)
+		if err := r.Delete(ctx, db); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete CNPG Database %s: %w", db.Name, err)
+		}
+	}
+
+	logger.Info("All CNPG Databases deleted", "count", len(cnpgDBList.Items))
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
