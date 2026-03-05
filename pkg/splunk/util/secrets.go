@@ -475,6 +475,30 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: splcommon.GetNamespaceScopedSecretName(namespace)}
 	err := client.Get(ctx, namespacedName, &current)
 	if err == nil {
+		// Generate values for only missing types of tokens them
+		var updateNeeded bool = false
+		for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
+			if _, ok := current.Data[tokenType]; !ok {
+				scopedLog.Info("Namespace scoped secret exists, missing value for token", "missingTokenType", tokenType)
+				if current.Data == nil || reflect.ValueOf(current.Data).Kind() != reflect.Map {
+					current.Data = make(map[string][]byte)
+				}
+				// Value for token not found, generate
+				if tokenType == "password" {
+					current.Data[tokenType] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
+					updateNeeded = true
+				}
+			}
+		}
+
+		// Updated the secret if needed
+		if updateNeeded {
+			scopedLog.Info("Updating namespace scoped secret due to a missing value for token")
+			err = UpdateResource(ctx, client, &current)
+			if err != nil {
+				return nil, err
+			}
+		}
 		return &current, nil
 	} else if err != nil && !k8serrors.IsNotFound(err) {
 		// get secret call failed with other than NotFound error return the err
