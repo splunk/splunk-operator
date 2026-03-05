@@ -32,7 +32,7 @@ clusterManager:
       storageType: s3
       provider: aws
       path: helm-test-c3-with-apps-testnew
-      endpoint: www.amazon.com
+      endpoint: https://s3-us-west-2.amazonaws.com
       region: us-west-2
       secretRef: s3-secret
   smartstore:
@@ -48,8 +48,10 @@ clusterManager:
     volumes:
     - name: helm-test-c3-with-apps-smartstore-testnew
       path: helm-test-c3-with-apps-smartstore-testnew/smartstore
-      endpoint: www.amazon.com
+      endpoint: https://s3-us-west-2.amazonaws.com
       secretRef: s3-secret
+      storageType: s3
+      provider: aws
       region: us-west-2
     cacheManager:
       hotlistBloomFilterRecencyHours: 360 # 15 days - splunk defaults - (can be lowered to 5 days)
@@ -74,6 +76,6 @@ searchHeadCluster:
       storageType: s3
       provider: aws
       path: helm-test-c3-with-apps-testnew
-      endpoint: www.amazon.com
+      endpoint: https://s3-us-west-2.amazonaws.com
       region: us-west-2
       secretRef: s3-secret
