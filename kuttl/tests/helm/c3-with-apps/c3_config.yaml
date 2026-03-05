@@ -51,6 +51,9 @@ clusterManager:
         path: helm-test-c3-with-apps-smartstore-test/smartstore
         endpoint: https://s3-us-west-2.amazonaws.com
         secretRef: s3-secret
+        storageType: s3
+        provider: aws
+        region: us-west-2
     cacheManager:
       hotlistBloomFilterRecencyHours: 360 # 15 days - splunk defaults - (can be lowered to 5 days)
       hotlistRecencySecs: 86400 # 24 hours - splunk defaults
