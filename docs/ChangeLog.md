@@ -62,9 +62,9 @@ nav_order: 1
 
 ### Supported Kubernetes Version
 
->| Kubernetes Version|
->| --- |
->| 1.27+ |
+>| Kubernetes Version |
+>|--------------------|
+>| 1.27 - 1.33        |
 
 ## 3.0.0 (2025-09-08)
 
