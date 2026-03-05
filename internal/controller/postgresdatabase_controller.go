@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,6 +38,43 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+)
+
+type reconcilePhases string
+type conditionTypes string
+type conditionReasons string
+type clusterReadyStatus string
+
+const (
+	retryDelay = time.Second * 15
+	// phases
+	ready        reconcilePhases = "Ready"
+	pending      reconcilePhases = "Pending"
+	provisioning reconcilePhases = "Provisioning"
+	failed       reconcilePhases = "Failed"
+
+	// Conditiontypes
+	clusterReady    conditionTypes = "ClusterReady"
+	secretsReady    conditionTypes = "SecretsReady"
+	usersReady      conditionTypes = "UsersReady"
+	databasesReady  conditionTypes = "DatabasesReady"
+	privilegesReady conditionTypes = "PrivilegesReady"
+
+	// Condition reasons
+	reasonNotFound               conditionReasons = "NotFound"
+	reasonProvisioning           conditionReasons = "Provisioning"
+	reasonClusterInfoFetchFailed conditionReasons = "ClusterInfoFetchNotPossible"
+	reasonAvailable              conditionReasons = "Available"
+	reasonConfiguring            conditionReasons = "Configuring"
+	reasonWaitingForCNPG         conditionReasons = "WaitingForCNPG"
+	reasonFailed                 conditionReasons = "Failed"
+	reasonCreating               conditionReasons = "Creating"
+
+	// Cluster status
+	ClusterNotFound         clusterReadyStatus = "NotFound"
+	ClusterNotReady         clusterReadyStatus = "NotReady"
+	ClusterNoProvisionerRef clusterReadyStatus = "NoProvisionerRef"
+	ClusterReady            clusterReadyStatus = "Ready"
 )
 
 // PostgresDatabaseReconciler reconciles a PostgresDatabase object
@@ -96,19 +134,19 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	logger.Info("Cluster validation done", "clusterName", cluster.Name, "status", clusterStatus)
 	switch clusterStatus {
 	case ClusterNotFound:
-		if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterNotFound, "Cluster CR not found", pending); err != nil {
+		if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonNotFound, "Cluster CR not found", pending); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 
 	case ClusterNotReady, ClusterNoProvisionerRef:
-		if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterProvisioning, "Cluster is not in ready state yet", pending); err != nil {
+		if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonProvisioning, "Cluster is not in ready state yet", pending); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 
 	case ClusterReady:
-		if err := updateStatus(clusterReady, metav1.ConditionTrue, reasonClusterAvailable, "Cluster is operational", provisioning); err != nil {
+		if err := updateStatus(clusterReady, metav1.ConditionTrue, reasonAvailable, "Cluster is operational", provisioning); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -153,7 +191,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// Spec is correct, verify status - are users reconciled?
 	allUsersReady, notReadyUsers, err := r.verifyUsersReady(ctx, postgresDB, cluster)
 	if err != nil {
-		if statusErr := updateStatus(usersReady, metav1.ConditionFalse, reasonUsersCreationFailed, fmt.Sprintf("User creation failed: %v", err), failed); statusErr != nil {
+		if statusErr := updateStatus(usersReady, metav1.ConditionFalse, reasonFailed, fmt.Sprintf("User creation failed: %v", err), failed); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
 		}
 		return ctrl.Result{}, err
@@ -169,7 +207,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// All users present in spec and reconciled in status
-	if err := updateStatus(usersReady, metav1.ConditionTrue, reasonUsersAvailable, fmt.Sprintf("All %d users in PostgreSQL", len(desiredUsers)), provisioning); err != nil {
+	if err := updateStatus(usersReady, metav1.ConditionTrue, reasonAvailable, fmt.Sprintf("All %d users in PostgreSQL", len(desiredUsers)), provisioning); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -222,7 +260,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// All phases complete - mark as reconciled
 	postgresDB.Status.ObservedGeneration = postgresDB.Generation
-	if err := updateStatus(databasesReady, metav1.ConditionTrue, reasonDatabasesAvailable, fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)), ready); err != nil {
+	if err := updateStatus(databasesReady, metav1.ConditionTrue, reasonAvailable, fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)), ready); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -315,8 +353,11 @@ func (r *PostgresDatabaseReconciler) getDatabasesInCNPGSpec(ctx context.Context,
 	return dbList, nil
 }
 
-// createUsers patches PostgresCluster with managed roles via SSA
-// PostgresCluster controller will then reconcile these roles to CNPG Cluster
+// createUsers patches PostgresCluster.spec.managedRoles via SSA using an unstructured patch.
+// Using unstructured avoids the zero-value problem: typed Go structs serialize required fields
+// (e.g. spec.class) as "" even when unset, causing SSA to claim ownership and conflict.
+// An unstructured map contains ONLY the keys we explicitly set — nothing else leaks.
+// PostgresCluster controller will then diff and reconcile these roles to CNPG Cluster.
 // Returns: error (patch failure only)
 func (r *PostgresDatabaseReconciler) createUsers(
 	ctx context.Context,
@@ -325,7 +366,7 @@ func (r *PostgresDatabaseReconciler) createUsers(
 ) error {
 	logger := log.FromContext(ctx)
 
-	// Build list of roles for this PostgresDatabase
+	// Build roles as raw maps — only name and ensure, nothing else
 	allRoles := []enterprisev4.ManagedRole{}
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		dbAdminUser := fmt.Sprintf("%s_admin", dbSpec.Name)
@@ -341,19 +382,20 @@ func (r *PostgresDatabaseReconciler) createUsers(
 			})
 	}
 
-	// Patch PostgresCluster with SSA to add our roles
-	// SSA with per-role granularity allows multiple PostgresDatabase CRs to manage different roles
-	rolePatch := &enterprisev4.PostgresCluster{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "enterprise.splunk.com/v4",
-			Kind:       "PostgresCluster",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name,
-			Namespace: cluster.Namespace,
-		},
-		Spec: enterprisev4.PostgresClusterSpec{
-			ManagedRoles: allRoles,
+	// Construct a minimal unstructured patch — only spec.managedRoles is present.
+	// No other spec fields (class, storage, instances...) are included, so SSA
+	// will only claim ownership of the roles we explicitly list.
+	rolePatch := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": cluster.APIVersion,
+			"kind":       cluster.Kind,
+			"metadata": map[string]any{
+				"name":      cluster.Name,
+				"namespace": cluster.Namespace,
+			},
+			"spec": map[string]any{
+				"managedRoles": allRoles,
+			},
 		},
 	}
 
