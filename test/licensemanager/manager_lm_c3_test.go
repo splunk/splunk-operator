@@ -328,7 +328,7 @@ var _ = Describe("Licensemanager test", func() {
 			}
 
 			// Wait for LM to be in READY status (polls for state instead of fixed sleep)
-			err = testenv.WaitForLicenseManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), deployment.GetName(), enterpriseApi.PhaseReady, 2*time.Minute)
+			err = testenv.WaitForLicenseManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), deployment.GetName(), enterpriseApi.PhaseReady, 2*time.Minute, testcaseEnvInst)
 			Expect(err).To(Succeed(), "Timed out waiting for LicenseManager to reach Ready phase")
 
 			// Verify LM stays in ready state

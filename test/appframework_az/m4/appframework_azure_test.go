@@ -1114,7 +1114,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Wait for Monitoring Console to reach Ready phase instead of using time.Sleep
-			err = testenv.WaitForMonitoringConsolePhase(ctx, deployment, testcaseEnvInst.GetName(), mc.Name, enterpriseApi.PhaseReady, 2*time.Minute)
+			err = testenv.WaitForMonitoringConsolePhase(ctx, deployment, testcaseEnvInst.GetName(), mc.Name, enterpriseApi.PhaseReady, 2*time.Minute, testcaseEnvInst)
 			Expect(err).To(Succeed(), "Timed out waiting for MonitoringConsole to reach Ready phase")
 			// Verify Monitoring Console is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
@@ -1689,7 +1689,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Wait for SearchHeadCluster to reach Ready phase instead of using time.Sleep
-			err = testenv.WaitForSearchHeadClusterPhase(ctx, deployment, testcaseEnvInst.GetName(), shc.Name, enterpriseApi.PhaseReady, 60*time.Second)
+			err = testenv.WaitForSearchHeadClusterPhase(ctx, deployment, testcaseEnvInst.GetName(), shc.Name, enterpriseApi.PhaseReady, 60*time.Second, testcaseEnvInst)
 			Expect(err).To(Succeed(), "Timed out waiting for SearchHeadCluster to reach Ready phase")
 			// Wait for polling interval to pass
 			testenv.WaitForAppInstall(ctx, deployment, testcaseEnvInst, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
@@ -2266,7 +2266,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Wait for ClusterManager to reach Ready phase instead of using time.Sleep
 			testcaseEnvInst.Log.Info("Wait for ClusterManager and SearchHeadCluster to reach Ready phase")
-			err = testenv.WaitForClusterManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), cm.Name, enterpriseApi.PhaseReady, 2*time.Minute)
+			err = testenv.WaitForClusterManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), cm.Name, enterpriseApi.PhaseReady, 2*time.Minute, testcaseEnvInst)
 			Expect(err).To(Succeed(), "Timed out waiting for ClusterManager to reach Ready phase")
 
 			// Verify status is 'ON' in config map for Cluster Master and Search Head Cluster

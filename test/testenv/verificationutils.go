@@ -95,16 +95,15 @@ func VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, m
 
 // StandaloneReady verify Standalone is in ReadyStatus and does not flip-flop
 func StandaloneReady(ctx context.Context, deployment *Deployment, deploymentName string, standalone *enterpriseApi.Standalone, testenvInstance *TestCaseEnv) {
-	gomega.Eventually(func() enterpriseApi.Phase {
-		err := deployment.GetInstance(ctx, standalone.Name, standalone)
-		if err != nil {
-			return enterpriseApi.PhaseError
-		}
-		testenvInstance.Log.Info("Waiting for Standalone phase to be ready", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
-		DumpGetPods(testenvInstance.GetName())
+	// Use optimized watch to wait for Ready phase
+	err := WatchForStandalonePhase(ctx, deployment, testenvInstance.GetName(), standalone.Name, enterpriseApi.PhaseReady, deployment.GetTimeout(), testenvInstance)
+	gomega.Expect(err).To(gomega.Succeed(), "Standalone failed to reach Ready phase")
 
-		return standalone.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	// Refresh the instance to get latest state
+	err = deployment.GetInstance(ctx, standalone.Name, standalone)
+	gomega.Expect(err).To(gomega.Succeed())
+	testenvInstance.Log.Info("Standalone reached Ready phase", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
+	DumpGetPods(testenvInstance.GetName())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
@@ -116,18 +115,17 @@ func StandaloneReady(ctx context.Context, deployment *Deployment, deploymentName
 
 // SearchHeadClusterReady verify SHC is in READY status and does not flip-flop
 func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
-	shc := &enterpriseApi.SearchHeadCluster{}
 	instanceName := fmt.Sprintf("%s-shc", deployment.GetName())
-	gomega.Eventually(func() bool {
-		err := deployment.GetInstance(ctx, instanceName, shc)
-		if err != nil {
-			return false
-		}
-		testenvInstance.Log.Info("Waiting for Search Head Cluster and Deployer phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase, "DeployerPhase", shc.Status.DeployerPhase)
-		DumpGetPods(testenvInstance.GetName())
+	// Use optimized watch to wait for Ready phase (checks both Phase and DeployerPhase)
+	err := WatchForSearchHeadClusterPhase(ctx, deployment, testenvInstance.GetName(), instanceName, enterpriseApi.PhaseReady, deployment.GetTimeout(), testenvInstance)
+	gomega.Expect(err).To(gomega.Succeed(), "SearchHeadCluster failed to reach Ready phase")
 
-		return shc.Status.Phase == enterpriseApi.PhaseReady && shc.Status.DeployerPhase == enterpriseApi.PhaseReady
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.BeTrue())
+	// Refresh the instance to get latest state
+	shc := &enterpriseApi.SearchHeadCluster{}
+	err = deployment.GetInstance(ctx, instanceName, shc)
+	gomega.Expect(err).To(gomega.Succeed())
+	testenvInstance.Log.Info("SearchHeadCluster reached Ready phase", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase, "DeployerPhase", shc.Status.DeployerPhase)
+	DumpGetPods(testenvInstance.GetName())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
@@ -140,18 +138,17 @@ func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenv
 
 // SingleSiteIndexersReady verify single site indexers go to ready state
 func SingleSiteIndexersReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
-	idc := &enterpriseApi.IndexerCluster{}
 	instanceName := fmt.Sprintf("%s-idxc", deployment.GetName())
-	gomega.Eventually(func() enterpriseApi.Phase {
-		err := deployment.GetInstance(ctx, instanceName, idc)
-		if err != nil {
-			return enterpriseApi.PhaseError
-		}
-		testenvInstance.Log.Info("Waiting for indexer instance's phase to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
-		DumpGetPods(testenvInstance.GetName())
+	// Use optimized watch to wait for Ready phase
+	err := WatchForIndexerClusterPhase(ctx, deployment, testenvInstance.GetName(), instanceName, enterpriseApi.PhaseReady, deployment.GetTimeout(), testenvInstance)
+	gomega.Expect(err).To(gomega.Succeed(), "IndexerCluster failed to reach Ready phase")
 
-		return idc.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	// Refresh the instance to get latest state
+	idc := &enterpriseApi.IndexerCluster{}
+	err = deployment.GetInstance(ctx, instanceName, idc)
+	gomega.Expect(err).To(gomega.Succeed())
+	testenvInstance.Log.Info("IndexerCluster reached Ready phase", "instance", instanceName, "Phase", idc.Status.Phase)
+	DumpGetPods(testenvInstance.GetName())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
@@ -164,20 +161,17 @@ func SingleSiteIndexersReady(ctx context.Context, deployment *Deployment, testen
 
 // IngestorsReady verify ingestors go to ready state
 func IngestorReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
-	ingest := &enterpriseApi.IngestorCluster{}
 	instanceName := fmt.Sprintf("%s-ingest", deployment.GetName())
+	// Use optimized watch to wait for Ready phase
+	err := WatchForIngestorClusterPhase(ctx, deployment, testenvInstance.GetName(), instanceName, enterpriseApi.PhaseReady, deployment.GetTimeout(), testenvInstance)
+	gomega.Expect(err).To(gomega.Succeed(), "IngestorCluster failed to reach Ready phase")
 
-	gomega.Eventually(func() enterpriseApi.Phase {
-		err := deployment.GetInstance(ctx, instanceName, ingest)
-		if err != nil {
-			return enterpriseApi.PhaseError
-		}
-
-		testenvInstance.Log.Info("Waiting for ingestor instance's phase to be ready", "instance", instanceName, "phase", ingest.Status.Phase)
-		DumpGetPods(testenvInstance.GetName())
-
-		return ingest.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	// Refresh the instance to get latest state
+	ingest := &enterpriseApi.IngestorCluster{}
+	err = deployment.GetInstance(ctx, instanceName, ingest)
+	gomega.Expect(err).To(gomega.Succeed())
+	testenvInstance.Log.Info("IngestorCluster reached Ready phase", "instance", instanceName, "phase", ingest.Status.Phase)
+	DumpGetPods(testenvInstance.GetName())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
@@ -192,19 +186,16 @@ func IngestorReady(ctx context.Context, deployment *Deployment, testenvInstance 
 
 // ClusterManagerReady verify Cluster Manager Instance is in ready status
 func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
-	// Ensure that the cluster-manager goes to Ready phase
-	cm := &enterpriseApi.ClusterManager{}
-	gomega.Eventually(func() enterpriseApi.Phase {
-		err := deployment.GetInstance(ctx, deployment.GetName(), cm)
-		if err != nil {
-			return enterpriseApi.PhaseError
-		}
-		testenvInstance.Log.Info("Waiting for cluster-manager phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
-		DumpGetPods(testenvInstance.GetName())
+	// Use optimized watch to wait for Ready phase
+	err := WatchForClusterManagerPhase(ctx, deployment, testenvInstance.GetName(), deployment.GetName(), enterpriseApi.PhaseReady, deployment.GetTimeout(), testenvInstance)
+	gomega.Expect(err).To(gomega.Succeed(), "ClusterManager failed to reach Ready phase")
 
-		// Test ClusterManager Phase to see if its ready
-		return cm.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	// Refresh the instance to get latest state
+	cm := &enterpriseApi.ClusterManager{}
+	err = deployment.GetInstance(ctx, deployment.GetName(), cm)
+	gomega.Expect(err).To(gomega.Succeed())
+	testenvInstance.Log.Info("ClusterManager reached Ready phase", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
+	DumpGetPods(testenvInstance.GetName())
 
 	// In a steady state, cluster-manager should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
@@ -218,19 +209,16 @@ func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 
 // ClusterMasterReady verify Cluster Master Instance is in ready status
 func ClusterMasterReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
-	// Ensure that the cluster-master goes to Ready phase
-	cm := &enterpriseApiV3.ClusterMaster{}
-	gomega.Eventually(func() enterpriseApi.Phase {
-		err := deployment.GetInstance(ctx, deployment.GetName(), cm)
-		if err != nil {
-			return enterpriseApi.PhaseError
-		}
-		testenvInstance.Log.Info("Waiting for cluster-master phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
-		DumpGetPods(testenvInstance.GetName())
+	// Use optimized watch to wait for Ready phase
+	err := WatchForClusterMasterPhase(ctx, deployment, testenvInstance.GetName(), deployment.GetName(), enterpriseApi.PhaseReady, deployment.GetTimeout(), testenvInstance)
+	gomega.Expect(err).To(gomega.Succeed(), "ClusterMaster failed to reach Ready phase")
 
-		// Test ClusterMaster Phase to see if its ready
-		return cm.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	// Refresh the instance to get latest state
+	cm := &enterpriseApiV3.ClusterMaster{}
+	err = deployment.GetInstance(ctx, deployment.GetName(), cm)
+	gomega.Expect(err).To(gomega.Succeed())
+	testenvInstance.Log.Info("ClusterMaster reached Ready phase", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
+	DumpGetPods(testenvInstance.GetName())
 
 	// In a steady state, cluster-master should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
@@ -1309,77 +1297,43 @@ func TriggerTelemetrySubmission(ctx context.Context, deployment *Deployment) {
 }
 
 // WaitForEvent waits for an event instead of relying on time
-func WaitForEvent(ctx context.Context, deployment *Deployment, namespace, crName, eventReason string, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, 1*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
-		eventList := &corev1.EventList{}
-		err := deployment.testenv.GetKubeClient().List(ctx, eventList, client.InNamespace(namespace))
-		if err != nil {
-			return false, nil
-		}
-
-		for _, event := range eventList.Items {
-			if event.InvolvedObject.Name == crName && event.Reason == eventReason {
-				return true, nil
-			}
-		}
-		return false, nil
-	})
+func WaitForEvent(ctx context.Context, deployment *Deployment, namespace, crName, eventReason string, timeout time.Duration, testenvInstance *TestCaseEnv) error {
+	return WatchForEventWithReason(ctx, deployment, namespace, crName, eventReason, timeout, testenvInstance)
 }
 
 // WaitForClusterManagerPhase waits for ClusterManager to reach expected phase
-func WaitForClusterManagerPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, 1*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
-		cr := &enterpriseApi.ClusterManager{}
-		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, cr)
-		if err != nil {
-			return false, nil
-		}
-		return cr.Status.Phase == expectedPhase, nil
-	})
+func WaitForClusterManagerPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration, testenvInstance *TestCaseEnv) error {
+	return WatchForClusterManagerPhase(ctx, deployment, namespace, crName, expectedPhase, timeout, testenvInstance)
 }
 
 // WaitForSearchHeadClusterPhase waits for SearchHeadCluster to reach expected phase
-func WaitForSearchHeadClusterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, 1*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
-		cr := &enterpriseApi.SearchHeadCluster{}
-		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, cr)
-		if err != nil {
-			return false, nil
-		}
-		return cr.Status.Phase == expectedPhase, nil
-	})
+func WaitForSearchHeadClusterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration, testenvInstance *TestCaseEnv) error {
+	return WatchForSearchHeadClusterPhase(ctx, deployment, namespace, crName, expectedPhase, timeout, testenvInstance)
 }
 
 // WaitForMonitoringConsolePhase waits for MonitoringConsole to reach expected phase
-func WaitForMonitoringConsolePhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, 1*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
-		cr := &enterpriseApi.MonitoringConsole{}
-		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, cr)
-		if err != nil {
-			return false, nil
-		}
-		return cr.Status.Phase == expectedPhase, nil
-	})
+func WaitForMonitoringConsolePhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration, testenvInstance *TestCaseEnv) error {
+	return WatchForMonitoringConsolePhase(ctx, deployment, namespace, crName, expectedPhase, timeout, testenvInstance)
 }
 
 // WaitForClusterInitialized waits for ClusterInitialized event on IndexerCluster
-func WaitForClusterInitialized(ctx context.Context, deployment *Deployment, namespace, crName string, timeout time.Duration) error {
-	return WaitForEvent(ctx, deployment, namespace, crName, "ClusterInitialized", timeout)
+func WaitForClusterInitialized(ctx context.Context, deployment *Deployment, namespace, crName string, timeout time.Duration, testenvInstance *TestCaseEnv) error {
+	return WaitForEvent(ctx, deployment, namespace, crName, "ClusterInitialized", timeout, testenvInstance)
 }
 
 // WaitForScaledUp waits for ScaledUp event on a CR (Standalone, IndexerCluster, SearchHeadCluster)
-func WaitForScaledUp(ctx context.Context, deployment *Deployment, namespace, crName string, timeout time.Duration) error {
-	return WaitForEvent(ctx, deployment, namespace, crName, "ScaledUp", timeout)
+func WaitForScaledUp(ctx context.Context, deployment *Deployment, namespace, crName string, timeout time.Duration, testenvInstance *TestCaseEnv) error {
+	return WaitForEvent(ctx, deployment, namespace, crName, "ScaledUp", timeout, testenvInstance)
 }
 
 // WaitForScaledDown waits for ScaledDown event on a CR (Standalone, IndexerCluster, SearchHeadCluster)
-func WaitForScaledDown(ctx context.Context, deployment *Deployment, namespace, crName string, timeout time.Duration) error {
-	return WaitForEvent(ctx, deployment, namespace, crName, "ScaledDown", timeout)
+func WaitForScaledDown(ctx context.Context, deployment *Deployment, namespace, crName string, timeout time.Duration, testenvInstance *TestCaseEnv) error {
+	return WaitForEvent(ctx, deployment, namespace, crName, "ScaledDown", timeout, testenvInstance)
 }
 
 // WaitForPasswordSyncCompleted waits for PasswordSyncCompleted event on IndexerCluster or SearchHeadCluster
-func WaitForPasswordSyncCompleted(ctx context.Context, deployment *Deployment, namespace, crName string, timeout time.Duration) error {
-	return WaitForEvent(ctx, deployment, namespace, crName, "PasswordSyncCompleted", timeout)
+func WaitForPasswordSyncCompleted(ctx context.Context, deployment *Deployment, namespace, crName string, timeout time.Duration, testenvInstance *TestCaseEnv) error {
+	return WaitForEvent(ctx, deployment, namespace, crName, "PasswordSyncCompleted", timeout, testenvInstance)
 }
 
 // WaitForPodsInMCConfigMap waits for pods to appear in MC ConfigMap instead of using time.Sleep
@@ -1420,84 +1374,32 @@ func WaitForPodsInMCConfigString(ctx context.Context, deployment *Deployment, te
 
 // WaitForAppPhase waits for an app to reach a specific phase on a CR
 func WaitForAppPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, crName string, crKind string, appSourceName string, appName string, expectedPhase enterpriseApi.AppPhaseType, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, crName, crKind, appSourceName, appName)
-		if err != nil {
-			return false, nil
-		}
-		return appDeploymentInfo.PhaseInfo.Phase == expectedPhase, nil
-	})
+	return WatchForAppPhaseChange(ctx, deployment, testenvInstance, testenvInstance.GetName(), crName, crKind, appSourceName, appName, expectedPhase, timeout)
 }
 
 // WaitForAllAppsPhase waits for all apps in a list to reach a specific phase
 func WaitForAllAppsPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, crName string, crKind string, appSourceName string, appList []string, expectedPhase enterpriseApi.AppPhaseType, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		for _, appName := range appList {
-			lookupAppName := appName
-			if appInfo, ok := AppInfo[appName]; ok {
-				if appFileName, ok := appInfo["filename"]; ok && appFileName != "" {
-					lookupAppName = appFileName
-				}
-			}
-
-			appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, crName, crKind, appSourceName, lookupAppName)
-			if err != nil {
-				return false, nil
-			}
-			if appDeploymentInfo.PhaseInfo.Phase != expectedPhase {
-				return false, nil
-			}
-		}
-		return true, nil
-	})
+	return WatchForAllAppsPhaseChange(ctx, deployment, testenvInstance.GetName(), crName, crKind, appSourceName, appList, expectedPhase, timeout, testenvInstance)
 }
 
 // WaitForStandalonePhase waits for Standalone to reach expected phase
-func WaitForStandalonePhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		cr := &enterpriseApi.Standalone{}
-		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, cr)
-		if err != nil {
-			return false, nil
-		}
-		return cr.Status.Phase == expectedPhase, nil
-	})
+func WaitForStandalonePhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration, testenvInstance *TestCaseEnv) error {
+	return WatchForStandalonePhase(ctx, deployment, namespace, crName, expectedPhase, timeout, testenvInstance)
 }
 
 // WaitForLicenseManagerPhase waits for LicenseManager to reach expected phase
-func WaitForLicenseManagerPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		cr := &enterpriseApi.LicenseManager{}
-		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, cr)
-		if err != nil {
-			return false, nil
-		}
-		return cr.Status.Phase == expectedPhase, nil
-	})
+func WaitForLicenseManagerPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration, testenvInstance *TestCaseEnv) error {
+	return WatchForLicenseManagerPhase(ctx, deployment, namespace, crName, expectedPhase, timeout, testenvInstance)
 }
 
 // WaitForLicenseMasterPhase waits for LicenseMaster to reach expected phase
-func WaitForLicenseMasterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		cr := &enterpriseApiV3.LicenseMaster{}
-		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, cr)
-		if err != nil {
-			return false, nil
-		}
-		return cr.Status.Phase == expectedPhase, nil
-	})
+func WaitForLicenseMasterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration, testenvInstance *TestCaseEnv) error {
+	return WatchForLicenseMasterPhase(ctx, deployment, namespace, crName, expectedPhase, timeout, testenvInstance)
 }
 
 // WaitForIndexerClusterPhase waits for IndexerCluster to reach expected phase
-func WaitForIndexerClusterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		cr := &enterpriseApi.IndexerCluster{}
-		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, cr)
-		if err != nil {
-			return false, nil
-		}
-		return cr.Status.Phase == expectedPhase, nil
-	})
+func WaitForIndexerClusterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration, testenvInstance *TestCaseEnv) error {
+	return WatchForIndexerClusterPhase(ctx, deployment, namespace, crName, expectedPhase, timeout, testenvInstance)
 }
 
 // WaitForSearchResultsNonEmpty waits for search results to return a non-empty "result" field

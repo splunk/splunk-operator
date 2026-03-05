@@ -429,7 +429,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Wait for Cluster Manager to reach Ready phase after image upgrade
 			// Image upgrades require longer timeout due to pod restarts
-			err = testenv.WaitForClusterManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), cm.Name, enterpriseApi.PhaseReady, 10*time.Minute)
+			err = testenv.WaitForClusterManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), cm.Name, enterpriseApi.PhaseReady, 10*time.Minute, testcaseEnvInst)
 			Expect(err).To(Succeed(), "Timed out waiting for ClusterManager to reach Ready phase")
 
 			// Ensure Cluster Manager stays in Ready phase
@@ -764,7 +764,7 @@ var _ = Describe("c3appfw test", func() {
 			// their phase is validated after AppFrameWorkVerifications below.
 			for _, appSource := range allAppSourceInfo {
 				if appSource.CrAppScope != enterpriseApi.ScopeCluster {
-					err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, testenv.AppInstallTimeout)
+					err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, 2*time.Minute)
 					Expect(err).To(Succeed(), "Timed out waiting for apps to reach Install phase on %s", appSource.CrName)
 				}
 			}
@@ -772,7 +772,7 @@ var _ = Describe("c3appfw test", func() {
 			// Validate cluster-scoped apps also reached Install phase (bundle push already done by AppFrameWorkVerifications)
 			for _, appSource := range allAppSourceInfo {
 				if appSource.CrAppScope == enterpriseApi.ScopeCluster {
-					err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, testenv.AppInstallTimeout)
+					err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, 2*time.Minute)
 					Expect(err).To(Succeed(), "Timed out waiting for cluster-scoped apps to reach Install phase on %s", appSource.CrName)
 				}
 			}
@@ -824,7 +824,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Wait for ScaledUp event to confirm scaling completed successfully
-			err = testenv.WaitForScaledUp(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
+			err = testenv.WaitForScaledUp(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute, testcaseEnvInst)
 			Expect(err).To(Succeed(), "Timed out waiting for ScaledUp event on IndexerCluster")
 
 			// Verify New Indexer On Cluster Manager
@@ -921,7 +921,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Wait for ScaledDown event to confirm scaling completed successfully
-			err = testenv.WaitForScaledDown(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
+			err = testenv.WaitForScaledDown(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute, testcaseEnvInst)
 			Expect(err).To(Succeed(), "Timed out waiting for ScaledDown event on IndexerCluster")
 
 			// Ensure Search Head Cluster go to Ready phase
@@ -1445,7 +1445,7 @@ var _ = Describe("c3appfw test", func() {
 			// their phase is validated after AppFrameWorkVerifications below.
 			for _, appSource := range allAppSourceInfo {
 				if appSource.CrAppScope != enterpriseApi.ScopeCluster {
-					err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, testenv.AppInstallTimeout)
+					err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, 2*time.Minute)
 					Expect(err).To(Succeed(), "Timed out waiting for apps to reach Install phase on %s", appSource.CrName)
 				}
 			}
@@ -1453,7 +1453,7 @@ var _ = Describe("c3appfw test", func() {
 			// Validate cluster-scoped apps also reached Install phase (bundle push already done by AppFrameWorkVerifications)
 			for _, appSource := range allAppSourceInfo {
 				if appSource.CrAppScope == enterpriseApi.ScopeCluster {
-					err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, testenv.AppInstallTimeout)
+					err = testenv.WaitForAllAppsPhase(ctx, deployment, testcaseEnvInst, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, 2*time.Minute)
 					Expect(err).To(Succeed(), "Timed out waiting for cluster-scoped apps to reach Install phase on %s", appSource.CrName)
 				}
 			}
