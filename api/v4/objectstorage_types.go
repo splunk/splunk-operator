@@ -44,7 +44,7 @@ type S3Spec struct {
 	// +optional
 	// +kubebuilder:validation:Pattern=`^https?://[^\s/$.?#].[^\s]*$`
 	// S3-compatible Service endpoint
-	Endpoint string `json:"endpoint"`
+	Endpoint string `json:"endpoint,omitempty"`
 
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern=`^(?:s3://)?[a-z0-9.-]{3,63}(?:/[^\s]+)?$`
