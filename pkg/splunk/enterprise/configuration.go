@@ -880,17 +880,27 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 
 	smartstoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, instanceType)
 	if smartstoreConfigMap != nil {
+		items := []corev1.KeyToPath{
+			{Key: "indexes.conf", Path: "indexes.conf", Mode: &configMapVolDefaultMode},
+			{Key: "server.conf", Path: "server.conf", Mode: &configMapVolDefaultMode},
+			{Key: configToken, Path: configToken, Mode: &configMapVolDefaultMode},
+		}
+		// When queue config keys are present (written by applyIdxcQueueConfigToCM),
+		// include them so the init container symlinks resolve correctly on the CM pod.
+		if _, ok := smartstoreConfigMap.Data["outputs.conf"]; ok {
+			items = append(items,
+				corev1.KeyToPath{Key: "outputs.conf", Path: "outputs.conf", Mode: &configMapVolDefaultMode},
+				corev1.KeyToPath{Key: "inputs.conf", Path: "inputs.conf", Mode: &configMapVolDefaultMode},
+				corev1.KeyToPath{Key: "default-mode.conf", Path: "default-mode.conf", Mode: &configMapVolDefaultMode},
+			)
+		}
 		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-operator", "/mnt/splunk-operator/local/", corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: smartstoreConfigMap.GetName(),
 				},
 				DefaultMode: &configMapVolDefaultMode,
-				Items: []corev1.KeyToPath{
-					{Key: "indexes.conf", Path: "indexes.conf", Mode: &configMapVolDefaultMode},
-					{Key: "server.conf", Path: "server.conf", Mode: &configMapVolDefaultMode},
-					{Key: configToken, Path: configToken, Mode: &configMapVolDefaultMode},
-				},
+				Items:       items,
 			},
 		})
 

@@ -92,6 +92,7 @@ func newStandalone(name, ns, splunkImage string) *enterpriseApi.Standalone {
 					ImagePullPolicy: "Always",
 					Image:           splunkImage,
 				},
+				ImagePullSecrets: getImagePullSecrets(),
 				Volumes: []corev1.Volume{},
 			},
 		},
@@ -149,6 +150,7 @@ func newLicenseManager(name, ns, licenseConfigMapName, splunkImage string) *ente
 					ImagePullPolicy: "Always",
 					Image:           splunkImage,
 				},
+				ImagePullSecrets: getImagePullSecrets(),
 			},
 		},
 	}
@@ -187,6 +189,7 @@ func newLicenseMaster(name, ns, licenseConfigMapName, splunkImage string) *enter
 					ImagePullPolicy: "Always",
 					Image:           splunkImage,
 				},
+				ImagePullSecrets: getImagePullSecrets(),
 			},
 		},
 	}
@@ -234,6 +237,7 @@ func newClusterManager(name, ns, licenseManagerName, ansibleConfig, splunkImage 
 					ImagePullPolicy: "Always",
 					Image:           splunkImage,
 				},
+				ImagePullSecrets: getImagePullSecrets(),
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
 				},
@@ -270,6 +274,7 @@ func newClusterMaster(name, ns, licenseManagerName, ansibleConfig, splunkImage s
 					ImagePullPolicy: "Always",
 					Image:           splunkImage,
 				},
+				ImagePullSecrets: getImagePullSecrets(),
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
 				},
@@ -307,6 +312,7 @@ func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName, ansibleConf
 					ImagePullPolicy: "Always",
 					Image:           splunkImage,
 				},
+				ImagePullSecrets: getImagePullSecrets(),
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
 				},
@@ -344,6 +350,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName, ansibleConfi
 					ImagePullPolicy: "Always",
 					Image:           splunkImage,
 				},
+				ImagePullSecrets: getImagePullSecrets(),
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
 				},
@@ -382,6 +389,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 					ImagePullPolicy: "Always",
 					Image:           splunkImage,
 				},
+				ImagePullSecrets: getImagePullSecrets(),
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: clusterManagerRef,
 				},
@@ -425,6 +433,7 @@ func newIngestorCluster(name, ns string, replicas int, splunkImage string, queue
 					ImagePullPolicy: "Always",
 					Image:           splunkImage,
 				},
+				ImagePullSecrets: getImagePullSecrets(),
 			},
 			Replicas:         int32(replicas),
 			QueueRef:         queue,
@@ -483,6 +492,7 @@ func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName, ansib
 					ImagePullPolicy: "Always",
 					Image:           splunkImage,
 				},
+				ImagePullSecrets: getImagePullSecrets(),
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: clusterManagerRef,
 				},
@@ -632,6 +642,7 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 						FSGroup: &OperatorFSGroup,
 					},
 					ServiceAccountName: account,
+					ImagePullSecrets:   getImagePullSecrets(),
 					Containers: []corev1.Container{
 						{
 							Name:            name,
@@ -673,6 +684,14 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 	return &operator
 }
 
+// getImagePullSecrets returns imagePullSecrets for operator pods when IMAGE_PULL_SECRET env var is set.
+func getImagePullSecrets() []corev1.LocalObjectReference {
+	if secret := os.Getenv("IMAGE_PULL_SECRET"); secret != "" {
+		return []corev1.LocalObjectReference{{Name: secret}}
+	}
+	return nil
+}
+
 // newStandaloneWithLM creates and initializes CR for Standalone Kind with License Manager
 func newStandaloneWithLM(name, ns, licenseManagerName, splunkImage string) *enterpriseApi.Standalone {
 
@@ -694,6 +713,7 @@ func newStandaloneWithLM(name, ns, licenseManagerName, splunkImage string) *ente
 					ImagePullPolicy: "Always",
 					Image:           splunkImage,
 				},
+				ImagePullSecrets: getImagePullSecrets(),
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
 				},
@@ -764,6 +784,7 @@ func newMonitoringConsoleSpec(name, ns, LicenseManagerRef, splunkImage string) *
 					ImagePullPolicy: "Always",
 					Image:           splunkImage,
 				},
+				ImagePullSecrets: getImagePullSecrets(),
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
 				},
@@ -993,6 +1014,9 @@ func GetConfigMap(ctx context.Context, deployment *Deployment, ns string, config
 
 // newClusterManagerWithGivenSpec creates and initialize the CR for ClusterManager Kind
 func newClusterManagerWithGivenSpec(name string, ns string, spec enterpriseApi.ClusterManagerSpec) *enterpriseApi.ClusterManager {
+	if len(spec.CommonSplunkSpec.ImagePullSecrets) == 0 {
+		spec.CommonSplunkSpec.ImagePullSecrets = getImagePullSecrets()
+	}
 	new := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterManager",

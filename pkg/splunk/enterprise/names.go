@@ -134,6 +134,29 @@ const (
 	// setSymbolicLinkCmanager
 	setSymbolicLinkCmanager = "ln -sfn /mnt/splunk-operator/local/indexes.conf /opt/splunk/etc/manager-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splunk/etc/manager-apps/splunk-operator/local/server.conf"
 
+	// cmQueueConfigMapTemplateStr is the ConfigMap name pattern: splunk-<name>-clustermanager-queue-config
+	cmQueueConfigMapTemplateStr = "splunk-%s-clustermanager-queue-config"
+
+	// cmQueueConfigVolName is the volume name for the CM queue config ConfigMap mount.
+	cmQueueConfigVolName = "mnt-splunk-cm-queue-config"
+
+	// cmQueueConfigMountPath is where the queue config ConfigMap is mounted on the CM pod.
+	cmQueueConfigMountPath = "/mnt/splunk-cm-queue-config"
+
+	// commandForCMQueueConfig is used in a dedicated init container on the ClusterManager pod
+	// to symlink queue config files (outputs.conf, inputs.conf, default-mode.conf) from the
+	// queue config ConfigMap mount into manager-apps/splunk-operator/local/.
+	// This init container runs independently of the smartstore init container.
+	commandForCMQueueConfig = "mkdir -p " + splcommon.OperatorClusterManagerAppsLocal +
+		" && ln -sfn " + cmQueueConfigMountPath + "/outputs.conf " + splcommon.OperatorClusterManagerAppsLocalOutputsConf +
+		" && ln -sfn " + cmQueueConfigMountPath + "/inputs.conf " + splcommon.OperatorClusterManagerAppsLocalInputsConf +
+		" && ln -sfn " + cmQueueConfigMountPath + "/default-mode.conf " + splcommon.OperatorClusterManagerAppsLocalDefaultModeConf
+
+	// setSymbolicLinkCmanagerQueueConfig resets queue config symlinks on the CM pod after a bundle push.
+	setSymbolicLinkCmanagerQueueConfig = "ln -sfn " + cmQueueConfigMountPath + "/outputs.conf " + splcommon.OperatorClusterManagerAppsLocalOutputsConf +
+		" && ln -sfn " + cmQueueConfigMountPath + "/inputs.conf " + splcommon.OperatorClusterManagerAppsLocalInputsConf +
+		" && ln -sfn " + cmQueueConfigMountPath + "/default-mode.conf " + splcommon.OperatorClusterManagerAppsLocalDefaultModeConf
+
 	// configToken used to track if the config is reflecting on Pod or not
 	configToken = "conftoken"
 
@@ -218,6 +241,30 @@ access = read : [ * ], write : [ admin ]
 	telLicenseInfoKey = "license_info"
 
 	managerConfigMapTemplateStr = "%smanager-config"
+
+	// ingestorQueueConfigAppName is the Splunk app directory name for ingestor queue config
+	ingestorQueueConfigAppName = "100-sok-ingestorcluster"
+
+	// ingestorQueueConfigTemplateStr is the ConfigMap name pattern: splunk-<name>-ingestor-queue-config
+	ingestorQueueConfigTemplateStr = "splunk-%s-ingestor-queue-config"
+
+	// ingestorQueueConfigRevAnnotation is the pod annotation key set to ConfigMap ResourceVersion.
+	// When content changes (credentials rotate, topology changes), RV increments → annotation changes
+	// → Restart EPIC detects change and restarts pods (PDB-aware). reload.outputs.remote_queue=never.
+	ingestorQueueConfigRevAnnotation = "ingestorQueueConfigRev"
+
+	// ingestorQueueConfigMountPath is the ConfigMap mount path inside the pod
+	ingestorQueueConfigMountPath = "/mnt/splunk-queue-config"
+
+	// commandForIngestorQueueConfig is the init container shell command.
+	// Creates app directory, symlinks conf files from ConfigMap mount, copies local.meta
+	// (NOT symlinked — Splunk replaces metadata symlinks with regular files when writing stanzas).
+	commandForIngestorQueueConfig = "mkdir -p /opt/splk/etc/apps/" + ingestorQueueConfigAppName + "/local && " +
+		"mkdir -p /opt/splk/etc/apps/" + ingestorQueueConfigAppName + "/metadata && " +
+		"ln -sfn " + ingestorQueueConfigMountPath + "/app.conf /opt/splk/etc/apps/" + ingestorQueueConfigAppName + "/local/app.conf && " +
+		"ln -sfn " + ingestorQueueConfigMountPath + "/outputs.conf /opt/splk/etc/apps/" + ingestorQueueConfigAppName + "/local/outputs.conf && " +
+		"ln -sfn " + ingestorQueueConfigMountPath + "/default-mode.conf /opt/splk/etc/apps/" + ingestorQueueConfigAppName + "/local/default-mode.conf && " +
+		"cp " + ingestorQueueConfigMountPath + "/local.meta /opt/splk/etc/apps/" + ingestorQueueConfigAppName + "/metadata/local.meta"
 )
 
 const (
@@ -382,4 +429,14 @@ func GetTelemetryConfigMapName(namePrefix string) string {
 // GetManagerConfigMapName returns the name of manager configmap
 func GetManagerConfigMapName(namePrefix string) string {
 	return fmt.Sprintf(managerConfigMapTemplateStr, namePrefix)
+}
+
+// GetIngestorQueueConfigMapName returns the name of the ingestor queue config ConfigMap
+func GetIngestorQueueConfigMapName(crName string) string {
+	return fmt.Sprintf(ingestorQueueConfigTemplateStr, crName)
+}
+
+// GetCMQueueConfigMapName returns the name of the ClusterManager queue config ConfigMap
+func GetCMQueueConfigMapName(cmName string) string {
+	return fmt.Sprintf(cmQueueConfigMapTemplateStr, cmName)
 }
