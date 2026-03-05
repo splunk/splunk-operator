@@ -63,7 +63,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// validate and updates defaults for CR
 	err = validateSearchHeadClusterSpec(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "validateSearchHeadClusterSpec", fmt.Sprintf("validate searchHeadCluster spec failed %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
 		scopedLog.Error(err, "Failed to validate searchHeadCluster spec")
 		return result, err
 	}
@@ -78,7 +78,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
-		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s — check operator logs", cr.GetName()))
 		return result, err
 	}
 
@@ -88,7 +88,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
-			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
+			eventPublisher.Warning(ctx, EventReasonAppFrameworkInitFailed, fmt.Sprintf("App framework initialization failed for %s — check operator logs", cr.GetName()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
 		}
@@ -140,7 +140,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 			result.Requeue = false
 		}
 		if err != nil {
-			eventPublisher.Warning(ctx, "Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
+			eventPublisher.Warning(ctx, EventReasonDeleteFailed, fmt.Sprintf("Failed to delete custom resource %s — check operator logs", cr.GetName()))
 		}
 		return result, err
 	}
@@ -335,7 +335,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			if err != nil {
 				// Emit event for password sync failure
 				if eventPublisher != nil {
-					eventPublisher.Warning(ctx, "PasswordSyncFailed",
+					eventPublisher.Warning(ctx, EventReasonPasswordSyncFailed,
 						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
 				}
 				return err
@@ -350,7 +350,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			if err != nil {
 				// Emit event for password sync failure
 				if eventPublisher != nil {
-					eventPublisher.Warning(ctx, "PasswordSyncFailed",
+					eventPublisher.Warning(ctx, EventReasonPasswordSyncFailed,
 						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
 				}
 				return err
@@ -436,7 +436,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 
 	// Emit event for password sync completed
 	if eventPublisher != nil {
-		eventPublisher.Normal(ctx, "PasswordSyncCompleted",
+		eventPublisher.Normal(ctx, EventReasonPasswordSyncCompleted,
 			fmt.Sprintf("Password synchronized for %d pods", howManyPodsHaveSecretChanged))
 	}
 
@@ -535,7 +535,7 @@ func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient,
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	if err != nil {
-		scopedLog.Error(err, "SearchHeadCluster types not found in namespace", "namsespace", cr.GetNamespace())
+		scopedLog.Error(err, "SearchHeadCluster types not found in namespace", "namespace", cr.GetNamespace())
 		return objectList, err
 	}
 

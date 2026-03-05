@@ -64,7 +64,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	// validate and updates defaults for CR
 	err = validateLicenseManagerSpec(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "validateLicenseManagerSpec", fmt.Sprintf("validate license manager spec failed %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
 		scopedLog.Error(err, "Failed to validate license manager spec")
 		return result, err
 	}
@@ -81,7 +81,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
-			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
+			eventPublisher.Warning(ctx, EventReasonAppFrameworkInitFailed, fmt.Sprintf("App framework initialization failed for %s — check operator logs", cr.GetName()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
 		}
@@ -91,7 +91,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseManager)
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
-		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s — check operator logs", cr.GetName()))
 		return result, err
 	}
 
@@ -123,7 +123,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 			result.Requeue = false
 		}
 		if err != nil {
-			eventPublisher.Warning(ctx, "Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
+			eventPublisher.Warning(ctx, EventReasonDeleteFailed, fmt.Sprintf("Failed to delete custom resource %s — check operator logs", cr.GetName()))
 		}
 		return result, err
 	}
@@ -286,7 +286,7 @@ func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.Contro
 		// Check for expired licenses
 		for licenseName, licenseInfo := range licenses {
 			if licenseInfo.Status == "EXPIRED" {
-				eventPublisher.Warning(ctx, "LicenseExpired",
+				eventPublisher.Warning(ctx, EventReasonLicenseExpired,
 					fmt.Sprintf("License '%s' has expired", licenseName))
 				scopedLog.Error(nil, "Detected expired license", "licenseName", licenseName, "title", licenseInfo.Title)
 			}
