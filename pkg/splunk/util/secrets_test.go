@@ -968,7 +968,8 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 	}
-	cerateFuncCalls := []spltest.MockFuncCall{
+	// For create case: Get returns NotFound, then Get in polling
+	createGetCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 	}
@@ -978,15 +979,17 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 		return err
 	}
 
-	// "splunk-secrets" object doesn't exist
-	createCalls := map[string][]spltest.MockFuncCall{"Get": cerateFuncCalls, "Create": funcCalls}
+	// "splunk-secrets" object doesn't exist - Get returns NotFound
+	createCalls := map[string][]spltest.MockFuncCall{"Get": createGetCalls, "Create": funcCalls}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls}
 
 	spltest.ReconcileTester(t, "TestApplyNamespaceScopedSecretObject", "test", "test", createCalls, updateCalls, reconcile, false)
 
 	// Partially baked "splunk-secrets" object(applies to empty as well)
+	// Get needs 1 call: the initial Get that finds the secret
+	// Update may or may not happen depending on missing tokens
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
-	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
 
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -995,7 +998,7 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 		},
 		Data: map[string][]byte{
 			"password":     splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"pass4Symmkey": splcommon.GenerateSecret(splcommon.SecretBytes, 24)},
+			"pass4SymmKey": splcommon.GenerateSecret(splcommon.SecretBytes, 24)},
 	}
 	spltest.ReconcileTester(t, "TestApplyNamespaceScopedSecretObject", "test", "test", createCalls, updateCalls, reconcile, false, &secret)
 
