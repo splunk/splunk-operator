@@ -342,65 +342,51 @@ func GetLatestVersionedSecret(ctx context.Context, c splcommon.ControllerClient,
 	return latestVersionedSecret, nil
 }
 
-// GetSplunkReadableNamespaceScopedSecretData retrieves the namespace scoped secret's data and converts it into Splunk readable format
-// All secrets are optional except "password" which is mandatory
+// GetSplunkReadableNamespaceScopedSecretData retrieves the namespace scoped secret's data and converts it into Splunk readable format if possible
 func GetSplunkReadableNamespaceScopedSecretData(ctx context.Context, c splcommon.ControllerClient, namespace string) (map[string][]byte, error) {
-	// Get namespace scoped secret (does not auto-generate)
+	// Get namespace scoped secret ensuring all tokens are present
 	namespaceScopedSecret, err := ApplyNamespaceScopedSecretObject(ctx, c, namespace)
 	if err != nil {
-		return nil, fmt.Errorf("namespace scoped secret not found in namespace %s. Please create secret %s with at least 'password' key", namespace, splcommon.GetNamespaceScopedSecretName(namespace))
+		return nil, err
 	}
 
 	// Create data
 	splunkReadableData := make(map[string][]byte)
 
-	// Validate that password is provided (mandatory)
-	if passwordBytes, exists := namespaceScopedSecret.Data["password"]; !exists || len(passwordBytes) == 0 {
-		return nil, fmt.Errorf("password is mandatory in secret %s but was not provided or is empty", splcommon.GetNamespaceScopedSecretName(namespace))
-	}
-
-	// Add all provided secrets to splunkReadableData (they are all optional)
+	// Create individual token type data
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
-		if secretValue, exists := namespaceScopedSecret.Data[tokenType]; exists && len(secretValue) > 0 {
-			splunkReadableData[tokenType] = secretValue
-		}
+		splunkReadableData[tokenType] = namespaceScopedSecret.Data[tokenType]
 	}
 
-	// Build default.yml with only the secrets that are provided
-	// Start with mandatory password
-	defaultYmlParts := []string{
-		"splunk:",
-		"    hec_disabled: 0",
-		"    hec_enableSSL: 0",
-		fmt.Sprintf("    password: \"%s\"", string(namespaceScopedSecret.Data["password"])),
+	// Create default.yml with optional splunk_secret
+	defaultYmlBuilder := fmt.Sprintf(`
+splunk:
+    hec_disabled: 0
+    hec_enableSSL: 0
+    hec_token: "%s"
+    password: "%s"
+    pass4SymmKey: "%s"`,
+		namespaceScopedSecret.Data["hec_token"],
+		namespaceScopedSecret.Data["password"],
+		namespaceScopedSecret.Data["pass4SymmKey"])
+
+	// Add splunk_secret only if it exists
+	if splunkSecret, exists := namespaceScopedSecret.Data["splunk_secret"]; exists {
+		defaultYmlBuilder += fmt.Sprintf(`
+    splunk_secret: "%s"`, splunkSecret)
 	}
 
-	// Add optional secrets only if they exist
-	if hecToken, exists := namespaceScopedSecret.Data["hec_token"]; exists && len(hecToken) > 0 {
-		defaultYmlParts = append(defaultYmlParts, fmt.Sprintf("    hec_token: \"%s\"", string(hecToken)))
-	}
+	// Add idxc and shc sections
+	defaultYmlBuilder += fmt.Sprintf(`
+    idxc:
+        secret: "%s"
+    shc:
+        secret: "%s"
+`,
+		namespaceScopedSecret.Data["idxc_secret"],
+		namespaceScopedSecret.Data["shc_secret"])
 
-	if pass4SymmKey, exists := namespaceScopedSecret.Data["pass4SymmKey"]; exists && len(pass4SymmKey) > 0 {
-		defaultYmlParts = append(defaultYmlParts, fmt.Sprintf("    pass4SymmKey: \"%s\"", string(pass4SymmKey)))
-	}
-
-	if splunkSecret, exists := namespaceScopedSecret.Data["splunk_secret"]; exists && len(splunkSecret) > 0 {
-		defaultYmlParts = append(defaultYmlParts, fmt.Sprintf("    splunk_secret: \"%s\"", string(splunkSecret)))
-	}
-
-	// Add indexer cluster secret if provided
-	if idxcSecret, exists := namespaceScopedSecret.Data["idxc_secret"]; exists && len(idxcSecret) > 0 {
-		defaultYmlParts = append(defaultYmlParts, fmt.Sprintf("    idxc:\n        secret: \"%s\"", string(idxcSecret)))
-	}
-
-	// Add search head cluster secret if provided
-	if shcSecret, exists := namespaceScopedSecret.Data["shc_secret"]; exists && len(shcSecret) > 0 {
-		defaultYmlParts = append(defaultYmlParts, fmt.Sprintf("    shc:\n        secret: \"%s\"", string(shcSecret)))
-	}
-
-	defaultYmlContent := strings.Join(defaultYmlParts, "\n")
-	splunkReadableData["default.yml"] = []byte(defaultYmlContent)
-
+	splunkReadableData["default.yml"] = []byte(defaultYmlBuilder)
 	return splunkReadableData, nil
 }
 
@@ -460,15 +446,14 @@ func ApplySplunkSecret(ctx context.Context, c splcommon.ControllerClient, cr spl
 	return &current, nil
 }
 
-// ApplyNamespaceScopedSecretObject retrieves the namespace scoped K8S secret object without auto-generating any secrets
-// It validates all secrets documented in PasswordManagement: hec_token, password, pass4SymmKey, idxc_secret, shc_secret
+// ApplyNamespaceScopedSecretObject creates/updates the namespace scoped K8S secret object
 func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.ControllerClient, namespace string) (*corev1.Secret, error) {
 	var current corev1.Secret
 
 	name := splcommon.GetNamespaceScopedSecretName(namespace)
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyNamespaceScopedSecretObject").WithValues(
+	log := log.FromContext(ctx)
+	scopedLog := log.WithName("ApplyNamespaceScopedSecretObject").WithValues(
 		"name", splcommon.GetNamespaceScopedSecretName(namespace),
 		"namespace", namespace)
 
@@ -491,10 +476,12 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 					current.Data = make(map[string][]byte)
 				}
 				// Value for token not found, generate
-				if tokenType == "password" {
+				if tokenType == "hec_token" {
+					current.Data[tokenType] = generateHECToken()
+				} else if tokenType != "splunk_secret" {
 					current.Data[tokenType] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
-					updateNeeded = true
 				}
+				updateNeeded = true
 			}
 		}
 
@@ -506,6 +493,7 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 				return nil, err
 			}
 		}
+
 		return &current, nil
 	} else if err != nil && !k8serrors.IsNotFound(err) {
 		// get secret call failed with other than NotFound error return the err
@@ -515,7 +503,14 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 	// Make data
 	scopedLog.Info("Namespace scoped secret does not exist, creating and filling it with new values for all token types")
 	current.Data = make(map[string][]byte)
-	current.Data["password"] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
+	// Not found, update data by generating values for all types of tokens
+	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
+		if tokenType == "hec_token" {
+			current.Data[tokenType] = generateHECToken()
+		} else {
+			current.Data[tokenType] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
+		}
+	}
 
 	// Set name and namespace
 	current.ObjectMeta = metav1.ObjectMeta{
@@ -580,8 +575,8 @@ func validateNamespaceScopedSecrets(scopedLog interface {
 // GetSecretByName retrieves namespace scoped secret object for a given name
 func GetSecretByName(ctx context.Context, c splcommon.ControllerClient, namespace string, logHandle string, name string) (*corev1.Secret, error) {
 	var namespaceScopedSecret corev1.Secret
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("GetSecretByName").WithValues("logHandle: ", logHandle, "namespace: ", namespace)
+	log := log.FromContext(ctx)
+	scopedLog := log.WithName("GetSecretByName").WithValues("logHandle: ", logHandle, "namespace: ", namespace)
 
 	// Check if a namespace scoped secret exists
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: name}

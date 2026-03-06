@@ -28,7 +28,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	wait "k8s.io/apimachinery/pkg/util/wait"
@@ -41,7 +40,6 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 // Deployment simply represents the deployment (standalone, clustered,...etc) we create on the testenv
@@ -527,42 +525,7 @@ func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, ClusterM
 }
 
 func (d *Deployment) deployCR(ctx context.Context, name string, cr client.Object) (client.Object, error) {
-
-	// Create namespace-scoped secret with all required tokens before deploying the CR
-	// This ensures that all tests have the necessary secrets pre-populated
-	namespaceScopedSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      splcommon.GetNamespaceScopedSecretName(d.testenv.namespace),
-			Namespace: d.testenv.namespace,
-		},
-		Data: map[string][]byte{
-			"hec_token":    []byte("550e8400-e29b-41d4-a716-446655440000"),
-			"password":     splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"pass4SymmKey": splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"idxc_secret":  splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"shc_secret":   splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-		},
-	}
-
-	// Check if secret already exists, if not create it
-	namespacedName := types.NamespacedName{Namespace: d.testenv.namespace, Name: splcommon.GetNamespaceScopedSecretName(d.testenv.namespace)}
-	existingSecret := &corev1.Secret{}
-	err := d.testenv.GetKubeClient().Get(ctx, namespacedName, existingSecret)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			d.testenv.Log.Info("Creating namespace-scoped secret", "name", namespaceScopedSecret.Name, "namespace", d.testenv.namespace)
-			err = d.testenv.GetKubeClient().Create(ctx, namespaceScopedSecret)
-			if err != nil {
-				d.testenv.Log.Error(err, "Failed to create namespace-scoped secret")
-				return nil, err
-			}
-		} else {
-			d.testenv.Log.Error(err, "Failed to check for existing namespace-scoped secret")
-			return nil, err
-		}
-	}
-
-	err = d.testenv.GetKubeClient().Create(ctx, cr)
+	err := d.testenv.GetKubeClient().Create(ctx, cr)
 	if err != nil {
 		return nil, err
 	}
@@ -590,7 +553,6 @@ func (d *Deployment) deployCR(ctx context.Context, name string, cr client.Object
 		return nil
 	})
 
-	// ...existing code...
 	// Returns once we can retrieve the lm instance
 	if err := wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
 		key := client.ObjectKey{Name: name, Namespace: d.testenv.namespace}

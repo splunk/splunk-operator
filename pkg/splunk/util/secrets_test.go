@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -780,6 +781,18 @@ func TestGetSplunkReadableNamespaceScopedSecretData(t *testing.T) {
 		}
 	}
 
+	// Verify that default.yml contains splunk_secret only if it exists in the secret data
+	defaultYml := string(splunkReadableData["default.yml"])
+	if _, exists := namespacescopedsecret.Data["splunk_secret"]; exists {
+		if !strings.Contains(defaultYml, "splunk_secret") {
+			t.Errorf("default.yml should contain splunk_secret key when it exists in secret data")
+		}
+	} else {
+		if strings.Contains(defaultYml, "splunk_secret") {
+			t.Errorf("default.yml should not contain splunk_secret key when it doesn't exist in secret data")
+		}
+	}
+
 	// Re-concile tester
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -794,7 +807,38 @@ func TestGetSplunkReadableNamespaceScopedSecretData(t *testing.T) {
 
 	spltest.ReconcileTester(t, "TestGetSplunkReadableNamespaceScopedSecretData", nil, nil, createCalls, updateCalls, reconcile, false, namespacescopedsecret)
 
+	// Test case: Update namespace scoped secrets object with splunk_secret
+	c = spltest.NewMockClient()
+	namespacescopedsecret, err = ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	// Add splunk_secret to the secret data
+	namespacescopedsecret.Data["splunk_secret"] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
+	err = UpdateResource(ctx, c, namespacescopedsecret)
+	if err != nil {
+		t.Errorf("Failed to update namespace scoped secret")
+	}
+
+	splunkReadableData, err = GetSplunkReadableNamespaceScopedSecretData(ctx, c, "test")
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	// Verify that default.yml now contains splunk_secret since it was added
+	defaultYml = string(splunkReadableData["default.yml"])
+	if !strings.Contains(defaultYml, "splunk_secret") {
+		t.Errorf("default.yml should contain splunk_secret key when splunk_secret exists")
+	}
+
 	// Negative testing - Update namespace scoped secrets object with data which has hec_token missing
+	c = spltest.NewMockClient()
+	namespacescopedsecret, err = ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Error(err.Error())
+	}
+
 	secretData := make(map[string][]byte)
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
 		if tokenType != "hec_token" {
@@ -950,8 +994,8 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
-			"pass4SymmKey": splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-		},
+			"password":     splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"pass4Symmkey": splcommon.GenerateSecret(splcommon.SecretBytes, 24)},
 	}
 	spltest.ReconcileTester(t, "TestApplyNamespaceScopedSecretObject", "test", "test", createCalls, updateCalls, reconcile, false, &secret)
 
@@ -980,9 +1024,6 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-secret",
 			Namespace: "test",
-		},
-		Data: map[string][]byte{
-			"hec_token": generateHECToken(),
 		},
 	}
 	c.Create(ctx, &negSecret)
