@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"net/http"
 	"strings"
 
@@ -145,21 +146,7 @@ func generateHECToken() []byte {
 // ValidateHECToken validates the HEC token format
 // HEC token should be in UUID-like format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX (36 characters with dashes at specific positions)
 func ValidateHECToken(tokenValue []byte) error {
-	if len(tokenValue) == 0 {
-		return fmt.Errorf("hec_token is empty")
-	}
-
-	tokenStr := string(tokenValue)
-	// Check for UUID-like format (36 characters with dashes at positions 8, 13, 18, 23)
-	if len(tokenStr) != 36 {
-		return fmt.Errorf("hec_token has invalid length: expected 36 characters, got %d", len(tokenStr))
-	}
-
-	if tokenStr[8] != '-' || tokenStr[13] != '-' || tokenStr[18] != '-' || tokenStr[23] != '-' {
-		return fmt.Errorf("hec_token does not match UUID-like format (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)")
-	}
-
-	return nil
+	return uuid.Validate(string(tokenValue))
 }
 
 // ValidateSecret validates a generic secret token
@@ -170,8 +157,27 @@ func ValidateSecret(tokenValue []byte) error {
 		return fmt.Errorf("secret is empty")
 	}
 
-	// Minimum reasonable length for secrets (at least 8 characters)
-	const minLength = 8
+	secretStr := string(tokenValue)
+
+	// Check for leading or trailing whitespace
+	if secretStr != strings.TrimSpace(secretStr) {
+		return fmt.Errorf("secret has leading or trailing whitespace")
+	}
+
+	// Check for newlines
+	if strings.Contains(secretStr, "\n") || strings.Contains(secretStr, "\r") {
+		return fmt.Errorf("secret contains newlines")
+	}
+
+	// Check for control characters (ASCII 0-31 and 127)
+	for _, ch := range secretStr {
+		if ch < 32 || ch == 127 {
+			return fmt.Errorf("secret contains control characters")
+		}
+	}
+
+	// Minimum length for secrets (at least 12 characters)
+	const minLength = 12
 	if len(tokenValue) < minLength {
 		return fmt.Errorf("secret is too short: minimum %d characters required, got %d", minLength, len(tokenValue))
 	}
