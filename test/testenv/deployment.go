@@ -525,12 +525,12 @@ func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, ClusterM
 }
 
 func (d *Deployment) deployCR(ctx context.Context, name string, cr client.Object) (client.Object, error) {
+
 	err := d.testenv.GetKubeClient().Create(ctx, cr)
 	if err != nil {
 		return nil, err
 	}
 
-	// ...existing code...
 	// Push the clean up func to delete the cr when done
 	d.pushCleanupFunc(func() error {
 		d.testenv.Log.Info("Deleting cr", "name", name)
