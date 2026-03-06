@@ -49,7 +49,7 @@ type DatabaseInfo struct {
 	Ready              bool                         `json:"ready"`
 	DatabaseRef        *corev1.LocalObjectReference `json:"databaseRef,omitempty"`
 	AdminUserSecretRef *corev1.LocalObjectReference `json:"adminUserSecretRef,omitempty"`
-	RWSecretRef        *corev1.LocalObjectReference `json:"rwSecretRef,omitempty"`
+	RWUserSecretRef    *corev1.LocalObjectReference `json:"rwSecretRef,omitempty"`
 	ConfigMapRef       *corev1.LocalObjectReference `json:"configMap,omitempty"`
 }
 

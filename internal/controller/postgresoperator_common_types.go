@@ -27,8 +27,11 @@ type conditionReasons string
 type clusterReadyStatus string
 
 const (
-	// default requeue delay
+	// retryDelay is the default requeue interval when waiting on external state (CNPG, cluster).
 	retryDelay = time.Second * 15
+	// clusterNotFoundRetryDelay is longer than retryDelay — a missing cluster is unlikely
+	// to appear in 15 s and hammering the API is wasteful.
+	clusterNotFoundRetryDelay = time.Second * 30
 	// cluster endpoint suffixes
 	readOnlyEndpoint  string = "ro"
 	readWriteEndpoint string = "rw"
@@ -54,8 +57,8 @@ const (
 	poolerReady    conditionTypes = "PoolerReady"
 	usersReady     conditionTypes = "UsersReady"
 	databasesReady conditionTypes = "DatabasesReady"
+	secretsReady   conditionTypes = "SecretsReady"
 	// TODO - to use in the future implementation
-	// secretsReady    conditionTypes = "SecretsReady"
 	// privilegesReady conditionTypes = "PrivilegesReady"
 
 	// Condition reasons
@@ -64,6 +67,8 @@ const (
 	reasonClusterInfoFetchFailed conditionReasons = "ClusterInfoFetchNotPossible"
 	reasonClusterAvailable       conditionReasons = "ClusterAvailable"
 	reasonDatabasesAvailable     conditionReasons = "DatabasesAvailable"
+	reasonSecretsCreated         conditionReasons = "SecretsCreated"
+	reasonSecretsCreationFailed  conditionReasons = "SecretsCreationFailed"
 	reasonWaitingForCNPG         conditionReasons = "WaitingForCNPG"
 	reasonUsersCreationFailed    conditionReasons = "UsersCreationFailed"
 	reasonUsersAvailable         conditionReasons = "UsersAvailable"
