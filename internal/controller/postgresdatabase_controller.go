@@ -30,7 +30,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -379,27 +378,17 @@ func (r *PostgresDatabaseReconciler) createUsers(
 			})
 	}
 
-	// Build unstructured SSA patch with only managedRoles — avoids Go zero-value fields
-	// (like spec.class) leaking into the patch and causing SSA ownership conflicts.
-	roles := make([]interface{}, len(allRoles))
-	for i, role := range allRoles {
-		roles[i] = map[string]interface{}{
-			"name":   role.Name,
-			"ensure": role.Ensure,
-		}
-	}
-
-	rolePatch := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "enterprise.splunk.com/v4",
-			"kind":       "PostgresCluster",
-			"metadata": map[string]interface{}{
-				"name":      cluster.Name,
-				"namespace": cluster.Namespace,
-			},
-			"spec": map[string]interface{}{
-				"managedRoles": roles,
-			},
+	rolePatch := &enterprisev4.PostgresCluster{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "enterprise.splunk.com/v4",
+			Kind:       "PostgresCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+		Spec: enterprisev4.PostgresClusterSpec{
+			ManagedRoles: allRoles,
 		},
 	}
 
@@ -599,20 +588,19 @@ func (r *PostgresDatabaseReconciler) removeUsersFromCluster(
 		return fmt.Errorf("failed to get PostgresCluster for user cleanup: %w", err)
 	}
 
-	// Patch with empty managedRoles using unstructured to avoid Go zero-value fields
-	// leaking into the patch. Using the same field manager releases ownership of roles
-	// that this PostgresDatabase previously managed.
-	rolePatch := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "enterprise.splunk.com/v4",
-			"kind":       "PostgresCluster",
-			"metadata": map[string]interface{}{
-				"name":      cluster.Name,
-				"namespace": cluster.Namespace,
-			},
-			"spec": map[string]interface{}{
-				"managedRoles": []interface{}{},
-			},
+	// Patch with empty managedRoles using the same field manager to release ownership
+	// of roles that this PostgresDatabase previously managed.
+	rolePatch := &enterprisev4.PostgresCluster{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "enterprise.splunk.com/v4",
+			Kind:       "PostgresCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+		Spec: enterprisev4.PostgresClusterSpec{
+			ManagedRoles: []enterprisev4.ManagedRole{},
 		},
 	}
 
