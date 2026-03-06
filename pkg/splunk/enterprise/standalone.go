@@ -63,8 +63,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	err = validateStandaloneSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateStandaloneSpec", fmt.Sprintf("validate standalone spec failed %s", err.Error()))
-		logger.ErrorContext(ctx, "Failed to validate standalone spec", "error", err)
-		return result, err
+		return result, fmt.Errorf("validate standalone spec: %w", err)
 	}
 
 	// updates status after function completes
@@ -109,9 +108,8 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkStandalone)
 	if err != nil {
-		logger.ErrorContext(ctx, "create or update general config failed", "error", err)
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-		return result, err
+		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
 	// Smart Store secrets get created manually and should not be managed by the Operator

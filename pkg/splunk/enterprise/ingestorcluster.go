@@ -60,8 +60,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	err = validateIngestorClusterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "ValidateIngestorClusterSpecFailed", "Validate Ingestor Cluster spec failed. Check operator logs for details.")
-		logger.ErrorContext(ctx, "Failed to validate Ingestor Cluster spec", "error", err.Error())
-		return result, err
+		return result, fmt.Errorf("validate ingestor cluster spec: %w", err)
 	}
 
 	// Initialize phase
@@ -103,8 +102,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIngestor)
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplySplunkConfigFailed", "Apply of general config failed. Check operator logs for details.")
-		logger.ErrorContext(ctx, "create or update general config failed", "error", err.Error())
-		return result, err
+		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
 	// Check if deletion has been requested
@@ -228,8 +226,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		qosCfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, cr.Spec.QueueRef, cr.Spec.ObjectStorageRef, cr.Spec.ServiceAccount)
 		if err != nil {
-			logger.ErrorContext(ctx, "Failed to resolve Queue/ObjectStorage config", "error", err.Error())
-			return result, err
+			return result, fmt.Errorf("resolve queue/object storage config: %w", err)
 		}
 		logger.DebugContext(ctx, "Resolved Queue/ObjectStorage config", "queue", qosCfg.Queue, "objectStorage", qosCfg.OS, "version", qosCfg.Version, "serviceAccount", cr.Spec.ServiceAccount)
 
@@ -244,8 +241,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			err = ingMgr.updateIngestorConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
 			if err != nil {
 				eventPublisher.Warning(ctx, "UpdateConfFilesFailed", "Failed to update conf file for Queue/Pipeline config. Check operator logs for details.")
-				logger.ErrorContext(ctx, "Failed to update conf file for Queue/Pipeline config", "error", err.Error())
-				return result, err
+				return result, fmt.Errorf("update queue/pipeline conf files: %w", err)
 			}
 
 			eventPublisher.Normal(ctx, "QueueConfigUpdated",

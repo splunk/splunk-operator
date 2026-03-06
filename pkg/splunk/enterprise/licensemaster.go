@@ -61,8 +61,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	err = validateLicenseMasterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateLicenseMasterSpec", fmt.Sprintf("validate licensemaster spec failed %s", err.Error()))
-		scopedLog.Error(err, "Failed to validate license master spec")
-		return result, err
+		return result, fmt.Errorf("validate license master spec: %w", err)
 	}
 
 	// If needed, Migrate the app framework status
@@ -86,9 +85,8 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseMaster)
 	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-		return result, err
+		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
 	// check if deletion has been requested
