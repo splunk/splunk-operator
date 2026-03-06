@@ -1455,22 +1455,49 @@ func ValidateTestPrerequisites(ctx context.Context, deployment *Deployment, test
 	}
 	testenvInstance.Log.Info("Namespace exists", "namespace", testenvInstance.GetName())
 
-	operatorPod := GetOperatorPodName(testenvInstance)
-	if operatorPod == "" {
-		return fmt.Errorf("operator pod not found in namespace '%s' - cannot proceed with test", testenvInstance.GetName())
-	}
-	testenvInstance.Log.Info("Operator pod found", "pod", operatorPod)
-
-	pod := &corev1.Pod{}
-	if err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: operatorPod, Namespace: testenvInstance.GetName()}, pod); err != nil {
-		return fmt.Errorf("operator pod '%s' exists but cannot be retrieved: %w", operatorPod, err)
+	operatorNamespace := testenvInstance.GetName()
+	if testenvInstance.clusterWideOperator == "true" {
+		operatorNamespace = "splunk-operator"
 	}
 
-	if pod.Status.Phase != corev1.PodRunning {
-		return fmt.Errorf("operator pod '%s' is not running (current phase: %s) - cannot proceed with test", operatorPod, pod.Status.Phase)
-	}
-	testenvInstance.Log.Info("Operator pod is running", "pod", operatorPod, "phase", pod.Status.Phase)
+	var runningPod *corev1.Pod
+	err := wait.PollUntilContextTimeout(ctx, 2*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
+		podList := &corev1.PodList{}
+		listOpts := []client.ListOption{
+			client.InNamespace(operatorNamespace),
+		}
 
+		if err := deployment.testenv.GetKubeClient().List(ctx, podList, listOpts...); err != nil {
+			testenvInstance.Log.Info("Failed to list pods in operator namespace", "namespace", operatorNamespace, "error", err)
+			return false, nil
+		}
+
+		for i := range podList.Items {
+			pod := &podList.Items[i]
+			if strings.HasPrefix(pod.Name, "splunk-operator-controller-manager") || strings.HasPrefix(pod.Name, "splunk-op") {
+				if pod.Status.Phase == corev1.PodRunning {
+					for _, condition := range pod.Status.Conditions {
+						if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
+							runningPod = pod
+							testenvInstance.Log.Info("Found running and ready operator pod", "pod", pod.Name, "phase", pod.Status.Phase)
+							return true, nil
+						}
+					}
+					testenvInstance.Log.Info("Found operator pod but not ready yet", "pod", pod.Name, "phase", pod.Status.Phase)
+				} else {
+					testenvInstance.Log.Info("Found operator pod but not running", "pod", pod.Name, "phase", pod.Status.Phase)
+				}
+			}
+		}
+		testenvInstance.Log.Info("No running operator pod found yet", "namespace", operatorNamespace)
+		return false, nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("operator pod not found or not ready in namespace '%s' after 30s: %w", operatorNamespace, err)
+	}
+
+	testenvInstance.Log.Info("Operator pod is running and ready", "pod", runningPod.Name, "phase", runningPod.Status.Phase)
 	testenvInstance.Log.Info("All test prerequisites validated successfully")
 	return nil
 }
