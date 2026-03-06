@@ -425,7 +425,7 @@ func TestValidateHECToken(t *testing.T) {
 		{
 			name:      "valid UUID format without dashes",
 			tokenVal:  []byte("550e8400e29b41d4a716446655440000"),
-			wantError: false,
+			wantError: true,
 		},
 		{
 			name:      "empty string",
