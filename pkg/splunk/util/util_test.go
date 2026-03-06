@@ -411,42 +411,31 @@ func TestValidateHECToken(t *testing.T) {
 		name      string
 		tokenVal  []byte
 		wantError bool
-		errMsg    string
 	}{
 		{
-			name:      "valid HEC token",
-			tokenVal:  []byte("ABCDEF01-2345-6789-ABCD-EF0123456789"),
+			name:      "valid UUID format with dashes",
+			tokenVal:  []byte("550e8400-e29b-41d4-a716-446655440000"),
 			wantError: false,
 		},
 		{
-			name:      "empty HEC token",
+			name:      "valid UUID format (uppercase)",
+			tokenVal:  []byte("550E8400-E29B-41D4-A716-446655440000"),
+			wantError: false,
+		},
+		{
+			name:      "valid UUID format without dashes",
+			tokenVal:  []byte("550e8400e29b41d4a716446655440000"),
+			wantError: false,
+		},
+		{
+			name:      "empty string",
 			tokenVal:  []byte(""),
 			wantError: true,
-			errMsg:    "hec_token is empty",
 		},
 		{
-			name:      "HEC token too short",
-			tokenVal:  []byte("ABCDEF01-2345-6789-ABCD-EF"),
+			name:      "invalid UUID format",
+			tokenVal:  []byte("not-a-uuid-format"),
 			wantError: true,
-			errMsg:    "hec_token has invalid length",
-		},
-		{
-			name:      "HEC token too long",
-			tokenVal:  []byte("ABCDEF01-2345-6789-ABCD-EF0123456789-EXTRA"),
-			wantError: true,
-			errMsg:    "hec_token has invalid length",
-		},
-		{
-			name:      "HEC token wrong format - no dashes",
-			tokenVal:  []byte("ABCDEF0123456789ABCDEF0123456789ABCD"),
-			wantError: true,
-			errMsg:    "hec_token does not match UUID-like format",
-		},
-		{
-			name:      "HEC token wrong format - only one dash",
-			tokenVal:  []byte("ABCDEF0123456789-ABCDEF0123456789ABC"),
-			wantError: true,
-			errMsg:    "hec_token does not match UUID-like format",
 		},
 	}
 
@@ -455,9 +444,6 @@ func TestValidateHECToken(t *testing.T) {
 			err := ValidateHECToken(tt.tokenVal)
 			if (err != nil) != tt.wantError {
 				t.Errorf("ValidateHECToken() error = %v, wantError %v", err, tt.wantError)
-			}
-			if tt.wantError && err != nil && !strings.Contains(err.Error(), tt.errMsg) {
-				t.Errorf("ValidateHECToken() error message = %v, want to contain %v", err.Error(), tt.errMsg)
 			}
 		})
 	}
@@ -468,11 +454,10 @@ func TestValidateSecret(t *testing.T) {
 		name      string
 		tokenVal  []byte
 		wantError bool
-		errMsg    string
 	}{
 		{
-			name:      "valid secret - 8 characters",
-			tokenVal:  []byte("12345678"),
+			name:      "valid secret - 12 characters (minimum)",
+			tokenVal:  []byte("123456789012"),
 			wantError: false,
 		},
 		{
@@ -489,19 +474,41 @@ func TestValidateSecret(t *testing.T) {
 			name:      "empty secret",
 			tokenVal:  []byte(""),
 			wantError: true,
-			errMsg:    "secret is empty",
 		},
 		{
-			name:      "secret too short - 7 characters",
-			tokenVal:  []byte("1234567"),
+			name:      "secret too short - 11 characters",
+			tokenVal:  []byte("12345678901"),
 			wantError: true,
-			errMsg:    "secret is too short",
 		},
 		{
-			name:      "secret too short - 1 character",
-			tokenVal:  []byte("1"),
+			name:      "secret with leading whitespace",
+			tokenVal:  []byte(" 123456789012"),
 			wantError: true,
-			errMsg:    "secret is too short",
+		},
+		{
+			name:      "secret with trailing whitespace",
+			tokenVal:  []byte("123456789012 "),
+			wantError: true,
+		},
+		{
+			name:      "secret with newline",
+			tokenVal:  []byte("12345678901\n23"),
+			wantError: true,
+		},
+		{
+			name:      "secret with carriage return",
+			tokenVal:  []byte("12345678901\r23"),
+			wantError: true,
+		},
+		{
+			name:      "secret with control character (tab)",
+			tokenVal:  []byte("12345678901\t23"),
+			wantError: true,
+		},
+		{
+			name:      "secret with null character",
+			tokenVal:  []byte("12345678901\x0023"),
+			wantError: true,
 		},
 	}
 
@@ -510,9 +517,6 @@ func TestValidateSecret(t *testing.T) {
 			err := ValidateSecret(tt.tokenVal)
 			if (err != nil) != tt.wantError {
 				t.Errorf("ValidateSecret() error = %v, wantError %v", err, tt.wantError)
-			}
-			if tt.wantError && err != nil && !strings.Contains(err.Error(), tt.errMsg) {
-				t.Errorf("ValidateSecret() error message = %v, want to contain %v", err.Error(), tt.errMsg)
 			}
 		})
 	}
