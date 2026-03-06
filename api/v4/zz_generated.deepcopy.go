@@ -456,8 +456,8 @@ func (in *DatabaseInfo) DeepCopyInto(out *DatabaseInfo) {
 		*out = new(v1.LocalObjectReference)
 		**out = **in
 	}
-	if in.RWSecretRef != nil {
-		in, out := &in.RWSecretRef, &out.RWSecretRef
+	if in.RWUserSecretRef != nil {
+		in, out := &in.RWUserSecretRef, &out.RWUserSecretRef
 		*out = new(v1.LocalObjectReference)
 		**out = **in
 	}
@@ -1189,6 +1189,11 @@ func (in *PostgresClusterSpec) DeepCopyInto(out *PostgresClusterSpec) {
 		in, out := &in.ConnectionPoolerEnabled, &out.ConnectionPoolerEnabled
 		*out = new(bool)
 		**out = **in
+	}
+	if in.ConnectionPoolerConfig != nil {
+		in, out := &in.ConnectionPoolerConfig, &out.ConnectionPoolerConfig
+		*out = new(ConnectionPoolerConfig)
+		(*in).DeepCopyInto(*out)
 	}
 	if in.ManagedRoles != nil {
 		in, out := &in.ManagedRoles, &out.ManagedRoles
