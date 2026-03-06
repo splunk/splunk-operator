@@ -636,6 +636,7 @@ func (r *PostgresDatabaseReconciler) secretExists(ctx context.Context, namespace
 // createUserSecret creates a single password secret for a database user.
 // AlreadyExists is treated as success — safe to retry after a partial failure
 // on a prior run without conflicting with the already-created secret.
+// TODO: Secret cleanup will be added to the finalizers to respect retain state
 func (r *PostgresDatabaseReconciler) createUserSecret(
 	ctx context.Context,
 	postgresDB *enterprisev4.PostgresDatabase,
