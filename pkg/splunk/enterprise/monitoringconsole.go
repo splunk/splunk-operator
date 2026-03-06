@@ -46,9 +46,6 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyMonitoringConsole")
-
 	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "MonitoringConsole"
@@ -68,8 +65,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	err = validateMonitoringConsoleSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateMonitoringConsoleSpec", fmt.Sprintf("validate monitoringconsole spec failed %s", err.Error()))
-		scopedLog.Error(err, "Failed to validate monitoring console spec")
-		return result, err
+		return result, fmt.Errorf("validate monitoring console spec: %w", err)
 	}
 
 	// If needed, Migrate the app framework status
@@ -95,9 +91,8 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole)
 	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-		return result, err
+		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
 	// check if deletion has been requested

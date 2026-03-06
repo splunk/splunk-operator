@@ -66,8 +66,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	err = validateClusterMasterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateClusterMasterSpec", fmt.Sprintf("validate clustermaster spec failed %s", err.Error()))
-		scopedLog.Error(err, "Failed to validate clustermaster spec")
-		return result, err
+		return result, fmt.Errorf("validate clustermaster spec: %w", err)
 	}
 
 	// updates status after function completes
@@ -121,9 +120,8 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	// create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
 	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-		return result, err
+		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
 	// Smart Store secrets get created manually and should not be managed by the Operator

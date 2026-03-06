@@ -64,8 +64,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	err = validateSearchHeadClusterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateSearchHeadClusterSpec", fmt.Sprintf("validate searchHeadCluster spec failed %s", err.Error()))
-		scopedLog.Error(err, "Failed to validate searchHeadCluster spec")
-		return result, err
+		return result, fmt.Errorf("validate search head cluster spec: %w", err)
 	}
 
 	// If needed, Migrate the app framework status
@@ -77,9 +76,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
 	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-		return result, err
+		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
 	// If the app framework is configured then do following things -

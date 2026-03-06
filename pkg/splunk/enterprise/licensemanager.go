@@ -65,8 +65,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	err = validateLicenseManagerSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateLicenseManagerSpec", fmt.Sprintf("validate license manager spec failed %s", err.Error()))
-		scopedLog.Error(err, "Failed to validate license manager spec")
-		return result, err
+		return result, fmt.Errorf("validate license manager spec: %w", err)
 	}
 
 	// If needed, Migrate the app framework status
@@ -90,9 +89,8 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseManager)
 	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-		return result, err
+		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
 	// check if deletion has been requested
@@ -148,8 +146,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 
 	// Check for license-related pod failures before updating
 	if err = checkLicenseRelatedPodFailures(ctx, client, cr, statefulSet); err != nil {
-		scopedLog.Error(err, "License check failed")
-		return result, err
+		return result, fmt.Errorf("license check: %w", err)
 	}
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}
