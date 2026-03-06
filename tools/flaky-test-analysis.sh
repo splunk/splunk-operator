@@ -87,7 +87,7 @@ if [[ -n "$BRANCH" ]]; then
   BRANCH_FILTER="| select(.workflow_run.head_branch == \"${BRANCH}\")"
 fi
 ART_FILTER=".artifacts[] | select(.name | test(\"${ARTIFACT_PATTERN}\")) | select(.expired == false) ${BRANCH_FILTER}"
-DATE_FI LTER="select(.created_at >= \"${START_DATE}T00:00:00Z\" and .created_at <= \"${END_DATE}T23:59:59Z\")"
+DATE_FILTER="select(.created_at >= \"${START_DATE}T00:00:00Z\" and .created_at <= \"${END_DATE}T23:59:59Z\")"
 
 echo "Fetching artifact list..."
 
