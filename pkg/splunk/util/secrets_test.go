@@ -986,10 +986,10 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 	spltest.ReconcileTester(t, "TestApplyNamespaceScopedSecretObject", "test", "test", createCalls, updateCalls, reconcile, false)
 
 	// Partially baked "splunk-secrets" object(applies to empty as well)
-	// Get needs 1 call: the initial Get that finds the secret
-	// Update may or may not happen depending on missing tokens
-	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
-	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	// Create phase: Get and Update (missing tokens will be generated)
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+	// Update phase: only Get (secret is complete now, no update needed)
+	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -997,8 +997,11 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
+			"hec_token":    generateHECToken(),
 			"password":     splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"pass4SymmKey": splcommon.GenerateSecret(splcommon.SecretBytes, 24)},
+			"pass4SymmKey": splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"idxc_secret":  splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"shc_secret":   splcommon.GenerateSecret(splcommon.SecretBytes, 24)},
 	}
 	spltest.ReconcileTester(t, "TestApplyNamespaceScopedSecretObject", "test", "test", createCalls, updateCalls, reconcile, false, &secret)
 
