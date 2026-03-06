@@ -355,7 +355,9 @@ func GetSplunkReadableNamespaceScopedSecretData(ctx context.Context, c splcommon
 
 	// Create individual token type data
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
-		splunkReadableData[tokenType] = namespaceScopedSecret.Data[tokenType]
+		if _, exists := namespaceScopedSecret.Data[tokenType]; exists {
+			splunkReadableData[tokenType] = namespaceScopedSecret.Data[tokenType]
+		}
 	}
 
 	// Create default.yml with optional splunk_secret
@@ -386,7 +388,7 @@ splunk:
 		namespaceScopedSecret.Data["idxc_secret"],
 		namespaceScopedSecret.Data["shc_secret"])
 
-	splunkReadableData["default.yml"] = []byte(defaultYmlBuilder)
+	splunkReadableData["default.yml"] = []byte(strings.TrimSpace(defaultYmlBuilder))
 	return splunkReadableData, nil
 }
 
@@ -470,6 +472,10 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 		// Generate values for only missing types of tokens them
 		var updateNeeded bool = false
 		for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
+			if tokenType == "splunk_secret" {
+				// splunk_secret is optional, skip if not found
+				continue
+			}
 			if _, ok := current.Data[tokenType]; !ok {
 				scopedLog.Info("Namespace scoped secret exists, missing value for token", "missingTokenType", tokenType)
 				if current.Data == nil || reflect.ValueOf(current.Data).Kind() != reflect.Map {
@@ -478,11 +484,10 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 				// Value for token not found, generate
 				if tokenType == "hec_token" {
 					current.Data[tokenType] = generateHECToken()
-					updateNeeded = true
-				} else if tokenType != "splunk_secret" {
+				} else {
 					current.Data[tokenType] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
-					updateNeeded = true
 				}
+				updateNeeded = true
 			}
 		}
 

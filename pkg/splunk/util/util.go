@@ -19,7 +19,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/google/uuid"
 	"net/http"
 	"strings"
 
@@ -146,7 +145,24 @@ func generateHECToken() []byte {
 // ValidateHECToken validates the HEC token format
 // HEC token should be in UUID-like format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX (36 characters with dashes at specific positions)
 func ValidateHECToken(tokenValue []byte) error {
-	return uuid.Validate(string(tokenValue))
+	const hecTokenLen = 36
+	if len(tokenValue) != hecTokenLen {
+		return fmt.Errorf("hec token length must be %d", hecTokenLen)
+	}
+
+	for i, c := range tokenValue {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			if c != '-' {
+				return fmt.Errorf("invalid char %c at position %d", c, i)
+			}
+		} else {
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+				return fmt.Errorf("invalid char %c at position %d", c, i)
+			}
+		}
+	}
+
+	return nil
 }
 
 // ValidateSecret validates a generic secret token
