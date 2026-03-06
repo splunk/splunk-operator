@@ -157,7 +157,7 @@ var _ = Describe("Smoke test", func() {
 
 			// Verify serviceAccount is configured on Pod
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.VerifyServiceAccountConfiguredOnPod(deployment, testcaseEnvInst.GetName(), standalonePodName, serviceAccountName)
+			testenv.VerifyServiceAccountConfiguredOnPod(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), standalonePodName, serviceAccountName)
 		})
 	})
 })

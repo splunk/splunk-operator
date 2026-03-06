@@ -93,7 +93,7 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 			// Verify CPU limits on Indexers before updating the CR
 			for i := 1; i <= siteCount; i++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
-				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), podName, defaultCPULimits)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst, podName, defaultCPULimits)
 			}
 
 			// Change CPU limits to trigger CR update
@@ -126,7 +126,7 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 			// Verify CPU limits after updating the CR
 			for i := 1; i <= siteCount; i++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
-				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), podName, newCPULimits)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst, podName, newCPULimits)
 			}
 		})
 	})

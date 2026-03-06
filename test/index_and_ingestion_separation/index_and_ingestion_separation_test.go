@@ -252,8 +252,8 @@ var _ = Describe("indingsep test", func() {
 				CrReplicas:      3,
 			}
 			allAppSourceInfo := []testenv.AppSourceInfo{ingestorAppSourceInfo}
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify probe configuration
 			testcaseEnvInst.Log.Info("Get config map for probes")
@@ -263,7 +263,7 @@ var _ = Describe("indingsep test", func() {
 			testcaseEnvInst.Log.Info("Verify probe configurations on Ingestor pods")
 			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
 			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-			testenv.VerifyFilesInDirectoryOnPod(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+			testenv.VerifyFilesInDirectoryOnPod(ctx, deployment, testcaseEnvInst, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
 		})
 	})
 

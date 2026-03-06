@@ -58,6 +58,11 @@ var _ = Describe("m4appfw test", func() {
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+
+		// Validate test prerequisites early to fail fast
+		err = testenv.ValidateTestPrerequisites(ctx, deployment, testcaseEnvInst)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
+
 		azTestDirIdxc = "m4appfw-idxc-" + testenv.RandomDNSName(4)
 		azTestDirShc = "m4appfw-shc-" + testenv.RandomDNSName(4)
 		appSourceVolumeNameIdxc = "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -206,7 +211,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## INITIAL VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
@@ -219,10 +224,10 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 
 			//############# UPGRADE APPS ################
 			// Delete apps on Azure
@@ -276,7 +281,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## UPGRADE VERIFICATIONS ##########
 			cmAppSourceInfo.CrAppVersion = appVersion
@@ -289,10 +294,10 @@ var _ = Describe("m4appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV2
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 
 		})
 	})
@@ -408,7 +413,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## INITIAL VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
@@ -421,10 +426,10 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 
 			//############# DOWNGRADE APPS ################
 			// Delete V2 apps on Azure
@@ -476,7 +481,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## DOWNGRADE VERIFICATIONS ########
 			cmAppSourceInfo.CrAppVersion = appVersion
@@ -489,10 +494,10 @@ var _ = Describe("m4appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV1
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 
 		})
 	})
@@ -583,7 +588,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// Ingest data on Indexers
 			for i := 1; i <= siteCount; i++ {
@@ -602,10 +607,10 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 
 			//############### SCALING UP ################
 			// Get instance of current Search Head Cluster CR with latest config
@@ -680,14 +685,14 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", indexerName, resultLine["host"].(string))
 
 			//######### SCALING UP VERIFICATIONS ########
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Listing the Search Head cluster pods to exclude them from the 'no pod reset' test as they are expected to be reset after scaling
 			shcPodNames = []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			shcPodNames = append(shcPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, shcPodNames)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, shcPodNames)
 
 			//############### SCALING DOWN ##############
 			// Get instance of current Search Head Cluster CR with latest config
@@ -751,10 +756,10 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", indexerName, resultLine["host"].(string))
 
 			//######### SCALING DOWN VERIFICATIONS ######
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, shcPodNames)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, shcPodNames)
 		})
 	})
 
@@ -825,7 +830,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## INITIAL VERIFICATION #############
 			var idxcPodNames, shcPodNames []string
@@ -836,10 +841,10 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on Azure
@@ -875,7 +880,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## UPGRADE VERIFICATIONS ############
 			cmAppSourceInfo.CrAppVersion = appVersion
@@ -885,10 +890,10 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 		})
 	})
 
@@ -1004,7 +1009,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## INITIAL VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
@@ -1017,10 +1022,10 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 
 			// ############### UPGRADE APPS ################
 
@@ -1120,7 +1125,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// ########## Verify Manual Poll disabled after the check #################
 
@@ -1142,10 +1147,10 @@ var _ = Describe("m4appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV2
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 		})
 	})
 
@@ -1219,7 +1224,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## INITIAL VERIFICATION #############
 			var idxcPodNames, shcPodNames []string
@@ -1230,10 +1235,10 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on Azure
@@ -1270,7 +1275,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// ############ ENABLE MANUAL POLL ############
 			appVersion = "V2"
@@ -1308,7 +1313,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// ########## Verify Manual Poll config map disabled after the poll is triggered #################
 
@@ -1326,10 +1331,10 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 		})
 	})
 
@@ -1457,7 +1462,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############ INITIAL VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
@@ -1470,10 +1475,10 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListLocal, CrAppFileList: localappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListCluster, CrAppFileList: clusterappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on Azure
@@ -1558,10 +1563,10 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfoCluster.CrAppList = appListCluster
 			shcAppSourceInfoCluster.CrAppFileList = clusterappFileList
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 		})
 	})
 
@@ -1915,7 +1920,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
@@ -1926,10 +1931,10 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 		})
 	})
 
@@ -2008,7 +2013,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
@@ -2019,10 +2024,10 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 		})
 	})
 
@@ -2093,7 +2098,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## INITIAL VERIFICATIONS ##########
 			idxcPodNames := testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)
@@ -2103,7 +2108,7 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify repo state on App to be disabled to be 1 (i.e app present on Azure bucket)
 			appName := appListV1[0]
@@ -2206,7 +2211,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## INITIAL VERIFICATION #############
 			var idxcPodNames, shcPodNames []string
@@ -2217,10 +2222,10 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 
 			// Verify status is 'OFF' in config map for Cluster Master and Search Head Cluster
 			testcaseEnvInst.Log.Info("Verify status is 'OFF' in config map for Cluster Master and Search Head Cluster")
@@ -2296,16 +2301,19 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## UPGRADE VERIFICATIONS ############
 			testcaseEnvInst.Log.Info("Verify apps are not updated before the end of AppsRepoPollInterval duration")
 			appVersion = "V1"
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
-			// Wait for the end of AppsRepoPollInterval duration
-			testcaseEnvInst.Log.Info("Wait for the end of AppsRepoPollInterval duration")
-			time.Sleep(2 * time.Minute)
+			// Wait for app repo state to change, indicating poll interval has completed
+			testcaseEnvInst.Log.Info("Wait for app repo state to change after AppsRepoPollInterval")
+			err = testenv.WaitForAppRepoStateChange(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind, appSourceNameIdxc, appListV2, 1, 3*time.Minute)
+			Expect(err).To(Succeed(), "Timed out waiting for Cluster Manager apps to update after poll interval")
+			err = testenv.WaitForAppRepoStateChange(ctx, deployment, testcaseEnvInst, shc.Name, shc.Kind, appSourceNameShc, appListV2, 1, 3*time.Minute)
+			Expect(err).To(Succeed(), "Timed out waiting for Search Head Cluster apps to update after poll interval")
 
 			testcaseEnvInst.Log.Info("Verify apps are updated after the end of AppsRepoPollInterval duration")
 			appVersion = "V2"
@@ -2316,10 +2324,10 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 		})
 	})
 
@@ -2404,7 +2412,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## VERIFICATIONS ##########
 			appVersion = "V1"
@@ -2439,7 +2447,7 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 		})
 	})
 
@@ -2516,7 +2524,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############ INITIAL VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
@@ -2527,7 +2535,7 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 		})
 	})
 
@@ -2609,7 +2617,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
@@ -2620,10 +2628,10 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodResetByUID(ctx, deployment, testcaseEnvInst, splunkPodUIDs, nil)
 		})
 	})
 

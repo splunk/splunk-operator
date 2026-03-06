@@ -69,7 +69,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
-			prevTelemetrySubmissionTime := testenv.GetTelemetryLastSubmissionTime(ctx, deployment)
+			prevTelemetrySubmissionTime := testenv.GetTelemetryLastSubmissionTime(ctx, deployment, testcaseEnvInst)
 			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
@@ -83,8 +83,8 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify telemetry
-			testenv.TriggerTelemetrySubmission(ctx, deployment)
-			testenv.VerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
+			testenv.TriggerTelemetrySubmission(ctx, deployment, testcaseEnvInst)
+			testenv.VerifyTelemetry(ctx, deployment, testcaseEnvInst, prevTelemetrySubmissionTime)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
@@ -100,7 +100,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			indexerCount := 3
 			for i := 0; i < indexerCount; i++ {
 				indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
-				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), indexerPodName, defaultCPULimits)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst, indexerPodName, defaultCPULimits)
 			}
 
 			// Change CPU limits to trigger CR update
@@ -124,14 +124,14 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			// Verify CPU limits on Indexers after updating the CR
 			for i := 0; i < indexerCount; i++ {
 				indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
-				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), indexerPodName, newCPULimits)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst, indexerPodName, newCPULimits)
 			}
 
 			// Verify CPU limits on Search Heads before updating the CR
 			searchHeadCount := 3
 			for i := 0; i < searchHeadCount; i++ {
 				SearchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
-				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), SearchHeadPodName, defaultCPULimits)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst, SearchHeadPodName, defaultCPULimits)
 			}
 
 			// Change CPU limits to trigger CR update
@@ -158,7 +158,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			// Verify CPU limits on Search Heads after updating the CR
 			for i := 0; i < searchHeadCount; i++ {
 				SearchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
-				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), SearchHeadPodName, newCPULimits)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst, SearchHeadPodName, newCPULimits)
 			}
 		})
 	})

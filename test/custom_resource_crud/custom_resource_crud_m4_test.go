@@ -65,7 +65,7 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 
 			// Deploy Multisite Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
-			prevTelemetrySubmissionTime := testenv.GetTelemetryLastSubmissionTime(ctx, deployment)
+			prevTelemetrySubmissionTime := testenv.GetTelemetryLastSubmissionTime(ctx, deployment, testcaseEnvInst)
 			siteCount := 3
 			err := deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
@@ -83,8 +83,8 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify telemetry
-			testenv.TriggerTelemetrySubmission(ctx, deployment)
-			testenv.VerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
+			testenv.TriggerTelemetrySubmission(ctx, deployment, testcaseEnvInst)
+			testenv.VerifyTelemetry(ctx, deployment, testcaseEnvInst, prevTelemetrySubmissionTime)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
@@ -99,7 +99,7 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 			// Verify CPU limits on Indexers before updating the CR
 			for i := 1; i <= siteCount; i++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
-				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), podName, defaultCPULimits)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst, podName, defaultCPULimits)
 			}
 
 			// Change CPU limits to trigger CR update
@@ -132,7 +132,7 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 			// Verify CPU limits after updating the CR
 			for i := 1; i <= siteCount; i++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
-				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), podName, newCPULimits)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst, podName, newCPULimits)
 			}
 		})
 	})

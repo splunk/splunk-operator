@@ -79,7 +79,7 @@ var _ = Describe("Smartstore test", func() {
 			// Check index on pod
 			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			for indexName := range indexVolumeMap {
-				testenv.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName)
+				testenv.VerifyIndexFoundOnPod(ctx, deployment, testcaseEnvInst, podName, indexName)
 			}
 
 			// Ingest data to the index
@@ -92,7 +92,7 @@ var _ = Describe("Smartstore test", func() {
 			// Roll Hot Buckets on the test index by restarting splunk and check for index on S3
 			for indexName := range indexVolumeMap {
 				testenv.RollHotToWarm(ctx, deployment, podName, indexName)
-				testenv.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
+				testenv.VerifyIndexExistsOnS3(ctx, deployment, testcaseEnvInst, indexName, podName)
 			}
 		})
 	})
@@ -126,10 +126,10 @@ var _ = Describe("Smartstore test", func() {
 
 			// Check index on pod
 			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName)
+			testenv.VerifyIndexFoundOnPod(ctx, deployment, testcaseEnvInst, podName, indexName)
 
 			// Check special index configs
-			testenv.VerifyIndexConfigsMatch(ctx, deployment, podName, indexName, specialConfig["MaxGlobalDataSizeMB"], specialConfig["MaxGlobalRawDataSizeMB"])
+			testenv.VerifyIndexConfigsMatch(ctx, deployment, testcaseEnvInst, podName, indexName, specialConfig["MaxGlobalDataSizeMB"], specialConfig["MaxGlobalRawDataSizeMB"])
 
 			// Ingest data to the index
 			logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
@@ -140,25 +140,25 @@ var _ = Describe("Smartstore test", func() {
 			testenv.RollHotToWarm(ctx, deployment, podName, indexName)
 
 			// Check for indexes on S3
-			testenv.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
+			testenv.VerifyIndexExistsOnS3(ctx, deployment, testcaseEnvInst, indexName, podName)
 
 			// Verify Cachemanager Values
 			serverConfPath := "/opt/splunk/etc/apps/splunk-operator/local/server.conf"
 
 			// Validate MaxCacheSizeMB
-			testenv.VerifyConfOnPod(deployment, testcaseEnvInst.GetName(), podName, serverConfPath, "max_cache_size", fmt.Sprint(cacheManagerSmartStoreSpec.MaxCacheSizeMB))
+			testenv.VerifyConfOnPod(deployment, testcaseEnvInst, podName, serverConfPath, "max_cache_size", fmt.Sprint(cacheManagerSmartStoreSpec.MaxCacheSizeMB))
 
 			// Validate EvictionPaddingSizeMB
-			testenv.VerifyConfOnPod(deployment, testcaseEnvInst.GetName(), podName, serverConfPath, "eviction_padding", fmt.Sprint(cacheManagerSmartStoreSpec.EvictionPaddingSizeMB))
+			testenv.VerifyConfOnPod(deployment, testcaseEnvInst, podName, serverConfPath, "eviction_padding", fmt.Sprint(cacheManagerSmartStoreSpec.EvictionPaddingSizeMB))
 
 			// Validate MaxConcurrentDownloads
-			testenv.VerifyConfOnPod(deployment, testcaseEnvInst.GetName(), podName, serverConfPath, "max_concurrent_downloads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentDownloads))
+			testenv.VerifyConfOnPod(deployment, testcaseEnvInst, podName, serverConfPath, "max_concurrent_downloads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentDownloads))
 
 			// Validate MaxConcurrentUploads
-			testenv.VerifyConfOnPod(deployment, testcaseEnvInst.GetName(), podName, serverConfPath, "max_concurrent_uploads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentUploads))
+			testenv.VerifyConfOnPod(deployment, testcaseEnvInst, podName, serverConfPath, "max_concurrent_uploads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentUploads))
 
 			// Validate EvictionPolicy
-			testenv.VerifyConfOnPod(deployment, testcaseEnvInst.GetName(), podName, serverConfPath, "eviction_policy", cacheManagerSmartStoreSpec.EvictionPolicy)
+			testenv.VerifyConfOnPod(deployment, testcaseEnvInst, podName, serverConfPath, "eviction_policy", cacheManagerSmartStoreSpec.EvictionPolicy)
 
 		})
 	})
@@ -198,7 +198,7 @@ var _ = Describe("Smartstore test", func() {
 			// Check index on pod
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
-				testenv.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName)
+				testenv.VerifyIndexFoundOnPod(ctx, deployment, testcaseEnvInst, podName, indexName)
 			}
 
 			// Ingest data to the index
@@ -218,7 +218,7 @@ var _ = Describe("Smartstore test", func() {
 			// Roll index buckets and Check for indexes on S3
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
-				testenv.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
+				testenv.VerifyIndexExistsOnS3(ctx, deployment, testcaseEnvInst, indexName, podName)
 			}
 
 			oldBundleHash := testenv.GetClusterManagerBundleHash(ctx, deployment, "ClusterMaster")
@@ -254,7 +254,7 @@ var _ = Describe("Smartstore test", func() {
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
 				for _, index := range indexList {
-					testenv.VerifyIndexFoundOnPod(ctx, deployment, podName, index)
+					testenv.VerifyIndexFoundOnPod(ctx, deployment, testcaseEnvInst, podName, index)
 				}
 			}
 
@@ -277,7 +277,7 @@ var _ = Describe("Smartstore test", func() {
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
 				testenvInstance.Log.Info("Checking index on S3", "Index Name", indexNameTwo, "Pod Name", podName)
-				testenv.VerifyIndexExistsOnS3(ctx, deployment, indexNameTwo, podName)
+				testenv.VerifyIndexExistsOnS3(ctx, deployment, testcaseEnvInst, indexNameTwo, podName)
 			}
 		})
 	})

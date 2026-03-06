@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
+	gomega "github.com/onsi/gomega"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	wait "k8s.io/apimachinery/pkg/util/wait"
@@ -449,24 +451,52 @@ func WaitForAppPhaseChange(ctx context.Context, deployment *Deployment, testenvI
 }
 
 // AppFrameWorkVerifications will perform several verifications needed between the different steps of App Framework tests
-func AppFrameWorkVerifications(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, appSource []AppSourceInfo, splunkPodAge map[string]time.Time, clusterManagerBundleHash string) string {
+func AppFrameWorkVerifications(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, appSource []AppSourceInfo, splunkPodAge map[string]string, clusterManagerBundleHash string) string {
 	/* Function Steps
-	 * Verify apps 'download' and 'podCopy' states for all CRs
+	 * Verify apps 'download' and 'podCopy' states for all CRs (PARALLELIZED)
 	 * Verify apps packages are deleted from the operator pod for all CRs
-	 * Verify apps 'install' state for all CRs
+	 * Verify apps 'install' state for all CRs (PARALLELIZED)
 	 * Verify apps packages are deleted from the CR pods
 	 * Verify bundle push status
 	 * Verify apps are copied to correct location on CR pods
 	 * Verify apps are installed to correct location on CR pods
 	 */
 
-	// Verify apps 'download' and 'podCopy' states for all CRs
+	// Verify apps 'download' and 'podCopy' states for all CRs IN PARALLEL
+	testenvInstance.Log.Info("Starting parallel verification of app download and podCopy phases across all CRs")
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(appSource)*2)
+
 	for _, phase := range []enterpriseApi.AppPhaseType{enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy} {
-		for _, appSource := range appSource {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify apps '%v' state on CR %v with name %v", phase, appSource.CrKind, appSource.CrName))
-			VerifyAppListPhase(ctx, deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appSource.CrAppFileList)
+		for _, appSourceItem := range appSource {
+			wg.Add(1)
+			go func(as AppSourceInfo, p enterpriseApi.AppPhaseType) {
+				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						errChan <- fmt.Errorf("panic in phase verification for CR %s/%s phase %v: %v", as.CrKind, as.CrName, p, r)
+					}
+				}()
+
+				testenvInstance.Log.Info(fmt.Sprintf("Verify apps '%v' state on CR %v with name %v", p, as.CrKind, as.CrName))
+				verifyCtx, cancel := context.WithTimeout(ctx, deployment.GetTimeout())
+				defer cancel()
+
+				VerifyAppListPhase(verifyCtx, deployment, testenvInstance, as.CrName, as.CrKind, as.CrAppSourceName, p, as.CrAppFileList)
+			}(appSourceItem, phase)
 		}
 	}
+
+	wg.Wait()
+	close(errChan)
+
+	for err := range errChan {
+		if err != nil {
+			testenvInstance.Log.Error(err, "Parallel phase verification failed")
+			gomega.Expect(err).To(gomega.Succeed())
+		}
+	}
+	testenvInstance.Log.Info("Parallel verification of app download and podCopy phases completed successfully")
 
 	// Verify apps packages are deleted from the operator pod for all CRs
 	opPod := GetOperatorPodName(testenvInstance)
@@ -476,11 +506,39 @@ func AppFrameWorkVerifications(ctx context.Context, deployment *Deployment, test
 		VerifyAppsPackageDeletedOnOperatorContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appSource.CrAppFileList, opPath)
 	}
 
-	// Verify apps 'install' state for all CRs
-	for _, appSource := range appSource {
-		testenvInstance.Log.Info(fmt.Sprintf("Verify apps '%v' state on CR %v with name %v", enterpriseApi.PhaseInstall, appSource.CrKind, appSource.CrName))
-		VerifyAppListPhase(ctx, deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, enterpriseApi.PhaseInstall, appSource.CrAppFileList)
+	// Verify apps 'install' state for all CRs IN PARALLEL
+	testenvInstance.Log.Info("Starting parallel verification of app install phase across all CRs")
+	wg = sync.WaitGroup{}
+	errChan = make(chan error, len(appSource))
+
+	for _, appSourceItem := range appSource {
+		wg.Add(1)
+		go func(as AppSourceInfo) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					errChan <- fmt.Errorf("panic in install phase verification for CR %s/%s: %v", as.CrKind, as.CrName, r)
+				}
+			}()
+
+			testenvInstance.Log.Info(fmt.Sprintf("Verify apps '%v' state on CR %v with name %v", enterpriseApi.PhaseInstall, as.CrKind, as.CrName))
+			verifyCtx, cancel := context.WithTimeout(ctx, deployment.GetTimeout())
+			defer cancel()
+
+			VerifyAppListPhase(verifyCtx, deployment, testenvInstance, as.CrName, as.CrKind, as.CrAppSourceName, enterpriseApi.PhaseInstall, as.CrAppFileList)
+		}(appSourceItem)
 	}
+
+	wg.Wait()
+	close(errChan)
+
+	for err := range errChan {
+		if err != nil {
+			testenvInstance.Log.Error(err, "Parallel install phase verification failed")
+			gomega.Expect(err).To(gomega.Succeed())
+		}
+	}
+	testenvInstance.Log.Info("Parallel verification of app install phase completed successfully")
 
 	// Verify apps packages are deleted from the CR pods
 	for _, appSource := range appSource {

@@ -29,16 +29,20 @@ import (
 
 	gomega "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	wait "k8s.io/apimachinery/pkg/util/wait"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // PodDetailsStruct captures output of kubectl get pods podname -o json
 type PodDetailsStruct struct {
+	Metadata struct {
+		UID string `json:"uid"`
+	} `json:"metadata"`
+
 	Spec struct {
 		Containers []struct {
 			Resources struct {
@@ -378,42 +382,42 @@ func VerifyLMConfiguredOnPod(ctx context.Context, deployment *Deployment, podNam
 }
 
 // VerifyServiceAccountConfiguredOnPod check if given service account is configured on given pod
-func VerifyServiceAccountConfiguredOnPod(deployment *Deployment, ns string, podName string, serviceAccount string) {
+func VerifyServiceAccountConfiguredOnPod(deployment *Deployment, testenvInstance *TestCaseEnv, ns string, podName string, serviceAccount string) {
 	gomega.Consistently(func() bool {
 		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
 		if err != nil {
 			cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
-			logf.Log.Error(err, "Failed to execute command", "command", cmd)
+			testenvInstance.Log.Error(err, "Failed to execute command", "command", cmd)
 			return false
 		}
 		restResponse := PodDetailsStruct{}
 		err = json.Unmarshal([]byte(output), &restResponse)
 		if err != nil {
-			logf.Log.Error(err, "Failed to parse cluster Search heads")
+			testenvInstance.Log.Error(err, "Failed to parse cluster Search heads")
 			return false
 		}
-		logf.Log.Info("Service Account on Pod", "FOUND", restResponse.Spec.ServiceAccount, "EXPECTED", serviceAccount)
+		testenvInstance.Log.Info("Service Account on Pod", "found", restResponse.Spec.ServiceAccount, "expected", serviceAccount)
 		return strings.Contains(serviceAccount, restResponse.Spec.ServiceAccount)
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
 }
 
 // VerifyIndexFoundOnPod verify index found on a given POD
-func VerifyIndexFoundOnPod(ctx context.Context, deployment *Deployment, podName string, indexName string) {
+func VerifyIndexFoundOnPod(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, podName string, indexName string) {
 	gomega.Eventually(func() bool {
 		indexFound, _ := GetIndexOnPod(ctx, deployment, podName, indexName)
-		logf.Log.Info("Checking status of index on pod", "PODNAME", podName, "INDEX NAME", indexName, "STATUS", indexFound)
+		testenvInstance.Log.Info("Checking status of index on pod", "podName", podName, "indexName", indexName, "status", indexFound)
 		return indexFound
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
 // VerifyIndexConfigsMatch verify index specific config
-func VerifyIndexConfigsMatch(ctx context.Context, deployment *Deployment, podName string, indexName string, maxGlobalDataSizeMB int, maxGlobalRawDataSizeMB int) {
+func VerifyIndexConfigsMatch(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, podName string, indexName string, maxGlobalDataSizeMB int, maxGlobalRawDataSizeMB int) {
 	gomega.Consistently(func() bool {
 		indexFound, data := GetIndexOnPod(ctx, deployment, podName, indexName)
-		logf.Log.Info("Checking status of index on pod", "PODNAME", podName, "INDEX NAME", indexName, "STATUS", indexFound)
+		testenvInstance.Log.Info("Checking status of index on pod", "podName", podName, "indexName", indexName, "status", indexFound)
 		if indexFound {
 			if data.Content.MaxGlobalDataSizeMB == maxGlobalDataSizeMB && data.Content.MaxGlobalRawDataSizeMB == maxGlobalRawDataSizeMB {
-				logf.Log.Info("Checking index configs", "MaxGlobalDataSizeMB", data.Content.MaxGlobalDataSizeMB, "MaxGlobalRawDataSizeMB", data.Content.MaxGlobalRawDataSizeMB)
+				testenvInstance.Log.Info("Checking index configs", "maxGlobalDataSizeMB", data.Content.MaxGlobalDataSizeMB, "maxGlobalRawDataSizeMB", data.Content.MaxGlobalRawDataSizeMB)
 				return true
 			}
 		}
@@ -422,13 +426,13 @@ func VerifyIndexConfigsMatch(ctx context.Context, deployment *Deployment, podNam
 }
 
 // VerifyIndexExistsOnS3 Verify Index Exists on S3
-func VerifyIndexExistsOnS3(ctx context.Context, deployment *Deployment, indexName string, podName string) {
+func VerifyIndexExistsOnS3(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, indexName string, podName string) {
 	gomega.Eventually(func() bool {
 		indexFound := CheckPrefixExistsOnS3(indexName)
-		logf.Log.Info("Checking Index on S3", "INDEX NAME", indexName, "STATUS", indexFound)
+		testenvInstance.Log.Info("Checking Index on S3", "indexName", indexName, "status", indexFound)
 		// During testing found some false failure. Rolling index buckets again to ensure data is pushed to remote storage
 		if !indexFound {
-			logf.Log.Info("Index NOT found. Rolling buckets again", "Index Name", indexName)
+			testenvInstance.Log.Info("Index NOT found. Rolling buckets again", "indexName", indexName)
 			RollHotToWarm(ctx, deployment, podName, indexName)
 		}
 		return indexFound
@@ -436,27 +440,27 @@ func VerifyIndexExistsOnS3(ctx context.Context, deployment *Deployment, indexNam
 }
 
 // VerifyRollingRestartFinished verify no rolling restart is active
-func VerifyRollingRestartFinished(ctx context.Context, deployment *Deployment) {
+func VerifyRollingRestartFinished(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	gomega.Eventually(func() bool {
 		rollingRestartStatus := CheckRollingRestartStatus(ctx, deployment)
-		logf.Log.Info("Rolling Restart Status", "Active", rollingRestartStatus)
+		testenvInstance.Log.Info("Rolling Restart Status", "active", rollingRestartStatus)
 		return rollingRestartStatus
 	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(true))
 }
 
 // VerifyConfOnPod Verify give conf and value on config file on pod
-func VerifyConfOnPod(deployment *Deployment, namespace string, podName string, confFilePath string, config string, value string) {
+func VerifyConfOnPod(deployment *Deployment, testenvInstance *TestCaseEnv, podName string, confFilePath string, config string, value string) {
 	gomega.Consistently(func() bool {
-		confLine, err := GetConfLineFromPod(podName, confFilePath, namespace, config, "", false)
+		confLine, err := GetConfLineFromPod(podName, confFilePath, testenvInstance.GetName(), config, "", false)
 		if err != nil {
-			logf.Log.Error(err, "Failed to get config on pod")
+			testenvInstance.Log.Error(err, "Failed to get config on pod")
 			return false
 		}
 		if strings.Contains(confLine, config) && strings.Contains(confLine, value) {
-			logf.Log.Info("Config found", "Config", config, "Value", value, "Conf Line", confLine)
+			testenvInstance.Log.Info("Config found", "config", config, "value", value, "confLine", confLine)
 			return true
 		}
-		logf.Log.Info("Config NOT found")
+		testenvInstance.Log.Info("Config NOT found")
 		return false
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
 }
@@ -618,18 +622,19 @@ func VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deploym
 }
 
 // VerifyCPULimits verifies value of CPU limits is as expected
-func VerifyCPULimits(deployment *Deployment, ns string, podName string, expectedCPULimits string) {
+func VerifyCPULimits(deployment *Deployment, testenvInstance *TestCaseEnv, podName string, expectedCPULimits string) {
 	gomega.Eventually(func() bool {
+		ns := testenvInstance.GetName()
 		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
 		if err != nil {
 			cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
-			logf.Log.Error(err, "Failed to execute command", "command", cmd)
+			testenvInstance.Log.Error(err, "Failed to execute command", "command", cmd)
 			return false
 		}
 		restResponse := PodDetailsStruct{}
 		err = json.Unmarshal([]byte(output), &restResponse)
 		if err != nil {
-			logf.Log.Error(err, "Failed to parse JSON")
+			testenvInstance.Log.Error(err, "Failed to parse JSON")
 			return false
 		}
 		result := false
@@ -637,7 +642,7 @@ func VerifyCPULimits(deployment *Deployment, ns string, podName string, expected
 		for i := 0; i < len(restResponse.Spec.Containers); i++ {
 			if strings.Contains(restResponse.Spec.Containers[0].Resources.Limits.CPU, expectedCPULimits) {
 				result = true
-				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[0].Resources.Limits.CPU, "EXPECTED", expectedCPULimits)
+				testenvInstance.Log.Info("Verifying CPU limits: ", "pod", podName, "found", restResponse.Spec.Containers[0].Resources.Limits.CPU, "expected", expectedCPULimits)
 			}
 		}
 		return result
@@ -645,18 +650,19 @@ func VerifyCPULimits(deployment *Deployment, ns string, podName string, expected
 }
 
 // VerifyResourceConstraints verifies value of CPU limits is as expected
-func VerifyResourceConstraints(deployment *Deployment, ns string, podName string, res corev1.ResourceRequirements) {
+func VerifyResourceConstraints(deployment *Deployment, testenvInstance *TestCaseEnv, podName string, res corev1.ResourceRequirements) {
 	gomega.Eventually(func() bool {
+		ns := testenvInstance.GetName()
 		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
 		if err != nil {
 			cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
-			logf.Log.Error(err, "Failed to execute command", "command", cmd)
+			testenvInstance.Log.Error(err, "Failed to execute command", "command", cmd)
 			return false
 		}
 		restResponse := PodDetailsStruct{}
 		err = json.Unmarshal([]byte(output), &restResponse)
 		if err != nil {
-			logf.Log.Error(err, "Failed to parse JSON")
+			testenvInstance.Log.Error(err, "Failed to parse JSON")
 			return false
 		}
 		result := false
@@ -664,22 +670,22 @@ func VerifyResourceConstraints(deployment *Deployment, ns string, podName string
 		for i := 0; i < len(restResponse.Spec.Containers); i++ {
 			if strings.Contains(restResponse.Spec.Containers[i].Resources.Limits.CPU, res.Limits.Cpu().String()) {
 				result = true
-				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[0].Resources.Limits.CPU, "EXPECTED", res.Limits.Cpu().String())
+				testenvInstance.Log.Info("Verifying CPU limits: ", "pod", podName, "found", restResponse.Spec.Containers[0].Resources.Limits.CPU, "expected", res.Limits.Cpu().String())
 			}
 
 			if strings.Contains(restResponse.Spec.Containers[i].Resources.Limits.Memory, res.Limits.Memory().String()) {
 				result = true
-				logf.Log.Info("Verifying Memory limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[i].Resources.Limits.Memory, "EXPECTED", res.Limits.Memory().String())
+				testenvInstance.Log.Info("Verifying Memory limits: ", "pod", podName, "found", restResponse.Spec.Containers[i].Resources.Limits.Memory, "expected", res.Limits.Memory().String())
 			}
 
 			if strings.Contains(restResponse.Spec.Containers[i].Resources.Requests.CPU, res.Requests.Cpu().String()) {
 				result = true
-				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[i].Resources.Requests.CPU, "EXPECTED", res.Requests.Cpu().String())
+				testenvInstance.Log.Info("Verifying CPU limits: ", "pod", podName, "found", restResponse.Spec.Containers[i].Resources.Requests.CPU, "expected", res.Requests.Cpu().String())
 			}
 
 			if strings.Contains(restResponse.Spec.Containers[i].Resources.Requests.Memory, res.Requests.Memory().String()) {
 				result = true
-				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[i].Resources.Requests.Memory, "EXPECTED", res.Requests.Memory().String())
+				testenvInstance.Log.Info("Verifying CPU limits: ", "pod", podName, "found", restResponse.Spec.Containers[i].Resources.Requests.Memory, "expected", res.Requests.Memory().String())
 			}
 		}
 		return result
@@ -852,10 +858,24 @@ func VerifyPVCsPerDeployment(deployment *Deployment, testenvInstance *TestCaseEn
 
 // VerifyAppInstalled verify that app of specific version is installed. Method assumes that app is installed in all CR's in namespace
 func VerifyAppInstalled(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pods []string, apps []string, versionCheck bool, statusCheck string, checkupdated bool, clusterWideInstall bool) {
+	// Fail-fast test: check first pod and first app before checking all pods
+	if len(pods) > 0 && len(apps) > 0 {
+		testenvInstance.Log.Info("Running fail-fast test on first pod before checking all pods", "pod", pods[0], "app", apps[0])
+		firstPod := pods[0]
+		firstApp := apps[0]
+
+		status, versionInstalled, err := GetPodAppStatus(ctx, deployment, firstPod, ns, firstApp, clusterWideInstall)
+		if err != nil {
+			gomega.Expect(err).To(gomega.Succeed(), fmt.Sprintf("Smoke test failed - app %s not accessible on pod %s. This indicates a fundamental issue. Skipping remaining checks.", firstApp, firstPod))
+		}
+		testenvInstance.Log.Info("Smoke test passed - app is accessible", "pod", firstPod, "app", firstApp, "status", status, "version", versionInstalled)
+		testenvInstance.Log.Info("Proceeding with full verification of all pods and apps")
+	}
+
 	for _, podName := range pods {
 		for _, appName := range apps {
 			status, versionInstalled, err := GetPodAppStatus(ctx, deployment, podName, ns, appName, clusterWideInstall)
-			logf.Log.Info("App details", "App", appName, "Status", status, "Version", versionInstalled, "Error", err)
+			testenvInstance.Log.Info("App details", "app", appName, "status", status, "version", versionInstalled, "error", err)
 			gomega.Expect(err).To(gomega.Succeed(), "Unable to get app status on pod ")
 			comparison := strings.EqualFold(status, statusCheck)
 			//Check the app is installed on specific pods and un-installed on others for cluster-wide install
@@ -863,7 +883,7 @@ func VerifyAppInstalled(ctx context.Context, deployment *Deployment, testenvInst
 			if clusterWideInstall {
 				if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
 					check = true
-					testenvInstance.Log.Info("App Install Check", "Pod", podName, "App", appName, "Expected", check, "Found", comparison, "Scope:cluster", clusterWideInstall)
+					testenvInstance.Log.Info("App Install Check", "pod", podName, "app", appName, "expected", check, "found", comparison, "scope:cluster", clusterWideInstall)
 					gomega.Expect(comparison).Should(gomega.Equal(check))
 				}
 			} else {
@@ -873,7 +893,7 @@ func VerifyAppInstalled(ctx context.Context, deployment *Deployment, testenvInst
 				} else {
 					check = true
 				}
-				testenvInstance.Log.Info("App Install Check", "Pod", podName, "App", appName, "Expected", check, "Found", comparison, "Scope:cluster", clusterWideInstall)
+				testenvInstance.Log.Info("App Install Check", "pod", podName, "app", appName, "expected", check, "found", comparison, "scope:cluster", clusterWideInstall)
 				gomega.Expect(comparison).Should(gomega.Equal(check))
 			}
 
@@ -886,7 +906,7 @@ func VerifyAppInstalled(ctx context.Context, deployment *Deployment, testenvInst
 					} else {
 						expectedVersion = AppInfo[appName]["V1"]
 					}
-					testenvInstance.Log.Info("Verify app", "On pod", podName, "App name", appName, "Expected version", expectedVersion, "Version installed", versionInstalled, "Updated", checkupdated)
+					testenvInstance.Log.Info("Verify app", "pod", podName, "app", appName, "expectedVersion", expectedVersion, "versionInstalled", versionInstalled, "updated", checkupdated)
 					gomega.Expect(versionInstalled).Should(gomega.Equal(expectedVersion))
 				}
 			}
@@ -922,7 +942,7 @@ func VerifyAppsInFolder(ctx context.Context, deployment *Deployment, testenvInst
 		for _, app := range apps {
 			folderName := app + "/"
 			found := CheckStringInSlice(appList, folderName)
-			logf.Log.Info("App check", "On pod", podName, "check app", folderName, "is in path", path, "Status", found)
+			testenvInstance.Log.Info("App check", "pod", podName, "folderName", folderName, "path", path, "status", found)
 			if found != checkAppDirectory {
 				return false
 			}
@@ -1124,24 +1144,20 @@ func VerifyDeployerBundlePush(ctx context.Context, deployment *Deployment, teste
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
-// VerifyNoPodReset verify that no pod reset during App install using phase3 framework
-func VerifyNoPodReset(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, podStartTimeMap map[string]time.Time, podToSkip []string) {
-	if podStartTimeMap == nil {
-		testenvInstance.Log.Info("podStartTimeMap is empty. Skipping validation")
+// VerifyNoPodResetByUID verify that no pod reset during App install by comparing pod UIDs
+func VerifyNoPodResetByUID(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, podUIDMap map[string]string, podToSkip []string) {
+	if podUIDMap == nil {
+		testenvInstance.Log.Info("podUIDMap is empty. Skipping validation")
 	} else {
-		// Get current Age on all splunk pods and compare with previous
-		currentSplunkPodAge := GetPodsStartTime(ns)
-		for podName, currentpodAge := range currentSplunkPodAge {
+		currentSplunkPodUIDs := GetPodUIDs(testenvInstance.GetName())
+		for podName, currentUID := range currentSplunkPodUIDs {
 			if strings.Contains(podName, "monitoring-console") {
 				continue
 			}
-			// Only compare if the pod was present in previous pod iteration
-			testenvInstance.Log.Info("Checking Pod reset for Pod Name", "PodName", podName, "Current Pod Age", currentpodAge)
-			if _, ok := podStartTimeMap[podName]; ok {
-				// Check if pod needs to be skipped
+			testenvInstance.Log.Info("Checking Pod reset for Pod Name", "podName", podName, "currentUID", currentUID)
+			if previousUID, ok := podUIDMap[podName]; ok {
 				if !CheckStringInSlice(podToSkip, podName) {
-					podReset := currentpodAge.Equal(podStartTimeMap[podName])
-					gomega.Expect(podReset).To(gomega.Equal(true), "Pod reset was detected. Pod Name %s. Current Pod Start Time %d. Previous Pod Start Time %d", podName, currentpodAge, podStartTimeMap[podName])
+					gomega.Expect(currentUID).To(gomega.Equal(previousUID), "Pod reset was detected. Pod Name %s. Current Pod UID %s. Previous Pod UID %s", podName, currentUID, previousUID)
 				}
 			}
 		}
@@ -1162,7 +1178,7 @@ func WaitforAppInstallState(ctx context.Context, deployment *Deployment, testenv
 	for _, podName := range podNames {
 		gomega.Eventually(func() string {
 			status, _, err := GetPodAppStatus(ctx, deployment, podName, ns, appName, clusterWideInstall)
-			logf.Log.Info("App details", "App", appName, "Status", status, "Error", err, "podName", podName)
+			testenvInstance.Log.Info("App details", "app", appName, "status", status, "error", err, "podName", podName)
 			return status
 		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(strings.ToUpper(newState)))
 	}
@@ -1197,7 +1213,7 @@ func VerifyIsDeploymentInProgressFlagIsSet(ctx context.Context, deployment *Depl
 }
 
 // VerifyFilesInDirectoryOnPod verify that files are present in folder.
-func VerifyFilesInDirectoryOnPod(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, podNames []string, files []string, path string, checkDirectory bool, checkPresent bool) {
+func VerifyFilesInDirectoryOnPod(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, podNames []string, files []string, path string, checkDirectory bool, checkPresent bool) {
 	for _, podName := range podNames {
 		gomega.Eventually(func() bool {
 			// Using checkDirectory here to get all files in case of negative check.  GetDirsOrFilesInPath  will return files/directory when checkDirecotry is FALSE
@@ -1205,7 +1221,7 @@ func VerifyFilesInDirectoryOnPod(ctx context.Context, deployment *Deployment, te
 			gomega.Expect(err).To(gomega.Succeed(), "Unable to get files on pod", "Pod", podName)
 			for _, file := range files {
 				found := CheckStringInSlice(filelist, file)
-				logf.Log.Info("File check", "On pod", podName, "Filename", file, "is in path", path, "Status", found)
+				testenvInstance.Log.Info("File check", "pod", podName, "filename", file, "path", path, "status", found)
 				if found != checkPresent {
 					return false
 				}
@@ -1215,7 +1231,7 @@ func VerifyFilesInDirectoryOnPod(ctx context.Context, deployment *Deployment, te
 	}
 }
 
-func GetTelemetryLastSubmissionTime(ctx context.Context, deployment *Deployment) string {
+func GetTelemetryLastSubmissionTime(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) string {
 	const (
 		configMapName = "splunk-operator-manager-telemetry"
 		statusKey     = "status"
@@ -1227,32 +1243,32 @@ func GetTelemetryLastSubmissionTime(ctx context.Context, deployment *Deployment)
 	cm := &corev1.ConfigMap{}
 	err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: configMapName, Namespace: "splunk-operator"}, cm)
 	if err != nil {
-		logf.Log.Error(err, "GetTelemetryLastSubmissionTime: failed to retrieve configmap")
+		testenvInstance.Log.Error(err, "GetTelemetryLastSubmissionTime: failed to retrieve configmap")
 		return ""
 	}
 
 	statusVal, ok := cm.Data[statusKey]
 	if !ok || statusVal == "" {
-		logf.Log.Info("GetTelemetryLastSubmissionTime: failed to retrieve status")
+		testenvInstance.Log.Info("GetTelemetryLastSubmissionTime: failed to retrieve status")
 		return ""
 	}
-	logf.Log.Info("GetTelemetryLastSubmissionTime: retrieved status", "status", statusVal)
+	testenvInstance.Log.Info("GetTelemetryLastSubmissionTime: retrieved status", "status", statusVal)
 
 	var status telemetryStatus
 	if err := json.Unmarshal([]byte(statusVal), &status); err != nil {
-		logf.Log.Error(err, "GetTelemetryLastSubmissionTime: failed to unmarshal status", "statusVal", statusVal)
+		testenvInstance.Log.Error(err, "GetTelemetryLastSubmissionTime: failed to unmarshal status", "status", statusVal)
 		return ""
 	}
 	return status.LastTransmission
 }
 
 // VerifyTelemetry checks that the telemetry ConfigMap has a non-empty lastTransmission field in its status key.
-func VerifyTelemetry(ctx context.Context, deployment *Deployment, prevVal string) {
-	logf.Log.Info("VerifyTelemetry: start")
+func VerifyTelemetry(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, prevVal string) {
+	testenvInstance.Log.Info("VerifyTelemetry: start")
 	gomega.Eventually(func() bool {
-		currentVal := GetTelemetryLastSubmissionTime(ctx, deployment)
+		currentVal := GetTelemetryLastSubmissionTime(ctx, deployment, testenvInstance)
 		if currentVal != "" && currentVal != prevVal {
-			logf.Log.Info("VerifyTelemetry: success", "previous", prevVal, "current", currentVal)
+			testenvInstance.Log.Info("VerifyTelemetry: success", "previous", prevVal, "current", currentVal)
 			return true
 		}
 		return false
@@ -1260,7 +1276,7 @@ func VerifyTelemetry(ctx context.Context, deployment *Deployment, prevVal string
 }
 
 // TriggerTelemetrySubmission updates or adds the 'test_submission' key in the telemetry ConfigMap with a JSON value containing a random number.
-func TriggerTelemetrySubmission(ctx context.Context, deployment *Deployment) {
+func TriggerTelemetrySubmission(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	const (
 		configMapName = "splunk-operator-manager-telemetry"
 		testKey       = "test_submission"
@@ -1273,15 +1289,15 @@ func TriggerTelemetrySubmission(ctx context.Context, deployment *Deployment) {
 	// Create the JSON value
 	jsonValue, err := json.Marshal(map[string]int{"value": randomNumber})
 	if err != nil {
-		logf.Log.Error(err, "Failed to marshal JSON value")
+		testenvInstance.Log.Error(err, "Failed to marshal JSON value")
 		return
 	}
 
-	// Update the ConfigMap
+	// Wait for ConfigMap to exist before updating
 	cm := &corev1.ConfigMap{}
-	err = deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: configMapName, Namespace: "splunk-operator"}, cm)
+	err = WaitForResourceToExist(ctx, deployment, configMapName, "splunk-operator", cm, 30*time.Second, testenvInstance)
 	if err != nil {
-		logf.Log.Error(err, "Failed to get ConfigMap")
+		testenvInstance.Log.Error(err, "Failed to wait for ConfigMap to exist")
 		return
 	}
 
@@ -1289,11 +1305,11 @@ func TriggerTelemetrySubmission(ctx context.Context, deployment *Deployment) {
 	cm.Data[testKey] = string(jsonValue)
 	err = deployment.testenv.GetKubeClient().Update(ctx, cm)
 	if err != nil {
-		logf.Log.Error(err, "Failed to update ConfigMap")
+		testenvInstance.Log.Error(err, "Failed to update ConfigMap")
 		return
 	}
 
-	logf.Log.Info("Successfully updated telemetry ConfigMap", "key", testKey, "value", jsonValue)
+	testenvInstance.Log.Info("Successfully updated telemetry ConfigMap", "key", testKey, "value", jsonValue)
 }
 
 // WaitForEvent waits for an event instead of relying on time
@@ -1426,4 +1442,99 @@ func WaitForPodExecSuccess(ctx context.Context, deployment *Deployment, podName 
 		return err == nil, nil
 	})
 	return stdout, err
+}
+
+// ValidateTestPrerequisites performs early validation checks to fail fast before long operations
+// This saves time by catching configuration errors immediately instead of after minutes of waiting
+func ValidateTestPrerequisites(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) error {
+	testenvInstance.Log.Info("Validating test prerequisites for fail-fast behavior")
+
+	ns := &corev1.Namespace{}
+	if err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: testenvInstance.GetName()}, ns); err != nil {
+		return fmt.Errorf("namespace validation failed - namespace '%s' does not exist: %w", testenvInstance.GetName(), err)
+	}
+	testenvInstance.Log.Info("Namespace exists", "namespace", testenvInstance.GetName())
+
+	operatorPod := GetOperatorPodName(testenvInstance)
+	if operatorPod == "" {
+		return fmt.Errorf("operator pod not found in namespace '%s' - cannot proceed with test", testenvInstance.GetName())
+	}
+	testenvInstance.Log.Info("Operator pod found", "pod", operatorPod)
+
+	pod := &corev1.Pod{}
+	if err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: operatorPod, Namespace: testenvInstance.GetName()}, pod); err != nil {
+		return fmt.Errorf("operator pod '%s' exists but cannot be retrieved: %w", operatorPod, err)
+	}
+
+	if pod.Status.Phase != corev1.PodRunning {
+		return fmt.Errorf("operator pod '%s' is not running (current phase: %s) - cannot proceed with test", operatorPod, pod.Status.Phase)
+	}
+	testenvInstance.Log.Info("Operator pod is running", "pod", operatorPod, "phase", pod.Status.Phase)
+
+	testenvInstance.Log.Info("All test prerequisites validated successfully")
+	return nil
+}
+
+// WaitForResourceToExist waits for a Kubernetes resource to exist before proceeding with verification
+// This provides fail-fast behavior when resources haven't been created yet
+func WaitForResourceToExist(ctx context.Context, deployment *Deployment, name, namespace string, obj client.Object, timeout time.Duration, testenvInstance *TestCaseEnv) error {
+	return wait.PollUntilContextTimeout(ctx, 1*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, obj)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				testenvInstance.Log.Info("Resource not found yet", "name", name, "namespace", namespace)
+				return false, nil
+			}
+			testenvInstance.Log.Error(err, "Error checking resource existence", "name", name, "namespace", namespace)
+			return false, err
+		}
+		testenvInstance.Log.Info("Resource exists", "name", name, "namespace", namespace)
+		return true, nil
+	})
+}
+
+// WaitForAppRepoStateChange waits for app repo state to change to expected value, indicating poll interval has completed
+// This replaces time.Sleep calls that wait for AppsRepoPollInterval to expire
+func WaitForAppRepoStateChange(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, crName, crKind, appSourceName string, appList []string, expectedRepoState int, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		default:
+		}
+
+		allAppsReady := true
+		for _, appName := range appList {
+			lookupAppName := appName
+			if appInfo, ok := AppInfo[appName]; ok {
+				if appFileName, ok := appInfo["filename"]; ok && appFileName != "" {
+					lookupAppName = appFileName
+				}
+			}
+
+			appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, crName, crKind, appSourceName, lookupAppName)
+			if err != nil {
+				testenvInstance.Log.Info("Failed to get app deployment info while waiting for repo state change", "app", appName, "error", err)
+				return false, nil
+			}
+
+			if appDeploymentInfo.AppName == "" {
+				testenvInstance.Log.Info("App deployment info not found yet", "app", appName)
+				allAppsReady = false
+				continue
+			}
+
+			currentRepoState := int(appDeploymentInfo.RepoState)
+			if currentRepoState != expectedRepoState {
+				testenvInstance.Log.Info("App repo state not yet at expected value", "app", appName, "current", currentRepoState, "expected", expectedRepoState)
+				allAppsReady = false
+			}
+		}
+
+		if allAppsReady {
+			testenvInstance.Log.Info("All apps reached expected repo state", "count", len(appList), "repoState", expectedRepoState)
+			return true, nil
+		}
+		return false, nil
+	})
 }

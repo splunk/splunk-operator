@@ -104,7 +104,7 @@ var _ = Describe("Licensemanager test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
 			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName()}
 			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-			testenv.VerifyFilesInDirectoryOnPod(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+			testenv.VerifyFilesInDirectoryOnPod(ctx, deployment, testcaseEnvInst, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
 
 			// Verify LM is configured on standalone instance
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
