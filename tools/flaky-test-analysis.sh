@@ -3,13 +3,14 @@
 # Download JUnit test report artifacts from GitHub Actions and run flaky test detection.
 #
 # Usage:
-#   ./tools/flaky-test-analysis.sh [start-date] [end-date] [--dry-run] [--skip-analysis]
+#   ./tools/flaky-test-analysis.sh [start-date] [end-date] [--branch <name>] [--dry-run] [--skip-analysis]
 #
 # Dates default to the last 7 full days (excluding today) if not provided.
 #
 # Examples:
 #   ./tools/flaky-test-analysis.sh                          # last 7 full days
 #   ./tools/flaky-test-analysis.sh 2026-02-01 2026-02-26
+#   ./tools/flaky-test-analysis.sh --branch develop         # only runs on develop
 #   ./tools/flaky-test-analysis.sh --dry-run                # preview only
 #   ./tools/flaky-test-analysis.sh --skip-analysis          # download only, no flaky detection
 #
@@ -31,11 +32,20 @@ fi
 
 DRY_RUN="${DRY_RUN:-false}"
 SKIP_ANALYSIS="${SKIP_ANALYSIS:-false}"
+BRANCH="${BRANCH:-}"
 START_DATE="${START_DATE:-}"
 END_DATE="${END_DATE:-}"
 
+_next_is_branch=false
 for arg in "$@"; do
-  if [[ "$arg" == "--dry-run" ]]; then
+  if [[ "$_next_is_branch" == "true" ]]; then
+    BRANCH="$arg"
+    _next_is_branch=false
+  elif [[ "$arg" == "--branch" ]]; then
+    _next_is_branch=true
+  elif [[ "$arg" == --branch=* ]]; then
+    BRANCH="${arg#--branch=}"
+  elif [[ "$arg" == "--dry-run" ]]; then
     DRY_RUN=true
   elif [[ "$arg" == "--skip-analysis" ]]; then
     SKIP_ANALYSIS=true
@@ -66,11 +76,18 @@ fi
 
 echo "Repository:  $REPO"
 echo "Date range:  $START_DATE .. $END_DATE"
+if [[ -n "$BRANCH" ]]; then
+  echo "Branch:      $BRANCH"
+fi
 echo "Output:      $OUTPUT_DIR"
 echo ""
 
-ART_FILTER=".artifacts[] | select(.name | test(\"${ARTIFACT_PATTERN}\")) | select(.expired == false)"
-DATE_FILTER="select(.created_at >= \"${START_DATE}T00:00:00Z\" and .created_at <= \"${END_DATE}T23:59:59Z\")"
+BRANCH_FILTER=""
+if [[ -n "$BRANCH" ]]; then
+  BRANCH_FILTER="| select(.workflow_run.head_branch == \"${BRANCH}\")"
+fi
+ART_FILTER=".artifacts[] | select(.name | test(\"${ARTIFACT_PATTERN}\")) | select(.expired == false) ${BRANCH_FILTER}"
+DATE_FI LTER="select(.created_at >= \"${START_DATE}T00:00:00Z\" and .created_at <= \"${END_DATE}T23:59:59Z\")"
 
 echo "Fetching artifact list..."
 
