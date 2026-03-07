@@ -553,7 +553,8 @@ func validateNamespaceScopedSecrets(scopedLog interface {
 	Error(err error, msg string, keysAndValues ...interface{})
 }, secret *corev1.Secret) error {
 	if secret.Data == nil {
-		return fmt.Errorf("secret data is nil for namespace scoped secret %s", secret.GetName())
+		scopedLog.Info("Secret data is nil for namespace scoped secret")
+		return nil
 	}
 
 	// Validate each documented secret token type
