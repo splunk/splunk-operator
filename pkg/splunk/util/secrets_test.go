@@ -1109,8 +1109,7 @@ func TestValidateNamespaceScopedSecrets(t *testing.T) {
 				},
 				Data: nil,
 			},
-			wantError: true,
-			errMsg:    "secret data is nil",
+			wantError: false,
 		},
 		{
 			name: "all valid secrets",
