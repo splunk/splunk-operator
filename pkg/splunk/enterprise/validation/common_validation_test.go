@@ -181,6 +181,7 @@ func TestValidateAppFramework(t *testing.T) {
 		name         string
 		appConfig    *enterpriseApi.AppFrameworkSpec
 		wantErrCount int
+		wantErrField string
 	}{
 		{
 			name:         "empty app framework",
@@ -226,6 +227,123 @@ func TestValidateAppFramework(t *testing.T) {
 			},
 			wantErrCount: 1,
 		},
+		// appsRepoPollInterval validation tests
+		{
+			name: "appsRepoPollInterval - 0 is valid (disabled)",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: 0,
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "appsRepoPollInterval - 60 is valid (minimum)",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: 60,
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "appsRepoPollInterval - 3600 is valid (1 hour)",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: 3600,
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "appsRepoPollInterval - 86400 is valid (maximum, 1 day)",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: 86400,
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "appsRepoPollInterval - negative value is invalid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: -1,
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.appsRepoPollIntervalSeconds",
+		},
+		{
+			name: "appsRepoPollInterval - 1 is invalid (between 0 and 60)",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: 1,
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.appsRepoPollIntervalSeconds",
+		},
+		{
+			name: "appsRepoPollInterval - 59 is invalid (between 0 and 60)",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: 59,
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.appsRepoPollIntervalSeconds",
+		},
+		{
+			name: "appsRepoPollInterval - 86401 is invalid (exceeds maximum)",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: 86401,
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.appsRepoPollIntervalSeconds",
+		},
+		// appSources uniqueness validation tests (Location + Scope)
+		{
+			name: "appSources - unique Location+Scope combinations are valid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "source1", Location: "/apps1", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local"}},
+					{Name: "source2", Location: "/apps2", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local"}},
+					{Name: "source3", Location: "/apps1", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "cluster"}},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "appSources - duplicate Location+Scope is invalid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "source1", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local", VolName: "vol1"}},
+					{Name: "source2", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local", VolName: "vol2"}},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.appSources[1]",
+		},
+		{
+			name: "appSources - same location different scope is valid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "source1", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local"}},
+					{Name: "source2", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "cluster"}},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "appSources - uses defaults for scope uniqueness check",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				Defaults: enterpriseApi.AppSourceDefaultSpec{Scope: "local"},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "source1", Location: "/apps"}, // uses default scope
+					{Name: "source2", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local"}}, // explicit same scope
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.appSources[1]",
+		},
+		{
+			name: "appSources - multiple duplicates",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "source1", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local"}},
+					{Name: "source2", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local"}},
+					{Name: "source3", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local"}},
+				},
+			},
+			wantErrCount: 2, // source2 and source3 are duplicates of source1
+		},
 	}
 
 	for _, tt := range tests {
@@ -236,6 +354,19 @@ func TestValidateAppFramework(t *testing.T) {
 				t.Errorf("validateAppFramework() got %d errors, want %d", len(errs), tt.wantErrCount)
 				for _, e := range errs {
 					t.Logf("  error: %s", e.Error())
+				}
+			}
+
+			if tt.wantErrField != "" && len(errs) > 0 {
+				found := false
+				for _, e := range errs {
+					if e.Field == tt.wantErrField {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("validateAppFramework() expected error on field %s", tt.wantErrField)
 				}
 			}
 		})

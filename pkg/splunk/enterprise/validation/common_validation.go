@@ -17,6 +17,7 @@ limitations under the License.
 package validation
 
 import (
+	"fmt"
 	"regexp"
 
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -98,9 +99,39 @@ func validateSmartStore(smartStore *enterpriseApi.SmartStoreSpec, fldPath *field
 	return allErrs
 }
 
+// Constants for appsRepoPollInterval validation
+const (
+	// minAppsRepoPollInterval is the minimum allowed poll interval (1 minute)
+	minAppsRepoPollInterval int64 = 60
+	// maxAppsRepoPollInterval is the maximum allowed poll interval (1 day)
+	maxAppsRepoPollInterval int64 = 86400
+)
+
 // validateAppFramework validates App Framework configuration
 func validateAppFramework(appConfig *enterpriseApi.AppFrameworkSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
+
+	// Validate appsRepoPollInterval
+	// - Default is 0 (disabled)
+	// - Minimum is 0, Maximum is 86400
+	// - Values between (0, 60) are invalid (will be adjusted to 60 at runtime, but we reject here)
+	pollInterval := appConfig.AppsRepoPollInterval
+	if pollInterval < 0 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("appsRepoPollIntervalSeconds"),
+			pollInterval,
+			"must be greater than or equal to 0"))
+	} else if pollInterval > 0 && pollInterval < minAppsRepoPollInterval {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("appsRepoPollIntervalSeconds"),
+			pollInterval,
+			"must be 0 (disabled) or at least 60 seconds"))
+	} else if pollInterval > maxAppsRepoPollInterval {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("appsRepoPollIntervalSeconds"),
+			pollInterval,
+			"must be less than or equal to 86400 seconds (1 day)"))
+	}
 
 	// Validate app sources
 	for i, source := range appConfig.AppSources {
@@ -110,6 +141,24 @@ func validateAppFramework(appConfig *enterpriseApi.AppFrameworkSpec, fldPath *fi
 		}
 		if source.Location == "" {
 			allErrs = append(allErrs, field.Required(sourcePath.Child("location"), "app source location is required"))
+		}
+	}
+
+	// Validate uniqueness of app sources by Location + Scope combination
+	seenAppSources := make(map[string]int) // map key -> first index seen
+	for i, source := range appConfig.AppSources {
+		// Use defaults if scope not specified in the source
+		scope := source.Scope
+		if scope == "" {
+			scope = appConfig.Defaults.Scope
+		}
+		key := source.Location + "|" + scope
+		if firstIdx, exists := seenAppSources[key]; exists {
+			allErrs = append(allErrs, field.Duplicate(
+				fldPath.Child("appSources").Index(i),
+				fmt.Sprintf("duplicate app source: location=%q, scope=%q (same as appSources[%d])", source.Location, scope, firstIdx)))
+		} else {
+			seenAppSources[key] = i
 		}
 	}
 
