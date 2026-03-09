@@ -1,8 +1,9 @@
 package controller
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 // This struct is used to compare the merged configuration from PostgresClusterClass and PostgresClusterSpec
@@ -36,8 +37,9 @@ const (
 	readOnlyEndpoint  string = "ro"
 	readWriteEndpoint string = "rw"
 	// default database name
-	defaultDatabaseName string = "postgres"
-	defaultUsername     string = "postgres"
+	defaultDatabaseName           string = "postgres"
+	defaultUsername               string = "postgres"
+	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"
 
 	// phases
 	ready        reconcilePhases = "Ready"
@@ -71,6 +73,8 @@ const (
 	reasonSecretsCreationFailed  conditionReasons = "SecretsCreationFailed"
 	reasonWaitingForCNPG         conditionReasons = "WaitingForCNPG"
 	reasonUsersCreationFailed    conditionReasons = "UsersCreationFailed"
+	reasonUsersCleanupFailed     conditionReasons = "UsersCleanupFailed"
+	reasonDatabasesCleanupFailed conditionReasons = "DatabasesCleanupFailed"
 	reasonUsersAvailable         conditionReasons = "UsersAvailable"
 
 	// Additional condition reasons for clusterReady conditionType

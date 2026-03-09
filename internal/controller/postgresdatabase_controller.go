@@ -87,6 +87,23 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return r.updateStatus(ctx, postgresDB, conditionType, conditionStatus, reason, message, phase)
 	}
 
+	// Handle finalizer: cleanup on deletion, register on creation
+	if !postgresDB.ObjectMeta.DeletionTimestamp.IsZero() {
+		if err := r.handleDeletion(ctx, postgresDB); err != nil {
+			logger.Error(err, "Cleanup failed for PostgresDatabase")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+	if !controllerutil.ContainsFinalizer(postgresDB, postgresDatabaseFinalizerName) {
+		controllerutil.AddFinalizer(postgresDB, postgresDatabaseFinalizerName)
+		if err := r.Update(ctx, postgresDB); err != nil {
+			logger.Error(err, "Failed to add finalizer to PostgresDatabase")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
 	// ObservedGeneration is only written when all phases complete successfully,
 	// so equality means nothing changed and there is no pending work.
 	if postgresDB.Status.ObservedGeneration == postgresDB.Generation {
@@ -434,6 +451,12 @@ func (r *PostgresDatabaseReconciler) reconcileCNPGDatabases(
 
 		cnpgDBName := fmt.Sprintf("%s-%s", postgresDB.Name, dbSpec.Name)
 
+		// Map DeletionPolicy to CNPG's databaseReclaimPolicy
+		reclaimPolicy := cnpgv1.DatabaseReclaimDelete
+		if dbSpec.DeletionPolicy == "Retain" {
+			reclaimPolicy = cnpgv1.DatabaseReclaimRetain
+		}
+
 		cnpgDB := &cnpgv1.Database{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      cnpgDBName,
@@ -445,6 +468,7 @@ func (r *PostgresDatabaseReconciler) reconcileCNPGDatabases(
 				ClusterRef: corev1.LocalObjectReference{
 					Name: cluster.Status.ProvisionerRef.Name,
 				},
+				ReclaimPolicy: reclaimPolicy,
 			},
 		}
 
@@ -530,6 +554,100 @@ func (r *PostgresDatabaseReconciler) updateStatus(
 	})
 	db.Status.Phase = string(phase)
 	return r.Status().Update(ctx, db)
+}
+
+// handleDeletion runs cleanup when a PostgresDatabase is being deleted:
+// deletes all CNPG Database CRs, releases managed role ownership, and removes the finalizer.
+// The actual PostgreSQL databases and roles survive based on CNPG's databaseReclaimPolicy
+// (set during creation from DeletionPolicy: "retain" keeps the PG database, "delete" drops it).
+func (r *PostgresDatabaseReconciler) handleDeletion(ctx context.Context, postgresDB *enterprisev4.PostgresDatabase) error {
+	logger := log.FromContext(ctx)
+
+	if err := r.removeDatabases(ctx, postgresDB); err != nil {
+		r.updateStatus(ctx, postgresDB, databasesReady, metav1.ConditionFalse, reasonDatabasesCleanupFailed, fmt.Sprintf("Failed to clean up databases: %v", err), failed)
+		return err
+	}
+
+	if err := r.removeUsersFromCluster(ctx, postgresDB); err != nil {
+		r.updateStatus(ctx, postgresDB, usersReady, metav1.ConditionFalse, reasonUsersCleanupFailed, fmt.Sprintf("Failed to clean up users: %v", err), failed)
+		return err
+	}
+
+	controllerutil.RemoveFinalizer(postgresDB, postgresDatabaseFinalizerName)
+	if err := r.Update(ctx, postgresDB); err != nil {
+		return fmt.Errorf("failed to remove finalizer: %w", err)
+	}
+
+	logger.Info("Cleanup complete for PostgresDatabase", "name", postgresDB.Name)
+	return nil
+}
+
+// removeUsersFromCluster releases ownership of all managed roles by patching with an empty list.
+// The actual PostgreSQL roles are not dropped — they become unmanaged by CNPG.
+func (r *PostgresDatabaseReconciler) removeUsersFromCluster(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+) error {
+	logger := log.FromContext(ctx)
+
+	cluster := &enterprisev4.PostgresCluster{}
+	if err := r.Get(ctx, types.NamespacedName{Name: postgresDB.Spec.ClusterRef.Name, Namespace: postgresDB.Namespace}, cluster); err != nil {
+		if errors.IsNotFound(err) {
+			logger.Info("PostgresCluster already deleted, skipping user cleanup")
+			return nil
+		}
+		return fmt.Errorf("failed to get PostgresCluster for user cleanup: %w", err)
+	}
+
+	rolePatch := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": cluster.APIVersion,
+			"kind":       cluster.Kind,
+			"metadata": map[string]any{
+				"name":      cluster.Name,
+				"namespace": cluster.Namespace,
+			},
+			"spec": map[string]any{
+				"managedRoles": []any{},
+			},
+		},
+	}
+
+	fieldManager := fmt.Sprintf("postgresdatabase-%s", postgresDB.Name)
+	if err := r.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManager)); err != nil {
+		return fmt.Errorf("failed to release user ownership from PostgresCluster: %w", err)
+	}
+
+	logger.Info("Released managed role ownership from PostgresCluster", "postgresDatabase", postgresDB.Name, "postgresCluster", cluster.Name)
+	return nil
+}
+
+// removeDatabases deletes all CNPG Database CRs owned by this PostgresDatabase.
+// The actual PostgreSQL databases are retained or deleted based on the databaseReclaimPolicy
+// set on each CNPG Database CR during creation.
+func (r *PostgresDatabaseReconciler) removeDatabases(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+) error {
+	logger := log.FromContext(ctx)
+
+	cnpgDBList := &cnpgv1.DatabaseList{}
+	if err := r.List(ctx, cnpgDBList,
+		client.InNamespace(postgresDB.Namespace),
+		client.MatchingFields{".metadata.controller": postgresDB.Name},
+	); err != nil {
+		return fmt.Errorf("failed to list CNPG Databases for cleanup: %w", err)
+	}
+
+	for _, db := range cnpgDBList.Items {
+		logger.Info("Deleting CNPG Database CR", "name", db.Name, "reclaimPolicy", db.Spec.ReclaimPolicy)
+		if err := r.Delete(ctx, &db); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete CNPG Database %s: %w", db.Name, err)
+		}
+	}
+
+	logger.Info("All CNPG Database CRs deleted", "count", len(cnpgDBList.Items))
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
