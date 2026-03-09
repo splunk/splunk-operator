@@ -67,6 +67,56 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *fie
 		}
 	}
 
+	// Validate probe configurations
+	if spec.LivenessProbe != nil {
+		allErrs = append(allErrs, validateProbe(spec.LivenessProbe, fldPath.Child("livenessProbe"))...)
+	}
+	if spec.ReadinessProbe != nil {
+		allErrs = append(allErrs, validateProbe(spec.ReadinessProbe, fldPath.Child("readinessProbe"))...)
+	}
+	if spec.StartupProbe != nil {
+		allErrs = append(allErrs, validateProbe(spec.StartupProbe, fldPath.Child("startupProbe"))...)
+	}
+
+	return allErrs
+}
+
+// validateProbe validates probe configuration
+func validateProbe(probe *enterpriseApi.Probe, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Validate initialDelaySeconds (minimum is 0)
+	if probe.InitialDelaySeconds < 0 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("initialDelaySeconds"),
+			probe.InitialDelaySeconds,
+			"must be greater than or equal to 0"))
+	}
+
+	// Validate timeoutSeconds (minimum is 1)
+	if probe.TimeoutSeconds < 1 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("timeoutSeconds"),
+			probe.TimeoutSeconds,
+			"must be greater than or equal to 1"))
+	}
+
+	// Validate periodSeconds (minimum is 1)
+	if probe.PeriodSeconds < 1 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("periodSeconds"),
+			probe.PeriodSeconds,
+			"must be greater than or equal to 1"))
+	}
+
+	// Validate failureThreshold (minimum is 1)
+	if probe.FailureThreshold < 1 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("failureThreshold"),
+			probe.FailureThreshold,
+			"must be greater than or equal to 1"))
+	}
+
 	return allErrs
 }
 

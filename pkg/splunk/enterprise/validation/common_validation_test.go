@@ -109,6 +109,119 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 			},
 			wantErrCount: 2, // my-secret[1] and my-secret[2] are duplicates of my-secret[0]
 		},
+		// Probe validation tests
+		{
+			name: "livenessProbe - valid values",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				LivenessProbe: &enterpriseApi.Probe{
+					InitialDelaySeconds: 30,
+					TimeoutSeconds:      30,
+					PeriodSeconds:       30,
+					FailureThreshold:    3,
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "livenessProbe - initialDelaySeconds can be 0",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				LivenessProbe: &enterpriseApi.Probe{
+					InitialDelaySeconds: 0,
+					TimeoutSeconds:      1,
+					PeriodSeconds:       1,
+					FailureThreshold:    1,
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "livenessProbe - negative initialDelaySeconds is invalid",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				LivenessProbe: &enterpriseApi.Probe{
+					InitialDelaySeconds: -1,
+					TimeoutSeconds:      1,
+					PeriodSeconds:       1,
+					FailureThreshold:    1,
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.livenessProbe.initialDelaySeconds",
+		},
+		{
+			name: "livenessProbe - timeoutSeconds 0 is invalid",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				LivenessProbe: &enterpriseApi.Probe{
+					InitialDelaySeconds: 0,
+					TimeoutSeconds:      0,
+					PeriodSeconds:       1,
+					FailureThreshold:    1,
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.livenessProbe.timeoutSeconds",
+		},
+		{
+			name: "livenessProbe - periodSeconds 0 is invalid",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				LivenessProbe: &enterpriseApi.Probe{
+					InitialDelaySeconds: 0,
+					TimeoutSeconds:      1,
+					PeriodSeconds:       0,
+					FailureThreshold:    1,
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.livenessProbe.periodSeconds",
+		},
+		{
+			name: "livenessProbe - failureThreshold 0 is invalid",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				LivenessProbe: &enterpriseApi.Probe{
+					InitialDelaySeconds: 0,
+					TimeoutSeconds:      1,
+					PeriodSeconds:       1,
+					FailureThreshold:    0,
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.livenessProbe.failureThreshold",
+		},
+		{
+			name: "livenessProbe - all invalid values",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				LivenessProbe: &enterpriseApi.Probe{
+					InitialDelaySeconds: -1,
+					TimeoutSeconds:      0,
+					PeriodSeconds:       0,
+					FailureThreshold:    0,
+				},
+			},
+			wantErrCount: 4,
+		},
+		{
+			name: "readinessProbe - valid values",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				ReadinessProbe: &enterpriseApi.Probe{
+					InitialDelaySeconds: 10,
+					TimeoutSeconds:      5,
+					PeriodSeconds:       5,
+					FailureThreshold:    3,
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "startupProbe - valid values",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				StartupProbe: &enterpriseApi.Probe{
+					InitialDelaySeconds: 40,
+					TimeoutSeconds:      30,
+					PeriodSeconds:       30,
+					FailureThreshold:    12,
+				},
+			},
+			wantErrCount: 0,
+		},
 	}
 
 	for _, tt := range tests {
