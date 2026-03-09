@@ -147,6 +147,11 @@ kubectl patch configmap splunk-operator-manager-telemetry -n splunk-operator --t
 
 echo "Skipping following test :: ${TEST_TO_SKIP}"
 
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+REPORT_FILENAME="report-junit-${TIMESTAMP}${GITHUB_RUN_ID:+-${GITHUB_RUN_ID}}-${TEST_TO_RUN:-all}.xml"
+
+TEST_TIMEOUT="${TEST_TIMEOUT:-225m}"
+
 # Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
-echo "ginkgo --junit-report=inttest.xml -v --keep-going --trace -r --timeout=7h  -nodes=${CLUSTER_NODES} --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" --output-interceptor-mode=none --cover ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}"
-ginkgo --junit-report=inttest-junit.xml --output-dir=`pwd` -v --keep-going --trace -r --timeout=7h  -nodes=${CLUSTER_NODES} --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" --output-interceptor-mode=none --cover ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}
+echo "ginkgo --junit-report=${REPORT_FILENAME} -v --keep-going --trace -r --timeout=${TEST_TIMEOUT}  -nodes=${CLUSTER_NODES} --focus=\"${TEST_TO_RUN}\" --skip=\"${TEST_TO_SKIP}\" --output-interceptor-mode=none --cover ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}"
+ginkgo --junit-report=${REPORT_FILENAME} --output-dir=`pwd` -v --keep-going --trace -r --timeout=${TEST_TIMEOUT} -nodes=${CLUSTER_NODES} --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" --output-interceptor-mode=none --cover ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE} -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}

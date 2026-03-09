@@ -4,6 +4,7 @@ permissions:
   packages: write
   id-token: write
   pull-requests: write
+  checks: write
 on:
   schedule:
     - cron: "0 06 * * 0"
@@ -24,7 +25,7 @@ jobs:
         ref: develop
     - name: Dotenv Action
       id: dotenv
-      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      uses: falti/dotenv-action@v1
     - name: Setup Go
       uses: actions/setup-go@v2
       with:
@@ -48,7 +49,7 @@ jobs:
         role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
     - name: Login to Amazon ECR
       id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v1
+      uses: aws-actions/amazon-ecr-login@v2
     - name: Build and Push Splunk Operator Image
       run: |
         make docker-buildx IMG=${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
@@ -115,7 +116,7 @@ jobs:
           echo "TEST_CLUSTER_NAME=${{ steps.set-cluster-name.outputs.cluster-name }}" >> $GITHUB_ENV
       - name: Dotenv Action
         id: dotenv
-        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+        uses: falti/dotenv-action@v1
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v3
         with:
@@ -143,7 +144,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2.5.0
       - name: Configure Docker Hub credentials
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN}}
@@ -158,7 +159,7 @@ jobs:
           role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
       - name: Tag and Push Splunk Enterprise Image to ECR
         run: |
           docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
@@ -189,6 +190,7 @@ jobs:
       - name: Run Integration test
         timeout-minutes: 240
         env:
+          TEST_TIMEOUT: 225m
           TEST_S3_ACCESS_KEY_ID: ${{ vars.TEST_S3_ACCESS_KEY_ID }}
           TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.TEST_S3_SECRET_ACCESS_KEY }}
         run: |
@@ -201,10 +203,23 @@ jobs:
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
       - name: Archive Pod Logs if Failure in Smoke Test
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4.4.0
+        uses: actions/upload-artifact@v6
         with:
           name: "splunk-pods-logs--artifacts-${{ matrix.test }}"
           path: "/tmp/pod_logs/**"
+      - name: Upload Integration Test Results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: "test-report-integration-nightly-${{ matrix.test }}"
+          path: report-junit*.xml
+      - name: Publish Integration Test Report
+        uses: mikepenz/action-junit-report@v6
+        if: always()
+        with:
+          report_paths: 'report-junit*.xml'
+          check_name: 'Nightly Integration Test Results - ${{ matrix.test }}'
+          detailed_summary: true
       - name: Cleanup Test Case artifacts
         if: ${{ always() }}
         run: |
@@ -223,13 +238,13 @@ jobs:
       TAG: edge
     steps:
     - name: Set up cosign
-      uses: sigstore/cosign-installer@main
+      uses: sigstore/cosign-installer@v4.0.0
     - uses: actions/checkout@v2
       with:
           ref: develop
     - name: Dotenv Action
       id: dotenv
-      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      uses: falti/dotenv-action@v1
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2.5.0
     - name: Configure AWS credentials
@@ -240,7 +255,7 @@ jobs:
         aws-region: ${{ vars.AWS_REGION }}
         role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
     - name: Login to Amazon ECR
-      uses: aws-actions/amazon-ecr-login@v1
+      uses: aws-actions/amazon-ecr-login@v2
     - name: Pull Splunk Operator Image Locally
       run: |
         docker pull ${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
@@ -248,7 +263,7 @@ jobs:
       run: |
         docker tag ${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}
     - name: Configure Docker Hub credentials
-      uses: docker/login-action@v1
+      uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
@@ -260,9 +275,8 @@ jobs:
       env:
         COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
         COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-    - name: Verify Signed Splunk Operator image 
+    - name: Verify Signed Splunk Operator image
       run: |
         cosign verify --key env://COSIGN_PUBLIC_KEY  ${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}
       env:
         COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
- 
