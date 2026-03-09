@@ -1,0 +1,112 @@
+{{- if .Values.universalForwarder.enabled }}
+{{- $ufName := default "splunk-uf" .Values.universalForwarder.name }}
+{{- $namespace := default (include "splunk-enterprise.namespace" . ) .Values.universalForwarder.namespaceOverride }}
+{{- $configMapName := default "splunk-uf-config" .Values.universalForwarder.configMapName }}
+{{- $secretName := default "splunk-uf-secret" .Values.universalForwarder.secretName }}
+{{- $secretRefName := default $secretName .Values.universalForwarder.existingSecret }}
+{{- $ufImageRepo := required "universalForwarder.image.repository is required" (dig "universalForwarder" "image" "repository" "" .Values) }}
+{{- $ufImageTag := required "universalForwarder.image.tag is required" (dig "universalForwarder" "image" "tag" "" .Values) }}
+{{- $ufImagePullPolicy := dig "universalForwarder" "image" "pullPolicy" "IfNotPresent" .Values }}
+{{- $runAsUser := dig "universalForwarder" "securityContext" "runAsUser" 0 .Values }}
+{{- $runAsGroup := dig "universalForwarder" "securityContext" "runAsGroup" 0 .Values }}
+{{- $ufDefaults := required "universalForwarder.defaults is required to avoid hardcoded forwarding config" .Values.universalForwarder.defaults }}
+{{- if not .Values.universalForwarder.existingSecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  namespace: {{ $namespace }}
+{{- with .Values.universalForwarder.additionalLabels }}
+  labels:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.universalForwarder.additionalAnnotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+type: Opaque
+stringData:
+  password: {{ required "universalForwarder.password is required when universalForwarder.existingSecret is not set" .Values.universalForwarder.password | quote }}
+---
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $configMapName }}
+  namespace: {{ $namespace }}
+{{- with .Values.universalForwarder.additionalLabels }}
+  labels:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.universalForwarder.additionalAnnotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+data:
+  default.yml: |
+{{ toYaml $ufDefaults | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $ufName }}
+  namespace: {{ $namespace }}
+{{- with .Values.universalForwarder.additionalLabels }}
+  labels:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.universalForwarder.additionalAnnotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+  replicas: {{ default 1 .Values.universalForwarder.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ $ufName }}
+  template:
+    metadata:
+      labels:
+        app: {{ $ufName }}
+    spec:
+{{- with .Values.image.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml . | indent 8 }}
+{{- end }}
+      containers:
+        - name: {{ default "uf" .Values.universalForwarder.containerName }}
+          image: {{ printf "%s:%s" $ufImageRepo $ufImageTag }}
+          imagePullPolicy: {{ $ufImagePullPolicy }}
+          securityContext:
+            runAsUser: {{ $runAsUser }}
+            runAsGroup: {{ $runAsGroup }}
+          env:
+            - name: SPLUNK_START_ARGS
+              value: {{ default "--accept-license --answer-yes --no-prompt" .Values.universalForwarder.splunkStartArgs | quote }}
+            - name: SPLUNK_GENERAL_TERMS
+              value: {{ default "--accept-sgt-current-at-splunk-com" .Values.universalForwarder.splunkGeneralTerms | quote }}
+            - name: SPLUNK_DEFAULTS_URL
+              value: {{ default "file:///tmp/defaults/default.yml" .Values.universalForwarder.splunkDefaultsUrl | quote }}
+            - name: SPLUNK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretRefName }}
+                  key: {{ default "password" .Values.universalForwarder.passwordKey }}
+{{- with .Values.universalForwarder.extraEnv }}
+{{ toYaml . | indent 12 }}
+{{- end }}
+          volumeMounts:
+            - name: uf-config
+              mountPath: /tmp/defaults/default.yml
+              subPath: default.yml
+{{- with .Values.universalForwarder.extraVolumeMounts }}
+{{ toYaml . | indent 12 }}
+{{- end }}
+      volumes:
+        - name: uf-config
+          configMap:
+            name: {{ $configMapName }}
+{{- with .Values.universalForwarder.extraVolumes }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- end }}
