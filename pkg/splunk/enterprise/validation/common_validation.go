@@ -43,6 +43,18 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *fie
 	// Validate VarVolumeStorageConfig
 	allErrs = append(allErrs, validateStorageConfig(&spec.VarVolumeStorageConfig, fldPath.Child("varVolumeStorageConfig"))...)
 
+	// Validate extraEnv uniqueness by Name
+	seenEnvNames := make(map[string]int) // map name -> first index seen
+	for i, env := range spec.ExtraEnv {
+		if firstIdx, exists := seenEnvNames[env.Name]; exists {
+			allErrs = append(allErrs, field.Duplicate(
+				fldPath.Child("extraEnv").Index(i).Child("name"),
+				fmt.Sprintf("environment variable name %q is duplicate (same as extraEnv[%d])", env.Name, firstIdx)))
+		} else {
+			seenEnvNames[env.Name] = i
+		}
+	}
+
 	return allErrs
 }
 

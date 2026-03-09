@@ -19,6 +19,7 @@ package validation
 import (
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -39,6 +40,40 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 			name:         "valid spec - empty",
 			spec:         &enterpriseApi.CommonSplunkSpec{},
 			wantErrCount: 0,
+		},
+		// extraEnv uniqueness validation tests
+		{
+			name: "extraEnv - unique names are valid",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				ExtraEnv: []corev1.EnvVar{
+					{Name: "VAR1", Value: "value1"},
+					{Name: "VAR2", Value: "value2"},
+					{Name: "VAR3", Value: "value3"},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "extraEnv - duplicate names are invalid",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				ExtraEnv: []corev1.EnvVar{
+					{Name: "VAR1", Value: "value1"},
+					{Name: "VAR1", Value: "value2"},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.extraEnv[1].name",
+		},
+		{
+			name: "extraEnv - multiple duplicates",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				ExtraEnv: []corev1.EnvVar{
+					{Name: "VAR1", Value: "value1"},
+					{Name: "VAR1", Value: "value2"},
+					{Name: "VAR1", Value: "value3"},
+				},
+			},
+			wantErrCount: 2, // VAR1[1] and VAR1[2] are duplicates of VAR1[0]
 		},
 	}
 
