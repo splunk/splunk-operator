@@ -1,9 +1,8 @@
 package controller
 
 import (
-	"time"
-
 	corev1 "k8s.io/api/core/v1"
+	"time"
 )
 
 // This struct is used to compare the merged configuration from PostgresClusterClass and PostgresClusterSpec
@@ -38,8 +37,12 @@ const (
 	readWriteEndpoint string = "rw"
 	// default database name
 	defaultDatabaseName           string = "postgres"
-	defaultUsername               string = "postgres"
 	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"
+	defaultSecretSuffix           string = "-secret-"
+	defaultPoolerSuffix           string = "-pooler-"
+	defaultConfigSuffix           string = "-config-"
+	defaultPort                   string = "5432"
+	superUsername                 string = "postgres"
 
 	// phases
 	ready        reconcilePhases = "Ready"
@@ -85,6 +88,9 @@ const (
 	reasonClusterGetFailed      conditionReasons = "ClusterGetFailed"
 	reasonClusterPatchFailed    conditionReasons = "ClusterPatchFailed"
 	reasonInvalidConfiguration  conditionReasons = "InvalidConfiguration"
+	reasonConfigMapFailed       conditionReasons = "ConfigMapReconciliationFailed"
+	reasonStatusSyncFailed      conditionReasons = "StatusSyncFailed"
+	reasonUserSecretFailed      conditionReasons = "UserSecretReconciliationFailed"
 
 	// Additional condition reasons for poolerReady conditionType
 	reasonPoolerReconciliationFailed conditionReasons = "PoolerReconciliationFailed"
