@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -33,8 +34,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -51,6 +54,9 @@ const (
 	// Label keys used on managed secrets.
 	labelManagedBy  = "app.kubernetes.io/managed-by"
 	labelCNPGReload = "cnpg.io/reload"
+
+	// postgresPort is the standard PostgreSQL port used in all connection strings.
+	postgresPort = "5432"
 )
 
 // PostgresDatabaseReconciler reconciles a PostgresDatabase object
@@ -66,6 +72,7 @@ type PostgresDatabaseReconciler struct {
 //+kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters,verbs=get;list;watch;patch
 //+kubebuilder:rbac:groups=postgresql.cnpg.io,resources=databases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create
+//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update
 
 func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -88,7 +95,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Handle finalizer: cleanup on deletion, register on creation
-	if !postgresDB.ObjectMeta.DeletionTimestamp.IsZero() {
+	if postgresDB.GetDeletionTimestamp() != nil {
 		if err := r.handleDeletion(ctx, postgresDB); err != nil {
 			logger.Error(err, "Cleanup failed for PostgresDatabase")
 			return ctrl.Result{}, err
@@ -124,8 +131,8 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		return ctrl.Result{}, err
 	}
+	logger.Info("Cluster validation done", "clusterName", postgresDB.Spec.ClusterRef.Name, "status", clusterStatus)
 
-	logger.Info("Cluster validation done", "clusterName", cluster.Name, "status", clusterStatus)
 	switch clusterStatus {
 	case ClusterNotFound:
 		if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterNotFound, "Cluster CR not found", pending); err != nil {
@@ -169,7 +176,22 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	// 3. Verify users exist in CNPG spec and are reconciled in CNPG status.
+	// 3. ConfigMaps carry connection info consumers need as soon as databases are ready,
+	// so they are created alongside secrets before any role or database work begins.
+	endpoints := resolveClusterEndpoints(cluster, cnpgCluster, postgresDB.Namespace)
+	if err := r.reconcileUserConfigMaps(ctx, postgresDB, endpoints); err != nil {
+		if statusErr := updateStatus(configMapsReady, metav1.ConditionFalse, reasonConfigMapsCreationFailed,
+			fmt.Sprintf("Failed to reconcile ConfigMaps: %v", err), provisioning); statusErr != nil {
+			logger.Error(statusErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+	if err := updateStatus(configMapsReady, metav1.ConditionTrue, reasonConfigMapsCreated,
+		fmt.Sprintf("All ConfigMaps provisioned for %d databases", len(postgresDB.Spec.Databases)), provisioning); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// 4. Verify users exist in CNPG spec and are reconciled in CNPG status.
 	desiredUsers := getDesiredUsers(postgresDB)
 	actualUsersInSpec := getUsersInClusterSpec(cluster)
 	var missingUsersFromSpec []string
@@ -180,7 +202,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if len(missingUsersFromSpec) > 0 {
-		logger.Info("User spec changed, patching CNPG Cluster", "adding", missingUsersFromSpec)
+		logger.Info("User spec changed, patching CNPG Cluster", "missing", missingUsersFromSpec)
 		if err := r.patchManagedRoles(ctx, postgresDB, cluster); err != nil {
 			logger.Error(err, "Failed to patch users in CNPG Cluster")
 			return ctrl.Result{}, err
@@ -191,7 +213,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	}
 
-	allUsersReady, notReadyUsers, err := r.verifyUsersReady(ctx, postgresDB, cnpgCluster)
+	allUsersReady, notReadyUsers, err := r.verifyUsersReady(ctx, desiredUsers, cnpgCluster)
 	if err != nil {
 		if statusErr := updateStatus(usersReady, metav1.ConditionFalse, reasonUsersCreationFailed, fmt.Sprintf("User creation failed: %v", err), failed); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
@@ -211,7 +233,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	// 4. Verify CNPG Database CRs exist and are ready.
+	// 5. Verify CNPG Database CRs exist and are ready.
 	desiredDatabases := getDesiredDatabases(postgresDB)
 	actualDatabasesInSpec, err := r.getDatabasesInCNPGSpec(ctx, postgresDB)
 	if err != nil {
@@ -337,7 +359,8 @@ func (r *PostgresDatabaseReconciler) getDatabasesInCNPGSpec(ctx context.Context,
 		return nil, err
 	}
 	for _, db := range cnpgDBList.Items {
-		// format of the db is fmt.Sprintf("%s-%s", postgresDB.Name, dbSpec.Name) so we need to remove postgresDatabase prefix first
+		// CNPG Database CR names include the parent prefix for cluster-uniqueness;
+		// strip it to get the bare database name for comparison against spec.databases.
 		dbList = append(dbList, strings.TrimPrefix(db.Name, fmt.Sprintf("%s-", postgresDB.Name)))
 	}
 	return dbList, nil
@@ -402,15 +425,13 @@ func (r *PostgresDatabaseReconciler) patchManagedRoles(
 	return nil
 }
 
-// verifyUsersReady checks if CNPG has finished creating the users
+// verifyUsersReady checks if CNPG has finished creating the users.
 func (r *PostgresDatabaseReconciler) verifyUsersReady(
 	ctx context.Context,
-	postgresDB *enterprisev4.PostgresDatabase,
+	expectedUsers []string,
 	cnpgCluster *cnpgv1.Cluster,
 ) (bool, []string, error) {
 	logger := log.FromContext(ctx)
-
-	expectedUsers := getDesiredUsers(postgresDB)
 
 	if cnpgCluster.Status.ManagedRolesStatus.CannotReconcile != nil {
 		for _, userName := range expectedUsers {
@@ -451,7 +472,8 @@ func (r *PostgresDatabaseReconciler) reconcileCNPGDatabases(
 
 		cnpgDBName := fmt.Sprintf("%s-%s", postgresDB.Name, dbSpec.Name)
 
-		// Map DeletionPolicy to CNPG's databaseReclaimPolicy
+		// reclaimPolicy controls whether CNPG physically drops the PostgreSQL database
+		// when the CR is deleted — a destructive and irreversible operation.
 		reclaimPolicy := cnpgv1.DatabaseReclaimDelete
 		if dbSpec.DeletionPolicy == "Retain" {
 			reclaimPolicy = cnpgv1.DatabaseReclaimRetain
@@ -507,13 +529,14 @@ func (r *PostgresDatabaseReconciler) reconcileCNPGDatabases(
 	return nil
 }
 
-// verifyDatabasesReady checks if CNPG has finished provisioning the databases
+// verifyDatabasesReady checks if CNPG has finished provisioning the databases.
 func (r *PostgresDatabaseReconciler) verifyDatabasesReady(
 	ctx context.Context,
 	postgresDB *enterprisev4.PostgresDatabase,
 ) (bool, error) {
 	logger := log.FromContext(ctx)
 
+	var notReady []string
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		cnpgDBName := fmt.Sprintf("%s-%s", postgresDB.Name, dbSpec.Name)
 
@@ -527,15 +550,21 @@ func (r *PostgresDatabaseReconciler) verifyDatabasesReady(
 		}
 
 		if cnpgDB.Status.Applied == nil || !*cnpgDB.Status.Applied {
-			logger.Info("Database not ready yet", "database", dbSpec.Name)
-			return false, nil
+			notReady = append(notReady, dbSpec.Name)
 		}
+	}
+
+	if len(notReady) > 0 {
+		logger.Info("Databases not ready yet", "pending", notReady)
+		return false, nil
 	}
 
 	logger.Info("All databases provisioned")
 	return true, nil
 }
 
+// updateStatus sets a condition and phase on the PostgresDatabase status in a single write —
+// callers should not call r.Status().Update() directly.
 func (r *PostgresDatabaseReconciler) updateStatus(
 	ctx context.Context,
 	db *enterprisev4.PostgresDatabase,
@@ -564,12 +593,10 @@ func (r *PostgresDatabaseReconciler) handleDeletion(ctx context.Context, postgre
 	logger := log.FromContext(ctx)
 
 	if err := r.removeDatabases(ctx, postgresDB); err != nil {
-		r.updateStatus(ctx, postgresDB, databasesReady, metav1.ConditionFalse, reasonDatabasesCleanupFailed, fmt.Sprintf("Failed to clean up databases: %v", err), failed)
 		return err
 	}
 
 	if err := r.removeUsersFromCluster(ctx, postgresDB); err != nil {
-		r.updateStatus(ctx, postgresDB, usersReady, metav1.ConditionFalse, reasonUsersCleanupFailed, fmt.Sprintf("Failed to clean up users: %v", err), failed)
 		return err
 	}
 
@@ -672,9 +699,22 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterprisev4.PostgresDatabase{}).WithEventFilter(predicate.GenerationChangedPredicate{}).
+		For(&enterprisev4.PostgresDatabase{}, builder.WithPredicates(
+			predicate.Or(
+				predicate.GenerationChangedPredicate{},
+				predicate.Funcs{
+					UpdateFunc: func(e event.UpdateEvent) bool {
+						return !reflect.DeepEqual(
+							e.ObjectOld.GetFinalizers(),
+							e.ObjectNew.GetFinalizers(),
+						)
+					},
+				},
+			),
+		)).
 		Owns(&cnpgv1.Database{}).
 		Owns(&corev1.Secret{}).
+		Owns(&corev1.ConfigMap{}).
 		Named("postgresdatabase").
 		Complete(r)
 }
@@ -734,8 +774,8 @@ func (r *PostgresDatabaseReconciler) reconcileUserSecrets(
 	return nil
 }
 
-// secretExists treats any non-NotFound error as absence — the subsequent Create will
-// surface the real API error if the cluster has a deeper problem.
+// secretExists treats non-NotFound errors as real failures — a transient API error
+// must not cause a spurious Create attempt.
 func (r *PostgresDatabaseReconciler) secretExists(ctx context.Context, namespace, name string) (bool, error) {
 	logger := log.FromContext(ctx)
 
@@ -783,7 +823,7 @@ func (r *PostgresDatabaseReconciler) createUserSecret(
 // buildPasswordSecret constructs the Secret object but intentionally omits an ownerReference.
 // Secrets are referenced by ManagedRole entries in the PostgresCluster CR, which outlives the
 // PostgresDatabase — cascade deletion would leave dangling PasswordSecretRef pointers.
-// Both "username" and "password" keys are required by CNPG
+// Both "username" and "password" keys are required by CNPG.
 func buildPasswordSecret(postgresDB *enterprisev4.PostgresDatabase, secretName, roleName, password string) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -801,6 +841,137 @@ func buildPasswordSecret(postgresDB *enterprisev4.PostgresDatabase, secretName, 
 	}
 }
 
+// configMapName mirrors userSecretName() so creation and status wiring share one source of truth.
+func configMapName(postgresDBName, dbName string) string {
+	return fmt.Sprintf("%s-%s-config", postgresDBName, dbName)
+}
+
+// clusterEndpoints holds fully-resolved connection hostnames for a cluster.
+// PoolerRWHost and PoolerROHost are empty when connection pooling is disabled.
+type clusterEndpoints struct {
+	RWHost       string
+	ROHost       string
+	PoolerRWHost string
+	PoolerROHost string
+}
+
+func resolveClusterEndpoints(cluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster, namespace string) clusterEndpoints {
+	// FQDN so consumers in other namespaces can resolve without extra config.
+	endpoints := clusterEndpoints{
+		RWHost: fmt.Sprintf("%s.%s.svc.cluster.local", cnpgCluster.Status.WriteService, namespace),
+		ROHost: fmt.Sprintf("%s.%s.svc.cluster.local", cnpgCluster.Status.ReadService, namespace),
+	}
+	// Pooler service names follow the pattern set by postgrescluster_controller: {cnpgClusterName}-pooler-{rw|ro}.
+	if cluster.Status.ConnectionPoolerStatus != nil && cluster.Status.ConnectionPoolerStatus.Enabled {
+		endpoints.PoolerRWHost = fmt.Sprintf("%s-pooler-%s.%s.svc.cluster.local", cnpgCluster.Name, readWriteEndpoint, namespace)
+		endpoints.PoolerROHost = fmt.Sprintf("%s-pooler-%s.%s.svc.cluster.local", cnpgCluster.Name, readOnlyEndpoint, namespace)
+	}
+	return endpoints
+}
+
+// buildDatabaseConfigMap is a pure function — no API calls, no decisions about which
+// endpoints exist. All that is resolved upstream and encoded in endpoints before this is called.
+func buildDatabaseConfigMap(
+	namespace string,
+	cmName string,
+	dbName string,
+	endpoints clusterEndpoints,
+) *corev1.ConfigMap {
+	data := map[string]string{
+		"dbname":     dbName,
+		"port":       postgresPort,
+		"rw-host":    endpoints.RWHost,
+		"ro-host":    endpoints.ROHost,
+		"admin-user": fmt.Sprintf("%s_admin", dbName),
+		"rw-user":    fmt.Sprintf("%s_rw", dbName),
+	}
+	// Pooler keys are only written when pooling is active
+	if endpoints.PoolerRWHost != "" {
+		data["pooler-rw-host"] = endpoints.PoolerRWHost
+	}
+	if endpoints.PoolerROHost != "" {
+		data["pooler-ro-host"] = endpoints.PoolerROHost
+	}
+
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cmName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				labelManagedBy: "splunk-operator",
+			},
+		},
+		Data: data,
+	}
+}
+
+// reconcileUserConfigMaps mirrors reconcileUserSecrets: checks per-database,
+// creates only what is absent. Endpoints are resolved by the caller so this function
+// has a single responsibility: iteration and existence-gated creation.
+func (r *PostgresDatabaseReconciler) reconcileUserConfigMaps(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	endpoints clusterEndpoints,
+) error {
+	logger := log.FromContext(ctx)
+
+	for _, dbSpec := range postgresDB.Spec.Databases {
+		cmName := configMapName(postgresDB.Name, dbSpec.Name)
+		exists, err := r.configMapExists(ctx, postgresDB.Namespace, cmName)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			logger.Info("Creating missing ConfigMap for database", "database", dbSpec.Name)
+			cm := buildDatabaseConfigMap(postgresDB.Namespace, cmName, dbSpec.Name, endpoints)
+			if err := r.createUserConfigMap(ctx, postgresDB, cm); err != nil {
+				return fmt.Errorf("failed to create ConfigMap for database %s: %w", dbSpec.Name, err)
+			}
+		}
+	}
+	return nil
+}
+
+// configMapExists treats non-NotFound errors as real failures — a transient API error
+// must not cause a spurious Create attempt.
+func (r *PostgresDatabaseReconciler) configMapExists(ctx context.Context, namespace, name string) (bool, error) {
+	logger := log.FromContext(ctx)
+
+	cm := &corev1.ConfigMap{}
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, cm)
+	if errors.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		logger.Error(err, "Failed to check ConfigMap existence", "configmap", name)
+		return false, err
+	}
+	return true, nil
+}
+
+// createUserConfigMap treats AlreadyExists as success — safe to retry after a partial
+// failure without conflicting with an already-created ConfigMap.
+func (r *PostgresDatabaseReconciler) createUserConfigMap(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	cm *corev1.ConfigMap,
+) error {
+	logger := log.FromContext(ctx)
+
+	if err := controllerutil.SetControllerReference(postgresDB, cm, r.Scheme); err != nil {
+		logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", cm.Name)
+		return err
+	}
+	if err := r.Create(ctx, cm); err != nil {
+		if errors.IsAlreadyExists(err) {
+			return nil
+		}
+		logger.Error(err, "Failed to create ConfigMap", "configmap", cm.Name)
+		return err
+	}
+	return nil
+}
+
 // populateDatabaseStatus derives all secret ref names via userSecretName() — the same function
 // used during creation — so status refs are always consistent with actual secret names.
 // Recomputing from spec rather than reading live Secret names keeps this side-effect free.
@@ -815,6 +986,9 @@ func populateDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase) []enterpr
 			},
 			RWUserSecretRef: &corev1.LocalObjectReference{
 				Name: userSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW),
+			},
+			ConfigMapRef: &corev1.LocalObjectReference{
+				Name: configMapName(postgresDB.Name, dbSpec.Name),
 			},
 		})
 	}
