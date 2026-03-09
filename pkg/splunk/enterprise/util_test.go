@@ -738,7 +738,14 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 
 	var appDeployContext enterpriseApi.AppDeploymentContext
 	appDeployContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
-	err = initAndCheckAppInfoStatus(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext)
+	appEngineInput := EngineInput{
+		Ctx:                ctx,
+		Client:             client,
+		Target:             &cr,
+		AppFrameworkConfig: &cr.Spec.AppFrameworkConfig,
+		AppDeployContext:   &appDeployContext,
+	}
+	err = DefaultAppFrameworkEngine.EnsureAppRepoState(appEngineInput)
 	if err != nil {
 		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
 	}
@@ -760,7 +767,14 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 
 	var appDeployContext2 enterpriseApi.AppDeploymentContext
 	appDeployContext2.AppFrameworkConfig = revised.Spec.AppFrameworkConfig
-	err = initAndCheckAppInfoStatus(ctx, client, &revised, &revised.Spec.AppFrameworkConfig, &appDeployContext2)
+	appEngineInput = EngineInput{
+		Ctx:                ctx,
+		Client:             client,
+		Target:             &revised,
+		AppFrameworkConfig: &revised.Spec.AppFrameworkConfig,
+		AppDeployContext:   &appDeployContext2,
+	}
+	err = DefaultAppFrameworkEngine.EnsureAppRepoState(appEngineInput)
 	if err != nil {
 		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
 	}
@@ -802,7 +816,14 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 		t.Errorf("Unable to set owner reference for configMap: %s", configMap.Name)
 	}
 
-	err = initAndCheckAppInfoStatus(ctx, client, &revised, &revised.Spec.AppFrameworkConfig, &appDeployContext2)
+	appEngineInput = EngineInput{
+		Ctx:                ctx,
+		Client:             client,
+		Target:             &revised,
+		AppFrameworkConfig: &revised.Spec.AppFrameworkConfig,
+		AppDeployContext:   &appDeployContext2,
+	}
+	err = DefaultAppFrameworkEngine.EnsureAppRepoState(appEngineInput)
 	if err != nil {
 		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
 	}
@@ -815,7 +836,14 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 	}
 
 	appDeployContext2.IsDeploymentInProgress = false
-	err = initAndCheckAppInfoStatus(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext2)
+	appEngineInput = EngineInput{
+		Ctx:                ctx,
+		Client:             client,
+		Target:             &cr,
+		AppFrameworkConfig: &cr.Spec.AppFrameworkConfig,
+		AppDeployContext:   &appDeployContext2,
+	}
+	err = DefaultAppFrameworkEngine.EnsureAppRepoState(appEngineInput)
 	if err != nil {
 		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
 	}
@@ -875,7 +903,14 @@ func TestInitAndCheckAppInfoStatusShouldFail(t *testing.T) {
 	var appDeployContext enterpriseApi.AppDeploymentContext
 	appDeployContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
 
-	initAndCheckAppInfoStatus(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext)
+	appEngineInput := EngineInput{
+		Ctx:                ctx,
+		Client:             client,
+		Target:             &cr,
+		AppFrameworkConfig: &cr.Spec.AppFrameworkConfig,
+		AppDeployContext:   &appDeployContext,
+	}
+	DefaultAppFrameworkEngine.EnsureAppRepoState(appEngineInput)
 	if appDeployContext.LastAppInfoCheckTime != 0 {
 		t.Errorf("We should not have updated the LastAppInfoCheckTime as polling of apps repo is disabled.")
 	}
@@ -2476,7 +2511,15 @@ func TestCheckAndMigrateAppDeployStatus(t *testing.T) {
 		},
 	}
 
-	err := checkAndMigrateAppDeployStatus(ctx, client, cr, appDeployContext, appFrameworkConfig, true)
+	appEngineInput := EngineInput{
+		Ctx:                ctx,
+		Client:             client,
+		Target:             cr,
+		AppFrameworkConfig: appFrameworkConfig,
+		AppDeployContext:   appDeployContext,
+		Scope:              enterpriseApi.ScopeLocal,
+	}
+	err := DefaultAppFrameworkEngine.EnsureAppFrameworkStatus(appEngineInput)
 	if err != nil {
 		t.Errorf("When the app deploy context is nil, should not return an error")
 	}
@@ -2498,6 +2541,7 @@ func TestCheckAndMigrateAppDeployStatus(t *testing.T) {
 	}
 
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeploymentInfo
+	appEngineInput.AppDeployContext = appDeployContext
 
 	statefulSetName := "splunk-stack1-standalone"
 	var replicas int32 = 4
@@ -2532,7 +2576,8 @@ func TestCheckAndMigrateAppDeployStatus(t *testing.T) {
 		}
 	}
 
-	err = checkAndMigrateAppDeployStatus(ctx, client, cr, appDeployContext, appFrameworkConfig, true)
+	appEngineInput.AppDeployContext = appDeployContext
+	err = DefaultAppFrameworkEngine.EnsureAppFrameworkStatus(appEngineInput)
 	if err != nil {
 		t.Errorf("With proper app spec and status contexts, migration should happen. error: %v", err)
 	}

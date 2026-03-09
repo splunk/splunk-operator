@@ -102,7 +102,15 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// If needed, Migrate the app framework status
-	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, false)
+	appEngineInput := EngineInput{
+		Ctx:                ctx,
+		Client:             client,
+		Target:             cr,
+		AppFrameworkConfig: &cr.Spec.AppFrameworkConfig,
+		AppDeployContext:   &cr.Status.AppContext,
+		Scope:              enterpriseApi.ScopeCluster,
+	}
+	err = DefaultAppFrameworkEngine.EnsureAppFrameworkStatus(appEngineInput)
 	if err != nil {
 		return result, err
 	}
@@ -111,7 +119,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		err := DefaultAppFrameworkEngine.EnsureAppRepoState(appEngineInput)
 		if err != nil {
 			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
@@ -248,8 +256,11 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			return result, err
 		}
 
-		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
-		result = *finalResult
+		appEngineInput.Phase = cr.Status.Phase
+		finalResult := DefaultAppFrameworkEngine.RunAppFrameworkIfReady(appEngineInput)
+		if finalResult.Result != nil {
+			result = *finalResult.Result
+		}
 
 		// trigger MonitoringConsole reconcile by changing the splunk/image-tag annotation
 		err = changeMonitoringConsoleAnnotations(ctx, client, cr)
@@ -314,7 +325,15 @@ func getClusterManagerStatefulSet(ctx context.Context, client splcommon.Controll
 		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForCMSmartstore, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
 	}
 	// Setup App framework staging volume for apps
-	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	appEngineInput := EngineInput{
+		Ctx:                ctx,
+		Client:             client,
+		Target:             cr,
+		AppFrameworkConfig: &cr.Spec.AppFrameworkConfig,
+		AppDeployContext:   &cr.Status.AppContext,
+		PodTemplateSpec:    &ss.Spec.Template,
+	}
+	DefaultAppFrameworkEngine.EnsureAppFrameworkStagingVolume(appEngineInput)
 
 	return ss, err
 }
