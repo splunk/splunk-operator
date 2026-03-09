@@ -75,6 +75,40 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 			},
 			wantErrCount: 2, // VAR1[1] and VAR1[2] are duplicates of VAR1[0]
 		},
+		// imagePullSecrets uniqueness validation tests
+		{
+			name: "imagePullSecrets - unique names are valid",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				ImagePullSecrets: []corev1.LocalObjectReference{
+					{Name: "secret1"},
+					{Name: "secret2"},
+					{Name: "secret3"},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "imagePullSecrets - duplicate names are invalid",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				ImagePullSecrets: []corev1.LocalObjectReference{
+					{Name: "my-secret"},
+					{Name: "my-secret"},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.imagePullSecrets[1].name",
+		},
+		{
+			name: "imagePullSecrets - multiple duplicates",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				ImagePullSecrets: []corev1.LocalObjectReference{
+					{Name: "my-secret"},
+					{Name: "my-secret"},
+					{Name: "my-secret"},
+				},
+			},
+			wantErrCount: 2, // my-secret[1] and my-secret[2] are duplicates of my-secret[0]
+		},
 	}
 
 	for _, tt := range tests {

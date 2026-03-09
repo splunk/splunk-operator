@@ -55,6 +55,18 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *fie
 		}
 	}
 
+	// Validate imagePullSecrets uniqueness by Name
+	seenSecretNames := make(map[string]int) // map name -> first index seen
+	for i, secret := range spec.ImagePullSecrets {
+		if firstIdx, exists := seenSecretNames[secret.Name]; exists {
+			allErrs = append(allErrs, field.Duplicate(
+				fldPath.Child("imagePullSecrets").Index(i).Child("name"),
+				fmt.Sprintf("secret reference %q is duplicate (same as imagePullSecrets[%d])", secret.Name, firstIdx)))
+		} else {
+			seenSecretNames[secret.Name] = i
+		}
+	}
+
 	return allErrs
 }
 
