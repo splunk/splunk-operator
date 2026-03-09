@@ -352,6 +352,10 @@ func ValidateSpec(spec *enterpriseApi.Spec, defaultResources corev1.ResourceRequ
 
 // setServiceTemplateDefaults sets default values for service templates
 func setServiceTemplateDefaults(spec *enterpriseApi.Spec) {
+	if spec.ServiceTemplate.Spec.Type == "" {
+		spec.ServiceTemplate.Spec.Type = corev1.ServiceTypeClusterIP
+	}
+
 	if spec.ServiceTemplate.Spec.Ports != nil {
 		for idx := range spec.ServiceTemplate.Spec.Ports {
 			var p *corev1.ServicePort = &spec.ServiceTemplate.Spec.Ports[idx]
@@ -1168,22 +1172,21 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 
 	if clusterManagerURL != "" {
-		// Construct full URL for preStop.sh to use when checking peer status
-		// Format: https://<service-name>:<port>
+		// Preserve existing semantics for Splunk Ansible: this value is expected to be
+		// the cluster manager service host name, not a full URL.
+		extraEnv = append(extraEnv, corev1.EnvVar{
+			Name:  splcommon.ClusterManagerURL,
+			Value: clusterManagerURL,
+		})
+
+		// Provide an explicit API endpoint for preStop logic that needs a full URL.
 		fullClusterManagerURL := clusterManagerURL
 		if clusterManagerURL != "localhost" {
 			fullClusterManagerURL = fmt.Sprintf("https://%s:8089", clusterManagerURL)
 		}
-
 		extraEnv = append(extraEnv, corev1.EnvVar{
-			Name:  splcommon.ClusterManagerURL,
+			Name:  "SPLUNK_CLUSTER_MANAGER_API_URL",
 			Value: fullClusterManagerURL,
-		})
-
-		// Also set the service name separately for peer name construction
-		extraEnv = append(extraEnv, corev1.EnvVar{
-			Name:  "SPLUNK_CLUSTER_MANAGER_SERVICE",
-			Value: clusterManagerURL,
 		})
 	}
 

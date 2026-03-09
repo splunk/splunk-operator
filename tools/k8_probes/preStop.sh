@@ -150,6 +150,30 @@ get_indexer_peer_status() {
     fi
 }
 
+# Build cluster manager API URL from available env vars.
+# Prefer SPLUNK_CLUSTER_MANAGER_API_URL; otherwise derive from
+# SPLUNK_CLUSTER_MANAGER_URL for backward compatibility.
+get_cluster_manager_api_url() {
+    local cm_api_url="${SPLUNK_CLUSTER_MANAGER_API_URL}"
+    local cm_host="${SPLUNK_CLUSTER_MANAGER_URL}"
+
+    if [ -n "$cm_api_url" ]; then
+        echo "$cm_api_url"
+        return
+    fi
+
+    if [ -z "$cm_host" ]; then
+        echo ""
+        return
+    fi
+
+    if [[ "$cm_host" == http://* || "$cm_host" == https://* ]]; then
+        echo "$cm_host"
+    else
+        echo "https://${cm_host}:8089"
+    fi
+}
+
 # Function to check if search head is in cluster
 check_search_head_in_cluster() {
     local response
@@ -183,10 +207,11 @@ decommission_indexer() {
         return 1
     fi
 
-    # Get cluster manager URL from environment
-    local cm_url="${SPLUNK_CLUSTER_MANAGER_URL}"
+    # Get cluster manager API URL from environment
+    local cm_url
+    cm_url=$(get_cluster_manager_api_url)
     if [ -z "$cm_url" ]; then
-        log_warn "SPLUNK_CLUSTER_MANAGER_URL not set, cannot verify decommission status"
+        log_warn "Cluster manager URL not set, cannot verify decommission status"
         log_info "Waiting 30 seconds for decommission to progress..."
         sleep 30
         return 0
@@ -344,8 +369,8 @@ main() {
     fi
 
     # Role-specific validation
-    if [ "$SPLUNK_ROLE" = "splunk_indexer" ] && [ -z "$SPLUNK_CLUSTER_MANAGER_URL" ]; then
-        log_warn "SPLUNK_CLUSTER_MANAGER_URL not set for indexer - decommission status verification will be skipped"
+    if [ "$SPLUNK_ROLE" = "splunk_indexer" ] && [ -z "$(get_cluster_manager_api_url)" ]; then
+        log_warn "Cluster manager URL env vars are not set for indexer - decommission status verification will be skipped"
     fi
 
     local pod_intent
