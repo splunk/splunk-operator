@@ -388,8 +388,11 @@ func TestValidateSmartStore(t *testing.T) {
 			wantErrCount: 1,
 		},
 		{
-			name: "index without name",
+			name: "index without name - with volume defined",
 			smartStore: &enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
 				IndexList: []enterpriseApi.IndexSpec{
 					{
 						Name: "",
@@ -399,11 +402,14 @@ func TestValidateSmartStore(t *testing.T) {
 					},
 				},
 			},
-			wantErrCount: 1,
+			wantErrCount: 1, // missing index name
 		},
 		{
-			name: "index without volume name",
+			name: "index without volume name and no defaults",
 			smartStore: &enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
 				IndexList: []enterpriseApi.IndexSpec{
 					{
 						Name: "idx1",
@@ -413,7 +419,57 @@ func TestValidateSmartStore(t *testing.T) {
 					},
 				},
 			},
-			wantErrCount: 1,
+			wantErrCount: 1, // missing volumeName (no defaults either)
+		},
+		{
+			name: "index with volumeName from defaults",
+			smartStore: &enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
+				Defaults: enterpriseApi.IndexConfDefaultsSpec{
+					IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+						VolName: "vol1",
+					},
+				},
+				IndexList: []enterpriseApi.IndexSpec{
+					{
+						Name: "idx1",
+					},
+				},
+			},
+			wantErrCount: 0, // volumeName comes from defaults
+		},
+		{
+			name: "index references non-existent volume",
+			smartStore: &enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
+				IndexList: []enterpriseApi.IndexSpec{
+					{
+						Name: "idx1",
+						IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+							VolName: "nonexistent",
+						},
+					},
+				},
+			},
+			wantErrCount: 1, // volumeName doesn't reference existing volume
+		},
+		{
+			name: "indexes defined without any volumes",
+			smartStore: &enterpriseApi.SmartStoreSpec{
+				IndexList: []enterpriseApi.IndexSpec{
+					{
+						Name: "idx1",
+						IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+							VolName: "vol1",
+						},
+					},
+				},
+			},
+			wantErrCount: 2, // no volumes + volumeName doesn't reference existing volume
 		},
 		{
 			name: "multiple validation errors",
@@ -430,7 +486,7 @@ func TestValidateSmartStore(t *testing.T) {
 					},
 				},
 			},
-			wantErrCount: 4,
+			wantErrCount: 4, // vol name required, vol endpoint/path required, idx name required, idx volumeName required
 		},
 	}
 

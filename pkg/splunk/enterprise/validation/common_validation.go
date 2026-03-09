@@ -183,6 +183,21 @@ func validateStorageConfig(config *enterpriseApi.StorageClassSpec, fldPath *fiel
 func validateSmartStore(smartStore *enterpriseApi.SmartStoreSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
+	// Build a set of valid volume names for reference validation
+	validVolumes := make(map[string]bool)
+	for _, vol := range smartStore.VolList {
+		if vol.Name != "" {
+			validVolumes[vol.Name] = true
+		}
+	}
+
+	// Validate: SmartStore indexes require at least one volume to be configured
+	if len(smartStore.IndexList) > 0 && len(smartStore.VolList) == 0 {
+		allErrs = append(allErrs, field.Required(
+			fldPath.Child("volumes"),
+			"at least one volume must be configured when indexes are defined"))
+	}
+
 	// Validate volume definitions
 	for i, vol := range smartStore.VolList {
 		volPath := fldPath.Child("volumes").Index(i)
@@ -200,8 +215,26 @@ func validateSmartStore(smartStore *enterpriseApi.SmartStoreSpec, fldPath *field
 		if idx.Name == "" {
 			allErrs = append(allErrs, field.Required(idxPath.Child("name"), "index name is required"))
 		}
-		if idx.VolName == "" {
-			allErrs = append(allErrs, field.Required(idxPath.Child("volumeName"), "volume name is required for index"))
+
+		// Determine effective volumeName (index-level or defaults)
+		effectiveVolName := idx.VolName
+		if effectiveVolName == "" {
+			effectiveVolName = smartStore.Defaults.VolName
+		}
+
+		// Validate: Index must have volumeName or defaults.volumeName provided
+		if effectiveVolName == "" {
+			allErrs = append(allErrs, field.Required(
+				idxPath.Child("volumeName"),
+				"volumeName is required for index (either directly or via defaults.volumeName)"))
+		} else {
+			// Validate: Index volumeName must reference an existing volume in volumes list
+			if !validVolumes[effectiveVolName] {
+				allErrs = append(allErrs, field.Invalid(
+					idxPath.Child("volumeName"),
+					effectiveVolName,
+					fmt.Sprintf("volumeName %q does not reference any volume in the volumes list", effectiveVolName)))
+			}
 		}
 	}
 
