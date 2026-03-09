@@ -428,7 +428,7 @@ func TestGetQueueAndPipelineInputsForIngestorConfFiles(t *testing.T) {
 				AuthRegion: "us-west-2",
 				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
 				DLQ:        "sqs-dlq-test",
-				VolList: []enterpriseApi.VolumeSpec{
+				VolList: []enterpriseApi.SQSVolumeSpec{
 					{SecretRef: "secret"},
 				},
 			},
@@ -502,7 +502,7 @@ func TestGetQueueAndPipelineInputsForIngestorConfFilesSQSCP(t *testing.T) {
 				AuthRegion: "us-west-2",
 				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
 				DLQ:        "sqs-dlq-test",
-				VolList: []enterpriseApi.VolumeSpec{
+				VolList: []enterpriseApi.SQSVolumeSpec{
 					{SecretRef: "secret"},
 				},
 			},

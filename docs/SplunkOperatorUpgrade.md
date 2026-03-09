@@ -22,10 +22,15 @@ A Splunk Operator for Kubernetes upgrade might include support for a later versi
 
 ## Steps to upgrade from version greater than 1.0.5 to latest
 
-1. Download the latest Splunk Operator installation yaml file.
-​
+1. Download the latest Splunk Operator installation yaml file for your deployment type.
+Cluster-wide:
 ```
-wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/3.0.0/splunk-operator-namespace.yaml
+wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/3.1.0/splunk-operator-cluster.yaml
+```​
+
+Namespace Scoped:
+```
+wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/3.1.0/splunk-operator-namespace.yaml
 ```
 ​
 2. (Optional) Review the file and update it with your specific customizations used during your install.

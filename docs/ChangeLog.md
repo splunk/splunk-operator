@@ -1,5 +1,64 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 3.1.0 (2026-02-26)
+
+* This is the 3.1.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
+
+#### New Features
+
+* Ingestion and Indexing Separation
+* Validation webhook implementation for improved CR validation
+* Telemetry support for Splunk Operator
+* Add kubebuilder validation annotations and CEL validation rules to CRDs
+
+#### Kubernetes Events and Messaging Enhancements
+
+* Emitting events for passwords, secrets, app framework, cluster manager, scaling and SmartStore operations
+* Add License Expired event notification
+* Migrate Kubernetes events to recorder for improved event handling
+* Enhanced IDXC upgrade error messages for better troubleshooting
+
+#### Helm Chart Improvements
+
+* Allow custom labels on helm chart service and service account
+* Add deployerNodeAffinity and deployerResourceSpec to SHC helm chart (GitHub Issue #1661)
+
+#### Dependency and Security Updates
+
+* Upgrade Operator SDK
+* Upgrade Golang version to 1.25.7
+* Update UBI8-minimal base image
+* Upgrade golang.org/x/crypto to 0.43.0
+* Upgrade opentelemetry-go from 1.33 to 1.40
+
+#### Bug Fixes
+
+* Fix Monitoring Console crash loop during scale-down
+* Add fallback error handling for cluster manager multisite check
+* Stabilize Monitoring Console error state handling
+* Fix app framework isAppAlreadyInstalled error handling
+* Support AWS S3 region parsing for 4-part regions
+* Properly process peers for Monitoring Console
+* Update requeue timer from 1 day to 6 hours
+
+#### Documentation
+
+* Add sample CRD yaml files in documentation
+* Update app framework documentation for deploying apps with multiple scopes
+* Update install and upgrade examples
+
+### Supported Splunk Version
+
+>| Splunk Version |
+>|----------------|
+>| 10.2.0         |
+
+### Supported Kubernetes Version
+
+>| Kubernetes Version |
+>|--------------------|
+>| 1.27 - 1.33        |
+
 ## 3.0.0 (2025-09-08)
 
 * This is the 3.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)

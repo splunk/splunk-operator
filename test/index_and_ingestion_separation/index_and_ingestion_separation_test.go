@@ -82,7 +82,7 @@ var _ = Describe("indingsep test", func() {
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
 			// Secret reference
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec(
+			volumeSpec := []enterpriseApi.SQSVolumeSpec{testenv.GenerateQueueVolumeSpec(
 				"queue-secret-ref-volume",
 				testcaseEnvInst.GetIndexIngestSepSecretName(),
 				objectStorage.S3.Endpoint,
@@ -168,7 +168,7 @@ var _ = Describe("indingsep test", func() {
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
 			// Secret reference
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec(
+			volumeSpec := []enterpriseApi.SQSVolumeSpec{testenv.GenerateQueueVolumeSpec(
 				"queue-secret-ref-volume",
 				testcaseEnvInst.GetIndexIngestSepSecretName(),
 				objectStorage.S3.Endpoint,
@@ -286,7 +286,7 @@ var _ = Describe("indingsep test", func() {
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
 			// Secret reference
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec(
+			volumeSpec := []enterpriseApi.SQSVolumeSpec{testenv.GenerateQueueVolumeSpec(
 				"queue-secret-ref-volume",
 				testcaseEnvInst.GetIndexIngestSepSecretName(),
 				objectStorage.S3.Endpoint,
@@ -403,7 +403,7 @@ var _ = Describe("indingsep test", func() {
 	Context("Ingestor rolling restart behavior", func() {
 		It("indingsep, integration, indingsep: Splunk Operator creates PodDisruptionBudget for IngestorCluster", func() {
 			// Secret reference
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec(
+			volumeSpec := []enterpriseApi.SQSVolumeSpec{testenv.GenerateQueueVolumeSpec(
 				"queue-secret-ref-volume",
 				testcaseEnvInst.GetIndexIngestSepSecretName(),
 				objectStorage.S3.Endpoint,
@@ -443,7 +443,7 @@ var _ = Describe("indingsep test", func() {
 
 		It("indingsep, integration, indingsep: Splunk Operator rolls Ingestor pods and applies updated queue secrets", func() {
 			// Secret reference
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec(
+			volumeSpec := []enterpriseApi.SQSVolumeSpec{testenv.GenerateQueueVolumeSpec(
 				"queue-secret-ref-volume",
 				testcaseEnvInst.GetIndexIngestSepSecretName(),
 				objectStorage.S3.Endpoint,
