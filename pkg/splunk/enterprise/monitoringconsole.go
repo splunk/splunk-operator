@@ -73,7 +73,15 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// If needed, Migrate the app framework status
-	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
+	appEngineInput := EngineInput{
+		Ctx:                ctx,
+		Client:             client,
+		Target:             cr,
+		AppFrameworkConfig: &cr.Spec.AppFrameworkConfig,
+		AppDeployContext:   &cr.Status.AppContext,
+		Scope:              enterpriseApi.ScopeLocal,
+	}
+	err = DefaultAppFrameworkEngine.EnsureAppFrameworkStatus(appEngineInput)
 	if err != nil {
 		return result, err
 	}
@@ -82,7 +90,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		err := DefaultAppFrameworkEngine.EnsureAppRepoState(appEngineInput)
 		if err != nil {
 			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
@@ -161,8 +169,11 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
-		result = *finalResult
+		appEngineInput.Phase = cr.Status.Phase
+		finalResult := DefaultAppFrameworkEngine.RunAppFrameworkIfReady(appEngineInput)
+		if finalResult.Result != nil {
+			result = *finalResult.Result
+		}
 
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
@@ -202,7 +213,15 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 	ss.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
 
 	// Setup App framework staging volume for apps
-	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	appEngineInput := EngineInput{
+		Ctx:                ctx,
+		Client:             client,
+		Target:             cr,
+		AppFrameworkConfig: &cr.Spec.AppFrameworkConfig,
+		AppDeployContext:   &cr.Status.AppContext,
+		PodTemplateSpec:    &ss.Spec.Template,
+	}
+	DefaultAppFrameworkEngine.EnsureAppFrameworkStagingVolume(appEngineInput)
 	return ss, nil
 }
 

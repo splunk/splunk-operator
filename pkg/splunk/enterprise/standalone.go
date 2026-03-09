@@ -71,7 +71,15 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	cr.Status.Replicas = cr.Spec.Replicas
 
 	// If needed, Migrate the app framework status
-	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
+	appEngineInput := EngineInput{
+		Ctx:                ctx,
+		Client:             client,
+		Target:             cr,
+		AppFrameworkConfig: &cr.Spec.AppFrameworkConfig,
+		AppDeployContext:   &cr.Status.AppContext,
+		Scope:              enterpriseApi.ScopeLocal,
+	}
+	err = DefaultAppFrameworkEngine.EnsureAppFrameworkStatus(appEngineInput)
 	if err != nil {
 		return result, err
 	}
@@ -96,7 +104,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		err := DefaultAppFrameworkEngine.EnsureAppRepoState(appEngineInput)
 		if err != nil {
 			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
@@ -241,8 +249,11 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			}
 		}
 
-		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
-		result = *finalResult
+		appEngineInput.Phase = cr.Status.Phase
+		finalResult := DefaultAppFrameworkEngine.RunAppFrameworkIfReady(appEngineInput)
+		if finalResult.Result != nil {
+			result = *finalResult.Result
+		}
 
 		// Add a splunk operator telemetry app
 		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
@@ -280,7 +291,15 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	}
 
 	// Setup App framework staging volume for apps
-	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	appEngineInput := EngineInput{
+		Ctx:                ctx,
+		Client:             client,
+		Target:             cr,
+		AppFrameworkConfig: &cr.Spec.AppFrameworkConfig,
+		AppDeployContext:   &cr.Status.AppContext,
+		PodTemplateSpec:    &ss.Spec.Template,
+	}
+	DefaultAppFrameworkEngine.EnsureAppFrameworkStagingVolume(appEngineInput)
 
 	return ss, nil
 }
