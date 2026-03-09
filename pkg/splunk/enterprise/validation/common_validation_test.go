@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -221,6 +222,95 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 				},
 			},
 			wantErrCount: 0,
+		},
+		// Resource requirements validation tests
+		{
+			name: "resources - valid: request equals limit",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse("1Gi"),
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse("1Gi"),
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+						},
+					},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "resources - valid: request less than limit",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse("512Mi"),
+							corev1.ResourceCPU:    resource.MustParse("250m"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse("1Gi"),
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+						},
+					},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "resources - invalid: memory request exceeds limit",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse("2Gi"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse("1Gi"),
+						},
+					},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.resources.requests.memory",
+		},
+		{
+			name: "resources - invalid: cpu request exceeds limit",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU: resource.MustParse("1000m"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU: resource.MustParse("500m"),
+						},
+					},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.resources.requests.cpu",
+		},
+		{
+			name: "resources - invalid: both memory and cpu requests exceed limits",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse("2Gi"),
+							corev1.ResourceCPU:    resource.MustParse("1000m"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse("1Gi"),
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+						},
+					},
+				},
+			},
+			wantErrCount: 2,
 		},
 	}
 

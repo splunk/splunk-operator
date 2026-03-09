@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"regexp"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -78,6 +79,9 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *fie
 		allErrs = append(allErrs, validateProbe(spec.StartupProbe, fldPath.Child("startupProbe"))...)
 	}
 
+	// Validate resource requests <= limits
+	allErrs = append(allErrs, validateResourceRequirements(&spec.Resources, fldPath.Child("resources"))...)
+
 	return allErrs
 }
 
@@ -115,6 +119,37 @@ func validateProbe(probe *enterpriseApi.Probe, fldPath *field.Path) field.ErrorL
 			fldPath.Child("failureThreshold"),
 			probe.FailureThreshold,
 			"must be greater than or equal to 1"))
+	}
+
+	return allErrs
+}
+
+// validateResourceRequirements validates that resource requests do not exceed limits
+func validateResourceRequirements(resources *corev1.ResourceRequirements, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Validate memory: request <= limit
+	memoryRequest := resources.Requests.Memory()
+	memoryLimit := resources.Limits.Memory()
+	if !memoryRequest.IsZero() && !memoryLimit.IsZero() {
+		if memoryRequest.Cmp(*memoryLimit) > 0 {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("requests").Child("memory"),
+				memoryRequest.String(),
+				fmt.Sprintf("memory request must be less than or equal to memory limit (%s)", memoryLimit.String())))
+		}
+	}
+
+	// Validate CPU: request <= limit
+	cpuRequest := resources.Requests.Cpu()
+	cpuLimit := resources.Limits.Cpu()
+	if !cpuRequest.IsZero() && !cpuLimit.IsZero() {
+		if cpuRequest.Cmp(*cpuLimit) > 0 {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("requests").Child("cpu"),
+				cpuRequest.String(),
+				fmt.Sprintf("cpu request must be less than or equal to cpu limit (%s)", cpuLimit.String())))
+		}
 	}
 
 	return allErrs
