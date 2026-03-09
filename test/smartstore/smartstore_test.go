@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/ginkgo/v2"
 	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
