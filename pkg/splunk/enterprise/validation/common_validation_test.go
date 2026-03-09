@@ -344,6 +344,88 @@ func TestValidateAppFramework(t *testing.T) {
 			},
 			wantErrCount: 2, // source2 and source3 are duplicates of source1
 		},
+		// premiumAppsProps validation tests
+		{
+			name: "premiumApps scope with premiumAppsProps.type is valid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{
+						Name:     "esApps",
+						Location: "/es-apps",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							Scope:            "premiumApps",
+							PremiumAppsProps: enterpriseApi.PremiumAppsProps{Type: "enterpriseSecurity"},
+						},
+					},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "premiumApps scope without premiumAppsProps.type is invalid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{
+						Name:     "esApps",
+						Location: "/es-apps",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							Scope: "premiumApps",
+						},
+					},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.appSources[0].premiumAppsProps.type",
+		},
+		{
+			name: "premiumApps scope with premiumAppsProps.type from defaults is valid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				Defaults: enterpriseApi.AppSourceDefaultSpec{
+					PremiumAppsProps: enterpriseApi.PremiumAppsProps{Type: "enterpriseSecurity"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{
+						Name:     "esApps",
+						Location: "/es-apps",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							Scope: "premiumApps",
+						},
+					},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "premiumApps scope from defaults without premiumAppsProps.type is invalid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				Defaults: enterpriseApi.AppSourceDefaultSpec{
+					Scope: "premiumApps",
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{
+						Name:     "esApps",
+						Location: "/es-apps",
+					},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.appSources[0].premiumAppsProps.type",
+		},
+		{
+			name: "non-premiumApps scope without premiumAppsProps is valid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{
+						Name:     "localApps",
+						Location: "/apps",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							Scope: "local",
+						},
+					},
+				},
+			},
+			wantErrCount: 0,
+		},
 	}
 
 	for _, tt := range tests {

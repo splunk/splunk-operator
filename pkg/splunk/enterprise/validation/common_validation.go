@@ -142,6 +142,24 @@ func validateAppFramework(appConfig *enterpriseApi.AppFrameworkSpec, fldPath *fi
 		if source.Location == "" {
 			allErrs = append(allErrs, field.Required(sourcePath.Child("location"), "app source location is required"))
 		}
+
+		// Validate premiumAppsProps is required when scope is "premiumApps"
+		scope := source.Scope
+		if scope == "" {
+			scope = appConfig.Defaults.Scope
+		}
+		if scope == "premiumApps" {
+			// Check if premiumAppsProps.Type is set (either in source or defaults)
+			premiumType := source.PremiumAppsProps.Type
+			if premiumType == "" {
+				premiumType = appConfig.Defaults.PremiumAppsProps.Type
+			}
+			if premiumType == "" {
+				allErrs = append(allErrs, field.Required(
+					sourcePath.Child("premiumAppsProps").Child("type"),
+					"premiumAppsProps.type is required when scope is 'premiumApps'"))
+			}
+		}
 	}
 
 	// Validate uniqueness of app sources by Location + Scope combination
