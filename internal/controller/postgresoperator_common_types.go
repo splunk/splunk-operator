@@ -20,7 +20,7 @@ type normalizedCNPGClusterSpec struct {
 	Resources               corev1.ResourceRequirements
 }
 
-type reconcilePhases string
+type reconcileDBPhases string
 type reconcileClusterPhases string
 type conditionTypes string
 type conditionReasons string
@@ -36,19 +36,21 @@ const (
 	readOnlyEndpoint  string = "ro"
 	readWriteEndpoint string = "rw"
 	// default database name
-	defaultDatabaseName           string = "postgres"
+	defaultDatabaseName                    string = "postgres"
 	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"
 	defaultSecretSuffix           string = "-secret-"
 	defaultPoolerSuffix           string = "-pooler-"
 	defaultConfigSuffix           string = "-config-"
 	defaultPort                   string = "5432"
-	superUsername                 string = "postgres"
+	superUsername                          string = "postgres"
+	postgresClusterFinalizerName string = "postgresclusters.enterprise.splunk.com/finalizer"
+	clusterDeletionPolicyDelete  string = "Delete"
 
 	// phases
-	ready        reconcilePhases = "Ready"
-	pending      reconcilePhases = "Pending"
-	provisioning reconcilePhases = "Provisioning"
-	failed       reconcilePhases = "Failed"
+	readyDBPhase        reconcileDBPhases = "Ready"
+	pendingDBPhase      reconcileDBPhases = "Pending"
+	provisioningDBPhase reconcileDBPhases = "Provisioning"
+	failedDBPhase       reconcileDBPhases = "Failed"
 
 	// cluster phases
 	readyClusterPhase        reconcileClusterPhases = "Ready"
@@ -113,6 +115,7 @@ const (
 	reasonCNPGProvisioningFailed conditionReasons = "CNPGProvisioningFailed"
 	reasonCNPGPluginError        conditionReasons = "CNPGPluginError"
 	reasonCNPGImageError         conditionReasons = "CNPGImageError"
+	reasonClusterDeleteFailed    conditionReasons = "ClusterDeleteFailed"
 
 	// Cluster status
 	ClusterNotFound         clusterReadyStatus = "NotFound"

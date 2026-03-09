@@ -1,5 +1,6 @@
 resources:
 - manager.yaml
+- controller_manager_telemetry.yaml
 
 generatorOptions:
   disableNameSuffixHash: true
@@ -16,5 +17,5 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 images:
 - name: controller
-  newName: splunk-operator
-  newTag: 0.1.9
+  newName: docker.io/splunk/splunk-operator
+  newTag: 3.1.0
