@@ -128,19 +128,20 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		return enterpriseApi.PhaseError, err
 	}
 
-	// wait for all replicas ready
-	replicas := *statefulSet.Spec.Replicas
+	// Use StatefulSet spec replicas for scaling intent.
+	// Ready replicas are transient runtime state and can lag during restarts.
+	currentReplicas := *statefulSet.Spec.Replicas
 	readyReplicas := statefulSet.Status.ReadyReplicas
 
 	// CRITICAL: Check for scaling FIRST before waiting for pods to be ready
 	// This ensures we detect when CR spec changes (e.g., replicas: 3 -> 2)
 	scopedLog.Info("UpdateStatefulSetPods called",
-		"currentReplicas", replicas,
+		"currentReplicas", currentReplicas,
 		"desiredReplicas", desiredReplicas,
 		"readyReplicas", readyReplicas)
 
 	// check for scaling up
-	if readyReplicas < desiredReplicas {
+	if currentReplicas < desiredReplicas {
 		// scale up StatefulSet to match desiredReplicas
 		scopedLog.Info("Scaling replicas up", "replicas", desiredReplicas)
 		*statefulSet.Spec.Replicas = desiredReplicas
@@ -148,9 +149,9 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	}
 
 	// check for scaling down
-	if readyReplicas > desiredReplicas {
+	if currentReplicas > desiredReplicas {
 		// prepare pod for removal via scale down
-		n := readyReplicas - 1
+		n := currentReplicas - 1
 		podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
 		ready, err := mgr.PrepareScaleDown(ctx, n)
 		if err != nil {
@@ -187,8 +188,8 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		return enterpriseApi.PhaseScalingDown, nil
 	}
 
-	// No scaling needed: readyReplicas == desiredReplicas
-	// But we need to wait for StatefulSet to stabilize at the desired count
+	// No scaling intent left: currentReplicas == desiredReplicas.
+	// Wait for runtime state (ready replicas) to converge.
 
 	// Wait for StatefulSet.Spec.Replicas to match desiredReplicas (should be updated now)
 	// and wait for all desired pods to be ready
