@@ -6,7 +6,7 @@ metadata:
   creationTimestamp: null
   labels:
     name: splunk-operator
-  name: clustermasters.enterprise.splunk.com
+  name: ingestorclusters.enterprise.splunk.com
 spec:
   conversion:
     strategy: Webhook
@@ -20,39 +20,39 @@ spec:
       - v1
   group: enterprise.splunk.com
   names:
-    kind: ClusterMaster
-    listKind: ClusterMasterList
-    plural: clustermasters
+    kind: IngestorCluster
+    listKind: IngestorClusterList
+    plural: ingestorclusters
     shortNames:
-    - cm-idxc
-    singular: clustermaster
+    - ing
+    singular: ingestorcluster
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Phase of the cluster master
+    - description: Status of ingestor cluster pods
       jsonPath: .status.phase
       name: Phase
       type: string
-    - description: Status of cluster master
-      jsonPath: .status.clusterMasterPhase
-      name: Master
-      type: string
-    - description: Desired number of indexer peers
+    - description: Number of desired ingestor cluster pods
       jsonPath: .status.replicas
       name: Desired
       type: integer
-    - description: Current number of ready indexer peers
+    - description: Current number of ready ingestor cluster pods
       jsonPath: .status.readyReplicas
       name: Ready
       type: integer
-    - description: Age of cluster manager
+    - description: Age of ingestor cluster resource
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v3
+    - description: Auxillary message describing CR status
+      jsonPath: .status.message
+      name: Message
+      type: string
+    name: v4
     schema:
       openAPIV3Schema:
-        description: ClusterMaster is the Schema for the cluster manager API
+        description: IngestorCluster is the Schema for the ingestorclusters API
         properties:
           apiVersion:
             description: |-
@@ -72,7 +72,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: ClusterMasterSpec defines the desired state of ClusterMaster
+            description: IngestorClusterSpec defines the spec of Ingestor Cluster
             properties:
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
@@ -991,8 +991,8 @@ spec:
                     type: object
                 type: object
               appRepo:
-                description: Splunk Enterprise App repository. Specifies remote App
-                  location and scope for Splunk App management
+                description: Splunk Enterprise app repository that specifies remote
+                  app location and scope for Splunk app management
                 properties:
                   appInstallPeriodSeconds:
                     default: 90
@@ -1585,6 +1585,92 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              objectStorageRef:
+                description: Object Storage reference
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              queueRef:
+                description: Queue reference
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               readinessInitialDelaySeconds:
                 description: |-
                   ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe
@@ -1617,6 +1703,12 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              replicas:
+                default: 1
+                description: Number of ingestor pods
+                format: int32
+                minimum: 1
+                type: integer
               resources:
                 description: resource requirements for the pod containers
                 properties:
@@ -2197,123 +2289,6 @@ spec:
                             x-kubernetes-list-type: atomic
                         type: object
                     type: object
-                type: object
-              smartstore:
-                description: Splunk Smartstore configuration. Refer to indexes.conf.spec
-                  and server.conf.spec on docs.splunk.com
-                properties:
-                  cacheManager:
-                    description: Defines Cache manager settings
-                    properties:
-                      evictionPadding:
-                        description: Additional size beyond 'minFreeSize' before eviction
-                          kicks in
-                        type: integer
-                      evictionPolicy:
-                        description: Eviction policy to use
-                        type: string
-                      hotlistBloomFilterRecencyHours:
-                        description: Time period relative to the bucket's age, during
-                          which the bloom filter file is protected from cache eviction
-                        type: integer
-                      hotlistRecencySecs:
-                        description: Time period relative to the bucket's age, during
-                          which the bucket is protected from cache eviction
-                        type: integer
-                      maxCacheSize:
-                        description: Max cache size per partition
-                        type: integer
-                      maxConcurrentDownloads:
-                        description: Maximum number of buckets that can be downloaded
-                          from remote storage in parallel
-                        type: integer
-                      maxConcurrentUploads:
-                        description: Maximum number of buckets that can be uploaded
-                          to remote storage in parallel
-                        type: integer
-                    type: object
-                  defaults:
-                    description: Default configuration for indexes
-                    properties:
-                      maxGlobalDataSizeMB:
-                        description: MaxGlobalDataSizeMB defines the maximum amount
-                          of space for warm and cold buckets of an index
-                        type: integer
-                      maxGlobalRawDataSizeMB:
-                        description: MaxGlobalDataSizeMB defines the maximum amount
-                          of cumulative space for warm and cold buckets of an index
-                        type: integer
-                      volumeName:
-                        description: Remote Volume name
-                        type: string
-                    type: object
-                  indexes:
-                    description: List of Splunk indexes
-                    items:
-                      description: IndexSpec defines Splunk index name and storage
-                        path
-                      properties:
-                        hotlistBloomFilterRecencyHours:
-                          description: Time period relative to the bucket's age, during
-                            which the bloom filter file is protected from cache eviction
-                          type: integer
-                        hotlistRecencySecs:
-                          description: Time period relative to the bucket's age, during
-                            which the bucket is protected from cache eviction
-                          type: integer
-                        maxGlobalDataSizeMB:
-                          description: MaxGlobalDataSizeMB defines the maximum amount
-                            of space for warm and cold buckets of an index
-                          type: integer
-                        maxGlobalRawDataSizeMB:
-                          description: MaxGlobalDataSizeMB defines the maximum amount
-                            of cumulative space for warm and cold buckets of an index
-                          type: integer
-                        name:
-                          description: Splunk index name
-                          type: string
-                        remotePath:
-                          description: Index location relative to the remote volume
-                            path
-                          type: string
-                        volumeName:
-                          description: Remote Volume name
-                          type: string
-                      type: object
-                    type: array
-                  volumes:
-                    description: List of remote storage volumes
-                    items:
-                      description: VolumeSpec defines remote volume config
-                      properties:
-                        endpoint:
-                          description: Remote volume URI
-                          type: string
-                        name:
-                          description: Remote volume name
-                          type: string
-                        path:
-                          description: Remote volume path
-                          type: string
-                        provider:
-                          description: 'App Package Remote Store provider. Supported
-                            values: aws, minio, azure, gcp.'
-                          type: string
-                        region:
-                          description: Region of the remote storage volume where apps
-                            reside. Used for aws, if provided. Not used for minio
-                            and azure.
-                          type: string
-                        secretRef:
-                          description: Secret object name
-                          type: string
-                        storageType:
-                          description: 'Remote Storage type. Supported values: s3,
-                            blob, gcs. s3 works with aws or minio providers, whereas
-                            blob works with azure provider, gcs works for gcp.'
-                          type: string
-                      type: object
-                    type: array
                 type: object
               startupProbe:
                 description: StartupProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes
@@ -4355,12 +4330,21 @@ spec:
                   - name
                   type: object
                 type: array
+            required:
+            - objectStorageRef
+            - queueRef
             type: object
+            x-kubernetes-validations:
+            - message: queueRef is immutable once created
+              rule: self.queueRef == oldSelf.queueRef
+            - message: objectStorageRef is immutable once created
+              rule: self.objectStorageRef == oldSelf.objectStorageRef
           status:
-            description: ClusterMasterStatus defines the observed state of ClusterMaster
+            description: IngestorClusterStatus defines the observed state of Ingestor
+              Cluster
             properties:
               appContext:
-                description: App Framework status
+                description: App Framework context
                 properties:
                   appRepo:
                     description: List of App package (*.spl, *.tgz) locations on remote
@@ -4640,19 +4624,16 @@ spec:
                     description: App Framework version info for future use
                     type: integer
                 type: object
-              bundlePushInfo:
-                description: Bundle push status tracker
-                properties:
-                  lastCheckInterval:
-                    format: int64
-                    type: integer
-                  needToPushManagerApps:
-                    type: boolean
-                  needToPushMasterApps:
-                    type: boolean
-                type: object
+              credentialSecretVersion:
+                description: Credential secret version to track changes to the secret
+                  and trigger rolling restart of indexer cluster peers when the secret
+                  is updated
+                type: string
+              message:
+                description: Auxillary message describing CR status
+                type: string
               phase:
-                description: current phase of the cluster manager
+                description: Phase of the ingestor pods
                 enum:
                 - Pending
                 - Ready
@@ -4662,131 +4643,27 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              readyReplicas:
+                description: Number of ready ingestor pods
+                format: int32
+                type: integer
+              replicas:
+                description: Number of desired ingestor pods
+                format: int32
+                type: integer
               resourceRevMap:
                 additionalProperties:
                   type: string
-                description: Resource Revision tracker
+                description: Resource revision tracker
                 type: object
               selector:
-                description: selector for pods, used by HorizontalPodAutoscaler
+                description: Selector for pods used by HorizontalPodAutoscaler
                 type: string
-              smartstore:
-                description: Splunk Smartstore configuration. Refer to indexes.conf.spec
-                  and server.conf.spec on docs.splunk.com
-                properties:
-                  cacheManager:
-                    description: Defines Cache manager settings
-                    properties:
-                      evictionPadding:
-                        description: Additional size beyond 'minFreeSize' before eviction
-                          kicks in
-                        type: integer
-                      evictionPolicy:
-                        description: Eviction policy to use
-                        type: string
-                      hotlistBloomFilterRecencyHours:
-                        description: Time period relative to the bucket's age, during
-                          which the bloom filter file is protected from cache eviction
-                        type: integer
-                      hotlistRecencySecs:
-                        description: Time period relative to the bucket's age, during
-                          which the bucket is protected from cache eviction
-                        type: integer
-                      maxCacheSize:
-                        description: Max cache size per partition
-                        type: integer
-                      maxConcurrentDownloads:
-                        description: Maximum number of buckets that can be downloaded
-                          from remote storage in parallel
-                        type: integer
-                      maxConcurrentUploads:
-                        description: Maximum number of buckets that can be uploaded
-                          to remote storage in parallel
-                        type: integer
-                    type: object
-                  defaults:
-                    description: Default configuration for indexes
-                    properties:
-                      maxGlobalDataSizeMB:
-                        description: MaxGlobalDataSizeMB defines the maximum amount
-                          of space for warm and cold buckets of an index
-                        type: integer
-                      maxGlobalRawDataSizeMB:
-                        description: MaxGlobalDataSizeMB defines the maximum amount
-                          of cumulative space for warm and cold buckets of an index
-                        type: integer
-                      volumeName:
-                        description: Remote Volume name
-                        type: string
-                    type: object
-                  indexes:
-                    description: List of Splunk indexes
-                    items:
-                      description: IndexSpec defines Splunk index name and storage
-                        path
-                      properties:
-                        hotlistBloomFilterRecencyHours:
-                          description: Time period relative to the bucket's age, during
-                            which the bloom filter file is protected from cache eviction
-                          type: integer
-                        hotlistRecencySecs:
-                          description: Time period relative to the bucket's age, during
-                            which the bucket is protected from cache eviction
-                          type: integer
-                        maxGlobalDataSizeMB:
-                          description: MaxGlobalDataSizeMB defines the maximum amount
-                            of space for warm and cold buckets of an index
-                          type: integer
-                        maxGlobalRawDataSizeMB:
-                          description: MaxGlobalDataSizeMB defines the maximum amount
-                            of cumulative space for warm and cold buckets of an index
-                          type: integer
-                        name:
-                          description: Splunk index name
-                          type: string
-                        remotePath:
-                          description: Index location relative to the remote volume
-                            path
-                          type: string
-                        volumeName:
-                          description: Remote Volume name
-                          type: string
-                      type: object
-                    type: array
-                  volumes:
-                    description: List of remote storage volumes
-                    items:
-                      description: VolumeSpec defines remote volume config
-                      properties:
-                        endpoint:
-                          description: Remote volume URI
-                          type: string
-                        name:
-                          description: Remote volume name
-                          type: string
-                        path:
-                          description: Remote volume path
-                          type: string
-                        provider:
-                          description: 'App Package Remote Store provider. Supported
-                            values: aws, minio, azure, gcp.'
-                          type: string
-                        region:
-                          description: Region of the remote storage volume where apps
-                            reside. Used for aws, if provided. Not used for minio
-                            and azure.
-                          type: string
-                        secretRef:
-                          description: Secret object name
-                          type: string
-                        storageType:
-                          description: 'Remote Storage type. Supported values: s3,
-                            blob, gcs. s3 works with aws or minio providers, whereas
-                            blob works with azure provider, gcs works for gcp.'
-                          type: string
-                      type: object
-                    type: array
-                type: object
+              serviceAccount:
+                description: Service account to track changes to the service account
+                  and trigger rolling restart of indexer cluster peers when the service
+                  account is updated
+                type: string
               telAppInstalled:
                 description: Telemetry App installation flag
                 type: boolean
@@ -4795,27 +4672,11 @@ spec:
     served: true
     storage: true
     subresources:
+      scale:
+        labelSelectorPath: .status.selector
+        specReplicasPath: .spec.replicas
+        statusReplicasPath: .status.replicas
       status: {}
-  - name: v1
-    schema:
-      openAPIV3Schema:
-        properties:
-          apiVersion:
-            type: string
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-    served: true
-    storage: false
-  - name: v2
-    schema:
-      openAPIV3Schema:
-        properties:
-          apiVersion:
-            type: string
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-    served: true
-    storage: false
 status:
   acceptedNames:
     kind: ""

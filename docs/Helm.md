@@ -29,7 +29,7 @@ make install
 OR
 
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/3.0.0/splunk-operator-crds.yaml --server-side
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/3.1.0/splunk-operator-crds.yaml --server-side
 ```
 
 Helm provides a long list of commands to manage your deployment, we'll be going over a few useful ones in the sections to come. You can learn more about supported commands [here](https://helm.sh/docs/helm/helm/).

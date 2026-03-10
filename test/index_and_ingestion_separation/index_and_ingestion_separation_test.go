@@ -81,7 +81,10 @@ var _ = Describe("indingsep test", func() {
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
 			// Secret reference
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec("queue-secret-ref-volume", testcaseEnvInst.GetIndexIngestSepSecretName())}
+			volumeSpec := []enterpriseApi.SQSVolumeSpec{testenv.GenerateQueueVolumeSpec(
+				"queue-secret-ref-volume",
+				testcaseEnvInst.GetIndexIngestSepSecretName(),
+			)}
 			queue.SQS.VolList = volumeSpec
 
 			// Deploy Queue
@@ -159,7 +162,10 @@ var _ = Describe("indingsep test", func() {
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
 			// Secret reference
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec("queue-secret-ref-volume", testcaseEnvInst.GetIndexIngestSepSecretName())}
+			volumeSpec := []enterpriseApi.SQSVolumeSpec{testenv.GenerateQueueVolumeSpec(
+				"queue-secret-ref-volume",
+				testcaseEnvInst.GetIndexIngestSepSecretName(),
+			)}
 			queue.SQS.VolList = volumeSpec
 
 			// Deploy Queue
@@ -269,7 +275,10 @@ var _ = Describe("indingsep test", func() {
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
 			// Secret reference
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec("queue-secret-ref-volume", testcaseEnvInst.GetIndexIngestSepSecretName())}
+			volumeSpec := []enterpriseApi.SQSVolumeSpec{testenv.GenerateQueueVolumeSpec(
+				"queue-secret-ref-volume",
+				testcaseEnvInst.GetIndexIngestSepSecretName(),
+			)}
 			queue.SQS.VolList = volumeSpec
 
 			// Deploy Queue

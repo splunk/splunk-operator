@@ -28,7 +28,7 @@ jobs:
       SPLUNK_OPERATOR_RC_IMAGE_NAME: splunk/splunk-operator-rc
     steps:
     - name: Set up cosign
-      uses: sigstore/cosign-installer@main
+      uses: sigstore/cosign-installer@v4.0.0
 
     - name: Checkout code
       uses: actions/checkout@v2
@@ -39,7 +39,7 @@ jobs:
 
     - name: Dotenv Action
       id: dotenv
-      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      uses: falti/dotenv-action@v1
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v5
@@ -63,7 +63,7 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2.5.0
     - name: Configure Docker Credentials
-      uses: docker/login-action@v1
+      uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
@@ -85,7 +85,7 @@ jobs:
         make generate-artifacts  IMG=splunk/splunk-operator:${{ github.event.inputs.release_version }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.enterprise_version }}
 
     - name: Upload Release Artifacts
-      uses: actions/upload-artifact@v4.4.0
+      uses: actions/upload-artifact@v6
       with:
         name: "release-artifacts-${{ github.event.inputs.release_version }}"
         path: "release-**"
@@ -108,14 +108,14 @@ jobs:
       run: |
         regctl image copy ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
         regctl image copy ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC splunk/splunk-operator:latest
-    
+
     - name: Sign Splunk Operator image with a key
       run: |
         cosign sign --yes --key env://COSIGN_PRIVATE_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
       env:
         COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
         COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-    
+
     - name: Verify Splunk Operator image with a key
       run: |
         cosign verify --key env://COSIGN_PUBLIC_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
@@ -125,14 +125,14 @@ jobs:
     - name: Promote Distroless RC Image to Release
       run: |
         regctl image copy ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC-distroless splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
-    
+
     - name: Sign Distroless Splunk Operator image with a key
       run: |
         cosign sign --yes --key env://COSIGN_PRIVATE_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
       env:
         COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
         COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-    
+
     - name: Verify Distroless Splunk Operator image with a key
       run: |
         cosign verify --key env://COSIGN_PUBLIC_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
