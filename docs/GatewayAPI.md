@@ -57,6 +57,21 @@ For indexer ingest, verify service ports include:
 3. `curl`
 4. `nc` (netcat)
 
+### Validation baseline for this guide
+
+This flow was validated on AKS on March 10, 2026 with:
+
+1. Splunk Operator `3.0.0`
+2. Splunk Enterprise image `10.2.0`
+3. Envoy Gateway `v1.7.0`
+
+Observed results:
+
+1. HEC health on `8088` returned `HEC is healthy`.
+2. HEC event post on `8088` returned `{"text":"Success","code":0}`.
+3. S2S TCP check on `9997` succeeded.
+4. Cross-namespace policy checks produced expected `NotAllowedByListeners`, `RefNotPermitted`, and `UnsupportedValue` (multiple TCP routes on a single listener).
+
 ## Quick implementation flow
 
 This guide follows four phases:
@@ -195,7 +210,7 @@ If your forwarding tier route objects are created outside the Splunk namespace (
 
 ### Default secure-deny behavior
 
-Cross-namespace route attachments can fail with:
+Cross-namespace route attachments can fail with one or both of the following, depending on listener policy and backend reference policy:
 
 1. `Accepted=False` + `NotAllowedByListeners`.
 2. `ResolvedRefs=False` + `RefNotPermitted`.
