@@ -1,0 +1,49 @@
+@startuml
+' Fancy C4 context-style diagram (custom colors)
+skinparam backgroundColor #F8FAFF
+skinparam shadowing true
+skinparam defaultFontName "Avenir Next"
+skinparam roundCorner 18
+skinparam rectangle {
+  BorderColor #1E3A8A
+  BackgroundColor #DBEAFE
+  FontColor #0F172A
+}
+skinparam package {
+  BorderColor #0E7490
+  BackgroundColor #CFFAFE
+  FontColor #042F2E
+}
+skinparam arrow {
+  Color #0F766E
+  FontColor #0F172A
+  Thickness 2
+}
+
+rectangle "External Forwarding Tier\n(UF/HF, Edge Collectors)" as FORWARDERS #FDE68A
+rectangle "Azure AKS Cluster" as AKS #E0E7FF {
+  rectangle "Gateway API\n(GatewayClass/Gateway/Routes)" as GAPI #BFDBFE
+  rectangle "Envoy Gateway Data Plane" as ENVOY #93C5FD
+  rectangle "Splunk Operator (SOK)" as SOK #A7F3D0
+  rectangle "Splunk Enterprise on K8s\n(C3: CM/Indexer/SHC or Standalone)" as SPLUNK #86EFAC
+  rectangle "Kubernetes Services\n(8088 HEC, 9997 S2S)" as SVC #BBF7D0
+}
+rectangle "Azure Key Vault" as AKV #FECACA
+rectangle "External Secrets Operator (ESO)" as ESO #FCA5A5
+
+FORWARDERS --> GAPI : Internet or private edge\nHEC(8088)/S2S(9997)
+GAPI --> ENVOY : Gateway API config translation
+ENVOY --> SVC : L4/L7 routing
+SVC --> SPLUNK : Splunk ingest and web/API traffic
+AKV --> ESO : Secret source of truth
+ESO --> SOK : K8s namespace secret sync
+SOK --> SPLUNK : Versioned CR secrets mounted to pods
+
+note right of GAPI
+Gateway API enforces:
+- listener policy
+- namespace attachment rules
+- route/backend references
+end note
+
+@enduml
