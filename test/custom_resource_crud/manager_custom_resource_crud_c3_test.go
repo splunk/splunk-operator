@@ -47,6 +47,11 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+
+		// Validate test prerequisites early to fail fast
+		err = testenv.ValidateTestPrerequisites(ctx, deployment, testcaseEnvInst)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
+
 		defaultCPULimits = "4"
 		newCPULimits = "2"
 		verificationTimeout = 150 * time.Second

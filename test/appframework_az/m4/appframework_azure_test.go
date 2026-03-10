@@ -1118,7 +1118,7 @@ var _ = Describe("m4appfw test", func() {
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
-			// Wait for Monitoring Console to reach Ready phase instead of using time.Sleep
+			// Wait for Monitoring Console to reach Ready phase
 			err = testenv.WaitForMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), mc.Name, enterpriseApi.PhaseReady, 2*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for MonitoringConsole to reach Ready phase")
 			// Verify Monitoring Console is ready and stays in ready state
@@ -1693,7 +1693,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
-			// Wait for SearchHeadCluster to reach Ready phase instead of using time.Sleep
+			// Wait for SearchHeadCluster to reach Ready phase
 			err = testenv.WaitForSearchHeadClusterPhase(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), shc.Name, enterpriseApi.PhaseReady, 60*time.Second)
 			Expect(err).To(Succeed(), "Timed out waiting for SearchHeadCluster to reach Ready phase")
 			// Wait for polling interval to pass
@@ -2269,7 +2269,7 @@ var _ = Describe("m4appfw test", func() {
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map for Search Head Cluster")
 
-			// Wait for ClusterManager to reach Ready phase instead of using time.Sleep
+			// Wait for ClusterManager to reach Ready phase
 			testcaseEnvInst.Log.Info("Wait for ClusterManager and SearchHeadCluster to reach Ready phase")
 			err = testenv.WaitForClusterManagerPhase(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), cm.Name, enterpriseApi.PhaseReady, 2*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for ClusterManager to reach Ready phase")

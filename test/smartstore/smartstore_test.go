@@ -28,6 +28,10 @@ var _ = Describe("Smartstore test", func() {
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+
+		// Validate test prerequisites early to fail fast
+		err = testenv.ValidateTestPrerequisites(ctx, deployment, testcaseEnvInst)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {
@@ -70,7 +74,7 @@ var _ = Describe("Smartstore test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Wait for Standalone to reach Ready phase
-			err = testenv.WaitForStandalonePhase(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), standalone.Name, enterpriseApi.PhaseReady, 5*time.Minute)
+			err = testenv.WaitForStandalonePhase(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), standalone.Name, enterpriseApi.PhaseReady, 2*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for Standalone to reach Ready phase")
 
 			// Verify standalone goes to ready state and stays ready

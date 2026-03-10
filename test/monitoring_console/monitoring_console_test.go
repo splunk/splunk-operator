@@ -41,6 +41,10 @@ var _ = Describe("Monitoring Console test", func() {
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+
+		// Validate test prerequisites early to fail fast
+		err = testenv.ValidateTestPrerequisites(ctx, deployment, testcaseEnvInst)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {
@@ -204,8 +208,6 @@ var _ = Describe("Monitoring Console test", func() {
 
 			testcaseEnvInst.Log.Info("Check standalone instance in MC Peer list")
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}, mcName, true, false)
-
-			//time.Sleep(2 * time.Second)
 
 			// Verify all Search Head Members are configured on Monitoring Console
 			shPods = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas, false, 0)

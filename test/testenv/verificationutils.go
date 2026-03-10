@@ -1352,7 +1352,7 @@ func WaitForPasswordSyncCompleted(ctx context.Context, deployment *Deployment, t
 	return WaitForEvent(ctx, deployment, testenvInstance, namespace, crName, "PasswordSyncCompleted", timeout)
 }
 
-// WaitForPodsInMCConfigMap waits for pods to appear in MC ConfigMap instead of using time.Sleep
+// WaitForPodsInMCConfigMap waits for pods to appear in MC ConfigMap
 func WaitForPodsInMCConfigMap(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, pods []string, key string, mcName string, expected bool, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		mcConfigMap, err := GetMCConfigMap(ctx, deployment, testenvInstance.GetName(), mcName)
@@ -1369,7 +1369,7 @@ func WaitForPodsInMCConfigMap(ctx context.Context, deployment *Deployment, teste
 	})
 }
 
-// WaitForPodsInMCConfigString waits for pods to appear in MC config string instead of using time.Sleep
+// WaitForPodsInMCConfigString waits for pods to appear in MC config string
 func WaitForPodsInMCConfigString(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, pods []string, mcName string, expected bool, checkPodIP bool, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		for _, podName := range pods {
@@ -1521,7 +1521,6 @@ func WaitForResourceToExist(ctx context.Context, deployment *Deployment, testenv
 }
 
 // WaitForAppRepoStateChange waits for app repo state to change to expected value, indicating poll interval has completed
-// This replaces time.Sleep calls that wait for AppsRepoPollInterval to expire
 func WaitForAppRepoStateChange(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, crName, crKind, appSourceName string, appList []string, expectedRepoState int, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		select {

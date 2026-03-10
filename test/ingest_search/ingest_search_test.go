@@ -46,6 +46,10 @@ var _ = Describe("Ingest and Search Test", func() {
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+
+		// Validate test prerequisites early to fail fast
+		err = testenv.ValidateTestPrerequisites(ctx, deployment, testcaseEnvInst)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {
@@ -207,7 +211,7 @@ var _ = Describe("Ingest and Search Test", func() {
 			searchString := fmt.Sprintf("index=%s | stats count by host", indexName)
 
 			// Wait for search results to be available instead of fixed sleep
-			err = testenv.WaitForSearchResultsNonEmpty(ctx, deployment, podName, searchString, 30*time.Second)
+			err = testenv.WaitForSearchResultsNonEmpty(ctx, deployment, podName, searchString, 2*time.Second)
 			Expect(err).To(Succeed(), "Timed out waiting for search results")
 
 			searchResultsResp, err := testenv.PerformSearchSync(ctx, podName, searchString, deployment)
