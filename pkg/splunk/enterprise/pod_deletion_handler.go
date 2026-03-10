@@ -17,6 +17,7 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -44,6 +45,8 @@ const (
 	PodIntentScaleDown = "scale-down" // Pod is being removed due to scale-down
 	PodIntentRestart   = "restart"    // Pod is being restarted/updated
 )
+
+var errNoStatefulSetOwner = errors.New("no StatefulSet owner found")
 
 // HandlePodDeletion processes pod deletion events and performs cleanup when finalizer is present
 // This handles scale-down operations gracefully, working with HPA and manual scale operations
@@ -73,6 +76,12 @@ func HandlePodDeletion(ctx context.Context, c splcommon.ControllerClient, pod *c
 	// Get the owning StatefulSet
 	statefulSet, err := getOwningStatefulSet(ctx, c, pod)
 	if err != nil {
+		// During CR/namespace teardown, StatefulSet can be deleted before pods are finalized.
+		// In that case, don't block pod deletion indefinitely on this finalizer.
+		if k8serrors.IsNotFound(err) || errors.Is(err, errNoStatefulSetOwner) {
+			scopedLog.Info("Owning StatefulSet unavailable during pod deletion, removing finalizer", "error", err.Error())
+			return removeFinalizer(ctx, c, pod, PodCleanupFinalizer)
+		}
 		scopedLog.Error(err, "Failed to get owning StatefulSet")
 		return err
 	}
@@ -410,7 +419,7 @@ func getOwningStatefulSet(ctx context.Context, c splcommon.ControllerClient, pod
 			return statefulSet, nil
 		}
 	}
-	return nil, fmt.Errorf("no StatefulSet owner found")
+	return nil, fmt.Errorf("%w", errNoStatefulSetOwner)
 }
 
 func getClusterManagerNameFromPod(ctx context.Context, c splcommon.ControllerClient, pod *corev1.Pod) (string, error) {
