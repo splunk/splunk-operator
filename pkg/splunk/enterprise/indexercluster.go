@@ -731,6 +731,47 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 	// Retrieve idxc_secret password from secret data
 	nsIdxcSecret := string(namespaceSecret.Data[splcommon.IdxcSecret])
 
+	// Track secret-change progress by replica ordinal (stable indexing).
+	// Using append() can misalign pod ordinals when some pods are temporarily missing.
+	if replicas == 0 {
+		mgr.cr.Status.IndexerSecretChanged = []bool{}
+	} else {
+		if int32(len(mgr.cr.Status.IndexerSecretChanged)) < replicas {
+			mgr.cr.Status.IndexerSecretChanged = append(
+				mgr.cr.Status.IndexerSecretChanged,
+				make([]bool, int(replicas)-len(mgr.cr.Status.IndexerSecretChanged))...,
+			)
+		}
+		if int32(len(mgr.cr.Status.IndexerSecretChanged)) > replicas {
+			mgr.cr.Status.IndexerSecretChanged = mgr.cr.Status.IndexerSecretChanged[:replicas]
+		}
+	}
+
+	enableMaintenanceModeIfNeeded := func() error {
+		if mgr.cr.Status.MaintenanceMode {
+			return nil
+		}
+
+		var managerIdxcName string
+		var cmPodName string
+		if len(mgr.cr.Spec.ClusterManagerRef.Name) > 0 {
+			managerIdxcName = mgr.cr.Spec.ClusterManagerRef.Name
+			cmPodName = fmt.Sprintf("splunk-%s-cluster-manager-%s", managerIdxcName, "0")
+		} else if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
+			managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
+			cmPodName = fmt.Sprintf("splunk-%s-cluster-master-%s", managerIdxcName, "0")
+		} else {
+			return errors.New("empty cluster manager reference")
+		}
+		podExecClient.SetTargetPodName(ctx, cmPodName)
+		err = SetClusterMaintenanceMode(ctx, mgr.c, mgr.cr, true, cmPodName, podExecClient)
+		if err != nil {
+			return err
+		}
+		scopedLog.Info("Set CM in maintenance mode")
+		return nil
+	}
+
 	// Loop over all indexer pods and get individual pod's idxc password
 	howManyPodsHaveSecretChanged := 0
 	for i := int32(0); i <= replicas-1; i++ {
@@ -764,32 +805,8 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 		if indIdxcSecret != nsIdxcSecret {
 			scopedLog.Info("idxc Secret different from namespace scoped secret")
 
-			// Enable maintenance mode
-			if len(mgr.cr.Status.IndexerSecretChanged) == 0 && !mgr.cr.Status.MaintenanceMode {
-				var managerIdxcName string
-				var cmPodName string
-				if len(mgr.cr.Spec.ClusterManagerRef.Name) > 0 {
-					managerIdxcName = mgr.cr.Spec.ClusterManagerRef.Name
-					cmPodName = fmt.Sprintf("splunk-%s-cluster-manager-%s", managerIdxcName, "0")
-				} else if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
-					managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
-					cmPodName = fmt.Sprintf("splunk-%s-cluster-master-%s", managerIdxcName, "0")
-				} else {
-					return errors.New("empty cluster manager reference")
-				}
-				podExecClient.SetTargetPodName(ctx, cmPodName)
-				err = SetClusterMaintenanceMode(ctx, mgr.c, mgr.cr, true, cmPodName, podExecClient)
-				if err != nil {
-					return err
-				}
-				scopedLog.Info("Set CM in maintenance mode")
-			}
-
-			// If idxc secret already changed, ignore
-			if i < int32(len(mgr.cr.Status.IndexerSecretChanged)) {
-				if mgr.cr.Status.IndexerSecretChanged[i] {
-					continue
-				}
+			if err := enableMaintenanceModeIfNeeded(); err != nil {
+				return err
 			}
 
 			// Get client for indexer Pod
@@ -825,11 +842,29 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 			mgr.cr.Status.IdxcPasswordChangedSecrets[podSecret.GetName()] = true
 
 			// Set the idxc_secret changed flag to true
-			if i < int32(len(mgr.cr.Status.IndexerSecretChanged)) {
-				mgr.cr.Status.IndexerSecretChanged[i] = true
-			} else {
-				mgr.cr.Status.IndexerSecretChanged = append(mgr.cr.Status.IndexerSecretChanged, true)
+			mgr.cr.Status.IndexerSecretChanged[i] = true
+			continue
+		}
+
+		// Secret data already matches the namespace-scoped secret, but this pod has not
+		// been processed in this rotation yet. Restart once so runtime picks up the secret.
+		if !mgr.cr.Status.IndexerSecretChanged[i] {
+			if err := enableMaintenanceModeIfNeeded(); err != nil {
+				return err
 			}
+
+			idxcClient := mgr.getClient(ctx, i)
+			err = idxcClient.RestartSplunk()
+			if err != nil {
+				if eventPublisher != nil {
+					eventPublisher.Warning(ctx, "PasswordSyncFailed",
+						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", indexerPodName, err.Error()))
+				}
+				return err
+			}
+			scopedLog.Info("Restarted splunk for pod with pre-synchronized idxc secret", "pod", indexerPodName)
+			mgr.cr.Status.IndexerSecretChanged[i] = true
+			howManyPodsHaveSecretChanged += 1
 		}
 	}
 
