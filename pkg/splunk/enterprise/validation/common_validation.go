@@ -159,6 +159,22 @@ func validateResourceRequirements(resources *corev1.ResourceRequirements, fldPat
 func validateStorageConfig(config *enterpriseApi.StorageClassSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
+	// Validate ephemeralStorage is mutually exclusive with storageClassName and storageCapacity
+	if config.EphemeralStorage {
+		if config.StorageClassName != "" {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("storageClassName"),
+				config.StorageClassName,
+				"storageClassName cannot be set when ephemeralStorage is true"))
+		}
+		if config.StorageCapacity != "" {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("storageCapacity"),
+				config.StorageCapacity,
+				"storageCapacity cannot be set when ephemeralStorage is true"))
+		}
+	}
+
 	// Validate storageCapacity format (must be in Gi format, e.g., "10Gi", "100Gi")
 	if config.StorageCapacity != "" {
 		if !storageCapacityRegex.MatchString(config.StorageCapacity) {

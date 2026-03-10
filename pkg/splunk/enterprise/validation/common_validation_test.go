@@ -849,13 +849,40 @@ func TestValidateStorageConfig(t *testing.T) {
 			wantErrField: "spec.storageClassName",
 		},
 		{
-			name: "ephemeral storage - storageClassName not required",
+			name: "ephemeral storage - valid without storageClassName and storageCapacity",
 			config: &enterpriseApi.StorageClassSpec{
-				StorageCapacity:  "10Gi",
 				EphemeralStorage: true,
 				StorageClassName: "",
+				StorageCapacity:  "",
 			},
 			wantErrCount: 0,
+		},
+		{
+			name: "ephemeral storage - invalid with storageClassName",
+			config: &enterpriseApi.StorageClassSpec{
+				EphemeralStorage: true,
+				StorageClassName: "standard",
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.storageClassName",
+		},
+		{
+			name: "ephemeral storage - invalid with storageCapacity",
+			config: &enterpriseApi.StorageClassSpec{
+				EphemeralStorage: true,
+				StorageCapacity:  "10Gi",
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.storageCapacity",
+		},
+		{
+			name: "ephemeral storage - invalid with both storageClassName and storageCapacity",
+			config: &enterpriseApi.StorageClassSpec{
+				EphemeralStorage: true,
+				StorageClassName: "standard",
+				StorageCapacity:  "10Gi",
+			},
+			wantErrCount: 2,
 		},
 		{
 			name: "multiple errors - invalid capacity and missing className",
