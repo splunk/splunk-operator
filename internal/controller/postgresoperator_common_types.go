@@ -26,11 +26,11 @@ type reconcileClusterPhases string
 type conditionTypes string
 type conditionReasons string
 type clusterReadyStatus string
+type objectKind string
 
 const (
 	// retryDelay is the default requeue interval when waiting on external state (CNPG, cluster).
 	retryDelay                  = time.Second * 15
-	deletionPolicyDelete string = "Delete"
 	deletionPolicyRetain string = "Retain"
 
 	// clusterNotFoundRetryDelay is longer than retryDelay — a missing cluster is unlikely
@@ -42,12 +42,14 @@ const (
 	// default database name
 	defaultDatabaseName           string = "postgres"
 	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"
-	defaultSecretSuffix           string = "-secret-"
+	defaultSecretSuffix           string = "-secret"
 	defaultPoolerSuffix           string = "-pooler-"
-	defaultConfigSuffix           string = "-config-"
+	defaultConfigMapSuffix        string = "-configmap"
 	defaultPort                   string = "5432"
 	superUsername                 string = "postgres"
 	postgresClusterFinalizerName  string = "postgresclusters.enterprise.splunk.com/finalizer"
+	clusterDeletionPolicyDelete   string = "Delete"
+	clusterDeletionPolicyRetain   string = "Retain"
 
 	// phases
 	readyDBPhase        reconcileDBPhases = "Ready"
@@ -80,13 +82,12 @@ const (
 	reasonDatabasesAvailable       conditionReasons = "DatabasesAvailable"
 	reasonSecretsCreated           conditionReasons = "SecretsCreated"
 	reasonSecretsCreationFailed    conditionReasons = "SecretsCreationFailed"
-	reasonConfigMapsCreated        conditionReasons = "ConfigMapsCreated"
-	reasonConfigMapsCreationFailed conditionReasons = "ConfigMapsCreationFailed"
 	reasonWaitingForCNPG           conditionReasons = "WaitingForCNPG"
 	reasonUsersCreationFailed      conditionReasons = "UsersCreationFailed"
-	reasonUsersCleanupFailed       conditionReasons = "UsersCleanupFailed"
-	reasonDatabasesCleanupFailed   conditionReasons = "DatabasesCleanupFailed"
 	reasonUsersAvailable           conditionReasons = "UsersAvailable"
+	reasonSuperUserSecretFailed    conditionReasons = "SuperUserSecretFailed"
+	reasonConfigMapsCreationFailed conditionReasons = "ConfigMapsCreationFailed"
+	reasonConfigMapsCreated        conditionReasons = "ConfigMapsCreated"
 
 	// Additional condition reasons for clusterReady conditionType
 	reasonClusterClassNotFound  conditionReasons = "ClusterClassNotFound"
@@ -97,7 +98,6 @@ const (
 	reasonClusterPatchFailed    conditionReasons = "ClusterPatchFailed"
 	reasonInvalidConfiguration  conditionReasons = "InvalidConfiguration"
 	reasonConfigMapFailed       conditionReasons = "ConfigMapReconciliationFailed"
-	reasonStatusSyncFailed      conditionReasons = "StatusSyncFailed"
 	reasonUserSecretFailed      conditionReasons = "UserSecretReconciliationFailed"
 
 	// Additional condition reasons for poolerReady conditionType
