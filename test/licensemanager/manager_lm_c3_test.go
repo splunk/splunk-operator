@@ -102,7 +102,7 @@ var _ = Describe("Licensemanager test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), mc)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -328,7 +328,7 @@ var _ = Describe("Licensemanager test", func() {
 			}
 
 			// Wait for LM to be in READY status (polls for state instead of fixed sleep)
-			err = testenv.WaitForLicenseManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), deployment.GetName(), enterpriseApi.PhaseReady, 2*time.Minute, testcaseEnvInst)
+			err = testenv.WaitForLicenseManagerPhase(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), deployment.GetName(), enterpriseApi.PhaseReady, 2*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for LicenseManager to reach Ready phase")
 
 			// Verify LM stays in ready state

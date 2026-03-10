@@ -68,7 +68,7 @@ var _ = Describe("Ingest and Search Test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Wait for standalone to be in READY Status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			testenv.StandaloneReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone)
 
 			Eventually(func() enterpriseApi.Phase {
 				podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
@@ -144,7 +144,7 @@ var _ = Describe("Ingest and Search Test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Wait for standalone to be in READY Status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			testenv.StandaloneReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone)
 
 			// Verify splunk status is up
 			Eventually(func() enterpriseApi.Phase {

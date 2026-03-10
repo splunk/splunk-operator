@@ -75,7 +75,7 @@ var _ = Describe("DeleteCR test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			testenv.StandaloneReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone)
 
 			// Delete Standalone CR
 			err = deployment.DeleteCR(ctx, standalone)

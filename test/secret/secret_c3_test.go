@@ -106,7 +106,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 
 			// Wait for ClusterInitialized event to confirm cluster is fully initialized
 			idxcName := deployment.GetName() + "-idxc"
-			err = testenv.WaitForClusterInitialized(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute, testcaseEnvInst)
+			err = testenv.WaitForClusterInitialized(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for ClusterInitialized event on IndexerCluster")
 
 			// Deploy Monitoring Console CRD
@@ -114,7 +114,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), mc)
 
 			// get revision number of the resource
 			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
@@ -151,21 +151,21 @@ var _ = Describe("Secret Test for SVA C3", func() {
 
 			// Wait for PasswordSyncCompleted event on SearchHeadCluster
 			shcName := deployment.GetName() + "-shc"
-			err = testenv.WaitForPasswordSyncCompleted(ctx, deployment, testcaseEnvInst.GetName(), shcName, 2*time.Minute, testcaseEnvInst)
+			err = testenv.WaitForPasswordSyncCompleted(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), shcName, 2*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for PasswordSyncCompleted event on SearchHeadCluster")
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Wait for PasswordSyncCompleted event on IndexerCluster
-			err = testenv.WaitForPasswordSyncCompleted(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute, testcaseEnvInst)
+			err = testenv.WaitForPasswordSyncCompleted(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for PasswordSyncCompleted event on IndexerCluster")
 
 			// wait for custom resource resource version to change
 			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), mc)
 
 			// Verify RF SF is met
 			testcaseEnvInst.Log.Info("Checkin RF SF after secret change")

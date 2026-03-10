@@ -182,7 +182,7 @@ func (d *Deployment) DeployMonitoringConsole(ctx context.Context, name string, L
 	if err != nil {
 		return nil, err
 	}
-	VerifyMonitoringConsoleReady(ctx, d, name, mc, d.testenv)
+	VerifyMonitoringConsoleReady(ctx, d, d.testenv, name, mc)
 	return deployed.(*enterpriseApi.MonitoringConsole), err
 }
 
