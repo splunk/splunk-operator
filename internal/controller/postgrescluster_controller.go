@@ -411,7 +411,7 @@ func (r *PostgresClusterReconciler) getMergedConfig(clusterClass *enterprisev4.P
 
 	return &MergedConfig{
 		Spec: resultConfig,
-		CNPG: clusterClass.Spec.CNPG, 
+		CNPG: clusterClass.Spec.CNPG,
 	}, nil
 }
 
@@ -1066,7 +1066,7 @@ func (r *PostgresClusterReconciler) handleFinalizer(ctx context.Context, postgre
 
 	// Handle CNPG cluster based on deletion policy
 	if cnpgCluster != nil {
-		if postgresCluster.Spec.ClusterDeletionPolicy == clusterDeletionPolicyDelete {
+		if postgresCluster.Spec.ClusterDeletionPolicy == deletionPolicyDelete {
 			logger.Info("ClusterDeletionPolicy is set to 'Delete', deleting CNPG Cluster", "policy", postgresCluster.Spec.ClusterDeletionPolicy)
 			if err := r.deleteCNPGCluster(ctx, cnpgCluster); err != nil {
 				logger.Error(err, "Failed to delete CNPG Cluster")

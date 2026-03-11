@@ -1,8 +1,9 @@
 package controller
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 // This struct is used to compare the merged configuration from PostgresClusterClass and PostgresClusterSpec
@@ -28,7 +29,10 @@ type clusterReadyStatus string
 
 const (
 	// retryDelay is the default requeue interval when waiting on external state (CNPG, cluster).
-	retryDelay = time.Second * 15
+	retryDelay                  = time.Second * 15
+	deletionPolicyDelete string = "Delete"
+	deletionPolicyRetain string = "Retain"
+
 	// clusterNotFoundRetryDelay is longer than retryDelay — a missing cluster is unlikely
 	// to appear in 15 s and hammering the API is wasteful.
 	clusterNotFoundRetryDelay = time.Second * 30
@@ -36,15 +40,14 @@ const (
 	readOnlyEndpoint  string = "ro"
 	readWriteEndpoint string = "rw"
 	// default database name
-	defaultDatabaseName                    string = "postgres"
+	defaultDatabaseName           string = "postgres"
 	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"
 	defaultSecretSuffix           string = "-secret-"
 	defaultPoolerSuffix           string = "-pooler-"
 	defaultConfigSuffix           string = "-config-"
 	defaultPort                   string = "5432"
-	superUsername                          string = "postgres"
-	postgresClusterFinalizerName string = "postgresclusters.enterprise.splunk.com/finalizer"
-	clusterDeletionPolicyDelete  string = "Delete"
+	superUsername                 string = "postgres"
+	postgresClusterFinalizerName  string = "postgresclusters.enterprise.splunk.com/finalizer"
 
 	// phases
 	readyDBPhase        reconcileDBPhases = "Ready"
@@ -60,27 +63,30 @@ const (
 	failedClusterPhase       reconcileClusterPhases = "Failed"
 
 	// Condition types
-	clusterReady   conditionTypes = "ClusterReady"
-	poolerReady    conditionTypes = "PoolerReady"
-	usersReady     conditionTypes = "UsersReady"
-	databasesReady conditionTypes = "DatabasesReady"
-	secretsReady   conditionTypes = "SecretsReady"
+	clusterReady    conditionTypes = "ClusterReady"
+	poolerReady     conditionTypes = "PoolerReady"
+	usersReady      conditionTypes = "UsersReady"
+	databasesReady  conditionTypes = "DatabasesReady"
+	secretsReady    conditionTypes = "SecretsReady"
+	configMapsReady conditionTypes = "ConfigMapsReady"
 	// TODO - to use in the future implementation
 	// privilegesReady conditionTypes = "PrivilegesReady"
 
 	// Condition reasons
-	reasonClusterNotFound        conditionReasons = "ClusterNotFound"
-	reasonClusterProvisioning    conditionReasons = "ClusterProvisioning"
-	reasonClusterInfoFetchFailed conditionReasons = "ClusterInfoFetchNotPossible"
-	reasonClusterAvailable       conditionReasons = "ClusterAvailable"
-	reasonDatabasesAvailable     conditionReasons = "DatabasesAvailable"
-	reasonSecretsCreated         conditionReasons = "SecretsCreated"
-	reasonSecretsCreationFailed  conditionReasons = "SecretsCreationFailed"
-	reasonWaitingForCNPG         conditionReasons = "WaitingForCNPG"
-	reasonUsersCreationFailed    conditionReasons = "UsersCreationFailed"
-	reasonUsersCleanupFailed     conditionReasons = "UsersCleanupFailed"
-	reasonDatabasesCleanupFailed conditionReasons = "DatabasesCleanupFailed"
-	reasonUsersAvailable         conditionReasons = "UsersAvailable"
+	reasonClusterNotFound          conditionReasons = "ClusterNotFound"
+	reasonClusterProvisioning      conditionReasons = "ClusterProvisioning"
+	reasonClusterInfoFetchFailed   conditionReasons = "ClusterInfoFetchNotPossible"
+	reasonClusterAvailable         conditionReasons = "ClusterAvailable"
+	reasonDatabasesAvailable       conditionReasons = "DatabasesAvailable"
+	reasonSecretsCreated           conditionReasons = "SecretsCreated"
+	reasonSecretsCreationFailed    conditionReasons = "SecretsCreationFailed"
+	reasonConfigMapsCreated        conditionReasons = "ConfigMapsCreated"
+	reasonConfigMapsCreationFailed conditionReasons = "ConfigMapsCreationFailed"
+	reasonWaitingForCNPG           conditionReasons = "WaitingForCNPG"
+	reasonUsersCreationFailed      conditionReasons = "UsersCreationFailed"
+	reasonUsersCleanupFailed       conditionReasons = "UsersCleanupFailed"
+	reasonDatabasesCleanupFailed   conditionReasons = "DatabasesCleanupFailed"
+	reasonUsersAvailable           conditionReasons = "UsersAvailable"
 
 	// Additional condition reasons for clusterReady conditionType
 	reasonClusterClassNotFound  conditionReasons = "ClusterClassNotFound"

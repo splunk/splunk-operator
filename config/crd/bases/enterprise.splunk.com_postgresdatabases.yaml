@@ -211,7 +211,7 @@ spec:
                       type: string
                     ready:
                       type: boolean
-                    rwSecretRef:
+                    rwUserSecretRef:
                       description: |-
                         LocalObjectReference contains enough information to let you locate the
                         referenced object inside the same namespace.

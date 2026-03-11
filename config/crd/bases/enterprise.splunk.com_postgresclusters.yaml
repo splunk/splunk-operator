@@ -58,59 +58,10 @@ spec:
                 x-kubernetes-validations:
                 - message: class is immutable
                   rule: self == oldSelf
-              cnpg:
-                description: CNPG contains the resolved CloudNativePG-specific configuration,
-                  merged from the class.
-                properties:
-                  connectionPooler:
-                    description: |-
-                      ConnectionPooler contains PgBouncer connection pooler configuration.
-                      When enabled, creates RW and RO pooler deployments for clusters using this class.
-                    properties:
-                      config:
-                        additionalProperties:
-                          type: string
-                        description: |-
-                          Config contains PgBouncer configuration parameters.
-                          Passed directly to CNPG Pooler spec.pgbouncer.parameters.
-                          See: https://cloudnative-pg.io/docs/1.28/connection_pooling/#pgbouncer-configuration-options
-                        type: object
-                      instances:
-                        default: 3
-                        description: |-
-                          Instances is the number of PgBouncer pod replicas.
-                          Higher values provide better availability and load distribution.
-                        format: int32
-                        maximum: 10
-                        minimum: 1
-                        type: integer
-                      mode:
-                        default: transaction
-                        description: Mode defines the connection pooling strategy.
-                        enum:
-                        - session
-                        - transaction
-                        - statement
-                        type: string
-                    type: object
-                  primaryUpdateMethod:
-                    default: switchover
-                    description: |-
-                      PrimaryUpdateMethod determines how the primary instance is updated.
-                      "restart" - tolerate brief downtime (suitable for development)
-                      "switchover" - minimal downtime via automated failover (production-grade)
-
-                      NOTE: When using "switchover", ensure clusterConfig.instances > 1.
-                      Switchover requires at least one replica to fail over to.
-                    enum:
-                    - restart
-                    - switchover
-                    type: string
-                type: object
-              cnpgDeletionPolicy:
+              clusterDeletionPolicy:
                 default: Retain
-                description: CNPGDeletionPolicy controls the deletion behavior of
-                  the underlying CNPG Cluster when the PostgresCluster is deleted.
+                description: ClusterDeletionPolicy controls the deletion behavior
+                  of the underlying CNPG Cluster when the PostgresCluster is deleted.
                 enum:
                 - Delete
                 - Retain
