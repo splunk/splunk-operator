@@ -79,7 +79,6 @@ jobs:
     needs: build-operator-image
     env:
       CLUSTER_WORKERS: 5
-      TEST_CLUSTER_PLATFORM: gcp
       CLUSTER_PROVIDER: gcp
       ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}

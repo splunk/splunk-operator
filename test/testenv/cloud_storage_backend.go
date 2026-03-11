@@ -75,7 +75,8 @@ func (b *AzureBackend) DeleteFiles(ctx context.Context, uploadedFiles []string) 
 }
 
 func (b *AzureBackend) DownloadFiles(ctx context.Context, remoteDir string, localDir string, fileList []string) error {
-	return DownloadFilesFromAzure(ctx, GetAzureEndpoint(ctx), StorageAccountKey, StorageAccount, localDir, remoteDir, fileList)
+	containerName := "/test-data/" + remoteDir
+	return DownloadFilesFromAzure(ctx, GetAzureEndpoint(ctx), StorageAccountKey, StorageAccount, localDir, containerName, fileList)
 }
 
 func (b *AzureBackend) GetCloudProvider() string { return "azure" }

@@ -11,9 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package c3appfw
+package m4appfw
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,24 +38,24 @@ const (
 
 var (
 	testenvInstance       *testenv.TestEnv
-	testSuiteName         = "c3appfw-" + testenv.RandomDNSName(3)
+	testSuiteName         = "m4appfw-" + testenv.RandomDNSName(3)
 	appListV1             []string
 	appListV2             []string
-	testDataS3Bucket      = os.Getenv("TEST_BUCKET")
-	testS3Bucket          = os.Getenv("TEST_INDEXES_S3_BUCKET")
-	s3AppDirV1            = testenv.AppLocationV1
-	s3AppDirV2            = testenv.AppLocationV2
-	s3PVTestApps          = testenv.PVTestAppsLocation
+	testDataBucket        = os.Getenv("TEST_BUCKET")
+	testBucket            = os.Getenv("TEST_INDEXES_S3_BUCKET")
+	appDirV1              = testenv.AppLocationV1
+	appDirV2              = testenv.AppLocationV2
+	pvTestApps            = testenv.PVTestAppsLocation
 	currDir, _            = os.Getwd()
-	downloadDirV1         = filepath.Join(currDir, "c3appfwV1-"+testenv.RandomDNSName(4))
-	downloadDirV2         = filepath.Join(currDir, "c3appfwV2-"+testenv.RandomDNSName(4))
-	downloadDirPVTestApps = filepath.Join(currDir, "c3appfwPVTestApps-"+testenv.RandomDNSName(4))
+	downloadDirV1         = filepath.Join(currDir, "m4appfwV1-"+testenv.RandomDNSName(4))
+	downloadDirV2         = filepath.Join(currDir, "m4appfwV2-"+testenv.RandomDNSName(4))
+	downloadDirPVTestApps = filepath.Join(currDir, "m4appfwPVTestApps-"+testenv.RandomDNSName(4))
+	backend               testenv.CloudStorageBackend
 )
 
 // TestBasic is the main entry point
 func TestBasic(t *testing.T) {
 
-	// Find and load the .env file from the current directory upwards
 	if err := loadEnvFile(); err != nil {
 		panic("Error loading .env file: " + err.Error())
 	}
@@ -66,32 +67,21 @@ func TestBasic(t *testing.T) {
 	RunSpecs(t, "Running "+testSuiteName, sc)
 }
 
-//func TestMain(m *testing.M) {
-// Run the tests
-//    os.Exit(m.Run())
-//}
-
 // loadEnvFile traverses up the directory tree to find a .env file
 func loadEnvFile() error {
-	// Get the current working directory
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
 	}
 
-	// Traverse up the directory tree
 	for {
-		// Check if .env file exists in the current directory
 		envFile := filepath.Join(dir, ".env")
 		if _, err := os.Stat(envFile); err == nil {
-			// .env file found, load it
 			return godotenv.Load(envFile)
 		}
 
-		// Move up to the parent directory
 		parentDir := filepath.Dir(dir)
 		if parentDir == dir {
-			// Reached the root directory
 			return nil
 		}
 		dir = parentDir
@@ -99,37 +89,27 @@ func loadEnvFile() error {
 }
 
 var _ = BeforeSuite(func() {
+	ctx := context.TODO()
 	var err error
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
 
-	if testenv.ClusterProvider == "eks" {
-		// Create a list of apps to upload to S3
-		appListV1 = testenv.BasicApps
-		appFileList := testenv.GetAppFileList(appListV1)
+	backend = testenv.NewCloudStorageBackend(testBucket, testDataBucket)
 
-		// Download V1 Apps from S3
-		err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V1 app files")
+	appListV1 = testenv.BasicApps
+	appFileList := testenv.GetAppFileList(appListV1)
 
-		// Create a list of apps to upload to S3 after poll period
-		appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
-		appFileList = testenv.GetAppFileList(appListV2)
+	err = backend.DownloadFiles(ctx, appDirV1, downloadDirV1, appFileList)
+	Expect(err).To(Succeed(), "Unable to download V1 app files")
 
-		// Download V2 Apps from S3
-		err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V2 app files")
-	} else {
-		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenv.ClusterProvider)
-	}
+	appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
+	appFileList = testenv.GetAppFileList(appListV2)
 
+	err = backend.DownloadFiles(ctx, appDirV2, downloadDirV2, appFileList)
+	Expect(err).To(Succeed(), "Unable to download V2 app files")
 })
 
 var _ = AfterSuite(func() {
-	if testenvInstance != nil {
-		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
-	}
-
 	if testenvInstance != nil {
 		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 	}

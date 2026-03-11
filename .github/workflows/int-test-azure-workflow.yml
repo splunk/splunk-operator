@@ -52,7 +52,6 @@ jobs:
     needs: build-operator-image
     env:
       CLUSTER_WORKERS: 5
-      TEST_CLUSTER_PLATFORM: azure
       CLUSTER_PROVIDER: azure
       AZURE_CONTAINER_REGISTRY: ${{secrets.AZURE_CONTAINER_REGISTRY}}
       CLUSTER_NAME: ${{secrets.CLUSTER_NAME}}
@@ -120,7 +119,6 @@ jobs:
       TEST_FOCUS: azure_sanity
       # This regex matches any string not containing integration keyword
       TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
-      TEST_CLUSTER_PLATFORM: azure
       CLUSTER_PROVIDER: azure
       AZURE_CONTAINER_REGISTRY: ${{secrets.AZURE_CONTAINER_REGISTRY}}
       CLUSTER_NAME: ${{secrets.CLUSTER_NAME}}
