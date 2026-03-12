@@ -326,7 +326,6 @@ func classifyRoles(postgresDB *enterprisev4.PostgresDatabase, cluster *enterpris
 		expectedSecrets[rwRoleName(dbSpec.Name)] = userSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)
 	}
 
-	// Index existing roles by name for O(1) lookup.
 	existingRoles := make(map[string]*enterprisev4.ManagedRole, len(cluster.Spec.ManagedRoles))
 	for i := range cluster.Spec.ManagedRoles {
 		existingRoles[cluster.Spec.ManagedRoles[i].Name] = &cluster.Spec.ManagedRoles[i]
