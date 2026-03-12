@@ -154,7 +154,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Phase: RoleConflictCheck — before creating any resources, verify no other
 	// PostgresDatabase already owns the same roles (different PasswordSecretRef).
-	_, foreignRoles := classifyRoles(postgresDB, cluster)
+	foreignRoles := getForeignRoles(postgresDB, cluster)
 	if len(foreignRoles) > 0 {
 		conflictMsg := fmt.Sprintf("Role conflict: roles (%s) are managed by another PostgresDatabase with different secret references. "+
 			"If you deleted a previous PostgresDatabase, recreate it with the original name to re-adopt the orphaned resources.",
@@ -208,7 +208,13 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Phase: RoleProvisioning
 	desiredUsers := getDesiredUsers(postgresDB)
-	missingUsersFromSpec, _ := classifyRoles(postgresDB, cluster)
+	actualRolesInSpec := getRolesInClusterSpec(cluster)
+	var missingUsersFromSpec []string
+	for _, user := range desiredUsers {
+		if !slices.Contains(actualRolesInSpec, user) {
+			missingUsersFromSpec = append(missingUsersFromSpec, user)
+		}
+	}
 
 	if len(missingUsersFromSpec) > 0 {
 		logger.Info("User spec changed, patching CNPG Cluster", "missing", missingUsersFromSpec)
@@ -313,36 +319,38 @@ func getDesiredUsers(postgresDB *enterprisev4.PostgresDatabase) []string {
 	return users
 }
 
-// classifyRoles compares desired roles against the PostgresCluster's current managedRoles.
-// Returns:
-//   - missing: role names not present in the cluster spec at all (need SSA patch)
-//   - foreign: role names present but with a PasswordSecretRef that doesn't match our expected
-//     secret names — meaning another PostgresDatabase owns them
-func classifyRoles(postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) (missing, foreign []string) {
-	// Build a map of role name → expected secret name for this PostgresDatabase.
-	expectedSecrets := make(map[string]string, len(postgresDB.Spec.Databases)*2)
+// getRolesInClusterSpec checks our PostgresCluster CR rather than the CNPG Cluster
+// because the database controller owns PostgresCluster.spec.managedRoles via SSA —
+// CNPG may have roles from other sources that we must not treat as our own.
+func getRolesInClusterSpec(cluster *enterprisev4.PostgresCluster) []string {
+	roles := make([]string, 0, len(cluster.Spec.ManagedRoles))
+	for _, role := range cluster.Spec.ManagedRoles {
+		roles = append(roles, role.Name)
+	}
+	return roles
+}
+
+// getForeignRoles returns role names that exist in the PostgresCluster but whose
+// PasswordSecretRef points to a different secret than what this PostgresDatabase expects.
+// This means another PostgresDatabase owns them.
+func getForeignRoles(postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) []string {
+	var foreign []string
 	for _, dbSpec := range postgresDB.Spec.Databases {
-		expectedSecrets[adminRoleName(dbSpec.Name)] = userSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)
-		expectedSecrets[rwRoleName(dbSpec.Name)] = userSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)
-	}
-
-	existingRoles := make(map[string]*enterprisev4.ManagedRole, len(cluster.Spec.ManagedRoles))
-	for i := range cluster.Spec.ManagedRoles {
-		existingRoles[cluster.Spec.ManagedRoles[i].Name] = &cluster.Spec.ManagedRoles[i]
-	}
-
-	for roleName, expectedSecret := range expectedSecrets {
-		existing, found := existingRoles[roleName]
-		if !found {
-			missing = append(missing, roleName)
-			continue
-		}
-		// Role exists — check if the secret ref matches ours.
-		if existing.PasswordSecretRef != nil && existing.PasswordSecretRef.Name != expectedSecret {
-			foreign = append(foreign, roleName)
+		expectedAdmin := userSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)
+		expectedRW := userSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)
+		for _, role := range cluster.Spec.ManagedRoles {
+			if role.PasswordSecretRef == nil {
+				continue
+			}
+			if role.Name == adminRoleName(dbSpec.Name) && role.PasswordSecretRef.Name != expectedAdmin {
+				foreign = append(foreign, role.Name)
+			}
+			if role.Name == rwRoleName(dbSpec.Name) && role.PasswordSecretRef.Name != expectedRW {
+				foreign = append(foreign, role.Name)
+			}
 		}
 	}
-	return missing, foreign
+	return foreign
 }
 
 // patchManagedRoles patches PostgresCluster.spec.managedRoles via SSA using an unstructured patch.
