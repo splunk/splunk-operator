@@ -1002,13 +1002,13 @@ func (r *PostgresDatabaseReconciler) createUserSecret(
 ) error {
 	logger := log.FromContext(ctx)
 
-	pw, err := generatePassword()
+	password, err := generatePassword()
 	if err != nil {
 		logger.Error(err, "Failed to generate password", "secret", secretName)
 		return err
 	}
 
-	secret := buildPasswordSecret(postgresDB, secretName, roleName, pw)
+	secret := buildPasswordSecret(postgresDB, secretName, roleName, password)
 	if err := controllerutil.SetControllerReference(postgresDB, secret, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set owner reference on Secret %s: %w", secretName, err)
 	}
@@ -1016,14 +1016,15 @@ func (r *PostgresDatabaseReconciler) createUserSecret(
 		if errors.IsAlreadyExists(err) {
 			return nil
 		}
-		return fmt.Errorf("failed to create Secret %s: %w", secretName, err)
+		logger.Error(err, "Failed to create secret", "secret", secretName)
+		return err
 	}
 	return nil
 }
 
 // buildPasswordSecret constructs the Secret object with "username" and "password" keys required by CNPG.
 // OwnerRef is set by the caller.
-func buildPasswordSecret(postgresDB *enterprisev4.PostgresDatabase, secretName, roleName, pw string) *corev1.Secret {
+func buildPasswordSecret(postgresDB *enterprisev4.PostgresDatabase, secretName, roleName, password string) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
@@ -1035,7 +1036,7 @@ func buildPasswordSecret(postgresDB *enterprisev4.PostgresDatabase, secretName, 
 		},
 		Data: map[string][]byte{
 			"username": []byte(roleName),
-			"password": []byte(pw),
+			"password": []byte(password),
 		},
 	}
 }
