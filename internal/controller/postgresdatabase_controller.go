@@ -322,6 +322,8 @@ func getDesiredUsers(postgresDB *enterprisev4.PostgresDatabase) []string {
 // getUsersInClusterSpec checks our PostgresCluster CR rather than the CNPG Cluster
 // because the database controller owns PostgresCluster.spec.managedRoles via SSA —
 // CNPG may have roles from other sources that we must not treat as our own.
+// Name-only comparison is sufficient: PasswordSecretRef is always set in the same
+// reconcile that creates the role, so a role present by name already carries the correct ref.
 func getUsersInClusterSpec(cluster *enterprisev4.PostgresCluster) []string {
 	users := make([]string, 0, len(cluster.Spec.ManagedRoles))
 	for _, role := range cluster.Spec.ManagedRoles {
@@ -468,45 +470,35 @@ func (r *PostgresDatabaseReconciler) reconcileCNPGDatabases(
 				Name:      cnpgDBName,
 				Namespace: postgresDB.Namespace,
 			},
-			Spec: cnpgv1.DatabaseSpec{
+		}
+		_, err := controllerutil.CreateOrUpdate(ctx, r.Client, cnpgDB, func() error {
+
+			spec := cnpgv1.DatabaseSpec{
 				Name:  dbSpec.Name,
 				Owner: adminRoleName(dbSpec.Name),
 				ClusterRef: corev1.LocalObjectReference{
 					Name: cluster.Status.ProvisionerRef.Name,
 				},
 				ReclaimPolicy: reclaimPolicy,
-			},
-		}
-
-		if err := controllerutil.SetControllerReference(postgresDB, cnpgDB, r.Scheme); err != nil {
-			logger.Error(err, "Failed to set owner reference")
-			return err
-		}
-		if err := r.Create(ctx, cnpgDB); err != nil {
-			if errors.IsAlreadyExists(err) {
-				currentDB := &cnpgv1.Database{}
-				if err := r.Get(ctx, types.NamespacedName{
-					Name:      cnpgDBName,
-					Namespace: postgresDB.Namespace,
-				}, currentDB); err != nil {
-					logger.Error(err, "Failed to get existing CNPG Database", "name", cnpgDBName)
-					return fmt.Errorf("failed to get existing CNPG Database %s: %w", cnpgDBName, err)
-				}
-
-				if currentDB.Annotations[annotationRetainedFrom] == postgresDB.Name {
-					logger.Info("Re-adopting orphaned CNPG Database", "name", cnpgDBName)
-				} else {
-					logger.Info("Database already exists, updating", "database", dbSpec.Name)
-				}
-
-				currentDB.Spec = cnpgDB.Spec
-				if err := r.adoptResource(ctx, postgresDB, currentDB); err != nil {
-					return fmt.Errorf("failed to update CNPG Database %s: %w", cnpgDBName, err)
-				}
-			} else {
-				logger.Error(err, "Failed to create CNPG Database", "name", cnpgDBName)
-				return fmt.Errorf("failed to create CNPG Database %s: %w", cnpgDBName, err)
 			}
+			cnpgDB.Spec = spec
+
+			// Set ownerRef on creation or re-adoption (orphaned objects have no ownerRef).
+			if cnpgDB.CreationTimestamp.IsZero() || cnpgDB.Annotations[annotationRetainedFrom] == postgresDB.Name {
+				if cnpgDB.Annotations[annotationRetainedFrom] == postgresDB.Name {
+					logger.Info("Re-adopting orphaned CNPG Database", "name", cnpgDBName)
+					delete(cnpgDB.Annotations, annotationRetainedFrom)
+				}
+				if err := controllerutil.SetControllerReference(postgresDB, cnpgDB, r.Scheme); err != nil {
+					logger.Error(err, "Failed to set owner reference")
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			logger.Error(err, "Failed to create CNPG Database", "name", cnpgDBName)
+			return fmt.Errorf("failed to create CNPG Database %s: %w", cnpgDBName, err)
 		}
 		logger.Info("CNPG Database created/updated successfully", "database", dbSpec.Name)
 	}
