@@ -1,9 +1,8 @@
 package controller
 
 import (
-	"time"
-
 	corev1 "k8s.io/api/core/v1"
+	"time"
 )
 
 // This struct is used to compare the merged configuration from PostgresClusterClass and PostgresClusterSpec
@@ -75,6 +74,7 @@ const (
 	databasesReady  conditionTypes = "DatabasesReady"
 	secretsReady    conditionTypes = "SecretsReady"
 	configMapsReady conditionTypes = "ConfigMapsReady"
+	configMapReady  conditionTypes = "ConfigMapReady"
 	privilegesReady conditionTypes = "PrivilegesReady"
 
 	// Condition reasons
@@ -113,7 +113,6 @@ const (
 	reasonAllInstancesReady          conditionReasons = "AllInstancesReady"
 
 	// Additional condition reasons for mapping CNPG cluster statuses
-	reasonCNPGClusterNotHealthy  conditionReasons = "CNPGClusterNotHealthy"
 	reasonCNPGClusterHealthy     conditionReasons = "CNPGClusterHealthy"
 	reasonCNPGProvisioning       conditionReasons = "CNPGClusterProvisioning"
 	reasonCNPGSwitchover         conditionReasons = "CNPGSwitchover"
