@@ -949,8 +949,10 @@ func generatePassword() (string, error) {
 	return password.Generate(passwordLength, passwordDigits, passwordSymbols, false, true)
 }
 
-// reconcileUserSecrets iterates each database's secrets: creates missing ones
-// and re-adopts orphaned ones from a previous retain-deletion.
+// reconcileUserSecrets checks existence before creating — intentionally not using
+// CreateOrUpdate because secrets must never be updated after creation. Rotating a password
+// here would break live connections before the application has a chance to pick up the change.
+// Orphaned secrets from a previous retain-deletion are re-adopted.
 func (r *PostgresDatabaseReconciler) reconcileUserSecrets(
 	ctx context.Context,
 	postgresDB *enterprisev4.PostgresDatabase,
@@ -958,38 +960,61 @@ func (r *PostgresDatabaseReconciler) reconcileUserSecrets(
 	logger := log.FromContext(ctx)
 
 	for _, dbSpec := range postgresDB.Spec.Databases {
-		for _, roleDef := range []struct {
-			role     string
-			roleName string
-		}{
-			{secretRoleAdmin, adminRoleName(dbSpec.Name)},
-			{secretRoleRW, rwRoleName(dbSpec.Name)},
-		} {
-			secretName := userSecretName(postgresDB.Name, dbSpec.Name, roleDef.role)
-			secret := &corev1.Secret{}
-			err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, secret)
-			if err != nil {
-				if !errors.IsNotFound(err) {
-					return fmt.Errorf("failed to check secret %s: %w", secretName, err)
-				}
-				logger.Info("Creating missing user secret for database",
-					"database", dbSpec.Name, "role", roleDef.role,
-				)
-				if err := r.createUserSecret(ctx, postgresDB, roleDef.roleName, secretName); err != nil {
-					return fmt.Errorf("failed to create secrets for database %s: %w", dbSpec.Name, err)
-				}
-				continue
-			}
+		adminSecretName := userSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)
+		rwSecretName := userSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)
 
-			if secret.Annotations[annotationRetainedFrom] == postgresDB.Name {
-				logger.Info("Re-adopting orphaned secret", "name", secretName)
-				if err := r.adoptResource(ctx, postgresDB, secret); err != nil {
-					return fmt.Errorf("failed to re-adopt secret %s: %w", secretName, err)
-				}
+		adminSecret, err := r.getSecret(ctx, postgresDB.Namespace, adminSecretName)
+		if err != nil {
+			return err
+		}
+		rwSecret, err := r.getSecret(ctx, postgresDB.Namespace, rwSecretName)
+		if err != nil {
+			return err
+		}
+
+		if adminSecret == nil {
+			logger.Info("Creating missing admin user secrets for database", "database", dbSpec.Name)
+			if err := r.createUserSecret(ctx, postgresDB, adminRoleName(dbSpec.Name), adminSecretName); err != nil {
+				return fmt.Errorf("failed to create secrets for database %s: %w", dbSpec.Name, err)
+			}
+		} else if adminSecret.Annotations[annotationRetainedFrom] == postgresDB.Name {
+			logger.Info("Re-adopting orphaned secret", "name", adminSecretName)
+			if err := r.adoptResource(ctx, postgresDB, adminSecret); err != nil {
+				return fmt.Errorf("failed to re-adopt secret %s: %w", adminSecretName, err)
+			}
+		}
+
+		if rwSecret == nil {
+			logger.Info("Creating missing rw user secrets for database", "database", dbSpec.Name)
+			if err := r.createUserSecret(ctx, postgresDB, rwRoleName(dbSpec.Name), rwSecretName); err != nil {
+				return fmt.Errorf("failed to create secrets for database %s: %w", dbSpec.Name, err)
+			}
+		} else if rwSecret.Annotations[annotationRetainedFrom] == postgresDB.Name {
+			logger.Info("Re-adopting orphaned secret", "name", rwSecretName)
+			if err := r.adoptResource(ctx, postgresDB, rwSecret); err != nil {
+				return fmt.Errorf("failed to re-adopt secret %s: %w", rwSecretName, err)
 			}
 		}
 	}
 	return nil
+}
+
+// getSecret fetches a Secret by name, returning nil if not found.
+// Non-NotFound errors are treated as real failures — a transient API error
+// must not cause a spurious Create attempt.
+func (r *PostgresDatabaseReconciler) getSecret(ctx context.Context, namespace, name string) (*corev1.Secret, error) {
+	logger := log.FromContext(ctx)
+
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, secret)
+	if errors.IsNotFound(err) {
+		return nil, nil
+	}
+	if err != nil {
+		logger.Error(err, "Failed to check secret existence", "secret", name)
+		return nil, err
+	}
+	return secret, nil
 }
 
 // createUserSecret generates a password, builds the Secret, and creates it.
