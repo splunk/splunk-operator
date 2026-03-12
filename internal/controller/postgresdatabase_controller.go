@@ -154,11 +154,11 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Phase: RoleConflictCheck — before creating any resources, verify no other
 	// PostgresDatabase already owns the same roles (different PasswordSecretRef).
-	foreignRoles := getForeignRoles(postgresDB, cluster)
-	if len(foreignRoles) > 0 {
+	foreignUsers := getForeignUsers(postgresDB, cluster)
+	if len(foreignUsers) > 0 {
 		conflictMsg := fmt.Sprintf("Role conflict: roles (%s) are managed by another PostgresDatabase with different secret references. "+
 			"If you deleted a previous PostgresDatabase, recreate it with the original name to re-adopt the orphaned resources.",
-			strings.Join(foreignRoles, ", "))
+			strings.Join(foreignUsers, ", "))
 		logger.Error(nil, conflictMsg)
 		if statusErr := updateStatus(usersReady, metav1.ConditionFalse, reasonRoleConflict, conflictMsg, failedDBPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
@@ -208,10 +208,10 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Phase: RoleProvisioning
 	desiredUsers := getDesiredUsers(postgresDB)
-	actualRolesInSpec := getRolesInClusterSpec(cluster)
+	actualUsersInSpec := getUsersInClusterSpec(cluster)
 	var missingUsersFromSpec []string
 	for _, user := range desiredUsers {
-		if !slices.Contains(actualRolesInSpec, user) {
+		if !slices.Contains(actualUsersInSpec, user) {
 			missingUsersFromSpec = append(missingUsersFromSpec, user)
 		}
 	}
@@ -319,21 +319,21 @@ func getDesiredUsers(postgresDB *enterprisev4.PostgresDatabase) []string {
 	return users
 }
 
-// getRolesInClusterSpec checks our PostgresCluster CR rather than the CNPG Cluster
+// getUsersInClusterSpec checks our PostgresCluster CR rather than the CNPG Cluster
 // because the database controller owns PostgresCluster.spec.managedRoles via SSA —
 // CNPG may have roles from other sources that we must not treat as our own.
-func getRolesInClusterSpec(cluster *enterprisev4.PostgresCluster) []string {
-	roles := make([]string, 0, len(cluster.Spec.ManagedRoles))
+func getUsersInClusterSpec(cluster *enterprisev4.PostgresCluster) []string {
+	users := make([]string, 0, len(cluster.Spec.ManagedRoles))
 	for _, role := range cluster.Spec.ManagedRoles {
-		roles = append(roles, role.Name)
+		users = append(users, role.Name)
 	}
-	return roles
+	return users
 }
 
-// getForeignRoles returns role names that exist in the PostgresCluster but whose
+// getForeignUsers returns role names that exist in the PostgresCluster but whose
 // PasswordSecretRef points to a different secret than what this PostgresDatabase expects.
 // This means another PostgresDatabase owns them.
-func getForeignRoles(postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) []string {
+func getForeignUsers(postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) []string {
 	var foreign []string
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		expectedAdmin := userSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)
