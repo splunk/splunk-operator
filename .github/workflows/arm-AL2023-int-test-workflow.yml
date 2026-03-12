@@ -70,6 +70,7 @@ jobs:
             licensemanager,
             managerdeletecr,
             indingsep,
+            licensemanager,
           ]
     runs-on: ubuntu-latest
     needs: build-operator-image-arm-al2023
