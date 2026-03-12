@@ -42,6 +42,7 @@ const (
 	// default database name
 	defaultDatabaseName           string = "postgres"
 	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"
+	annotationRetainedFrom        string = "enterprise.splunk.com/retained-from"
 	defaultSecretSuffix           string = "-secret-"
 	defaultPoolerSuffix           string = "-pooler-"
 	defaultConfigSuffix           string = "-config-"
@@ -84,9 +85,8 @@ const (
 	reasonConfigMapsCreationFailed conditionReasons = "ConfigMapsCreationFailed"
 	reasonWaitingForCNPG           conditionReasons = "WaitingForCNPG"
 	reasonUsersCreationFailed      conditionReasons = "UsersCreationFailed"
-	reasonUsersCleanupFailed       conditionReasons = "UsersCleanupFailed"
-	reasonDatabasesCleanupFailed   conditionReasons = "DatabasesCleanupFailed"
 	reasonUsersAvailable           conditionReasons = "UsersAvailable"
+	reasonRoleConflict             conditionReasons = "RoleConflict"
 
 	// Additional condition reasons for clusterReady conditionType
 	reasonClusterClassNotFound  conditionReasons = "ClusterClassNotFound"
