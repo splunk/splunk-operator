@@ -1118,8 +1118,10 @@ func buildDatabaseConfigMapBody(
 	return data
 }
 
-// reconcileUserConfigMaps iterates each database's ConfigMap: creates missing ones
-// and re-adopts orphaned ones from a previous retain-deletion.
+// reconcileUserConfigMaps mirrors reconcileUserSecrets: checks per-database,
+// creates only what is absent. Endpoints are resolved by the caller so this function
+// has a single responsibility: iteration and existence-gated creation.
+// Orphaned ConfigMaps from a previous retain-deletion are re-adopted.
 func (r *PostgresDatabaseReconciler) reconcileUserConfigMaps(
 	ctx context.Context,
 	postgresDB *enterprisev4.PostgresDatabase,
@@ -1129,51 +1131,39 @@ func (r *PostgresDatabaseReconciler) reconcileUserConfigMaps(
 
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		cmName := configMapName(postgresDB.Name, dbSpec.Name)
-		existing := &corev1.ConfigMap{}
-		err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: postgresDB.Namespace}, existing)
-		if err != nil {
-			if !errors.IsNotFound(err) {
-				return fmt.Errorf("failed to check ConfigMap %s: %w", cmName, err)
-			}
-			logger.Info("Creating missing ConfigMap for database", "database", dbSpec.Name)
-			cm := buildDatabaseConfigMap(postgresDB.Namespace, cmName, dbSpec.Name, endpoints)
-			if err := controllerutil.SetControllerReference(postgresDB, cm, r.Scheme); err != nil {
-				logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", cm.Name)
-				return err
-			}
-			if err := r.Create(ctx, cm); err != nil {
-				if errors.IsAlreadyExists(err) {
-					continue
-				}
-				logger.Error(err, "Failed to create ConfigMap", "configmap", cm.Name)
-				return err
-			}
-			continue
+
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cmName,
+				Namespace: postgresDB.Namespace,
+				Labels: map[string]string{
+					labelManagedBy: "splunk-operator",
+				},
+			},
 		}
 
-		if existing.Annotations[annotationRetainedFrom] == postgresDB.Name {
-			logger.Info("Re-adopting orphaned ConfigMap", "name", cmName)
-			existing.Data = buildDatabaseConfigMapBody(dbSpec.Name, endpoints)
-			if err := r.adoptResource(ctx, postgresDB, existing); err != nil {
-				return fmt.Errorf("failed to re-adopt ConfigMap %s: %w", cmName, err)
+		_, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
+			cm.Data = buildDatabaseConfigMapBody(dbSpec.Name, endpoints)
+
+			// Set ownerRef on creation or re-adoption (orphaned objects have no ownerRef).
+			if cm.CreationTimestamp.IsZero() || cm.Annotations[annotationRetainedFrom] == postgresDB.Name {
+				if cm.Annotations[annotationRetainedFrom] == postgresDB.Name {
+					logger.Info("Re-adopting orphaned ConfigMap", "name", cmName)
+					delete(cm.Annotations, annotationRetainedFrom)
+				}
+				if err := controllerutil.SetControllerReference(postgresDB, cm, r.Scheme); err != nil {
+					logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", cm.Name)
+					return err
+				}
 			}
+			return nil
+		})
+		if err != nil {
+			logger.Error(err, "failed to create or update database configmap", "db", postgresDB.Name, "configmap", cmName)
+			return fmt.Errorf("failed to create or update database configmap %s: %w", cmName, err)
 		}
 	}
 	return nil
-}
-
-// buildDatabaseConfigMap constructs a full ConfigMap object with connection metadata.
-func buildDatabaseConfigMap(namespace, cmName, dbName string, endpoints clusterEndpoints) *corev1.ConfigMap {
-	return &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cmName,
-			Namespace: namespace,
-			Labels: map[string]string{
-				labelManagedBy: "splunk-operator",
-			},
-		},
-		Data: buildDatabaseConfigMapBody(dbName, endpoints),
-	}
 }
 
 // populateDatabaseStatus derives all secret ref names via userSecretName() — the same function
