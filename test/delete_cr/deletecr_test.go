@@ -43,7 +43,7 @@ var _ = Describe("DeleteCR test", func() {
 		Expect(err).To(Succeed(), "Unable to create deployment")
 
 		// Validate test prerequisites early to fail fast
-		err = testenv.ValidateTestPrerequisites(ctx, deployment, testcaseEnvInst)
+		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
@@ -79,7 +79,7 @@ var _ = Describe("DeleteCR test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone)
+			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
 			// Delete Standalone CR
 			err = deployment.DeleteCR(ctx, standalone)
@@ -98,13 +98,13 @@ var _ = Describe("DeleteCR test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy C3 instance")
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			idxc := &enterpriseApi.IndexerCluster{}
 			idxcName := deployment.GetName() + "-idxc"

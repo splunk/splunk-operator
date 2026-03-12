@@ -27,11 +27,11 @@ import (
 
 // WatchForCRPhase is a generic function to wait for any CR to reach expected phase
 // Uses PollInterval for consistency with existing test behavior
-func WatchForCRPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, namespace, crName, crKind string, obj client.Object, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+func (testenv *TestCaseEnv) WatchForCRPhase(ctx context.Context, deployment *Deployment, namespace, crName, crKind string, obj client.Object, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, obj)
 		if err != nil {
-			testenvInstance.Log.Info("Failed to get CR", "kind", crKind, "name", crName, "error", err)
+			testenv.Log.Info("Failed to get CR", "kind", crKind, "name", crName, "error", err)
 			return false, nil
 		}
 
@@ -43,7 +43,7 @@ func WatchForCRPhase(ctx context.Context, deployment *Deployment, testenvInstanc
 			currentPhase = cr.Status.Phase
 		case *enterpriseApi.SearchHeadCluster:
 			if cr.Status.Phase == expectedPhase && cr.Status.DeployerPhase == expectedPhase {
-				testenvInstance.Log.Info("CR reached expected phase", "kind", crKind, "name", crName, "phase", expectedPhase)
+				testenv.Log.Info("CR reached expected phase", "kind", crKind, "name", crName, "phase", expectedPhase)
 				return true, nil
 			}
 			return false, nil
@@ -64,7 +64,7 @@ func WatchForCRPhase(ctx context.Context, deployment *Deployment, testenvInstanc
 		}
 
 		if currentPhase == expectedPhase {
-			testenvInstance.Log.Info("CR reached expected phase", "kind", crKind, "name", crName, "phase", expectedPhase)
+			testenv.Log.Info("CR reached expected phase", "kind", crKind, "name", crName, "phase", expectedPhase)
 			return true, nil
 		}
 		return false, nil
@@ -72,61 +72,61 @@ func WatchForCRPhase(ctx context.Context, deployment *Deployment, testenvInstanc
 }
 
 // WatchForStandalonePhase waits for Standalone to reach expected phase
-func WatchForStandalonePhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return WatchForCRPhase(ctx, deployment, testenvInstance, namespace, crName, "Standalone", &enterpriseApi.Standalone{}, expectedPhase, timeout)
+func (testenv *TestCaseEnv) WatchForStandalonePhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return testenv.WatchForCRPhase(ctx, deployment, namespace, crName, "Standalone", &enterpriseApi.Standalone{}, expectedPhase, timeout)
 }
 
 // WatchForClusterManagerPhase waits for ClusterManager to reach expected phase
-func WatchForClusterManagerPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return WatchForCRPhase(ctx, deployment, testenvInstance, namespace, crName, "ClusterManager", &enterpriseApi.ClusterManager{}, expectedPhase, timeout)
+func (testenv *TestCaseEnv) WatchForClusterManagerPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return testenv.WatchForCRPhase(ctx, deployment, namespace, crName, "ClusterManager", &enterpriseApi.ClusterManager{}, expectedPhase, timeout)
 }
 
 // WatchForSearchHeadClusterPhase waits for SearchHeadCluster to reach expected phase (checks both Phase and DeployerPhase)
-func WatchForSearchHeadClusterPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return WatchForCRPhase(ctx, deployment, testenvInstance, namespace, crName, "SearchHeadCluster", &enterpriseApi.SearchHeadCluster{}, expectedPhase, timeout)
+func (testenv *TestCaseEnv) WatchForSearchHeadClusterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return testenv.WatchForCRPhase(ctx, deployment, namespace, crName, "SearchHeadCluster", &enterpriseApi.SearchHeadCluster{}, expectedPhase, timeout)
 }
 
 // WatchForIndexerClusterPhase waits for IndexerCluster to reach expected phase
-func WatchForIndexerClusterPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return WatchForCRPhase(ctx, deployment, testenvInstance, namespace, crName, "IndexerCluster", &enterpriseApi.IndexerCluster{}, expectedPhase, timeout)
+func (testenv *TestCaseEnv) WatchForIndexerClusterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return testenv.WatchForCRPhase(ctx, deployment, namespace, crName, "IndexerCluster", &enterpriseApi.IndexerCluster{}, expectedPhase, timeout)
 }
 
 // WatchForMonitoringConsolePhase waits for MonitoringConsole to reach expected phase
-func WatchForMonitoringConsolePhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return WatchForCRPhase(ctx, deployment, testenvInstance, namespace, crName, "MonitoringConsole", &enterpriseApi.MonitoringConsole{}, expectedPhase, timeout)
+func (testenv *TestCaseEnv) WatchForMonitoringConsolePhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return testenv.WatchForCRPhase(ctx, deployment, namespace, crName, "MonitoringConsole", &enterpriseApi.MonitoringConsole{}, expectedPhase, timeout)
 }
 
 // WatchForLicenseManagerPhase waits for LicenseManager to reach expected phase
-func WatchForLicenseManagerPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return WatchForCRPhase(ctx, deployment, testenvInstance, namespace, crName, "LicenseManager", &enterpriseApi.LicenseManager{}, expectedPhase, timeout)
+func (testenv *TestCaseEnv) WatchForLicenseManagerPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return testenv.WatchForCRPhase(ctx, deployment, namespace, crName, "LicenseManager", &enterpriseApi.LicenseManager{}, expectedPhase, timeout)
 }
 
 // WatchForLicenseMasterPhase waits for LicenseMaster to reach expected phase
-func WatchForLicenseMasterPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return WatchForCRPhase(ctx, deployment, testenvInstance, namespace, crName, "LicenseMaster", &enterpriseApiV3.LicenseMaster{}, expectedPhase, timeout)
+func (testenv *TestCaseEnv) WatchForLicenseMasterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return testenv.WatchForCRPhase(ctx, deployment, namespace, crName, "LicenseMaster", &enterpriseApiV3.LicenseMaster{}, expectedPhase, timeout)
 }
 
 // WatchForClusterMasterPhase waits for ClusterMaster to reach expected phase
-func WatchForClusterMasterPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return WatchForCRPhase(ctx, deployment, testenvInstance, namespace, crName, "ClusterMaster", &enterpriseApiV3.ClusterMaster{}, expectedPhase, timeout)
+func (testenv *TestCaseEnv) WatchForClusterMasterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return testenv.WatchForCRPhase(ctx, deployment, namespace, crName, "ClusterMaster", &enterpriseApiV3.ClusterMaster{}, expectedPhase, timeout)
 }
 
 // WatchForIngestorClusterPhase waits for IngestorCluster to reach expected phase
-func WatchForIngestorClusterPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
-	return WatchForCRPhase(ctx, deployment, testenvInstance, namespace, crName, "IngestorCluster", &enterpriseApi.IngestorCluster{}, expectedPhase, timeout)
+func (testenv *TestCaseEnv) WatchForIngestorClusterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return testenv.WatchForCRPhase(ctx, deployment, namespace, crName, "IngestorCluster", &enterpriseApi.IngestorCluster{}, expectedPhase, timeout)
 }
 
 // WatchForAppPhaseChange uses optimized polling to wait for app phase changes on a CR
-func WatchForAppPhaseChange(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, namespace, crName, crKind, appSourceName, appName string, expectedPhase enterpriseApi.AppPhaseType, timeout time.Duration) error {
+func (testenv *TestCaseEnv) WatchForAppPhaseChange(ctx context.Context, deployment *Deployment, namespace, crName, crKind, appSourceName, appName string, expectedPhase enterpriseApi.AppPhaseType, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, crName, crKind, appSourceName, appName)
+		appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenv, crName, crKind, appSourceName, appName)
 		if err != nil {
-			testenvInstance.Log.Info("Failed to get app deployment info", "app", appName, "error", err)
+			testenv.Log.Info("Failed to get app deployment info", "app", appName, "error", err)
 			return false, nil
 		}
 
 		if appDeploymentInfo.PhaseInfo.Phase == expectedPhase {
-			testenvInstance.Log.Info("App reached expected phase", "app", appName, "phase", expectedPhase, "kind", crKind, "name", crName)
+			testenv.Log.Info("App reached expected phase", "app", appName, "phase", expectedPhase, "kind", crKind, "name", crName)
 			return true, nil
 		}
 		return false, nil
@@ -134,7 +134,7 @@ func WatchForAppPhaseChange(ctx context.Context, deployment *Deployment, testenv
 }
 
 // WatchForAllAppsPhaseChange uses optimized polling to wait for all apps in a list to reach a specific phase
-func WatchForAllAppsPhaseChange(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, namespace, crName, crKind, appSourceName string, appList []string, expectedPhase enterpriseApi.AppPhaseType, timeout time.Duration) error {
+func (testenv *TestCaseEnv) WatchForAllAppsPhaseChange(ctx context.Context, deployment *Deployment, namespace, crName, crKind, appSourceName string, appList []string, expectedPhase enterpriseApi.AppPhaseType, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		for _, appName := range appList {
 			lookupAppName := appName
@@ -144,9 +144,9 @@ func WatchForAllAppsPhaseChange(ctx context.Context, deployment *Deployment, tes
 				}
 			}
 
-			appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, crName, crKind, appSourceName, lookupAppName)
+			appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenv, crName, crKind, appSourceName, lookupAppName)
 			if err != nil {
-				testenvInstance.Log.Info("Failed to get app deployment info", "app", appName, "error", err)
+				testenv.Log.Info("Failed to get app deployment info", "app", appName, "error", err)
 				return false, nil
 			}
 
@@ -155,25 +155,25 @@ func WatchForAllAppsPhaseChange(ctx context.Context, deployment *Deployment, tes
 			}
 		}
 
-		testenvInstance.Log.Info("All apps reached expected phase", "count", len(appList), "phase", expectedPhase)
+		testenv.Log.Info("All apps reached expected phase", "count", len(appList), "phase", expectedPhase)
 		return true, nil
 	})
 }
 
 // WatchForEventWithReason uses optimized polling to wait for a Kubernetes event with specific reason
 // Uses ShortPollInterval (2s) for faster response to time-sensitive events
-func WatchForEventWithReason(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, namespace, crName, eventReason string, timeout time.Duration) error {
+func (testenv *TestCaseEnv) WatchForEventWithReason(ctx context.Context, deployment *Deployment, namespace, crName, eventReason string, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		eventList := &corev1.EventList{}
 		err := deployment.testenv.GetKubeClient().List(ctx, eventList, client.InNamespace(namespace))
 		if err != nil {
-			testenvInstance.Log.Info("Failed to list events", "namespace", namespace, "error", err)
+			testenv.Log.Info("Failed to list events", "namespace", namespace, "error", err)
 			return false, nil
 		}
 
 		for _, event := range eventList.Items {
 			if event.InvolvedObject.Name == crName && event.Reason == eventReason {
-				testenvInstance.Log.Info("Found expected event", "name", crName, "reason", eventReason)
+				testenv.Log.Info("Found expected event", "name", crName, "reason", eventReason)
 				return true, nil
 			}
 		}

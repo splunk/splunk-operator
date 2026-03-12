@@ -48,7 +48,7 @@ var _ = Describe("Ingest and Search Test", func() {
 		Expect(err).To(Succeed(), "Unable to create deployment")
 
 		// Validate test prerequisites early to fail fast
-		err = testenv.ValidateTestPrerequisites(ctx, deployment, testcaseEnvInst)
+		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
@@ -72,7 +72,7 @@ var _ = Describe("Ingest and Search Test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Wait for standalone to be in READY Status
-			testenv.StandaloneReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone)
+			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
 			Eventually(func() enterpriseApi.Phase {
 				podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
@@ -148,7 +148,7 @@ var _ = Describe("Ingest and Search Test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Wait for standalone to be in READY Status
-			testenv.StandaloneReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone)
+			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
 			// Verify splunk status is up
 			Eventually(func() enterpriseApi.Phase {

@@ -45,7 +45,7 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 		ctx = context.TODO()
 
 		// Validate test prerequisites early to fail fast
-		err = testenv.ValidateTestPrerequisites(ctx, deployment, testcaseEnvInst)
+		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 
 		defaultCPULimits = "4"
@@ -70,27 +70,27 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 
 			// Deploy Standalone
 			mcRef := deployment.GetName()
-			prevTelemetrySubmissionTime := testenv.GetTelemetryLastSubmissionTime(ctx, deployment, testcaseEnvInst)
+			prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
 			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), mcRef, "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
 			// Verify Standalone goes to ready state
-			testenv.StandaloneReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone)
+			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
 			// Verify telemetry
-			testenv.TriggerTelemetrySubmission(ctx, deployment, testcaseEnvInst)
-			testenv.VerifyTelemetry(ctx, deployment, testcaseEnvInst, prevTelemetrySubmissionTime)
+			testcaseEnvInst.TriggerTelemetrySubmission(ctx, deployment)
+			testcaseEnvInst.VerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), mc)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// Verify CPU limits before updating the CR
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.VerifyCPULimits(deployment, testcaseEnvInst, standalonePodName, defaultCPULimits)
+			testcaseEnvInst.VerifyCPULimits(deployment, standalonePodName, defaultCPULimits)
 
 			// Change CPU limits to trigger CR update
 			standalone.Spec.Resources.Limits = corev1.ResourceList{
@@ -100,16 +100,16 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with updated CR ")
 
 			// Verify Standalone is updating
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseUpdating)
+			testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
 			// Verify Standalone goes to ready state
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseReady)
+			testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseReady)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), mc)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// Verify CPU limits after updating the CR
-			testenv.VerifyCPULimits(deployment, testcaseEnvInst, standalonePodName, newCPULimits)
+			testcaseEnvInst.VerifyCPULimits(deployment, standalonePodName, newCPULimits)
 		})
 	})
 })

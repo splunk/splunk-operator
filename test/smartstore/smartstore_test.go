@@ -30,7 +30,7 @@ var _ = Describe("Smartstore test", func() {
 		Expect(err).To(Succeed(), "Unable to create deployment")
 
 		// Validate test prerequisites early to fail fast
-		err = testenv.ValidateTestPrerequisites(ctx, deployment, testcaseEnvInst)
+		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
@@ -74,16 +74,16 @@ var _ = Describe("Smartstore test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Wait for Standalone to reach Ready phase
-			err = testenv.WaitForStandalonePhase(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), standalone.Name, enterpriseApi.PhaseReady, 2*time.Minute)
+			err = testcaseEnvInst.WaitForStandalonePhase(ctx, deployment, testcaseEnvInst.GetName(), standalone.Name, enterpriseApi.PhaseReady, 2*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for Standalone to reach Ready phase")
 
 			// Verify standalone goes to ready state and stays ready
-			testenv.StandaloneReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone)
+			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
 			// Check index on pod
 			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			for indexName := range indexVolumeMap {
-				testenv.VerifyIndexFoundOnPod(ctx, deployment, testcaseEnvInst, podName, indexName)
+				testcaseEnvInst.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName)
 			}
 
 			// Ingest data to the index
@@ -96,7 +96,7 @@ var _ = Describe("Smartstore test", func() {
 			// Roll Hot Buckets on the test index by restarting splunk and check for index on S3
 			for indexName := range indexVolumeMap {
 				testenv.RollHotToWarm(ctx, deployment, podName, indexName)
-				testenv.VerifyIndexExistsOnS3(ctx, deployment, testcaseEnvInst, indexName, podName)
+				testcaseEnvInst.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
 			}
 		})
 	})
@@ -126,14 +126,14 @@ var _ = Describe("Smartstore test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Verify standalone goes to ready state
-			testenv.StandaloneReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone)
+			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
 			// Check index on pod
 			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.VerifyIndexFoundOnPod(ctx, deployment, testcaseEnvInst, podName, indexName)
+			testcaseEnvInst.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName)
 
 			// Check special index configs
-			testenv.VerifyIndexConfigsMatch(ctx, deployment, testcaseEnvInst, podName, indexName, specialConfig["MaxGlobalDataSizeMB"], specialConfig["MaxGlobalRawDataSizeMB"])
+			testcaseEnvInst.VerifyIndexConfigsMatch(ctx, deployment, podName, indexName, specialConfig["MaxGlobalDataSizeMB"], specialConfig["MaxGlobalRawDataSizeMB"])
 
 			// Ingest data to the index
 			logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
@@ -144,25 +144,25 @@ var _ = Describe("Smartstore test", func() {
 			testenv.RollHotToWarm(ctx, deployment, podName, indexName)
 
 			// Check for indexes on S3
-			testenv.VerifyIndexExistsOnS3(ctx, deployment, testcaseEnvInst, indexName, podName)
+			testcaseEnvInst.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
 
 			// Verify Cachemanager Values
 			serverConfPath := "/opt/splunk/etc/apps/splunk-operator/local/server.conf"
 
 			// Validate MaxCacheSizeMB
-			testenv.VerifyConfOnPod(deployment, testcaseEnvInst, podName, serverConfPath, "max_cache_size", fmt.Sprint(cacheManagerSmartStoreSpec.MaxCacheSizeMB))
+			testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "max_cache_size", fmt.Sprint(cacheManagerSmartStoreSpec.MaxCacheSizeMB))
 
 			// Validate EvictionPaddingSizeMB
-			testenv.VerifyConfOnPod(deployment, testcaseEnvInst, podName, serverConfPath, "eviction_padding", fmt.Sprint(cacheManagerSmartStoreSpec.EvictionPaddingSizeMB))
+			testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "eviction_padding", fmt.Sprint(cacheManagerSmartStoreSpec.EvictionPaddingSizeMB))
 
 			// Validate MaxConcurrentDownloads
-			testenv.VerifyConfOnPod(deployment, testcaseEnvInst, podName, serverConfPath, "max_concurrent_downloads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentDownloads))
+			testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "max_concurrent_downloads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentDownloads))
 
 			// Validate MaxConcurrentUploads
-			testenv.VerifyConfOnPod(deployment, testcaseEnvInst, podName, serverConfPath, "max_concurrent_uploads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentUploads))
+			testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "max_concurrent_uploads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentUploads))
 
 			// Validate EvictionPolicy
-			testenv.VerifyConfOnPod(deployment, testcaseEnvInst, podName, serverConfPath, "eviction_policy", cacheManagerSmartStoreSpec.EvictionPolicy)
+			testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "eviction_policy", cacheManagerSmartStoreSpec.EvictionPolicy)
 
 		})
 	})
@@ -185,24 +185,24 @@ var _ = Describe("Smartstore test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-master goes to Ready phase
-			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
 			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
+			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
 
 			// Ensure cluster configured as multisite
-			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
+			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Check index on pod
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
-				testenv.VerifyIndexFoundOnPod(ctx, deployment, testcaseEnvInst, podName, indexName)
+				testcaseEnvInst.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName)
 			}
 
 			// Ingest data to the index
@@ -222,7 +222,7 @@ var _ = Describe("Smartstore test", func() {
 			// Roll index buckets and Check for indexes on S3
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
-				testenv.VerifyIndexExistsOnS3(ctx, deployment, testcaseEnvInst, indexName, podName)
+				testcaseEnvInst.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
 			}
 
 			oldBundleHash := testenv.GetClusterManagerBundleHash(ctx, deployment, "ClusterMaster")
@@ -240,25 +240,25 @@ var _ = Describe("Smartstore test", func() {
 			Expect(err).To(Succeed(), "Failed to add new index to cluster master")
 
 			// Ensure that the cluster-master goes to Ready phase
-			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
 			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
+			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Verify new bundle is pushed
-			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), 1, oldBundleHash)
+			testcaseEnvInst.VerifyClusterManagerBundlePush(ctx, deployment, testcaseEnvInst.GetName(), 1, oldBundleHash)
 
 			// Check index on pod
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
 				for _, index := range indexList {
-					testenv.VerifyIndexFoundOnPod(ctx, deployment, testcaseEnvInst, podName, index)
+					testcaseEnvInst.VerifyIndexFoundOnPod(ctx, deployment, podName, index)
 				}
 			}
 
@@ -281,7 +281,7 @@ var _ = Describe("Smartstore test", func() {
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
 				testenvInstance.Log.Info("Checking index on S3", "Index Name", indexNameTwo, "Pod Name", podName)
-				testenv.VerifyIndexExistsOnS3(ctx, deployment, testcaseEnvInst, indexNameTwo, podName)
+				testcaseEnvInst.VerifyIndexExistsOnS3(ctx, deployment, indexNameTwo, podName)
 			}
 		})
 	})
@@ -319,7 +319,7 @@ var _ = Describe("Smartstore test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone)
+			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 		})
 	})
 
@@ -356,7 +356,7 @@ var _ = Describe("Smartstore test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone)
+			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
 		})
 	})
