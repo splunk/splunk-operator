@@ -852,13 +852,6 @@ func (r *PostgresDatabaseReconciler) patchManagedRolesOnDeletion(
 
 	fieldManager := fmt.Sprintf("postgresdatabase-%s", postgresDB.Name)
 	if err := r.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManager)); err != nil {
-		// SSA conflict means another field manager owns these roles — we don't need to clean up
-		// what we never owned. Log and continue so the finalizer can be removed.
-		if strings.Contains(err.Error(), "Apply failed") {
-			logger.Info("Skipping role cleanup — roles are owned by another field manager",
-				"postgresDatabase", postgresDB.Name, "error", err.Error())
-			return nil
-		}
 		return fmt.Errorf("failed to patch managed roles on deletion: %w", err)
 	}
 
