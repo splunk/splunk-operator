@@ -355,40 +355,28 @@ func GetSplunkReadableNamespaceScopedSecretData(ctx context.Context, c splcommon
 
 	// Create individual token type data
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
-		if _, exists := namespaceScopedSecret.Data[tokenType]; exists {
-			splunkReadableData[tokenType] = namespaceScopedSecret.Data[tokenType]
-		}
+		splunkReadableData[tokenType] = namespaceScopedSecret.Data[tokenType]
 	}
 
-	// Create default.yml with optional splunk_secret
-	defaultYmlBuilder := fmt.Sprintf(`
+	// Create default.yml
+	splunkReadableData["default.yml"] = []byte(fmt.Sprintf(`
 splunk:
     hec_disabled: 0
     hec_enableSSL: 0
     hec_token: "%s"
     password: "%s"
-    pass4SymmKey: "%s"`,
-		namespaceScopedSecret.Data["hec_token"],
-		namespaceScopedSecret.Data["password"],
-		namespaceScopedSecret.Data["pass4SymmKey"])
-
-	// Add splunk_secret only if it exists
-	if splunkSecret, exists := namespaceScopedSecret.Data["splunk_secret"]; exists {
-		defaultYmlBuilder += fmt.Sprintf(`
-    splunk_secret: "%s"`, splunkSecret)
-	}
-
-	// Add idxc and shc sections
-	defaultYmlBuilder += fmt.Sprintf(`
+    pass4SymmKey: "%s"
     idxc:
         secret: "%s"
     shc:
         secret: "%s"
 `,
+		namespaceScopedSecret.Data["hec_token"],
+		namespaceScopedSecret.Data["password"],
+		namespaceScopedSecret.Data["pass4SymmKey"],
 		namespaceScopedSecret.Data["idxc_secret"],
-		namespaceScopedSecret.Data["shc_secret"])
+		namespaceScopedSecret.Data["shc_secret"]))
 
-	splunkReadableData["default.yml"] = []byte(strings.TrimSpace(defaultYmlBuilder))
 	return splunkReadableData, nil
 }
 
@@ -463,19 +451,9 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: splcommon.GetNamespaceScopedSecretName(namespace)}
 	err := client.Get(ctx, namespacedName, &current)
 	if err == nil {
-		// Validate existing secrets according to PasswordManagement documentation
-		err = validateNamespaceScopedSecrets(scopedLog, &current)
-		if err != nil {
-			return nil, err
-		}
-
 		// Generate values for only missing types of tokens them
 		var updateNeeded bool = false
 		for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
-			if tokenType == "splunk_secret" {
-				// splunk_secret is optional, skip if not found
-				continue
-			}
 			if _, ok := current.Data[tokenType]; !ok {
 				scopedLog.Info("Namespace scoped secret exists, missing value for token", "missingTokenType", tokenType)
 				if current.Data == nil || reflect.ValueOf(current.Data).Kind() != reflect.Map {
@@ -513,7 +491,7 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
 		if tokenType == "hec_token" {
 			current.Data[tokenType] = generateHECToken()
-		} else if tokenType != "splunk_secret" {
+		} else {
 			current.Data[tokenType] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
 		}
 	}
@@ -543,40 +521,6 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 		}
 	}
 	return &current, nil
-}
-
-// validateNamespaceScopedSecrets validates that all Splunk secret tokens that exist are not empty
-// and meet their specific requirements
-// Validates secrets documented in PasswordManagement: hec_token, password, pass4SymmKey, idxc_secret, shc_secret
-func validateNamespaceScopedSecrets(scopedLog interface {
-	Info(msg string, keysAndValues ...interface{})
-	Error(err error, msg string, keysAndValues ...interface{})
-}, secret *corev1.Secret) error {
-	if secret.Data == nil {
-		scopedLog.Info("Secret data is nil for namespace scoped secret")
-		return nil
-	}
-
-	// Validate each documented secret token type
-	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
-		if secretValue, exists := secret.Data[tokenType]; exists {
-			var err error
-			if tokenType == "hec_token" {
-				err = ValidateHECToken(secretValue)
-			} else {
-				err = ValidateSecret(secretValue)
-			}
-
-			if err != nil {
-				scopedLog.Error(err, "Validation failed for secret", "secret", tokenType)
-				return fmt.Errorf("validation failed for secret %s: %w", tokenType, err)
-			}
-
-			scopedLog.Info("Namespace scoped secret validation passed", "secret", tokenType)
-		}
-	}
-
-	return nil
 }
 
 // GetSecretByName retrieves namespace scoped secret object for a given name
