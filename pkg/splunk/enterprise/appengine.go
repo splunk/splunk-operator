@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package enterprise
 
 import (
@@ -9,51 +25,49 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// AppFrameworkEngine provides a stable internal API boundary for the app framework pipeline.
-type AppFrameworkEngine struct{}
-
-// DefaultAppFrameworkEngine is the shared engine instance for reconcilers.
-var DefaultAppFrameworkEngine = &AppFrameworkEngine{}
-
-// EngineInput bundles app framework inputs for pipeline calls.
-type EngineInput struct {
-	Ctx                context.Context
-	Client             splcommon.ControllerClient
-	Target             splcommon.MetaObject
-	AppFrameworkConfig *enterpriseApi.AppFrameworkSpec
-	AppDeployContext   *enterpriseApi.AppDeploymentContext
-	Scope              enterpriseApi.ScopeType
-	Phase              enterpriseApi.Phase
-	PodTemplateSpec    *corev1.PodTemplateSpec
+type AppEngine interface {
+	ensureAppFrameworkStatus(ctx context.Context, client splcommon.ControllerClient, target splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec, scope enterpriseApi.ScopeType) error
+	ensureAppRepoState(ctx context.Context, client splcommon.ControllerClient, target splcommon.MetaObject, appFrameworkConfig *enterpriseApi.AppFrameworkSpec, appDeployContext *enterpriseApi.AppDeploymentContext) error
+	runAppFrameworkIfReady(ctx context.Context, client splcommon.ControllerClient, target splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) *reconcile.Result
+	ensureAppFrameworkStagingVolume(ctx context.Context, client splcommon.ControllerClient, target splcommon.MetaObject, podTemplateSpec *corev1.PodTemplateSpec, appFrameworkConfig *enterpriseApi.AppFrameworkSpec)
+	changeAppSrcDeployInfoStatus(ctx context.Context, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo, repoState enterpriseApi.AppRepoState, oldDeployStatus enterpriseApi.AppDeploymentStatus, newDeployStatus enterpriseApi.AppDeploymentStatus)
+	changePhaseInfo(ctx context.Context, desiredReplicas int32, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo)
+	removeStaleEntriesFromAuxPhaseInfo(ctx context.Context, desiredReplicas int32, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo)
 }
 
-// EngineOutput wraps pipeline outputs to keep the API stable.
-type EngineOutput struct {
-	Result *reconcile.Result
+type appFrameworkEngine struct{}
+
+func NewAppFrameworkEngine() AppEngine {
+	return &appFrameworkEngine{}
 }
 
-// EnsureAppFrameworkStatus validates and migrates app framework status when needed.
-func (e *AppFrameworkEngine) EnsureAppFrameworkStatus(input EngineInput) error {
-	return checkAndMigrateAppDeployStatus(input.Ctx, input.Client, input.Target, input.AppDeployContext, input.AppFrameworkConfig, input.Scope == enterpriseApi.ScopeLocal)
+// ensureAppFrameworkStatus validates and migrates app framework status when needed.
+func (e *appFrameworkEngine) ensureAppFrameworkStatus(ctx context.Context, client splcommon.ControllerClient, target splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec, scope enterpriseApi.ScopeType) error {
+	return checkAndMigrateAppDeployStatus(ctx, client, target, appDeployContext, appFrameworkConfig, scope == enterpriseApi.ScopeLocal)
 }
 
-// EnsureAppRepoState initializes clients and checks remote app status when app framework is configured.
-func (e *AppFrameworkEngine) EnsureAppRepoState(input EngineInput) error {
-	return initAndCheckAppInfoStatus(input.Ctx, input.Client, input.Target, input.AppFrameworkConfig, input.AppDeployContext)
+// ensureAppRepoState initializes clients and checks remote app status when app framework is configured.
+func (e *appFrameworkEngine) ensureAppRepoState(ctx context.Context, client splcommon.ControllerClient, target splcommon.MetaObject, appFrameworkConfig *enterpriseApi.AppFrameworkSpec, appDeployContext *enterpriseApi.AppDeploymentContext) error {
+	return initAndCheckAppInfoStatus(ctx, client, target, appFrameworkConfig, appDeployContext)
 }
 
-// RunAppFrameworkIfReady runs the app framework pipeline only when the CR is ready.
-func (e *AppFrameworkEngine) RunAppFrameworkIfReady(input EngineInput) EngineOutput {
-	if input.Phase != enterpriseApi.PhaseReady {
-		return EngineOutput{Result: nil}
-	}
-
-	return EngineOutput{
-		Result: handleAppFrameworkActivity(input.Ctx, input.Client, input.Target, input.AppDeployContext, input.AppFrameworkConfig),
-	}
+// runAppFrameworkIfReady runs the app framework pipeline only when the CR is ready.
+func (e *appFrameworkEngine) runAppFrameworkIfReady(ctx context.Context, client splcommon.ControllerClient, target splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) *reconcile.Result {
+	return handleAppFrameworkActivity(ctx, client, target, appDeployContext, appFrameworkConfig)
 }
 
-// EnsureAppFrameworkStagingVolume adds the app framework staging volume when configured.
-func (e *AppFrameworkEngine) EnsureAppFrameworkStagingVolume(input EngineInput) {
-	setupAppsStagingVolume(input.Ctx, input.Client, input.Target, input.PodTemplateSpec, input.AppFrameworkConfig)
+func (e *appFrameworkEngine) changePhaseInfo(ctx context.Context, desiredReplicas int32, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo) {
+	changePhaseInfo(ctx, desiredReplicas, appSrc, appSrcDeployStatus)
+}
+
+func (e *appFrameworkEngine) removeStaleEntriesFromAuxPhaseInfo(ctx context.Context, desiredReplicas int32, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo) {
+	removeStaleEntriesFromAuxPhaseInfo(ctx, desiredReplicas, appSrc, appSrcDeployStatus)
+}
+
+func (e *appFrameworkEngine) changeAppSrcDeployInfoStatus(ctx context.Context, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo, repoState enterpriseApi.AppRepoState, oldDeployStatus enterpriseApi.AppDeploymentStatus, newDeployStatus enterpriseApi.AppDeploymentStatus) {
+	changeAppSrcDeployInfoStatus(ctx, appSrc, appSrcDeployStatus, repoState, oldDeployStatus, newDeployStatus)
+}
+
+func (e *appFrameworkEngine) ensureAppFrameworkStagingVolume(ctx context.Context, client splcommon.ControllerClient, target splcommon.MetaObject, podTemplateSpec *corev1.PodTemplateSpec, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) {
+	setupAppsStagingVolume(ctx, client, target, podTemplateSpec, appFrameworkConfig)
 }

@@ -101,15 +101,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	}
 
 	// If needed, Migrate the app framework status
-	appEngineInput := EngineInput{
-		Ctx:                ctx,
-		Client:             client,
-		Target:             cr,
-		AppFrameworkConfig: &cr.Spec.AppFrameworkConfig,
-		AppDeployContext:   &cr.Status.AppContext,
-		Scope:              enterpriseApi.ScopeCluster,
-	}
-	err = DefaultAppFrameworkEngine.EnsureAppFrameworkStatus(appEngineInput)
+	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, false)
 	if err != nil {
 		return result, err
 	}
@@ -118,7 +110,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := DefaultAppFrameworkEngine.EnsureAppRepoState(appEngineInput)
+		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
 			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
@@ -243,11 +235,8 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 			return result, err
 		}
 
-		appEngineInput.Phase = cr.Status.Phase
-		finalResult := DefaultAppFrameworkEngine.RunAppFrameworkIfReady(appEngineInput)
-		if finalResult.Result != nil {
-			result = *finalResult.Result
-		}
+		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
+		result = *finalResult
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
@@ -306,15 +295,7 @@ func getClusterMasterStatefulSet(ctx context.Context, client splcommon.Controlle
 		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForCMSmartstore, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
 	}
 	// Setup App framework staging volume for apps
-	appEngineInput := EngineInput{
-		Ctx:                ctx,
-		Client:             client,
-		Target:             cr,
-		AppFrameworkConfig: &cr.Spec.AppFrameworkConfig,
-		AppDeployContext:   &cr.Status.AppContext,
-		PodTemplateSpec:    &ss.Spec.Template,
-	}
-	DefaultAppFrameworkEngine.EnsureAppFrameworkStagingVolume(appEngineInput)
+	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, err
 }

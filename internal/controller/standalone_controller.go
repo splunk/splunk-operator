@@ -113,7 +113,7 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Pass event recorder through context
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
-	result, err := ApplyStandalone(ctx, r.Client, instance)
+	result, err := ApplyStandalone(ctx, r.Client, instance, enterprise.NewAppFrameworkEngine())
 	if result.Requeue && result.RequeueAfter != 0 {
 		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
 	}
@@ -122,8 +122,8 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 // ApplyStandalone adding to handle unit test case
-var ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
-	return enterprise.ApplyStandalone(ctx, client, instance)
+var ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone, appEngine enterprise.AppEngine) (reconcile.Result, error) {
+	return enterprise.ApplyStandalone(ctx, client, instance, appEngine)
 }
 
 // SetupWithManager sets up the controller with the Manager.
