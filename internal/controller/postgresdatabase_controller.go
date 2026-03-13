@@ -557,60 +557,37 @@ func (r *PostgresDatabaseReconciler) updateStatus(
 	return r.Status().Update(ctx, db)
 }
 
-// handleDeletion processes each database according to its DeletionPolicy:
-//   - Delete: deletes the CNPG Database CR, ConfigMap, and Secrets.
-//   - Retain: orphans resources (strips ownerRef, adds retention annotation) so they survive deletion and can be re-adopted.
-//
-// For SSA managed roles: retained databases keep their role ownership, deleted databases release it.
+// deletionPlan separates databases by their DeletionPolicy for the cleanup workflow.
+type deletionPlan struct {
+	retained []enterprisev4.DatabaseDefinition
+	deleted  []enterprisev4.DatabaseDefinition
+}
+
+// buildDeletionPlan splits databases into retained and deleted groups.
+func buildDeletionPlan(databases []enterprisev4.DatabaseDefinition) deletionPlan {
+	var plan deletionPlan
+	for _, db := range databases {
+		if db.DeletionPolicy == deletionPolicyRetain {
+			plan.retained = append(plan.retained, db)
+		} else {
+			plan.deleted = append(plan.deleted, db)
+		}
+	}
+	return plan
+}
+
+// handleDeletion orchestrates the cleanup workflow for a PostgresDatabase being deleted.
 func (r *PostgresDatabaseReconciler) handleDeletion(ctx context.Context, postgresDB *enterprisev4.PostgresDatabase) error {
-	logger := log.FromContext(ctx)
+	plan := buildDeletionPlan(postgresDB.Spec.Databases)
 
-	var retainedDBs, deletedDBs []enterprisev4.DatabaseDefinition
-	for _, dbSpec := range postgresDB.Spec.Databases {
-		if dbSpec.DeletionPolicy == deletionPolicyRetain {
-			retainedDBs = append(retainedDBs, dbSpec)
-		} else {
-			deletedDBs = append(deletedDBs, dbSpec)
-		}
-	}
-
-	// Orphan resources for Retain databases.
-	if err := r.orphanCNPGDatabases(ctx, postgresDB, retainedDBs); err != nil {
+	if err := r.orphanRetainedResources(ctx, postgresDB, plan.retained); err != nil {
 		return err
 	}
-	if err := r.orphanConfigMaps(ctx, postgresDB, retainedDBs); err != nil {
+	if err := r.deleteRemovedResources(ctx, postgresDB, plan.deleted); err != nil {
 		return err
 	}
-	if err := r.orphanSecrets(ctx, postgresDB, retainedDBs); err != nil {
+	if err := r.cleanupManagedRoles(ctx, postgresDB, plan); err != nil {
 		return err
-	}
-
-	// Delete resources for Delete databases.
-	if err := r.deleteCNPGDatabases(ctx, postgresDB, deletedDBs); err != nil {
-		return err
-	}
-	if err := r.deleteConfigMaps(ctx, postgresDB, deletedDBs); err != nil {
-		return err
-	}
-	if err := r.deleteSecrets(ctx, postgresDB, deletedDBs); err != nil {
-		return err
-	}
-
-	// Patch SSA managed roles only when some databases are being deleted —
-	// we need to release ownership of the deleted roles. When all are retained,
-	// the roles stay as-is under our field manager.
-	if len(deletedDBs) > 0 {
-		cluster := &enterprisev4.PostgresCluster{}
-		if err := r.Get(ctx, types.NamespacedName{Name: postgresDB.Spec.ClusterRef.Name, Namespace: postgresDB.Namespace}, cluster); err != nil {
-			if !errors.IsNotFound(err) {
-				return fmt.Errorf("failed to get PostgresCluster for role cleanup: %w", err)
-			}
-			logger.Info("PostgresCluster already deleted, skipping role cleanup")
-		} else {
-			if err := r.patchManagedRolesOnDeletion(ctx, postgresDB, cluster, retainedDBs); err != nil {
-				return err
-			}
-		}
 	}
 
 	controllerutil.RemoveFinalizer(postgresDB, postgresDatabaseFinalizerName)
@@ -618,11 +595,70 @@ func (r *PostgresDatabaseReconciler) handleDeletion(ctx context.Context, postgre
 		return fmt.Errorf("failed to remove finalizer: %w", err)
 	}
 
-	logger.Info("Cleanup complete for PostgresDatabase",
+	log.FromContext(ctx).Info("Cleanup complete for PostgresDatabase",
 		"name", postgresDB.Name,
-		"retained", len(retainedDBs),
-		"deleted", len(deletedDBs))
+		"retained", len(plan.retained),
+		"deleted", len(plan.deleted))
 	return nil
+}
+
+// orphanRetainedResources strips ownerRefs and adds retention annotations
+// so resources survive the parent's deletion and can be re-adopted later.
+func (r *PostgresDatabaseReconciler) orphanRetainedResources(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	retained []enterprisev4.DatabaseDefinition,
+) error {
+	if err := r.orphanCNPGDatabases(ctx, postgresDB, retained); err != nil {
+		return err
+	}
+	if err := r.orphanConfigMaps(ctx, postgresDB, retained); err != nil {
+		return err
+	}
+	if err := r.orphanSecrets(ctx, postgresDB, retained); err != nil {
+		return err
+	}
+	return nil
+}
+
+// deleteRemovedResources deletes CNPG Databases, ConfigMaps, and Secrets
+// for databases with the Delete policy.
+func (r *PostgresDatabaseReconciler) deleteRemovedResources(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	deleted []enterprisev4.DatabaseDefinition,
+) error {
+	if err := r.deleteCNPGDatabases(ctx, postgresDB, deleted); err != nil {
+		return err
+	}
+	if err := r.deleteConfigMaps(ctx, postgresDB, deleted); err != nil {
+		return err
+	}
+	if err := r.deleteSecrets(ctx, postgresDB, deleted); err != nil {
+		return err
+	}
+	return nil
+}
+
+// cleanupManagedRoles releases SSA ownership of deleted databases' roles.
+// When all databases are retained, roles stay as-is under our field manager.
+func (r *PostgresDatabaseReconciler) cleanupManagedRoles(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	plan deletionPlan,
+) error {
+	if len(plan.deleted) == 0 {
+		return nil
+	}
+	cluster := &enterprisev4.PostgresCluster{}
+	if err := r.Get(ctx, types.NamespacedName{Name: postgresDB.Spec.ClusterRef.Name, Namespace: postgresDB.Namespace}, cluster); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get PostgresCluster for role cleanup: %w", err)
+		}
+		log.FromContext(ctx).Info("PostgresCluster already deleted, skipping role cleanup")
+		return nil
+	}
+	return r.patchManagedRolesOnDeletion(ctx, postgresDB, cluster, plan.retained)
 }
 
 // orphanCNPGDatabases strips ownerReferences and adds a retention annotation
@@ -745,7 +781,11 @@ func (r *PostgresDatabaseReconciler) deleteCNPGDatabases(
 				Namespace: postgresDB.Namespace,
 			},
 		}
-		if err := r.Delete(ctx, db); err != nil && !errors.IsNotFound(err) {
+		if err := r.Delete(ctx, db); err != nil {
+			if errors.IsNotFound(err) {
+				logger.Info("CNPG Database already deleted", "name", cnpgDBName)
+				continue
+			}
 			return fmt.Errorf("failed to delete CNPG Database %s: %w", cnpgDBName, err)
 		}
 		logger.Info("Deleted CNPG Database CR", "name", cnpgDBName)
@@ -769,7 +809,11 @@ func (r *PostgresDatabaseReconciler) deleteConfigMaps(
 				Namespace: postgresDB.Namespace,
 			},
 		}
-		if err := r.Delete(ctx, cm); err != nil && !errors.IsNotFound(err) {
+		if err := r.Delete(ctx, cm); err != nil {
+			if errors.IsNotFound(err) {
+				logger.Info("ConfigMap already deleted", "name", cmName)
+				continue
+			}
 			return fmt.Errorf("failed to delete ConfigMap %s: %w", cmName, err)
 		}
 		logger.Info("Deleted ConfigMap", "name", cmName)
@@ -794,7 +838,11 @@ func (r *PostgresDatabaseReconciler) deleteSecrets(
 					Namespace: postgresDB.Namespace,
 				},
 			}
-			if err := r.Delete(ctx, secret); err != nil && !errors.IsNotFound(err) {
+			if err := r.Delete(ctx, secret); err != nil {
+				if errors.IsNotFound(err) {
+					logger.Info("Secret already deleted", "name", secretName)
+					continue
+				}
 				return fmt.Errorf("failed to delete Secret %s: %w", secretName, err)
 			}
 			logger.Info("Deleted Secret", "name", secretName)
@@ -803,38 +851,39 @@ func (r *PostgresDatabaseReconciler) deleteSecrets(
 	return nil
 }
 
-// patchManagedRolesOnDeletion patches SSA managed roles to keep only retained databases' roles.
-// If no databases are retained, releases all role ownership with an empty patch.
+// buildRetainedRoles returns the SSA role list for databases that are being retained.
+// Returns an empty slice when no databases are retained, which clears our field manager's claim.
+func buildRetainedRoles(postgresDBName string, retainedDBs []enterprisev4.DatabaseDefinition) []enterprisev4.ManagedRole {
+	roles := make([]enterprisev4.ManagedRole, 0, len(retainedDBs)*2)
+	for _, dbSpec := range retainedDBs {
+		roles = append(roles,
+			enterprisev4.ManagedRole{
+				Name:              adminRoleName(dbSpec.Name),
+				Ensure:            "present",
+				PasswordSecretRef: &corev1.LocalObjectReference{Name: userSecretName(postgresDBName, dbSpec.Name, secretRoleAdmin)},
+			},
+			enterprisev4.ManagedRole{
+				Name:              rwRoleName(dbSpec.Name),
+				Ensure:            "present",
+				PasswordSecretRef: &corev1.LocalObjectReference{Name: userSecretName(postgresDBName, dbSpec.Name, secretRoleRW)},
+			},
+		)
+	}
+	return roles
+}
+
+// patchManagedRolesOnDeletion applies an SSA patch to keep only retained databases' roles.
 func (r *PostgresDatabaseReconciler) patchManagedRolesOnDeletion(
 	ctx context.Context,
 	postgresDB *enterprisev4.PostgresDatabase,
 	cluster *enterprisev4.PostgresCluster,
 	retainedDBs []enterprisev4.DatabaseDefinition,
 ) error {
-	logger := log.FromContext(ctx)
+	roles := buildRetainedRoles(postgresDB.Name, retainedDBs)
 
-	var roles any
-	if len(retainedDBs) == 0 {
-		// Release all ownership — empty list clears our field manager's claim.
-		roles = []any{}
-	} else {
-		// Keep only the retained databases' roles.
-		retainedRoles := make([]enterprisev4.ManagedRole, 0, len(retainedDBs)*2)
-		for _, dbSpec := range retainedDBs {
-			retainedRoles = append(retainedRoles,
-				enterprisev4.ManagedRole{
-					Name:              adminRoleName(dbSpec.Name),
-					Ensure:            "present",
-					PasswordSecretRef: &corev1.LocalObjectReference{Name: userSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)},
-				},
-				enterprisev4.ManagedRole{
-					Name:              rwRoleName(dbSpec.Name),
-					Ensure:            "present",
-					PasswordSecretRef: &corev1.LocalObjectReference{Name: userSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)},
-				},
-			)
-		}
-		roles = retainedRoles
+	var rolesField any = roles
+	if len(roles) == 0 {
+		rolesField = []any{}
 	}
 
 	rolePatch := &unstructured.Unstructured{
@@ -846,7 +895,7 @@ func (r *PostgresDatabaseReconciler) patchManagedRolesOnDeletion(
 				"namespace": cluster.Namespace,
 			},
 			"spec": map[string]any{
-				"managedRoles": roles,
+				"managedRoles": rolesField,
 			},
 		},
 	}
@@ -856,9 +905,9 @@ func (r *PostgresDatabaseReconciler) patchManagedRolesOnDeletion(
 		return fmt.Errorf("failed to patch managed roles on deletion: %w", err)
 	}
 
-	logger.Info("Patched managed roles on deletion",
+	log.FromContext(ctx).Info("Patched managed roles on deletion",
 		"postgresDatabase", postgresDB.Name,
-		"retainedRoles", len(retainedDBs)*2)
+		"retainedRoles", len(roles))
 	return nil
 }
 
