@@ -91,7 +91,7 @@ func GetMountedKey(ctx context.Context, deployment *Deployment, podName string, 
 
 // GetRandomeHECToken generates a random HEC token
 func GetRandomeHECToken() string {
-	return fmt.Sprintf("%s-%s-%s-%s-%s", RandomHex(8), RandomHex(4), RandomHex(4), RandomHex(4), RandomHex(12))
+	return fmt.Sprintf("%s-%s-%s-%s-%s", strings.ToUpper(RandomDNSName(8)), strings.ToUpper(RandomDNSName(4)), strings.ToUpper(RandomDNSName(4)), strings.ToUpper(RandomDNSName(4)), strings.ToUpper(RandomDNSName(12)))
 }
 
 // GetSecretFromServerConf gets give secret from server under given stanza

@@ -118,7 +118,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Update Secret Value on Secret Object
 			testcaseEnvInst.Log.Info("Data in secret object", "data", secretStruct.Data)
 			modifiedHecToken := testenv.GetRandomeHECToken()
-			modifedValue := testenv.RandomDNSName(12)
+			modifedValue := testenv.RandomDNSName(10)
 			updatedSecretData := testenv.GetSecretDataMap(modifiedHecToken, modifedValue, modifedValue, modifedValue, modifedValue)
 
 			err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, updatedSecretData)
