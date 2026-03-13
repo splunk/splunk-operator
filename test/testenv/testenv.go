@@ -20,10 +20,7 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"time"
-
-	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -41,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 const (

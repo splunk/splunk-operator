@@ -410,11 +410,6 @@ func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 		return err
 	}
 
-	err = validateSplunkGeneralTerms()
-	if err != nil {
-		return err
-	}
-
 	// if not provided, set default values for imagePullSecrets
 	err = ValidateImagePullSecrets(ctx, c, cr, spec)
 	if err != nil {
