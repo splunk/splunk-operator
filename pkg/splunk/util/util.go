@@ -180,11 +180,6 @@ func ValidateSecret(tokenValue []byte) error {
 		return fmt.Errorf("secret has leading or trailing whitespace")
 	}
 
-	// Check for newlines
-	if strings.Contains(secretStr, "\n") || strings.Contains(secretStr, "\r") {
-		return fmt.Errorf("secret contains newlines")
-	}
-
 	// Check for control characters (ASCII 0-31 and 127)
 	for _, ch := range secretStr {
 		if ch < 32 || ch == 127 {
