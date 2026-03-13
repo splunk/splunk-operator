@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -568,7 +567,7 @@ func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []s
 		appConfFile := untarredAppRootFolder + "/default/app.conf"
 		input, err := os.ReadFile(appConfFile)
 		if err != nil {
-			log.Fatalln(err)
+			logf.Log.Error(err, "Failed to read app.conf file", "file", appConfFile)
 			return nil, err
 		}
 		lines := strings.Split(string(input), "\n")
@@ -583,7 +582,8 @@ func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []s
 		output := strings.Join(lines, "\n")
 		err = os.WriteFile(appConfFile, []byte(output), 0644)
 		if err != nil {
-			log.Fatalln(err)
+			logf.Log.Error(err, "Failed to write app.conf file", "file", appConfFile)
+			return nil, err
 		}
 
 		// Tar disabled app folder

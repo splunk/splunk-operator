@@ -2719,12 +2719,12 @@ func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
 	base := "https://splunk-test-indexer-0.splunk-test-indexer-headless.test.svc.cluster.local:8089/servicesNS/nobody/system/configs"
 	q := "remote_queue:test-queue"
 
-	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-outputs", base), "name="+q), 200, "", nil)
-	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-outputs/%s", base, q), ""), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-outputs", base), "name="+q), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-outputs/%s", base, q), ""), 200, "", nil)
 
 	// inputs.conf
-	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-inputs", base), "name="+q), 200, "", nil)
-	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-inputs/%s", base, q), ""), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-inputs", base), "name="+q), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-inputs/%s", base, q), ""), 200, "", nil)
 
 	// default-mode.conf
 	pipelineFields := []string{
@@ -2735,8 +2735,8 @@ func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
 		"pipeline:typing",
 	}
 	for range pipelineFields {
-		mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-default-mode", base), "name="), 200, "", nil)
-		mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-default-mode/", base), ""), 200, "", nil)
+		mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-default-mode", base), "name="), 200, "", nil)
+		mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-default-mode/", base), ""), 200, "", nil)
 	}
 
 	res, err := ApplyIndexerCluster(ctx, c, cr)
@@ -2744,7 +2744,8 @@ func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-func mustReq(method, url, body string) *http.Request {
+func mustReq(t *testing.T, method, url, body string) *http.Request {
+	t.Helper()
 	var r *http.Request
 	var err error
 	if body != "" {
@@ -2753,10 +2754,9 @@ func mustReq(method, url, body string) *http.Request {
 		r, err = http.NewRequest(method, url, nil)
 	}
 	if err != nil {
-		panic(err)
+		t.Fatalf("failed to create HTTP request: %v", err)
 	}
 	return r
-
 }
 
 func TestPasswordSyncCompleted(t *testing.T) {

@@ -53,11 +53,10 @@ var (
 
 // TestBasic is the main entry point
 func TestBasic(t *testing.T) {
-
 	// Find and load the .env file from the current directory upwards
-	if err := loadEnvFile(); err != nil {
-		panic("Error loading .env file: " + err.Error())
-	}
+	err := loadEnvFile()
+	Expect(err).ToNot(HaveOccurred(), "Error loading .env file")
+
 	RegisterFailHandler(Fail)
 
 	sc, _ := GinkgoConfiguration()
