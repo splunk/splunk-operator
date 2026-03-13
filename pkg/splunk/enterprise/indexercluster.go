@@ -933,12 +933,12 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 			if desiredReplicas > previousReadyReplicas {
 				if eventPublisher != nil {
 					eventPublisher.Normal(ctx, "ScaledUp",
-						fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", mgr.cr.GetName(), previousReadyReplicas, desiredReplicas))
+						fmt.Sprintf("Successfully scaled %s up to %d replicas", mgr.cr.GetName(), desiredReplicas))
 				}
 			} else if desiredReplicas < previousReadyReplicas {
 				if eventPublisher != nil {
 					eventPublisher.Normal(ctx, "ScaledDown",
-						fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", mgr.cr.GetName(), previousReadyReplicas, desiredReplicas))
+						fmt.Sprintf("Successfully scaled %s down to %d replicas", mgr.cr.GetName(), desiredReplicas))
 				}
 			}
 		}

@@ -235,12 +235,12 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			if desiredReplicas > previousReadyReplicas {
 				if eventPublisher != nil {
 					eventPublisher.Normal(ctx, "ScaledUp",
-						fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReadyReplicas, desiredReplicas))
+						fmt.Sprintf("Successfully scaled %s up to %d replicas", cr.GetName(), desiredReplicas))
 				}
 			} else if desiredReplicas < previousReadyReplicas {
 				if eventPublisher != nil {
 					eventPublisher.Normal(ctx, "ScaledDown",
-						fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReadyReplicas, desiredReplicas))
+						fmt.Sprintf("Successfully scaled %s down to %d replicas", cr.GetName(), desiredReplicas))
 				}
 			}
 		}
