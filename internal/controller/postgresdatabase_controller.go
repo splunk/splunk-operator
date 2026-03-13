@@ -483,12 +483,13 @@ func (r *PostgresDatabaseReconciler) reconcileCNPGDatabases(
 			}
 			cnpgDB.Spec = spec
 
-			// Set ownerRef on creation or re-adoption (orphaned objects have no ownerRef).
-			if cnpgDB.CreationTimestamp.IsZero() || cnpgDB.Annotations[annotationRetainedFrom] == postgresDB.Name {
-				if cnpgDB.Annotations[annotationRetainedFrom] == postgresDB.Name {
-					logger.Info("Re-adopting orphaned CNPG Database", "name", cnpgDBName)
-					delete(cnpgDB.Annotations, annotationRetainedFrom)
-				}
+			reAdopting := cnpgDB.Annotations[annotationRetainedFrom] == postgresDB.Name
+			if reAdopting {
+				logger.Info("Re-adopting orphaned CNPG Database", "name", cnpgDBName)
+				delete(cnpgDB.Annotations, annotationRetainedFrom)
+			}
+			// Set ownerRef on creation or re-adoption
+			if cnpgDB.CreationTimestamp.IsZero() || reAdopting {
 				if err := controllerutil.SetControllerReference(postgresDB, cnpgDB, r.Scheme); err != nil {
 					logger.Error(err, "Failed to set owner reference")
 					return err
@@ -1146,11 +1147,12 @@ func (r *PostgresDatabaseReconciler) reconcileUserConfigMaps(
 			cm.Data = buildDatabaseConfigMapBody(dbSpec.Name, endpoints)
 
 			// Set ownerRef on creation or re-adoption (orphaned objects have no ownerRef).
-			if cm.CreationTimestamp.IsZero() || cm.Annotations[annotationRetainedFrom] == postgresDB.Name {
-				if cm.Annotations[annotationRetainedFrom] == postgresDB.Name {
-					logger.Info("Re-adopting orphaned ConfigMap", "name", cmName)
-					delete(cm.Annotations, annotationRetainedFrom)
-				}
+			reAdopting := cm.Annotations[annotationRetainedFrom] == postgresDB.Name
+			if reAdopting {
+				logger.Info("Re-adopting orphaned ConfigMap", "name", cmName)
+				delete(cm.Annotations, annotationRetainedFrom)
+			}
+			if cm.CreationTimestamp.IsZero() || reAdopting {
 				if err := controllerutil.SetControllerReference(postgresDB, cm, r.Scheme); err != nil {
 					logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", cm.Name)
 					return err
