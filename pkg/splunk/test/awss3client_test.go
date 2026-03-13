@@ -30,5 +30,3 @@ func TestAwsS3ListObjectsV2(t *testing.T) {
 
 func TestAwsS3Download(t *testing.T) {
 }
-
-// dummy test
