@@ -862,7 +862,8 @@ func (r *PostgresDatabaseReconciler) patchManagedRolesOnDeletion(
 	return nil
 }
 
-// stripOwnerReference removes the ownerReference matching the given UID from obj.
+// stripOwnerReference removes only the ownerReference matching the given UID from obj,
+// preserving any other owner references the object may have.
 func stripOwnerReference(obj metav1.Object, ownerUID types.UID) {
 	refs := obj.GetOwnerReferences()
 	filtered := make([]metav1.OwnerReference, 0, len(refs))
@@ -950,52 +951,46 @@ func generatePassword() (string, error) {
 	return password.Generate(passwordLength, passwordDigits, passwordSymbols, false, true)
 }
 
-// reconcileUserSecrets checks existence before creating — intentionally not using
-// CreateOrUpdate because secrets must never be updated after creation. Rotating a password
-// here would break live connections before the application has a chance to pick up the change.
-// Orphaned secrets from a previous retain-deletion are re-adopted.
+// reconcileUserSecrets ensures admin and rw secrets exist for each database,
+// delegating per-secret logic to ensureSecret.
 func (r *PostgresDatabaseReconciler) reconcileUserSecrets(
 	ctx context.Context,
 	postgresDB *enterprisev4.PostgresDatabase,
 ) error {
+	for _, dbSpec := range postgresDB.Spec.Databases {
+		if err := r.ensureSecret(ctx, postgresDB, adminRoleName(dbSpec.Name),
+			userSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)); err != nil {
+			return err
+		}
+		if err := r.ensureSecret(ctx, postgresDB, rwRoleName(dbSpec.Name),
+			userSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ensureSecret handles three states: missing (create), orphaned (re-adopt), or existing (no-op).
+// Intentionally not using CreateOrUpdate because secrets must never be updated after creation.
+// Rotating a password here would break live connections before the application picks up the change.
+func (r *PostgresDatabaseReconciler) ensureSecret(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	roleName, secretName string,
+) error {
+	secret, err := r.getSecret(ctx, postgresDB.Namespace, secretName)
+	if err != nil {
+		return err
+	}
 	logger := log.FromContext(ctx)
 
-	for _, dbSpec := range postgresDB.Spec.Databases {
-		adminSecretName := userSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)
-		rwSecretName := userSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)
-
-		adminSecret, err := r.getSecret(ctx, postgresDB.Namespace, adminSecretName)
-		if err != nil {
-			return err
-		}
-		rwSecret, err := r.getSecret(ctx, postgresDB.Namespace, rwSecretName)
-		if err != nil {
-			return err
-		}
-
-		if adminSecret == nil {
-			logger.Info("Creating missing admin user secrets for database", "database", dbSpec.Name)
-			if err := r.createUserSecret(ctx, postgresDB, adminRoleName(dbSpec.Name), adminSecretName); err != nil {
-				return fmt.Errorf("failed to create secrets for database %s: %w", dbSpec.Name, err)
-			}
-		} else if adminSecret.Annotations[annotationRetainedFrom] == postgresDB.Name {
-			logger.Info("Re-adopting orphaned secret", "name", adminSecretName)
-			if err := r.adoptResource(ctx, postgresDB, adminSecret); err != nil {
-				return fmt.Errorf("failed to re-adopt secret %s: %w", adminSecretName, err)
-			}
-		}
-
-		if rwSecret == nil {
-			logger.Info("Creating missing rw user secrets for database", "database", dbSpec.Name)
-			if err := r.createUserSecret(ctx, postgresDB, rwRoleName(dbSpec.Name), rwSecretName); err != nil {
-				return fmt.Errorf("failed to create secrets for database %s: %w", dbSpec.Name, err)
-			}
-		} else if rwSecret.Annotations[annotationRetainedFrom] == postgresDB.Name {
-			logger.Info("Re-adopting orphaned secret", "name", rwSecretName)
-			if err := r.adoptResource(ctx, postgresDB, rwSecret); err != nil {
-				return fmt.Errorf("failed to re-adopt secret %s: %w", rwSecretName, err)
-			}
-		}
+	switch {
+	case secret == nil:
+		logger.Info("Creating missing user secret", "name", secretName)
+		return r.createUserSecret(ctx, postgresDB, roleName, secretName)
+	case secret.Annotations[annotationRetainedFrom] == postgresDB.Name:
+		logger.Info("Re-adopting orphaned secret", "name", secretName)
+		return r.adoptResource(ctx, postgresDB, secret)
 	}
 	return nil
 }
