@@ -592,6 +592,9 @@ func (r *PostgresDatabaseReconciler) handleDeletion(ctx context.Context, postgre
 
 	controllerutil.RemoveFinalizer(postgresDB, postgresDatabaseFinalizerName)
 	if err := r.Update(ctx, postgresDB); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		return fmt.Errorf("failed to remove finalizer: %w", err)
 	}
 
@@ -881,11 +884,6 @@ func (r *PostgresDatabaseReconciler) patchManagedRolesOnDeletion(
 ) error {
 	roles := buildRetainedRoles(postgresDB.Name, retainedDBs)
 
-	var rolesField any = roles
-	if len(roles) == 0 {
-		rolesField = []any{}
-	}
-
 	rolePatch := &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": cluster.APIVersion,
@@ -895,7 +893,7 @@ func (r *PostgresDatabaseReconciler) patchManagedRolesOnDeletion(
 				"namespace": cluster.Namespace,
 			},
 			"spec": map[string]any{
-				"managedRoles": rolesField,
+				"managedRoles": roles,
 			},
 		},
 	}
