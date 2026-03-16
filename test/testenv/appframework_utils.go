@@ -7,10 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
+	gomega "github.com/onsi/gomega"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
+	wait "k8s.io/apimachinery/pkg/util/wait"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -168,20 +171,17 @@ func GetPodAppInstallStatus(ctx context.Context, deployment *Deployment, podName
 	stdin := fmt.Sprintf("/opt/splunk/bin/splunk display app '%s' -auth admin:$(cat /mnt/splunk-secrets/password)", appname)
 	command := []string{"/bin/sh"}
 	var stdout, stderr string
-	var err error
-	for i := 0; i < 10; i++ {
-		stdout, stderr, err = deployment.PodExecCommand(ctx, podName, command, stdin, false)
-		if err == nil {
-			continue
-		} else if err != nil && i == 9 {
-			logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
-			return "", err
-		} else {
-			time.Sleep(1 * time.Second)
-		}
+	err := wait.PollUntilContextTimeout(ctx, PollInterval, 10*time.Second, true, func(ctx context.Context) (bool, error) {
+		var execErr error
+		stdout, stderr, execErr = deployment.PodExecCommand(ctx, podName, command, stdin, false)
+		return execErr == nil, nil
+	})
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stderr", stderr)
+		return "", err
 	}
 
-	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout)
 
 	return strings.TrimSuffix(stdout, "\n"), nil
 }
@@ -427,91 +427,152 @@ func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv,
 	return appFrameworkSpec
 }
 
-// WaitforPhaseChange Wait for 2 mins or when phase change on is seen on a CR for any particular app
+// WaitforPhaseChange Wait for timeout or when phase change is seen on a CR for any particular app
+// Deprecated: Use WaitForAppPhaseChange instead for better timeout control
 func WaitforPhaseChange(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appList []string) {
-	startTime := time.Now()
+	_ = WaitForAppPhaseChange(ctx, deployment, testenvInstance, name, crKind, appSourceName, appList, 2*time.Minute)
+}
 
-	for time.Since(startTime) <= time.Duration(2*time.Minute) {
+// WaitForAppPhaseChange waits for any app in the list to change from PhaseInstall to another phase
+func WaitForAppPhaseChange(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appList []string, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		for _, appName := range appList {
 			appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
 			if err != nil {
 				testenvInstance.Log.Error(err, "Failed to get app deployment info")
+				continue
 			}
 			if appDeploymentInfo.PhaseInfo.Phase != enterpriseApi.PhaseInstall {
-				return
+				return true, nil
 			}
 		}
-		time.Sleep(1 * time.Second)
-	}
+		return false, nil
+	})
 }
 
-// AppFrameWorkVerifications will perform several verifications needed between the different steps of App Framework tests
-func AppFrameWorkVerifications(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, appSource []AppSourceInfo, splunkPodAge map[string]time.Time, clusterManagerBundleHash string) string {
+// VerifyAppFrameworkState will perform several verifications needed between the different steps of App Framework tests
+func (testenv *TestCaseEnv) VerifyAppFrameworkState(ctx context.Context, deployment *Deployment, appSource []AppSourceInfo, splunkPodAge map[string]string, clusterManagerBundleHash string) string {
 	/* Function Steps
-	 * Verify apps 'download' and 'podCopy' states for all CRs
+	 * Verify apps 'download' and 'podCopy' states for all CRs (PARALLELIZED)
 	 * Verify apps packages are deleted from the operator pod for all CRs
-	 * Verify apps 'install' state for all CRs
+	 * Verify apps 'install' state for all CRs (PARALLELIZED)
 	 * Verify apps packages are deleted from the CR pods
 	 * Verify bundle push status
 	 * Verify apps are copied to correct location on CR pods
 	 * Verify apps are installed to correct location on CR pods
 	 */
 
-	// Verify apps 'download' and 'podCopy' states for all CRs
+	// Verify apps 'download' and 'podCopy' states for all CRs IN PARALLEL
+	testenv.Log.Info("Starting parallel verification of app download and podCopy phases across all CRs")
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(appSource)*2)
+
 	for _, phase := range []enterpriseApi.AppPhaseType{enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy} {
-		for _, appSource := range appSource {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify apps '%v' state on CR %v with name %v", phase, appSource.CrKind, appSource.CrName))
-			VerifyAppListPhase(ctx, deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appSource.CrAppFileList)
+		for _, appSourceItem := range appSource {
+			wg.Add(1)
+			go func(as AppSourceInfo, p enterpriseApi.AppPhaseType) {
+				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						errChan <- fmt.Errorf("panic in phase verification for CR %s/%s phase %v: %v", as.CrKind, as.CrName, p, r)
+					}
+				}()
+
+				testenv.Log.Info(fmt.Sprintf("Verify apps '%v' state on CR %v with name %v", p, as.CrKind, as.CrName))
+				verifyCtx, cancel := context.WithTimeout(ctx, deployment.GetTimeout())
+				defer cancel()
+
+				testenv.VerifyAppListPhase(verifyCtx, deployment, as.CrName, as.CrKind, as.CrAppSourceName, p, as.CrAppFileList)
+			}(appSourceItem, phase)
 		}
 	}
 
+	wg.Wait()
+	close(errChan)
+
+	for err := range errChan {
+		if err != nil {
+			testenv.Log.Error(err, "Parallel phase verification failed")
+			gomega.Expect(err).To(gomega.Succeed())
+		}
+	}
+	testenv.Log.Info("Parallel verification of app download and podCopy phases completed successfully")
+
 	// Verify apps packages are deleted from the operator pod for all CRs
-	opPod := GetOperatorPodName(testenvInstance)
+	opPod := GetOperatorPodName(testenv)
 	for _, appSource := range appSource {
-		testenvInstance.Log.Info(fmt.Sprintf("Verify apps %s packages are deleted from the operator pod for CR %v with name %v", appSource.CrAppVersion, appSource.CrKind, appSource.CrName))
-		opPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), appSource.CrKind, deployment.GetName(), appSource.CrAppScope, appSource.CrAppSourceName)
-		VerifyAppsPackageDeletedOnOperatorContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appSource.CrAppFileList, opPath)
+		testenv.Log.Info(fmt.Sprintf("Verify apps %s packages are deleted from the operator pod for CR %v with name %v", appSource.CrAppVersion, appSource.CrKind, appSource.CrName))
+		opPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenv.GetName(), appSource.CrKind, deployment.GetName(), appSource.CrAppScope, appSource.CrAppSourceName)
+		testenv.VerifyAppsPackageDeletedOnOperatorContainer(ctx, deployment, testenv.GetName(), []string{opPod}, appSource.CrAppFileList, opPath)
 	}
 
-	// Verify apps 'install' state for all CRs
-	for _, appSource := range appSource {
-		testenvInstance.Log.Info(fmt.Sprintf("Verify apps '%v' state on CR %v with name %v", enterpriseApi.PhaseInstall, appSource.CrKind, appSource.CrName))
-		VerifyAppListPhase(ctx, deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, enterpriseApi.PhaseInstall, appSource.CrAppFileList)
+	// Verify apps 'install' state for all CRs IN PARALLEL
+	testenv.Log.Info("Starting parallel verification of app install phase across all CRs")
+	wg = sync.WaitGroup{}
+	errChan = make(chan error, len(appSource))
+
+	for _, appSourceItem := range appSource {
+		wg.Add(1)
+		go func(as AppSourceInfo) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					errChan <- fmt.Errorf("panic in install phase verification for CR %s/%s: %v", as.CrKind, as.CrName, r)
+				}
+			}()
+
+			testenv.Log.Info(fmt.Sprintf("Verify apps '%v' state on CR %v with name %v", enterpriseApi.PhaseInstall, as.CrKind, as.CrName))
+			verifyCtx, cancel := context.WithTimeout(ctx, deployment.GetTimeout())
+			defer cancel()
+
+			testenv.VerifyAppListPhase(verifyCtx, deployment, as.CrName, as.CrKind, as.CrAppSourceName, enterpriseApi.PhaseInstall, as.CrAppFileList)
+		}(appSourceItem)
 	}
+
+	wg.Wait()
+	close(errChan)
+
+	for err := range errChan {
+		if err != nil {
+			testenv.Log.Error(err, "Parallel install phase verification failed")
+			gomega.Expect(err).To(gomega.Succeed())
+		}
+	}
+	testenv.Log.Info("Parallel verification of app install phase completed successfully")
 
 	// Verify apps packages are deleted from the CR pods
 	for _, appSource := range appSource {
 		podDownloadPath := AppStagingLocOnPod + appSource.CrAppSourceVolumeName
 		pod := appSource.CrPod
-		testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps packages are deleted on pod %s", appSource.CrAppVersion, pod))
-		VerifyAppsPackageDeletedOnContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), pod, appSource.CrAppFileList, podDownloadPath)
+		testenv.Log.Info(fmt.Sprintf("Verify %s apps packages are deleted on pod %s", appSource.CrAppVersion, pod))
+		testenv.VerifyAppsPackageDeletedOnContainer(ctx, deployment, testenv.GetName(), pod, appSource.CrAppFileList, podDownloadPath)
 	}
 
 	// Verify bundle push status
 	for _, appSource := range appSource {
 		if (appSource.CrKind == "ClusterManager" || appSource.CrKind == "ClusterMaster") && appSource.CrAppScope == enterpriseApi.ScopeCluster {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Cluster Manager bundle push status (%s apps) and compare bundle hash with previous bundle hash", appSource.CrAppVersion))
-			VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), appSource.CrReplicas, clusterManagerBundleHash)
+			testenv.Log.Info(fmt.Sprintf("Verify Cluster Manager bundle push status (%s apps) and compare bundle hash with previous bundle hash", appSource.CrAppVersion))
+			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testenv.GetName(), appSource.CrReplicas, clusterManagerBundleHash)
 			if clusterManagerBundleHash == "" {
 				clusterManagerBundleHash = GetClusterManagerBundleHash(ctx, deployment, appSource.CrKind)
 			}
 		}
 		if appSource.CrKind == "SearchHeadCluster" && appSource.CrAppScope == enterpriseApi.ScopeCluster {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Deployer bundle push status (%s apps)", appSource.CrAppVersion))
-			VerifyDeployerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), appSource.CrReplicas)
+			testenv.Log.Info(fmt.Sprintf("Verify Deployer bundle push status (%s apps)", appSource.CrAppVersion))
+			testenv.VerifyDeployerBundlePush(ctx, deployment, testenv.GetName(), appSource.CrReplicas)
 		}
 	}
 
 	// Verify apps are copied to correct location on all CRs
 	for _, appSource := range appSource {
 		if appSource.CrAppScope == enterpriseApi.ScopeLocal {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'local' scope are copied to /etc/apps/ for CR %s with name %s", appSource.CrAppVersion, appSource.CrKind, appSource.CrName))
-			VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), appSource.CrPod, appSource.CrAppList, true, appSource.CrAppScope)
+			testenv.Log.Info(fmt.Sprintf("Verify %s apps with 'local' scope are copied to /etc/apps/ for CR %s with name %s", appSource.CrAppVersion, appSource.CrKind, appSource.CrName))
+			testenv.VerifyAppsCopied(ctx, deployment, testenv.GetName(), appSource.CrPod, appSource.CrAppList, true, appSource.CrAppScope)
 		} else {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are NOT copied to /etc/apps/ on %v pod", appSource.CrAppVersion, appSource.CrPod))
-			VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), appSource.CrPod, appSource.CrAppList, false, appSource.CrAppScope)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are copied on %v pods", appSource.CrAppVersion, appSource.CrClusterPods))
-			VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), appSource.CrClusterPods, appSource.CrAppList, true, appSource.CrAppScope)
+			testenv.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are NOT copied to /etc/apps/ on %v pod", appSource.CrAppVersion, appSource.CrPod))
+			testenv.VerifyAppsCopied(ctx, deployment, testenv.GetName(), appSource.CrPod, appSource.CrAppList, false, appSource.CrAppScope)
+			testenv.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are copied on %v pods", appSource.CrAppVersion, appSource.CrClusterPods))
+			testenv.VerifyAppsCopied(ctx, deployment, testenv.GetName(), appSource.CrClusterPods, appSource.CrAppList, true, appSource.CrAppScope)
 		}
 	}
 
@@ -520,12 +581,12 @@ func AppFrameWorkVerifications(ctx context.Context, deployment *Deployment, test
 		allPodNames := appSource.CrPod
 		checkUpdated := appSource.CrAppVersion == "V2"
 		if appSource.CrAppScope == "local" {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'local' scope for CR %s with name %s are installed on pod %s", appSource.CrAppVersion, appSource.CrKind, appSource.CrName, allPodNames))
-			VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appSource.CrAppList, true, "enabled", checkUpdated, false)
+			testenv.Log.Info(fmt.Sprintf("Verify %s apps with 'local' scope for CR %s with name %s are installed on pod %s", appSource.CrAppVersion, appSource.CrKind, appSource.CrName, allPodNames))
+			testenv.VerifyAppInstalled(ctx, deployment, testenv.GetName(), allPodNames, appSource.CrAppList, true, "enabled", checkUpdated, false)
 		} else {
 			allPodNames = appSource.CrClusterPods
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope for CR %s with name %s are installed on pods %s", appSource.CrAppVersion, appSource.CrKind, appSource.CrName, allPodNames))
-			VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appSource.CrAppList, true, "enabled", checkUpdated, true)
+			testenv.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope for CR %s with name %s are installed on pods %s", appSource.CrAppVersion, appSource.CrKind, appSource.CrName, allPodNames))
+			testenv.VerifyAppInstalled(ctx, deployment, testenv.GetName(), allPodNames, appSource.CrAppList, true, "enabled", checkUpdated, true)
 		}
 	}
 	return clusterManagerBundleHash

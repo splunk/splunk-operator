@@ -42,6 +42,10 @@ var _ = Describe("licensemaster test", func() {
 		Expect(err).To(Succeed(), "Unable to create deployment")
 
 		config = licensemanager.NewLicenseMasterConfig()
+		
+		// Validate test prerequisites early to fail fast
+		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {

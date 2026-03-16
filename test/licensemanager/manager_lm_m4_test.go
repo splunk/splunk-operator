@@ -40,7 +40,12 @@ var _ = Describe("Licensemanager test", func() {
 
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+		
 		config = NewLicenseManagerConfig()
+
+		// Validate test prerequisites early to fail fast
+		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {
