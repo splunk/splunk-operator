@@ -216,7 +216,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	// Track last successful replica count to emit scale events after completion
-	previousReplicas := cr.Status.Replicas
+	previousReadyReplicas := cr.Status.ReadyReplicas
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
@@ -228,18 +228,20 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 	cr.Status.Phase = phase
 
-	// Emit scale events only after a successful scale operation has completed
+	// Emit scale events when phase is ready and ready replicas changed to match desired
 	if phase == enterpriseApi.PhaseReady {
 		desiredReplicas := cr.Spec.Replicas
-		if desiredReplicas > previousReplicas && cr.Status.Replicas == desiredReplicas {
-			if eventPublisher != nil {
-				eventPublisher.Normal(ctx, "ScaledUp",
-					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
-			}
-		} else if desiredReplicas < previousReplicas && cr.Status.Replicas == desiredReplicas {
-			if eventPublisher != nil {
-				eventPublisher.Normal(ctx, "ScaledDown",
-					fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		if cr.Status.ReadyReplicas == desiredReplicas && previousReadyReplicas != desiredReplicas {
+			if desiredReplicas > previousReadyReplicas {
+				if eventPublisher != nil {
+					eventPublisher.Normal(ctx, "ScaledUp",
+						fmt.Sprintf("Successfully scaled %s up to %d replicas", cr.GetName(), desiredReplicas))
+				}
+			} else if desiredReplicas < previousReadyReplicas {
+				if eventPublisher != nil {
+					eventPublisher.Normal(ctx, "ScaledDown",
+						fmt.Sprintf("Successfully scaled %s down to %d replicas", cr.GetName(), desiredReplicas))
+				}
 			}
 		}
 	}

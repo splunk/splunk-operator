@@ -2,13 +2,11 @@ package controller
 
 import (
 	"context"
-	"fmt"
+	"time"
 
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-
-	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -22,14 +20,10 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-const timeout = time.Second * 120
-const interval = time.Second * 2
+const timeout = time.Second * 10
+const interval = time.Millisecond * 250
 
 var _ = Describe("Standalone Controller", func() {
-
-	BeforeEach(func() {
-		time.Sleep(2 * time.Second)
-	})
 
 	AfterEach(func() {
 
@@ -159,20 +153,16 @@ func CreateStandalone(name string, namespace string, annotations map[string]stri
 	}
 	ssSpec = testutils.NewStandalone(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
-	time.Sleep(2 * time.Second)
 
 	By("Expecting Standalone custom resource to be created successfully")
 	ss := &enterpriseApi.Standalone{}
 	Eventually(func() bool {
-		_ = k8sClient.Get(context.Background(), key, ss)
-		if status != "" {
-			fmt.Printf("status is set to %v", status)
-			ss.Status.Phase = status
-			Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
-			time.Sleep(2 * time.Second)
-		}
-		return true
+		return k8sClient.Get(context.Background(), key, ss) == nil
 	}, timeout, interval).Should(BeTrue())
+	if status != "" {
+		ss.Status.Phase = status
+		Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
+	}
 
 	return ss
 }
@@ -186,20 +176,16 @@ func UpdateStandalone(instance *enterpriseApi.Standalone, status enterpriseApi.P
 	ssSpec := testutils.NewStandalone(instance.Name, instance.Namespace, "image")
 	ssSpec.ResourceVersion = instance.ResourceVersion
 	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
-	time.Sleep(2 * time.Second)
 
-	By("Expecting Standalone custom resource to be created successfully")
+	By("Expecting Standalone custom resource to be updated successfully")
 	ss := &enterpriseApi.Standalone{}
 	Eventually(func() bool {
-		_ = k8sClient.Get(context.Background(), key, ss)
-		if status != "" {
-			fmt.Printf("status is set to %v", status)
-			ss.Status.Phase = status
-			Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
-			time.Sleep(2 * time.Second)
-		}
-		return true
+		return k8sClient.Get(context.Background(), key, ss) == nil
 	}, timeout, interval).Should(BeTrue())
+	if status != "" {
+		ss.Status.Phase = status
+		Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
+	}
 
 	return ss
 }

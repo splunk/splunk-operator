@@ -43,6 +43,10 @@ var _ = Describe("Licensemanager test", func() {
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+
+		// Validate test prerequisites early to fail fast
+		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {
@@ -89,23 +93,23 @@ var _ = Describe("Licensemanager test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Verify LM is configured on indexers
 			indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 0)
@@ -269,14 +273,14 @@ var _ = Describe("Licensemanager test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy LM with App framework")
 
 			// Wait for LM to be in READY status
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment)
 
 			// Verify apps are copied at the correct location on LM (/etc/apps/)
 			podName := []string{fmt.Sprintf(testenv.LicenseManagerPod, deployment.GetName(), 0)}
-			testenv.VerifyAppsCopied(ctx, deployment, testcaseEnvInst, testenvInstance.GetName(), podName, appListV1, true, enterpriseApi.ScopeLocal)
+			testcaseEnvInst.VerifyAppsCopied(ctx, deployment, testenvInstance.GetName(), podName, appListV1, true, enterpriseApi.ScopeLocal)
 
 			// Verify apps are installed on LM
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), podName, appListV1, false, "enabled", false, false)
+			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), podName, appListV1, false, "enabled", false, false)
 
 			// Delete files uploaded
 			switch testenv.ClusterProvider {
@@ -327,17 +331,18 @@ var _ = Describe("Licensemanager test", func() {
 				uploadedApps = append(uploadedApps, uploadedFiles...)
 			}
 
-			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			// Wait for LM to be in READY status (polls for state instead of fixed sleep)
+			err = testcaseEnvInst.WaitForLicenseManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), deployment.GetName(), enterpriseApi.PhaseReady, 2*time.Minute)
+			Expect(err).To(Succeed(), "Timed out waiting for LicenseManager to reach Ready phase")
 
-			// Wait for LM to be in READY status
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+			// Verify LM stays in ready state
+			testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment)
 
 			// Verify apps are copied at the correct location on LM (/etc/apps/)
-			testenv.VerifyAppsCopied(ctx, deployment, testcaseEnvInst, testenvInstance.GetName(), podName, appListV2, true, enterpriseApi.ScopeLocal)
+			testcaseEnvInst.VerifyAppsCopied(ctx, deployment, testenvInstance.GetName(), podName, appListV2, true, enterpriseApi.ScopeLocal)
 
 			// Verify apps are installed on LM
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), podName, appListV2, true, "enabled", true, false)
+			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), podName, appListV2, true, "enabled", true, false)
 
 			// Delete files uploaded
 			switch testenv.ClusterProvider {
