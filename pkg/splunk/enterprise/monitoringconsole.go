@@ -67,7 +67,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	// validate and updates defaults for CR
 	err = validateMonitoringConsoleSpec(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "validateMonitoringConsoleSpec", fmt.Sprintf("validate monitoringconsole spec failed %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
 		scopedLog.Error(err, "Failed to validate monitoring console spec")
 		return result, err
 	}
@@ -84,7 +84,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
-			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
+			eventPublisher.Warning(ctx, EventReasonAppFrameworkInitFailed, fmt.Sprintf("App framework initialization failed for %s — check operator logs", cr.GetName()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
 		}
@@ -96,7 +96,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole)
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
-		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s — check operator logs", cr.GetName()))
 		return result, err
 	}
 
@@ -124,21 +124,21 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	// create or update a headless service
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, true))
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create or update headless service failed %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonApplyServiceFailed, fmt.Sprintf("Failed to apply headless service for %s — check operator logs", cr.GetName()))
 		return result, err
 	}
 
 	// create or update a regular service
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, false))
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create or update regular service failed %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonApplyServiceFailed, fmt.Sprintf("Failed to apply regular service for %s — check operator logs", cr.GetName()))
 		return result, err
 	}
 
 	// create or update statefulset
 	statefulSet, err := getMonitoringConsoleStatefulSet(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "getMonitoringConsoleStatefulSet", fmt.Sprintf("get monitoring console stateful set failed %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonStatefulSetFailed, fmt.Sprintf("Failed to get monitoring console statefulset for %s — check operator logs", cr.GetName()))
 		return result, err
 	}
 
@@ -154,7 +154,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(ctx, client, statefulSet, 1)
 	if err != nil {
-		eventPublisher.Warning(ctx, "getMonitoringConsoleStatefulSet", fmt.Sprintf("update to default statefuleset pod manager failed %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonStatefulSetUpdateFailed, fmt.Sprintf("Failed to update statefulset for %s — check operator logs", cr.GetName()))
 		return result, err
 	}
 	cr.Status.Phase = phase
@@ -376,7 +376,7 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 // on update, and returns error if something is wrong.
 func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("changeMonitoringConsoleAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName(EventReasonAnnotationUpdateFailed).WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Get event publisher from context
 	eventPublisher := GetEventPublisher(ctx, cr)
@@ -427,13 +427,13 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 
 	image, err := getCurrentImage(ctx, client, cr, SplunkClusterManager)
 	if err != nil {
-		eventPublisher.Warning(ctx, "changeMonitoringConsoleAnnotations", fmt.Sprintf("Could not get the ClusterManager Image. Reason %v", err))
+		eventPublisher.Warning(ctx, EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not get the ClusterManager Image. Reason %v", err))
 		scopedLog.Error(err, "Get ClusterManager Image failed with", "error", err)
 		return err
 	}
 	err = changeAnnotations(ctx, client, image, monitoringConsoleInstance)
 	if err != nil {
-		eventPublisher.Warning(ctx, "changeMonitoringConsoleAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
+		eventPublisher.Warning(ctx, EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not update annotations. Reason %v", err))
 		scopedLog.Error(err, "MonitoringConsole types update after changing annotations failed with", "error", err)
 		return err
 	}

@@ -65,7 +65,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	// validate and updates defaults for CR
 	err = validateClusterMasterSpec(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "validateClusterMasterSpec", fmt.Sprintf("validate clustermaster spec failed %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
 		scopedLog.Error(err, "Failed to validate clustermaster spec")
 		return result, err
 	}
@@ -77,7 +77,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 		AreRemoteVolumeKeysChanged(ctx, client, cr, SplunkClusterMaster, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
 
 		if err != nil {
-			eventPublisher.Warning(ctx, "AreRemoteVolumeKeysChanged", fmt.Sprintf("check remote volume key change failed %s", err.Error()))
+			eventPublisher.Warning(ctx, EventReasonRemoteVolumeKeyCheckFailed, fmt.Sprintf("Remote volume key change check failed for %s — check operator logs", cr.GetName()))
 			return result, err
 		}
 
@@ -112,7 +112,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
-			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
+			eventPublisher.Warning(ctx, EventReasonAppFrameworkInitFailed, fmt.Sprintf("App framework initialization failed for %s — check operator logs", cr.GetName()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
 		}
@@ -122,7 +122,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
-		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s — check operator logs", cr.GetName()))
 		return result, err
 	}
 
@@ -160,7 +160,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 			result.Requeue = false
 		}
 		if err != nil {
-			eventPublisher.Warning(ctx, "Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
+			eventPublisher.Warning(ctx, EventReasonDeleteFailed, fmt.Sprintf("Failed to delete custom resource %s — check operator logs", cr.GetName()))
 		}
 		return result, err
 	}
@@ -313,7 +313,7 @@ func CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcomm
 
 	stdOut, stdErr, err := podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 	if err != nil || stdErr != "" {
-		eventPublisher.Warning(ctx, "PodExecCommand", fmt.Sprintf("Failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err))
+		eventPublisher.Warning(ctx, EventReasonPodExecFailed, fmt.Sprintf("Failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err))
 		return fmt.Errorf("failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
 	}
 
@@ -324,12 +324,12 @@ func CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcomm
 			scopedLog.Info("Token Matched.", "on Pod=", stdOut, "from configMap=", tokenFromConfigMap)
 			return nil
 		}
-		eventPublisher.Warning(ctx, "getSmartstoreConfigMap", fmt.Sprintf("waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap))
+		eventPublisher.Warning(ctx, EventReasonSmartStoreConfigPending, fmt.Sprintf("waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap))
 		return fmt.Errorf("waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap)
 	}
 
 	// Somehow the configmap was deleted, ideally this should not happen
-	eventPublisher.Warning(ctx, "getSmartstoreConfigMap", "smartstore ConfigMap is missing")
+	eventPublisher.Warning(ctx, EventReasonSmartStoreConfigPending, "smartstore ConfigMap is missing")
 	return fmt.Errorf("smartstore ConfigMap is missing")
 }
 
@@ -393,14 +393,14 @@ func PushMasterAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), defaultSecretObjName)
 	if err != nil {
-		eventPublisher.Warning(ctx, "PushMasterAppsBundle", fmt.Sprintf("Could not access default secret object to fetch admin password. Reason %v", err))
+		eventPublisher.Warning(ctx, EventReasonBundlePushFailed, fmt.Sprintf("Could not access default secret object to fetch admin password. Reason %v", err))
 		return fmt.Errorf("could not access default secret object to fetch admin password. Reason %v", err)
 	}
 
 	//Get the admin password from the secret object
 	adminPwd, foundSecret := defaultSecret.Data["password"]
 	if !foundSecret {
-		eventPublisher.Warning(ctx, "PushMasterAppsBundle", "Could not find admin password while trying to push the manager apps bundle")
+		eventPublisher.Warning(ctx, EventReasonBundlePushFailed, "Could not find admin password while trying to push the manager apps bundle")
 		return fmt.Errorf("could not find admin password while trying to push the manager apps bundle")
 	}
 

@@ -82,12 +82,12 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	if phase == enterpriseApi.PhaseReady {
 		if desiredReplicas > previousReplicas && mgr.cr.Status.Replicas == desiredReplicas {
 			if eventPublisher != nil {
-				eventPublisher.Normal(ctx, "ScaledUp",
+				eventPublisher.Normal(ctx, EventReasonScaledUp,
 					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", mgr.cr.GetName(), previousReplicas, desiredReplicas))
 			}
 		} else if desiredReplicas < previousReplicas && mgr.cr.Status.Replicas == desiredReplicas {
 			if eventPublisher != nil {
-				eventPublisher.Normal(ctx, "ScaledDown",
+				eventPublisher.Normal(ctx, EventReasonScaledDown,
 					fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", mgr.cr.GetName(), previousReplicas, desiredReplicas))
 			}
 		}

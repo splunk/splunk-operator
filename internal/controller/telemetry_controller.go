@@ -18,19 +18,18 @@ package controller
 import (
 	"context"
 	"fmt"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
-	ctrl "sigs.k8s.io/controller-runtime"
+	"log/slog"
 	"time"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
-
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
@@ -55,14 +54,14 @@ func (r *TelemetryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "Telemetry")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "Telemetry")
 
-	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("telemetry", req.NamespacedName)
+	logger := slog.Default().With("controller", "Telemetry", "name", req.Name, "namespace", req.Namespace)
+	ctx = logging.WithLogger(ctx, logger)
 
-	reqLogger.Info("Reconciling telemetry")
+	logger.InfoContext(ctx, "Reconciling telemetry")
 
 	defer func() {
 		if rec := recover(); rec != nil {
-			reqLogger.Error(fmt.Errorf("panic: %v", rec), "Recovered from panic in TelemetryReconciler.Reconcile")
+			logger.ErrorContext(ctx, "Recovered from panic in TelemetryReconciler.Reconcile", "error", fmt.Errorf("panic: %v", rec))
 		}
 	}()
 
@@ -71,27 +70,27 @@ func (r *TelemetryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	err := r.Get(ctx, req.NamespacedName, cm)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			reqLogger.Info("telemetry configmap not found; requeueing", "period(seconds)", int(telemetryRetryDelay/time.Second))
+			logger.InfoContext(ctx, "telemetry configmap not found; requeueing", "period(seconds)", int(telemetryRetryDelay/time.Second))
 			return ctrl.Result{Requeue: true, RequeueAfter: telemetryRetryDelay}, nil
 		}
-		reqLogger.Error(err, "could not load telemetry configmap; requeueing", "period(seconds)", int(telemetryRetryDelay/time.Second))
+		logger.ErrorContext(ctx, "could not load telemetry configmap; requeueing", "error", err, "period(seconds)", int(telemetryRetryDelay/time.Second))
 		return ctrl.Result{Requeue: true, RequeueAfter: telemetryRetryDelay}, nil
 	}
 
 	if len(cm.Data) == 0 {
-		reqLogger.Info("telemetry configmap has no data keys")
+		logger.InfoContext(ctx, "telemetry configmap has no data keys")
 		return ctrl.Result{Requeue: true, RequeueAfter: telemetryRetryDelay}, nil
 	}
 
-	reqLogger.Info("start", "Telemetry configmap version", cm.GetResourceVersion())
+	logger.InfoContext(ctx, "start", "Telemetry configmap version", cm.GetResourceVersion())
 
 	result, err := applyTelemetryFn(ctx, r.Client, cm)
 	if err != nil {
-		reqLogger.Error(err, "Failed to send telemetry")
+		logger.ErrorContext(ctx, "Failed to send telemetry", "error", err)
 		return ctrl.Result{Requeue: true, RequeueAfter: telemetryRetryDelay}, nil
 	}
 	if result.Requeue && result.RequeueAfter != 0 {
-		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+		logger.InfoContext(ctx, "Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
 	}
 
 	return result, err

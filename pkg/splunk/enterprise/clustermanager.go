@@ -66,7 +66,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	// validate and updates defaults for CR
 	err = validateClusterManagerSpec(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "validateClusterManagerSpec", fmt.Sprintf("validate clustermanager spec failed %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
 		scopedLog.Error(err, "Failed to validate clustermanager spec")
 		return result, err
 	}
@@ -78,7 +78,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		AreRemoteVolumeKeysChanged(ctx, client, cr, SplunkClusterManager, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
 
 		if err != nil {
-			eventPublisher.Warning(ctx, "AreRemoteVolumeKeysChanged", fmt.Sprintf("check remote volume key change failed %s", err.Error()))
+			eventPublisher.Warning(ctx, EventReasonRemoteVolumeKeyCheckFailed, fmt.Sprintf("Remote volume key change check failed for %s — check operator logs", cr.GetName()))
 			return result, err
 		}
 
@@ -113,7 +113,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
-			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
+			eventPublisher.Warning(ctx, EventReasonAppFrameworkInitFailed, fmt.Sprintf("App framework initialization failed for %s — check operator logs", cr.GetName()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
 		}
@@ -123,7 +123,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
-		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s — check operator logs", cr.GetName()))
 		return result, err
 	}
 
@@ -168,7 +168,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			result.Requeue = false
 		}
 		if err != nil {
-			eventPublisher.Warning(ctx, "Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
+			eventPublisher.Warning(ctx, EventReasonDeleteFailed, fmt.Sprintf("Failed to delete custom resource %s — check operator logs", cr.GetName()))
 		}
 		return result, err
 	}
@@ -331,7 +331,7 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.Con
 
 	stdOut, stdErr, err := podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 	if err != nil || stdErr != "" {
-		eventPublisher.Warning(ctx, "PodExecCommand", fmt.Sprintf("Failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err))
+		eventPublisher.Warning(ctx, EventReasonPodExecFailed, fmt.Sprintf("Failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err))
 		return fmt.Errorf("failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
 	}
 
@@ -342,12 +342,12 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.Con
 			scopedLog.Info("Token Matched.", "on Pod=", stdOut, "from configMap=", tokenFromConfigMap)
 			return nil
 		}
-		eventPublisher.Warning(ctx, "getSmartstoreConfigMap", fmt.Sprintf("waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap))
+		eventPublisher.Warning(ctx, EventReasonSmartStoreConfigPending, fmt.Sprintf("waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap))
 		return fmt.Errorf("waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap)
 	}
 
 	// Somehow the configmap was deleted, ideally this should not happen
-	eventPublisher.Warning(ctx, "getSmartstoreConfigMap", "smartstore ConfigMap is missing")
+	eventPublisher.Warning(ctx, EventReasonSmartStoreConfigPending, "smartstore ConfigMap is missing")
 	return fmt.Errorf("smartstore ConfigMap is missing")
 }
 
@@ -414,7 +414,7 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), defaultSecretObjName)
 	if err != nil {
-		eventPublisher.Warning(ctx, "PushManagerAppsBundle", fmt.Sprintf("Could not access default secret object to fetch admin password. Reason %v", err))
+		eventPublisher.Warning(ctx, EventReasonBundlePushFailed, fmt.Sprintf("Could not access default secret object to fetch admin password. Reason %v", err))
 		return fmt.Errorf("could not access default secret object to fetch admin password. Reason %v", err)
 	}
 
@@ -483,7 +483,7 @@ var GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.Clus
 // on update, and returns error if something is wrong
 func changeClusterManagerAnnotations(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("changeClusterManagerAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName(EventReasonAnnotationUpdateFailed).WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Get event publisher from context
 	eventPublisher := GetEventPublisher(ctx, cr)
@@ -534,13 +534,13 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 
 	image, err := getCurrentImage(ctx, c, cr, SplunkLicenseManager)
 	if err != nil {
-		eventPublisher.Warning(ctx, "changeClusterManagerAnnotations", fmt.Sprintf("Could not get the LicenseManager Image. Reason %v", err))
+		eventPublisher.Warning(ctx, EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not get the LicenseManager Image. Reason %v", err))
 		scopedLog.Error(err, "Get LicenseManager Image failed with", "error", err)
 		return err
 	}
 	err = changeAnnotations(ctx, c, image, clusterManagerInstance)
 	if err != nil {
-		eventPublisher.Warning(ctx, "changeClusterManagerAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
+		eventPublisher.Warning(ctx, EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not update annotations. Reason %v", err))
 		scopedLog.Error(err, "ClusterManager types update after changing annotations failed with", "error", err)
 		return err
 	}

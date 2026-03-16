@@ -69,7 +69,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// validate and updates defaults for CR
 	err = validateIndexerClusterSpec(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "IndexerClusterSpecValidationFailed", "Validation of Indexer Cluster spec failed. Check operator logs for details.")
+		eventPublisher.Warning(ctx, EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s \u2014 check operator logs", cr.GetName()))
 		logger.ErrorContext(ctx, "Failed to validate Indexer Cluster spec", "error", err.Error())
 		return result, err
 	}
@@ -97,7 +97,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
 	if err != nil {
 		logger.ErrorContext(ctx, "Create or update of general config failed", "error", err.Error())
-		eventPublisher.Warning(ctx, "ApplySplunkConfigFailed", "Create or update of general config failed. Check operator logs for details.")
+		eventPublisher.Warning(ctx, EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s \u2014 check operator logs", cr.GetName()))
 		return result, err
 	}
 
@@ -125,7 +125,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	if mgr.cr.Status.ClusterManagerPhase == enterpriseApi.PhaseReady {
 		err = VerifyRFPeers(ctx, mgr, client)
 		if err != nil {
-			eventPublisher.Warning(ctx, "VerifyRFPeersFailed", "Verification of RF peer failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, EventReasonVerifyRFPeersFailed, fmt.Sprintf("RF peer verification failed for %s \u2014 check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "Verification of RF peer failed", "error", err.Error())
 			return result, err
 		}
@@ -143,7 +143,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			result.Requeue = false
 		}
 		if err != nil {
-			eventPublisher.Warning(ctx, "DeletionFailed", "Deletion of custom resource failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, EventReasonDeleteFailed, fmt.Sprintf("Failed to delete custom resource %s \u2014 check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "Deletion of custom resource failed", "error", err.Error())
 		}
 		return result, err
@@ -151,7 +151,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// create or update a headless service for indexer cluster
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Create or update of headless service for Indexer Cluster failed. Check operator logs for details.")
+		eventPublisher.Warning(ctx, EventReasonApplyServiceFailed, fmt.Sprintf("Failed to apply headless service for %s \u2014 check operator logs", cr.GetName()))
 		logger.ErrorContext(ctx, "Create or update of headless service for Indexer Cluster failed", "error", err.Error())
 		return result, err
 	}
@@ -159,7 +159,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// create or update a regular service for indexer cluster (ingestion)
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Create or update of service for Indexer Cluster failed. Check operator logs for details.")
+		eventPublisher.Warning(ctx, EventReasonApplyServiceFailed, fmt.Sprintf("Failed to apply service for %s \u2014 check operator logs", cr.GetName()))
 		logger.ErrorContext(ctx, "Create or update of service for Indexer Cluster failed", "error", err.Error())
 		return result, err
 	}
@@ -167,7 +167,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// create or update statefulset for the indexers
 	statefulSet, err := getIndexerStatefulSet(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "GetIndexerStatefulSetFailed", "Get Indexer stateful set failed. Check operator logs for details.")
+		eventPublisher.Warning(ctx, EventReasonStatefulSetFailed, fmt.Sprintf("Failed to get indexer statefulset for %s \u2014 check operator logs", cr.GetName()))
 		logger.ErrorContext(ctx, "Get Indexer stateful set failed", "error", err.Error())
 		return result, err
 	}
@@ -227,7 +227,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	if !versionUpgrade {
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
-			eventPublisher.Warning(ctx, "UpdateFailed", "Update of stateful set failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, EventReasonStatefulSetUpdateFailed, fmt.Sprintf("Failed to update statefulset for %s — check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "Update of stateful set failed", "error", err.Error())
 			return result, err
 		}
@@ -235,7 +235,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		// Delete the statefulset and recreate new one
 		err = client.Delete(ctx, statefulSet)
 		if err != nil {
-			eventPublisher.Warning(ctx, "DeleteFailed", "Delete of stateful set failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, EventReasonStatefulSetDeleteFailed, fmt.Sprintf("Version mismatch detected, failed to delete statefulset for %s — check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "Delete of stateful set failed", "error", err.Error())
 			return result, err
 		}
@@ -244,7 +244,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		statefulSet.ResourceVersion = ""
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
-			eventPublisher.Warning(ctx, "UpdateFailed", "Update of stateful set failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, EventReasonStatefulSetUpdateFailed, fmt.Sprintf("Failed to update statefulset for %s — check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "Update of stateful set failed", "error", err.Error())
 			return result, err
 		}
@@ -271,7 +271,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				mgr := newIndexerClusterPodManager(logger, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 				err = mgr.updateIndexerConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
 				if err != nil {
-					eventPublisher.Warning(ctx, "UpdateConfFilesFailed", "Failed to update conf file for Queue/Pipeline config. Check operator logs for details.")
+					eventPublisher.Warning(ctx, EventReasonConfFileUpdateFailed, fmt.Sprintf("Failed to update Queue/Pipeline config for %s — check operator logs", cr.GetName()))
 					logger.ErrorContext(ctx, "Failed to update conf file for Queue/Pipeline config", "error", err.Error())
 					return result, err
 				}
@@ -303,7 +303,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
 		if err != nil {
-			eventPublisher.Warning(ctx, "RetrieveCMSpecFailed", "Retrieval of Cluster Manager spec failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, EventReasonRetrieveCMSpecFailed, fmt.Sprintf("Failed to retrieve cluster manager spec for %s — check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "Retrieval of Cluster Manager spec failed", "error", err.Error())
 			return result, err
 		}
@@ -315,7 +315,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				c := mgr.getMonitoringConsoleClient(cr, cmMonitoringConsoleConfigRef)
 				err := c.AutomateMCApplyChanges()
 				if err != nil {
-					eventPublisher.Warning(ctx, "AutomateMCApplyChangesFailed", "Get Monitoring Console client failed. Check operator logs for details.")
+					eventPublisher.Warning(ctx, EventReasonMonitoringConsoleApplyFailed, fmt.Sprintf("Failed to apply monitoring console changes for %s — check operator logs", cr.GetName()))
 					logger.ErrorContext(ctx, "get Monitoring Console client failed", "error", err.Error())
 					return result, err
 				}
@@ -336,7 +336,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
 			if err != nil {
-				eventPublisher.Warning(ctx, "ClusterMaintenanceModeFailed", "Set Cluster maintenance mode failed. Check operator logs for details.")
+				eventPublisher.Warning(ctx, EventReasonMaintenanceModeFailed, fmt.Sprintf("Failed to disable cluster maintenance mode for %s — check operator logs", cr.GetName()))
 				logger.ErrorContext(ctx, "Set Cluster maintenance mode failed", "error", err.Error())
 				return result, err
 			}
@@ -355,7 +355,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		}
 		err = splctrl.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
 		if err != nil {
-			eventPublisher.Warning(ctx, "SetStatefulSetOwnerRefFailed", "Set stateful set owner reference failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, EventReasonOwnerRefFailed, fmt.Sprintf("Failed to set statefulset owner reference for %s — check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "Set stateful set owner reference failed", "error", err.Error())
 			result.Requeue = true
 			return result, err
@@ -416,8 +416,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
 	if err != nil {
+		eventPublisher.Warning(ctx, EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s \u2014 check operator logs", cr.GetName()))
 		logger.ErrorContext(ctx, "Create or update general config failed", "error", err.Error())
-		eventPublisher.Warning(ctx, "ApplySplunkConfigFailed", "Create or update general config failed. Check operator logs for details.")
 		return result, err
 	}
 
@@ -444,7 +444,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	if mgr.cr.Status.ClusterMasterPhase == enterpriseApi.PhaseReady {
 		err = VerifyRFPeers(ctx, mgr, client)
 		if err != nil {
-			eventPublisher.Warning(ctx, "VerifyRFPeersFailed", "Verify RF peer failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, EventReasonVerifyRFPeersFailed, fmt.Sprintf("RF peer verification failed for %s \u2014 check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "Verify RF peer failed", "error", err.Error())
 			return result, err
 		}
@@ -462,7 +462,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			result.Requeue = false
 		}
 		if err != nil {
-			eventPublisher.Warning(ctx, "DeleteFailed", "Delete custom resource failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, EventReasonDeleteFailed, fmt.Sprintf("Failed to delete custom resource %s \u2014 check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "Delete custom resource failed", "error", err.Error())
 		}
 		return result, err
@@ -471,7 +471,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// create or update a headless service for indexer cluster
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Create or update of headless service for Indexer Cluster failed. Check operator logs for details.")
+		eventPublisher.Warning(ctx, EventReasonApplyServiceFailed, fmt.Sprintf("Failed to apply headless service for %s \u2014 check operator logs", cr.GetName()))
 		logger.ErrorContext(ctx, "Create or update of headless service failed", "error", err.Error())
 		return result, err
 	}
@@ -479,7 +479,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// create or update a regular service for indexer cluster (ingestion)
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Create or update of service for Indexer Cluster failed. Check operator logs for details.")
+		eventPublisher.Warning(ctx, EventReasonApplyServiceFailed, fmt.Sprintf("Failed to apply service for %s \u2014 check operator logs", cr.GetName()))
 		logger.ErrorContext(ctx, "Create or update of service failed", "error", err.Error())
 		return result, err
 	}
@@ -487,7 +487,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// create or update statefulset for the indexers
 	statefulSet, err := getIndexerStatefulSet(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "GetIndexerStatefulSetFailed", "Get Indexer stateful set failed. Check operator logs for details.")
+		eventPublisher.Warning(ctx, EventReasonStatefulSetFailed, fmt.Sprintf("Failed to get indexer statefulset for %s \u2014 check operator logs", cr.GetName()))
 		logger.ErrorContext(ctx, "Get Indexer stateful set failed", "error", err.Error())
 		return result, err
 	}
@@ -547,7 +547,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	if !versionUpgrade {
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
-			eventPublisher.Warning(ctx, "UpdateFailed", "Update of stateful set failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, EventReasonStatefulSetUpdateFailed, fmt.Sprintf("Failed to update statefulset for %s \u2014 check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "Update of stateful set failed", "error", err.Error())
 			return result, err
 		}
@@ -555,7 +555,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		// Delete the statefulset and recreate new one
 		err = client.Delete(ctx, statefulSet)
 		if err != nil {
-			eventPublisher.Warning(ctx, "DeleteFailed", "Delete of stateful set failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, EventReasonStatefulSetDeleteFailed, fmt.Sprintf("Version mismatch detected, failed to delete statefulset for %s \u2014 check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "Delete of stateful set failed", "error", err.Error())
 			return result, err
 		}
@@ -564,7 +564,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		statefulSet.ResourceVersion = ""
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
-			eventPublisher.Warning(ctx, "UpdateFailed", "Update of stateful set failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, EventReasonStatefulSetUpdateFailed, fmt.Sprintf("Failed to update statefulset for %s \u2014 check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "Update of stateful set failed", "error", err.Error())
 			return result, err
 		}
@@ -590,7 +590,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 				mgr := newIndexerClusterPodManager(logger, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 				err = mgr.updateIndexerConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
 				if err != nil {
-					eventPublisher.Warning(ctx, "UpdateIndexerConfFileFailed", "Failed to update conf file for Queue/Pipeline config change after pod creation. Check operator logs for details.")
+					eventPublisher.Warning(ctx, EventReasonConfFileUpdateFailed, fmt.Sprintf("Failed to update Queue/Pipeline config for %s \u2014 check operator logs", cr.GetName()))
 					logger.ErrorContext(ctx, "Failed to update conf file for Queue/Pipeline config change after pod creation", "error", err.Error())
 					return result, err
 				}
@@ -622,7 +622,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
 		if err != nil {
-			eventPublisher.Warning(ctx, "RetrieveCMSpecFailed", "Retrieve Cluster Master spec failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, EventReasonRetrieveCMSpecFailed, fmt.Sprintf("Failed to retrieve cluster master spec for %s \u2014 check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "Retrieve Cluster Master spec failed", "error", err.Error())
 			return result, err
 		}
@@ -634,7 +634,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 				c := mgr.getMonitoringConsoleClient(cr, cmMonitoringConsoleConfigRef)
 				err := c.AutomateMCApplyChanges()
 				if err != nil {
-					eventPublisher.Warning(ctx, "AutomateMCApplyChangesFailed", "Automate MC Apply Changes failed. Check operator logs for details.")
+					eventPublisher.Warning(ctx, EventReasonMonitoringConsoleApplyFailed, fmt.Sprintf("Failed to apply monitoring console changes for %s \u2014 check operator logs", cr.GetName()))
 					logger.ErrorContext(ctx, "Automate MC Apply Changes failed", "error", err.Error())
 					return result, err
 				}
@@ -655,7 +655,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
 			if err != nil {
-				eventPublisher.Warning(ctx, "SetClusterMaintenanceModeFailed", "Set Cluster Master maintenance mode failed. Check operator logs for details.")
+				eventPublisher.Warning(ctx, EventReasonMaintenanceModeFailed, fmt.Sprintf("Failed to disable cluster maintenance mode for %s \u2014 check operator logs", cr.GetName()))
 				logger.ErrorContext(ctx, "Set Cluster Master maintenance mode failed", "error", err.Error())
 				return result, err
 			}
@@ -672,7 +672,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterMaster, cr.Spec.ClusterMasterRef.Name)}
 		err = splctrl.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
 		if err != nil {
-			eventPublisher.Warning(ctx, "SetStatefulSetOwnerRefFailed", "Set stateful set owner reference failed. Check operator logs for details.")
+			eventPublisher.Warning(ctx, EventReasonOwnerRefFailed, fmt.Sprintf("Failed to set statefulset owner reference for %s \u2014 check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "Set stateful set owner reference failed", "error", err.Error())
 			result.Requeue = true
 			return result, err
@@ -853,8 +853,8 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 			if err != nil {
 				// Emit event for password sync failure
 				if eventPublisher != nil {
-					eventPublisher.Warning(ctx, "PasswordSyncFailed",
-						fmt.Sprintf("Password sync failed for pod '%s'. Check operator logs for details.", indexerPodName))
+					eventPublisher.Warning(ctx, EventReasonPasswordSyncFailed,
+						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", indexerPodName, err.Error()))
 				}
 				mgr.log.ErrorContext(ctx, "Configuration push failed", "failedPeer", indexerPodName, "error", err.Error())
 				return err
@@ -868,8 +868,8 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 			if err != nil {
 				// Emit event for password sync failure
 				if eventPublisher != nil {
-					eventPublisher.Warning(ctx, "PasswordSyncFailed",
-						fmt.Sprintf("Password sync failed for pod '%s'. Check operator logs for details.", indexerPodName))
+					eventPublisher.Warning(ctx, EventReasonPasswordSyncFailed,
+						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", indexerPodName, err.Error()))
 				}
 				logger.ErrorContext(ctx, "Configuration push failed during restart", "failedPeer", indexerPodName, "error", err.Error())
 				return err
@@ -927,7 +927,7 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 
 	// Emit event for password sync completed
 	if eventPublisher != nil {
-		eventPublisher.Normal(ctx, "PasswordSyncCompleted",
+		eventPublisher.Normal(ctx, EventReasonPasswordSyncCompleted,
 			fmt.Sprintf("Password synchronized for %d pods", howManyPodsHaveSecretChanged))
 	}
 
@@ -990,12 +990,12 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 		if mgr.cr.Status.ReadyReplicas == desiredReplicas && previousReadyReplicas != desiredReplicas {
 			if desiredReplicas > previousReadyReplicas {
 				if eventPublisher != nil {
-					eventPublisher.Normal(ctx, "ScaledUp",
+					eventPublisher.Normal(ctx, EventReasonScaledUp,
 						fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", mgr.cr.GetName(), previousReadyReplicas, desiredReplicas))
 				}
 			} else if desiredReplicas < previousReadyReplicas {
 				if eventPublisher != nil {
-					eventPublisher.Normal(ctx, "ScaledDown",
+					eventPublisher.Normal(ctx, EventReasonScaledDown,
 						fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", mgr.cr.GetName(), previousReadyReplicas, desiredReplicas))
 				}
 			}
@@ -1173,7 +1173,7 @@ func (mgr *indexerClusterPodManager) verifyRFPeers(ctx context.Context, c splcom
 		mgr.log.InfoContext(ctx, "Changing number of replicas as it is less than RF number of peers", "replicas", requestedReplicas)
 		// Emit event indicating scaling below RF is blocked/adjusted
 		if eventPublisher != nil {
-			eventPublisher.Warning(ctx, "ScalingBlockedRF",
+			eventPublisher.Warning(ctx, EventReasonScalingBlockedRF,
 				fmt.Sprintf("Cannot scale below replication factor: %d replicas required, %d requested. Adjust replicationFactor or replicas.", replicationFactor, requestedReplicas))
 		}
 		mgr.cr.Spec.Replicas = replicationFactor
@@ -1269,18 +1269,18 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 		// Cluster just finished initializing when quorum becomes ready
 		if !oldIndexingReady && mgr.cr.Status.IndexingReady {
 			if !oldInitialized && mgr.cr.Status.Initialized {
-				eventPublisher.Normal(ctx, "ClusterInitialized",
+				eventPublisher.Normal(ctx, EventReasonClusterInitialized,
 					fmt.Sprintf("Cluster '%s' initialized with %d peers", mgr.cr.GetName(), totalPeers))
 			}
 
 			// Cluster quorum just restored
-			eventPublisher.Normal(ctx, "ClusterQuorumRestored",
+			eventPublisher.Normal(ctx, EventReasonClusterQuorumRestored,
 				fmt.Sprintf("Cluster quorum restored: %d/%d peers available", available, totalPeers))
 		}
 
 		// Cluster quorum lost (transition out of indexing ready)
 		if oldIndexingReady && !mgr.cr.Status.IndexingReady {
-			eventPublisher.Warning(ctx, "ClusterQuorumLost",
+			eventPublisher.Warning(ctx, EventReasonClusterQuorumLost,
 				fmt.Sprintf("Cluster quorum lost: %d/%d peers available. Investigate peer failures immediately.", available, totalPeers))
 		}
 	}

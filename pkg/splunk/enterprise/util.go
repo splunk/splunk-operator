@@ -165,7 +165,7 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 			// Emit event for missing secret
 			if k8serrors.IsNotFound(err) {
 				if eventPublisher != nil {
-					eventPublisher.Warning(ctx, "SecretMissing",
+					eventPublisher.Warning(ctx, EventReasonSecretMissing,
 						fmt.Sprintf("Required secret '%s' not found in namespace '%s'. Create secret to proceed.", appSecretRef, cr.GetNamespace()))
 				}
 			}
@@ -221,7 +221,7 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 		scopedLog.Error(err, "Failed to get the S3 client")
 		// Emit event when operator cannot connect to the remote app repository
 		if eventPublisher != nil {
-			eventPublisher.Warning(ctx, "AppRepositoryConnectionFailed",
+			eventPublisher.Warning(ctx, EventReasonAppRepoConnFailed,
 				fmt.Sprintf("Failed to connect to app repository '%s': %s. Check credentials and network.", vol.Name, err.Error()))
 		}
 		return remoteDataClient, err
@@ -425,7 +425,7 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 		// Emit event for missing secret
 		if k8serrors.IsNotFound(err) {
 			if eventPublisher != nil {
-				eventPublisher.Warning(ctx, "SecretMissing",
+				eventPublisher.Warning(ctx, EventReasonSecretMissing,
 					fmt.Sprintf("Required secret '%s' not found in namespace '%s'. Create secret to proceed.", volume.SecretRef, cr.GetNamespace()))
 			}
 		}
@@ -439,13 +439,13 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 
 	if accessKey == "" {
 		if eventPublisher != nil {
-			eventPublisher.Warning(ctx, "SecretInvalid",
+			eventPublisher.Warning(ctx, EventReasonSecretInvalid,
 				fmt.Sprintf("Secret '%s' missing required fields: %s. Update secret with required data.", namespaceScopedSecret.GetName(), "accessKey"))
 		}
 		return "", "", "", fmt.Errorf("s3 Access Key is missing")
 	} else if secretKey == "" {
 		if eventPublisher != nil {
-			eventPublisher.Warning(ctx, "SecretInvalid",
+			eventPublisher.Warning(ctx, EventReasonSecretInvalid,
 				fmt.Sprintf("Secret '%s' missing required fields: %s. Update secret with required data.", namespaceScopedSecret.GetName(), "s3SecretKey"))
 		}
 		return "", "", "", fmt.Errorf("s3 Secret Key is missing")

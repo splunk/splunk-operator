@@ -16,6 +16,7 @@ package controller
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -28,13 +29,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/pkg/errors"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
@@ -68,8 +69,8 @@ func (r *IngestorClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "IngestorCluster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "IngestorCluster")
 
-	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("ingestorcluster", req.NamespacedName)
+	logger := slog.Default().With("controller", "IngestorCluster", "name", req.Name, "namespace", req.Namespace)
+	ctx = logging.WithLogger(ctx, logger)
 
 	// Fetch the IngestorCluster
 	instance := &enterpriseApi.IngestorCluster{}
@@ -94,14 +95,14 @@ func (r *IngestorClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+	logger.InfoContext(ctx, "start", "CR version", instance.GetResourceVersion())
 
 	// Pass event recorder through context
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
 	result, err := ApplyIngestorCluster(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
-		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+		logger.InfoContext(ctx, "Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
 	}
 
 	return result, err
