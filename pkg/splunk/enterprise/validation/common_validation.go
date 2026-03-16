@@ -358,3 +358,35 @@ func getCommonWarnings(spec *enterpriseApi.CommonSplunkSpec) []string {
 
 	return warnings
 }
+
+// ValidateImagePullSecretsExistence validates that imagePullSecrets reference existing secrets
+// This function requires a ValidationContext with a Kubernetes client
+func ValidateImagePullSecretsExistence(secrets []corev1.LocalObjectReference, vc *ValidationContext, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if vc == nil || vc.Client == nil {
+		// Skip existence validation if no client is available
+		return allErrs
+	}
+
+	for i, secret := range secrets {
+		if secret.Name == "" {
+			continue // Empty names are validated elsewhere
+		}
+
+		exists, err := vc.SecretExists(secret.Name)
+		if err != nil {
+			// Log the error but don't fail validation for transient errors
+			// This prevents webhook failures due to temporary API issues
+			continue
+		}
+
+		if !exists {
+			allErrs = append(allErrs, field.NotFound(
+				fldPath.Index(i).Child("name"),
+				secret.Name))
+		}
+	}
+
+	return allErrs
+}

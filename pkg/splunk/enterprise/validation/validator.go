@@ -38,6 +38,13 @@ type Validator interface {
 	// ValidateUpdate validates an object on UPDATE operation
 	ValidateUpdate(obj, oldObj runtime.Object) field.ErrorList
 
+	// ValidateCreateWithContext validates an object on CREATE operation with ValidationContext
+	// This allows validators to perform resource lookups (e.g., checking if secrets exist)
+	ValidateCreateWithContext(obj runtime.Object, vc *ValidationContext) field.ErrorList
+
+	// ValidateUpdateWithContext validates an object on UPDATE operation with ValidationContext
+	ValidateUpdateWithContext(obj, oldObj runtime.Object, vc *ValidationContext) field.ErrorList
+
 	// GetGroupKind returns the GroupKind for the object
 	GetGroupKind(obj runtime.Object) schema.GroupKind
 
@@ -58,6 +65,14 @@ type GenericValidator[T ValidatableObject] struct {
 
 	// ValidateUpdateFunc is the function to validate on UPDATE
 	ValidateUpdateFunc func(obj, oldObj T) field.ErrorList
+
+	// ValidateCreateWithContextFunc is the function to validate on CREATE with ValidationContext
+	// If set, this is used instead of ValidateCreateFunc when a context is available
+	ValidateCreateWithContextFunc func(obj T, vc *ValidationContext) field.ErrorList
+
+	// ValidateUpdateWithContextFunc is the function to validate on UPDATE with ValidationContext
+	// If set, this is used instead of ValidateUpdateFunc when a context is available
+	ValidateUpdateWithContextFunc func(obj T, oldObj T, vc *ValidationContext) field.ErrorList
 
 	// WarningsOnCreateFunc returns warnings on CREATE
 	WarningsOnCreateFunc func(obj T) []string
@@ -98,6 +113,41 @@ func (v *GenericValidator[T]) ValidateUpdate(obj, oldObj runtime.Object) field.E
 			&TypeAssertionError{Expected: new(T), Actual: oldObj})}
 	}
 	return v.ValidateUpdateFunc(typedObj, typedOldObj)
+}
+
+// ValidateCreateWithContext implements Validator interface
+// Uses ValidateCreateWithContextFunc if set, otherwise falls back to ValidateCreate
+func (v *GenericValidator[T]) ValidateCreateWithContext(obj runtime.Object, vc *ValidationContext) field.ErrorList {
+	if v.ValidateCreateWithContextFunc != nil {
+		typedObj, ok := obj.(T)
+		if !ok {
+			return field.ErrorList{field.InternalError(nil,
+				&TypeAssertionError{Expected: new(T), Actual: obj})}
+		}
+		return v.ValidateCreateWithContextFunc(typedObj, vc)
+	}
+	// Fall back to non-context validation
+	return v.ValidateCreate(obj)
+}
+
+// ValidateUpdateWithContext implements Validator interface
+// Uses ValidateUpdateWithContextFunc if set, otherwise falls back to ValidateUpdate
+func (v *GenericValidator[T]) ValidateUpdateWithContext(obj, oldObj runtime.Object, vc *ValidationContext) field.ErrorList {
+	if v.ValidateUpdateWithContextFunc != nil {
+		typedObj, ok := obj.(T)
+		if !ok {
+			return field.ErrorList{field.InternalError(nil,
+				&TypeAssertionError{Expected: new(T), Actual: obj})}
+		}
+		typedOldObj, ok := oldObj.(T)
+		if !ok {
+			return field.ErrorList{field.InternalError(nil,
+				&TypeAssertionError{Expected: new(T), Actual: oldObj})}
+		}
+		return v.ValidateUpdateWithContextFunc(typedObj, typedOldObj, vc)
+	}
+	// Fall back to non-context validation
+	return v.ValidateUpdate(obj, oldObj)
 }
 
 // GetGroupKind implements Validator interface

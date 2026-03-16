@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -56,6 +57,9 @@ type WebhookServerOptions struct {
 
 	// WriteTimeout is the maximum duration before timing out writes of the response (default: 10s)
 	WriteTimeout time.Duration
+
+	// Client is the Kubernetes client for resource lookups (optional)
+	Client client.Client
 }
 
 // WebhookServer is the HTTP server for validation webhooks
@@ -170,7 +174,7 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 			"user", admissionReview.Request.UserInfo.Username)
 	}
 
-	warnings, validationErr := Validate(&admissionReview, s.options.Validators)
+	warnings, validationErr := ValidateWithClient(&admissionReview, s.options.Validators, s.options.Client)
 
 	response := &admissionv1.AdmissionResponse{
 		UID: admissionReview.Request.UID,

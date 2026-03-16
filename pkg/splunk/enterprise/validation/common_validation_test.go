@@ -922,6 +922,53 @@ func TestValidateStorageConfig(t *testing.T) {
 	}
 }
 
+func TestValidateImagePullSecretsExistence(t *testing.T) {
+	tests := []struct {
+		name         string
+		secrets      []corev1.LocalObjectReference
+		vc           *ValidationContext
+		wantErrCount int
+	}{
+		{
+			name:         "nil context - skip validation",
+			secrets:      []corev1.LocalObjectReference{{Name: "my-secret"}},
+			vc:           nil,
+			wantErrCount: 0,
+		},
+		{
+			name:         "nil client - skip validation",
+			secrets:      []corev1.LocalObjectReference{{Name: "my-secret"}},
+			vc:           &ValidationContext{Client: nil, Namespace: "default"},
+			wantErrCount: 0,
+		},
+		{
+			name:         "empty secrets list - no errors",
+			secrets:      []corev1.LocalObjectReference{},
+			vc:           nil,
+			wantErrCount: 0,
+		},
+		{
+			name:         "empty secret name - skipped",
+			secrets:      []corev1.LocalObjectReference{{Name: ""}},
+			vc:           nil,
+			wantErrCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := ValidateImagePullSecretsExistence(tt.secrets, tt.vc, field.NewPath("spec").Child("imagePullSecrets"))
+
+			if len(errs) != tt.wantErrCount {
+				t.Errorf("ValidateImagePullSecretsExistence() got %d errors, want %d", len(errs), tt.wantErrCount)
+				for _, e := range errs {
+					t.Logf("  error: %s", e.Error())
+				}
+			}
+		})
+	}
+}
+
 func TestGetCommonWarnings(t *testing.T) {
 	tests := []struct {
 		name         string

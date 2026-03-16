@@ -42,10 +42,25 @@ func ValidateClusterManagerCreate(obj *enterpriseApi.ClusterManager) field.Error
 	return allErrs
 }
 
+// ValidateClusterManagerCreateWithContext validates a ClusterManager on CREATE with ValidationContext
+func ValidateClusterManagerCreateWithContext(obj *enterpriseApi.ClusterManager, vc *ValidationContext) field.ErrorList {
+	allErrs := ValidateClusterManagerCreate(obj)
+	if len(obj.Spec.ImagePullSecrets) > 0 {
+		allErrs = append(allErrs, ValidateImagePullSecretsExistence(
+			obj.Spec.ImagePullSecrets, vc, field.NewPath("spec").Child("imagePullSecrets"))...)
+	}
+	return allErrs
+}
+
 // ValidateClusterManagerUpdate validates a ClusterManager on UPDATE
 // TODO: Add immutable field validation here (e.g., compare obj vs oldObj for fields that cannot change after creation)
 func ValidateClusterManagerUpdate(obj, oldObj *enterpriseApi.ClusterManager) field.ErrorList {
 	return ValidateClusterManagerCreate(obj)
+}
+
+// ValidateClusterManagerUpdateWithContext validates a ClusterManager on UPDATE with ValidationContext
+func ValidateClusterManagerUpdateWithContext(obj, oldObj *enterpriseApi.ClusterManager, vc *ValidationContext) field.ErrorList {
+	return ValidateClusterManagerCreateWithContext(obj, vc)
 }
 
 // GetClusterManagerWarningsOnCreate returns warnings for ClusterManager CREATE

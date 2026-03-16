@@ -32,10 +32,25 @@ func ValidateLicenseManagerCreate(obj *enterpriseApi.LicenseManager) field.Error
 	return allErrs
 }
 
+// ValidateLicenseManagerCreateWithContext validates a LicenseManager on CREATE with ValidationContext
+func ValidateLicenseManagerCreateWithContext(obj *enterpriseApi.LicenseManager, vc *ValidationContext) field.ErrorList {
+	allErrs := ValidateLicenseManagerCreate(obj)
+	if len(obj.Spec.ImagePullSecrets) > 0 {
+		allErrs = append(allErrs, ValidateImagePullSecretsExistence(
+			obj.Spec.ImagePullSecrets, vc, field.NewPath("spec").Child("imagePullSecrets"))...)
+	}
+	return allErrs
+}
+
 // ValidateLicenseManagerUpdate validates a LicenseManager on UPDATE
 // TODO: Add immutable field validation here (e.g., compare obj vs oldObj for fields that cannot change after creation)
 func ValidateLicenseManagerUpdate(obj, oldObj *enterpriseApi.LicenseManager) field.ErrorList {
 	return ValidateLicenseManagerCreate(obj)
+}
+
+// ValidateLicenseManagerUpdateWithContext validates a LicenseManager on UPDATE with ValidationContext
+func ValidateLicenseManagerUpdateWithContext(obj, oldObj *enterpriseApi.LicenseManager, vc *ValidationContext) field.ErrorList {
+	return ValidateLicenseManagerCreateWithContext(obj, vc)
 }
 
 // GetLicenseManagerWarningsOnCreate returns warnings for LicenseManager CREATE
