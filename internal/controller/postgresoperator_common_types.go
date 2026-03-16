@@ -71,12 +71,11 @@ const (
 	// Condition types
 	clusterReady    conditionTypes = "ClusterReady"
 	poolerReady     conditionTypes = "PoolerReady"
-	usersReady      conditionTypes = "UsersReady"
+	rolesReady      conditionTypes = "RolesReady"
 	databasesReady  conditionTypes = "DatabasesReady"
 	secretsReady    conditionTypes = "SecretsReady"
 	configMapsReady conditionTypes = "ConfigMapsReady"
-	// TODO - to use in the future implementation
-	// privilegesReady conditionTypes = "PrivilegesReady"
+	privilegesReady conditionTypes = "PrivilegesReady"
 
 	// Condition reasons
 	reasonClusterNotFound          conditionReasons = "ClusterNotFound"
@@ -93,6 +92,8 @@ const (
 	reasonSuperUserSecretFailed    conditionReasons = "SuperUserSecretFailed"
 	reasonConfigMapsCreationFailed conditionReasons = "ConfigMapsCreationFailed"
 	reasonConfigMapsCreated        conditionReasons = "ConfigMapsCreated"
+	reasonPrivilegesGranted        conditionReasons = "PrivilegesGranted"
+	reasonPrivilegesGrantFailed    conditionReasons = "PrivilegesGrantFailed"
 
 	// Additional condition reasons for clusterReady conditionType
 	reasonClusterClassNotFound  conditionReasons = "ClusterClassNotFound"

@@ -45,7 +45,7 @@ spec:
         - --health-probe-bind-address=:8081
         - --pprof
         image: controller:latest
-        imagePullPolicy: Always
+        imagePullPolicy: Never
         name: manager
         env:
         - name: POD_NAME

@@ -891,6 +891,7 @@ func (r *PostgresClusterReconciler) reconcileManagedRoles(ctx context.Context, p
 			cnpgRole.Ensure = cnpgv1.EnsureAbsent
 		} else {
 			cnpgRole.Ensure = cnpgv1.EnsurePresent
+			cnpgRole.Login = true
 		}
 
 		if role.PasswordSecretRef != nil {
