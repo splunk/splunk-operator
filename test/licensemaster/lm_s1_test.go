@@ -21,23 +21,28 @@ import (
 	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
-	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	"github.com/splunk/splunk-operator/test/licensemanager"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("Licensemanager test", func() {
+var _ = Describe("Licensemaster test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
+	var config *licensemanager.LicenseTestConfig
 	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
 		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
+
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
+
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+
+		config = licensemanager.NewLicenseMasterConfig()
 
 		// Validate test prerequisites early to fail fast
 		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
@@ -57,67 +62,9 @@ var _ = Describe("Licensemanager test", func() {
 		}
 	})
 
-	Context("Standalone deployment (S1) with LM", func() {
-		It("licensemaster, smoke, s1: Splunk Operator can configure License Manager with Standalone in S1 SVA", func() {
-
-			// Download License File
-			downloadDir := "licenseFolder"
-			switch testenv.ClusterProvider {
-			case "eks":
-				licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
-				Expect(err).To(Succeed(), "Unable to download license file from S3")
-				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-			case "azure":
-				licenseFilePath, err := testenv.DownloadLicenseFromAzure(ctx, downloadDir)
-				Expect(err).To(Succeed(), "Unable to download license file from Azure")
-				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-			case "gcp":
-				licenseFilePath, err := testenv.DownloadLicenseFromGCPBucket()
-				Expect(err).To(Succeed(), "Unable to download license file from GCP")
-				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-			default:
-				fmt.Printf("Unable to download license file")
-				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
-			}
-
-			// Create standalone Deployment with License Master
-			mcRef := deployment.GetName()
-			standalone, err := deployment.DeployStandaloneWithLMaster(ctx, deployment.GetName(), mcRef)
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
-
-			// Wait for License Master to be in READY status
-			testcaseEnvInst.VerifyLicenseMasterReady(ctx, deployment)
-
-			// Wait for Standalone to be in READY status
-			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
-
-			// Deploy Monitoring Console
-			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
-
-			// ############ Verify livenessProbe and readinessProbe config object and scripts############
-			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
-			ConfigMapName := enterprise.GetProbeConfigMapName(testcaseEnvInst.GetName())
-			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
-			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
-			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName()}
-			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-			testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
-
-			// Verify LM is configured on standalone instance
-			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, standalonePodName)
-
-			// Verify LM Configured on Monitoring Console
-			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, monitoringConsolePodName)
-
+	Context("Standalone deployment (S1) with License Master", func() {
+		It("licensemaster, smoke, s1: Splunk Operator can configure License Master with Standalone in S1 SVA", func() {
+			licensemanager.RunLMS1Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})
 })

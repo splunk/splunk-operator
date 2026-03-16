@@ -201,6 +201,7 @@ jobs:
                 managersecret,
                 managermc,
                 indingsep,
+                licensemanager,
                ]
     runs-on: ubuntu-latest
     env:
