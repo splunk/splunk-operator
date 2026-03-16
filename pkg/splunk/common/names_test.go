@@ -40,7 +40,7 @@ func TestGetNamespaceScopedSecretName(t *testing.T) {
 }
 
 func TestGetSplunkSecretTokenTypes(t *testing.T) {
-	wantSecretTokens := []string{"hec_token", "password", "pass4SymmKey", "splunk_secret", "idxc_secret", "shc_secret"}
+	wantSecretTokens := []string{"hec_token", "password", "pass4SymmKey", "idxc_secret", "shc_secret"}
 	secretTokens := GetSplunkSecretTokenTypes()
 	if !reflect.DeepEqual(secretTokens, wantSecretTokens) {
 		t.Errorf("Incorrect secret tokens returned got %+v want %+v", secretTokens, wantSecretTokens)
