@@ -245,7 +245,7 @@ jobs:
 
       - name: Setup Kustomize
         run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"  | bash
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- 5.4.3
           sudo mv kustomize /usr/local/bin/
 
       - name: Verify kubectl Configuration
