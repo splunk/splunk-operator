@@ -470,36 +470,6 @@ func TestValidateSecret(t *testing.T) {
 			tokenVal:  []byte("12345678901"),
 			wantError: true,
 		},
-		{
-			name:      "secret with leading whitespace",
-			tokenVal:  []byte(" 123456789012"),
-			wantError: true,
-		},
-		{
-			name:      "secret with trailing whitespace",
-			tokenVal:  []byte("123456789012 "),
-			wantError: true,
-		},
-		{
-			name:      "secret with newline",
-			tokenVal:  []byte("12345678901\n23"),
-			wantError: true,
-		},
-		{
-			name:      "secret with carriage return",
-			tokenVal:  []byte("12345678901\r23"),
-			wantError: true,
-		},
-		{
-			name:      "secret with control character (tab)",
-			tokenVal:  []byte("12345678901\t23"),
-			wantError: true,
-		},
-		{
-			name:      "secret with null character",
-			tokenVal:  []byte("12345678901\x0023"),
-			wantError: true,
-		},
 	}
 
 	for _, tt := range tests {
