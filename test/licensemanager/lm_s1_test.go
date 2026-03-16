@@ -20,7 +20,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
-
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -28,7 +27,7 @@ var _ = Describe("Licensemanager test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	var config *testenv.LicenseTestConfig
+	var config *LicenseTestConfig
 	ctx := context.TODO()
 
 	BeforeEach(func() {
@@ -41,7 +40,7 @@ var _ = Describe("Licensemanager test", func() {
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 
-		config = testenv.NewLicenseManagerConfig()
+		config = NewLicenseManagerConfig()
 	})
 
 	AfterEach(func() {
@@ -61,7 +60,7 @@ var _ = Describe("Licensemanager test", func() {
 
 	Context("Standalone deployment (S1) with License Manager", func() {
 		It("licensemanager, smoke, s1: Splunk Operator can configure License Manager with Standalone in S1 SVA", func() {
-			testenv.RunLMS1Test(ctx, deployment, testcaseEnvInst, config)
+			RunLMS1Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})
 })

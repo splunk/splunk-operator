@@ -28,7 +28,7 @@ var _ = Describe("Licensemanager test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	var config *testenv.LicenseTestConfig
+	var config *LicenseTestConfig
 	ctx := context.TODO()
 
 	BeforeEach(func() {
@@ -40,7 +40,7 @@ var _ = Describe("Licensemanager test", func() {
 
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
-		config = testenv.NewLicenseManagerConfig()
+		config = NewLicenseManagerConfig()
 	})
 
 	AfterEach(func() {
@@ -58,7 +58,7 @@ var _ = Describe("Licensemanager test", func() {
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)  with License Manager", func() {
 		It("licensemanager, integration, m4: Splunk Operator can configure License Manager with indexers and search head in M4 SVA", func() {
-			testenv.RunLMM4Test(ctx, deployment, testcaseEnvInst, config)
+			RunLMM4Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})
 

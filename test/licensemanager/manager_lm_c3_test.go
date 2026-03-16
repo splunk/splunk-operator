@@ -27,7 +27,7 @@ var _ = Describe("Licensemanager test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	var config *testenv.LicenseTestConfig
+	var config *LicenseTestConfig
 	ctx := context.TODO()
 
 	BeforeEach(func() {
@@ -40,7 +40,7 @@ var _ = Describe("Licensemanager test", func() {
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 
-		config = testenv.NewLicenseManagerConfig()
+		config = NewLicenseManagerConfig()
 	})
 
 	AfterEach(func() {
@@ -60,13 +60,13 @@ var _ = Describe("Licensemanager test", func() {
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)  with License Manager", func() {
 		It("licensemanager, integration, c3: Splunk Operator can configure License Manager with Indexers and Search Heads in C3 SVA", func() {
-			testenv.RunLMC3Test(ctx, deployment, testcaseEnvInst, config)
+			RunLMC3Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)  with License Manager", func() {
 		It("licensemanager, integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
-			testenv.RunLMC3AppFrameworkTest(ctx, deployment, testcaseEnvInst, testenvInstance, config)
+			RunLMC3AppFrameworkTest(ctx, deployment, testcaseEnvInst, testenvInstance, config)
 		})
 	})
 })

@@ -21,6 +21,7 @@ import (
 	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
+	"github.com/splunk/splunk-operator/test/licensemanager"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -28,7 +29,7 @@ var _ = Describe("Licensemaster test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	var config *testenv.LicenseTestConfig
+	var config *licensemanager.LicenseTestConfig
 	ctx := context.TODO()
 
 	BeforeEach(func() {
@@ -41,7 +42,7 @@ var _ = Describe("Licensemaster test", func() {
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 
-		config = testenv.NewLicenseMasterConfig()
+		config = licensemanager.NewLicenseMasterConfig()
 	})
 
 	AfterEach(func() {
@@ -61,7 +62,7 @@ var _ = Describe("Licensemaster test", func() {
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster) with License Master", func() {
 		It("licensemaster, integration, m4: Splunk Operator can configure License Master with indexers and search head in M4 SVA", func() {
-			testenv.RunLMM4Test(ctx, deployment, testcaseEnvInst, config)
+			licensemanager.RunLMM4Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})
 
