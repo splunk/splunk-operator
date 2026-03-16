@@ -172,26 +172,7 @@ func ValidateSecret(tokenValue []byte) error {
 	if len(tokenValue) == 0 {
 		return fmt.Errorf("secret is empty")
 	}
-
-	secretStr := string(tokenValue)
-
-	// Check for leading or trailing whitespace
-	if secretStr != strings.TrimSpace(secretStr) {
-		return fmt.Errorf("secret has leading or trailing whitespace")
-	}
-
-	// Check for newlines
-	if strings.Contains(secretStr, "\n") || strings.Contains(secretStr, "\r") {
-		return fmt.Errorf("secret contains newlines")
-	}
-
-	// Check for control characters (ASCII 0-31 and 127)
-	for _, ch := range secretStr {
-		if ch < 32 || ch == 127 {
-			return fmt.Errorf("secret contains control characters")
-		}
-	}
-
+	
 	// Minimum length for secrets (at least 12 characters)
 	const minLength = 12
 	if len(tokenValue) < minLength {
