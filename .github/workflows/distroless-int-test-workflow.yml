@@ -10,7 +10,6 @@ on:
     branches:
       - develop
       - main
-      - feature/decrease-number-of-secrets
     paths-ignore:
       - 'docs/**'
       - '*.md'
