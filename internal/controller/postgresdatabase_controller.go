@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"slices"
@@ -57,7 +58,15 @@ const (
 
 	// postgresPort is the standard PostgreSQL port used in all connection strings.
 	postgresPort = "5432"
+
+	// fieldManagerPrefix is the SSA field manager prefix for PostgresDatabase controllers.
+	fieldManagerPrefix = "postgresdatabase-"
 )
+
+// fieldManagerName returns the SSA field manager name for a given PostgresDatabase.
+func fieldManagerName(postgresDBName string) string {
+	return fieldManagerPrefix + postgresDBName
+}
 
 // PostgresDatabaseReconciler reconciles a PostgresDatabase object
 type PostgresDatabaseReconciler struct {
@@ -153,12 +162,12 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Phase: RoleConflictCheck — before creating any resources, verify no other
-	// PostgresDatabase already owns the same roles (different PasswordSecretRef).
-	foreignUsers := getForeignUsers(postgresDB, cluster)
-	if len(foreignUsers) > 0 {
-		conflictMsg := fmt.Sprintf("Role conflict: roles (%s) are managed by another PostgresDatabase with different secret references. "+
+	// field manager already owns the same roles via SSA.
+	roleConflicts := getRoleConflicts(postgresDB, cluster)
+	if len(roleConflicts) > 0 {
+		conflictMsg := fmt.Sprintf("Role conflict: %s. "+
 			"If you deleted a previous PostgresDatabase, recreate it with the original name to re-adopt the orphaned resources.",
-			strings.Join(foreignUsers, ", "))
+			strings.Join(roleConflicts, ", "))
 		logger.Error(nil, conflictMsg)
 		if statusErr := updateStatus(usersReady, metav1.ConditionFalse, reasonRoleConflict, conflictMsg, failedDBPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
@@ -332,27 +341,62 @@ func getUsersInClusterSpec(cluster *enterprisev4.PostgresCluster) []string {
 	return users
 }
 
-// getForeignUsers returns role names that exist in the PostgresCluster but whose
-// PasswordSecretRef points to a different secret than what this PostgresDatabase expects.
-// This means another PostgresDatabase owns them.
-func getForeignUsers(postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) []string {
-	var foreign []string
+// getRoleConflicts checks ManagedFields on the PostgresCluster to detect if any roles
+// this PostgresDatabase wants to own are already claimed by a different SSA field manager.
+func getRoleConflicts(postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) []string {
+	myManager := fieldManagerName(postgresDB.Name)
+
+	desired := make(map[string]struct{}, len(postgresDB.Spec.Databases)*2)
 	for _, dbSpec := range postgresDB.Spec.Databases {
-		expectedAdmin := userSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)
-		expectedRW := userSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)
-		for _, role := range cluster.Spec.ManagedRoles {
-			if role.PasswordSecretRef == nil {
-				continue
-			}
-			if role.Name == adminRoleName(dbSpec.Name) && role.PasswordSecretRef.Name != expectedAdmin {
-				foreign = append(foreign, role.Name)
-			}
-			if role.Name == rwRoleName(dbSpec.Name) && role.PasswordSecretRef.Name != expectedRW {
-				foreign = append(foreign, role.Name)
-			}
+		desired[adminRoleName(dbSpec.Name)] = struct{}{}
+		desired[rwRoleName(dbSpec.Name)] = struct{}{}
+	}
+
+	roleOwners := managedRoleOwners(cluster.ManagedFields)
+
+	var conflicts []string
+	for roleName := range desired {
+		owner, exists := roleOwners[roleName]
+		if exists && owner != myManager {
+			conflicts = append(conflicts, fmt.Sprintf("%s (owned by %s)", roleName, owner))
 		}
 	}
-	return foreign
+	return conflicts
+}
+
+// managedRoleOwners builds a map of role name → field manager from ManagedFields.
+func managedRoleOwners(managedFields []metav1.ManagedFieldsEntry) map[string]string {
+	owners := make(map[string]string)
+	for _, mf := range managedFields {
+		if mf.FieldsV1 == nil {
+			continue
+		}
+		for _, name := range parseRoleNames(mf.FieldsV1.Raw) {
+			owners[name] = mf.Manager
+		}
+	}
+	return owners
+}
+
+// parseRoleNames extracts role names from FieldsV1 JSON by walking
+// f:spec → f:managedRoles → k:{"name":"<role>"}.
+func parseRoleNames(raw []byte) []string {
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil
+	}
+
+	spec, _ := fields["f:spec"].(map[string]any)
+	roles, _ := spec["f:managedRoles"].(map[string]any)
+
+	var names []string
+	for key := range roles {
+		var k struct{ Name string }
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(key, "k:")), &k); err == nil && k.Name != "" {
+			names = append(names, k.Name)
+		}
+	}
+	return names
 }
 
 // patchManagedRoles patches PostgresCluster.spec.managedRoles via SSA using an unstructured patch.
@@ -402,7 +446,7 @@ func (r *PostgresDatabaseReconciler) patchManagedRoles(
 		},
 	}
 
-	fieldManager := fmt.Sprintf("postgresdatabase-%s", postgresDB.Name)
+	fieldManager := fieldManagerName(postgresDB.Name)
 	if err := r.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManager)); err != nil {
 		logger.Error(err, "Failed to add users to PostgresCluster", "postgresDatabase", postgresDB.Name)
 		return fmt.Errorf("failed to patch managed roles for PostgresDatabase %s: %w", postgresDB.Name, err)
@@ -898,7 +942,7 @@ func (r *PostgresDatabaseReconciler) patchManagedRolesOnDeletion(
 		},
 	}
 
-	fieldManager := fmt.Sprintf("postgresdatabase-%s", postgresDB.Name)
+	fieldManager := fieldManagerName(postgresDB.Name)
 	if err := r.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManager)); err != nil {
 		return fmt.Errorf("failed to patch managed roles on deletion: %w", err)
 	}
