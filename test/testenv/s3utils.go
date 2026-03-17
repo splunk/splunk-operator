@@ -240,7 +240,7 @@ func UploadFilesToS3(testS3Bucket string, s3TestDir string, applist []string, do
 }
 
 // DisableAppsToS3 untar apps, modify their conf file to disable them, re-tar and upload the disabled version to S3
-func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string) ([]string, error) {
+func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string) error {
 
 	// Create a folder named 'untarred_apps' to store untarred apps folders
 	untarredAppsMainFolder := downloadDir + "/untarred_apps"
@@ -275,8 +275,7 @@ func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string)
 		appConfFile := untarredAppRootFolder + "/default/app.conf"
 		input, err := os.ReadFile(appConfFile)
 		if err != nil {
-			logf.Log.Error(err, "Failed to read app.conf file", "file", appConfFile)
-			return nil, err
+			return err
 		}
 		lines := strings.Split(string(input), "\n")
 		for i, line := range lines {
@@ -290,8 +289,7 @@ func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string)
 		output := strings.Join(lines, "\n")
 		err = os.WriteFile(appConfFile, []byte(output), 0644)
 		if err != nil {
-			logf.Log.Error(err, "Failed to write app.conf file", "file", appConfFile)
-			return nil, err
+			return err
 		}
 
 		// Tar disabled app folder
@@ -303,7 +301,7 @@ func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string)
 	}
 
 	// Upload disabled apps to S3
-	uploadedFiles, _ := UploadFilesToS3(testIndexesS3Bucket, s3TestDir, appFileList, disabledAppsFolder)
+	_, err := UploadFilesToS3(testIndexesS3Bucket, s3TestDir, appFileList, disabledAppsFolder)
 
-	return uploadedFiles, nil
+	return err
 }

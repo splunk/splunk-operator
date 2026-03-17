@@ -2842,7 +2842,8 @@ var _ = Describe("c3appfw test", func() {
 
 			// Disable the app
 			testcaseEnvInst.Log.Info("Download disabled version of apps from Azure for this test")
-			testenv.DisableAppsOnAzure(ctx, downloadDirV1, appFileName, azTestDirIdxc)
+			err = testenv.DisableAppsOnAzure(ctx, downloadDirV1, appFileName, azTestDirIdxc)
+			Expect(err).To(Succeed(), "Unable to disable apps on Azure")
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
