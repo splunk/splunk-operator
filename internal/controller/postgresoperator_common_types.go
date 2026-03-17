@@ -42,7 +42,11 @@ const (
 	// default database name
 	defaultDatabaseName           string = "postgres"
 	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"
+
+	annotationRetainedFrom        string = "enterprise.splunk.com/retained-from"
+
 	defaultSecretSuffix           string = "-secret"
+
 	defaultPoolerSuffix           string = "-pooler-"
 	defaultConfigMapSuffix        string = "-configmap"
 	defaultPort                   string = "5432"
@@ -85,6 +89,7 @@ const (
 	reasonWaitingForCNPG           conditionReasons = "WaitingForCNPG"
 	reasonUsersCreationFailed      conditionReasons = "UsersCreationFailed"
 	reasonUsersAvailable           conditionReasons = "UsersAvailable"
+	reasonRoleConflict             conditionReasons = "RoleConflict"
 	reasonSuperUserSecretFailed    conditionReasons = "SuperUserSecretFailed"
 	reasonConfigMapsCreationFailed conditionReasons = "ConfigMapsCreationFailed"
 	reasonConfigMapsCreated        conditionReasons = "ConfigMapsCreated"

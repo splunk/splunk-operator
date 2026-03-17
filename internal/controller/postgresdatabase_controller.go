@@ -18,9 +18,11 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/sethvargo/go-password/password"
@@ -56,7 +58,15 @@ const (
 
 	// postgresPort is the standard PostgreSQL port used in all connection strings.
 	postgresPort = "5432"
+
+	// fieldManagerPrefix is the SSA field manager prefix for PostgresDatabase controllers.
+	fieldManagerPrefix = "postgresdatabase-"
 )
+
+// fieldManagerName returns the SSA field manager name for a given PostgresDatabase.
+func fieldManagerName(postgresDBName string) string {
+	return fieldManagerPrefix + postgresDBName
+}
 
 // PostgresDatabaseReconciler reconciles a PostgresDatabase object
 type PostgresDatabaseReconciler struct {
@@ -70,8 +80,8 @@ type PostgresDatabaseReconciler struct {
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters,verbs=get;list;watch
 //+kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters,verbs=get;list;watch;patch
 //+kubebuilder:rbac:groups=postgresql.cnpg.io,resources=databases,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create
-//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update
+//+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;delete
+//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;delete
 
 func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -149,6 +159,20 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if err := updateStatus(clusterReady, metav1.ConditionTrue, reasonClusterAvailable, "Cluster is operational", provisioningDBPhase); err != nil {
 			return ctrl.Result{}, err
 		}
+	}
+
+	// Phase: RoleConflictCheck — before creating any resources, verify no other
+	// field manager already owns the same roles via SSA.
+	roleConflicts := getRoleConflicts(postgresDB, cluster)
+	if len(roleConflicts) > 0 {
+		conflictMsg := fmt.Sprintf("Role conflict: %s. "+
+			"If you deleted a previous PostgresDatabase, recreate it with the original name to re-adopt the orphaned resources.",
+			strings.Join(roleConflicts, ", "))
+		logger.Error(nil, conflictMsg)
+		if statusErr := updateStatus(usersReady, metav1.ConditionFalse, reasonRoleConflict, conflictMsg, failedDBPhase); statusErr != nil {
+			logger.Error(statusErr, "Failed to update status")
+		}
+		return ctrl.Result{}, nil
 	}
 
 	// We need the CNPG Cluster directly because PostgresCluster status does not yet
@@ -317,6 +341,64 @@ func getUsersInClusterSpec(cluster *enterprisev4.PostgresCluster) []string {
 	return users
 }
 
+// getRoleConflicts checks ManagedFields on the PostgresCluster to detect if any roles
+// this PostgresDatabase wants to own are already claimed by a different SSA field manager.
+func getRoleConflicts(postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) []string {
+	myManager := fieldManagerName(postgresDB.Name)
+
+	desired := make(map[string]struct{}, len(postgresDB.Spec.Databases)*2)
+	for _, dbSpec := range postgresDB.Spec.Databases {
+		desired[adminRoleName(dbSpec.Name)] = struct{}{}
+		desired[rwRoleName(dbSpec.Name)] = struct{}{}
+	}
+
+	roleOwners := managedRoleOwners(cluster.ManagedFields)
+
+	var conflicts []string
+	for roleName := range desired {
+		owner, exists := roleOwners[roleName]
+		if exists && owner != myManager {
+			conflicts = append(conflicts, fmt.Sprintf("%s (owned by %s)", roleName, owner))
+		}
+	}
+	return conflicts
+}
+
+// managedRoleOwners builds a map of role name → field manager from ManagedFields.
+func managedRoleOwners(managedFields []metav1.ManagedFieldsEntry) map[string]string {
+	owners := make(map[string]string)
+	for _, mf := range managedFields {
+		if mf.FieldsV1 == nil {
+			continue
+		}
+		for _, name := range parseRoleNames(mf.FieldsV1.Raw) {
+			owners[name] = mf.Manager
+		}
+	}
+	return owners
+}
+
+// parseRoleNames extracts role names from FieldsV1 JSON by walking
+// f:spec → f:managedRoles → k:{"name":"<role>"}.
+func parseRoleNames(raw []byte) []string {
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil
+	}
+
+	spec, _ := fields["f:spec"].(map[string]any)
+	roles, _ := spec["f:managedRoles"].(map[string]any)
+
+	var names []string
+	for key := range roles {
+		var k struct{ Name string }
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(key, "k:")), &k); err == nil && k.Name != "" {
+			names = append(names, k.Name)
+		}
+	}
+	return names
+}
+
 // patchManagedRoles patches PostgresCluster.spec.managedRoles via SSA using an unstructured patch.
 // Using unstructured avoids the zero-value problem: typed Go structs serialize required fields
 // (e.g. spec.class) as "" even when unset, causing SSA to claim ownership and conflict.
@@ -364,7 +446,7 @@ func (r *PostgresDatabaseReconciler) patchManagedRoles(
 		},
 	}
 
-	fieldManager := fmt.Sprintf("postgresdatabase-%s", postgresDB.Name)
+	fieldManager := fieldManagerName(postgresDB.Name)
 	if err := r.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManager)); err != nil {
 		logger.Error(err, "Failed to add users to PostgresCluster", "postgresDatabase", postgresDB.Name)
 		return fmt.Errorf("failed to patch managed roles for PostgresDatabase %s: %w", postgresDB.Name, err)
@@ -445,7 +527,13 @@ func (r *PostgresDatabaseReconciler) reconcileCNPGDatabases(
 			}
 			cnpgDB.Spec = spec
 
-			if cnpgDB.CreationTimestamp.IsZero() {
+			reAdopting := cnpgDB.Annotations[annotationRetainedFrom] == postgresDB.Name
+			if reAdopting {
+				logger.Info("Re-adopting orphaned CNPG Database", "name", cnpgDBName)
+				delete(cnpgDB.Annotations, annotationRetainedFrom)
+			}
+			// Set ownerRef on creation or re-adoption
+			if cnpgDB.CreationTimestamp.IsZero() || reAdopting {
 				if err := controllerutil.SetControllerReference(postgresDB, cnpgDB, r.Scheme); err != nil {
 					logger.Error(err, "Failed to set owner reference")
 					return err
@@ -513,46 +601,337 @@ func (r *PostgresDatabaseReconciler) updateStatus(
 	return r.Status().Update(ctx, db)
 }
 
-// handleDeletion runs cleanup when a PostgresDatabase is being deleted:
-// deletes all CNPG Database CRs, releases managed role ownership, and removes the finalizer.
-// The actual PostgreSQL databases and roles survive based on CNPG's databaseReclaimPolicy
-// (set during creation from DeletionPolicy: "retain" keeps the PG database, "delete" drops it).
-func (r *PostgresDatabaseReconciler) handleDeletion(ctx context.Context, postgresDB *enterprisev4.PostgresDatabase) error {
-	logger := log.FromContext(ctx)
+// deletionPlan separates databases by their DeletionPolicy for the cleanup workflow.
+type deletionPlan struct {
+	retained []enterprisev4.DatabaseDefinition
+	deleted  []enterprisev4.DatabaseDefinition
+}
 
-	if err := r.removeDatabases(ctx, postgresDB); err != nil {
+// buildDeletionPlan splits databases into retained and deleted groups.
+func buildDeletionPlan(databases []enterprisev4.DatabaseDefinition) deletionPlan {
+	var plan deletionPlan
+	for _, db := range databases {
+		if db.DeletionPolicy == deletionPolicyRetain {
+			plan.retained = append(plan.retained, db)
+		} else {
+			plan.deleted = append(plan.deleted, db)
+		}
+	}
+	return plan
+}
+
+// handleDeletion orchestrates the cleanup workflow for a PostgresDatabase being deleted.
+func (r *PostgresDatabaseReconciler) handleDeletion(ctx context.Context, postgresDB *enterprisev4.PostgresDatabase) error {
+	plan := buildDeletionPlan(postgresDB.Spec.Databases)
+
+	if err := r.orphanRetainedResources(ctx, postgresDB, plan.retained); err != nil {
 		return err
 	}
-
-	if err := r.removeUsersFromCluster(ctx, postgresDB); err != nil {
+	if err := r.deleteRemovedResources(ctx, postgresDB, plan.deleted); err != nil {
+		return err
+	}
+	if err := r.cleanupManagedRoles(ctx, postgresDB, plan); err != nil {
 		return err
 	}
 
 	controllerutil.RemoveFinalizer(postgresDB, postgresDatabaseFinalizerName)
 	if err := r.Update(ctx, postgresDB); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		return fmt.Errorf("failed to remove finalizer: %w", err)
 	}
 
-	logger.Info("Cleanup complete for PostgresDatabase", "name", postgresDB.Name)
+	log.FromContext(ctx).Info("Cleanup complete for PostgresDatabase",
+		"name", postgresDB.Name,
+		"retained", len(plan.retained),
+		"deleted", len(plan.deleted))
 	return nil
 }
 
-// removeUsersFromCluster releases ownership of all managed roles by patching with an empty list.
-// The actual PostgreSQL roles are not dropped — they become unmanaged by CNPG.
-func (r *PostgresDatabaseReconciler) removeUsersFromCluster(
+// orphanRetainedResources strips ownerRefs and adds retention annotations
+// so resources survive the parent's deletion and can be re-adopted later.
+func (r *PostgresDatabaseReconciler) orphanRetainedResources(
 	ctx context.Context,
 	postgresDB *enterprisev4.PostgresDatabase,
+	retained []enterprisev4.DatabaseDefinition,
+) error {
+	if err := r.orphanCNPGDatabases(ctx, postgresDB, retained); err != nil {
+		return err
+	}
+	if err := r.orphanConfigMaps(ctx, postgresDB, retained); err != nil {
+		return err
+	}
+	if err := r.orphanSecrets(ctx, postgresDB, retained); err != nil {
+		return err
+	}
+	return nil
+}
+
+// deleteRemovedResources deletes CNPG Databases, ConfigMaps, and Secrets
+// for databases with the Delete policy.
+func (r *PostgresDatabaseReconciler) deleteRemovedResources(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	deleted []enterprisev4.DatabaseDefinition,
+) error {
+	if err := r.deleteCNPGDatabases(ctx, postgresDB, deleted); err != nil {
+		return err
+	}
+	if err := r.deleteConfigMaps(ctx, postgresDB, deleted); err != nil {
+		return err
+	}
+	if err := r.deleteSecrets(ctx, postgresDB, deleted); err != nil {
+		return err
+	}
+	return nil
+}
+
+// cleanupManagedRoles releases SSA ownership of deleted databases' roles.
+// When all databases are retained, roles stay as-is under our field manager.
+func (r *PostgresDatabaseReconciler) cleanupManagedRoles(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	plan deletionPlan,
+) error {
+	if len(plan.deleted) == 0 {
+		return nil
+	}
+	cluster := &enterprisev4.PostgresCluster{}
+	if err := r.Get(ctx, types.NamespacedName{Name: postgresDB.Spec.ClusterRef.Name, Namespace: postgresDB.Namespace}, cluster); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get PostgresCluster for role cleanup: %w", err)
+		}
+		log.FromContext(ctx).Info("PostgresCluster already deleted, skipping role cleanup")
+		return nil
+	}
+	return r.patchManagedRolesOnDeletion(ctx, postgresDB, cluster, plan.retained)
+}
+
+// orphanCNPGDatabases strips ownerReferences and adds a retention annotation
+// on CNPG Database CRs for the given databases.
+func (r *PostgresDatabaseReconciler) orphanCNPGDatabases(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	databases []enterprisev4.DatabaseDefinition,
 ) error {
 	logger := log.FromContext(ctx)
 
-	cluster := &enterprisev4.PostgresCluster{}
-	if err := r.Get(ctx, types.NamespacedName{Name: postgresDB.Spec.ClusterRef.Name, Namespace: postgresDB.Namespace}, cluster); err != nil {
-		if errors.IsNotFound(err) {
-			logger.Info("PostgresCluster already deleted, skipping user cleanup")
-			return nil
+	for _, dbSpec := range databases {
+		cnpgDBName := cnpgDatabaseName(postgresDB.Name, dbSpec.Name)
+		db := &cnpgv1.Database{}
+		if err := r.Get(ctx, types.NamespacedName{Name: cnpgDBName, Namespace: postgresDB.Namespace}, db); err != nil {
+			if errors.IsNotFound(err) {
+				continue
+			}
+			return fmt.Errorf("failed to get CNPG Database %s for orphaning: %w", cnpgDBName, err)
 		}
-		return fmt.Errorf("failed to get PostgresCluster for user cleanup: %w", err)
+		if db.Annotations[annotationRetainedFrom] == postgresDB.Name {
+			continue
+		}
+		stripOwnerReference(db, postgresDB.UID)
+		if db.Annotations == nil {
+			db.Annotations = make(map[string]string)
+		}
+		db.Annotations[annotationRetainedFrom] = postgresDB.Name
+		if err := r.Update(ctx, db); err != nil {
+			return fmt.Errorf("failed to orphan CNPG Database %s: %w", cnpgDBName, err)
+		}
+		logger.Info("Orphaned CNPG Database CR", "name", cnpgDBName)
 	}
+	return nil
+}
+
+// orphanConfigMaps strips ownerReferences and adds a retention annotation
+// on ConfigMaps for the given databases.
+func (r *PostgresDatabaseReconciler) orphanConfigMaps(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	databases []enterprisev4.DatabaseDefinition,
+) error {
+	logger := log.FromContext(ctx)
+
+	for _, dbSpec := range databases {
+		cmName := configMapName(postgresDB.Name, dbSpec.Name)
+		cm := &corev1.ConfigMap{}
+		if err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: postgresDB.Namespace}, cm); err != nil {
+			if errors.IsNotFound(err) {
+				continue
+			}
+			return fmt.Errorf("failed to get ConfigMap %s for orphaning: %w", cmName, err)
+		}
+		if cm.Annotations[annotationRetainedFrom] == postgresDB.Name {
+			continue
+		}
+		stripOwnerReference(cm, postgresDB.UID)
+		if cm.Annotations == nil {
+			cm.Annotations = make(map[string]string)
+		}
+		cm.Annotations[annotationRetainedFrom] = postgresDB.Name
+		if err := r.Update(ctx, cm); err != nil {
+			return fmt.Errorf("failed to orphan ConfigMap %s: %w", cmName, err)
+		}
+		logger.Info("Orphaned ConfigMap", "name", cmName)
+	}
+	return nil
+}
+
+// orphanSecrets strips ownerReferences and adds a retention annotation
+// on Secrets for the given databases.
+func (r *PostgresDatabaseReconciler) orphanSecrets(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	databases []enterprisev4.DatabaseDefinition,
+) error {
+	logger := log.FromContext(ctx)
+
+	for _, dbSpec := range databases {
+		for _, role := range []string{secretRoleAdmin, secretRoleRW} {
+			secretName := userSecretName(postgresDB.Name, dbSpec.Name, role)
+			secret := &corev1.Secret{}
+			if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, secret); err != nil {
+				if errors.IsNotFound(err) {
+					continue
+				}
+				return fmt.Errorf("failed to get Secret %s for orphaning: %w", secretName, err)
+			}
+			if secret.Annotations[annotationRetainedFrom] == postgresDB.Name {
+				continue
+			}
+			stripOwnerReference(secret, postgresDB.UID)
+			if secret.Annotations == nil {
+				secret.Annotations = make(map[string]string)
+			}
+			secret.Annotations[annotationRetainedFrom] = postgresDB.Name
+			if err := r.Update(ctx, secret); err != nil {
+				return fmt.Errorf("failed to orphan Secret %s: %w", secretName, err)
+			}
+			logger.Info("Orphaned Secret", "name", secretName)
+		}
+	}
+	return nil
+}
+
+// deleteCNPGDatabases explicitly deletes CNPG Database CRs for the given databases.
+func (r *PostgresDatabaseReconciler) deleteCNPGDatabases(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	databases []enterprisev4.DatabaseDefinition,
+) error {
+	logger := log.FromContext(ctx)
+
+	for _, dbSpec := range databases {
+		cnpgDBName := cnpgDatabaseName(postgresDB.Name, dbSpec.Name)
+		db := &cnpgv1.Database{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cnpgDBName,
+				Namespace: postgresDB.Namespace,
+			},
+		}
+		if err := r.Delete(ctx, db); err != nil {
+			if errors.IsNotFound(err) {
+				logger.Info("CNPG Database already deleted", "name", cnpgDBName)
+				continue
+			}
+			return fmt.Errorf("failed to delete CNPG Database %s: %w", cnpgDBName, err)
+		}
+		logger.Info("Deleted CNPG Database CR", "name", cnpgDBName)
+	}
+	return nil
+}
+
+// deleteConfigMaps explicitly deletes ConfigMaps for the given databases.
+func (r *PostgresDatabaseReconciler) deleteConfigMaps(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	databases []enterprisev4.DatabaseDefinition,
+) error {
+	logger := log.FromContext(ctx)
+
+	for _, dbSpec := range databases {
+		cmName := configMapName(postgresDB.Name, dbSpec.Name)
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cmName,
+				Namespace: postgresDB.Namespace,
+			},
+		}
+		if err := r.Delete(ctx, cm); err != nil {
+			if errors.IsNotFound(err) {
+				logger.Info("ConfigMap already deleted", "name", cmName)
+				continue
+			}
+			return fmt.Errorf("failed to delete ConfigMap %s: %w", cmName, err)
+		}
+		logger.Info("Deleted ConfigMap", "name", cmName)
+	}
+	return nil
+}
+
+// deleteSecrets explicitly deletes Secrets for the given databases.
+func (r *PostgresDatabaseReconciler) deleteSecrets(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	databases []enterprisev4.DatabaseDefinition,
+) error {
+	logger := log.FromContext(ctx)
+
+	for _, dbSpec := range databases {
+		for _, role := range []string{secretRoleAdmin, secretRoleRW} {
+			secretName := userSecretName(postgresDB.Name, dbSpec.Name, role)
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: postgresDB.Namespace,
+				},
+			}
+			if err := r.Delete(ctx, secret); err != nil {
+				if errors.IsNotFound(err) {
+					logger.Info("Secret already deleted", "name", secretName)
+					continue
+				}
+				return fmt.Errorf("failed to delete Secret %s: %w", secretName, err)
+			}
+			logger.Info("Deleted Secret", "name", secretName)
+		}
+	}
+	return nil
+}
+
+// buildRetainedRoles returns the SSA role list for databases that are being retained.
+// Returns an empty slice when no databases are retained, which clears our field manager's claim.
+func buildRetainedRoles(postgresDBName string, retainedDBs []enterprisev4.DatabaseDefinition) []enterprisev4.ManagedRole {
+	roles := make([]enterprisev4.ManagedRole, 0, len(retainedDBs)*2)
+	for _, dbSpec := range retainedDBs {
+		roles = append(roles,
+			enterprisev4.ManagedRole{
+				Name:              adminRoleName(dbSpec.Name),
+				Ensure:            "present",
+				PasswordSecretRef: &corev1.LocalObjectReference{Name: userSecretName(postgresDBName, dbSpec.Name, secretRoleAdmin)},
+			},
+			enterprisev4.ManagedRole{
+				Name:              rwRoleName(dbSpec.Name),
+				Ensure:            "present",
+				PasswordSecretRef: &corev1.LocalObjectReference{Name: userSecretName(postgresDBName, dbSpec.Name, secretRoleRW)},
+			},
+		)
+	}
+	return roles
+}
+
+// patchManagedRolesOnDeletion applies an SSA patch to keep only retained databases' roles.
+//
+// SSA ensures that each patch only affects fields owned by our field manager
+// (postgresdatabase-<name>). This means when one PostgresDatabase is deleted,
+// its role cleanup cannot interfere with roles managed by other PostgresDatabase
+// controllers targeting the same PostgresCluster.
+func (r *PostgresDatabaseReconciler) patchManagedRolesOnDeletion(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	cluster *enterprisev4.PostgresCluster,
+	retainedDBs []enterprisev4.DatabaseDefinition,
+) error {
+	roles := buildRetainedRoles(postgresDB.Name, retainedDBs)
 
 	rolePatch := &unstructured.Unstructured{
 		Object: map[string]any{
@@ -563,46 +942,49 @@ func (r *PostgresDatabaseReconciler) removeUsersFromCluster(
 				"namespace": cluster.Namespace,
 			},
 			"spec": map[string]any{
-				"managedRoles": []any{},
+				"managedRoles": roles,
 			},
 		},
 	}
 
-	fieldManager := fmt.Sprintf("postgresdatabase-%s", postgresDB.Name)
+	fieldManager := fieldManagerName(postgresDB.Name)
 	if err := r.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManager)); err != nil {
-		return fmt.Errorf("failed to release user ownership from PostgresCluster: %w", err)
+		return fmt.Errorf("failed to patch managed roles on deletion: %w", err)
 	}
 
-	logger.Info("Released managed role ownership from PostgresCluster", "postgresDatabase", postgresDB.Name, "postgresCluster", cluster.Name)
+	log.FromContext(ctx).Info("Patched managed roles on deletion",
+		"postgresDatabase", postgresDB.Name,
+		"retainedRoles", len(roles))
 	return nil
 }
 
-// removeDatabases deletes all CNPG Database CRs owned by this PostgresDatabase.
-// The actual PostgreSQL databases are retained or deleted based on the databaseReclaimPolicy
-// set on each CNPG Database CR during creation.
-func (r *PostgresDatabaseReconciler) removeDatabases(
-	ctx context.Context,
-	postgresDB *enterprisev4.PostgresDatabase,
-) error {
-	logger := log.FromContext(ctx)
-
-	cnpgDBList := &cnpgv1.DatabaseList{}
-	if err := r.List(ctx, cnpgDBList,
-		client.InNamespace(postgresDB.Namespace),
-		client.MatchingFields{".metadata.controller": postgresDB.Name},
-	); err != nil {
-		return fmt.Errorf("failed to list CNPG Databases for cleanup: %w", err)
-	}
-
-	for _, db := range cnpgDBList.Items {
-		logger.Info("Deleting CNPG Database CR", "name", db.Name, "reclaimPolicy", db.Spec.ReclaimPolicy)
-		if err := r.Delete(ctx, &db); err != nil && !errors.IsNotFound(err) {
-			return fmt.Errorf("failed to delete CNPG Database %s: %w", db.Name, err)
+// stripOwnerReference removes only the ownerReference matching the given UID from obj,
+// preserving any other owner references the object may have.
+func stripOwnerReference(obj metav1.Object, ownerUID types.UID) {
+	refs := obj.GetOwnerReferences()
+	filtered := make([]metav1.OwnerReference, 0, len(refs))
+	for _, ref := range refs {
+		if ref.UID != ownerUID {
+			filtered = append(filtered, ref)
 		}
 	}
+	obj.SetOwnerReferences(filtered)
+}
 
-	logger.Info("All CNPG Database CRs deleted", "count", len(cnpgDBList.Items))
-	return nil
+// adoptResource removes the retention annotation, restores the controller ownerRef,
+// and updates the object. Works for any resource type (Secret, ConfigMap, CNPG Database).
+func (r *PostgresDatabaseReconciler) adoptResource(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	obj client.Object,
+) error {
+	annotations := obj.GetAnnotations()
+	delete(annotations, annotationRetainedFrom)
+	obj.SetAnnotations(annotations)
+	if err := controllerutil.SetControllerReference(postgresDB, obj, r.Scheme); err != nil {
+		return err
+	}
+	return r.Update(ctx, obj)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -665,65 +1047,70 @@ func generatePassword() (string, error) {
 	return password.Generate(passwordLength, passwordDigits, passwordSymbols, false, true)
 }
 
-// reconcileUserSecrets checks existence before creating — intentionally not using
-// CreateOrUpdate because secrets must never be updated after creation. Rotating a password
-// here would break live connections before the application has a chance to pick up the change.
+// reconcileUserSecrets ensures admin and rw secrets exist for each database,
+// delegating per-secret logic to ensureSecret.
 func (r *PostgresDatabaseReconciler) reconcileUserSecrets(
 	ctx context.Context,
 	postgresDB *enterprisev4.PostgresDatabase,
 ) error {
-	logger := log.FromContext(ctx)
-
 	for _, dbSpec := range postgresDB.Spec.Databases {
-		adminSecretName := userSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)
-		rwSecretName := userSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)
-
-		adminExists, err := r.secretExists(ctx, postgresDB.Namespace, adminSecretName)
-		if err != nil {
+		if err := r.ensureSecret(ctx, postgresDB, adminRoleName(dbSpec.Name),
+			userSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)); err != nil {
 			return err
 		}
-		rwExists, err := r.secretExists(ctx, postgresDB.Namespace, rwSecretName)
-		if err != nil {
+		if err := r.ensureSecret(ctx, postgresDB, rwRoleName(dbSpec.Name),
+			userSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)); err != nil {
 			return err
-		}
-
-		if !adminExists {
-			logger.Info("Creating missing admin user secrets for database", "database", dbSpec.Name)
-			if err := r.createUserSecret(ctx, postgresDB, adminRoleName(dbSpec.Name), adminSecretName); err != nil {
-				return fmt.Errorf("failed to create secrets for database %s: %w", dbSpec.Name, err)
-			}
-		}
-		if !rwExists {
-			logger.Info("Creating missing rw user secrets for database", "database", dbSpec.Name)
-			if err := r.createUserSecret(ctx, postgresDB, rwRoleName(dbSpec.Name), rwSecretName); err != nil {
-				return fmt.Errorf("failed to create secrets for database %s: %w", dbSpec.Name, err)
-			}
 		}
 	}
 	return nil
 }
 
-// secretExists treats non-NotFound errors as real failures — a transient API error
+// ensureSecret handles three states: missing (create), orphaned (re-adopt), or existing (no-op).
+// Intentionally not using CreateOrUpdate because secrets must never be updated after creation.
+// Rotating a password here would break live connections before the application picks up the change.
+func (r *PostgresDatabaseReconciler) ensureSecret(
+	ctx context.Context,
+	postgresDB *enterprisev4.PostgresDatabase,
+	roleName, secretName string,
+) error {
+	secret, err := r.getSecret(ctx, postgresDB.Namespace, secretName)
+	if err != nil {
+		return err
+	}
+	logger := log.FromContext(ctx)
+
+	switch {
+	case secret == nil:
+		logger.Info("Creating missing user secret", "name", secretName)
+		return r.createUserSecret(ctx, postgresDB, roleName, secretName)
+	case secret.Annotations[annotationRetainedFrom] == postgresDB.Name:
+		logger.Info("Re-adopting orphaned secret", "name", secretName)
+		return r.adoptResource(ctx, postgresDB, secret)
+	}
+	return nil
+}
+
+// getSecret fetches a Secret by name, returning nil if not found.
+// Non-NotFound errors are treated as real failures — a transient API error
 // must not cause a spurious Create attempt.
-func (r *PostgresDatabaseReconciler) secretExists(ctx context.Context, namespace, name string) (bool, error) {
+func (r *PostgresDatabaseReconciler) getSecret(ctx context.Context, namespace, name string) (*corev1.Secret, error) {
 	logger := log.FromContext(ctx)
 
 	secret := &corev1.Secret{}
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, secret)
 	if errors.IsNotFound(err) {
-		return false, nil
+		return nil, nil
 	}
 	if err != nil {
 		logger.Error(err, "Failed to check secret existence", "secret", name)
-		return false, err
+		return nil, err
 	}
-	return true, nil
+	return secret, nil
 }
 
-// createUserSecret creates a single password secret for a database user.
-// AlreadyExists is treated as success — safe to retry after a partial failure
-// on a prior run without conflicting with the already-created secret.
-// TODO: Secret cleanup will be added to the finalizers to respect retain state
+// createUserSecret generates a password, builds the Secret, and creates it.
+// AlreadyExists is treated as success — safe to retry after a partial failure.
 func (r *PostgresDatabaseReconciler) createUserSecret(
 	ctx context.Context,
 	postgresDB *enterprisev4.PostgresDatabase,
@@ -739,6 +1126,9 @@ func (r *PostgresDatabaseReconciler) createUserSecret(
 	}
 
 	secret := buildPasswordSecret(postgresDB, secretName, roleName, password)
+	if err := controllerutil.SetControllerReference(postgresDB, secret, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set owner reference on Secret %s: %w", secretName, err)
+	}
 	if err := r.Create(ctx, secret); err != nil {
 		if errors.IsAlreadyExists(err) {
 			return nil
@@ -749,10 +1139,8 @@ func (r *PostgresDatabaseReconciler) createUserSecret(
 	return nil
 }
 
-// buildPasswordSecret constructs the Secret object but intentionally omits an ownerReference.
-// Secrets are referenced by ManagedRole entries in the PostgresCluster CR, which outlives the
-// PostgresDatabase — cascade deletion would leave dangling PasswordSecretRef pointers.
-// Both "username" and "password" keys are required by CNPG.
+// buildPasswordSecret constructs the Secret object with "username" and "password" keys required by CNPG.
+// OwnerRef is set by the caller.
 func buildPasswordSecret(postgresDB *enterprisev4.PostgresDatabase, secretName, roleName, password string) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -825,6 +1213,7 @@ func buildDatabaseConfigMapBody(
 // reconcileUserConfigMaps mirrors reconcileUserSecrets: checks per-database,
 // creates only what is absent. Endpoints are resolved by the caller so this function
 // has a single responsibility: iteration and existence-gated creation.
+// Orphaned ConfigMaps from a previous retain-deletion are re-adopted.
 func (r *PostgresDatabaseReconciler) reconcileUserConfigMaps(
 	ctx context.Context,
 	postgresDB *enterprisev4.PostgresDatabase,
@@ -848,7 +1237,13 @@ func (r *PostgresDatabaseReconciler) reconcileUserConfigMaps(
 		_, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
 			cm.Data = buildDatabaseConfigMapBody(dbSpec.Name, endpoints)
 
-			if cm.CreationTimestamp.IsZero() {
+			// Set ownerRef on creation or re-adoption (orphaned objects have no ownerRef).
+			reAdopting := cm.Annotations[annotationRetainedFrom] == postgresDB.Name
+			if reAdopting {
+				logger.Info("Re-adopting orphaned ConfigMap", "name", cmName)
+				delete(cm.Annotations, annotationRetainedFrom)
+			}
+			if cm.CreationTimestamp.IsZero() || reAdopting {
 				if err := controllerutil.SetControllerReference(postgresDB, cm, r.Scheme); err != nil {
 					logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", cm.Name)
 					return err
