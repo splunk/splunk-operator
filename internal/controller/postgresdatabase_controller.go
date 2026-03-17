@@ -920,6 +920,11 @@ func buildRetainedRoles(postgresDBName string, retainedDBs []enterprisev4.Databa
 }
 
 // patchManagedRolesOnDeletion applies an SSA patch to keep only retained databases' roles.
+//
+// SSA ensures that each patch only affects fields owned by our field manager
+// (postgresdatabase-<name>). This means when one PostgresDatabase is deleted,
+// its role cleanup cannot interfere with roles managed by other PostgresDatabase
+// controllers targeting the same PostgresCluster.
 func (r *PostgresDatabaseReconciler) patchManagedRolesOnDeletion(
 	ctx context.Context,
 	postgresDB *enterprisev4.PostgresDatabase,
