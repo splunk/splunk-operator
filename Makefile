@@ -128,6 +128,10 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 fmt: ## Run go fmt against code.
 	go fmt ./...
 
+mod/vendor: ## Tidy go modules and re-snapshot vendor/ (run after adding/updating dependencies).
+	go mod tidy
+	go mod vendor
+
 scheck: ## Run static check against code
 	go install honnef.co/go/tools/cmd/staticcheck@2022.1
 	staticcheck ./...

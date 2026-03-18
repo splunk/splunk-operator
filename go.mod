@@ -18,7 +18,6 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
-	github.com/lib/pq v1.10.9
 	github.com/minio/minio-go/v7 v7.0.16
 	github.com/onsi/ginkgo/v2 v2.28.1
 	github.com/onsi/gomega v1.39.1
@@ -129,6 +128,7 @@ require (
 	github.com/klauspost/cpuid v1.3.1 // indirect
 	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.4.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
+	github.com/lib/pq v1.10.9 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/minio/md5-simd v1.1.0 // indirect
 	github.com/minio/sha256-simd v0.1.1 // indirect

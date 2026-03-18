@@ -43,17 +43,17 @@ const (
 	defaultDatabaseName           string = "postgres"
 	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"
 
-	annotationRetainedFrom        string = "enterprise.splunk.com/retained-from"
+	annotationRetainedFrom string = "enterprise.splunk.com/retained-from"
 
-	defaultSecretSuffix           string = "-secret"
+	defaultSecretSuffix string = "-secret"
 
-	defaultPoolerSuffix           string = "-pooler-"
-	defaultConfigMapSuffix        string = "-configmap"
-	defaultPort                   string = "5432"
-	superUsername                 string = "postgres"
-	postgresClusterFinalizerName  string = "postgresclusters.enterprise.splunk.com/finalizer"
-	clusterDeletionPolicyDelete   string = "Delete"
-	clusterDeletionPolicyRetain   string = "Retain"
+	defaultPoolerSuffix          string = "-pooler-"
+	defaultConfigMapSuffix       string = "-configmap"
+	defaultPort                  string = "5432"
+	superUsername                string = "postgres"
+	postgresClusterFinalizerName string = "postgresclusters.enterprise.splunk.com/finalizer"
+	clusterDeletionPolicyDelete  string = "Delete"
+	clusterDeletionPolicyRetain  string = "Retain"
 
 	// phases
 	readyDBPhase        reconcileDBPhases = "Ready"
