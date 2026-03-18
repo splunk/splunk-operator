@@ -2136,7 +2136,8 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.VerifyAppRepoState(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])
 
 			// Disable the app
-			testenv.DisableAppsToS3(downloadDirV1, appFileName, s3TestDirIdxc)
+			err = testenv.DisableAppsToS3(downloadDirV1, appFileName, s3TestDirIdxc)
+			Expect(err).To(Succeed(), "Unable to disable apps on S3")
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)

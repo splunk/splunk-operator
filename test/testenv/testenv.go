@@ -29,6 +29,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo/v2"
+	gomega "github.com/onsi/gomega"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
@@ -294,9 +295,7 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	// use apireader instead of kubeclient when retrieving resources
 	go func() {
 		err := kubeManager.Start(signals.SetupSignalHandler())
-		if err != nil {
-			panic("Unable to start kube manager. Error: " + err.Error())
-		}
+		gomega.Expect(err).ToNot(gomega.HaveOccurred(), "Error starting kube manager")
 	}()
 
 	return testenv, nil
