@@ -136,11 +136,12 @@ jobs:
         uses: google-github-actions/setup-gcloud@v1
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
-          install_components: 'kubectl'
+          install_components: 'kubectl,gke-gcloud-auth-plugin'
 
       - name: Set GCP Project
         run: |
           gcloud config set project ${{ env.GCP_PROJECT_ID }}
+          export USE_GKE_GCLOUD_AUTH_PLUGIN=True
 
       - name: Create GKE Cluster
         run: |
@@ -150,6 +151,7 @@ jobs:
 
       - name: Get Kubernetes Credentials
         run: |
+          export USE_GKE_GCLOUD_AUTH_PLUGIN=True
           gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.GCP_ZONE }} --project ${{ env.GCP_PROJECT_ID }}
 
       - name: Allow Pulling from Artifact Registry
@@ -226,6 +228,7 @@ jobs:
 
       - name: Get Kubernetes Credentials
         run: |
+          export USE_GKE_GCLOUD_AUTH_PLUGIN=True
           gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.GCP_ZONE }} --project ${{ env.GCP_PROJECT_ID }}
 
       - name: Get GKE Credentials
