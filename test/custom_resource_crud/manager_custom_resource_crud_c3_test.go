@@ -18,15 +18,13 @@ import (
 	"fmt"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	//splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/test/testenv"
 )
 
 var _ = Describe("Crcrud test for SVA C3", func() {
@@ -57,95 +55,8 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("managercrcrud, integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", func() {
-
-			// Deploy Single site Cluster and Search Head Clusters
-			mcRef := deployment.GetName()
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
-			Expect(err).To(Succeed(), "Unable to deploy cluster")
-
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
-
-			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
-
-			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
-
-			// Verify CPU limits on Indexers before updating the CR
-			indexerCount := 3
-			for i := 0; i < indexerCount; i++ {
-				indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
-				testcaseEnvInst.VerifyCPULimits(deployment, indexerPodName, defaultCPULimits)
-			}
-
-			// Change CPU limits to trigger CR update
-			idxc := &enterpriseApi.IndexerCluster{}
-			instanceName := fmt.Sprintf("%s-idxc", deployment.GetName())
-			err = deployment.GetInstance(ctx, instanceName, idxc)
-			Expect(err).To(Succeed(), "Unable to get instance of indexer cluster")
-			idxc.Spec.Resources.Limits = corev1.ResourceList{
-				"cpu": resource.MustParse(newCPULimits),
-			}
-			err = deployment.UpdateCR(ctx, idxc)
-			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster with updated CR")
-
-			// Verify Indexer Cluster is updating
-			idxcName := deployment.GetName() + "-idxc"
-			testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseUpdating, idxcName)
-
-			// Verify Indexers go to ready state
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
-
-			// Verify CPU limits on Indexers after updating the CR
-			for i := 0; i < indexerCount; i++ {
-				indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
-				testcaseEnvInst.VerifyCPULimits(deployment, indexerPodName, newCPULimits)
-			}
-
-			// Verify CPU limits on Search Heads before updating the CR
-			searchHeadCount := 3
-			for i := 0; i < searchHeadCount; i++ {
-				SearchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
-				testcaseEnvInst.VerifyCPULimits(deployment, SearchHeadPodName, defaultCPULimits)
-			}
-
-			// Change CPU limits to trigger CR update
-			shc := &enterpriseApi.SearchHeadCluster{}
-			instanceName = fmt.Sprintf("%s-shc", deployment.GetName())
-			err = deployment.GetInstance(ctx, instanceName, shc)
-			Expect(err).To(Succeed(), "Unable to fetch Search Head Cluster deployment")
-
-			shc.Spec.Resources.Limits = corev1.ResourceList{
-				"cpu": resource.MustParse(newCPULimits),
-			}
-			err = deployment.UpdateCR(ctx, shc)
-			Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster with updated CR")
-
-			// Verify Search Head Cluster is updating
-			testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
-
-			// Verify Search Head go to ready state
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
-
-			// Verify CPU limits on Search Heads after updating the CR
-			for i := 0; i < searchHeadCount; i++ {
-				SearchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
-				testcaseEnvInst.VerifyCPULimits(deployment, SearchHeadPodName, newCPULimits)
-			}
+			config := NewCRUDTestConfigV4()
+			RunC3CPUUpdateTest(ctx, deployment, testcaseEnvInst, config, defaultCPULimits, newCPULimits)
 		})
 	})
 

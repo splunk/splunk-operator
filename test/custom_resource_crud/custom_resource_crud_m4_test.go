@@ -15,15 +15,10 @@ package crcrud
 
 import (
 	"context"
-	"fmt"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/splunk/splunk-operator/test/testenv"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var _ = Describe("Crcrud test for SVA M4", func() {
@@ -51,78 +46,8 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
 		It("mastercrcrud, integration, m4: can deploy can deploy multisite indexer and search head clusters, change their CR, update the instances", func() {
-
-			// Deploy Multisite Cluster and Search Head Clusters
-			mcRef := deployment.GetName()
-			prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
-			siteCount := 3
-			err := deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcRef)
-			Expect(err).To(Succeed(), "Unable to deploy cluster")
-
-			// Ensure that the cluster-master goes to Ready phase
-			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
-
-			// Ensure the indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure cluster configured as multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure search head cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Verify telemetry
-			testcaseEnvInst.TriggerTelemetrySubmission(ctx, deployment)
-			testcaseEnvInst.VerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
-
-			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
-
-			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
-
-			// Verify CPU limits on Indexers before updating the CR
-			for i := 1; i <= siteCount; i++ {
-				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
-				testcaseEnvInst.VerifyCPULimits(deployment, podName, defaultCPULimits)
-			}
-
-			// Change CPU limits to trigger CR update
-			idxc := &enterpriseApi.IndexerCluster{}
-			for i := 1; i <= siteCount; i++ {
-				siteName := fmt.Sprintf("site%d", i)
-				instanceName := fmt.Sprintf("%s-%s", deployment.GetName(), siteName)
-				err = deployment.GetInstance(ctx, instanceName, idxc)
-				Expect(err).To(Succeed(), "Unable to fetch Indexer Cluster deployment")
-				idxc.Spec.Resources.Limits = corev1.ResourceList{
-					"cpu": resource.MustParse(newCPULimits),
-				}
-				err = deployment.UpdateCR(ctx, idxc)
-				Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster with updated CR")
-			}
-
-			// Verify Indexer Cluster is updating
-			idxcName := deployment.GetName() + "-" + "site1"
-			testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseUpdating, idxcName)
-
-			// Verify Indexers go to ready state
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
-
-			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
-
-			// Verify CPU limits after updating the CR
-			for i := 1; i <= siteCount; i++ {
-				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
-				testcaseEnvInst.VerifyCPULimits(deployment, podName, newCPULimits)
-			}
+			config := NewCRUDTestConfigV3()
+			RunM4CPUUpdateTest(ctx, deployment, testcaseEnvInst, config, defaultCPULimits, newCPULimits)
 		})
 	})
 })

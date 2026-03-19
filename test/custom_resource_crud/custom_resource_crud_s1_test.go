@@ -15,15 +15,10 @@ package crcrud
 
 import (
 	"context"
-	"fmt"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/splunk/splunk-operator/test/testenv"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var _ = Describe("Crcrud test for SVA S1", func() {
@@ -51,49 +46,7 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 
 	Context("Standalone deployment (S1)", func() {
 		It("managercrcrud, integration, s1: can deploy a standalone instance, change its CR, update the instance", func() {
-
-			// Deploy Standalone
-			mcRef := deployment.GetName()
-			prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
-			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), mcRef, "")
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
-
-			// Verify Standalone goes to ready state
-			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
-
-			// Verify telemetry
-			testcaseEnvInst.TriggerTelemetrySubmission(ctx, deployment)
-			testcaseEnvInst.VerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
-
-			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
-
-			// Verify CPU limits before updating the CR
-			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testcaseEnvInst.VerifyCPULimits(deployment, standalonePodName, defaultCPULimits)
-
-			// Change CPU limits to trigger CR update
-			standalone.Spec.Resources.Limits = corev1.ResourceList{
-				"cpu": resource.MustParse(newCPULimits),
-			}
-			err = deployment.UpdateCR(ctx, standalone)
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance with updated CR ")
-
-			// Verify Standalone is updating
-			testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating)
-
-			// Verify Standalone goes to ready state
-			testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseReady)
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
-
-			// Verify CPU limits after updating the CR
-			testcaseEnvInst.VerifyCPULimits(deployment, standalonePodName, newCPULimits)
+			RunS1CPUUpdateTest(ctx, deployment, testcaseEnvInst, defaultCPULimits, newCPULimits)
 		})
 	})
 })
