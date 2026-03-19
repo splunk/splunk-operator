@@ -15,7 +15,6 @@ package licensemanager
 
 import (
 	"context"
-	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -27,69 +26,26 @@ var _ = Describe("Licensemanager test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
+	var config *LicenseTestConfig
 	ctx := context.TODO()
 
 	BeforeEach(func() {
 		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
+
+		config = NewLicenseManagerConfig()
+
+		// Validate test prerequisites early to fail fast
+		err := testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {
 		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 	})
 
-	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
-		It("licensemanager, integration, m4: Splunk Operator can configure license manager with indexers and search head in M4 SVA", func() {
-
-			// Download License File and create config map
-			testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
-
-			siteCount := 3
-			mcRef := deployment.GetName()
-			err := deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcRef)
-			Expect(err).To(Succeed(), "Unable to deploy cluster")
-
-			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-
-			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
-
-			// Ensure cluster configured as multisite
-			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
-
-			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
-
-			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
-			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
-
-			// Verify LM is configured on indexers
-			indexerPodName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 0)
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
-			indexerPodName = fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 2, 0)
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
-			indexerPodName = fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 3, 0)
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
-
-			// Verify LM is configured on SHs
-			searchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 0)
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
-			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 1)
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
-			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 2)
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
-
-			// Verify LM Configured on Monitoring Console
-			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, monitoringConsolePodName)
-
+	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)  with License Manager", func() {
+		It("licensemanager, integration, m4: Splunk Operator can configure License Manager with indexers and search head in M4 SVA", func() {
+			RunLMM4Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})
 

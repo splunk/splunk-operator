@@ -15,286 +15,43 @@ package licensemaster
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"path/filepath"
-	"time"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	"github.com/splunk/splunk-operator/test/licensemanager"
 	"github.com/splunk/splunk-operator/test/testenv"
-	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("licensemaster test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	var testDir string
+	var config *licensemanager.LicenseTestConfig
 	ctx := context.TODO()
 
 	BeforeEach(func() {
 		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "master")
+
+		config = licensemanager.NewLicenseMasterConfig()
+
+		// Validate test prerequisites early to fail fast
+		err := testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {
 		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster) with License Master", func() {
 		It("licensemaster, integration, c3: Splunk Operator can configure License Master with Indexers and Search Heads in C3 SVA", func() {
-
-			// Download License File and create config map
-			testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
-
-			mcRef := deployment.GetName()
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
-			Expect(err).To(Succeed(), "Unable to deploy cluster")
-
-			// Ensure that the cluster-master goes to Ready phase
-			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
-
-			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
-
-			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
-			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
-
-			// Verify LM is configured on indexers
-			indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 0)
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
-			indexerPodName = fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 1)
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
-			indexerPodName = fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 2)
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
-
-			// Verify LM is configured on SHs
-			searchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 0)
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
-			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 1)
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
-			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 2)
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
-
-			// Verify LM Configured on Monitoring Console
-			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, monitoringConsolePodName)
-
+			licensemanager.RunLMC3Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("licensemaster: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
-
-			var (
-				appListV1          []string
-				appListV2          []string
-				testS3Bucket       = os.Getenv("TEST_INDEXES_S3_BUCKET")
-				testDataS3Bucket   = os.Getenv("TEST_BUCKET")
-				AzureDataContainer = os.Getenv("TEST_CONTAINER")
-				appDirV1           = testenv.AppLocationV1
-				appDirV2           = testenv.AppLocationV2
-				currDir, _         = os.Getwd()
-				downloadDirV1      = filepath.Join(currDir, "lmV1-"+testenv.RandomDNSName(4))
-				downloadDirV2      = filepath.Join(currDir, "lmV2-"+testenv.RandomDNSName(4))
-				uploadedApps       []string
-			)
-
-			// Create a list of apps to upload
-			appVersion := "V1"
-			appListV1 = testenv.BasicApps
-			appFileList := testenv.GetAppFileList(appListV1)
-
-			// Download V1 Apps
-			switch testenv.ClusterProvider {
-			case "eks":
-				err := testenv.DownloadFilesFromS3(testDataS3Bucket, appDirV1, downloadDirV1, appFileList)
-				Expect(err).To(Succeed(), "Unable to download V1 app files")
-			case "azure":
-				containerName := "/" + AzureDataContainer + "/" + appDirV1
-				err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
-				Expect(err).To(Succeed(), "Unable to download V1 app files")
-			}
-
-			// Upload V1 apps
-			switch testenv.ClusterProvider {
-			case "eks":
-				testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3", appVersion))
-				testDir = "lm-" + testenv.RandomDNSName(4)
-				uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, testDir, appFileList, downloadDirV1)
-				Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3", appVersion))
-				uploadedApps = append(uploadedApps, uploadedFiles...)
-			case "azure":
-				testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure", appVersion))
-				testDir = "lm-" + testenv.RandomDNSName(4)
-				uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, testDir, appFileList)
-				Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure", appVersion))
-				uploadedApps = append(uploadedApps, uploadedFiles...)
-			case "gcp":
-				testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP", appVersion))
-				testDir = "lm-" + testenv.RandomDNSName(4)
-				uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, testDir, appFileList, downloadDirV1)
-				Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3", appVersion))
-				uploadedApps = append(uploadedApps, uploadedFiles...)
-			}
-
-			// Download License File and create config map
-			testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
-
-			// Create App framework Spec
-			volumeName := "lm-test-volume-" + testenv.RandomDNSName(3)
-			var volumeSpec []enterpriseApi.VolumeSpec
-			switch testenv.ClusterProvider {
-			case "eks":
-				volumeSpec = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
-			case "azure":
-				volumeSpec = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpecAzure(volumeName, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "azure", "blob")}
-			case "gcp":
-				volumeSpec = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "gcp", "blob", testenv.GetDefaultS3Region())}
-			}
-
-			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
-			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeName,
-				Scope:   enterpriseApi.ScopeLocal,
-			}
-
-			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
-			appSourceName := "lm-" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, testDir, appSourceDefaultSpec)}
-
-			// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
-			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpec,
-				AppsRepoPollInterval: 60,
-				VolList:              volumeSpec,
-				AppSources:           appSourceSpec,
-			}
-
-			spec := enterpriseApiV3.LicenseMasterSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Volumes: []corev1.Volume{
-						{
-							Name: "licenses",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: testcaseEnvInst.GetLMConfigMap(),
-									},
-								},
-							},
-						},
-					},
-					LicenseURL: "/mnt/licenses/enterprise.lic",
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-				},
-				AppFrameworkConfig: appFrameworkSpec,
-			}
-
-			// Deploy the LM with App Framework
-			_, err := deployment.DeployLicenseMasterWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy LM with App framework")
-
-			// Wait for LM to be in READY status
-			testenv.LicenseMasterReady(ctx, deployment, testcaseEnvInst)
-
-			// Verify apps are copied at the correct location on LM (/etc/apps/)
-			podName := []string{fmt.Sprintf(testenv.LicenseMasterPod, deployment.GetName(), 0)}
-			testenv.VerifyAppsCopied(ctx, deployment, testcaseEnvInst, testenvInstance.GetName(), podName, appListV1, true, enterpriseApi.ScopeLocal)
-
-			// Verify apps are installed on LM
-			lmPodName := []string{fmt.Sprintf(testenv.LicenseMasterPod, deployment.GetName(), 0)}
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), lmPodName, appListV1, false, "enabled", false, false)
-
-			// Delete files uploaded
-			switch testenv.ClusterProvider {
-			case "eks":
-				testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
-			case "azure":
-				azureBlobClient := &testenv.AzureBlobClient{}
-				azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
-			}
-			uploadedApps = nil
-
-			// Create a list of apps to upload to S3 after poll period
-			appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
-			appFileList = testenv.GetAppFileList(appListV2)
-			appVersion = "V2"
-
-			switch testenv.ClusterProvider {
-			case "eks":
-				err := testenv.DownloadFilesFromS3(testDataS3Bucket, appDirV2, downloadDirV2, appFileList)
-				Expect(err).To(Succeed(), "Unable to download V2 app files")
-			case "azure":
-				containerName := "/" + AzureDataContainer + "/" + appDirV2
-				err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
-				Expect(err).To(Succeed(), "Unable to download V2 app files")
-			case "gcp":
-				err := testenv.DownloadFilesFromGCP(testDataS3Bucket, appDirV2, downloadDirV2, appFileList)
-				Expect(err).To(Succeed(), "Unable to download V2 app files")
-			}
-
-			// Upload V2 apps
-			switch testenv.ClusterProvider {
-			case "eks":
-				testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3", appVersion))
-				uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, testDir, appFileList, downloadDirV2)
-				Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3", appVersion))
-				uploadedApps = append(uploadedApps, uploadedFiles...)
-			case "azure":
-				testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure", appVersion))
-				uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, testDir, appFileList)
-				Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure", appVersion))
-				uploadedApps = append(uploadedApps, uploadedFiles...)
-			case "gcp":
-				testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3", appVersion))
-				uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, testDir, appFileList, downloadDirV2)
-				Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP", appVersion))
-				uploadedApps = append(uploadedApps, uploadedFiles...)
-			}
-
-			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
-
-			// Wait for LM to be in READY status
-			testenv.LicenseMasterReady(ctx, deployment, testcaseEnvInst)
-
-			// Verify apps are copied at the correct location on LM (/etc/apps/)
-			testenv.VerifyAppsCopied(ctx, deployment, testcaseEnvInst, testenvInstance.GetName(), podName, appListV2, true, enterpriseApi.ScopeLocal)
-
-			// Verify apps are installed on LM
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), lmPodName, appListV2, true, "enabled", true, false)
-
-			// Delete files uploaded
-			switch testenv.ClusterProvider {
-			case "eks":
-				testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
-			case "azure":
-				azureBlobClient := &testenv.AzureBlobClient{}
-				azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
-			case "gcp":
-				testenv.DeleteFilesOnGCP(testS3Bucket, uploadedApps)
-			}
-
-			// Delete locally downloaded app files
-			os.RemoveAll(downloadDirV1)
-			os.RemoveAll(downloadDirV2)
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster) with License Master", func() {
+		It("licensemaster, integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
+			licensemanager.RunLMC3AppFrameworkTest(ctx, deployment, testcaseEnvInst, testenvInstance, config)
 		})
 	})
 })

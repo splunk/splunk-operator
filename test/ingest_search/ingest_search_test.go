@@ -40,6 +40,10 @@ var _ = Describe("Ingest and Search Test", func() {
 
 	BeforeEach(func() {
 		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
+
+		// Validate test prerequisites early to fail fast
+		err := testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {
@@ -53,7 +57,7 @@ var _ = Describe("Ingest and Search Test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Wait for standalone to be in READY Status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
 			Eventually(func() enterpriseApi.Phase {
 				podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
@@ -129,7 +133,7 @@ var _ = Describe("Ingest and Search Test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Wait for standalone to be in READY Status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
 			// Verify splunk status is up
 			Eventually(func() enterpriseApi.Phase {
@@ -191,8 +195,10 @@ var _ = Describe("Ingest and Search Test", func() {
 
 			searchString := fmt.Sprintf("index=%s | stats count by host", indexName)
 
-			// Wait for ingestion lag prior to searching
-			time.Sleep(2 * time.Second)
+			// Wait for search results to be available instead of fixed sleep
+			err = testenv.WaitForSearchResultsNonEmpty(ctx, deployment, podName, searchString, 2*time.Second)
+			Expect(err).To(Succeed(), "Timed out waiting for search results")
+
 			searchResultsResp, err := testenv.PerformSearchSync(ctx, podName, searchString, deployment)
 			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", podName, searchString)
 

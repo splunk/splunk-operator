@@ -394,7 +394,7 @@ func UploadFilesToGCP(bucketName, gcpTestDir string, appList []string, uploadDir
 }
 
 // DisableAppsToGCP untars apps, modifies their config files to disable them, re-tars, and uploads the disabled versions to GCP
-func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir string) ([]string, error) {
+func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir string) error {
 	// Create directories for untarred and disabled apps
 	untarredAppsMainFolder := filepath.Join(downloadDir, "untarred_apps")
 	disabledAppsFolder := filepath.Join(downloadDir, "disabled_apps")
@@ -402,13 +402,13 @@ func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir strin
 	err := os.MkdirAll(untarredAppsMainFolder, os.ModePerm)
 	if err != nil {
 		logf.Log.Error(err, "Unable to create directory for untarred apps")
-		return nil, err
+		return err
 	}
 
 	err = os.MkdirAll(disabledAppsFolder, os.ModePerm)
 	if err != nil {
 		logf.Log.Error(err, "Unable to create directory for disabled apps")
-		return nil, err
+		return err
 	}
 
 	for _, key := range appFileList {
@@ -418,7 +418,7 @@ func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir strin
 		err := os.MkdirAll(untarredCurrentAppFolder, os.ModePerm)
 		if err != nil {
 			logf.Log.Error(err, "Unable to create folder for current app", "App", key)
-			return nil, err
+			return err
 		}
 
 		// Untar the app
@@ -426,7 +426,7 @@ func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir strin
 		err = untarFile(tarfile, untarredCurrentAppFolder)
 		if err != nil {
 			logf.Log.Error(err, "Failed to untar app", "App", key)
-			return nil, err
+			return err
 		}
 
 		// Disable the app by modifying its config file
@@ -434,7 +434,7 @@ func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir strin
 		err = disableAppConfig(appConfFile)
 		if err != nil {
 			logf.Log.Error(err, "Failed to disable app config", "File", appConfFile)
-			return nil, err
+			return err
 		}
 
 		// Tar the disabled app
@@ -442,18 +442,18 @@ func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir strin
 		err = tarGzFolder(untarredCurrentAppFolder, tarDestination)
 		if err != nil {
 			logf.Log.Error(err, "Failed to tar disabled app", "App", key)
-			return nil, err
+			return err
 		}
 	}
 
 	// Upload disabled apps to GCP
-	uploadedFiles, err := UploadFilesToGCP(testIndexesGCPBucket, gcpTestDir, appFileList, disabledAppsFolder)
+	_, err = UploadFilesToGCP(testIndexesGCPBucket, gcpTestDir, appFileList, disabledAppsFolder)
 	if err != nil {
 		logf.Log.Error(err, "Failed to upload disabled apps to GCP")
-		return nil, err
+		return err
 	}
 
-	return uploadedFiles, nil
+	return nil
 }
 
 // untarFile extracts a tar.gz file to the specified destination

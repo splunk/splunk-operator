@@ -33,6 +33,12 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 
 	BeforeEach(func() {
 		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "master")
+
+		testenv.SpecifiedTestTimeout = 40000
+
+		// Validate test prerequisites early to fail fast
+		err := testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {
@@ -58,33 +64,33 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Wait for License Master to be in READY status
-			testenv.LicenseMasterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyLicenseMasterReady(ctx, deployment)
 
 			// Ensure that the cluster-master goes to Ready phase
-			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
 			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
+			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure cluster configured as multisite
-			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
+			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
 
 			// Verify RF SF is met
 			testcaseEnvInst.Log.Info("Checkin RF SF before secret change")
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
@@ -108,50 +114,50 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// Ensure that Cluster Master goes to update phase
-			testenv.VerifyClusterMasterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
+			testcaseEnvInst.VerifyClusterMasterPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
 
 			// Ensure that the cluster-master goes to Ready phase
-			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
 			// Wait for License Master to be in READY status
-			testenv.LicenseMasterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyLicenseMasterReady(ctx, deployment)
 
 			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
+			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// wait for custom resource resource version to change
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// Verify RF SF is met
 			testcaseEnvInst.Log.Info("Checkin RF SF after secret change")
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testcaseEnvInst.GetName(), 2)
 
 			// Verify Secrets on versioned secret objects
-			testenv.VerifySecretsOnSecretObjects(ctx, deployment, testcaseEnvInst, secretObjectNames, updatedSecretData, true)
+			testcaseEnvInst.VerifySecretsOnSecretObjects(ctx, deployment, secretObjectNames, updatedSecretData, true)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			verificationPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
 
 			// Verify secrets on pods
-			testenv.VerifySecretsOnPods(ctx, deployment, testcaseEnvInst, verificationPods, updatedSecretData, true)
+			testcaseEnvInst.VerifySecretsOnPods(ctx, deployment, verificationPods, updatedSecretData, true)
 
 			// Verify Pass4SymmKey Secrets on ServerConf on MC, LM Pods
-			testenv.VerifySplunkServerConfSecrets(ctx, deployment, testcaseEnvInst, verificationPods, updatedSecretData, true)
+			testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, updatedSecretData, true)
 
 			// Verify Hec token on InputConf on Pod
-			testenv.VerifySplunkInputConfSecrets(deployment, testcaseEnvInst, verificationPods, updatedSecretData, true)
+			testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, updatedSecretData, true)
 
 			// Verify Secrets via api access on Pod
-			testenv.VerifySplunkSecretViaAPI(ctx, deployment, testcaseEnvInst, verificationPods, updatedSecretData, true)
+			testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, updatedSecretData, true)
 		})
 	})
 })

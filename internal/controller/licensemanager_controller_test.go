@@ -2,13 +2,10 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -22,10 +19,6 @@ import (
 )
 
 var _ = Describe("LicenseManager Controller", func() {
-
-	BeforeEach(func() {
-		time.Sleep(2 * time.Second)
-	})
 
 	AfterEach(func() {
 
@@ -147,20 +140,16 @@ func CreateLicenseManager(name string, namespace string, annotations map[string]
 	}
 	ssSpec := testutils.NewLicenseManager(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
-	time.Sleep(2 * time.Second)
 
 	By("Expecting LicenseManager custom resource to be created successfully")
 	ss := &enterpriseApi.LicenseManager{}
 	Eventually(func() bool {
-		_ = k8sClient.Get(context.Background(), key, ss)
-		if status != "" {
-			fmt.Printf("status is set to %v", status)
-			ss.Status.Phase = status
-			Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
-			time.Sleep(2 * time.Second)
-		}
-		return true
+		return k8sClient.Get(context.Background(), key, ss) == nil
 	}, timeout, interval).Should(BeTrue())
+	if status != "" {
+		ss.Status.Phase = status
+		Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
+	}
 
 	return ss
 }
@@ -174,20 +163,16 @@ func UpdateLicenseManager(instance *enterpriseApi.LicenseManager, status enterpr
 	ssSpec := testutils.NewLicenseManager(instance.Name, instance.Namespace, "image")
 	ssSpec.ResourceVersion = instance.ResourceVersion
 	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
-	time.Sleep(2 * time.Second)
 
-	By("Expecting LicenseManager custom resource to be created successfully")
+	By("Expecting LicenseManager custom resource to be updated successfully")
 	ss := &enterpriseApi.LicenseManager{}
 	Eventually(func() bool {
-		_ = k8sClient.Get(context.Background(), key, ss)
-		if status != "" {
-			fmt.Printf("status is set to %v", status)
-			ss.Status.Phase = status
-			Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
-			time.Sleep(2 * time.Second)
-		}
-		return true
+		return k8sClient.Get(context.Background(), key, ss) == nil
 	}, timeout, interval).Should(BeTrue())
+	if status != "" {
+		ss.Status.Phase = status
+		Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
+	}
 
 	return ss
 }

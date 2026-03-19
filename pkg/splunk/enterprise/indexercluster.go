@@ -888,7 +888,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	eventPublisher := GetEventPublisher(ctx, mgr.cr)
 
 	// Track last successful replica count to emit scale events after completion
-	previousReplicas := mgr.cr.Status.Replicas
+	previousReadyReplicas := mgr.cr.Status.ReadyReplicas
 
 	// Assign client
 	if mgr.c == nil {
@@ -927,17 +927,19 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 		return phase, err
 	}
 
-	// Emit ScaledUp event only after a successful scale-up has completed
+	// Emit scale events when phase is ready and ready replicas changed to match desired
 	if phase == enterpriseApi.PhaseReady {
-		if desiredReplicas > previousReplicas && mgr.cr.Status.Replicas == desiredReplicas {
-			if eventPublisher != nil {
-				eventPublisher.Normal(ctx, "ScaledUp",
-					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", mgr.cr.GetName(), previousReplicas, desiredReplicas))
-			}
-		} else if desiredReplicas < previousReplicas && mgr.cr.Status.Replicas == desiredReplicas {
-			if eventPublisher != nil {
-				eventPublisher.Normal(ctx, "ScaledDown",
-					fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", mgr.cr.GetName(), previousReplicas, desiredReplicas))
+		if mgr.cr.Status.ReadyReplicas == desiredReplicas && previousReadyReplicas != desiredReplicas {
+			if desiredReplicas > previousReadyReplicas {
+				if eventPublisher != nil {
+					eventPublisher.Normal(ctx, "ScaledUp",
+						fmt.Sprintf("Successfully scaled %s up to %d replicas", mgr.cr.GetName(), desiredReplicas))
+				}
+			} else if desiredReplicas < previousReadyReplicas {
+				if eventPublisher != nil {
+					eventPublisher.Normal(ctx, "ScaledDown",
+						fmt.Sprintf("Successfully scaled %s down to %d replicas", mgr.cr.GetName(), desiredReplicas))
+				}
 			}
 		}
 	}

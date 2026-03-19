@@ -182,7 +182,7 @@ func (d *Deployment) DeployMonitoringConsole(ctx context.Context, name string, L
 	if err != nil {
 		return nil, err
 	}
-	VerifyMonitoringConsoleReady(ctx, d, name, mc, d.testenv)
+	d.testenv.VerifyMonitoringConsoleReady(ctx, d, name, mc)
 	return deployed.(*enterpriseApi.MonitoringConsole), err
 }
 
@@ -339,7 +339,7 @@ func (d *Deployment) DeployLicenseManager(ctx context.Context, name string) (*en
 		return nil, err
 	}
 	// Verify standalone goes to ready state
-	LicenseManagerReady(ctx, d, d.testenv)
+	d.testenv.VerifyLicenseManagerReady(ctx, d)
 
 	return deployed.(*enterpriseApi.LicenseManager), err
 }
@@ -357,7 +357,7 @@ func (d *Deployment) DeployLicenseMaster(ctx context.Context, name string) (*ent
 		return nil, err
 	}
 	// Verify standalone goes to ready state
-	LicenseMasterReady(ctx, d, d.testenv)
+	d.testenv.VerifyLicenseMasterReady(ctx, d)
 
 	return deployed.(*enterpriseApiV3.LicenseMaster), err
 }
@@ -377,7 +377,7 @@ func (d *Deployment) DeployClusterManager(ctx context.Context, name, LicenseMana
 	}
 
 	// Verify standalone goes to ready state
-	ClusterManagerReady(ctx, d, d.testenv)
+	d.testenv.VerifyClusterManagerReady(ctx, d)
 
 	return deployed.(*enterpriseApi.ClusterManager), err
 }
@@ -397,7 +397,7 @@ func (d *Deployment) DeployClusterMaster(ctx context.Context, name, LicenseManag
 	}
 
 	// Verify standalone goes to ready state
-	ClusterMasterReady(ctx, d, d.testenv)
+	d.testenv.VerifyClusterMasterReady(ctx, d)
 
 	return deployed.(*enterpriseApiV3.ClusterMaster), err
 }
@@ -814,7 +814,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHead(ctx context.Cont
 		return err
 	}
 
-	ClusterMasterReady(ctx, d, d.testenv)
+	d.testenv.VerifyClusterMasterReady(ctx, d)
 
 	// Deploy indexer sites
 	for site := 1; site <= siteCount; site++ {
@@ -886,7 +886,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 		return err
 	}
 
-	ClusterManagerReady(ctx, d, d.testenv)
+	d.testenv.VerifyClusterManagerReady(ctx, d)
 
 	// Deploy indexer sites
 	for site := 1; site <= siteCount; site++ {
