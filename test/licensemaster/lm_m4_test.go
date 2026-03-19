@@ -18,7 +18,6 @@ import (
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
@@ -31,52 +30,18 @@ var _ = Describe("Licensemaster test", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-		var err error
-		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
-		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-		Expect(err).To(Succeed(), "Unable to create testcaseenv")
-		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
-		Expect(err).To(Succeed(), "Unable to create deployment")
+		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "master")
 	})
 
 	AfterEach(func() {
-		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
-			testcaseEnvInst.SkipTeardown = true
-		}
-		if deployment != nil {
-			deployment.Teardown()
-		}
-		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
-		}
+		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
 		It("licensemaster, integration, m4: Splunk Operator can configure license master with indexers and search head in M4 SVA", func() {
 
-			// Download License File
-			downloadDir := "licenseFolder"
-			switch testenv.ClusterProvider {
-			case "eks":
-				licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
-				Expect(err).To(Succeed(), "Unable to download license file from S3")
-				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-			case "azure":
-				licenseFilePath, err := testenv.DownloadLicenseFromAzure(ctx, downloadDir)
-				Expect(err).To(Succeed(), "Unable to download license file from Azure")
-				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-			case "gcp":
-				licenseFilePath, err := testenv.DownloadLicenseFromGCPBucket()
-				Expect(err).To(Succeed(), "Unable to download license file from GCP")
-				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-			default:
-				fmt.Printf("Unable to download license file")
-				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
-			}
+			// Download License File and create config map
+			testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
 
 			siteCount := 3
 			mcRef := deployment.GetName()

@@ -20,7 +20,6 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
@@ -35,25 +34,11 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	var deployment *testenv.Deployment
 
 	BeforeEach(func() {
-		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
-		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-		Expect(err).To(Succeed(), "Unable to create testcaseenv")
-		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
-		Expect(err).To(Succeed(), "Unable to create deployment")
+		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
 	})
 
 	AfterEach(func() {
-		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
-			testcaseEnvInst.SkipTeardown = true
-		}
-		if deployment != nil {
-			deployment.Teardown()
-		}
-		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
-		}
+		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 	})
 
 	Context("Standalone deployment (S1) with LM and MC", func() {
@@ -66,28 +51,8 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// 4. Verify New Secrets are present in server.conf (Pass4SymmKey)
 			// 5. Verify New Secrets via api access (password)
 
-			// Download License File
-			downloadDir := "licenseFolder"
-			switch testenv.ClusterProvider {
-			case "eks":
-				licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
-				Expect(err).To(Succeed(), "Unable to download license file from S3")
-				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-			case "azure":
-				licenseFilePath, err := testenv.DownloadLicenseFromAzure(ctx, downloadDir)
-				Expect(err).To(Succeed(), "Unable to download license file from Azure")
-				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-			case "gcp":
-				licenseFilePath, err := testenv.DownloadLicenseFromGCPBucket()
-				Expect(err).To(Succeed(), "Unable to download license file from GCP")
-				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-			default:
-				fmt.Printf("Unable to download license file")
-				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
-			}
+			// Download License File and create config map
+			testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
 
 			// Create standalone Deployment with License Manager
 			mcName := deployment.GetName()
@@ -173,28 +138,8 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			//4. Verify New Secrets are present in server.conf (Pass4SymmKey)
 			//5. Verify New Secrets via api access (password)
 
-			// Download License File
-			downloadDir := "licenseFolder"
-			switch testenv.ClusterProvider {
-			case "eks":
-				licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
-				Expect(err).To(Succeed(), "Unable to download license file from S3")
-				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-			case "azure":
-				licenseFilePath, err := testenv.DownloadLicenseFromAzure(ctx, downloadDir)
-				Expect(err).To(Succeed(), "Unable to download license file from Azure")
-				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-			case "gcp":
-				licenseFilePath, err := testenv.DownloadLicenseFromGCPBucket()
-				Expect(err).To(Succeed(), "Unable to download license file from GCP")
-				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-			default:
-				fmt.Printf("Unable to download license file")
-				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
-			}
+			// Download License File and create config map
+			testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
 
 			// Create standalone Deployment with License Manager
 			mcName := deployment.GetName()
