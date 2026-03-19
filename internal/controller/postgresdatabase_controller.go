@@ -26,8 +26,8 @@ import (
 	"strings"
 	"time"
 
-	"cd.splunkdev.com/libraries/go-sql/sqlx"
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/jackc/pgx/v5"
 	"github.com/sethvargo/go-password/password"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
@@ -1071,36 +1071,67 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // DBRepo abstracts SQL execution so grant logic is testable without a live cluster.
+// Connection lifecycle is managed internally — callers only call ExecGrants.
 type DBRepo interface {
-	ExecGrants(ctx context.Context, dbName, rwRole string) error
-	Close() error
+	ExecGrants(ctx context.Context, dbName string) error
 }
 
-// dbRepo is the production implementation backed by the internal sqlx pool.
 type dbRepo struct {
-	db *sqlx.DB
+	conn *pgx.Conn
 }
 
-// Close releases the underlying connection pool — each dbRepo is opened per-database
-// and must be closed after use to avoid file descriptor exhaustion.
-func (sdg *dbRepo) Close() error {
-	return sdg.db.SQLDB().Close()
+// newDBRepo opens a direct superuser connection, bypassing any pooler.
+// PgBouncer in transaction mode blocks DDL; password set on config avoids URL-encoding issues.
+func newDBRepo(ctx context.Context, host, dbName, password string) (DBRepo, error) {
+	cfg, err := pgx.ParseConfig(fmt.Sprintf(
+		"postgres://%s@%s:%s/%s?sslmode=require&connect_timeout=%d",
+		superUsername, host, postgresPort, dbName,
+		int(dbConnectTimeout.Seconds()),
+	))
+	if err != nil {
+		return nil, fmt.Errorf("parsing connection config for %s/%s: %w", host, dbName, err)
+	}
+	cfg.Password = password
+
+	conn, err := pgx.ConnectConfig(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("connecting to %s/%s: %w", host, dbName, err)
+	}
+	return &dbRepo{conn: conn}, nil
 }
 
-func (sdg *dbRepo) ExecGrants(ctx context.Context, dbName, rwRole string) error {
+// ExecGrants applies all privilege grants needed for the RW role on a single database.
+// GRANT ON ALL TABLES/SEQUENCES covers existing objects; ALTER DEFAULT PRIVILEGES covers
+// future ones created by the admin role (e.g. via migrations).
+func (r *dbRepo) ExecGrants(ctx context.Context, dbName string) error {
+	defer r.conn.Close(context.Background())
+
 	adminRole := adminRoleName(dbName)
-	// GRANT ON ALL TABLES/SEQUENCES covers objects that exist at grant time.
-	// ALTER DEFAULT PRIVILEGES ensures objects created by the admin role after this
-	// point are automatically accessible — without it, tables added by migrations
-	// would be invisible to the RW role until the next grant cycle.
-	cmds := sqlx.NewCommandSet("execGrants", 6)
-	cmds.Add(sqlx.Queryf("GRANT CONNECT ON DATABASE %s TO %s", dbName, rwRole))
-	cmds.Add(sqlx.Queryf("GRANT USAGE ON SCHEMA public TO %s", rwRole))
-	cmds.Add(sqlx.Queryf("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %s", rwRole))
-	cmds.Add(sqlx.Queryf("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %s", rwRole))
-	cmds.Add(sqlx.Queryf("ALTER DEFAULT PRIVILEGES FOR ROLE %s IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %s", adminRole, rwRole))
-	cmds.Add(sqlx.Queryf("ALTER DEFAULT PRIVILEGES FOR ROLE %s IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO %s", adminRole, rwRole))
-	return sdg.db.Commit(ctx, cmds)
+	rwRole := rwRoleName(dbName)
+
+	tx, err := r.conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+
+	// Identifiers cannot be parameterised in PostgreSQL — fmt.Sprintf is correct here.
+	// These names are generated internally by our own functions, never from user input.
+	stmts := []string{
+		fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", dbName, rwRole),
+		fmt.Sprintf("GRANT USAGE ON SCHEMA public TO %s", rwRole),
+		fmt.Sprintf("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %s", rwRole),
+		fmt.Sprintf("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %s", rwRole),
+		fmt.Sprintf("ALTER DEFAULT PRIVILEGES FOR ROLE %s IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %s", adminRole, rwRole),
+		fmt.Sprintf("ALTER DEFAULT PRIVILEGES FOR ROLE %s IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO %s", adminRole, rwRole),
+	}
+
+	for _, stmt := range stmts {
+		if _, err := tx.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("executing grant %q: %w", stmt, err)
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 // hasNewDatabases returns true when spec contains a database not yet present in status.
@@ -1132,16 +1163,15 @@ func reconcileRWRolePrivileges(
 
 	var errs []error
 	for _, dbName := range dbNames {
-		db := openSuperuserDB(rwHost, dbName, superPassword)
-		grantErr := db.ExecGrants(ctx, dbName, rwRoleName(dbName))
-		// Close immediately — each pool is per-database and short-lived.
-		// Deferring inside a loop would accumulate open pools until the function returns.
-		if closeErr := db.Close(); closeErr != nil {
-			logger.Error(closeErr, "Failed to close DB connection", "database", dbName)
+		db, err := newDBRepo(ctx, rwHost, dbName, superPassword)
+		if err != nil {
+			logger.Error(err, "Failed to connect to database", "database", dbName)
+			errs = append(errs, fmt.Errorf("database %s: %w", dbName, err))
+			continue
 		}
-		if grantErr != nil {
-			logger.Error(grantErr, "Failed to grant RW role privileges", "database", dbName)
-			errs = append(errs, fmt.Errorf("database %s: %w", dbName, grantErr))
+		if err := db.ExecGrants(ctx, dbName); err != nil {
+			logger.Error(err, "Failed to grant RW role privileges", "database", dbName)
+			errs = append(errs, fmt.Errorf("database %s: %w", dbName, err))
 			continue
 		}
 		logger.Info("RW role privileges granted", "database", dbName, "rwRole", rwRoleName(dbName))
@@ -1153,30 +1183,6 @@ func reconcileRWRolePrivileges(
 // dbConnectTimeout caps how long we wait for the primary to accept a connection.
 // A hung primary must not stall the reconcile goroutine indefinitely.
 const dbConnectTimeout = 10 * time.Second
-
-// openSuperuserDB connects directly to the primary — poolers are intentionally bypassed
-// because PgBouncer in transaction mode blocks DDL, and CNPG rejects plain connections
-// by default so sslmode=require is mandatory.
-func openSuperuserDB(rwHost, dbName, superPassword string) *dbRepo {
-	server := &sqlx.Server{
-		Primary:        rwHost,
-		Port:           postgresPort,
-		SSLMode:        "require",
-		ConnectTimeout: dbConnectTimeout,
-		// Single transaction per pool — cap to avoid speculative extra connections
-		// before Close() is called immediately after Commit().
-		MaxOpenConns: 1,
-		MaxIdleConns: 1,
-	}
-	database := sqlx.Database{
-		Database: dbName,
-		User:     superUsername,
-		Password: superPassword,
-	}
-
-	db := server.Open(database)
-	return &dbRepo{db: db}
-}
 
 // roleSecretName gives both secret creation and status wiring a single source of truth
 // for naming — eliminating any risk of the two sides drifting out of sync.

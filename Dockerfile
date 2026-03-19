@@ -9,10 +9,11 @@ FROM golang:1.25.5 AS builder
 
 WORKDIR /workspace
 
-# Copy the Go Modules manifests and vendored dependencies
+# Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
-COPY vendor/ vendor/
+# Cache dependencies before building and copying source to reduce re-downloading
+RUN go mod download
 
 # Copy the go source
 COPY cmd/main.go cmd/main.go
@@ -24,7 +25,7 @@ COPY hack hack/
 
 # Build
 # TARGETOS and TARGETARCH are provided(inferred) by buildx via the --platforms flag
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -mod=vendor -a -o manager cmd/main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
 # Use BASE_IMAGE as the base image
 FROM ${BASE_IMAGE}:${BASE_IMAGE_VERSION}
