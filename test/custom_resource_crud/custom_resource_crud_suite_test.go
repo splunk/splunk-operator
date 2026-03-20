@@ -30,6 +30,13 @@ const (
 	// ConsistentPollInterval is the interval to use to consistently check a state is stable
 	ConsistentPollInterval = 200 * time.Millisecond
 	ConsistentDuration     = 2000 * time.Millisecond
+
+	// DefaultCPULimits is the default CPU limit
+	DefaultCPULimits = "4"
+	// UpdatedCPULimits is the updated CPU limit
+	UpdatedCPULimits = "2"
+	// DefaultVerificationTimeout is the default timeout for CRUD verification steps
+	DefaultVerificationTimeout = 150 * time.Second
 )
 
 var (

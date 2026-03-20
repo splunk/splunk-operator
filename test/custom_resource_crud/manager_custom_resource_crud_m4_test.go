@@ -36,8 +36,8 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 		err := testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 
-		defaultCPULimits = "4"
-		newCPULimits = "2"
+		defaultCPULimits = DefaultCPULimits
+		newCPULimits = UpdatedCPULimits
 	})
 
 	AfterEach(func() {

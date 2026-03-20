@@ -225,9 +225,18 @@ func RunIngestAndSearchWorkflow(ctx context.Context, deployment *Deployment, tes
 	testcaseEnvInst.Log.Info("Search completed", "results", searchResults)
 }
 
-// RunScaleUpScaleDownWorkflow scales a cluster up and down and verifies state
-func RunScaleUpScaleDownWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, crType string, name string, initialReplicas int, scaledReplicas int) {
-	// Removed non-existent Scale functions
+// RunMonitoringConsoleDeploymentWorkflow deploys a Monitoring Console instance and verifies it is ready
+func RunMonitoringConsoleDeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string) *WorkflowResult {
+	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, name, "")
+	return &WorkflowResult{MonitoringConsole: mc}
+}
+
+// RunLicenseManagerDeploymentWorkflow deploys a License Manager instance and verifies it is ready
+func RunLicenseManagerDeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string) *WorkflowResult {
+	lm, err := deployment.DeployLicenseManager(ctx, name)
+	Expect(err).To(Succeed(), "Unable to deploy License Manager")
+	testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment)
+	return &WorkflowResult{LicenseManager: lm}
 }
 
 // RunCompleteDataIngestionWorkflow performs complete data ingestion workflow: ingest, verify, roll to warm, verify on S3

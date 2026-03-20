@@ -162,16 +162,12 @@ var _ = Describe("Monitoring Console test", func() {
 			mcName := deployment.GetName()
 
 			// Deploy Monitoring Console Pod
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
 
 			// get revision number of the resource
 			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
 
-			err = deployment.DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
+			err := deployment.DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Ensure that the cluster-master goes to Ready phase

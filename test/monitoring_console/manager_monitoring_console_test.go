@@ -66,10 +66,7 @@ var _ = Describe("Monitoring Console test", func() {
 			*/
 
 			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
 
 			// get revision number of the resource
 			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
@@ -125,11 +122,7 @@ var _ = Describe("Monitoring Console test", func() {
 			Expect(err).To(Succeed(), "Unable to update Standalone with new MC Name")
 
 			// Deploy 2nd MC Pod
-			mcTwo, err := deployment.DeployMonitoringConsole(ctx, mcTwoName, "")
-			Expect(err).To(Succeed(), "Unable to deploy Second Monitoring Console Pod")
-
-			// Verify 2nd Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, mcTwoName, mcTwo)
+			testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcTwoName, "")
 
 			// Check Standalone is configure in MC Config Map
 			testcaseEnvInst.Log.Info("Checking for Standalone Pod on SECOND MC Config Map after Standalone RECONFIG")
@@ -195,11 +188,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standaloneOne)
 
 			// Deploy MC and wait for MC to be READY
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
-
-			// Verify MC is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
 
 			// Check Standalone is configure in MC Config Map
 			standalonePods := testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneOneName, 1, false, 0)
@@ -349,11 +338,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
 			// Deploy MC and wait for MC to be READY
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
-
-			// Verify MC is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
 
 			// Check Standalone is configure in MC Config Map
 			standalonePods := testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneName, 1, false, 0)
@@ -429,16 +414,12 @@ var _ = Describe("Monitoring Console test", func() {
 			mcName := deployment.GetName()
 
 			// Deploy Monitoring Console Pod
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
 
 			// get revision number of the resource
 			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
 
-			err = deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
+			err := deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Ensure that the cluster-manager goes to Ready phase
@@ -604,16 +585,12 @@ var _ = Describe("Monitoring Console test", func() {
 			mcName := deployment.GetName()
 
 			// Deploy Monitoring Console Pod
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
 
 			// get revision number of the resource
 			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
 
-			err = deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
+			err := deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Ensure that the cluster-manager goes to Ready phase
@@ -680,11 +657,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Deploy Monitoring Console Pod
-			mcTwo, err := deployment.DeployMonitoringConsole(ctx, mcTwoName, "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
-
-			// Verify Monitoring Console TWO is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, mcTwoName, mcTwo)
+			testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcTwoName, "")
 
 			// ###########   VERIFY MONITORING CONSOLE TWO AFTER CLUSTER MANAGER RECONFIG  ###################################
 
@@ -845,11 +818,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, true)
 
 			// Deploy Monitoring Console Pod
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
 
 			// Check Monitoring console is configured with all search head instances in namespace
 			shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), defaultSHReplicas, false, 0)
@@ -888,11 +857,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Deploy Monitoring Console Pod
-			mcTwo, err := deployment.DeployMonitoringConsole(ctx, mcTwoName, "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console Two instance")
-
-			// Verify Monitoring Console TWO is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, mcTwoName, mcTwo)
+			testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcTwoName, "")
 
 			// Check Cluster Manager in Monitoring Console Config Map
 			testcaseEnvInst.Log.Info("Checking for Cluster Manager on MC TWO CONFIG MAP after Cluster Manager RECONFIG")
@@ -977,11 +942,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, standaloneOneName, standaloneOne)
 
 			// Deploy MC and wait for MC to be READY
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
-
-			// Verify MC is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
 
 			// Check standaloneOne is configured in MC Config Map
 			standalonePods := testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneOneName, 1, false, 0)

@@ -38,9 +38,9 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-		defaultCPULimits = "4"
-		newCPULimits = "2"
-		verificationTimeout = 150 * time.Second
+		defaultCPULimits = DefaultCPULimits
+		newCPULimits = UpdatedCPULimits
+		verificationTimeout = DefaultVerificationTimeout
 
 		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
 
