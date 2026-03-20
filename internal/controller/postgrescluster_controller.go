@@ -891,6 +891,7 @@ func (r *PostgresClusterReconciler) reconcileManagedRoles(ctx context.Context, p
 			cnpgRole.Ensure = cnpgv1.EnsureAbsent
 		} else {
 			cnpgRole.Ensure = cnpgv1.EnsurePresent
+			cnpgRole.Login = true
 		}
 
 		if role.PasswordSecretRef != nil {
@@ -964,8 +965,8 @@ func (r *PostgresClusterReconciler) generateConfigMap(ctx context.Context, postg
 	configMapName := fmt.Sprintf("%s%s", postgresCluster.Name, defaultConfigMapSuffix)
 	if postgresCluster.Status.Resources != nil && postgresCluster.Status.Resources.ConfigMapRef != nil {
 		configMapName = postgresCluster.Status.Resources.ConfigMapRef.Name
-	} 
-	
+	}
+
 	data := map[string]string{
 		"CLUSTER_RW_ENDPOINT":   fmt.Sprintf("%s-rw.%s", cnpgCluster.Name, cnpgCluster.Namespace),
 		"CLUSTER_RO_ENDPOINT":   fmt.Sprintf("%s-ro.%s", cnpgCluster.Name, cnpgCluster.Namespace),

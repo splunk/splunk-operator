@@ -19,12 +19,15 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/jackc/pgx/v5"
 	"github.com/sethvargo/go-password/password"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
@@ -169,7 +172,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"If you deleted a previous PostgresDatabase, recreate it with the original name to re-adopt the orphaned resources.",
 			strings.Join(roleConflicts, ", "))
 		logger.Error(nil, conflictMsg)
-		if statusErr := updateStatus(usersReady, metav1.ConditionFalse, reasonRoleConflict, conflictMsg, failedDBPhase); statusErr != nil {
+		if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonRoleConflict, conflictMsg, failedDBPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
 		}
 		return ctrl.Result{}, nil
@@ -203,7 +206,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// Phase: ConnectionMetadata — ConfigMaps carry connection info consumers need as soon as
 	// databases are ready, so they are created alongside secrets before any role or database work begins.
 	endpoints := resolveClusterEndpoints(cluster, cnpgCluster, postgresDB.Namespace)
-	if err := r.reconcileUserConfigMaps(ctx, postgresDB, endpoints); err != nil {
+	if err := r.reconcileRoleConfigMaps(ctx, postgresDB, endpoints); err != nil {
 		if statusErr := updateStatus(configMapsReady, metav1.ConditionFalse, reasonConfigMapsCreationFailed,
 			fmt.Sprintf("Failed to reconcile ConfigMaps: %v", err), provisioningDBPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
@@ -217,44 +220,44 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Phase: RoleProvisioning
 	desiredUsers := getDesiredUsers(postgresDB)
-	actualUsersInSpec := getUsersInClusterSpec(cluster)
-	var missingUsersFromSpec []string
-	for _, user := range desiredUsers {
-		if !slices.Contains(actualUsersInSpec, user) {
-			missingUsersFromSpec = append(missingUsersFromSpec, user)
+	actualRolesInSpec := getUsersInClusterSpec(cluster)
+	var missingRolesFromSpec []string
+	for _, role := range desiredUsers {
+		if !slices.Contains(actualRolesInSpec, role) {
+			missingRolesFromSpec = append(missingRolesFromSpec, role)
 		}
 	}
 
-	if len(missingUsersFromSpec) > 0 {
-		logger.Info("User spec changed, patching CNPG Cluster", "missing", missingUsersFromSpec)
+	if len(missingRolesFromSpec) > 0 {
+		logger.Info("User spec changed, patching CNPG Cluster", "missing", missingRolesFromSpec)
 		if err := r.patchManagedRoles(ctx, postgresDB, cluster); err != nil {
 			logger.Error(err, "Failed to patch users in CNPG Cluster")
 			return ctrl.Result{}, err
 		}
 		// Spec updated, requeue to check status
-		if err := updateStatus(usersReady, metav1.ConditionFalse, reasonWaitingForCNPG, fmt.Sprintf("Waiting for %d users to be reconciled", len(desiredUsers)), provisioningDBPhase); err != nil {
+		if err := updateStatus(rolesReady, metav1.ConditionFalse, reasonWaitingForCNPG, fmt.Sprintf("Waiting for %d roles to be reconciled", len(desiredUsers)), provisioningDBPhase); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	}
 
-	notReadyUsers, err := r.verifyRolesReady(ctx, desiredUsers, cnpgCluster)
+	notReadyRoles, err := r.verifyRolesReady(ctx, desiredUsers, cnpgCluster)
 	if err != nil {
-		if statusErr := updateStatus(usersReady, metav1.ConditionFalse, reasonUsersCreationFailed, fmt.Sprintf("User creation failed: %v", err), failedDBPhase); statusErr != nil {
+		if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonUsersCreationFailed, fmt.Sprintf("Role creation failed: %v", err), failedDBPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
 		}
 		return ctrl.Result{}, err
 	}
 
-	if len(notReadyUsers) > 0 {
-		if err := updateStatus(usersReady, metav1.ConditionFalse, reasonWaitingForCNPG, fmt.Sprintf("Waiting for users to be reconciled: %v", notReadyUsers), provisioningDBPhase); err != nil {
+	if len(notReadyRoles) > 0 {
+		if err := updateStatus(rolesReady, metav1.ConditionFalse, reasonWaitingForCNPG, fmt.Sprintf("Waiting for roles to be reconciled: %v", notReadyRoles), provisioningDBPhase); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	}
 
 	// All users present in spec and reconciled in status
-	if err := updateStatus(usersReady, metav1.ConditionTrue, reasonUsersAvailable, fmt.Sprintf("All %d users in PostgreSQL", len(desiredUsers)), provisioningDBPhase); err != nil {
+	if err := updateStatus(rolesReady, metav1.ConditionTrue, reasonUsersAvailable, fmt.Sprintf("All %d users in PostgreSQL", len(desiredUsers)), provisioningDBPhase); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -277,13 +280,51 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	}
-
-	databasesInfo := populateDatabaseStatus(postgresDB)
-	postgresDB.Status.Databases = databasesInfo
-	postgresDB.Status.ObservedGeneration = postgresDB.Generation
 	if err := updateStatus(databasesReady, metav1.ConditionTrue, reasonDatabasesAvailable, fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)), readyDBPhase); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	// Phase: RWRolePrivileges
+	// Skipped when no new databases are detected — ALTER DEFAULT PRIVILEGES covers tables
+	// added by migrations on existing databases. Re-runs for all databases when a new one
+	// is added (idempotent for existing ones, required for the new one).
+	if hasNewDatabases(postgresDB) {
+		if cluster.Status.Resources == nil || cluster.Status.Resources.SecretRef == nil {
+			return ctrl.Result{}, fmt.Errorf("PostgresCluster %s has no superuser secret in status yet", cluster.Name)
+		}
+		superSecret := &corev1.Secret{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Name:      cluster.Status.Resources.SecretRef.Name,
+			Namespace: postgresDB.Namespace,
+		}, superSecret); err != nil {
+			return ctrl.Result{}, fmt.Errorf("fetching superuser secret %s: %w", cluster.Status.Resources.SecretRef.Name, err)
+		}
+
+		dbNames := make([]string, 0, len(postgresDB.Spec.Databases))
+		for _, dbSpec := range postgresDB.Spec.Databases {
+			dbNames = append(dbNames, dbSpec.Name)
+		}
+
+		password, ok := superSecret.Data["password"]
+		if !ok {
+			return ctrl.Result{}, fmt.Errorf("superuser secret %s missing 'password' key", cluster.Status.Resources.SecretRef.Name)
+		}
+
+		if err := reconcileRWRolePrivileges(ctx, endpoints.RWHost, string(password), dbNames); err != nil {
+			if statusErr := updateStatus(privilegesReady, metav1.ConditionFalse, reasonPrivilegesGrantFailed,
+				fmt.Sprintf("Failed to grant RW role privileges: %v", err), provisioningDBPhase); statusErr != nil {
+				logger.Error(statusErr, "Failed to update status")
+			}
+			return ctrl.Result{}, err
+		}
+		if err := updateStatus(privilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted,
+			fmt.Sprintf("RW role privileges granted for all %d databases", len(postgresDB.Spec.Databases)), readyDBPhase); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	postgresDB.Status.Databases = populateDatabaseStatus(postgresDB)
+	postgresDB.Status.ObservedGeneration = postgresDB.Generation
 
 	logger.Info("All phases complete")
 	return ctrl.Result{}, nil
@@ -420,12 +461,12 @@ func (r *PostgresDatabaseReconciler) patchManagedRoles(
 			enterprisev4.ManagedRole{
 				Name:              adminRoleName(dbSpec.Name),
 				Ensure:            "present",
-				PasswordSecretRef: &corev1.LocalObjectReference{Name: userSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)},
+				PasswordSecretRef: &corev1.LocalObjectReference{Name: roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)},
 			},
 			enterprisev4.ManagedRole{
 				Name:              rwRoleName(dbSpec.Name),
 				Ensure:            "present",
-				PasswordSecretRef: &corev1.LocalObjectReference{Name: userSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)},
+				PasswordSecretRef: &corev1.LocalObjectReference{Name: roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)},
 			})
 	}
 
@@ -787,7 +828,7 @@ func (r *PostgresDatabaseReconciler) orphanSecrets(
 
 	for _, dbSpec := range databases {
 		for _, role := range []string{secretRoleAdmin, secretRoleRW} {
-			secretName := userSecretName(postgresDB.Name, dbSpec.Name, role)
+			secretName := roleSecretName(postgresDB.Name, dbSpec.Name, role)
 			secret := &corev1.Secret{}
 			if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, secret); err != nil {
 				if errors.IsNotFound(err) {
@@ -878,7 +919,7 @@ func (r *PostgresDatabaseReconciler) deleteSecrets(
 
 	for _, dbSpec := range databases {
 		for _, role := range []string{secretRoleAdmin, secretRoleRW} {
-			secretName := userSecretName(postgresDB.Name, dbSpec.Name, role)
+			secretName := roleSecretName(postgresDB.Name, dbSpec.Name, role)
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      secretName,
@@ -907,12 +948,12 @@ func buildRetainedRoles(postgresDBName string, retainedDBs []enterprisev4.Databa
 			enterprisev4.ManagedRole{
 				Name:              adminRoleName(dbSpec.Name),
 				Ensure:            "present",
-				PasswordSecretRef: &corev1.LocalObjectReference{Name: userSecretName(postgresDBName, dbSpec.Name, secretRoleAdmin)},
+				PasswordSecretRef: &corev1.LocalObjectReference{Name: roleSecretName(postgresDBName, dbSpec.Name, secretRoleAdmin)},
 			},
 			enterprisev4.ManagedRole{
 				Name:              rwRoleName(dbSpec.Name),
 				Ensure:            "present",
-				PasswordSecretRef: &corev1.LocalObjectReference{Name: userSecretName(postgresDBName, dbSpec.Name, secretRoleRW)},
+				PasswordSecretRef: &corev1.LocalObjectReference{Name: roleSecretName(postgresDBName, dbSpec.Name, secretRoleRW)},
 			},
 		)
 	}
@@ -1029,14 +1070,130 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// userSecretName gives both secret creation and status wiring a single source of truth
+// DBRepo abstracts SQL execution so grant logic is testable without a live cluster.
+// Connection lifecycle is managed internally — callers only call ExecGrants.
+type DBRepo interface {
+	ExecGrants(ctx context.Context, dbName string) error
+}
+
+type dbRepo struct {
+	conn *pgx.Conn
+}
+
+// newDBRepo opens a direct superuser connection, bypassing any pooler.
+// PgBouncer in transaction mode blocks DDL; password set on config avoids URL-encoding issues.
+func newDBRepo(ctx context.Context, host, dbName, password string) (DBRepo, error) {
+	cfg, err := pgx.ParseConfig(fmt.Sprintf(
+		"postgres://%s@%s:%s/%s?sslmode=require&connect_timeout=%d",
+		superUsername, host, postgresPort, dbName,
+		int(dbConnectTimeout.Seconds()),
+	))
+	if err != nil {
+		return nil, fmt.Errorf("parsing connection config for %s/%s: %w", host, dbName, err)
+	}
+	cfg.Password = password
+
+	conn, err := pgx.ConnectConfig(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("connecting to %s/%s: %w", host, dbName, err)
+	}
+	return &dbRepo{conn: conn}, nil
+}
+
+// ExecGrants applies all privilege grants needed for the RW role on a single database.
+// GRANT ON ALL TABLES/SEQUENCES covers existing objects; ALTER DEFAULT PRIVILEGES covers
+// future ones created by the admin role (e.g. via migrations).
+func (r *dbRepo) ExecGrants(ctx context.Context, dbName string) error {
+	defer r.conn.Close(context.Background())
+
+	adminRole := adminRoleName(dbName)
+	rwRole := rwRoleName(dbName)
+
+	tx, err := r.conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+
+	// Identifiers cannot be parameterised in PostgreSQL — fmt.Sprintf is correct here.
+	// These names are generated internally by our own functions, never from user input.
+	stmts := []string{
+		fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", dbName, rwRole),
+		fmt.Sprintf("GRANT USAGE ON SCHEMA public TO %s", rwRole),
+		fmt.Sprintf("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %s", rwRole),
+		fmt.Sprintf("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %s", rwRole),
+		fmt.Sprintf("ALTER DEFAULT PRIVILEGES FOR ROLE %s IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %s", adminRole, rwRole),
+		fmt.Sprintf("ALTER DEFAULT PRIVILEGES FOR ROLE %s IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO %s", adminRole, rwRole),
+	}
+
+	for _, stmt := range stmts {
+		if _, err := tx.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("executing grant %q: %w", stmt, err)
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+// hasNewDatabases returns true when spec contains a database not yet present in status.
+// Used to skip the grants phase when a spec change is unrelated to the database set —
+// grants only need to run when a new database is introduced, not on every spec update.
+func hasNewDatabases(postgresDB *enterprisev4.PostgresDatabase) bool {
+	existing := make(map[string]bool, len(postgresDB.Status.Databases))
+	for _, dbInfo := range postgresDB.Status.Databases {
+		existing[dbInfo.Name] = true
+	}
+	for _, dbSpec := range postgresDB.Spec.Databases {
+		if !existing[dbSpec.Name] {
+			return true
+		}
+	}
+	return false
+}
+
+// reconcileRWRolePrivileges ensures the RW role has database-level access.
+// CNPG owns role existence, not privileges — the RW role can authenticate but gets
+// "permission denied" on every query until these grants are applied.
+func reconcileRWRolePrivileges(
+	ctx context.Context,
+	rwHost string,
+	superPassword string,
+	dbNames []string,
+) error {
+	logger := log.FromContext(ctx)
+
+	var errs []error
+	for _, dbName := range dbNames {
+		db, err := newDBRepo(ctx, rwHost, dbName, superPassword)
+		if err != nil {
+			logger.Error(err, "Failed to connect to database", "database", dbName)
+			errs = append(errs, fmt.Errorf("database %s: %w", dbName, err))
+			continue
+		}
+		if err := db.ExecGrants(ctx, dbName); err != nil {
+			logger.Error(err, "Failed to grant RW role privileges", "database", dbName)
+			errs = append(errs, fmt.Errorf("database %s: %w", dbName, err))
+			continue
+		}
+		logger.Info("RW role privileges granted", "database", dbName, "rwRole", rwRoleName(dbName))
+	}
+
+	return stderrors.Join(errs...)
+}
+
+// dbConnectTimeout caps how long we wait for the primary to accept a connection.
+// A hung primary must not stall the reconcile goroutine indefinitely.
+const dbConnectTimeout = 10 * time.Second
+
+// roleSecretName gives both secret creation and status wiring a single source of truth
 // for naming — eliminating any risk of the two sides drifting out of sync.
-func userSecretName(postgresDBName, dbName, role string) string {
+func roleSecretName(postgresDBName, dbName, role string) string {
 	return fmt.Sprintf("%s-%s-%s", postgresDBName, dbName, role)
 }
 
 func adminRoleName(dbName string) string { return dbName + "_admin" }
-func rwRoleName(dbName string) string    { return dbName + "_rw" }
+
+func rwRoleName(dbName string) string { return dbName + "_rw" }
+
 func cnpgDatabaseName(postgresDBName, dbName string) string {
 	return fmt.Sprintf("%s-%s", postgresDBName, dbName)
 }
@@ -1055,11 +1212,11 @@ func (r *PostgresDatabaseReconciler) reconcileUserSecrets(
 ) error {
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		if err := r.ensureSecret(ctx, postgresDB, adminRoleName(dbSpec.Name),
-			userSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)); err != nil {
+			roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)); err != nil {
 			return err
 		}
 		if err := r.ensureSecret(ctx, postgresDB, rwRoleName(dbSpec.Name),
-			userSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)); err != nil {
+			roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)); err != nil {
 			return err
 		}
 	}
@@ -1158,7 +1315,7 @@ func buildPasswordSecret(postgresDB *enterprisev4.PostgresDatabase, secretName, 
 	}
 }
 
-// configMapName mirrors userSecretName() so creation and status wiring share one source of truth.
+// configMapName mirrors roleSecretName() so creation and status wiring share one source of truth.
 func configMapName(postgresDBName, dbName string) string {
 	return fmt.Sprintf("%s-%s-config", postgresDBName, dbName)
 }
@@ -1210,11 +1367,11 @@ func buildDatabaseConfigMapBody(
 	return data
 }
 
-// reconcileUserConfigMaps mirrors reconcileUserSecrets: checks per-database,
+// reconcileRoleConfigMaps mirrors reconcileUserSecrets: checks per-database,
 // creates only what is absent. Endpoints are resolved by the caller so this function
 // has a single responsibility: iteration and existence-gated creation.
 // Orphaned ConfigMaps from a previous retain-deletion are re-adopted.
-func (r *PostgresDatabaseReconciler) reconcileUserConfigMaps(
+func (r *PostgresDatabaseReconciler) reconcileRoleConfigMaps(
 	ctx context.Context,
 	postgresDB *enterprisev4.PostgresDatabase,
 	endpoints clusterEndpoints,
@@ -1259,9 +1416,9 @@ func (r *PostgresDatabaseReconciler) reconcileUserConfigMaps(
 	return nil
 }
 
-// populateDatabaseStatus derives all secret ref names via userSecretName() — the same function
+// populateDatabaseStatus derives all secret ref names via roleSecretName() — the same function
 // used during creation — so status refs are always consistent with actual secret names.
-// Recomputing from spec rather than reading live Secret names keeps this side-effect free.
+// Recomputing from spec rather than reading live secret names keeps this side-effect free.
 func populateDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase) []enterprisev4.DatabaseInfo {
 	databases := make([]enterprisev4.DatabaseInfo, 0, len(postgresDB.Spec.Databases))
 	for _, dbSpec := range postgresDB.Spec.Databases {
@@ -1269,10 +1426,10 @@ func populateDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase) []enterpr
 			Name:  dbSpec.Name,
 			Ready: true,
 			AdminUserSecretRef: &corev1.LocalObjectReference{
-				Name: userSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin),
+				Name: roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin),
 			},
 			RWUserSecretRef: &corev1.LocalObjectReference{
-				Name: userSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW),
+				Name: roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW),
 			},
 			ConfigMapRef: &corev1.LocalObjectReference{
 				Name: configMapName(postgresDB.Name, dbSpec.Name),
