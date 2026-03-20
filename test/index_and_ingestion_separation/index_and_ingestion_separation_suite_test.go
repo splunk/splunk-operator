@@ -17,22 +17,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/test/testenv"
-)
-
-const (
-	// PollInterval specifies the polling interval
-	PollInterval = 5 * time.Second
-
-	// ConsistentPollInterval is the interval to use to consistently check a state is stable
-	ConsistentPollInterval = 200 * time.Millisecond
-	ConsistentDuration     = 2000 * time.Millisecond
 )
 
 var (

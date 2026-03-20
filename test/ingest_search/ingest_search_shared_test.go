@@ -62,7 +62,7 @@ func RunS1InternalLogSearchTest(ctx context.Context, deployment *testenv.Deploym
 		}
 
 		return standalone.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(Equal(enterpriseApi.PhaseReady))
+	}, deployment.GetTimeout(), testenv.PollInterval).Should(Equal(enterpriseApi.PhaseReady))
 
 	Eventually(func() enterpriseApi.Phase {
 		podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
@@ -96,7 +96,7 @@ func RunS1InternalLogSearchTest(ctx context.Context, deployment *testenv.Deploym
 		}
 
 		return standalone.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(Equal(enterpriseApi.PhaseReady))
+	}, deployment.GetTimeout(), testenv.PollInterval).Should(Equal(enterpriseApi.PhaseReady))
 }
 
 // RunS1IngestAndSearchTest deploys a Standalone instance, ingests a custom log file into a new
@@ -130,7 +130,7 @@ func RunS1IngestAndSearchTest(ctx context.Context, deployment *testenv.Deploymen
 
 		testcaseEnvInst.Log.Info("Waiting for standalone splunkd status to be ready", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
 		return standalone.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(Equal(enterpriseApi.PhaseReady))
+	}, deployment.GetTimeout(), testenv.PollInterval).Should(Equal(enterpriseApi.PhaseReady))
 
 	podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
 	indexName := "myTestIndex"
