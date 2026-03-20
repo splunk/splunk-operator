@@ -1,0 +1,67 @@
+{
+  "links": {},
+  "origin": "https://localhost:8089/services/shcluster/member/info",
+  "updated": "2020-03-15T16:30:38+00:00",
+  "generator": {
+    "build": "a7f645ddaf91",
+    "version": "8.0.2"
+  },
+  "entry": [
+    {
+      "name": "member",
+      "id": "https://localhost:8089/services/shcluster/member/info/member",
+      "updated": "1970-01-01T00:00:00+00:00",
+      "links": {
+        "alternate": "/services/shcluster/member/info/member",
+        "list": "/services/shcluster/member/info/member"
+      },
+      "author": "system",
+      "acl": {
+        "app": "",
+        "can_list": true,
+        "can_write": true,
+        "modifiable": false,
+        "owner": "system",
+        "perms": {
+          "read": [
+            "admin",
+            "splunk-system-role"
+          ],
+          "write": [
+            "admin",
+            "splunk-system-role"
+          ]
+        },
+        "removable": false,
+        "sharing": "system"
+      },
+      "content": {
+        "active_historical_search_count": 0,
+        "active_realtime_search_count": 0,
+        "adhoc_searchhead": false,
+        "eai:acl": null,
+        "is_registered": true,
+        "last_heartbeat_attempt": 1584289836,
+        "maintenance_mode": false,
+        "no_artifact_replications": false,
+        "peer_load_stats_gla_15m": 0,
+        "peer_load_stats_gla_1m": 0,
+        "peer_load_stats_gla_5m": 0,
+        "peer_load_stats_max_runtime": 0,
+        "peer_load_stats_num_autosummary": 0,
+        "peer_load_stats_num_historical": 0,
+        "peer_load_stats_num_realtime": 0,
+        "peer_load_stats_num_running": 0,
+        "peer_load_stats_total_runtime": 0,
+        "restart_state": "NoRestart",
+        "status": "Up"
+      }
+    }
+  ],
+  "paging": {
+    "total": 1,
+    "perPage": 30,
+    "offset": 0
+  },
+  "messages": []
+}

@@ -4,6 +4,9 @@ metadata:
   name: {{ include "splunk-operator.operator.fullname" . }}-controller-manager-service
   labels:
 {{- include "splunk-operator.labels" . | nindent 4 }}
+{{- if .Values.splunkOperator.labels }}
+{{ toYaml .Values.splunkOperator.labels | nindent 4 }}
+{{- end }}
   annotations:
 {{ toYaml .Values.splunkOperator.annotations | nindent 4 }}
 spec:

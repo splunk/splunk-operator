@@ -214,7 +214,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
 	}
 
-	_, err = ApplyClusterManager(ctx, client, &cm)
+	_, err = ApplyClusterManager(ctx, client, &cm, nil)
 	// license manager statefulset is not created
 	if err != nil && !k8serrors.IsNotFound(err) {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
@@ -268,7 +268,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("lm is not in ready state")
 	}
 
-	_, err = ApplyClusterManager(ctx, client, &cm)
+	_, err = ApplyClusterManager(ctx, client, &cm, nil)
 	// lm statefulset should have been created by now, this should pass
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
@@ -279,7 +279,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-cluster-manager", cm.Name), cm.Namespace)
 	cm.Status.TelAppInstalled = true
 	// cluster manager is found  and creat
-	_, err = ApplyClusterManager(ctx, client, &cm)
+	_, err = ApplyClusterManager(ctx, client, &cm, nil)
 	// lm statefulset should have been created by now, this should pass
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
@@ -417,7 +417,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("shc is not in ready state")
 	}
 
-	VerifyCMisMultisiteCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
 		return extraEnv, err
 	}
@@ -532,7 +532,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	}
 
 	cm.Status.TelAppInstalled = true
-	_, err = ApplyClusterManager(ctx, client, &cm)
+	_, err = ApplyClusterManager(ctx, client, &cm, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
 	}
@@ -585,13 +585,13 @@ func TestUpgradePathValidation(t *testing.T) {
 	}
 
 	cm.Status.TelAppInstalled = true
-	_, err = ApplyClusterManager(ctx, client, &cm)
+	_, err = ApplyClusterManager(ctx, client, &cm, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
 	}
 
 	cm.Status.TelAppInstalled = true
-	_, err = ApplyClusterManager(ctx, client, &cm)
+	_, err = ApplyClusterManager(ctx, client, &cm, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
 	}
@@ -623,6 +623,101 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("ApplyIndexerClusterManager after update should not have returned error; err=%v", err)
 	}
 
+}
+
+func TestUpgradeBlockedVersionMismatchEvent(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	builder := fake.NewClientBuilder().
+		WithScheme(sch).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
+		WithStatusSubresource(&enterpriseApi.IndexerCluster{})
+
+	client := builder.Build()
+	ctx := context.TODO()
+
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+
+	// Create ClusterManager with old image, phase Ready
+	cm := enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "test"},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{Image: "splunk/splunk:old"},
+			},
+		},
+	}
+	cm.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("ClusterManager"))
+	if err := client.Create(ctx, &cm); err != nil {
+		t.Fatalf("Failed to create ClusterManager: %v", err)
+	}
+	cm.Status.Phase = enterpriseApi.PhaseReady
+	if err := client.Status().Update(ctx, &cm); err != nil {
+		t.Fatalf("Failed to update ClusterManager status: %v", err)
+	}
+
+	// Create CM statefulset with old image
+	cmSS := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-test-cm-cluster-manager", Namespace: "test"},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "test"}},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:old"}}},
+			},
+		},
+	}
+	if err := client.Create(ctx, cmSS); err != nil {
+		t.Fatalf("Failed to create CM StatefulSet: %v", err)
+	}
+
+	// IndexerCluster CR with NEW image (mismatch with CM)
+	idx := enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-idx", Namespace: "test"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec:              enterpriseApi.Spec{Image: "splunk/splunk:new"},
+				ClusterManagerRef: corev1.ObjectReference{Name: "test-cm"},
+			},
+		},
+	}
+	idx.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("IndexerCluster"))
+
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	mgr := &indexerClusterPodManager{}
+	continueReconcile, err := UpgradePathValidation(ctx, client, &idx, idx.Spec.CommonSplunkSpec, mgr)
+
+	if continueReconcile {
+		t.Errorf("Expected continueReconcile to be false when CM image mismatches IDX image")
+	}
+	if err == nil {
+		t.Errorf("Expected error when CM image mismatches IDX image")
+	}
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "UpgradeBlockedVersionMismatch" {
+			found = true
+			if event.eventType != corev1.EventTypeWarning {
+				t.Errorf("Expected Warning event type for UpgradeBlockedVersionMismatch, got %s", event.eventType)
+			}
+			expectedMessage := "Upgrade blocked: ClusterManager version splunk/splunk:old != IndexerCluster version splunk/splunk:new. Upgrade ClusterManager first."
+			if event.message != expectedMessage {
+				t.Errorf("Expected event message %q, got: %q", expectedMessage, event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected UpgradeBlockedVersionMismatch event to be published")
+	}
 }
 
 func createPods(t *testing.T, ctx context.Context, client common.ControllerClient, crtype, name, namespace, image string) {

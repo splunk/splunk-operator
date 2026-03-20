@@ -15,6 +15,6 @@
 
 /*
 Package client provides a simple client for the Splunk Enterprise REST API.
-This package has no depedencies outside of the standard go library.
+This package has no dependencies outside of the standard go library.
 */
 package client

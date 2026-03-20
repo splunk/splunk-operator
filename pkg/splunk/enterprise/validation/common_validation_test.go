@@ -1,0 +1,379 @@
+/*
+Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package validation
+
+import (
+	"testing"
+
+	"k8s.io/apimachinery/pkg/util/validation/field"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+)
+
+func TestValidateCommonSplunkSpec(t *testing.T) {
+	// Note: The following fields are validated via kubebuilder annotations, not webhook:
+	// - ImagePullPolicy: +kubebuilder:validation:Enum
+	// - LivenessInitialDelaySeconds: +kubebuilder:validation:Minimum=0
+	// - ReadinessInitialDelaySeconds: +kubebuilder:validation:Minimum=0
+	tests := []struct {
+		name         string
+		spec         *enterpriseApi.CommonSplunkSpec
+		wantErrCount int
+		wantErrField string
+	}{
+		{
+			name:         "valid spec - empty",
+			spec:         &enterpriseApi.CommonSplunkSpec{},
+			wantErrCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateCommonSplunkSpec(tt.spec, field.NewPath("spec"))
+
+			if len(errs) != tt.wantErrCount {
+				t.Errorf("validateCommonSplunkSpec() got %d errors, want %d", len(errs), tt.wantErrCount)
+				for _, e := range errs {
+					t.Logf("  error: %s", e.Error())
+				}
+			}
+
+			if tt.wantErrField != "" && len(errs) > 0 {
+				found := false
+				for _, e := range errs {
+					if e.Field == tt.wantErrField {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("validateCommonSplunkSpec() expected error on field %s", tt.wantErrField)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateSmartStore(t *testing.T) {
+	tests := []struct {
+		name         string
+		smartStore   *enterpriseApi.SmartStoreSpec
+		wantErrCount int
+	}{
+		{
+			name:         "empty smart store",
+			smartStore:   &enterpriseApi.SmartStoreSpec{},
+			wantErrCount: 0,
+		},
+		{
+			name: "valid smart store with volumes and indexes",
+			smartStore: &enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
+				IndexList: []enterpriseApi.IndexSpec{
+					{
+						Name: "idx1",
+						IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+							VolName: "vol1",
+						},
+					},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "volume without name",
+			smartStore: &enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "", Endpoint: "s3://bucket"},
+				},
+			},
+			wantErrCount: 1,
+		},
+		{
+			name: "volume without endpoint or path",
+			smartStore: &enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "", Path: ""},
+				},
+			},
+			wantErrCount: 1,
+		},
+		{
+			name: "index without name",
+			smartStore: &enterpriseApi.SmartStoreSpec{
+				IndexList: []enterpriseApi.IndexSpec{
+					{
+						Name: "",
+						IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+							VolName: "vol1",
+						},
+					},
+				},
+			},
+			wantErrCount: 1,
+		},
+		{
+			name: "index without volume name",
+			smartStore: &enterpriseApi.SmartStoreSpec{
+				IndexList: []enterpriseApi.IndexSpec{
+					{
+						Name: "idx1",
+						IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+							VolName: "",
+						},
+					},
+				},
+			},
+			wantErrCount: 1,
+		},
+		{
+			name: "multiple validation errors",
+			smartStore: &enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "", Endpoint: ""},
+				},
+				IndexList: []enterpriseApi.IndexSpec{
+					{
+						Name: "",
+						IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+							VolName: "",
+						},
+					},
+				},
+			},
+			wantErrCount: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateSmartStore(tt.smartStore, field.NewPath("spec").Child("smartstore"))
+
+			if len(errs) != tt.wantErrCount {
+				t.Errorf("validateSmartStore() got %d errors, want %d", len(errs), tt.wantErrCount)
+				for _, e := range errs {
+					t.Logf("  error: %s", e.Error())
+				}
+			}
+		})
+	}
+}
+
+func TestValidateAppFramework(t *testing.T) {
+	tests := []struct {
+		name         string
+		appConfig    *enterpriseApi.AppFrameworkSpec
+		wantErrCount int
+	}{
+		{
+			name:         "empty app framework",
+			appConfig:    &enterpriseApi.AppFrameworkSpec{},
+			wantErrCount: 0,
+		},
+		{
+			name: "valid app framework",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "source1", Location: "/apps"},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "app source without name",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "", Location: "/apps"},
+				},
+			},
+			wantErrCount: 1,
+		},
+		{
+			name: "app source without location",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "source1", Location: ""},
+				},
+			},
+			wantErrCount: 1,
+		},
+		{
+			name: "volume without name",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "", Endpoint: "s3://bucket"},
+				},
+			},
+			wantErrCount: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateAppFramework(tt.appConfig, field.NewPath("spec").Child("appFramework"))
+
+			if len(errs) != tt.wantErrCount {
+				t.Errorf("validateAppFramework() got %d errors, want %d", len(errs), tt.wantErrCount)
+				for _, e := range errs {
+					t.Logf("  error: %s", e.Error())
+				}
+			}
+		})
+	}
+}
+
+func TestValidateStorageConfig(t *testing.T) {
+	tests := []struct {
+		name         string
+		config       *enterpriseApi.StorageClassSpec
+		wantErrCount int
+		wantErrField string
+	}{
+		{
+			name:         "empty config - valid",
+			config:       &enterpriseApi.StorageClassSpec{},
+			wantErrCount: 0,
+		},
+		{
+			name: "valid storage capacity - 10Gi",
+			config: &enterpriseApi.StorageClassSpec{
+				StorageCapacity:  "10Gi",
+				StorageClassName: "standard",
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "valid storage capacity - 100Gi",
+			config: &enterpriseApi.StorageClassSpec{
+				StorageCapacity:  "100Gi",
+				StorageClassName: "fast",
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "invalid storage capacity - missing Gi suffix",
+			config: &enterpriseApi.StorageClassSpec{
+				StorageCapacity:  "10",
+				StorageClassName: "standard",
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.storageCapacity",
+		},
+		{
+			name: "invalid storage capacity - wrong suffix Mi",
+			config: &enterpriseApi.StorageClassSpec{
+				StorageCapacity:  "10Mi",
+				StorageClassName: "standard",
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.storageCapacity",
+		},
+		{
+			name: "invalid storage capacity - text value",
+			config: &enterpriseApi.StorageClassSpec{
+				StorageCapacity:  "large",
+				StorageClassName: "standard",
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.storageCapacity",
+		},
+		{
+			name: "missing storageClassName with persistent storage",
+			config: &enterpriseApi.StorageClassSpec{
+				StorageCapacity:  "10Gi",
+				EphemeralStorage: false,
+				StorageClassName: "",
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.storageClassName",
+		},
+		{
+			name: "ephemeral storage - storageClassName not required",
+			config: &enterpriseApi.StorageClassSpec{
+				StorageCapacity:  "10Gi",
+				EphemeralStorage: true,
+				StorageClassName: "",
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "multiple errors - invalid capacity and missing className",
+			config: &enterpriseApi.StorageClassSpec{
+				StorageCapacity:  "10MB",
+				EphemeralStorage: false,
+				StorageClassName: "",
+			},
+			wantErrCount: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateStorageConfig(tt.config, field.NewPath("spec"))
+
+			if len(errs) != tt.wantErrCount {
+				t.Errorf("validateStorageConfig() got %d errors, want %d", len(errs), tt.wantErrCount)
+				for _, e := range errs {
+					t.Logf("  error: %s", e.Error())
+				}
+			}
+
+			if tt.wantErrField != "" && len(errs) > 0 {
+				found := false
+				for _, e := range errs {
+					if e.Field == tt.wantErrField {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("validateStorageConfig() expected error on field %s", tt.wantErrField)
+				}
+			}
+		})
+	}
+}
+
+func TestGetCommonWarnings(t *testing.T) {
+	tests := []struct {
+		name         string
+		spec         *enterpriseApi.CommonSplunkSpec
+		wantWarnings int
+	}{
+		{
+			name:         "empty spec - no warnings",
+			spec:         &enterpriseApi.CommonSplunkSpec{},
+			wantWarnings: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			warnings := getCommonWarnings(tt.spec)
+
+			if len(warnings) != tt.wantWarnings {
+				t.Errorf("getCommonWarnings() got %d warnings, want %d", len(warnings), tt.wantWarnings)
+			}
+		})
+	}
+}

@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"time"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
@@ -39,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 const (
@@ -76,6 +76,9 @@ const (
 
 	// LicenseMasterPod Template String for standalone pod
 	LicenseMasterPod = "splunk-%s-" + splcommon.LicenseManager + "-%d"
+
+	// IngestorPod Template String for ingestor pod
+	IngestorPod = "splunk-%s-ingestor-%d"
 
 	// IndexerPod Template String for indexer pod
 	IndexerPod = "splunk-%s-idxc-indexer-%d"
@@ -156,24 +159,25 @@ type cleanupFunc func() error
 
 // TestEnv represents a namespaced-isolated k8s cluster environment (aka virtual k8s cluster) to run tests against
 type TestEnv struct {
-	kubeAPIServer      string
-	name               string
-	namespace          string
-	serviceAccountName string
-	roleName           string
-	roleBindingName    string
-	operatorName       string
-	operatorImage      string
-	splunkImage        string
-	initialized        bool
-	SkipTeardown       bool
-	licenseFilePath    string
-	licenseCMName      string
-	s3IndexSecret      string
-	kubeClient         client.Client
-	Log                logr.Logger
-	cleanupFuncs       []cleanupFunc
-	debug              string
+	kubeAPIServer        string
+	name                 string
+	namespace            string
+	serviceAccountName   string
+	roleName             string
+	roleBindingName      string
+	operatorName         string
+	operatorImage        string
+	splunkImage          string
+	initialized          bool
+	SkipTeardown         bool
+	licenseFilePath      string
+	licenseCMName        string
+	s3IndexSecret        string
+	indexIngestSepSecret string
+	kubeClient           client.Client
+	Log                  logr.Logger
+	cleanupFuncs         []cleanupFunc
+	debug                string
 }
 
 func init() {
@@ -227,19 +231,20 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	}
 
 	testenv := &TestEnv{
-		name:               envName,
-		namespace:          envName,
-		serviceAccountName: envName,
-		roleName:           envName,
-		roleBindingName:    envName,
-		operatorName:       "splunk-op-" + envName,
-		operatorImage:      operatorImage,
-		splunkImage:        splunkImage,
-		SkipTeardown:       specifiedSkipTeardown,
-		licenseCMName:      envName,
-		licenseFilePath:    licenseFilePath,
-		s3IndexSecret:      "splunk-s3-index-" + envName,
-		debug:              os.Getenv("DEBUG"),
+		name:                 envName,
+		namespace:            envName,
+		serviceAccountName:   envName,
+		roleName:             envName,
+		roleBindingName:      envName,
+		operatorName:         "splunk-op-" + envName,
+		operatorImage:        operatorImage,
+		splunkImage:          splunkImage,
+		SkipTeardown:         specifiedSkipTeardown,
+		licenseCMName:        envName,
+		licenseFilePath:      licenseFilePath,
+		s3IndexSecret:        "splunk-s3-index-" + envName,
+		indexIngestSepSecret: "splunk--index-ingest-sep-" + name,
+		debug:                os.Getenv("DEBUG"),
 	}
 
 	testenv.Log = logf.Log.WithValues("testenv", testenv.name)

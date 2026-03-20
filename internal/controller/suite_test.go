@@ -50,7 +50,6 @@ func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Controller Suite")
-
 }
 
 var _ = BeforeSuite(func(ctx context.Context) {
@@ -112,6 +111,12 @@ var _ = BeforeSuite(func(ctx context.Context) {
 		Expect(err).NotTo(HaveOccurred())
 	}
 	if err := (&IndexerClusterReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+	}).SetupWithManager(k8sManager); err != nil {
+		Expect(err).NotTo(HaveOccurred())
+	}
+	if err := (&IngestorClusterReconciler{
 		Client: k8sManager.GetClient(),
 		Scheme: k8sManager.GetScheme(),
 	}).SetupWithManager(k8sManager); err != nil {

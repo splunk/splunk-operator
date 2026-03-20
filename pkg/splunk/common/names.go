@@ -117,6 +117,7 @@ const (
 var AppDownloadVolume string = "/opt/splunk/appframework/"
 
 var EventPublisherKey contextKey = "eventPublisher"
+var EventRecorderKey contextKey = "eventRecorder"
 
 // GetVersionedSecretName returns a versioned secret name
 func GetVersionedSecretName(versionedSecretIdentifier string, version string) string {

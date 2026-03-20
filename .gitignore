@@ -82,6 +82,7 @@ tags
 .yq_script.yaml
 Gopkg.lock
 vendor/
+.bundle/
 push_targets
 splunk-enterprise.lic
 splunk-operator-*.yaml
@@ -90,7 +91,8 @@ clair-scanner
 clair-scanner-logs
 release-*
 deploy/olm-certified
-*junit.xml
+report-junit*.xml
+unit_test*.xml
 # Bias Language Linter
 .biaslanguage/
 bin/

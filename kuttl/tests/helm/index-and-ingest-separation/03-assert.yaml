@@ -1,0 +1,23 @@
+---
+# assert for ingestor cluster custom resource to be ready
+apiVersion: enterprise.splunk.com/v4
+kind: IngestorCluster
+metadata:
+  name: ingestor
+spec:
+  replicas: 4
+  queueRef:
+    name: queue
+  objectStorageRef:
+    name: os
+status:
+  phase: Ready
+
+---
+# check for stateful sets and replicas updated
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: splunk-ingestor-ingestor
+status:
+  replicas: 4

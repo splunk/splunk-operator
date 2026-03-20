@@ -53,7 +53,7 @@ type LicenseManagerStatus struct {
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
 
-	// Auxillary message describing CR status
+	// Auxiliary message describing CR status
 	Message string `json:"message"`
 }
 
@@ -65,7 +65,7 @@ type LicenseManagerStatus struct {
 // +kubebuilder:resource:path=licensemanagers,scope=Namespaced,shortName=lmanager
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of license manager"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of license manager"
-// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
+// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxiliary message describing CR status"
 // +kubebuilder:storageversion
 type LicenseManager struct {
 	metav1.TypeMeta   `json:",inline"`

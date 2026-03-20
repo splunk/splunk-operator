@@ -1,3 +1,10 @@
+---
+title: Helm Chart
+parent: Deploy & Configure
+nav_order: 2
+---
+
+
 # Splunk Operator Helm Installation
 
 ## Splunk Operator Helm chart Repository
@@ -22,7 +29,7 @@ make install
 OR
 
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/3.0.0/splunk-operator-crds.yaml --server-side
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/3.1.0/splunk-operator-crds.yaml --server-side
 ```
 
 Helm provides a long list of commands to manage your deployment, we'll be going over a few useful ones in the sections to come. You can learn more about supported commands [here](https://helm.sh/docs/helm/helm/).
@@ -100,10 +107,8 @@ release "splunk-operator-test" uninstalled
 
 ## Splunk Enterprise deployments
 
-The Splunk Enterprise chart allows you to install and configure Splunk Enterprise custom resources. The ```splunk/splunk-enterprise``` chart has the ```splunk/splunk-operator``` chart as a dependency by default. To satisfy the dependencies please use the following command:
-```
-helm dependency build splunk/splunk-enterprise
-```
+The Splunk Enterprise chart allows you to install and configure Splunk Enterprise custom resources. The ```splunk/splunk-enterprise``` chart has the ```splunk/splunk-operator``` chart as a dependency by default.
+
 If the operator is already installed then you will need to disable the dependency:
 ```
 helm install --set splunk-operator.enabled=false <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>

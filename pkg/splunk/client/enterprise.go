@@ -16,6 +16,7 @@
 package client
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -26,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -788,7 +790,7 @@ func (c *SplunkClient) AutomateMCApplyChanges() error {
 	return err
 }
 
-// GetMonitoringconsoleServerRoles to retrive server roles of the local host or SplunkMonitoringConsole
+// GetMonitoringconsoleServerRoles to retrieve server roles of the local host or SplunkMonitoringConsole
 func (c *SplunkClient) GetMonitoringconsoleServerRoles() (*MCServerRolesInfo, error) {
 	apiResponseServerRoles := struct {
 		Entry []struct {
@@ -954,6 +956,70 @@ func (c *SplunkClient) SetIdxcSecret(idxcSecret string) error {
 	return c.Do(request, expectedStatus, nil)
 }
 
+type TelemetryResponse struct {
+	Message       string `json:"message"`
+	MetricValueID string `json:"metricValueId"`
+}
+
+func (c *SplunkClient) SendTelemetry(path string, body []byte) (*TelemetryResponse, error) {
+	endpoint := fmt.Sprintf("%s%s", c.ManagementURI, path)
+	request, err := http.NewRequest("POST", endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	expectedStatus := []int{201}
+	var response TelemetryResponse
+
+	err = c.Do(request, expectedStatus, &response)
+	if err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
+// LicenseInfo represents license information from Splunk
+type LicenseInfo struct {
+	Title          string `json:"title"`
+	Status         string `json:"status"`
+	ExpirationTime int64  `json:"expiration_time"`
+	ID             string `json:"guid"`
+	Type           string `json:"type"`
+}
+
+// LicenseResponse represents the API response from /services/licenser/licenses
+type LicenseResponse struct {
+	Entry []struct {
+		Name    string      `json:"name"`
+		Content LicenseInfo `json:"content"`
+	} `json:"entry"`
+}
+
+// GetLicenseInfo retrieves license information from Splunk instance
+// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTlicense#licenser.2Flicenses
+func (c *SplunkClient) GetLicenseInfo() (map[string]LicenseInfo, error) {
+	endpoint := fmt.Sprintf("%s/services/licenser/licenses?output_mode=json", c.ManagementURI)
+	request, err := http.NewRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response LicenseResponse
+	expectedStatus := []int{200}
+	err = c.Do(request, expectedStatus, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert response to map
+	licenses := make(map[string]LicenseInfo)
+	for _, entry := range response.Entry {
+		licenses[entry.Name] = entry.Content
+	}
+
+	return licenses, nil
+}
+
 // RestartSplunk restarts specific Splunk instance
 // Can be used for any Splunk Instance
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTsystem#server.2Fcontrol.2Frestart
@@ -965,4 +1031,52 @@ func (c *SplunkClient) RestartSplunk() error {
 	}
 	expectedStatus := []int{200}
 	return c.Do(request, expectedStatus, nil)
+}
+
+// Updates conf files and their properties
+// See https://help.splunk.com/en/splunk-enterprise/leverage-rest-apis/rest-api-reference/10.0/configuration-endpoints/configuration-endpoint-descriptions
+func (c *SplunkClient) UpdateConfFile(scopedLog logr.Logger, fileName, property string, propertyKVList [][]string) error {
+	// Creates an object in a conf file if it doesn't exist
+	endpoint := fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s", c.ManagementURI, fileName)
+	body := fmt.Sprintf("name=%s", property)
+
+	scopedLog.Info("Creating conf file object if it does not exist", "fileName", fileName, "property", property)
+	request, err := http.NewRequest("POST", endpoint, strings.NewReader(body))
+	if err != nil {
+		scopedLog.Error(err, "Failed to create conf file object if it does not exist", "fileName", fileName, "property", property)
+		return err
+	}
+
+	scopedLog.Info("Validating conf file object creation", "fileName", fileName, "property", property)
+	expectedStatus := []int{200, 201, 409}
+	err = c.Do(request, expectedStatus, nil)
+	if err != nil {
+		scopedLog.Error(err, fmt.Sprintf("Status not in %v for conf file object creation", expectedStatus), "fileName", fileName, "property", property)
+		return err
+	}
+
+	// Updates a property of an object in a conf file
+	endpoint = fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s/%s", c.ManagementURI, fileName, property)
+	body = ""
+	for _, kv := range propertyKVList {
+		body += fmt.Sprintf("%s=%s&", kv[0], kv[1])
+	}
+	if len(body) > 0 && body[len(body)-1] == '&' {
+		body = body[:len(body)-1]
+	}
+
+	scopedLog.Info("Updating conf file object", "fileName", fileName, "property", property, "body", body)
+	request, err = http.NewRequest("POST", endpoint, strings.NewReader(body))
+	if err != nil {
+		scopedLog.Error(err, "Failed to update conf file object", "fileName", fileName, "property", property, "body", body)
+		return err
+	}
+
+	scopedLog.Info("Validating conf file object update", "fileName", fileName, "property", property)
+	expectedStatus = []int{200, 201}
+	err = c.Do(request, expectedStatus, nil)
+	if err != nil {
+		scopedLog.Error(err, fmt.Sprintf("Status not in %v for conf file object update", expectedStatus), "fileName", fileName, "property", property, "body", body)
+	}
+	return err
 }

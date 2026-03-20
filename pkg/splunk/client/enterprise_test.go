@@ -16,6 +16,8 @@
 package client
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -23,6 +25,7 @@ import (
 	"testing"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
@@ -642,6 +645,47 @@ func TestSetIdxcSecret(t *testing.T) {
 	splunkClientErrorTester(t, test)
 }
 
+func TestSendTelemetry_Success(t *testing.T) {
+	path := "/services/telemetry/metrics"
+	bodyBytes := []byte(`{"metric":"value"}`)
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/telemetry/metrics", bytes.NewReader(bodyBytes))
+	wantRequest.Header.Set("Content-Type", "application/json")
+	wantResponse := TelemetryResponse{
+		Message:       "Telemetry sent successfully",
+		MetricValueID: "abc123",
+	}
+	test := func(c SplunkClient) error {
+		resp, err := c.SendTelemetry(path, bodyBytes)
+		if err != nil {
+			return err
+		}
+		if resp.Message != wantResponse.Message || resp.MetricValueID != wantResponse.MetricValueID {
+			t.Errorf("SendTelemetry = %+v; want %+v", resp, wantResponse)
+		}
+		return nil
+	}
+	responseBody := `{"message":"Telemetry sent successfully","metricValueId":"abc123"}`
+	splunkClientTester(t, "TestSendTelemetry", 201, responseBody, wantRequest, test)
+}
+
+func TestSendTelemetry_Error(t *testing.T) {
+	path := "/services/telemetry/metrics"
+	bodyBytes := []byte(`{"metric":"value"}`)
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/telemetry/metrics", bytes.NewReader(bodyBytes))
+	wantRequest.Header.Set("Content-Type", "application/json")
+
+	test := func(c SplunkClient) error {
+		_, err := c.SendTelemetry(path, bodyBytes)
+		if err == nil {
+			t.Errorf("SendTelemetry should return error for 500 response code")
+		}
+		return nil
+	}
+
+	// Simulate a 500 error response from the mock client
+	splunkClientTester(t, "TestSendTelemetry_Error", 500, "", wantRequest, test)
+}
+
 func TestRestartSplunk(t *testing.T) {
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/server/control/restart", nil)
 	test := func(c SplunkClient) error {
@@ -651,4 +695,55 @@ func TestRestartSplunk(t *testing.T) {
 
 	// Test invalid http request
 	splunkClientErrorTester(t, test)
+}
+
+func TestUpdateConfFile(t *testing.T) {
+	// Test successful creation and update of conf property
+	property := "myproperty"
+	key := "mykey"
+	value := "myvalue"
+	fileName := "outputs"
+
+	reqLogger := log.FromContext(context.TODO())
+	scopedLog := reqLogger.WithName("TestUpdateConfFile")
+
+	// First request: create the property (object) if it doesn't exist
+	createBody := strings.NewReader(fmt.Sprintf("name=%s", property))
+	wantCreateRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/system/configs/conf-outputs", createBody)
+
+	// Second request: update the key/value for the property
+	updateBody := strings.NewReader(fmt.Sprintf("%s=%s", key, value))
+	wantUpdateRequest, _ := http.NewRequest("POST", fmt.Sprintf("https://localhost:8089/servicesNS/nobody/system/configs/conf-outputs/%s", property), updateBody)
+
+	mockSplunkClient := &spltest.MockHTTPClient{}
+	mockSplunkClient.AddHandler(wantCreateRequest, 201, "", nil)
+	mockSplunkClient.AddHandler(wantUpdateRequest, 200, "", nil)
+
+	c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c.Client = mockSplunkClient
+
+	err := c.UpdateConfFile(scopedLog, fileName, property, [][]string{{key, value}})
+	if err != nil {
+		t.Errorf("UpdateConfFile err = %v", err)
+	}
+	mockSplunkClient.CheckRequests(t, "TestUpdateConfFile")
+
+	// Negative test: error on create
+	mockSplunkClient = &spltest.MockHTTPClient{}
+	mockSplunkClient.AddHandler(wantCreateRequest, 500, "", nil)
+	c.Client = mockSplunkClient
+	err = c.UpdateConfFile(scopedLog, fileName, property, [][]string{{key, value}})
+	if err == nil {
+		t.Errorf("UpdateConfFile expected error on create, got nil")
+	}
+
+	// Negative test: error on update
+	mockSplunkClient = &spltest.MockHTTPClient{}
+	mockSplunkClient.AddHandler(wantCreateRequest, 201, "", nil)
+	mockSplunkClient.AddHandler(wantUpdateRequest, 500, "", nil)
+	c.Client = mockSplunkClient
+	err = c.UpdateConfFile(scopedLog, fileName, property, [][]string{{key, value}})
+	if err == nil {
+		t.Errorf("UpdateConfFile expected error on update, got nil")
+	}
 }

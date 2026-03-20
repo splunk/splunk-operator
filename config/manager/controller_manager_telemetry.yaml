@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: manager-telemetry
+data:
+  status: |
+    {
+      "lastTransmission": "",
+      "test": "false",
+      "sokVersion": "3.1.0"
+    }

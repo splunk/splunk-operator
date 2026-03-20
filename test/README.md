@@ -69,8 +69,8 @@ Note: To run a specific test, you can
 Smoke and integration tests will run on Github actions. This tests can be triggered on schedule or after a certain event occur depending of the content of the workflow files.
 To run the tests on different clusters platforms, you will need to define the following project environment variables.
 For AWS:
-AWS_ACCESS_KEY_ID
-AWS_SECRET_ACCESS_KEY
+TEST_S3_ACCESS_KEY_ID (optional, defaults to AWS_ACCESS_KEY_ID if not set)
+TEST_S3_SECRET_ACCESS_KEY (optional, defaults to AWS_SECRET_ACCESS_KEY if not set)
 CLUSTER_PROVIDER=[eks]
 ECR_REGISTRY
 

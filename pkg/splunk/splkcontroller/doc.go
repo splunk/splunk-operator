@@ -15,7 +15,7 @@
 
 /*
 Package controller is used to manipulate Kubernetes resources using its REST API.
-This package has no depedencies outside of the standard go and kubernetes libraries,
+This package has no dependencies outside of the standard go and kubernetes libraries,
 and the splunk.common package.
 */
 package splkcontroller

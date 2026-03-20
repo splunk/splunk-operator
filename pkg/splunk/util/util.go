@@ -228,8 +228,8 @@ type PodExecClient struct {
 	targetPodName string
 }
 
-// GetPodExecClient returns the client object used to execute pod exec commands
-func GetPodExecClient(client splcommon.ControllerClient, cr splcommon.MetaObject, targetPodName string) *PodExecClient {
+// getPodExecClientImpl is the actual implementation that creates a real PodExecClient
+func getPodExecClientImpl(client splcommon.ControllerClient, cr splcommon.MetaObject, targetPodName string) PodExecClientImpl {
 	return &PodExecClient{
 		client:        client,
 		cr:            cr,
@@ -237,6 +237,10 @@ func GetPodExecClient(client splcommon.ControllerClient, cr splcommon.MetaObject
 		targetPodName: targetPodName,
 	}
 }
+
+// GetPodExecClient is a var that can be mocked in tests to return a mock PodExecClient
+// By default it returns a real PodExecClient
+var GetPodExecClient = getPodExecClientImpl
 
 // suppressHarmlessErrorMessages suppresses harmless error messages
 func suppressHarmlessErrorMessages(values ...*string) {

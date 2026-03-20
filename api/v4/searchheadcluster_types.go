@@ -40,7 +40,9 @@ type SearchHeadClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// Number of search head pods; a search head cluster will be created if > 1
-	Replicas int32 `json:"replicas"`
+	// +optional
+	// +kubebuilder:default=3
+	Replicas int32 `json:"replicas,omitempty"`
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
@@ -126,7 +128,7 @@ type SearchHeadClusterStatus struct {
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
 
-	// Auxillary message describing CR status
+	// Auxiliary message describing CR status
 	Message string `json:"message"`
 
 	UpgradePhase UpgradePhase `json:"upgradePhase"`
@@ -154,7 +156,7 @@ const (
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of search head cluster members"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready search head cluster members"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of search head cluster"
-// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
+// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxiliary message describing CR status"
 // +kubebuilder:storageversion
 type SearchHeadCluster struct {
 	metav1.TypeMeta   `json:",inline"`

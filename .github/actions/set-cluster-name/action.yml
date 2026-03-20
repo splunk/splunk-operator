@@ -1,0 +1,50 @@
+name: 'Set EKS Test Cluster Name'
+description: 'Generate a shortened, standardized EKS test cluster name'
+inputs:
+  test-type:
+    description: 'Type of test (e.g., smoke, integration)'
+    required: true
+  platform:
+    description: 'Platform variant (e.g., distroless, arm-ubuntu, arm-rhel, arm-al2023, helm, namespace, nightly, manual, or empty for standard)'
+    required: false
+    default: ''
+  test-name:
+    description: 'Test name from matrix (e.g., basic, managerappframeworkc3)'
+    required: true
+  run-id:
+    description: 'GitHub run ID for uniqueness'
+    required: true
+outputs:
+  cluster-name:
+    description: 'The generated cluster name'
+    value: ${{ steps.generate-name.outputs.cluster_name }}
+runs:
+  using: "composite"
+  steps:
+    - name: Generate cluster name
+      id: generate-name
+      shell: bash
+      run: |
+        TEST_NAME="${{ inputs.test-name }}"
+        
+        # Shorten long test names
+        case "$TEST_NAME" in
+          managerappframeworkc3) TEST_NAME="mgr-appfw-c3" ;;
+          managerappframeworkm4) TEST_NAME="mgr-appfw-m4" ;;
+          appframeworksS1) TEST_NAME="appfw-s1" ;;
+          managersecret) TEST_NAME="mgr-secret" ;;
+          managermc) TEST_NAME="mgr-mc" ;;
+        esac
+        
+        # Build cluster name based on platform
+        if [ -z "${{ inputs.platform }}" ]; then
+          # Standard platform (no platform suffix)
+          CLUSTER_NAME="eks-test-${{ inputs.test-type }}-${TEST_NAME}-${{ inputs.run-id }}"
+        else
+          # Platform-specific
+          CLUSTER_NAME="eks-test-${{ inputs.test-type }}-${{ inputs.platform }}-${TEST_NAME}-${{ inputs.run-id }}"
+        fi
+        
+        echo "cluster_name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
+        echo "Generated cluster name: ${CLUSTER_NAME}"
+

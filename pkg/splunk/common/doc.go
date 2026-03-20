@@ -15,6 +15,6 @@
 
 /*
 Package common contains generic methods that are reused across other packages.
-This package has no depedencies other than the standard go and kubernetes libraries.
+This package has no dependencies other than the standard go and kubernetes libraries.
 */
 package common

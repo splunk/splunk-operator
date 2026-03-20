@@ -246,6 +246,8 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 		},
 	}
 	statefulSet.Status.ReadyReplicas = 3
+	// Add statefulSet to mock client so UpdateStatefulSetPods can re-fetch it
+	c.AddObject(statefulSet)
 	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
 	_, err = UpdateStatefulSetPods(ctx, c, statefulSet, &mgr, 1)
 	if err == nil {

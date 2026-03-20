@@ -1,10 +1,22 @@
-name: Build and Test Distroless
+name: Build and Test Distroles
+permissions:
+  contents: read
+  packages: write
+  checks: write
+  id-token: write
+  pull-requests: write
 on:
-  pull_request: {}
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
   push:
     branches:
-    - main
-    - develop
+      - main
+      - develop
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
 jobs:
   check-formating:
     runs-on: ubuntu-latest
@@ -12,7 +24,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Dotenv Action
         id: dotenv
-        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+        uses: falti/dotenv-action@v1
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
@@ -28,7 +40,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Dotenv Action
         id: dotenv
-        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+        uses: falti/dotenv-action@v1
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
@@ -44,12 +56,26 @@ jobs:
       - name: Run Unit Tests
         run: make test
       - name: Run Code Coverage
-        run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
+        run: goveralls -shallow -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
+        continue-on-error: true
       - name: Upload Coverage artifacts
-        uses: actions/upload-artifact@v4.4.0
+        uses: actions/upload-artifact@v6
         with:
           name: coverage.out
           path: coverage.out
+      - name: Upload Unit Test Results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-report-unit
+          path: unit_test*.xml
+      - name: Publish Unit Test Report
+        uses: mikepenz/action-junit-report@v6
+        if: always()
+        with:
+          report_paths: 'unit_test*.xml'
+          check_name: 'Unit Test Results'
+          detailed_summary: true
   build-operator-image:
     runs-on: ubuntu-latest
     needs: unit-tests
@@ -60,12 +86,12 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
       - name: Set up cosign
-        uses: sigstore/cosign-installer@main
+        uses: sigstore/cosign-installer@v4.0.0
 
       - uses: actions/checkout@v2
       - name: Dotenv Action
         id: dotenv
-        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+        uses: falti/dotenv-action@v1
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
@@ -84,17 +110,20 @@ jobs:
           sudo chmod +x operator-sdk_${OS}_${ARCH}
           sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v5
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: github-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
       - name: Build and push Splunk Operator Image
         run: |
-          make docker-buildx IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA-distroless
+          export BASE_IMAGE=gcr.io/distroless/static-debian12
+          export BASE_IMAGE_VERSION=latest
+          make docker-buildx BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA-distroless
       - name: Sign Splunk Operator image with a key
         run: |
           cosign sign --yes --key env://COSIGN_PRIVATE_KEY  ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}-distroless
@@ -116,22 +145,23 @@ jobs:
 #      IMAGE_NAME: ${{ secrets.ECR_REPOSITORY }}/splunk/splunk-operator:${{ github.sha }}-distroless
 #    steps:
 #      - name: Set up cosign
-#        uses: sigstore/cosign-installer@main
+#        uses: sigstore/cosign-installer@v4.0.0
 #      - uses: actions/checkout@v2
 #      - name: Dotenv Action
 #        id: dotenv
-#        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+#        uses: falti/dotenv-action@v1
 #      - name: Set up Docker Buildx
 #        uses: docker/setup-buildx-action@v2.5.0
 #      - name: Configure AWS credentials
-#        uses: aws-actions/configure-aws-credentials@v1
+#        uses: aws-actions/configure-aws-credentials@v5
 #        with:
-#          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-#          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-#          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+#          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+#          role-session-name: github-${{ github.run_id }}
+#          aws-region: ${{ vars.AWS_REGION }}
+#          role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
 #
 #      - name: Login to Amazon ECR
-#        uses: aws-actions/amazon-ecr-login@v1
+#        uses: aws-actions/amazon-ecr-login@v2
 #      - name: Pull Splunk Operator Image Locally
 #        run: |
 #          docker pull ${{ env.IMAGE_NAME }}
@@ -150,7 +180,7 @@ jobs:
 #          ignore-unfixed: true
 #          output: 'trivy-results.sarif'
 #      - name: Upload Trivy scan results to GitHub Security tab
-#        uses: github/codeql-action/upload-sarif@v3
+#        uses: github/codeql-action/upload-sarif@v4
 #        with:
 #          sarif_file: 'trivy-results.sarif'
   smoke-tests:
@@ -165,6 +195,7 @@ jobs:
           managerappframeworkm4,
           managersecret,
           managermc,
+          indingsep,
         ]
     runs-on: ubuntu-latest
     env:
@@ -188,15 +219,25 @@ jobs:
       EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
+      AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID: ${{ secrets.AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID }}
+      AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY: ${{ secrets.AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY }}
     steps:
-      - name: Set Test Cluster Name
-        run: |
-          echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Chekcout code
         uses: actions/checkout@v2
+      - name: Set Test Cluster Name
+        id: set-cluster-name
+        uses: ./.github/actions/set-cluster-name
+        with:
+          test-type: smoke
+          platform: distroless
+          test-name: ${{ matrix.test }}
+          run-id: ${{ github.run_id }}
+      - name: Export cluster name to environment
+        run: |
+          echo "TEST_CLUSTER_NAME=${{ steps.set-cluster-name.outputs.cluster-name }}" >> $GITHUB_ENV
       - name: Dotenv Action
         id: dotenv
-        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+        uses: falti/dotenv-action@v1
       - name: Change splunk enterprise to release image on main branches
         if: github.ref == 'refs/heads/main'
         run: |
@@ -238,7 +279,7 @@ jobs:
           sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
           sudo chmod +x /usr/local/bin/operator-sdk
       - name: Configure Docker Hub credentials
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN}}
@@ -248,14 +289,15 @@ jobs:
       - name: Pull Splunk Enterprise Image
         run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v5
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: github-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
       - name: Tag and Push Splunk Enterprise Image to ECR
         run: |
           docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
@@ -266,7 +308,8 @@ jobs:
           make cluster-up
       - name: install metric server
         run: |
-          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+          curl -LO https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+          kubectl replace --force -f components.yaml || kubectl apply -f components.yaml
       - name: install k8s dashboard
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
@@ -277,6 +320,11 @@ jobs:
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run smoke test
         id: smoketest
+        timeout-minutes: 240
+        env:
+          TEST_TIMEOUT: 225m
+          TEST_S3_ACCESS_KEY_ID: ${{ vars.TEST_S3_ACCESS_KEY_ID }}
+          TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.TEST_S3_SECRET_ACCESS_KEY }}
         run: |
           make int-test
       - name: Collect Test Logs
@@ -286,10 +334,23 @@ jobs:
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
       - name: Archive Pod Logs
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4.4.0
+        uses: actions/upload-artifact@v6
         with:
           name: "splunk-pods-logs--artifacts-${{ matrix.test }}"
           path: "/tmp/pod_logs/**"
+      - name: Upload Smoke Test Results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: "test-report-smoke-distroless-${{ matrix.test }}"
+          path: report-junit*.xml
+      - name: Publish Smoke Test Report
+        uses: mikepenz/action-junit-report@v6
+        if: always()
+        with:
+          report_paths: 'report-junit*.xml'
+          check_name: 'Smoke Test Results (Distroless) - ${{ matrix.test }}'
+          detailed_summary: true
       - name: Cleanup Test Case artifacts
         if: ${{ always() }}
         run: |
@@ -299,10 +360,3 @@ jobs:
         if: ${{ always() }}
         run: |
           make cluster-down
-      #- name: Test Report
-      #  uses: dorny/test-reporter@v1
-      #  if: success() || failure()    # run this step even if previous step failed
-      #  with:
-      #    name: Integration Tests          # Name of the check run which will be created
-      #    path: inttest-*.xml         # Path to test results
-      #    reporter: jest-junit        # Format of test results

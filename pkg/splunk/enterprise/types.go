@@ -60,6 +60,15 @@ const (
 	// SplunkIndexer may be a standalone or clustered indexer peer
 	SplunkIndexer InstanceType = "indexer"
 
+	// SplunkIngestor may be a standalone or clustered ingestion peer
+	SplunkIngestor InstanceType = "ingestor"
+
+	// SplunkQueue is the queue instance
+	SplunkQueue InstanceType = "queue"
+
+	// SplunkObjectStorage is the object storage instance
+	SplunkObjectStorage InstanceType = "object-storage"
+
 	// SplunkDeployer is an instance that distributes baseline configurations and apps to search head cluster members
 	SplunkDeployer InstanceType = "deployer"
 
@@ -129,6 +138,10 @@ type PipelineWorker struct {
 
 	// indicates a fan out worker
 	fanOut bool
+
+	// Optional injected pod exec client for testing (avoids real network I/O)
+	// If nil, runPodCopyWorker will create a real client
+	podExecClient splutil.PodExecClientImpl
 }
 
 // PipelinePhase represents one phase in the overall installation pipeline
@@ -244,6 +257,8 @@ func (instanceType InstanceType) ToRole() string {
 		role = splcommon.LicenseManagerRole
 	case SplunkMonitoringConsole:
 		role = "splunk_monitor"
+	case SplunkIngestor:
+		role = "splunk_ingestor"
 	}
 	return role
 }
@@ -270,6 +285,8 @@ func (instanceType InstanceType) ToKind() string {
 		kind = "license-manager"
 	case SplunkMonitoringConsole:
 		kind = "monitoring-console"
+	case SplunkIngestor:
+		kind = "ingestor"
 	}
 	return kind
 }
@@ -282,6 +299,12 @@ func KindToInstanceString(kind string) string {
 		return SplunkClusterMaster.ToString()
 	case "IndexerCluster":
 		return SplunkIndexer.ToString()
+	case "IngestorCluster":
+		return SplunkIngestor.ToString()
+	case "Queue":
+		return SplunkQueue.ToString()
+	case "ObjectStorage":
+		return SplunkObjectStorage.ToString()
 	case "LicenseManager":
 		return SplunkLicenseManager.ToString()
 	case "LicenseMaster":

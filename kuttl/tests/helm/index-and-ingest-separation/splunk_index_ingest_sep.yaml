@@ -1,0 +1,52 @@
+splunk-operator:
+  enabled: false
+  splunkOperator:
+    clusterWideAccess: false
+    persistentVolumeClaim:
+      storageClassName: gp2
+
+queue:
+  enabled: true
+  name: queue
+  provider: sqs
+  sqs:
+    name: index-ingest-separation-test-q
+    authRegion: us-west-2
+    endpoint: https://sqs.us-west-2.amazonaws.com
+    dlq: index-ingest-separation-test-dlq
+    volumes:
+      - name: helm-bus-secret-ref-test
+        secretRef: index-ing-sep-secret
+
+objectStorage:
+  enabled: true
+  name: os
+  provider: s3
+  s3:
+    endpoint: https://s3.us-west-2.amazonaws.com
+    path: index-ingest-separation-test-bucket/smartbus-test
+
+ingestorCluster:
+  enabled: true
+  name: ingestor
+  replicaCount: 3
+  queueRef:
+    name: queue
+  objectStorageRef:
+    name: os
+
+clusterManager:
+  enabled: true
+  name: cm
+  replicaCount: 1
+
+indexerCluster:
+  enabled: true
+  name: indexer
+  replicaCount: 3
+  clusterManagerRef:
+    name: cm
+  queueRef:
+    name: queue
+  objectStorageRef:
+    name: os

@@ -1,3 +1,10 @@
+---
+title: Examples
+parent: Reference
+nav_order: 5
+---
+
+
 # Configuring Splunk Enterprise Deployments
 
 This document includes various examples for configuring Splunk Enterprise deployments with the Splunk Operator.
@@ -699,6 +706,8 @@ spec:
   defaultsUrl: /mnt/license-manager/default.yml
 ```
 
+In the case of an indexer cluster, default.yml will need configuration on the cluster manager custom resource and all indexer cluster custom resource(s).
+
 ## Using an External Indexer Cluster
 
 *Note that this requires using the Splunk Enterprise container version 8.1.0 or later*
@@ -818,7 +827,9 @@ type: Opaque
 
 The kubectl command line tool can be used to decode the splunk secret tokens with the following command:
 
+{% raw %}
 `kubectl get secret splunk-<desired_namespace>-secret -o go-template='{{range $k,$v := .data}}{{printf "%s: " $k}}{{if not $v}}{{$v}}{{else}}{{$v | base64decode}}{{end}}{{"\n"}}{{end}}'`
+{% endraw %}
 
 A sample global kubernetes secret object with tokens decoded looks like:
 
