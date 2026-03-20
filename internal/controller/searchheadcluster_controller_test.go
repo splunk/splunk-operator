@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
