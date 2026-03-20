@@ -431,7 +431,7 @@ func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv,
 // Deprecated: Use WaitForAppPhaseChange instead for better timeout control
 func WaitforPhaseChange(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appList []string) {
 	if err := WaitForAppPhaseChange(ctx, deployment, testenvInstance, name, crKind, appSourceName, appList, 2*time.Minute); err != nil {
-		testenvInstance.Log.Info("WaitforPhaseChange did not observe a phase transition within timeout", "cr", name, "kind", crKind, "appSource", appSourceName, "error", err)
+		testenvInstance.Log.Error(err, "WaitforPhaseChange did not observe a phase transition within timeout", "cr", name, "kind", crKind, "appSource", appSourceName)
 	}
 }
 
