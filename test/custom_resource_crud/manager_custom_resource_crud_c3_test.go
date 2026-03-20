@@ -113,84 +113,8 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("managercrcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", func() {
-
-			// Deploy Single site Cluster and Search Head Clusters
-			mcRef := deployment.GetName()
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
-			Expect(err).To(Succeed(), "Unable to deploy cluster")
-
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
-
-			// Verify Search Head go to ready state
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
-
-			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
-
-			// Verify Search Heads PVCs (etc and var) exists
-			testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-search-head", 3, true, verificationTimeout)
-
-			// Verify Deployer PVCs (etc and var) exists
-			testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-deployer", 1, true, verificationTimeout)
-
-			// Verify Indexers PVCs (etc and var) exists
-			testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "idxc-indexer", 3, true, verificationTimeout)
-
-			// Verify Cluster Manager PVCs (etc and var) exists
-			testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "cluster-manager", 1, true, verificationTimeout)
-
-			// Delete the Search Head Cluster
-			shc := &enterpriseApi.SearchHeadCluster{}
-			err = deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)
-			Expect(err).To(Succeed(), "Unable to GET SHC instance", "SHC Name", shc)
-			err = deployment.DeleteCR(ctx, shc)
-			Expect(err).To(Succeed(), "Unable to delete SHC instance", "SHC Name", shc)
-
-			// Delete the Indexer Cluster
-			idxc := &enterpriseApi.IndexerCluster{}
-			err = deployment.GetInstance(ctx, deployment.GetName()+"-idxc", idxc)
-			Expect(err).To(Succeed(), "Unable to GET IDXC instance", "IDXC Name", idxc)
-			err = deployment.DeleteCR(ctx, idxc)
-			Expect(err).To(Succeed(), "Unable to delete IDXC instance", "IDXC Name", idxc)
-
-			// Delete the Cluster Manager
-			cm := &enterpriseApi.ClusterManager{}
-			err = deployment.GetInstance(ctx, deployment.GetName(), cm)
-			Expect(err).To(Succeed(), "Unable to GET Cluster Manager instance", "Cluster Manager Name", cm)
-			err = deployment.DeleteCR(ctx, cm)
-			Expect(err).To(Succeed(), "Unable to delete Cluster Manager instance", "Cluster Manger Name", cm)
-
-			// Delete Monitoring Console
-			err = deployment.GetInstance(ctx, mcRef, mc)
-			Expect(err).To(Succeed(), "Unable to GET Monitoring Console instance", "Monitoring Console Name", mcRef)
-			err = deployment.DeleteCR(ctx, mc)
-			Expect(err).To(Succeed(), "Unable to delete Monitoring Console instance", "Monitoring Console Name", mcRef)
-
-			// Verify Search Heads PVCs (etc and var) have been deleted
-			testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-search-head", 3, false, verificationTimeout)
-
-			// Verify Deployer PVCs (etc and var) have been deleted
-			testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-deployer", 1, false, verificationTimeout)
-
-			// Verify Indexers PVCs (etc and var) have been deleted
-			testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "idxc-indexer", 3, false, verificationTimeout)
-
-			// Verify Cluster Manager PVCs (etc and var) have been deleted
-			testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "cluster-manager", 1, false, verificationTimeout)
-
-			// Verify Monitoring Console PVCs (etc and var) have been deleted
-			testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "monitoring-console", 1, false, verificationTimeout)
+			config := NewCRUDTestConfigV4()
+			RunC3PVCDeletionTest(ctx, deployment, testcaseEnvInst, config, verificationTimeout)
 		})
 	})
 })

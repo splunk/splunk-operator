@@ -40,6 +40,9 @@ var _ = Describe("indingsep test", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
+		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
+		Expect(testcaseEnvInst).ToNot(BeNil(), "testcaseEnvInst should not be nil after SetupTestCaseEnv")
+		Expect(deployment).ToNot(BeNil(), "deployment should not be nil after SetupTestCaseEnv")
 
 		// Validate test prerequisites early to fail fast
 		err := testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
@@ -53,7 +56,6 @@ var _ = Describe("indingsep test", func() {
 				},
 			},
 		}
-		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
 	})
 
 	AfterEach(func() {

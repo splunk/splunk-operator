@@ -20,10 +20,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	testenv "github.com/splunk/splunk-operator/test/testenv"
-	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("DeleteCR test", func() {
@@ -46,77 +44,13 @@ var _ = Describe("DeleteCR test", func() {
 
 	Context("Standalone deployment (S1 - Standalone Pod)", func() {
 		It("integration, managerdeletecr: can deploy standalone and delete", func() {
-
-			spec := enterpriseApi.StandaloneSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-			}
-
-			// Deploy Standalone
-			testcaseEnvInst.Log.Info("Deploy Standalone")
-			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
-
-			// Wait for Standalone to be in READY status
-			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
-
-			// Delete Standalone CR
-			err = deployment.DeleteCR(ctx, standalone)
-			Expect(err).To(Succeed(), "Unable to Delete Standalone")
-
+			testenv.RunDeleteStandaloneWorkflow(ctx, deployment, testcaseEnvInst, deployment.GetName())
 		})
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3)", func() {
 		It("integration, managerdeletecr: can deploy C3 and delete search head, clustermanager", func() {
-
-			// Deploy C3
-			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
-			indexerReplicas := 3
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, true, "")
-			Expect(err).To(Succeed(), "Unable to deploy C3 instance")
-
-			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
-
-			idxc := &enterpriseApi.IndexerCluster{}
-			idxcName := deployment.GetName() + "-idxc"
-			err = deployment.GetInstance(ctx, idxcName, idxc)
-			Expect(err).To(Succeed(), "Unable to get Indexer instance")
-
-			// Delete Indexer Cluster CR
-			err = deployment.DeleteCR(ctx, idxc)
-			Expect(err).To(Succeed(), "Unable to Delete Indexer Cluster")
-
-			sh := &enterpriseApi.SearchHeadCluster{}
-			shcName := deployment.GetName() + "-shc"
-			err = deployment.GetInstance(ctx, shcName, sh)
-			Expect(err).To(Succeed(), "Unable to get Search Head instance")
-
-			// Delete Search Head Cluster CR
-			err = deployment.DeleteCR(ctx, sh)
-			Expect(err).To(Succeed(), "Unable to Delete Search Head Cluster")
-
-			cm := &enterpriseApi.ClusterManager{}
-			cmName := deployment.GetName()
-			err = deployment.GetInstance(ctx, cmName, cm)
-			Expect(err).To(Succeed(), "Unable to get Cluster Manager instance")
-
-			// Delete Cluster Manager CR
-			err = deployment.DeleteCR(ctx, cm)
-			Expect(err).To(Succeed(), "Unable to Delete Cluster Manager")
-
+			testenv.RunDeleteC3Workflow(ctx, deployment, testcaseEnvInst, deployment.GetName(), 3)
 		})
 	})
 })

@@ -27,7 +27,7 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 	var deployment *testenv.Deployment
 	var defaultCPULimits string
 	var newCPULimits string
-	var ctx context.Context
+	ctx := context.TODO()
 
 	BeforeEach(func() {
 		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
