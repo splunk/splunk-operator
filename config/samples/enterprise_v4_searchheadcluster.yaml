@@ -2,5 +2,10 @@ apiVersion: enterprise.splunk.com/v4
 kind: SearchHeadCluster
 metadata:
   name: searchheadcluster-sample
+  namespace: splunk-operator
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
 spec:
+  clusterManagerRef:
+    name: clustermanager-sample
   # Add fields here

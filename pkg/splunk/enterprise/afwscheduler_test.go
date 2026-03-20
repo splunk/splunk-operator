@@ -377,6 +377,13 @@ func TestGetApplicablePodNameForAppFramework(t *testing.T) {
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
+
+	cr.TypeMeta.Kind = "IngestorCluster"
+	expectedPodName = "splunk-stack1-ingestor-0"
+	returnedPodName = getApplicablePodNameForAppFramework(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
 }
 
 func TestInitAppInstallPipeline(t *testing.T) {
@@ -713,6 +720,16 @@ func TestPhaseManagersTermination(t *testing.T) {
 }
 
 func TestPhaseManagersMsgChannels(t *testing.T) {
+	// Override timing variables for faster test execution
+	origBusyWait := phaseManagerBusyWaitDuration
+	origLoopSleep := phaseManagerLoopSleepDuration
+	phaseManagerBusyWaitDuration = 1 * time.Millisecond
+	phaseManagerLoopSleepDuration = 1 * time.Millisecond
+	defer func() {
+		phaseManagerBusyWaitDuration = origBusyWait
+		phaseManagerLoopSleepDuration = origLoopSleep
+	}()
+
 	ctx := context.TODO()
 	appDeployContext := &enterpriseApi.AppDeploymentContext{
 		AppsStatusMaxConcurrentAppDownloads: 1,
@@ -789,6 +806,18 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 		t.Errorf("unable to apply statefulset")
 	}
 
+	// Create mock PodExecClient for all workers
+	mockClient := &spltest.MockPodExecClient{
+		Client:        client,
+		Cr:            &cr,
+		TargetPodName: "splunk-stack1-standalone-0",
+	}
+	mockClient.AddMockPodExecReturnContext(ctx, "", &spltest.MockPodExecReturnContext{
+		StdOut: "",
+		StdErr: "",
+		Err:    nil,
+	})
+
 	// Just make the lint conversion checks happy
 	capacity := 1
 	var workerList []*PipelineWorker = make([]*PipelineWorker, capacity)
@@ -806,9 +835,10 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 					FailCount: 2,
 				},
 			},
-			afwConfig: &cr.Spec.AppFrameworkConfig,
-			client:    client,
-			fanOut:    cr.GetObjectKind().GroupVersionKind().Kind == "Standalone",
+			afwConfig:     &cr.Spec.AppFrameworkConfig,
+			client:        client,
+			fanOut:        cr.GetObjectKind().GroupVersionKind().Kind == "Standalone",
+			podExecClient: mockClient,
 		}
 	}
 
@@ -832,7 +862,7 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	}
 	worker.appDeployInfo.PhaseInfo.FailCount = 4
 	// Let the phase hop on empty channel, to get more coverage
-	time.Sleep(600 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = nil
 
 	// add the worker to the pod copy phase
@@ -859,7 +889,7 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	}
 	worker.appDeployInfo.PhaseInfo.FailCount = 4
 	// Let the phase hop on empty channel, to get more coverage
-	time.Sleep(600 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	ppln.pplnPhases[enterpriseApi.PhasePodCopy].q = nil
 
 	// add the worker to the install phase
@@ -879,7 +909,7 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 
 	worker.appDeployInfo.PhaseInfo.FailCount = 4
 	// Let the phase hop on empty channel, to get more coverage
-	time.Sleep(600 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	close(ppln.sigTerm)
 
@@ -1346,7 +1376,7 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 
 	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
 	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
-		t.Errorf("Unable to get the sts for SHC deployer")
+		t.Errorf("Unable to get the sts for LicenseManager")
 	}
 
 	// Test if STS works for Standalone
@@ -1360,7 +1390,21 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 
 	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
 	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
-		t.Errorf("Unable to get the sts for SHC deployer")
+		t.Errorf("Unable to get the sts for Standalone")
+	}
+
+	// Test if STS works for IngestorCluster
+	cr.TypeMeta.Kind = "IngestorCluster"
+	current = appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-ingestor",
+			Namespace: "test",
+		},
+	}
+
+	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
+	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
+		t.Errorf("Unable to get the sts for IngestorCluster")
 	}
 
 	// Negative testing
@@ -2127,7 +2171,10 @@ func TestExtractClusterScopedAppOnPod(t *testing.T) {
 }
 
 func TestRunPodCopyWorker(t *testing.T) {
-	ctx := context.TODO()
+	// Use context with timeout to prevent workers from hanging indefinitely
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterManager",
@@ -2189,6 +2236,21 @@ func TestRunPodCopyWorker(t *testing.T) {
 	var client splcommon.ControllerClient = getConvertedClient(c)
 	var waiter sync.WaitGroup
 
+	// Create MockPodExecClient to avoid real network I/O
+	mockPodExecClient := &spltest.MockPodExecClient{
+		Client:        c,
+		Cr:            &cr,
+		TargetPodName: "splunk-stack1-clustermanager-0",
+	}
+
+	// Setup mock responses for CopyFileToPod operations
+	dirCheckCmd := fmt.Sprintf("test -d %s; echo -n $?", "/operator-staging/appframework/adminApps")
+	mockPodExecClient.AddMockPodExecReturnContext(ctx, dirCheckCmd, &spltest.MockPodExecReturnContext{
+		StdOut: "0",
+		StdErr: "",
+		Err:    nil,
+	})
+
 	worker := &PipelineWorker{
 		cr:            &cr,
 		targetPodName: "splunk-stack1-clustermanager-0",
@@ -2201,10 +2263,11 @@ func TestRunPodCopyWorker(t *testing.T) {
 			},
 			ObjectHash: "abcd1234abcd",
 		},
-		client:     client,
-		afwConfig:  appFrameworkConfig,
-		waiter:     &waiter,
-		appSrcName: appFrameworkConfig.AppSources[0].Name,
+		client:        client,
+		afwConfig:     appFrameworkConfig,
+		waiter:        &waiter,
+		appSrcName:    appFrameworkConfig.AppSources[0].Name,
+		podExecClient: mockPodExecClient, // Inject the mock to avoid real network I/O
 	}
 
 	var ch chan struct{} = make(chan struct{}, 1)
@@ -2252,7 +2315,19 @@ func TestRunPodCopyWorker(t *testing.T) {
 }
 
 func TestPodCopyWorkerHandler(t *testing.T) {
-	ctx := context.TODO()
+	// Override timing variables for faster test execution
+	origBusyWait := phaseManagerBusyWaitDuration
+	origLoopSleep := phaseManagerLoopSleepDuration
+	phaseManagerBusyWaitDuration = 1 * time.Millisecond
+	phaseManagerLoopSleepDuration = 1 * time.Millisecond
+	defer func() {
+		phaseManagerBusyWaitDuration = origBusyWait
+		phaseManagerLoopSleepDuration = origLoopSleep
+	}()
+
+	// Use context with timeout to prevent workers from hanging indefinitely
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterManager",
@@ -2310,6 +2385,28 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 	// Add object
 	client.AddObject(pod)
 
+	// Create MockPodExecClient to avoid real network I/O
+	mockPodExecClient := &spltest.MockPodExecClient{
+		Client:        client,
+		Cr:            &cr,
+		TargetPodName: "splunk-stack1-clustermanager-0",
+	}
+
+	// Setup mock responses for CopyFileToPod operations
+	// CopyFileToPod makes 2 exec calls:
+	// 1. Directory existence check: "test -d <dir>; echo -n $?"
+	// 2. Tar extraction: ["tar", "-xf", "-", "-C", "<dir>"]
+
+	// Mock response for directory check (should return "0" for success)
+	dirCheckCmd := fmt.Sprintf("test -d %s; echo -n $?", "/operator-staging/appframework/adminApps")
+	mockPodExecClient.AddMockPodExecReturnContext(ctx, dirCheckCmd, &spltest.MockPodExecReturnContext{
+		StdOut: "0",
+		StdErr: "",
+		Err:    nil,
+	})
+
+	// Note: tar command will be handled by the default case in MockPodExecClient (returns empty with nil error)
+
 	worker := &PipelineWorker{
 		cr:            &cr,
 		targetPodName: "splunk-stack1-clustermanager-0",
@@ -2322,9 +2419,10 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 			},
 			ObjectHash: "abcd1234abcd",
 		},
-		client:     client,
-		afwConfig:  appFrameworkConfig,
-		appSrcName: appFrameworkConfig.AppSources[0].Name,
+		client:        client,
+		afwConfig:     appFrameworkConfig,
+		appSrcName:    appFrameworkConfig.AppSources[0].Name,
+		podExecClient: mockPodExecClient, // Inject the mock to avoid real network I/O
 	}
 
 	defaultVol := splcommon.AppDownloadVolume
@@ -2371,7 +2469,7 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 
 	ppln.pplnPhases[enterpriseApi.PhaseInstall].msgChannel <- worker
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(10 * time.Millisecond)
 
 	// sending null worker should not cause a crash
 	ppln.pplnPhases[enterpriseApi.PhaseInstall].msgChannel <- nil
@@ -2382,7 +2480,7 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 	}
 
 	// wait for the handler to consue the worker
-	time.Sleep(2 * time.Second)
+	time.Sleep(10 * time.Millisecond)
 
 	// Closing the channels should exit podCopyWorkerHandler test cleanly
 	close(ppln.pplnPhases[enterpriseApi.PhaseInstall].msgChannel)
@@ -3061,28 +3159,23 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 		t.Errorf("Failed to detect that steps to get installed app failed")
 	}
 
-	// Test3: get installed app name passes but getting installed app name failed
+	// Test3: get installed app name passes but isAppAlreadyInstalled fails with real error (not "Could not find object")
 	mockPodExecReturnContexts[1].StdErr = ""
+	mockPodExecReturnContexts[2].StdErr = "Some other real error message" // Real error, not "Could not find object"
+	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 2")        // Real error, not grep exit code 1
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = localInstallCtxt.runPlaybook(ctx)
 	if err == nil {
-		t.Errorf("Failed to detect not able to get installed app name: err")
+		t.Errorf("Failed to detect isAppAlreadyInstalled error")
 	}
 
-	// Test4: get installed app command passes but installing app fails
-	mockPodExecReturnContexts[2].StdOut = "1" //app is not yet installed or it is not enabled
-	mockPodExecReturnContexts[2].StdErr = ""  //no error thrown
-
-	localInstallCtxt.sem <- struct{}{}
-	waiter.Add(1)
-	err = localInstallCtxt.runPlaybook(ctx)
-	if err == nil {
-		t.Errorf("Expected app install failed")
-	}
-
-	mockPodExecReturnContexts[2].StdOut = "1" //app is not yet installed or it is not enabled
-	mockPodExecReturnContexts[2].StdErr = "Could not find object"
+	// Test4: isAppAlreadyInstalled returns app not enabled (grep exit code 1), then install fails
+	mockPodExecReturnContexts[2].StdOut = ""                                // No stdout means grep didn't find ENABLED
+	mockPodExecReturnContexts[2].StdErr = ""                                // No stderr
+	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 1")          // grep exit code 1 = pattern not found
+	mockPodExecReturnContexts[3].StdErr = "real installation error"         // This is just logged now
+	mockPodExecReturnContexts[3].Err = fmt.Errorf("install command failed") // This causes the actual failure
 
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
@@ -3091,18 +3184,35 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 		t.Errorf("Expected app install failed")
 	}
 
-	// Test5: install app should be successful
-
-	mockPodExecReturnContexts[3].StdErr = "" //no error for app install
+	// Test5: App not found scenario (Could not find object) - should proceed to install but install fails
+	mockPodExecReturnContexts[2].StdOut = ""
+	mockPodExecReturnContexts[2].StdErr = "Could not find object id=app1"
+	mockPodExecReturnContexts[2].Err = nil // This should return false, nil (app not installed)
+	// Keep the installation error from previous test to make install fail
+	mockPodExecReturnContexts[3].StdErr = "real installation error" // Install should fail
+	mockPodExecReturnContexts[3].Err = fmt.Errorf("install failed")
 
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = localInstallCtxt.runPlaybook(ctx)
 	if err == nil {
-		t.Errorf("Expected app install succeeded but app arhive deletion failed")
+		t.Errorf("Expected app install failed due to installation error")
 	}
 
-	// Test6: successful scenario where everything succeeds
+	// Test6: Install succeeds with stderr content (should be ignored), but cleanup fails
+	mockPodExecReturnContexts[3].StdErr = "Some informational message in stderr" // Stderr content should be ignored
+	mockPodExecReturnContexts[3].Err = nil                                       // No actual error for install
+	// Keep cleanup failure from previous test setup to make overall test fail
+	// mockPodExecReturnContexts[4] still has error from earlier
+
+	localInstallCtxt.sem <- struct{}{}
+	waiter.Add(1)
+	err = localInstallCtxt.runPlaybook(ctx)
+	if err == nil {
+		t.Errorf("Expected app install succeeded but app archive deletion failed")
+	}
+
+	// Test7: successful scenario where everything succeeds
 	mockPodExecReturnContexts[4].StdErr = ""
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
@@ -3301,19 +3411,24 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 		t.Errorf("Failed to detect that steps to get installed app failed")
 	}
 
-	// Test3: get installed app name passes but getting installed app name failed
+	// Test3: get installed app name passes but isAppAlreadyInstalled fails with real error (not "Could not find object")
 	mockPodExecReturnContexts[1].StdErr = ""
+	mockPodExecReturnContexts[2].StdErr = "Some other real error message" // Real error, not "Could not find object"
+	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 2")        // Real error, not grep exit code 1
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = pCtx.runPlaybook(ctx)
 	if err == nil {
-		t.Errorf("Failed to detect not able to get installed app name: err")
+		t.Errorf("Failed to detect isAppAlreadyInstalled error")
 	}
 
-	// Test4: get installed app command passes, it returns app is not enabled
-	// so app install will run and it should  fail
-	mockPodExecReturnContexts[2].StdOut = "1" //app is not yet installed or it is not enabled
-	mockPodExecReturnContexts[2].StdErr = ""  //no error thrown
+	// Test4: isAppAlreadyInstalled returns app is not enabled (grep exit code 1)
+	// so app install will run and it should fail with real error
+	mockPodExecReturnContexts[2].StdOut = ""                                // No stdout means grep didn't find ENABLED
+	mockPodExecReturnContexts[2].StdErr = ""                                // No stderr
+	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 1")          // grep exit code 1 = pattern not found
+	mockPodExecReturnContexts[3].StdErr = "real installation error"         // This is just logged now
+	mockPodExecReturnContexts[3].Err = fmt.Errorf("install command failed") // This causes the actual failure
 
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
@@ -3322,9 +3437,9 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 		t.Errorf("Expected app install failed")
 	}
 
-	// Test5: install app should be successful but es post install fails
-
-	mockPodExecReturnContexts[3].StdErr = "" //no error for app install
+	// Test5: Install succeeds with stderr content (should be ignored), but post install fails
+	mockPodExecReturnContexts[3].StdErr = "Some informational message in stderr" // Stderr content should be ignored
+	mockPodExecReturnContexts[3].Err = nil                                       // No actual error for install
 
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
@@ -3343,7 +3458,24 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 		t.Errorf("Expected es post  install succeeded but app arhive deletion failed")
 	}
 
-	// Test7: successful scenario where everything succeeds
+	// Test7: App already installed with stderr content - should skip installation
+	// Reset all mock contexts for this test
+	mockPodExecReturnContexts[0].Err = nil                                  // File exists check passes
+	mockPodExecReturnContexts[1].StdErr = ""                                // Get app name passes
+	mockPodExecReturnContexts[1].StdOut = "app1"                            // App name is found
+	mockPodExecReturnContexts[2].StdOut = "app1 CONFIGURED ENABLED VISIBLE" // App is already enabled
+	mockPodExecReturnContexts[2].StdErr = "Some informational message in stderr"
+	mockPodExecReturnContexts[2].Err = nil // No error - app is found and enabled
+	// Install step should be skipped, but cleanup should still work
+	mockPodExecReturnContexts[5].StdErr = "" // Cleanup should succeed
+	localInstallCtxt.sem <- struct{}{}
+	waiter.Add(1)
+	err = pCtx.runPlaybook(ctx)
+	if err != nil {
+		t.Errorf("runPlayBook should not have returned error when app is already installed with stderr content. err=%s", err.Error())
+	}
+
+	// Test8: successful scenario where everything succeeds
 	mockPodExecReturnContexts[5].StdErr = ""
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
@@ -3837,6 +3969,16 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 }
 
 func TestInstallWorkerHandler(t *testing.T) {
+	// Override timing variables for faster test execution
+	origBusyWait := phaseManagerBusyWaitDuration
+	origLoopSleep := phaseManagerLoopSleepDuration
+	phaseManagerBusyWaitDuration = 1 * time.Millisecond
+	phaseManagerLoopSleepDuration = 1 * time.Millisecond
+	defer func() {
+		phaseManagerBusyWaitDuration = origBusyWait
+		phaseManagerLoopSleepDuration = origLoopSleep
+	}()
+
 	ctx := context.TODO()
 	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
@@ -3914,6 +4056,18 @@ func TestInstallWorkerHandler(t *testing.T) {
 		t.Errorf("unable to apply statefulset")
 	}
 
+	// Create mock PodExecClient to avoid real pod command execution
+	mockClient := &spltest.MockPodExecClient{
+		Client:        client,
+		Cr:            &cr,
+		TargetPodName: "splunk-stack1-clustermanager-0",
+	}
+	mockClient.AddMockPodExecReturnContext(ctx, "", &spltest.MockPodExecReturnContext{
+		StdOut: "",
+		StdErr: "",
+		Err:    nil,
+	})
+
 	worker := &PipelineWorker{
 		cr:            &cr,
 		targetPodName: "splunk-stack1-clustermanager-0",
@@ -3926,10 +4080,11 @@ func TestInstallWorkerHandler(t *testing.T) {
 			},
 			ObjectHash: "abcd1234abcd",
 		},
-		client:     client,
-		afwConfig:  appFrameworkConfig,
-		sts:        sts,
-		appSrcName: appFrameworkConfig.AppSources[0].Name,
+		client:        client,
+		afwConfig:     appFrameworkConfig,
+		sts:           sts,
+		appSrcName:    appFrameworkConfig.AppSources[0].Name,
+		podExecClient: mockClient,
 	}
 
 	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{
@@ -4211,6 +4366,7 @@ func TestGetTelAppNameExtension(t *testing.T) {
 		"SearchHeadCluster": "shc",
 		"ClusterMaster":     "cmaster",
 		"ClusterManager":    "cmanager",
+		"IngestorCluster":   "ingestor",
 	}
 
 	// Test all CR kinds
@@ -4246,7 +4402,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 
 	// Define mock podexec context
 	podExecCommands := []string{
-		fmt.Sprintf(createTelAppNonShcString, "cmaster", "cmaster", telAppConfString, "cmaster", telAppDefMetaConfString, "cmaster"),
+		fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString),
 		telAppReloadString,
 	}
 
@@ -4270,7 +4426,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 
 	// Test shc
 	podExecCommands = []string{
-		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc", telAppDefMetaConfString, shcAppsLocationOnDeployer, "shc"),
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer),
 		fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(shcCr.GetNamespace(), SplunkSearchHead, shcCr.GetName(), 0, false), "/tmp/status.txt"),
 	}
 
@@ -4286,7 +4442,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 
 	// Test non-shc error 1
 	podExecCommandsError := []string{
-		fmt.Sprintf(createTelAppNonShcString, "cmerror", "cmerror", telAppConfString, "cmerror", telAppDefMetaConfString, "cmerror"),
+		fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString),
 	}
 
 	mockPodExecReturnContextsError := []*spltest.MockPodExecReturnContext{
@@ -4305,7 +4461,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 
 	// Test non-shc error 2
 	podExecCommandsError = []string{
-		fmt.Sprintf(createTelAppNonShcString, "cm", "cm", telAppConfString, "cm", telAppDefMetaConfString, "cm"),
+		fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString),
 	}
 	var mockPodExecClientError2 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
 	mockPodExecClientError2.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
@@ -4317,7 +4473,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 
 	// Test shc error 1
 	podExecCommandsError = []string{
-		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shcerror", shcAppsLocationOnDeployer, "shcerror", telAppConfString, shcAppsLocationOnDeployer, "shcerror", telAppDefMetaConfString, shcAppsLocationOnDeployer, "shcerror"),
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer),
 	}
 
 	var mockPodExecClientError3 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
@@ -4330,7 +4486,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 
 	// Test shc error 2
 	podExecCommandsError = []string{
-		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc", telAppDefMetaConfString, shcAppsLocationOnDeployer, "shc"),
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer),
 	}
 	var mockPodExecClientError4 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
 	mockPodExecClientError4.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
@@ -4359,7 +4515,7 @@ func TestAddTelAppCManager(t *testing.T) {
 
 	// Define mock podexec context
 	podExecCommands := []string{
-		fmt.Sprintf(createTelAppNonShcString, "cmanager", "cmanager", telAppConfString, "cmanager", telAppDefMetaConfString, "cmanager"),
+		fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString),
 		telAppReloadString,
 	}
 
@@ -4383,7 +4539,7 @@ func TestAddTelAppCManager(t *testing.T) {
 
 	// Test shc
 	podExecCommands = []string{
-		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc", telAppDefMetaConfString, shcAppsLocationOnDeployer, "shc"),
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer),
 		fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(shcCr.GetNamespace(), SplunkSearchHead, shcCr.GetName(), 0, false), "/tmp/status.txt"),
 	}
 
@@ -4399,7 +4555,7 @@ func TestAddTelAppCManager(t *testing.T) {
 
 	// Test non-shc error 1
 	podExecCommandsError := []string{
-		fmt.Sprintf(createTelAppNonShcString, "cmerror", "cmerror", telAppConfString, "cmerror", telAppDefMetaConfString, "cmerror"),
+		fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString),
 	}
 
 	mockPodExecReturnContextsError := []*spltest.MockPodExecReturnContext{
@@ -4418,7 +4574,7 @@ func TestAddTelAppCManager(t *testing.T) {
 
 	// Test non-shc error 2
 	podExecCommandsError = []string{
-		fmt.Sprintf(createTelAppNonShcString, "cm", "cm", telAppConfString, "cm", telAppDefMetaConfString, "cm"),
+		fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString),
 	}
 	var mockPodExecClientError2 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
 	mockPodExecClientError2.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
@@ -4430,7 +4586,7 @@ func TestAddTelAppCManager(t *testing.T) {
 
 	// Test shc error 1
 	podExecCommandsError = []string{
-		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shcerror", shcAppsLocationOnDeployer, "shcerror", telAppConfString, shcAppsLocationOnDeployer, "shcerror", telAppDefMetaConfString, shcAppsLocationOnDeployer, "shcerror"),
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer),
 	}
 
 	var mockPodExecClientError3 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
@@ -4443,7 +4599,7 @@ func TestAddTelAppCManager(t *testing.T) {
 
 	// Test shc error 2
 	podExecCommandsError = []string{
-		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc", telAppDefMetaConfString, shcAppsLocationOnDeployer, "shc"),
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer),
 	}
 	var mockPodExecClientError4 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
 	mockPodExecClientError4.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
@@ -4461,4 +4617,127 @@ func TestAddTelAppCManager(t *testing.T) {
 	}
 	// Negative testing
 	addTelApp(ctx, mockPodExecClient, 2, &crNew)
+}
+
+func TestIsAppAlreadyInstalled(t *testing.T) {
+	ctx := context.TODO()
+
+	tests := []struct {
+		name           string
+		stdOut         string
+		stdErr         string
+		err            error
+		expectedResult bool
+		expectedError  bool
+		description    string
+	}{
+		{
+			name:           "App is enabled - success case",
+			stdOut:         "myapp CONFIGURED ENABLED VISIBLE",
+			stdErr:         "",
+			err:            nil,
+			expectedResult: true,
+			expectedError:  false,
+			description:    "App is found and enabled",
+		},
+		{
+			name:           "App not found - grep exit code 1",
+			stdOut:         "",
+			stdErr:         "",
+			err:            fmt.Errorf("command terminated with exit code 1"),
+			expectedResult: false,
+			expectedError:  false,
+			description:    "App not enabled - grep pattern not found",
+		},
+		{
+			name:           "App not found - Could not find object",
+			stdOut:         "",
+			stdErr:         "Could not find object id=myapp",
+			err:            nil,
+			expectedResult: false,
+			expectedError:  false,
+			description:    "App not installed at all",
+		},
+		{
+			name:           "App enabled with stderr content",
+			stdOut:         "myapp CONFIGURED ENABLED VISIBLE",
+			stdErr:         "Some informational message in stderr",
+			err:            nil,
+			expectedResult: true,
+			expectedError:  false,
+			description:    "Stderr content should be ignored when app is enabled",
+		},
+		{
+			name:           "App not enabled with stderr content",
+			stdOut:         "",
+			stdErr:         "Some informational message in stderr",
+			err:            fmt.Errorf("exit status 1"),
+			expectedResult: false,
+			expectedError:  false,
+			description:    "Stderr content should be ignored, grep exit code 1 means not enabled",
+		},
+		{
+			name:           "Real error - exit code 2",
+			stdOut:         "",
+			stdErr:         "Some real error occurred",
+			err:            fmt.Errorf("exit status 2"),
+			expectedResult: false,
+			expectedError:  true,
+			description:    "Real error should be returned",
+		},
+		{
+			name:           "Command succeeded but no output",
+			stdOut:         "",
+			stdErr:         "",
+			err:            nil,
+			expectedResult: false,
+			expectedError:  true,
+			description:    "Should error if command succeeds but no output",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a test CR
+			cr := &enterpriseApi.Standalone{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-standalone",
+					Namespace: "test",
+				},
+			}
+
+			// Create mock pod exec client with CR
+			mockPodExecClient := &spltest.MockPodExecClient{Cr: cr}
+			mockPodExecClient.SetTargetPodName(ctx, "test-pod")
+
+			// Set up the mock return context
+			mockReturnContext := &spltest.MockPodExecReturnContext{
+				StdOut: tt.stdOut,
+				StdErr: tt.stdErr,
+				Err:    tt.err,
+			}
+
+			// Add the mock command and return context - use the exact command pattern
+			command := "/opt/splunk/bin/splunk list app testapp -auth admin:`cat /mnt/splunk-secrets/password`| grep ENABLED"
+			mockPodExecClient.AddMockPodExecReturnContexts(ctx, []string{command}, mockReturnContext)
+
+			// Call the function
+			result, err := isAppAlreadyInstalled(ctx, cr, mockPodExecClient, "testapp")
+
+			// Check results
+			if tt.expectedError {
+				if err == nil {
+					t.Errorf("Expected error but got none for test: %s", tt.description)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for test '%s': %v", tt.description, err)
+				}
+			}
+
+			if result != tt.expectedResult {
+				t.Errorf("Expected result %v but got %v for test: %s", tt.expectedResult, result, tt.description)
+			}
+		})
+	}
 }

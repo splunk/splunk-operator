@@ -1,0 +1,10 @@
+{
+  "metadata": {
+    "name": "splunk-stack1-indexer-defaults",
+    "namespace": "test",
+    "creationTimestamp": null
+  },
+  "data": {
+    "default.yml": "defaults_string"
+  }
+}

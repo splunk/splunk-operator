@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -53,6 +54,16 @@ func TestApplyClusterManager(t *testing.T) {
 	// redefining cpmakeTar to return nil always
 	cpMakeTar = func(src localPath, dest remotePath, writer io.Writer) error {
 		return nil
+	}
+
+	// Mock the event publisher to return a valid (empty) publisher in tests
+	newK8EventPublisher = func(recorder record.EventRecorder, instance pkgruntime.Object) (*K8EventPublisher, error) {
+		return &K8EventPublisher{}, nil
+	}
+
+	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		return extraEnv, nil
 	}
 
 	ctx := context.TODO()
@@ -132,7 +143,7 @@ func TestApplyClusterManager(t *testing.T) {
 	revised.Spec.Image = "splunk/test"
 	revised.SetGroupVersionKind(gvk)
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
+		_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager), nil)
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManager", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -142,7 +153,7 @@ func TestApplyClusterManager(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
+		_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager), nil)
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -154,7 +165,7 @@ func TestApplyClusterManager(t *testing.T) {
 	c := spltest.NewMockClient()
 	_ = errors.New(splcommon.Rerr)
 	current.Kind = "ClusterManager"
-	_, err := ApplyClusterManager(ctx, c, &current)
+	_, err := ApplyClusterManager(ctx, c, &current, nil)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -221,7 +232,7 @@ func TestApplyClusterManager(t *testing.T) {
 	}
 
 	current.Kind = "ClusterManager"
-	_, err = ApplyClusterManager(ctx, c, &current)
+	_, err = ApplyClusterManager(ctx, c, &current, nil)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -238,7 +249,7 @@ func TestApplyClusterManager(t *testing.T) {
 	current.Status.SmartStore.VolList[0].SecretRef = "s3-secret"
 	current.Status.ResourceRevMap["s3-secret"] = "v2"
 	current.Kind = "ClusterManager"
-	_, err = ApplyClusterManager(ctx, c, &current)
+	_, err = ApplyClusterManager(ctx, c, &current, nil)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -253,7 +264,7 @@ func TestApplyClusterManager(t *testing.T) {
 	current.Spec.SmartStore.VolList[0].SecretRef = ""
 	current.Spec.SmartStore.Defaults.IndexAndGlobalCommonSpec.VolName = "msos_s2s3_vol"
 	current.Kind = "ClusterManager"
-	_, err = ApplyClusterManager(ctx, c, &current)
+	_, err = ApplyClusterManager(ctx, c, &current, nil)
 	if err != nil {
 		t.Errorf("Don't expected error here")
 	}
@@ -310,7 +321,7 @@ func TestApplyClusterManager(t *testing.T) {
 		},
 	}
 	current.Kind = "ClusterManager"
-	_, err = ApplyClusterManager(ctx, c, &current)
+	_, err = ApplyClusterManager(ctx, c, &current, nil)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -328,7 +339,7 @@ func TestApplyClusterManager(t *testing.T) {
 	rerr := errors.New(splcommon.Rerr)
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
 	current.Kind = "ClusterManager"
-	_, err = ApplyClusterManager(ctx, c, &current)
+	_, err = ApplyClusterManager(ctx, c, &current, nil)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -465,18 +476,18 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 		}
 		configTester(t, "getClusterManagerStatefulSet", f, want)
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-cluster-manager","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-cluster-manager-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"},{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-cluster-manager"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-cluster-manager-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "statefulset_stack1_cluster_manager_base.json"))
 
 	cr.Spec.LicenseManagerRef.Name = "stack1"
 	cr.Spec.LicenseManagerRef.Namespace = "test"
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-cluster-manager","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-cluster-manager-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"},{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"},{"name":"SPLUNK_LICENSE_MASTER_URL","value":"splunk-stack1-license-manager-service.test.svc.cluster.local"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-cluster-manager"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-cluster-manager-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "statefulset_stack1_cluster_manager_base_1.json"))
 
 	cr.Spec.LicenseManagerRef.Name = ""
 	cr.Spec.LicenseURL = "/mnt/splunk.lic"
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-cluster-manager","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-cluster-manager-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"},{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"},{"name":"SPLUNK_LICENSE_URI","value":"/mnt/splunk.lic"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-cluster-manager"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-cluster-manager-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "statefulset_stack1_cluster_manager_base_2.json"))
 
 	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-cluster-manager","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-cluster-manager-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"},{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"},{"name":"SPLUNK_LICENSE_URI","value":"/mnt/splunk.lic"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-cluster-manager"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-cluster-manager-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "statefulset_stack1_cluster_manager_with_apps.json"))
 
 	// Create a serviceaccount
 	current := corev1.ServiceAccount{
@@ -487,7 +498,7 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 	}
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-cluster-manager","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-cluster-manager-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"},{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"},{"name":"SPLUNK_LICENSE_URI","value":"/mnt/splunk.lic"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-cluster-manager"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-cluster-manager-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "statefulset_stack1_cluster_manager_with_service_account.json"))
 
 	// Add extraEnv
 	cr.Spec.CommonSplunkSpec.ExtraEnv = []corev1.EnvVar{
@@ -496,12 +507,12 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 			Value: "test_value",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-cluster-manager","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-cluster-manager-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"TEST_ENV_VAR","value":"test_value"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"},{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"},{"name":"SPLUNK_LICENSE_URI","value":"/mnt/splunk.lic"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-cluster-manager"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-cluster-manager-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "statefulset_stack1_cluster_manager_with_service_account_1.json"))
 
 	// Add additional label to cr metadata to transfer to the statefulset
 	cr.ObjectMeta.Labels = make(map[string]string)
 	cr.ObjectMeta.Labels["app.kubernetes.io/test-extra-label"] = "test-extra-label-value"
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-cluster-manager","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer","app.kubernetes.io/test-extra-label":"test-extra-label-value"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer","app.kubernetes.io/test-extra-label":"test-extra-label-value"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-cluster-manager-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"TEST_ENV_VAR","value":"test_value"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"},{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"},{"name":"SPLUNK_LICENSE_URI","value":"/mnt/splunk.lic"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-cluster-manager"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer","app.kubernetes.io/test-extra-label":"test-extra-label-value"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager","app.kubernetes.io/part-of":"splunk-stack1-indexer","app.kubernetes.io/test-extra-label":"test-extra-label-value"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-cluster-manager-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "statefulset_stack1_cluster_manager_with_service_account_2.json"))
 }
 
 func TestClusterManagerSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
@@ -530,7 +541,7 @@ func TestClusterManagerSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	c := spltest.NewMockClient()
 
 	// Attempt to apply the cluster manager spec
-	_, err := ApplyClusterManager(ctx, c, &cm)
+	_, err := ApplyClusterManager(ctx, c, &cm, nil)
 
 	// Assert that an error is returned
 	if err == nil {
@@ -542,6 +553,12 @@ func TestClusterManagerSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 
 func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		return extraEnv, nil
+	}
+
 	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -561,6 +578,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-stack1-cluster-manager-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermanager-smartstore"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermanager-smartstore"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-cluster-manager-0"},
@@ -651,7 +669,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 
 	// Without S3 keys, ApplyClusterManager should fail
 	current.Kind = "ClusterManager"
-	_, err := ApplyClusterManager(ctx, client, &current)
+	_, err := ApplyClusterManager(ctx, client, &current, nil)
 	if err == nil {
 		t.Errorf("ApplyClusterManager should fail without S3 secrets configured")
 	}
@@ -681,7 +699,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		current.Kind = "ClusterManager"
-		_, err := ApplyClusterManager(context.Background(), c, cr.(*enterpriseApi.ClusterManager))
+		_, err := ApplyClusterManager(context.Background(), c, cr.(*enterpriseApi.ClusterManager), nil)
 		return err
 	}
 
@@ -709,12 +727,12 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 
 	current.Status.BundlePushTracker.NeedToPushManagerApps = true
 	current.Kind = "ClusterManager"
-	if _, err = ApplyClusterManager(context.Background(), client, &current); err != nil {
+	if _, err = ApplyClusterManager(context.Background(), client, &current, nil); err != nil {
 		t.Errorf("ApplyClusterManager() should not have returned error")
 	}
 
 	current.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.StorageCapacity = "-abcd"
-	if _, err := ApplyClusterManager(context.Background(), client, &current); err == nil {
+	if _, err := ApplyClusterManager(context.Background(), client, &current, nil); err == nil {
 		t.Errorf("ApplyClusterManager() should have returned error")
 	}
 
@@ -724,7 +742,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	ss.Spec.Replicas = &replicas
 	ss.Spec.Template.Spec.Containers[0].Image = "splunk/splunk"
 	client.AddObject(ss)
-	if result, err := ApplyClusterManager(context.Background(), client, &current); err == nil && !result.Requeue {
+	if result, err := ApplyClusterManager(context.Background(), client, &current, nil); err == nil && !result.Requeue {
 		t.Errorf("ApplyClusterManager() should have returned error or result.requeue should have been false")
 	}
 
@@ -734,7 +752,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	client.AddObjects(objects)
 	current.Spec.CommonSplunkSpec.Mock = false
 
-	if _, err := ApplyClusterManager(context.Background(), client, &current); err == nil {
+	if _, err := ApplyClusterManager(context.Background(), client, &current, nil); err == nil {
 		t.Errorf("ApplyClusterManager() should have returned error")
 	}
 }
@@ -762,7 +780,7 @@ func TestPerformCmBundlePush(t *testing.T) {
 
 	// When the secret object is not present, should return an error
 	current.Status.BundlePushTracker.NeedToPushManagerApps = true
-	err := PerformCmBundlePush(ctx, client, &current)
+	err := PerformCmBundlePush(ctx, client, &current, nil)
 	if err == nil {
 		t.Errorf("Should return error, when the secret object is not present")
 	}
@@ -794,28 +812,28 @@ func TestPerformCmBundlePush(t *testing.T) {
 
 	//Re-attempting to push the CM bundle in less than 5 seconds should return an error
 	current.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix() - 1
-	err = PerformCmBundlePush(ctx, client, &current)
+	err = PerformCmBundlePush(ctx, client, &current, nil)
 	if err == nil {
 		t.Errorf("Bundle Push Should fail, if attempted to push within 5 seconds interval")
 	}
 
 	//Re-attempting to push the CM bundle after 5 seconds passed, should not return an error
 	current.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix() - 10
-	err = PerformCmBundlePush(ctx, client, &current)
+	err = PerformCmBundlePush(ctx, client, &current, nil)
 	if err != nil && strings.HasPrefix(err.Error(), "Will re-attempt to push the bundle after the 5 seconds") {
 		t.Errorf("Bundle Push Should not fail if reattempted after 5 seconds interval passed. Error: %s", err.Error())
 	}
 
 	// When the CM Bundle push is not pending, should not return an error
 	current.Status.BundlePushTracker.NeedToPushManagerApps = false
-	err = PerformCmBundlePush(ctx, client, &current)
+	err = PerformCmBundlePush(ctx, client, &current, nil)
 	if err != nil {
 		t.Errorf("Should not return an error when the Bundle push is not required. Error: %s", err.Error())
 	}
 
 	// Negative testing
 	current.Status.BundlePushTracker.NeedToPushManagerApps = true
-	err = PerformCmBundlePush(ctx, client, &current)
+	err = PerformCmBundlePush(ctx, client, &current, nil)
 	if err != nil && strings.HasPrefix(err.Error(), "Will re-attempt to push the bundle after the 5 seconds") {
 		t.Errorf("Bundle Push Should not fail if reattempted after 5 seconds interval passed. Error: %s", err.Error())
 	}
@@ -874,6 +892,12 @@ func TestPushManagerAppsBundle(t *testing.T) {
 func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	initGlobalResourceTracker()
+
+	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		return extraEnv, nil
+	}
+
 	ctx := context.TODO()
 	cm := enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
@@ -940,7 +964,7 @@ func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 	}
 
 	cm.Kind = "ClusterManager"
-	_, err = ApplyClusterManager(context.Background(), client, &cm)
+	_, err = ApplyClusterManager(context.Background(), client, &cm, nil)
 	if err != nil {
 		t.Errorf("ApplyClusterManager should not have returned error here.")
 	}
@@ -948,6 +972,12 @@ func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 
 func TestApplyClusterManagerDeletion(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		return extraEnv, nil
+	}
+
 	ctx := context.TODO()
 	cm := enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1037,7 +1067,7 @@ func TestApplyClusterManagerDeletion(t *testing.T) {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
 	cm.Kind = "ClusterManager"
-	_, err = ApplyClusterManager(ctx, c, &cm)
+	_, err = ApplyClusterManager(ctx, c, &cm, nil)
 	if err != nil {
 		t.Errorf("ApplyClusterManager should not have returned error here.")
 	}
@@ -1471,6 +1501,12 @@ func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
 
 func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		return extraEnv, nil
+	}
+
 	ctx := context.TODO()
 
 	sch := pkgruntime.NewScheme()
@@ -1546,7 +1582,7 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 
 	cm.Kind = "ClusterManager"
 	client.Create(ctx, &cm)
-	_, err = ApplyClusterManager(ctx, client, &cm)
+	_, err = ApplyClusterManager(ctx, client, &cm, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
@@ -1678,14 +1714,14 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	VerifyCMisMultisiteCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
 		return extraEnv, err
 	}
 
 	cm.Kind = "ClusterManager"
 	client.Create(ctx, cm)
-	_, err = ApplyClusterManager(ctx, client, cm)
+	_, err = ApplyClusterManager(ctx, client, cm, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
@@ -1715,6 +1751,41 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
 	_ = os.MkdirAll(newpath, os.ModePerm)
+
+	// Mock GetCMMultisiteEnvVarsCall to avoid 5-second HTTP timeout
+	// This function tries to connect to Splunk REST API which doesn't exist in unit tests
+	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		return extraEnv, nil
+	}
+
+	savedPerformCmBundlePush := PerformCmBundlePush
+	PerformCmBundlePush = func(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) error {
+		// Just set the flag to false to simulate successful bundle push
+		cr.Status.BundlePushTracker.NeedToPushManagerApps = false
+		return nil
+	}
+	defer func() { PerformCmBundlePush = savedPerformCmBundlePush }()
+
+	// Mock GetPodExecClient to return a mock client that simulates pod operations locally
+	savedGetPodExecClient := splutil.GetPodExecClient
+	splutil.GetPodExecClient = func(client splcommon.ControllerClient, cr splcommon.MetaObject, targetPodName string) splutil.PodExecClientImpl {
+		mockClient := &spltest.MockPodExecClient{
+			Client:        client,
+			Cr:            cr,
+			TargetPodName: targetPodName,
+		}
+		// Add mock responses for common commands
+		ctx := context.TODO()
+		// Mock mkdir command (used by createDirOnSplunkPods)
+		mockClient.AddMockPodExecReturnContext(ctx, "", &spltest.MockPodExecReturnContext{
+			StdOut: "",
+			StdErr: "",
+			Err:    nil,
+		})
+		return mockClient
+	}
+	defer func() { splutil.GetPodExecClient = savedGetPodExecClient }()
 
 	// adding getapplist to fix test case
 	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
@@ -1840,7 +1911,7 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	// simulate create clustermanager instance before reconcilation
 	c.Create(ctx, clustermanager)
 
-	_, err := ApplyClusterManager(ctx, c, clustermanager)
+	_, err := ApplyClusterManager(ctx, c, clustermanager, nil)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for clustermanager with app framework  %v", err)
 		debug.PrintStack()
@@ -1883,7 +1954,7 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 
 	// call reconciliation
 	clustermanager.Kind = "ClusterManager"
-	_, err = ApplyClusterManager(ctx, c, clustermanager)
+	_, err = ApplyClusterManager(ctx, c, clustermanager, nil)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
@@ -2002,7 +2073,7 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 
 	// call reconciliation
 	clustermanager.Kind = "ClusterManager"
-	_, err = ApplyClusterManager(ctx, c, clustermanager)
+	_, err = ApplyClusterManager(ctx, c, clustermanager, nil)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()

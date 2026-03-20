@@ -16,7 +16,9 @@
 package enterprise
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -29,8 +31,12 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -111,7 +117,7 @@ func initStorageTracker() error {
 
 // updateStorageTracker updates the storage tracker with the latest disk info
 func updateStorageTracker(ctx context.Context) error {
-	if !isPersistantVolConfigured() {
+	if !isPersistentVolConfigured() {
 		return fmt.Errorf("operator resource tracker not initialized")
 
 	}
@@ -136,6 +142,9 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("GetRemoteStorageClient").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, cr)
+
 	remoteDataClient := splclient.SplunkRemoteDataClient{}
 	//use the provider name to get the corresponding function pointer
 	getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
@@ -153,6 +162,14 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 		// Get credentials through the secretRef
 		remoteDataClientSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), appSecretRef)
 		if err != nil {
+			// Emit event for missing secret
+			if k8serrors.IsNotFound(err) {
+				if eventPublisher != nil {
+					eventPublisher.Warning(ctx, "SecretMissing",
+						fmt.Sprintf("Required secret '%s' not found in namespace '%s'. Create secret to proceed.", appSecretRef, cr.GetNamespace()))
+				}
+			}
+
 			return remoteDataClient, err
 		}
 
@@ -202,6 +219,11 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 
 	if err != nil {
 		scopedLog.Error(err, "Failed to get the S3 client")
+		// Emit event when operator cannot connect to the remote app repository
+		if eventPublisher != nil {
+			eventPublisher.Warning(ctx, "AppRepositoryConnectionFailed",
+				fmt.Sprintf("Failed to connect to app repository '%s': %s. Check credentials and network.", vol.Name, err.Error()))
+		}
 		return remoteDataClient, err
 	}
 
@@ -395,8 +417,18 @@ func getSearchHeadExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 
 // GetSmartstoreRemoteVolumeSecrets is used to retrieve S3 access key and secrete keys.
 func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec) (string, string, string, error) {
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, cr)
+
 	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
 	if err != nil {
+		// Emit event for missing secret
+		if k8serrors.IsNotFound(err) {
+			if eventPublisher != nil {
+				eventPublisher.Warning(ctx, "SecretMissing",
+					fmt.Sprintf("Required secret '%s' not found in namespace '%s'. Create secret to proceed.", volume.SecretRef, cr.GetNamespace()))
+			}
+		}
 		return "", "", "", err
 	}
 
@@ -406,12 +438,41 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 	splutil.SetSecretOwnerRef(ctx, client, volume.SecretRef, cr)
 
 	if accessKey == "" {
+		if eventPublisher != nil {
+			eventPublisher.Warning(ctx, "SecretInvalid",
+				fmt.Sprintf("Secret '%s' missing required fields: %s. Update secret with required data.", namespaceScopedSecret.GetName(), "accessKey"))
+		}
 		return "", "", "", fmt.Errorf("s3 Access Key is missing")
 	} else if secretKey == "" {
+		if eventPublisher != nil {
+			eventPublisher.Warning(ctx, "SecretInvalid",
+				fmt.Sprintf("Secret '%s' missing required fields: %s. Update secret with required data.", namespaceScopedSecret.GetName(), "s3SecretKey"))
+		}
 		return "", "", "", fmt.Errorf("s3 Secret Key is missing")
 	}
 
 	return accessKey, secretKey, namespaceScopedSecret.ResourceVersion, nil
+}
+
+// GetQueueRemoteVolumeSecrets is used to retrieve access key and secrete key for Index & Ingestion separation
+func GetQueueRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.SQSVolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject) (string, string, string, error) {
+	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	accessKey := string(namespaceScopedSecret.Data[s3AccessKey])
+	secretKey := string(namespaceScopedSecret.Data[s3SecretKey])
+
+	version := namespaceScopedSecret.ResourceVersion
+
+	if accessKey == "" {
+		return "", "", "", errors.New("access Key is missing")
+	} else if secretKey == "" {
+		return "", "", "", errors.New("secret Key is missing")
+	}
+
+	return accessKey, secretKey, version, nil
 }
 
 // getLocalAppFileName generates the local app file name
@@ -1120,7 +1181,7 @@ func removeStaleEntriesFromAuxPhaseInfo(ctx context.Context, desiredReplicas int
 }
 
 // changeAppSrcDeployInfoStatus sets the new status to all the apps in an AppSrc if the given repo state and deploy status matches
-// primarly used in Phase-3
+// primarily used in Phase-3
 func changeAppSrcDeployInfoStatus(ctx context.Context, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo, repoState enterpriseApi.AppRepoState, oldDeployStatus enterpriseApi.AppDeploymentStatus, newDeployStatus enterpriseApi.AppDeploymentStatus) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("changeAppSrcDeployInfoStatus").WithValues("Called for AppSource: ", appSrc, "repoState", repoState, "oldDeployStatus", oldDeployStatus, "newDeployStatus", newDeployStatus)
@@ -1237,8 +1298,8 @@ func handleAppRepoChanges(ctx context.Context, client splcommon.ControllerClient
 	return appsModified, err
 }
 
-// isAppExtentionValid checks if an app extention is supported or not
-func isAppExtentionValid(receivedKey string) bool {
+// isAppExtensionValid checks if an app extension is supported or not
+func isAppExtensionValid(receivedKey string) bool {
 	validExtensions := []string{".spl", ".tgz", ".tar.gz"}
 
 	for _, ext := range validExtensions {
@@ -1262,7 +1323,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(ctx context.Context, appSrcDeploymentIn
 
 	for _, remoteObj := range remoteS3ObjList {
 		receivedKey := *remoteObj.Key
-		if !isAppExtentionValid(receivedKey) {
+		if !isAppExtensionValid(receivedKey) {
 			scopedLog.Error(nil, "App name Parsing: Ignoring the key with invalid extension", "receivedKey", receivedKey)
 			continue
 		}
@@ -2007,14 +2068,14 @@ func setInstallStateForClusterScopedApps(ctx context.Context, appDeployContext *
 	}
 }
 
-// isPersistantVolConfigured confirms if the Operator Pod is configured with storage
-func isPersistantVolConfigured() bool {
+// isPersistentVolConfigured confirms if the Operator Pod is configured with storage
+func isPersistentVolConfigured() bool {
 	return operatorResourceTracker != nil && operatorResourceTracker.storage != nil
 }
 
 // reserveStorage tries to reserve the amount of requested storage
 func reserveStorage(allocSize uint64) error {
-	if !isPersistantVolConfigured() {
+	if !isPersistentVolConfigured() {
 		return fmt.Errorf("storageTracker was not initialized")
 	}
 
@@ -2033,7 +2094,7 @@ func reserveStorage(allocSize uint64) error {
 
 // releaseStorage releases the reserved storage
 func releaseStorage(releaseSize uint64) error {
-	if !isPersistantVolConfigured() {
+	if !isPersistentVolConfigured() {
 		return fmt.Errorf("storageTracker was not initialized")
 	}
 
@@ -2274,6 +2335,48 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		origCR.(*enterpriseApi.Standalone).Status.DeepCopyInto(&latestStdlnCR.Status)
 		return latestStdlnCR, nil
 
+	case "IngestorCluster":
+		latestIngCR := &enterpriseApi.IngestorCluster{}
+		err = client.Get(ctx, namespacedName, latestIngCR)
+		if err != nil {
+			return nil, err
+		}
+
+		origCR.(*enterpriseApi.IngestorCluster).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.IngestorCluster).Status.Message = (*crError).Error()
+		}
+		origCR.(*enterpriseApi.IngestorCluster).Status.DeepCopyInto(&latestIngCR.Status)
+		return latestIngCR, nil
+
+	case "Queue":
+		latestQueueCR := &enterpriseApi.Queue{}
+		err = client.Get(ctx, namespacedName, latestQueueCR)
+		if err != nil {
+			return nil, err
+		}
+
+		origCR.(*enterpriseApi.Queue).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.Queue).Status.Message = (*crError).Error()
+		}
+		origCR.(*enterpriseApi.Queue).Status.DeepCopyInto(&latestQueueCR.Status)
+		return latestQueueCR, nil
+
+	case "ObjectStorage":
+		latestOsCR := &enterpriseApi.ObjectStorage{}
+		err = client.Get(ctx, namespacedName, latestOsCR)
+		if err != nil {
+			return nil, err
+		}
+
+		origCR.(*enterpriseApi.ObjectStorage).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.ObjectStorage).Status.Message = (*crError).Error()
+		}
+		origCR.(*enterpriseApi.ObjectStorage).Status.DeepCopyInto(&latestOsCR.Status)
+		return latestOsCR, nil
+
 	case "LicenseMaster":
 		latestLmCR := &enterpriseApiV3.LicenseMaster{}
 		err = client.Get(ctx, namespacedName, latestLmCR)
@@ -2449,6 +2552,8 @@ func getApplicablePodNameForK8Probes(cr splcommon.MetaObject, ordinalIdx int32) 
 		podType = "cluster-manager"
 	case "MonitoringConsole":
 		podType = "monitoring-console"
+	case "IngestorCluster":
+		podType = "ingestor"
 	}
 	return fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, ordinalIdx)
 }
@@ -2489,4 +2594,128 @@ func changeAnnotations(ctx context.Context, c splcommon.ControllerClient, image 
 	cr.SetAnnotations(annotations)
 	err := c.Update(ctx, cr)
 	return err
+}
+
+// loadFixture loads a JSON fixture file from the testdata/fixtures directory
+// and returns it as compact JSON (minified, single-line)
+func loadFixture(t *testing.T, filename string) string {
+	t.Helper()
+	path := filepath.Join("testdata", "fixtures", filename)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to load fixture %s: %v", filename, err)
+	}
+
+	// Compact the JSON to match the output from json.Marshal
+	var compactJSON bytes.Buffer
+	if err := json.Compact(&compactJSON, data); err != nil {
+		t.Fatalf("Failed to compact JSON from fixture %s: %v", filename, err)
+	}
+	return compactJSON.String()
+}
+
+// QueueOSConfig holds resolved Queue and ObjectStorage specs with credentials
+type QueueOSConfig struct {
+	Queue     enterpriseApi.QueueSpec
+	OS        enterpriseApi.ObjectStorageSpec
+	AccessKey string
+	SecretKey string
+	Version   string
+}
+
+// ResolveQueueAndObjectStorage fetches Queue and ObjectStorage CRs, resolves
+// their endpoints, and extracts credentials from the referenced secret.
+func ResolveQueueAndObjectStorage(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, queueRef, osRef corev1.ObjectReference, serviceAccount string) (*QueueOSConfig, error) {
+	cfg := &QueueOSConfig{}
+
+	if queueRef.Name != "" {
+		ns := cr.GetNamespace()
+		if queueRef.Namespace != "" {
+			ns = queueRef.Namespace
+		}
+		var queue enterpriseApi.Queue
+		if err := c.Get(ctx, types.NamespacedName{Name: queueRef.Name, Namespace: ns}, &queue); err != nil {
+			return nil, err
+		}
+		cfg.Queue = queue.Spec
+	}
+	if cfg.Queue.Provider == "sqs" || cfg.Queue.Provider == "sqs_cp" {
+		if cfg.Queue.SQS.Endpoint == "" && cfg.Queue.SQS.AuthRegion != "" {
+			ep, err := resolveSQSEndpoint(ctx, cfg.Queue.SQS.AuthRegion)
+			if err != nil {
+				return nil, err
+			}
+			cfg.Queue.SQS.Endpoint = ep
+		}
+	}
+
+	if osRef.Name != "" {
+		ns := cr.GetNamespace()
+		if osRef.Namespace != "" {
+			ns = osRef.Namespace
+		}
+		var os enterpriseApi.ObjectStorage
+		if err := c.Get(ctx, types.NamespacedName{Name: osRef.Name, Namespace: ns}, &os); err != nil {
+			return nil, err
+		}
+		cfg.OS = os.Spec
+	}
+	if cfg.OS.Provider == "s3" {
+		if cfg.OS.S3.Endpoint == "" && cfg.Queue.SQS.AuthRegion != "" {
+			ep, err := resolveS3Endpoint(ctx, cfg.Queue.SQS.AuthRegion)
+			if err != nil {
+				return nil, err
+			}
+			cfg.OS.S3.Endpoint = ep
+		}
+	}
+
+	if (cfg.Queue.Provider == "sqs" || cfg.Queue.Provider == "sqs_cp") && serviceAccount == "" {
+		for _, vol := range cfg.Queue.SQS.VolList {
+			if vol.SecretRef != "" {
+				accessKey, secretKey, version, err := GetQueueRemoteVolumeSecrets(ctx, vol, c, cr)
+				if err != nil {
+					return nil, err
+				}
+				cfg.AccessKey = accessKey
+				cfg.SecretKey = secretKey
+				cfg.Version = version
+			}
+		}
+	}
+
+	return cfg, nil
+}
+
+func resolveS3Endpoint(ctx context.Context, region string) (string, error) {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	if err != nil {
+		return "", err
+	}
+
+	client := s3.NewFromConfig(cfg)
+	params := s3.EndpointParameters{Region: &region}
+
+	ep, err := client.Options().EndpointResolverV2.ResolveEndpoint(ctx, params)
+	if err != nil {
+		return "", err
+	}
+	// Full endpoint URL as string:
+	return ep.URI.String(), nil
+}
+
+func resolveSQSEndpoint(ctx context.Context, region string) (string, error) {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	if err != nil {
+		return "", err
+	}
+
+	client := sqs.NewFromConfig(cfg)
+	params := sqs.EndpointParameters{Region: &region}
+
+	ep, err := client.Options().EndpointResolverV2.ResolveEndpoint(ctx, params)
+	if err != nil {
+		return "", err
+	}
+	return ep.URI.String(), nil
 }

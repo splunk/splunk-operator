@@ -12,6 +12,8 @@ maintainers:
     email: igorg@splunk.com
   - name: Kasia Kozioł
     email: kkoziol@splunk.com
+  - name: Jakub Buczak
+    email: jbuczak@splunk.com
 # A chart can be either an 'application' or a 'library' chart.
 #
 # Application charts are a collection of templates that can be packaged into versioned archives
@@ -25,10 +27,10 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: "3.0.0"
+version: "3.1.0"
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "3.0.0"
+appVersion: "3.1.0"

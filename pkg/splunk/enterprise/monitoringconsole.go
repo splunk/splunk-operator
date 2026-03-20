@@ -33,7 +33,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -49,7 +48,8 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyMonitoringConsole")
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "MonitoringConsole"
 
@@ -207,7 +207,7 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 }
 
 // helper function to get the list of MonitoringConsole types in the current namespace
-func getMonitoringConsoleList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.MonitoringConsoleList, error) {
+func getMonitoringConsoleList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []rclient.ListOption) (enterpriseApi.MonitoringConsoleList, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getMonitoringConsoleList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -320,7 +320,7 @@ func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1
 			//2. if length of both same then just reconcile
 			if len(crURLs) == len(url.Value) {
 				//reconcile
-				break
+				continue
 			} else if len(crURLs) < len(url.Value) { //3. incoming URLs are more than current scaling up
 				//scaling UP
 				for _, newEntry := range newInsURLs {
@@ -377,7 +377,9 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("changeMonitoringConsoleAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, cr)
 
 	monitoringConsoleInstance := &enterpriseApi.MonitoringConsole{}
 	if len(cr.Spec.MonitoringConsoleRef.Name) > 0 {

@@ -35,6 +35,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+var (
+	phaseManagerBusyWaitDuration  = 1 * time.Second
+	phaseManagerLoopSleepDuration = 200 * time.Millisecond
+)
+
 var appPhaseInfoStatuses = map[enterpriseApi.AppPhaseStatusType]bool{
 	enterpriseApi.AppPkgDownloadPending:     true,
 	enterpriseApi.AppPkgDownloadInProgress:  true,
@@ -55,7 +60,7 @@ var appPhaseInfoStatuses = map[enterpriseApi.AppPhaseStatusType]bool{
 // isFanOutApplicableToCR confirms if a given CR needs fanOut support
 func isFanOutApplicableToCR(cr splcommon.MetaObject) bool {
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
-	case "Standalone":
+	case "Standalone", "IngestorCluster":
 		return true
 	default:
 		return false
@@ -106,6 +111,8 @@ func getApplicablePodNameForAppFramework(cr splcommon.MetaObject, ordinalIdx int
 		podType = "cluster-manager"
 	case "MonitoringConsole":
 		podType = "monitoring-console"
+	case "IngestorCluster":
+		podType = "ingestor"
 	}
 
 	return fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, ordinalIdx)
@@ -153,6 +160,8 @@ func getTelAppNameExtension(crKind string) (string, error) {
 		return "cmaster", nil
 	case "ClusterManager":
 		return "cmanager", nil
+	case "IngestorCluster":
+		return "ingestor", nil
 	default:
 		return "", errors.New("Invalid CR kind for telemetry app")
 	}
@@ -170,26 +179,20 @@ var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImp
 	// Create pod exec client
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 
-	// Get Tel App Name Extension
-	appNameExt, err := getTelAppNameExtension(crKind)
-	if err != nil {
-		return err
-	}
-
 	// Commands to run on pods
 	var command1, command2 string
 
 	// Handle non SHC scenarios(Standalone, CM, LM)
 	if crKind != "SearchHeadCluster" {
 		// Create dir on pods
-		command1 = fmt.Sprintf(createTelAppNonShcString, appNameExt, appNameExt, telAppConfString, appNameExt, telAppDefMetaConfString, appNameExt)
+		command1 = fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString)
 
 		// App reload
 		command2 = telAppReloadString
 
 	} else {
 		// Create dir on pods
-		command1 = fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, appNameExt, shcAppsLocationOnDeployer, appNameExt, telAppConfString, shcAppsLocationOnDeployer, appNameExt, telAppDefMetaConfString, shcAppsLocationOnDeployer, appNameExt)
+		command1 = fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer)
 
 		// Bundle push
 		command2 = fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false), "/tmp/status.txt")
@@ -509,7 +512,7 @@ func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *P
 		return
 	}
 
-	// download is successfull, update the state and reset the retry count
+	// download is successful, update the state and reset the retry count
 	updatePplnWorkerPhaseInfo(ctx, appDeployInfo, 0, enterpriseApi.AppPkgDownloadComplete)
 
 	scopedLog.Info("Finished downloading app")
@@ -597,10 +600,10 @@ downloadWork:
 		default:
 			// All the workers are busy, check after one second
 			scopedLog.Info("All the workers are busy, we will check again after one second")
-			time.Sleep(1 * time.Second)
+			time.Sleep(phaseManagerBusyWaitDuration)
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(phaseManagerLoopSleepDuration)
 	}
 
 	// wait for all the download threads to finish
@@ -680,7 +683,7 @@ downloadPhase:
 			}
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(phaseManagerLoopSleepDuration)
 	}
 }
 
@@ -766,8 +769,15 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 	streamOptions := splutil.NewStreamOptionsObject(command)
 
 	stdOut, stdErr, err := localCtx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
-	// if the app was already installed previously, then just mark it for install complete
-	if stdErr != "" || err != nil {
+
+	// TODO(patrykw-splunk): remove this once we have confirm that we are not using stderr for error detection at all
+	// Log stderr content for debugging but don't use it for error detection
+	if stdErr != "" {
+		scopedLog.Info("App install command stderr output (informational only)", "stderr", stdErr)
+	}
+
+	// Check only the actual command execution error, not stderr content
+	if err != nil {
 		phaseInfo.FailCount++
 		scopedLog.Error(err, "local scoped app package install failed", "stdout", stdOut, "stderr", stdErr, "app pkg path", appPkgPathOnPod, "failCount", phaseInfo.FailCount)
 		return fmt.Errorf("local scoped app package install failed. stdOut: %s, stdErr: %s, app pkg path: %s, failCount: %d", stdOut, stdErr, appPkgPathOnPod, phaseInfo.FailCount)
@@ -785,12 +795,13 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 
 	scopedLog.Info("check app's installation state")
 
-	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s -auth admin:`cat /mnt/splunk-secrets/password`| grep ENABLED; echo -n $?", appTopFolder)
+	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s -auth admin:`cat /mnt/splunk-secrets/password`| grep ENABLED", appTopFolder)
 
 	streamOptions := splutil.NewStreamOptionsObject(command)
 
 	stdOut, stdErr, err := podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 
+	// Handle specific stderr cases first
 	if strings.Contains(stdErr, "Could not find object") {
 		// when app is not installed you will see something like on StdErr:
 		// "Could not find object id=<app_name>"
@@ -798,15 +809,37 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 		return false, nil
 	}
 
-	if stdErr != "" || err != nil {
-		return false, fmt.Errorf("could not get installed app status stdOut: %s, stdErr: %s, command: %s", stdOut, stdErr, command)
+	// Log any other stderr content for debugging but don't use it for error detection
+	if stdErr != "" {
+		scopedLog.Info("Command stderr output (informational only)", "stderr", stdErr)
 	}
 
-	appInstallCheck, _ := strconv.Atoi(stdOut)
+	// Now check the actual command result
+	if err != nil {
+		// The command pipeline ends with 'grep ENABLED', so exit codes follow grep semantics:
+		// For grep: exit code 1 = pattern not found, exit code 2+ = actual error
+		errMsg := err.Error()
 
-	scopedLog.Info("Apps installation state", stdOut, stdOut)
+		// Check for grep exit code 1 (pattern not found)
+		if strings.Contains(errMsg, "exit status 1") || strings.Contains(errMsg, "command terminated with exit code 1") {
+			// grep exit code 1 means "ENABLED" pattern not found - app exists but is not enabled
+			scopedLog.Info("App not enabled - grep pattern not found", "stdout", stdOut, "stderr", stdErr)
+			return false, nil
+		}
 
-	return appInstallCheck == 0, nil
+		// Any other exit code indicates a real error (splunk command failed, etc.)
+		return false, fmt.Errorf("could not get installed app status stdOut: %s, stdErr: %s, error: %v, command: %s", stdOut, stdErr, err, command)
+	}
+
+	// If we reach here, grep found "ENABLED" (exit code 0)
+	// stdOut should contain the app status line with "ENABLED"
+	if stdOut == "" {
+		// This shouldn't happen if grep succeeded, but let's be safe
+		return false, fmt.Errorf("command succeeded but no output received, command: %s", command)
+	}
+
+	scopedLog.Info("App installation state check successful - app is enabled", "appStatus", strings.TrimSpace(stdOut))
+	return true, nil
 }
 
 // get the name of top folder from the package.
@@ -972,7 +1005,11 @@ func runPodCopyWorker(ctx context.Context, worker *PipelineWorker, ch chan struc
 	}
 
 	// get the podExecClient to be used for copying file to pod
-	podExecClient := splutil.GetPodExecClient(worker.client, cr, worker.targetPodName)
+	// Use injected client if available (for testing), otherwise create real client
+	podExecClient := worker.podExecClient
+	if podExecClient == nil {
+		podExecClient = splutil.GetPodExecClient(worker.client, cr, worker.targetPodName)
+	}
 	stdOut, stdErr, err := CopyFileToPod(ctx, worker.client, cr.GetNamespace(), appPkgLocalPath, appPkgPathOnPod, podExecClient)
 	if err != nil {
 		phaseInfo.FailCount++
@@ -1032,10 +1069,10 @@ podCopyHandler:
 			}
 		default:
 			// All the workers are busy, check after one second
-			time.Sleep(1 * time.Second)
+			time.Sleep(phaseManagerBusyWaitDuration)
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(phaseManagerLoopSleepDuration)
 	}
 
 	// Wait for all the workers to finish
@@ -1101,7 +1138,7 @@ podCopyPhase:
 			}
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(phaseManagerLoopSleepDuration)
 	}
 }
 
@@ -1201,9 +1238,12 @@ installHandler:
 
 			// Install workers can exist for local scope and premium app scopes
 			if installWorker != nil {
-				podExecClient := splutil.GetPodExecClient(installWorker.client, installWorker.cr, installWorker.targetPodName)
+				// Use injected client if available (for testing), otherwise create real client
+				podExecClient := installWorker.podExecClient
+				if podExecClient == nil {
+					podExecClient = splutil.GetPodExecClient(installWorker.client, installWorker.cr, installWorker.targetPodName)
+				}
 				podID, _ := getOrdinalValFromPodName(installWorker.targetPodName)
-
 				// Get app source spec
 				appSrcSpec, err := getAppSrcSpec(installWorker.afwConfig.AppSources, installWorker.appSrcName)
 				if err != nil {
@@ -1234,10 +1274,10 @@ installHandler:
 			}
 
 		default:
-			time.Sleep(1 * time.Second)
+			time.Sleep(phaseManagerBusyWaitDuration)
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(phaseManagerLoopSleepDuration)
 	}
 
 	for {
@@ -1257,7 +1297,7 @@ installHandler:
 		}
 
 		// Sleep for a second before retry
-		time.Sleep(1 * time.Second)
+		time.Sleep(phaseManagerBusyWaitDuration)
 	}
 
 	// Wait for all the workers to finish
@@ -1320,6 +1360,15 @@ installPhase:
 				phaseInfo := getPhaseInfoByPhaseType(ctx, installWorker, enterpriseApi.PhaseInstall)
 				if isPhaseMaxRetriesReached(ctx, phaseInfo, installWorker.afwConfig) {
 					phaseInfo.Status = enterpriseApi.AppPkgInstallError
+
+					// For fanout CRs, also update the main PhaseInfo to reflect the failure
+					if isFanOutApplicableToCR(installWorker.cr) {
+						scopedLog.Info("Max retries reached for fanout CR - updating main phase info", "app", installWorker.appDeployInfo.AppName, "failCount", phaseInfo.FailCount)
+						installWorker.appDeployInfo.PhaseInfo.Phase = enterpriseApi.PhaseInstall
+						installWorker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgInstallError
+						installWorker.appDeployInfo.DeployStatus = enterpriseApi.DeployStatusError
+					}
+
 					ppln.deleteWorkerFromPipelinePhase(ctx, phaseInfo.Phase, installWorker)
 				} else if isPhaseStatusComplete(phaseInfo) {
 					ppln.deleteWorkerFromPipelinePhase(ctx, phaseInfo.Phase, installWorker)
@@ -1344,7 +1393,7 @@ installPhase:
 			}
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(phaseManagerLoopSleepDuration)
 	}
 }
 
@@ -1510,6 +1559,8 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 		instanceID = SplunkClusterManager
 	case "MonitoringConsole":
 		instanceID = SplunkMonitoringConsole
+	case "IngestorCluster":
+		instanceID = SplunkIngestor
 	default:
 		return nil
 	}
@@ -1632,7 +1683,7 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 		// remove the status file too, so that we dont have any stale status
 		removeErr := shcPlaybookContext.removeSHCBundlePushStatusFile(ctx)
 		if removeErr != nil {
-			errors.Wrap(err, removeErr.Error())
+			err = errors.Wrap(err, removeErr.Error())
 		}
 		return false, err
 	}
@@ -1654,7 +1705,7 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 		// remove the status file too, so that we dont have any stale status
 		removeErr := shcPlaybookContext.removeSHCBundlePushStatusFile(ctx)
 		if removeErr != nil {
-			errors.Wrap(err, removeErr.Error())
+			err = errors.Wrap(err, removeErr.Error())
 		}
 		return false, err
 	}
@@ -2135,8 +2186,8 @@ func afwSchedulerEntry(ctx context.Context, client splcommon.ControllerClient, c
 	scopedLog := reqLogger.WithName("afwSchedulerEntry").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// return error, if there is no storage defined for the Operator pod
-	if !isPersistantVolConfigured() {
-		return true, fmt.Errorf("persistant volume required for the App framework, but not provisioned")
+	if !isPersistentVolConfigured() {
+		return true, fmt.Errorf("persistent volume required for the App framework, but not provisioned")
 	}
 
 	// Operator pod storage is not fully under operator control
@@ -2171,6 +2222,7 @@ func afwSchedulerEntry(ctx context.Context, client splcommon.ControllerClient, c
 
 		podExecClient := splutil.GetPodExecClient(client, cr, podName)
 		appsPathOnPod := filepath.Join(appBktMnt, appSrcName)
+
 		// create the dir on Splunk pod/s where app/s will be copied from operator pod
 		err = createDirOnSplunkPods(ctx, cr, *sts.Spec.Replicas, appsPathOnPod, podExecClient)
 		if err != nil {

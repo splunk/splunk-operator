@@ -1,0 +1,63 @@
+{
+  "kind": "Service",
+  "apiVersion": "v1",
+  "metadata": {
+    "name": "splunk-stack1-indexer-headless",
+    "namespace": "test",
+    "creationTimestamp": null,
+    "labels": {
+      "app.kubernetes.io/component": "indexer",
+      "app.kubernetes.io/managed-by": "splunk-operator",
+      "app.kubernetes.io/name": "indexer",
+      "app.kubernetes.io/part-of": "splunk-stack1-indexer"
+    },
+    "ownerReferences": [
+      {
+        "apiVersion": "",
+        "kind": "",
+        "name": "stack1",
+        "uid": "",
+        "controller": true
+      }
+    ]
+  },
+  "spec": {
+    "ports": [
+      {
+        "name": "http-splunkweb",
+        "protocol": "TCP",
+        "port": 8000,
+        "targetPort": 8000
+      },
+      {
+        "name": "http-hec",
+        "protocol": "TCP",
+        "port": 8088,
+        "targetPort": 8088
+      },
+      {
+        "name": "https-splunkd",
+        "protocol": "TCP",
+        "port": 8089,
+        "targetPort": 8089
+      },
+      {
+        "name": "tcp-s2s",
+        "protocol": "TCP",
+        "port": 9997,
+        "targetPort": 9997
+      }
+    ],
+    "selector": {
+      "app.kubernetes.io/component": "indexer",
+      "app.kubernetes.io/managed-by": "splunk-operator",
+      "app.kubernetes.io/name": "indexer",
+      "app.kubernetes.io/part-of": "splunk-stack1-indexer"
+    },
+    "clusterIP": "None",
+    "type": "ClusterIP"
+  },
+  "status": {
+    "loadBalancer": {}
+  }
+}

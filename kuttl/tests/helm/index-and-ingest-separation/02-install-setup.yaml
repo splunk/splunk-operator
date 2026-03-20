@@ -1,0 +1,6 @@
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: helm install splunk-index-ingest-sep $HELM_REPO_PATH/splunk-enterprise -f splunk_index_ingest_sep.yaml
+    namespaced: true

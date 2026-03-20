@@ -20,7 +20,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os/exec"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"time"
 
@@ -182,6 +184,34 @@ func SingleSiteIndexersReady(ctx context.Context, deployment *Deployment, testen
 		testenvInstance.Log.Info("Check for Consistency indexer instance's phase to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
 		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-idxc-indexer-")
 		return idc.Status.Phase
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+}
+
+// IngestorsReady verify ingestors go to ready state
+func IngestorReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
+	ingest := &enterpriseApi.IngestorCluster{}
+	instanceName := fmt.Sprintf("%s-ingest", deployment.GetName())
+
+	gomega.Eventually(func() enterpriseApi.Phase {
+		err := deployment.GetInstance(ctx, instanceName, ingest)
+		if err != nil {
+			return enterpriseApi.PhaseError
+		}
+
+		testenvInstance.Log.Info("Waiting for ingestor instance's phase to be ready", "instance", instanceName, "phase", ingest.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+
+		return ingest.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+
+	// In a steady state, we should stay in Ready and not flip-flop around
+	gomega.Consistently(func() enterpriseApi.Phase {
+		_ = deployment.GetInstance(ctx, instanceName, ingest)
+
+		testenvInstance.Log.Info("Check for Consistency ingestor instance's phase to be ready", "instance", instanceName, "phase", ingest.Status.Phase)
+		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-ingest-")
+
+		return ingest.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
@@ -997,7 +1027,11 @@ func VerifyAppListPhase(ctx context.Context, deployment *Deployment, testenvInst
 				appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
 				if err != nil {
 					testenvInstance.Log.Error(err, "Failed to get app deployment info")
-					return phase
+					return phase // Continue polling
+				}
+				if appDeploymentInfo.AppName == "" {
+					testenvInstance.Log.Info(fmt.Sprintf("App deployment info not found yet for app %s (CR %s/%s, AppSource %s), continuing to poll", appName, crKind, name, appSourceName))
+					return phase // Continue polling
 				}
 				testenvInstance.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase should not be %s", crKind, name, appName, phase), "Actual Phase", appDeploymentInfo.PhaseInfo.Phase, "App State", appDeploymentInfo)
 				return appDeploymentInfo.PhaseInfo.Phase
@@ -1010,7 +1044,11 @@ func VerifyAppListPhase(ctx context.Context, deployment *Deployment, testenvInst
 				appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
 				if err != nil {
 					testenvInstance.Log.Error(err, "Failed to get app deployment info")
-					return enterpriseApi.PhaseDownload
+					return enterpriseApi.PhaseDownload // Continue polling
+				}
+				if appDeploymentInfo.AppName == "" {
+					testenvInstance.Log.Info(fmt.Sprintf("App deployment info not found yet for app %s (CR %s/%s, AppSource %s), continuing to poll", appName, crKind, name, appSourceName))
+					return enterpriseApi.PhaseDownload // Continue polling
 				}
 				testenvInstance.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase), "Actual Phase", appDeploymentInfo.PhaseInfo.Phase, "App Phase Status", appDeploymentInfo.PhaseInfo.Status, "App State", appDeploymentInfo)
 				if appDeploymentInfo.PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
@@ -1212,4 +1250,85 @@ func VerifyFilesInDirectoryOnPod(ctx context.Context, deployment *Deployment, te
 			return true
 		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 	}
+}
+
+func GetTelemetryLastSubmissionTime(ctx context.Context, deployment *Deployment) string {
+	const (
+		configMapName = "splunk-operator-manager-telemetry"
+		statusKey     = "status"
+	)
+	type telemetryStatus struct {
+		LastTransmission string `json:"lastTransmission"`
+	}
+
+	cm := &corev1.ConfigMap{}
+	err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: configMapName, Namespace: "splunk-operator"}, cm)
+	if err != nil {
+		logf.Log.Error(err, "GetTelemetryLastSubmissionTime: failed to retrieve configmap")
+		return ""
+	}
+
+	statusVal, ok := cm.Data[statusKey]
+	if !ok || statusVal == "" {
+		logf.Log.Info("GetTelemetryLastSubmissionTime: failed to retrieve status")
+		return ""
+	}
+	logf.Log.Info("GetTelemetryLastSubmissionTime: retrieved status", "status", statusVal)
+
+	var status telemetryStatus
+	if err := json.Unmarshal([]byte(statusVal), &status); err != nil {
+		logf.Log.Error(err, "GetTelemetryLastSubmissionTime: failed to unmarshal status", "statusVal", statusVal)
+		return ""
+	}
+	return status.LastTransmission
+}
+
+// VerifyTelemetry checks that the telemetry ConfigMap has a non-empty lastTransmission field in its status key.
+func VerifyTelemetry(ctx context.Context, deployment *Deployment, prevVal string) {
+	logf.Log.Info("VerifyTelemetry: start")
+	gomega.Eventually(func() bool {
+		currentVal := GetTelemetryLastSubmissionTime(ctx, deployment)
+		if currentVal != "" && currentVal != prevVal {
+			logf.Log.Info("VerifyTelemetry: success", "previous", prevVal, "current", currentVal)
+			return true
+		}
+		return false
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
+// TriggerTelemetrySubmission updates or adds the 'test_submission' key in the telemetry ConfigMap with a JSON value containing a random number.
+func TriggerTelemetrySubmission(ctx context.Context, deployment *Deployment) {
+	const (
+		configMapName = "splunk-operator-manager-telemetry"
+		testKey       = "test_submission"
+	)
+
+	// Generate a random number
+	rand.Seed(time.Now().UnixNano())
+	randomNumber := rand.Intn(1000)
+
+	// Create the JSON value
+	jsonValue, err := json.Marshal(map[string]int{"value": randomNumber})
+	if err != nil {
+		logf.Log.Error(err, "Failed to marshal JSON value")
+		return
+	}
+
+	// Update the ConfigMap
+	cm := &corev1.ConfigMap{}
+	err = deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: configMapName, Namespace: "splunk-operator"}, cm)
+	if err != nil {
+		logf.Log.Error(err, "Failed to get ConfigMap")
+		return
+	}
+
+	// Update the test_submission key
+	cm.Data[testKey] = string(jsonValue)
+	err = deployment.testenv.GetKubeClient().Update(ctx, cm)
+	if err != nil {
+		logf.Log.Error(err, "Failed to update ConfigMap")
+		return
+	}
+
+	logf.Log.Info("Successfully updated telemetry ConfigMap", "key", testKey, "value", jsonValue)
 }

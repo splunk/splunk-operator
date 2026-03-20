@@ -470,7 +470,7 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 		configTester2(t, "ApplySmartstoreConfigMap()", f, want)
 	}
 
-	test(client, &cr, &cr.Spec.SmartStore, `{"metadata":{"name":"splunk-idxCluster--smartstore","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"idxCluster","uid":"","controller":true}]},"data":{"conftoken":"1601945361","indexes.conf":"[default]\nrepFactor = auto\nmaxDataSize = auto\nhomePath = $SPLUNK_DB/$_index_name/db\ncoldPath = $SPLUNK_DB/$_index_name/colddb\nthawedPath = $SPLUNK_DB/$_index_name/thaweddb\n \n[volume:msos_s2s3_vol]\nstorageType = remote\npath = s3://testbucket-rs-london\nremote.s3.access_key = abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa\nremote.s3.secret_key = g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy\nremote.s3.endpoint = https://s3-eu-west-2.amazonaws.com\nremote.s3.auth_region = \n \n[salesdata1]\nremotePath = volume:msos_s2s3_vol/remotepath1\n\n[salesdata2]\nremotePath = volume:msos_s2s3_vol/remotepath2\n\n[salesdata3]\nremotePath = volume:msos_s2s3_vol/remotepath3\n","server.conf":""}}`)
+	test(client, &cr, &cr.Spec.SmartStore, loadFixture(t, "configmap_smartstore_volumes.json"))
 
 	// Missing Volume config should return an error
 	cr.Spec.SmartStore.VolList = nil
@@ -1215,11 +1215,11 @@ func TestGetAvailableDiskSpaceShouldFail(t *testing.T) {
 }
 
 func TestIsAppExtentionValid(t *testing.T) {
-	if !isAppExtentionValid("testapp.spl") || !isAppExtentionValid("testapp.tgz") || !isAppExtentionValid("testapp.tar.gz") {
+	if !isAppExtensionValid("testapp.spl") || !isAppExtensionValid("testapp.tgz") || !isAppExtensionValid("testapp.tar.gz") {
 		t.Errorf("failed to detect valid app extension")
 	}
 
-	if isAppExtentionValid("testapp.aspl") || isAppExtentionValid("testapp.ttgz") {
+	if isAppExtensionValid("testapp.aspl") || isAppExtensionValid("testapp.ttgz") {
 		t.Errorf("failed to detect invalid app extension")
 	}
 }
@@ -2130,19 +2130,19 @@ func TestUpdateStorageTracker(t *testing.T) {
 func TestIsPersistantVolConfigured(t *testing.T) {
 	// when the resource tracker not initialized, should return false
 	operatorResourceTracker = nil
-	if isPersistantVolConfigured() {
+	if isPersistentVolConfigured() {
 		t.Errorf("When the resource tracker is not initialized, should resturn false")
 	}
 
 	// when the storage tracker not initialized, should return false
 	operatorResourceTracker = &globalResourceTracker{}
-	if isPersistantVolConfigured() {
+	if isPersistentVolConfigured() {
 		t.Errorf("When the storage tracker is not initialized, should return false")
 	}
 
 	// Should return true, when the trackers are initialized
 	operatorResourceTracker.storage = &storageTracker{}
-	if !isPersistantVolConfigured() {
+	if !isPersistentVolConfigured() {
 		t.Errorf("When the storage tracker is initialized, should return true")
 	}
 }
@@ -2612,6 +2612,8 @@ func TestUpdateReconcileRequeueTime(t *testing.T) {
 }
 
 func TestUpdateCRStatus(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
 	utilruntime.Must(corev1.AddToScheme(sch))
@@ -2624,6 +2626,9 @@ func TestUpdateCRStatus(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
 		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
 		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
+		WithStatusSubresource(&enterpriseApi.Queue{}).
+		WithStatusSubresource(&enterpriseApi.ObjectStorage{}).
+		WithStatusSubresource(&enterpriseApi.IngestorCluster{}).
 		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
 	c := builder.Build()
 	ctx := context.TODO()
@@ -2687,7 +2692,8 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
 		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
 		WithStatusSubresource(&enterpriseApiV3.LicenseMaster{}).
-		WithStatusSubresource(&enterpriseApiV3.ClusterMaster{})
+		WithStatusSubresource(&enterpriseApiV3.ClusterMaster{}).
+		WithStatusSubresource(&enterpriseApi.IngestorCluster{})
 	c := builder.Build()
 	ctx := context.TODO()
 
@@ -2923,6 +2929,43 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	} else if receivedCR.(*enterpriseApi.SearchHeadCluster).Status.Message != "testerror" {
 		t.Errorf("Failed to update error message")
 	}
+
+	// IngestorCluster: should return a valid CR
+	ic := enterpriseApi.IngestorCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "IngestorCluster",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+		Status: enterpriseApi.IngestorClusterStatus{
+			ReadyReplicas: 3,
+		},
+	}
+
+	// When the CR is available, should be able to fetch it.
+	err = c.Create(ctx, &ic)
+	if err != nil {
+		t.Errorf("ingestor CR creation failed.")
+	}
+
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &ic, nil)
+	if err != nil {
+		t.Errorf("Expected a valid CR without error, but got the error %v", err)
+	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "IngestorCluster" {
+		t.Errorf("Failed to fetch the CR")
+	}
 }
 
 // func getApplicablePodNameForK8Probes(t *testing.T) {
@@ -2980,6 +3023,13 @@ func TestGetApplicablePodNameForK8Probes(t *testing.T) {
 
 	cr.TypeMeta.Kind = "LicenseMaster"
 	expectedPodName = "splunk-stack1-license-master-0"
+	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
+
+	cr.TypeMeta.Kind = "IngestorCluster"
+	expectedPodName = "splunk-stack1-ingestor-0"
 	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
@@ -3229,6 +3279,7 @@ func TestGetLicenseMasterURL(t *testing.T) {
 	}
 }
 func TestGetCurrentImage(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
 	current := enterpriseApi.ClusterManager{
@@ -3258,10 +3309,13 @@ func TestGetCurrentImage(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
 		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
 		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
-		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
+		WithStatusSubresource(&enterpriseApi.Queue{}).
+		WithStatusSubresource(&enterpriseApi.ObjectStorage{}).
+		WithStatusSubresource(&enterpriseApi.IngestorCluster{})
 	client := builder.Build()
 	client.Create(ctx, &current)
-	_, err := ApplyClusterManager(ctx, client, &current)
+	_, err := ApplyClusterManager(ctx, client, &current, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
@@ -3277,4 +3331,245 @@ func TestGetCurrentImage(t *testing.T) {
 		t.Errorf("getCurrentImage does not return the current statefulset image")
 	}
 
+}
+
+func TestSecretMissingEvent(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	ctx := context.TODO()
+
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "test"},
+	}
+
+	volume := enterpriseApi.VolumeSpec{
+		Name:      "test-vol",
+		SecretRef: "nonexistent-secret",
+	}
+
+	_, _, _, err := GetSmartstoreRemoteVolumeSecrets(ctx, volume, client, cr, &enterpriseApi.SmartStoreSpec{})
+	if err == nil {
+		t.Errorf("Expected error when secret does not exist")
+	}
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "SecretMissing" {
+			found = true
+			if event.eventType != corev1.EventTypeWarning {
+				t.Errorf("Expected Warning event type for SecretMissing, got %s", event.eventType)
+			}
+			expectedMessage := "Required secret 'nonexistent-secret' not found in namespace 'test'. Create secret to proceed."
+			if event.message != expectedMessage {
+				t.Errorf("Expected event message %q, got: %q", expectedMessage, event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected SecretMissing event to be published")
+	}
+}
+
+func TestSecretInvalidEmptyAccessKeyEvent(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	ctx := context.TODO()
+
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "test"},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-secret", Namespace: "test"},
+		Data: map[string][]byte{
+			"s3_access_key": {},
+			"s3_secret_key": []byte("some-secret-key"),
+		},
+	}
+	if err := client.Create(ctx, secret); err != nil {
+		t.Fatalf("Failed to create secret: %v", err)
+	}
+
+	volume := enterpriseApi.VolumeSpec{
+		Name:      "test-vol",
+		SecretRef: "test-secret",
+	}
+
+	_, _, _, err := GetSmartstoreRemoteVolumeSecrets(ctx, volume, client, cr, &enterpriseApi.SmartStoreSpec{})
+	if err == nil {
+		t.Errorf("Expected error when access key is empty")
+	}
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "SecretInvalid" {
+			found = true
+			if event.eventType != corev1.EventTypeWarning {
+				t.Errorf("Expected Warning event type for SecretInvalid, got %s", event.eventType)
+			}
+			expectedMessage := "Secret 'test-secret' missing required fields: accessKey. Update secret with required data."
+			if event.message != expectedMessage {
+				t.Errorf("Expected event message %q, got: %q", expectedMessage, event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected SecretInvalid event to be published for empty access key")
+	}
+}
+
+func TestSecretInvalidEmptySecretKeyEvent(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	ctx := context.TODO()
+
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "test"},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-secret-sk", Namespace: "test"},
+		Data: map[string][]byte{
+			"s3_access_key": []byte("some-access-key"),
+			"s3_secret_key": {},
+		},
+	}
+	if err := client.Create(ctx, secret); err != nil {
+		t.Fatalf("Failed to create secret: %v", err)
+	}
+
+	volume := enterpriseApi.VolumeSpec{
+		Name:      "test-vol",
+		SecretRef: "test-secret-sk",
+	}
+
+	_, _, _, err := GetSmartstoreRemoteVolumeSecrets(ctx, volume, client, cr, &enterpriseApi.SmartStoreSpec{})
+	if err == nil {
+		t.Errorf("Expected error when secret key is empty")
+	}
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "SecretInvalid" {
+			found = true
+			if event.eventType != corev1.EventTypeWarning {
+				t.Errorf("Expected Warning event type for SecretInvalid, got %s", event.eventType)
+			}
+			expectedMessage := "Secret 'test-secret-sk' missing required fields: s3SecretKey. Update secret with required data."
+			if event.message != expectedMessage {
+				t.Errorf("Expected event message %q, got: %q", expectedMessage, event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected SecretInvalid event to be published for empty secret key")
+	}
+}
+
+func TestAppRepositoryConnectionFailedEvent(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	ctx := context.TODO()
+
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "test"},
+	}
+
+	// Create a secret with valid credentials so GetRemoteStorageClient reaches the getClient call
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-s3-secret", Namespace: "test"},
+		Data: map[string][]byte{
+			"s3_access_key": []byte("AKIAIOSFODNN7EXAMPLE"),
+			"s3_secret_key": []byte("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+		},
+	}
+	if err := client.Create(ctx, secret); err != nil {
+		t.Fatalf("Failed to create secret: %v", err)
+	}
+
+	// Register a mock provider that always returns an error from getClient
+	mockProvider := "mock-failing-provider"
+	splclient.RemoteDataClientsMap[mockProvider] = splclient.GetRemoteDataClientWrapper{
+		GetRemoteDataClient: func(ctx context.Context, bucket, accessKeyID, secretAccessKey, prefix, startAfter, region, endpoint string, fn splclient.GetInitFunc) (splclient.RemoteDataClient, error) {
+			return nil, fmt.Errorf("mock connection timeout")
+		},
+		GetInitFunc: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+			return nil
+		},
+	}
+	defer delete(splclient.RemoteDataClientsMap, mockProvider)
+
+	vol := &enterpriseApi.VolumeSpec{
+		Name:      "test-vol",
+		Provider:  mockProvider,
+		Path:      "test-bucket/apps",
+		SecretRef: "test-s3-secret",
+	}
+
+	// Call GetRemoteStorageClient — should fail at getClient and emit AppRepositoryConnectionFailed
+	_, err := GetRemoteStorageClient(ctx, client, cr, &enterpriseApi.AppFrameworkSpec{}, vol, "apps", nil)
+	if err == nil {
+		t.Errorf("Expected error from GetRemoteStorageClient when getClient fails")
+	}
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "AppRepositoryConnectionFailed" {
+			found = true
+			if event.eventType != corev1.EventTypeWarning {
+				t.Errorf("Expected Warning event type for AppRepositoryConnectionFailed, got %s", event.eventType)
+			}
+			expectedMessage := "Failed to connect to app repository 'test-vol': mock connection timeout. Check credentials and network."
+			if event.message != expectedMessage {
+				t.Errorf("Expected event message %q, got: %q", expectedMessage, event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected AppRepositoryConnectionFailed event to be published")
+	}
 }

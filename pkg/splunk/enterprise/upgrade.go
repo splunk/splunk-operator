@@ -10,7 +10,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -36,7 +35,10 @@ var GetClusterInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager
 func UpgradePathValidation(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec, mgr *indexerClusterPodManager) (bool, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("isClusterManagerReadyForUpgrade").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	// Get event publisher from context
+	eventPublisher := GetEventPublisher(ctx, cr)
+
 	kind := cr.GroupVersionKind().Kind
 	scopedLog.Info("kind is set to ", "kind", kind)
 	// start from standalone first
@@ -137,8 +139,16 @@ ClusterManager:
 
 		// check if an image upgrade is happening and whether CM has finished updating yet, return false to stop
 		// further reconcile operations on custom resource until CM is ready
-		if clusterManager.Status.Phase != enterpriseApi.PhaseReady || cmImage != spec.Image {
-			return false, nil
+		if clusterManager.Status.Phase != enterpriseApi.PhaseReady {
+			return false, fmt.Errorf("cluster manager %s is not ready (phase: %s). IndexerCluster upgrade is waiting for ClusterManager to be ready", clusterManager.Name, clusterManager.Status.Phase)
+		}
+		if cmImage != spec.Image {
+			// Emit event when upgrade is blocked due to ClusterManager / IndexerCluster version mismatch
+			if eventPublisher != nil {
+				eventPublisher.Warning(ctx, "UpgradeBlockedVersionMismatch",
+					fmt.Sprintf("Upgrade blocked: ClusterManager version %s != IndexerCluster version %s. Upgrade ClusterManager first.", cmImage, spec.Image))
+			}
+			return false, fmt.Errorf("cluster manager %s image (%s) does not match IndexerCluster image (%s). Please upgrade ClusterManager and IndexerCluster together using the operator's RELATED_IMAGE_SPLUNK_ENTERPRISE or upgrade the ClusterManager first", clusterManager.Name, cmImage, spec.Image)
 		}
 		goto IndexerCluster
 	}
@@ -158,8 +168,8 @@ IndexerCluster:
 		}
 		// check if cluster is multisite
 		if clusterInfo.MultiSite == "true" {
-			opts := []rclient.ListOption{
-				rclient.InNamespace(cr.GetNamespace()),
+			opts := []runtime.ListOption{
+				runtime.InNamespace(cr.GetNamespace()),
 			}
 			indexerList, err := getIndexerClusterList(ctx, c, cr, opts)
 			if err != nil {
@@ -217,8 +227,8 @@ SearchHeadCluster:
 
 		// check if a search head cluster exists with the same ClusterManager instance attached
 		searchHeadClusterInstance := enterpriseApi.SearchHeadCluster{}
-		opts := []rclient.ListOption{
-			rclient.InNamespace(cr.GetNamespace()),
+		opts := []runtime.ListOption{
+			runtime.InNamespace(cr.GetNamespace()),
 		}
 		searchHeadList, err := getSearchHeadClusterList(ctx, c, cr, opts)
 		if err != nil {

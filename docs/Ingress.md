@@ -1,3 +1,10 @@
+---
+title: Ingress
+parent: Deploy & Configure
+nav_order: 4
+---
+
+
 # Configuring Ingress 
 
 Using `port-forward` is great for testing, but you will ultimately want to make it easier to access your Splunk cluster outside of Kubernetes. A common approach is through the use of [Kubernetes Ingress Controllers](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/).
@@ -23,7 +30,7 @@ We provide some examples below for configuring a few of the most popular Ingress
 
 * [Configuring Ingress Using Istio](#Configuring-Ingress-Using-Istio)
 * [Configuring Ingress Using NGINX](#Configuring-Ingress-Using-NGINX)
-* [Using Let's Encrypt to manage TLS certificates ](#installing-the-splunk-operator)
+* [Using Let's Encrypt to manage TLS certificates](#using-lets-encrypt-to-manage-tls-certificates)
 
 
 Before deploying an example, you will need to review the yaml and replace “example.com” with the domain name you would like to use and replace “example” in the service names with the name of your custom resource object. You will also need to point your DNS for all the desired hostnames to the IP addresses of your ingress load balancer.
