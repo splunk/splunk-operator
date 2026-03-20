@@ -171,12 +171,8 @@ func RunLMS1Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 	// Wait for Standalone to be in READY status
 	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
-	// Deploy Monitoring Console
-	mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	// Deploy and verify Monitoring Console
+	_ = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
 
 	// ############ Verify livenessProbe and readinessProbe config object and scripts############
 	testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
@@ -214,31 +210,15 @@ func RunLMC3Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 	// Wait for Indexers to be in READY status
 	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
-	// Deploy Monitoring Console
-	mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	// Deploy and verify Monitoring Console
+	_ = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
 
 	// Verify RF SF is met
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-	// Verify License Manager/Master is configured on indexers
-	indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 0)
-	testenv.VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
-	indexerPodName = fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 1)
-	testenv.VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
-	indexerPodName = fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 2)
-	testenv.VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
-
-	// Verify License Manager/Master is configured on SHs
-	searchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 0)
-	testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
-	searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 1)
-	testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
-	searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 2)
-	testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
+	// Verify License Manager/Master is configured on indexers and search heads
+	testenv.VerifyLMConfiguredOnIndexers(ctx, deployment, deployment.GetName(), 3)
+	testenv.VerifyLMConfiguredOnSearchHeads(ctx, deployment, deployment.GetName(), 3)
 
 	// Verify License Manager/Master is configured on Monitoring Console
 	monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())
@@ -429,31 +409,15 @@ func RunLMM4Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 	// Wait for Search Head Cluster to be in READY status
 	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
-	// Deploy Monitoring Console
-	mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	// Deploy and verify Monitoring Console
+	_ = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
 
 	// Verify RF SF is met
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-	// Verify License Manager/Master is configured on indexers
-	indexerPodName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 0)
-	testenv.VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
-	indexerPodName = fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 2, 0)
-	testenv.VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
-	indexerPodName = fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 3, 0)
-	testenv.VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
-
-	// Verify License Manager/Master is configured on SHs
-	searchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 0)
-	testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
-	searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 1)
-	testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
-	searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 2)
-	testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
+	// Verify License Manager/Master is configured on indexers and search heads
+	testenv.VerifyLMConfiguredOnMultisiteIndexers(ctx, deployment, deployment.GetName(), siteCount)
+	testenv.VerifyLMConfiguredOnSearchHeads(ctx, deployment, deployment.GetName(), 3)
 
 	// Verify License Manager/Master is configured on Monitoring Console
 	monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())

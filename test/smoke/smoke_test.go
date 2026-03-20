@@ -46,56 +46,32 @@ var _ = Describe("Smoke test", func() {
 
 	Context("Standalone deployment (S1)", func() {
 		It("smoke, basic, s1: can deploy a standalone instance", func() {
-
-			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
-
-			// Verify standalone goes to ready state
-			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+			// Deploy and verify standalone
+			testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), "", "")
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("smoke, basic, c3: can deploy indexers and search head cluster", func() {
-
+			// Deploy C3 cluster
 			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Ensure that the cluster-manager goes to Ready phase
+			// Verify cluster is ready and RF/SF is met
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
-
-			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			testcaseEnvInst.VerifyClusterReadyAndRFSF(ctx, deployment)
 		})
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
 		It("smoke, basic, m4: can deploy indexers and search head cluster", func() {
-
 			siteCount := 3
 			err := deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, "")
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Ensure that the cluster-manager goes to Ready phase
+			// Verify multisite cluster is ready and RF/SF is met
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure the indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure cluster configured as multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure search head cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			testcaseEnvInst.VerifyMultisiteClusterReadyAndRFSF(ctx, deployment, siteCount)
 		})
 	})
 

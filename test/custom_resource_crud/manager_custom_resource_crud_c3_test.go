@@ -71,17 +71,13 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Verify CPU limits on Search Heads and deployer before updating CR
 			searchHeadCount := 3
-			for i := 0; i < searchHeadCount; i++ {
-				SearchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
-				testcaseEnvInst.VerifyCPULimits(deployment, SearchHeadPodName, defaultCPULimits)
-			}
+			testcaseEnvInst.VerifySearchHeadCPULimits(deployment, deployment.GetName(), searchHeadCount, defaultCPULimits)
 
 			DeployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
 			testcaseEnvInst.VerifyCPULimits(deployment, DeployerPodName, defaultCPULimits)
 
 			shc := &enterpriseApi.SearchHeadCluster{}
-			err = deployment.GetInstance(ctx, shcName, shc)
-			Expect(err).To(Succeed(), "Unable to fetch Search Head Cluster deployment")
+			testenv.GetInstanceWithExpect(ctx, deployment, shc, shcName, "Unable to fetch Search Head Cluster deployment")
 
 			// Assign new resources for deployer pod only
 			newCPULimits = "4"
@@ -101,18 +97,14 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			}
 			shc.Spec.DeployerResourceSpec = depResSpec
 
-			err = deployment.UpdateCR(ctx, shc)
-			Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster with updated CR")
+			testenv.UpdateCRWithExpect(ctx, deployment, shc, "Unable to deploy Search Head Cluster with updated CR")
 
 			// Verify Search Head go to ready state
 			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Verify CPU limits on Search Heads - Should be same as before
 			searchHeadCount = 3
-			for i := 0; i < searchHeadCount; i++ {
-				SearchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
-				testcaseEnvInst.VerifyCPULimits(deployment, SearchHeadPodName, defaultCPULimits)
-			}
+			testcaseEnvInst.VerifySearchHeadCPULimits(deployment, deployment.GetName(), searchHeadCount, defaultCPULimits)
 
 			// Verify modified deployer spec
 			testcaseEnvInst.VerifyResourceConstraints(deployment, DeployerPodName, depResSpec)

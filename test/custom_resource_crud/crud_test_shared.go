@@ -62,25 +62,15 @@ func NewCRUDTestConfigV4() *CRUDTestConfig {
 
 // RunS1CPUUpdateTest runs the standard S1 CPU limit update test workflow
 func RunS1CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, defaultCPULimits string, newCPULimits string) {
-	// Deploy Standalone
-	mcRef := deployment.GetName()
-	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
-	standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), mcRef, "")
-	Expect(err).To(Succeed(), "Unable to deploy standalone instance")
-
-	// Verify Standalone goes to ready state
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+	// Deploy and verify Standalone
+	standalone := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), deployment.GetName(), "")
 
 	// Verify telemetry
-	testcaseEnvInst.TriggerTelemetrySubmission(ctx, deployment)
-	testcaseEnvInst.VerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
+	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
+	testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
 
-	// Deploy Monitoring Console CRD
-	mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	// Deploy and verify Monitoring Console
+	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
 
 	// Verify CPU limits before updating the CR
 	standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
@@ -90,7 +80,7 @@ func RunS1CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	standalone.Spec.Resources.Limits = corev1.ResourceList{
 		"cpu": resource.MustParse(newCPULimits),
 	}
-	err = deployment.UpdateCR(ctx, standalone)
+	err := deployment.UpdateCR(ctx, standalone)
 	Expect(err).To(Succeed(), "Unable to deploy standalone instance with updated CR ")
 
 	// Verify Standalone is updating
@@ -110,50 +100,25 @@ func RunS1CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *CRUDTestConfig, defaultCPULimits string, newCPULimits string) {
 	// Deploy Single site Cluster and Search Head Clusters
 	mcRef := deployment.GetName()
-	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
 	err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-	// Ensure that the Cluster Manager goes to Ready phase
+	// Verify cluster is ready, RF/SF is met, and MC is ready
 	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-
-	// Ensure Search Head Cluster go to Ready phase
-	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-	// Ensure Indexers go to Ready phase
-	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
-
-	// Verify telemetry
-	testcaseEnvInst.TriggerTelemetrySubmission(ctx, deployment)
-	testcaseEnvInst.VerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
-
-	// Deploy Monitoring Console CRD
-	mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
-
-	// Verify RF SF is met
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+	testcaseEnvInst.StandardC3Verification(ctx, deployment, deployment.GetName(), testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), ""))
 
 	// Verify CPU limits on Indexers before updating the CR
 	indexerCount := 3
-	for i := 0; i < indexerCount; i++ {
-		indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
-		testcaseEnvInst.VerifyCPULimits(deployment, indexerPodName, defaultCPULimits)
-	}
+	testcaseEnvInst.VerifyIndexerCPULimits(deployment, deployment.GetName(), indexerCount, defaultCPULimits)
 
 	// Change CPU limits to trigger CR update
 	idxc := &enterpriseApi.IndexerCluster{}
 	instanceName := fmt.Sprintf("%s-idxc", deployment.GetName())
-	err = deployment.GetInstance(ctx, instanceName, idxc)
-	Expect(err).To(Succeed(), "Unable to get instance of indexer cluster")
+	testenv.GetInstanceWithExpect(ctx, deployment, idxc, instanceName, "Unable to get instance of indexer cluster")
 	idxc.Spec.Resources.Limits = corev1.ResourceList{
 		"cpu": resource.MustParse(newCPULimits),
 	}
-	err = deployment.UpdateCR(ctx, idxc)
-	Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster with updated CR")
+	testenv.UpdateCRWithExpect(ctx, deployment, idxc, "Unable to deploy Indexer Cluster with updated CR")
 
 	// Verify Indexer Cluster is updating
 	idxcName := deployment.GetName() + "-idxc"
@@ -163,29 +128,21 @@ func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 	// Verify CPU limits on Indexers after updating the CR
-	for i := 0; i < indexerCount; i++ {
-		indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
-		testcaseEnvInst.VerifyCPULimits(deployment, indexerPodName, newCPULimits)
-	}
+	testcaseEnvInst.VerifyIndexerCPULimits(deployment, deployment.GetName(), indexerCount, newCPULimits)
 
 	// Verify CPU limits on Search Heads before updating the CR
 	searchHeadCount := 3
-	for i := 0; i < searchHeadCount; i++ {
-		SearchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
-		testcaseEnvInst.VerifyCPULimits(deployment, SearchHeadPodName, defaultCPULimits)
-	}
+	testcaseEnvInst.VerifySearchHeadCPULimits(deployment, deployment.GetName(), searchHeadCount, defaultCPULimits)
 
 	// Change CPU limits to trigger CR update
 	shc := &enterpriseApi.SearchHeadCluster{}
 	instanceName = fmt.Sprintf("%s-shc", deployment.GetName())
-	err = deployment.GetInstance(ctx, instanceName, shc)
-	Expect(err).To(Succeed(), "Unable to fetch Search Head Cluster deployment")
+	testenv.GetInstanceWithExpect(ctx, deployment, shc, instanceName, "Unable to fetch Search Head Cluster deployment")
 
 	shc.Spec.Resources.Limits = corev1.ResourceList{
 		"cpu": resource.MustParse(newCPULimits),
 	}
-	err = deployment.UpdateCR(ctx, shc)
-	Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster with updated CR")
+	testenv.UpdateCRWithExpect(ctx, deployment, shc, "Unable to deploy Search Head Cluster with updated CR")
 
 	// Verify Search Head Cluster is updating
 	testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
@@ -193,14 +150,8 @@ func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	// Verify Search Head go to ready state
 	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
-
 	// Verify CPU limits on Search Heads after updating the CR
-	for i := 0; i < searchHeadCount; i++ {
-		SearchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
-		testcaseEnvInst.VerifyCPULimits(deployment, SearchHeadPodName, newCPULimits)
-	}
+	testcaseEnvInst.VerifySearchHeadCPULimits(deployment, deployment.GetName(), searchHeadCount, newCPULimits)
 }
 
 // RunC3PVCDeletionTest runs the standard C3 PVC deletion test workflow
@@ -210,24 +161,12 @@ func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, t
 	err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-	// Ensure that the Cluster Manager goes to Ready phase
+	// Verify cluster is ready and RF/SF is met
 	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+	testcaseEnvInst.VerifyClusterReadyAndRFSF(ctx, deployment)
 
-	// Ensure Indexers go to Ready phase
-	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
-
-	// Verify Search Head go to ready state
-	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-	// Deploy Monitoring Console CRD
-	mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
-
-	// Verify RF SF is met
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+	// Deploy and verify Monitoring Console
+	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, "")
 
 	// Verify Search Heads PVCs (etc and var) exists
 	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-search-head", 3, true, verificationTimeout)
@@ -348,13 +287,11 @@ func RunM4CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	for i := 1; i <= siteCount; i++ {
 		siteName := fmt.Sprintf("site%d", i)
 		instanceName := fmt.Sprintf("%s-%s", deployment.GetName(), siteName)
-		err = deployment.GetInstance(ctx, instanceName, idxc)
-		Expect(err).To(Succeed(), "Unable to fetch Indexer Cluster deployment")
+		testenv.GetInstanceWithExpect(ctx, deployment, idxc, instanceName, "Unable to fetch Indexer Cluster deployment")
 		idxc.Spec.Resources.Limits = corev1.ResourceList{
 			"cpu": resource.MustParse(newCPULimits),
 		}
-		err = deployment.UpdateCR(ctx, idxc)
-		Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster with updated CR")
+		testenv.UpdateCRWithExpect(ctx, deployment, idxc, "Unable to deploy Indexer Cluster with updated CR")
 	}
 
 	// Verify Indexer Cluster is updating
@@ -371,8 +308,5 @@ func RunM4CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 	// Verify CPU limits after updating the CR
-	for i := 1; i <= siteCount; i++ {
-		podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
-		testcaseEnvInst.VerifyCPULimits(deployment, podName, newCPULimits)
-	}
+	testcaseEnvInst.VerifyCPULimitsOnAllSites(deployment, deployment.GetName(), siteCount, newCPULimits)
 }

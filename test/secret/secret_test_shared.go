@@ -81,12 +81,8 @@ func RunS1SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	// Wait for Standalone to be in READY status
 	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
-	// Deploy Monitoring Console CRD
-	mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	// Deploy and verify Monitoring Console
+	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), deployment.GetName())
 
 	// Get revision number of the resource
 	resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
@@ -163,12 +159,8 @@ func RunS1SecretDeleteTest(ctx context.Context, deployment *testenv.Deployment, 
 	// Wait for Standalone to be in READY status
 	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
-	// Deploy Monitoring Console CRD
-	mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	// Deploy and verify Monitoring Console
+	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), deployment.GetName())
 
 	// Get revision number of the resource
 	resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
@@ -244,9 +236,8 @@ func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Dep
 	// Wait for Standalone to be in READY status
 	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
-	// Deploy Monitoring Console CRD
-	mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+	// Deploy and verify Monitoring Console
+	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
 
 	// Verify Monitoring Console is Ready and stays in ready state
 	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
@@ -323,12 +314,8 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	err = testcaseEnvInst.WaitForClusterInitialized(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
 	Expect(err).To(Succeed(), "Timed out waiting for ClusterInitialized event on IndexerCluster")
 
-	// Deploy Monitoring Console CRD
-	mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	// Deploy and verify Monitoring Console
+	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), deployment.GetName())
 
 	// Get revision number of the resource
 	resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
@@ -441,12 +428,8 @@ func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	// Ensure cluster configured as multisite
 	testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
 
-	// Deploy Monitoring Console CRD
-	mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	// Deploy and verify Monitoring Console
+	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), deployment.GetName())
 
 	// Get revision number of the resource
 	resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)

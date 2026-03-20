@@ -16,18 +16,18 @@ package testenv
 import (
 	"context"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	. "github.com/onsi/gomega"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 )
 
 // DeploymentScenarioResult holds the result of a deployment scenario
 type DeploymentScenarioResult struct {
-	Standalone      *enterpriseApi.Standalone
-	ClusterManager  *enterpriseApi.ClusterManager
-	IndexerCluster  *enterpriseApi.IndexerCluster
+	Standalone        *enterpriseApi.Standalone
+	ClusterManager    *enterpriseApi.ClusterManager
+	IndexerCluster    *enterpriseApi.IndexerCluster
 	SearchHeadCluster *enterpriseApi.SearchHeadCluster
 	MonitoringConsole *enterpriseApi.MonitoringConsole
-	LicenseManager  *enterpriseApi.LicenseManager
+	LicenseManager    *enterpriseApi.LicenseManager
 }
 
 // DeployStandardS1 deploys a standard S1 (Standalone) configuration

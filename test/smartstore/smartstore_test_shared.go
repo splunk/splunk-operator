@@ -191,46 +191,12 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	}
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-	// Ensure that the cluster-manager goes to Ready phase
+	// Verify multisite cluster is ready and RF/SF is met
 	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+	testcaseEnvInst.VerifyMultisiteClusterReadyAndRFSF(ctx, deployment, siteCount)
 
-	// Ensure the indexers of all sites go to Ready phase
-	testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-	// Ensure cluster configured as multisite
-	testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-	// Ensure search head cluster go to Ready phase
-	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-	// Verify RF SF is met
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
-
-	// Check index on pod
-	for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
-		podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
-		testcaseEnvInst.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName)
-	}
-
-	// Ingest data to the index
-	for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
-		podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
-		logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
-		testenv.CreateMockLogfile(logFile, 2000)
-		testenv.IngestFileViaMonitor(ctx, logFile, indexName, podName, deployment)
-	}
-
-	// Roll Hot Buckets on the test index per indexer
-	for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
-		podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
-		testenv.RollHotToWarm(ctx, deployment, podName, indexName)
-	}
-
-	// Roll index buckets and Check for indexes on S3
-	for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
-		podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
-		testcaseEnvInst.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
-	}
+	// Use multisite workflow helper to verify index, ingest data, roll to warm, and verify on S3
+	testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, deployment.GetName(), siteCount, indexName, 2000)
 
 	// Get old bundle hash before adding new index
 	var oldBundleHash string
@@ -262,24 +228,16 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 		Expect(err).To(Succeed(), "Failed to add new index to cluster manager")
 	}
 
-	// Ensure that the cluster-manager goes to Ready phase
+	// Verify multisite cluster is ready and RF/SF is met
 	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-
-	// Ensure the indexers of all sites go to Ready phase
-	testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-	// Ensure search head cluster go to Ready phase
-	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-	// Verify RF SF is met
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+	testcaseEnvInst.VerifyMultisiteClusterReadyAndRFSF(ctx, deployment, siteCount)
 
 	// Verify new bundle is pushed (only for v3)
 	if config.APIVersion == "v3" {
 		testcaseEnvInst.VerifyClusterManagerBundlePush(ctx, deployment, testcaseEnvInst.GetName(), 1, oldBundleHash)
 	}
 
-	// Check index on pod
+	// Verify both indexes on all sites
 	for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 		podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
 		for _, index := range indexList {
@@ -287,25 +245,7 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 		}
 	}
 
-	// Ingest data to the new index
-	for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
-		podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
-		logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
-		testenv.CreateMockLogfile(logFile, 2000)
-		testcaseEnvInst.Log.Info("Ingesting data on index", "Index Name", indexNameTwo)
-		testenv.IngestFileViaMonitor(ctx, logFile, indexNameTwo, podName, deployment)
-	}
-
-	// Roll Hot Buckets on the test index per indexer
-	for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
-		podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
-		testenv.RollHotToWarm(ctx, deployment, podName, indexNameTwo)
-	}
-
-	// Roll index buckets and Check for indexes on S3
-	for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
-		podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
-		testcaseEnvInst.Log.Info("Checking index on S3", "Index Name", indexNameTwo, "Pod Name", podName)
-		testcaseEnvInst.VerifyIndexExistsOnS3(ctx, deployment, indexNameTwo, podName)
-	}
+	// Use multisite workflow helper for the new index
+	testcaseEnvInst.Log.Info("Ingesting data on index", "Index Name", indexNameTwo)
+	testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, deployment.GetName(), siteCount, indexNameTwo, 2000)
 }
