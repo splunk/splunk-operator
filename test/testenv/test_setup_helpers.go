@@ -17,6 +17,7 @@ package testenv
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/ginkgo/v2/types"
@@ -50,6 +51,28 @@ func TeardownTestCaseEnv(testcaseEnvInst *TestCaseEnv, deployment *Deployment) {
 	if testcaseEnvInst != nil {
 		Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
 	}
+}
+
+// CleanupOperatorFile deletes the test_file.img from the operator pod's app download directory
+// if filePresentOnOperator is true.
+func CleanupOperatorFile(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, filePresentOnOperator bool) {
+	if filePresentOnOperator {
+		opPod := GetOperatorPodName(testcaseEnvInst)
+		podDownloadPath := filepath.Join(AppDownloadVolume, "test_file.img")
+		DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
+	}
+}
+
+// TeardownAppFrameworkTestCaseEnv handles teardown for app framework tests with provider-specific
+// cloud storage cleanup. cloudCleanup is called only if SkipTeardown is false.
+func TeardownAppFrameworkTestCaseEnv(ctx context.Context, testcaseEnvInst *TestCaseEnv, deployment *Deployment, cloudCleanup func(), filePresentOnOperator bool) {
+	TeardownTestCaseEnv(testcaseEnvInst, deployment)
+
+	if testcaseEnvInst != nil && !testcaseEnvInst.SkipTeardown && cloudCleanup != nil {
+		cloudCleanup()
+	}
+
+	CleanupOperatorFile(ctx, deployment, testcaseEnvInst, filePresentOnOperator)
 }
 
 // SetupLicenseConfigMap downloads the license file from the appropriate cloud provider
