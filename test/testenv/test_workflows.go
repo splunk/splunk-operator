@@ -59,10 +59,7 @@ func RunStandaloneWithLMWorkflow(ctx context.Context, deployment *Deployment, te
 
 // RunStandaloneWithMCWorkflow deploys standalone with monitoring console and verifies both are ready
 func RunStandaloneWithMCWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, mcName string) *WorkflowResult {
-	mc, err := deployment.DeployMonitoringConsole(ctx, mcName, "")
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
+	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcName, "")
 
 	standalone, err := deployment.DeployStandalone(ctx, name, "", mcName)
 	Expect(err).To(Succeed(), "Unable to deploy standalone instance")
@@ -88,12 +85,9 @@ func RunC3DeploymentWorkflow(ctx context.Context, deployment *Deployment, testca
 
 // RunC3WithMCWorkflow deploys a C3 cluster with monitoring console and verifies all components
 func RunC3WithMCWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int, mcName string) *WorkflowResult {
-	mc, err := deployment.DeployMonitoringConsole(ctx, mcName, "")
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
+	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcName, "")
 
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
-
-	err = deployment.DeploySingleSiteCluster(ctx, name, indexerReplicas, true, mcName)
+	err := deployment.DeploySingleSiteCluster(ctx, name, indexerReplicas, true, mcName)
 	Expect(err).To(Succeed(), "Unable to deploy C3 cluster")
 
 	testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
@@ -121,12 +115,9 @@ func RunM4DeploymentWorkflow(ctx context.Context, deployment *Deployment, testca
 
 // RunM4WithMCWorkflow deploys a M4 multisite cluster with monitoring console
 func RunM4WithMCWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int, siteCount int, mcName string) *WorkflowResult {
-	mc, err := deployment.DeployMonitoringConsole(ctx, mcName, "")
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
+	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcName, "")
 
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
-
-	err = deployment.DeployMultisiteClusterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcName)
+	err := deployment.DeployMultisiteClusterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcName)
 	Expect(err).To(Succeed(), "Unable to deploy M4 cluster")
 
 	testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)

@@ -21,6 +21,7 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/test/testenv"
+	corev1 "k8s.io/api/core/v1"
 
 	. "github.com/onsi/gomega"
 )
@@ -167,6 +168,30 @@ func RunS1DefaultVolumesTest(ctx context.Context, deployment *testenv.Deployment
 
 	// Validate EvictionPolicy
 	testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "eviction_policy", cacheManagerSmartStoreSpec.EvictionPolicy)
+}
+
+// RunS1EphemeralStorageTest deploys a Standalone with one ephemeral storage volume configured and verifies it is ready.
+// Pass etcStorage=true to set EtcVolumeStorageConfig, false to set VarVolumeStorageConfig.
+func RunS1EphemeralStorageTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, storageConfig enterpriseApi.StorageClassSpec, etcStorage bool) {
+	spec := enterpriseApi.StandaloneSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: enterpriseApi.Spec{
+				ImagePullPolicy: "Always",
+				Image:           testcaseEnvInst.GetSplunkImage(),
+			},
+			Volumes: []corev1.Volume{},
+		},
+	}
+	if etcStorage {
+		spec.CommonSplunkSpec.EtcVolumeStorageConfig = storageConfig
+	} else {
+		spec.CommonSplunkSpec.VarVolumeStorageConfig = storageConfig
+	}
+
+	standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
+	Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+
+	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 }
 
 // RunM4MultisiteSmartStoreTest runs the standard M4 multisite SmartStore test workflow
