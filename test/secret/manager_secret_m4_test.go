@@ -17,7 +17,6 @@ import (
 	"context"
 
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
 )
@@ -31,10 +30,6 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 	BeforeEach(func() {
 		testenv.SpecifiedTestTimeout = 40000
 		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
-
-		// Validate test prerequisites early to fail fast
-		err := testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
-		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {

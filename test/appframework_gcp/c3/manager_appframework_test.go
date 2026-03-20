@@ -52,10 +52,6 @@ var _ = Describe("c3appfw test", func() {
 	BeforeEach(func() {
 		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
 		testenv.SpecifiedTestTimeout = 100000
-
-		// Validate test prerequisites early to fail fast
-		err := testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
-		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {

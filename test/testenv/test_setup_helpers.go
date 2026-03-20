@@ -25,6 +25,7 @@ import (
 )
 
 // SetupTestCaseEnv creates a new test case environment and deployment for use in BeforeEach blocks.
+// It also validates test prerequisites immediately to fail fast before any long operations.
 func SetupTestCaseEnv(testenvInstance *TestEnv, namePrefix string) (*TestCaseEnv, *Deployment) {
 	name := fmt.Sprintf("%s-%s", namePrefix+testenvInstance.GetName(), RandomDNSName(3))
 	testcaseEnvInst, err := NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
@@ -32,6 +33,9 @@ func SetupTestCaseEnv(testenvInstance *TestEnv, namePrefix string) (*TestCaseEnv
 
 	deployment, err := testcaseEnvInst.NewDeployment(RandomDNSName(3))
 	Expect(err).To(Succeed(), "Unable to create deployment")
+
+	err = testcaseEnvInst.ValidateTestPrerequisites(context.TODO(), deployment)
+	Expect(err).To(Succeed(), "Test prerequisites validation failed")
 
 	return testcaseEnvInst, deployment
 }

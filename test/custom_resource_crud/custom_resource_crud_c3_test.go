@@ -18,7 +18,6 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -34,10 +33,6 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 	BeforeEach(func() {
 		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "master")
-
-		// Validate test prerequisites early to fail fast
-		err := testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
-		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 
 		defaultCPULimits = DefaultCPULimits
 		newCPULimits = UpdatedCPULimits

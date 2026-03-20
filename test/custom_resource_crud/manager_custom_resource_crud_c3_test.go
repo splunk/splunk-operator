@@ -43,10 +43,6 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 		verificationTimeout = DefaultVerificationTimeout
 
 		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
-
-		// Validate test prerequisites early to fail fast
-		err := testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
-		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {
