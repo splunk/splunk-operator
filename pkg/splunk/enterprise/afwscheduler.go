@@ -68,9 +68,11 @@ func isFanOutApplicableToCR(cr splcommon.MetaObject) bool {
 }
 
 // createAndAddPipelineWorker used to add a worker to the pipeline on reconcile re-entry
+// test comment
 func (ppln *AppInstallPipeline) createAndAddPipelineWorker(ctx context.Context, phase enterpriseApi.AppPhaseType, appDeployInfo *enterpriseApi.AppDeploymentInfo,
 	appSrcName string, podName string, appFrameworkConfig *enterpriseApi.AppFrameworkSpec,
-	client splcommon.ControllerClient, cr splcommon.MetaObject, statefulSet *appsv1.StatefulSet) {
+	client splcommon.ControllerClient, cr splcommon.MetaObject, statefulSet *appsv1.StatefulSet,
+) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("createAndAddPipelineWorker").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -304,7 +306,6 @@ func createFanOutWorker(seedWorker *PipelineWorker, ordinalIdx int) *PipelineWor
 // transitionWorkerPhase transitions a worker to new phase, and deletes from the current phase
 // In the case of Standalone CR with multiple replicas, Fan-out `replicas` number of new workers
 func (ppln *AppInstallPipeline) transitionWorkerPhase(ctx context.Context, worker *PipelineWorker, currentPhase, nextPhase enterpriseApi.AppPhaseType) {
-
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("transitionWorkerPhase").WithValues("name", worker.cr.GetName(), "namespace", worker.cr.GetNamespace(), "App name", worker.appDeployInfo.AppName, "digest", worker.appDeployInfo.ObjectHash, "pod name", worker.targetPodName, "current Phase", currentPhase, "next phase", nextPhase)
 
@@ -341,7 +342,7 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(ctx context.Context, worke
 				// Create a slice of corresponding worker nodes
 				podCopyWorkers = make([]*PipelineWorker, replicaCount)
 
-				//Create the Aux PhaseInfo for tracking all the Standalone Pods
+				// Create the Aux PhaseInfo for tracking all the Standalone Pods
 				for podID := range appDeployInfo.AuxPhaseInfo {
 					// Create a new copy worker
 					podCopyWorkers[podID] = createFanOutWorker(worker, podID)
@@ -469,7 +470,6 @@ func (downloadWorker *PipelineWorker) createDownloadDirOnOperator(ctx context.Co
 
 // download API will do the actual work of downloading apps from remote storage
 func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *PipelinePhase, remoteDataClientMgr RemoteDataClientManager, localPath string, downloadWorkersRunPool chan struct{}) {
-
 	defer func() {
 		downloadWorker.isActive = false
 
@@ -520,12 +520,11 @@ func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *P
 
 // downloadWorkerHandler schedules the download workers to download app/s
 func (pplnPhase *PipelinePhase) downloadWorkerHandler(ctx context.Context, ppln *AppInstallPipeline, maxWorkers uint64, scheduleDownloadsWaiter *sync.WaitGroup) {
-
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("downloadWorkerHandler")
 
 	// derive a counting semaphore from the channel to represent worker run pool
-	var downloadWorkersRunPool = make(chan struct{}, maxWorkers)
+	downloadWorkersRunPool := make(chan struct{}, maxWorkers)
 
 downloadWork:
 	for {
@@ -704,7 +703,7 @@ func markWorkerPhaseInstallationComplete(ctx context.Context, phaseInfo *enterpr
 			worker.appDeployInfo.PhaseInfo.Phase = enterpriseApi.PhaseInstall
 			worker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgInstallComplete
 
-			//For now, set the deploy status as complete. Eventually, we can phase it out
+			// For now, set the deploy status as complete. Eventually, we can phase it out
 			worker.appDeployInfo.DeployStatus = enterpriseApi.DeployStatusComplete
 		}
 	}
@@ -870,7 +869,7 @@ func getAppTopFolderFromPackage(rctx context.Context, cr splcommon.MetaObject, a
 		}
 	}
 
-	//output contains a trailing \n also, something like "SplunkEnterpriseSecuritySuite\n"
+	// output contains a trailing \n also, something like "SplunkEnterpriseSecuritySuite\n"
 	stdOut = strings.Trim(stdOut, "\n")
 	return stdOut, nil
 }
@@ -1040,7 +1039,7 @@ func (pplnPhase *PipelinePhase) podCopyWorkerHandler(ctx context.Context, handle
 	// Try to get an active worker by queuing a msg to podCopyRunPool. Once the worker finishes it drains a msg from the channel.
 	// So, indirectly serving the counting semaphore functionality. At any point in time, only numPodCopyRunners workers can
 	// be running, as that is the channel max. capacity.
-	var podCopyWorkerPool = make(chan struct{}, numPodCopyRunners)
+	podCopyWorkerPool := make(chan struct{}, numPodCopyRunners)
 
 podCopyHandler:
 	for {
@@ -1499,7 +1498,6 @@ func initPipelinePhase(afwPipeline *AppInstallPipeline, phase enterpriseApi.AppP
 
 // initAppInstallPipeline creates the AFW scheduler pipelines
 func initAppInstallPipeline(ctx context.Context, appDeployContext *enterpriseApi.AppDeploymentContext, client splcommon.ControllerClient, cr splcommon.MetaObject) *AppInstallPipeline {
-
 	afwPipeline := &AppInstallPipeline{}
 	afwPipeline.pplnPhases = make(map[enterpriseApi.AppPhaseType]*PipelinePhase, 3)
 	afwPipeline.sigTerm = make(chan struct{})
@@ -1640,7 +1638,6 @@ func getInsallWorkerPlaybookContext(ctx context.Context, worker *PipelineWorker,
 
 // getClusterScopePlaybookContext returns the context for running playbook
 func getClusterScopePlaybookContext(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline, podName string, kind string, podExecClient splutil.PodExecClientImpl) PlaybookImpl {
-
 	switch kind {
 	case "ClusterManager", "ClusterMaster":
 		return getIdxcPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
@@ -1991,7 +1988,6 @@ func (idxcPlaybookContext *IdxcPlaybookContext) setLivenessProbeLevel(ctx contex
 // 1. If the bundle push is not in progress, run the logic to push the bundle from CM to indexer peers
 // 2. OR else, if the bundle push is already in progress, check the status of bundle push
 func (idxcPlaybookContext *IdxcPlaybookContext) runPlaybook(ctx context.Context) error {
-
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("RunPlaybook").WithValues("crName", idxcPlaybookContext.cr.GetName(), "namespace", idxcPlaybookContext.cr.GetNamespace())
 
