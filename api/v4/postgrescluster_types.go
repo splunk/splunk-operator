@@ -30,15 +30,14 @@ type ManagedRole struct {
 	// +kubebuilder:validation:MaxLength=63
 	Name string `json:"name"`
 
-	// PasswordSecretRef references a Secret containing the password for this role.
-	// The Secret should have a key "password" with the password value.
+	// PasswordSecretRef references a Secret and the key within it containing the password for this role.
 	// +optional
-	PasswordSecretRef *corev1.LocalObjectReference `json:"passwordSecretRef,omitempty"`
+	PasswordSecretRef *corev1.SecretKeySelector `json:"passwordSecretRef,omitempty"`
 
-	// Ensure controls whether the role should exist (present) or not (absent).
-	// +kubebuilder:validation:Enum=present;absent
-	// +kubebuilder:default=present
-	Ensure string `json:"ensure,omitempty"`
+	// Exists controls whether the role should be present (true) or absent (false) in PostgreSQL.
+	// +kubebuilder:default=true
+	// +optional
+	Exists bool `json:"exists,omitempty"`
 }
 
 // PostgresClusterSpec defines the desired state of PostgresCluster.
@@ -113,7 +112,7 @@ type PostgresClusterSpec struct {
 	// +kubebuilder:validation:Enum=Delete;Retain
 	// +kubebuilder:default=Retain
 	// +optional
-	ClusterDeletionPolicy string `json:"clusterDeletionPolicy,omitempty"`
+	ClusterDeletionPolicy *string `json:"clusterDeletionPolicy,omitempty"`
 }
 
 // PostgresClusterResources defines references to Kubernetes resources related to the PostgresCluster, such as ConfigMaps and Secrets.
@@ -123,10 +122,8 @@ type PostgresClusterResources struct {
 	// +optional
 	ConfigMapRef *corev1.LocalObjectReference `json:"configMapRef,omitempty"`
 
-	// SecretRef references the Secret with superuser credentials.
-	// Contains: passwords for superuser
 	// +optional
-	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+	SuperUserSecretRef *corev1.SecretKeySelector `json:"secretRef,omitempty"`
 }
 
 // PostgresClusterStatus defines the observed state of PostgresCluster.
@@ -134,7 +131,7 @@ type PostgresClusterStatus struct {
 	// Phase represents the current phase of the PostgresCluster.
 	// Values: "Pending", "Provisioning", "Failed", "Ready", "Deleting"
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase *string `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations of the PostgresCluster's state.
 	// +optional

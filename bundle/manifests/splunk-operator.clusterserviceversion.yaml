@@ -63,31 +63,11 @@ metadata:
           "apiVersion": "enterprise.splunk.com/v4",
           "kind": "ClusterManager",
           "metadata": {
-            "name": "clustermanager-sample"
-          },
-          "spec": null
-        },
-        {
-          "apiVersion": "enterprise.splunk.com/v4",
-          "kind": "Database",
-          "metadata": {
-            "labels": {
-              "app.kubernetes.io/managed-by": "kustomize",
-              "app.kubernetes.io/name": "splunk-operator"
-            },
-            "name": "database-sample"
-          },
-          "spec": null
-        },
-        {
-          "apiVersion": "enterprise.splunk.com/v4",
-          "kind": "DatabaseClass",
-          "metadata": {
-            "labels": {
-              "app.kubernetes.io/managed-by": "kustomize",
-              "app.kubernetes.io/name": "splunk-operator"
-            },
-            "name": "databaseclass-sample"
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "clustermanager-sample",
+            "namespace": "splunk-operator"
           },
           "spec": null
         },
@@ -95,39 +75,157 @@ metadata:
           "apiVersion": "enterprise.splunk.com/v4",
           "kind": "IndexerCluster",
           "metadata": {
-            "name": "indexercluster-sample"
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "indexercluster-sample",
+            "namespace": "splunk-operator"
           },
-          "spec": null
+          "spec": {
+            "clusterManagerRef": {
+              "name": "clustermanager-sample"
+            }
+          }
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
           "kind": "LicenseManager",
           "metadata": {
-            "name": "licensemanager-sample"
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "licensemanager-sample",
+            "namespace": "splunk-operator"
           },
-          "spec": null
+          "spec": {
+            "licenseUrl": "/mnt/licenses/enterprise.lic",
+            "volumes": [
+              {
+                "configMap": {
+                  "name": "splunk-licenses"
+                },
+                "name": "licenses"
+              }
+            ]
+          }
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
           "kind": "MonitoringConsole",
           "metadata": {
-            "name": "monitoringconsole-sample"
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "monitoringconsole-sample",
+            "namespace": "splunk-operator"
           },
           "spec": null
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "PostgresCluster",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "splunk-operator"
+            },
+            "name": "postgresql-cluster-dev"
+          },
+          "spec": {
+            "class": "postgresql-dev"
+          }
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "PostgresClusterClass",
+          "metadata": {
+            "name": "postgresql-dev"
+          },
+          "spec": {
+            "cnpg": {
+              "connectionPooler": {
+                "config": {
+                  "max_client_conn": "100"
+                },
+                "instances": 2,
+                "mode": "transaction"
+              },
+              "primaryUpdateMethod": "restart"
+            },
+            "config": {
+              "connectionPoolerEnabled": true,
+              "instances": 1,
+              "postgresVersion": "18",
+              "resources": {
+                "limits": {
+                  "cpu": "1",
+                  "memory": "2Gi"
+                },
+                "requests": {
+                  "cpu": "500m",
+                  "memory": "1Gi"
+                }
+              },
+              "storage": "10Gi"
+            },
+            "provisioner": "postgresql.cnpg.io"
+          }
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "PostgresDatabase",
+          "metadata": {
+            "name": "splunk-databases",
+            "namespace": "default"
+          },
+          "spec": {
+            "clusterRef": {
+              "name": "postgresql-cluster-dev"
+            },
+            "databases": [
+              {
+                "deletionPolicy": "Retain",
+                "extensions": [
+                  "pg_stat_statements",
+                  "pgcrypto"
+                ],
+                "name": "kvstore"
+              },
+              {
+                "deletionPolicy": "Delete",
+                "extensions": [
+                  "pg_trgm"
+                ],
+                "name": "analytics"
+              }
+            ]
+          }
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
           "kind": "SearchHeadCluster",
           "metadata": {
-            "name": "searchheadcluster-sample"
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "searchheadcluster-sample",
+            "namespace": "splunk-operator"
           },
-          "spec": null
+          "spec": {
+            "clusterManagerRef": {
+              "name": "clustermanager-sample"
+            }
+          }
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
           "kind": "Standalone",
           "metadata": {
-            "name": "standalone-sample"
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "standalone-sample",
+            "namespace": "splunk-operator"
           },
           "spec": null
         }
@@ -135,7 +233,7 @@ metadata:
     capabilities: Seamless Upgrades
     categories: Big Data, Logging & Tracing, Monitoring, Security, AI/Machine Learning
     containerImage: splunk/splunk-operator@sha256:c4e0d314622699496f675760aad314520d050a66627fdf33e1e21fa28ca85d50
-    createdAt: "2026-01-05T14:32:06Z"
+    createdAt: "2026-03-23T13:00:36Z"
     description: The Splunk Operator for Kubernetes enables you to quickly and easily
       deploy Splunk Enterprise on your choice of private or public cloud provider.
       The Operator simplifies scaling and management of Splunk Enterprise by automating
@@ -166,16 +264,6 @@ spec:
     - kind: ClusterMaster
       name: clustermasters.enterprise.splunk.com
       version: v2
-    - description: DatabaseClass is the Schema for the databaseclasses API.
-      displayName: Database Class
-      kind: DatabaseClass
-      name: databaseclasses.enterprise.splunk.com
-      version: v4
-    - description: Database is the Schema for the databases API.
-      displayName: Database
-      kind: Database
-      name: databases.enterprise.splunk.com
-      version: v4
     - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
       displayName: Indexer Cluster
       kind: IndexerCluster
@@ -217,6 +305,23 @@ spec:
       displayName: Monitoring Console
       kind: MonitoringConsole
       name: monitoringconsoles.enterprise.splunk.com
+      version: v4
+    - description: |-
+        PostgresClusterClass is the Schema for the postgresclusterclasses API.
+        PostgresClusterClass defines a reusable template and policy for postgres cluster provisioning.
+      displayName: Postgres Cluster Class
+      kind: PostgresClusterClass
+      name: postgresclusterclasses.enterprise.splunk.com
+      version: v4
+    - description: PostgresCluster is the Schema for the postgresclusters API.
+      displayName: Postgres Cluster
+      kind: PostgresCluster
+      name: postgresclusters.enterprise.splunk.com
+      version: v4
+    - description: PostgresDatabase is the Schema for the postgresdatabases API.
+      displayName: Postgres Database
+      kind: PostgresDatabase
+      name: postgresdatabases.enterprise.splunk.com
       version: v4
     - description: SearchHeadCluster is the Schema for a Splunk Enterprise search
         head cluster
@@ -265,25 +370,6 @@ spec:
       clusterPermissions:
       - rules:
         - apiGroups:
-          - apiextensions.k8s.io
-          resources:
-          - customresourcedefinitions
-          verbs:
-          - get
-          - list
-        - apiGroups:
-          - apps
-          resources:
-          - statefulsets
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
           - ""
           resources:
           - configmaps
@@ -305,16 +391,35 @@ spec:
           - update
           - watch
         - apiGroups:
+          - apiextensions.k8s.io
+          resources:
+          - customresourcedefinitions
+          verbs:
+          - get
+          - list
+        - apiGroups:
+          - apps
+          resources:
+          - statefulsets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
           - enterprise.splunk.com
           resources:
           - clustermanagers
           - clustermasters
-          - databaseclasses
-          - databases
           - indexerclusters
           - licensemanagers
           - licensemasters
           - monitoringconsoles
+          - postgresclusters
+          - postgresdatabases
           - searchheadclusters
           - standalones
           verbs:
@@ -330,12 +435,12 @@ spec:
           resources:
           - clustermanagers/finalizers
           - clustermasters/finalizers
-          - databaseclasses/finalizers
-          - databases/finalizers
           - indexerclusters/finalizers
           - licensemanagers/finalizers
           - licensemasters/finalizers
           - monitoringconsoles/finalizers
+          - postgresclusters/finalizers
+          - postgresdatabases/finalizers
           - searchheadclusters/finalizers
           - standalones/finalizers
           verbs:
@@ -345,18 +450,47 @@ spec:
           resources:
           - clustermanagers/status
           - clustermasters/status
-          - databaseclasses/status
-          - databases/status
           - indexerclusters/status
           - licensemanagers/status
           - licensemasters/status
           - monitoringconsoles/status
+          - postgresclusters/status
+          - postgresdatabases/status
           - searchheadclusters/status
           - standalones/status
           verbs:
           - get
           - patch
           - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - postgresclusterclasses
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - postgresql.cnpg.io
+          resources:
+          - clusters
+          - databases
+          - poolers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - postgresql.cnpg.io
+          resources:
+          - clusters/status
+          - poolers/status
+          verbs:
+          - get
         - apiGroups:
           - authentication.k8s.io
           resources:
@@ -415,7 +549,7 @@ spec:
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.name
-                image: localhost:5001/sok-operator-mploski:v1.0.0
+                image: controller:latest
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:

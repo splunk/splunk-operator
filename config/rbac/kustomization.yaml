@@ -22,13 +22,10 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the splunk-operator itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
-- postgrescluster_admin_role.yaml
 - postgrescluster_editor_role.yaml
 - postgrescluster_viewer_role.yaml
-- postgresclusterclass_admin_role.yaml
 - postgresclusterclass_editor_role.yaml
 - postgresclusterclass_viewer_role.yaml
-- postgresdatabase_admin_role.yaml
 - postgresdatabase_editor_role.yaml
 - postgresdatabase_viewer_role.yaml
 
