@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
@@ -39,7 +40,7 @@ var _ = Describe("Standalone Controller", func() {
 
 		It("Get Standalone custom resource should failed", func() {
 			namespace := "ns-splunk-st-1"
-			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone, appEngine enterprise.AppEngine) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -52,7 +53,7 @@ var _ = Describe("Standalone Controller", func() {
 
 		It("Create Standalone custom resource with annotations should pause", func() {
 			namespace := "ns-splunk-st-2"
-			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone, appEngine enterprise.AppEngine) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -71,7 +72,7 @@ var _ = Describe("Standalone Controller", func() {
 
 		It("Create Standalone custom resource should succeeded", func() {
 			namespace := "ns-splunk-st-3"
-			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone, appEngine enterprise.AppEngine) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -84,7 +85,7 @@ var _ = Describe("Standalone Controller", func() {
 
 		It("Cover Unused methods", func() {
 			namespace := "ns-splunk-st-4"
-			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone, appEngine enterprise.AppEngine) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
