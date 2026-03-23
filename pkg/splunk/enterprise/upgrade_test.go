@@ -61,7 +61,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	if err != nil {
 		t.Errorf("create should not have returned error; err=%v", err)
 	}
-	_, err = ApplyStandalone(ctx, client, &stdln)
+	_, err = ApplyStandalone(ctx, client, &stdln, NewAppFrameworkEngine())
 	if err != nil {
 		t.Errorf("ApplyStandalone should not have returned error; err=%v", err)
 	}
@@ -458,7 +458,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	if err != nil {
 		t.Errorf("update should not have returned error; err=%v", err)
 	}
-	_, err = ApplyStandalone(ctx, client, &stdln)
+	_, err = ApplyStandalone(ctx, client, &stdln, NewAppFrameworkEngine())
 	if err != nil {
 		t.Errorf("ApplyStandalone should not have returned error; err=%v", err)
 	}

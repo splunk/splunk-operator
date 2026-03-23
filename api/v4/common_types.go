@@ -47,6 +47,9 @@ const (
 	RepoStatePassive
 )
 
+// ScopeType represent the scope of the App Source
+type ScopeType string
+
 // Values to represent the App Source scope
 const (
 	ScopeLocal                = "local"
