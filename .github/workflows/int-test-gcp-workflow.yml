@@ -84,7 +84,7 @@ jobs:
       ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GCP_REGION: ${{ secrets.GCP_REGION }}
-      AWS_S3_REGION: ${{ secrets.GCP_REGION }}
+      GCP_STORAGE_REGION: ${{ secrets.GCP_REGION }}
       GCP_ZONE: ${{ secrets.GCP_ZONE }}
       GCP_NETWORK: default  # Adjust if using a custom network
       GCP_SUBNETWORK: default  # Adjust if using a custom subnetwork
@@ -112,7 +112,7 @@ jobs:
       GCP_TEST_CONTAINER: ${{ secrets.GCP_TEST_CONTAINER}}
       GCP_INDEXES_CONTAINER: ${{ secrets.GCP_INDEXES_CONTAINER}}
       ECR_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
-      GCP_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
+      GCP_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
     steps:
       - name: Set Test Cluster Name
         run: |
@@ -141,7 +141,7 @@ jobs:
       - name: Set GCP Project
         run: |
           gcloud config set project ${{ env.GCP_PROJECT_ID }}
-          export USE_GKE_GCLOUD_AUTH_PLUGIN=True
+          echo "USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> $GITHUB_ENV
 
       - name: Create GKE Cluster
         run: |
@@ -151,18 +151,11 @@ jobs:
 
       - name: Get Kubernetes Credentials
         run: |
-          export USE_GKE_GCLOUD_AUTH_PLUGIN=True
           gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.GCP_ZONE }} --project ${{ env.GCP_PROJECT_ID }}
 
       - name: Allow Pulling from Artifact Registry
         run: |
           gcloud auth configure-docker ${{ secrets.GCP_ARTIFACT_REGISTRY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          install_components: 'kubectl'
 
       - name: Change Splunk Enterprise Image on Main Branches
         if: github.ref == 'refs/heads/main'
@@ -225,11 +218,6 @@ jobs:
         run: |
           docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
           docker push ${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-
-      - name: Get Kubernetes Credentials
-        run: |
-          export USE_GKE_GCLOUD_AUTH_PLUGIN=True
-          gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.GCP_ZONE }} --project ${{ env.GCP_PROJECT_ID }}
 
       - name: Get GKE Credentials
         uses: google-github-actions/get-gke-credentials@v1

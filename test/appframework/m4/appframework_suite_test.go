@@ -57,7 +57,7 @@ var (
 func TestBasic(t *testing.T) {
 
 	if err := loadEnvFile(); err != nil {
-		panic("Error loading .env file: " + err.Error())
+		t.Fatalf("Error loading .env file: %s", err.Error())
 	}
 	RegisterFailHandler(Fail)
 

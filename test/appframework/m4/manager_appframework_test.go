@@ -66,21 +66,21 @@ var _ = Describe("m4appfw test", func() {
 
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
+		if testcaseEnvInst != nil && types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
 		}
 		if deployment != nil {
 			deployment.Teardown()
 		}
 		// Delete files uploaded to S3
-		if !testcaseEnvInst.SkipTeardown {
+		if testcaseEnvInst != nil && !testcaseEnvInst.SkipTeardown {
 			backend.DeleteFiles(ctx, uploadedApps)
 		}
 		if testcaseEnvInst != nil {
 			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
 		}
 
-		if filePresentOnOperator {
+		if filePresentOnOperator && testcaseEnvInst != nil {
 			//Delete files from app-directory
 			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
 			podDownloadPath := filepath.Join(testenv.AppDownloadVolume, "test_file.img")

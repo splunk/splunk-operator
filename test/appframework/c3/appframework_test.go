@@ -67,7 +67,7 @@ var _ = Describe("c3appfw test", func() {
 
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
+		if testcaseEnvInst != nil && types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
 		}
 		if deployment != nil {
@@ -79,11 +79,11 @@ var _ = Describe("c3appfw test", func() {
 		}
 
 		// Delete files uploaded to cloud storage
-		if !testcaseEnvInst.SkipTeardown {
+		if testcaseEnvInst != nil && !testcaseEnvInst.SkipTeardown {
 			backend.DeleteFiles(ctx, uploadedApps)
 		}
 
-		if filePresentOnOperator {
+		if filePresentOnOperator && testcaseEnvInst != nil {
 			//Delete files from app-directory
 			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
 			podDownloadPath := filepath.Join(testenv.AppDownloadVolume, "test_file.img")
