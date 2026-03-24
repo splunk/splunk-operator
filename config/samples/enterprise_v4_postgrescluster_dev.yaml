@@ -7,13 +7,12 @@ metadata:
   labels:
     app.kubernetes.io/name: splunk-operator
     app.kubernetes.io/managed-by: kustomize
-  name: postgresql-cluster-dev-overridden
+  name: postgresql-cluster-dev
 spec:
   # Reference the ClusterClass to inherit defaults - this is required, immutable, and must match the name of an existing ClusterClass
   class: postgresql-dev
-  # ClusterDeletionPolicy is set to "Retain" to keep the underlying CNPG Cluster when this PostgresCluster is deleted
   clusterDeletionPolicy: Retain
-  instances: 2
+  instances: 3
   # Storage and PostgreSQL version are overridden from the ClusterClass defaults. Validation rules on the PostgresCluster resource will prevent removing these fields or setting them to lower values than the original overrides.
   storage: 1Gi
   postgresVersion: "15.10"

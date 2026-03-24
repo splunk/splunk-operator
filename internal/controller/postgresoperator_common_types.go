@@ -1,9 +1,8 @@
 package controller
 
 import (
-	"time"
-
 	corev1 "k8s.io/api/core/v1"
+	"time"
 )
 
 // This struct is used to compare the merged configuration from PostgresClusterClass and PostgresClusterSpec
@@ -43,17 +42,17 @@ const (
 	defaultDatabaseName           string = "postgres"
 	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"
 
-	annotationRetainedFrom        string = "enterprise.splunk.com/retained-from"
+	annotationRetainedFrom string = "enterprise.splunk.com/retained-from"
 
-	defaultSecretSuffix           string = "-secret"
+	defaultSecretSuffix string = "-secret"
 
-	defaultPoolerSuffix           string = "-pooler-"
-	defaultConfigMapSuffix        string = "-configmap"
-	defaultPort                   string = "5432"
-	superUsername                 string = "postgres"
-	postgresClusterFinalizerName  string = "postgresclusters.enterprise.splunk.com/finalizer"
-	clusterDeletionPolicyDelete   string = "Delete"
-	clusterDeletionPolicyRetain   string = "Retain"
+	defaultPoolerSuffix          string = "-pooler-"
+	defaultConfigMapSuffix       string = "-configmap"
+	defaultPort                  string = "5432"
+	superUsername                string = "postgres"
+	postgresClusterFinalizerName string = "postgresclusters.enterprise.splunk.com/finalizer"
+	clusterDeletionPolicyDelete  string = "Delete"
+	clusterDeletionPolicyRetain  string = "Retain"
 
 	// phases
 	readyDBPhase        reconcileDBPhases = "Ready"
@@ -71,12 +70,12 @@ const (
 	// Condition types
 	clusterReady    conditionTypes = "ClusterReady"
 	poolerReady     conditionTypes = "PoolerReady"
-	usersReady      conditionTypes = "UsersReady"
+	rolesReady      conditionTypes = "RolesReady"
 	databasesReady  conditionTypes = "DatabasesReady"
 	secretsReady    conditionTypes = "SecretsReady"
 	configMapsReady conditionTypes = "ConfigMapsReady"
-	// TODO - to use in the future implementation
-	// privilegesReady conditionTypes = "PrivilegesReady"
+	configMapReady  conditionTypes = "ConfigMapReady"
+	privilegesReady conditionTypes = "PrivilegesReady"
 
 	// Condition reasons
 	reasonClusterNotFound          conditionReasons = "ClusterNotFound"
@@ -93,6 +92,8 @@ const (
 	reasonSuperUserSecretFailed    conditionReasons = "SuperUserSecretFailed"
 	reasonConfigMapsCreationFailed conditionReasons = "ConfigMapsCreationFailed"
 	reasonConfigMapsCreated        conditionReasons = "ConfigMapsCreated"
+	reasonPrivilegesGranted        conditionReasons = "PrivilegesGranted"
+	reasonPrivilegesGrantFailed    conditionReasons = "PrivilegesGrantFailed"
 
 	// Additional condition reasons for clusterReady conditionType
 	reasonClusterClassNotFound  conditionReasons = "ClusterClassNotFound"
@@ -112,7 +113,6 @@ const (
 	reasonAllInstancesReady          conditionReasons = "AllInstancesReady"
 
 	// Additional condition reasons for mapping CNPG cluster statuses
-	reasonCNPGClusterNotHealthy  conditionReasons = "CNPGClusterNotHealthy"
 	reasonCNPGClusterHealthy     conditionReasons = "CNPGClusterHealthy"
 	reasonCNPGProvisioning       conditionReasons = "CNPGClusterProvisioning"
 	reasonCNPGSwitchover         conditionReasons = "CNPGSwitchover"

@@ -2,7 +2,7 @@ apiVersion: enterprise.splunk.com/v4
 kind: PostgresDatabase
 metadata:
   name: splunk-databases
-  namespace: default
+  # namespace: default
 spec:
   clusterRef:
     name: postgresql-cluster-dev
@@ -11,7 +11,7 @@ spec:
       extensions:
         - pg_stat_statements
         - pgcrypto
-      deletionPolicy: Retain
+      deletionPolicy: Delete
     - name: analytics
       extensions:
         - pg_trgm
