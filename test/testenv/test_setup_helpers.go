@@ -17,8 +17,10 @@ package testenv
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 
+	"github.com/joho/godotenv"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
@@ -77,6 +79,122 @@ func TeardownAppFrameworkTestCaseEnv(ctx context.Context, testcaseEnvInst *TestC
 	}
 
 	CleanupOperatorFile(ctx, deployment, testcaseEnvInst, filePresentOnOperator)
+}
+
+// LoadEnvFile traverses up the directory tree from the current working directory
+// to find and load a .env file using godotenv. Returns nil if no .env file is found.
+func LoadEnvFile() error {
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	for {
+		envFile := filepath.Join(dir, ".env")
+		if _, err := os.Stat(envFile); err == nil {
+			return godotenv.Load(envFile)
+		}
+
+		parentDir := filepath.Dir(dir)
+		if parentDir == dir {
+			return nil
+		}
+		dir = parentDir
+	}
+}
+
+// SetupS3AppsSuite initialises the test environment and, when running on EKS,
+// downloads the V1 and V2 app sets from S3.
+func SetupS3AppsSuite(suiteName, testDataBucket, appDirV1, downloadDirV1, appDirV2, downloadDirV2 string) (*TestEnv, []string, []string) {
+	testenvInst, err := NewDefaultTestEnv(suiteName)
+	Expect(err).ToNot(HaveOccurred())
+
+	if ClusterProvider == "eks" {
+		appListV1 := BasicApps
+		appFileList := GetAppFileList(appListV1)
+
+		err = DownloadFilesFromS3(testDataBucket, appDirV1, downloadDirV1, appFileList)
+		Expect(err).To(Succeed(), "Unable to download V1 app files")
+
+		appListV2 := append(appListV1, NewAppsAddedBetweenPolls...)
+		appFileList = GetAppFileList(appListV2)
+
+		err = DownloadFilesFromS3(testDataBucket, appDirV2, downloadDirV2, appFileList)
+		Expect(err).To(Succeed(), "Unable to download V2 app files")
+
+		return testenvInst, appListV1, appListV2
+	}
+
+	testenvInst.Log.Info("Skipping Before Suite Setup", "provider", ClusterProvider)
+	return testenvInst, nil, nil
+}
+
+// CleanupLocalAppDownloads tears down the test environment and removes locally
+// downloaded app directories after a suite run.
+func CleanupLocalAppDownloads(testenvInst *TestEnv, dirs ...string) {
+	if testenvInst != nil {
+		Expect(testenvInst.Teardown()).ToNot(HaveOccurred())
+	}
+	for _, dir := range dirs {
+		Expect(os.RemoveAll(dir)).To(Succeed(), "Unable to delete locally downloaded app files from "+dir)
+	}
+}
+
+// SetupAzureAppsSuite initialises the test environment and, when running on Azure,
+// downloads the V1 and V2 app sets from Azure Blob.
+func SetupAzureAppsSuite(suiteName, downloadDirV1, downloadDirV2 string) (*TestEnv, []string, []string) {
+	testenvInst, err := NewDefaultTestEnv(suiteName)
+	Expect(err).ToNot(HaveOccurred())
+
+	if ClusterProvider == "azure" {
+		ctx := context.TODO()
+
+		appListV1 := BasicApps
+		appFileList := GetAppFileList(appListV1)
+
+		containerName := "/test-data/appframework/v1apps/"
+		err = DownloadFilesFromAzure(ctx, GetAzureEndpoint(ctx), StorageAccountKey, StorageAccount, downloadDirV1, containerName, appFileList)
+		Expect(err).To(Succeed(), "Unable to download V1 app files")
+
+		appListV2 := append(appListV1, NewAppsAddedBetweenPolls...)
+		appFileList = GetAppFileList(appListV2)
+
+		containerName = "/test-data/appframework/v2apps/"
+		err = DownloadFilesFromAzure(ctx, GetAzureEndpoint(ctx), StorageAccountKey, StorageAccount, downloadDirV2, containerName, appFileList)
+		Expect(err).To(Succeed(), "Unable to download V2 app files")
+
+		return testenvInst, appListV1, appListV2
+	}
+
+	testenvInst.Log.Info("Skipping Before Suite Setup", "provider", ClusterProvider)
+	return testenvInst, nil, nil
+}
+
+// SetupGCPAppsSuite initialises the test environment and, when running on GCP,
+// downloads the V1 and V2 app sets from GCS.
+func SetupGCPAppsSuite(suiteName, testDataBucket, appDirV1, downloadDirV1, appDirV2, downloadDirV2 string) (*TestEnv, []string, []string) {
+	testenvInst, err := NewDefaultTestEnv(suiteName)
+	Expect(err).ToNot(HaveOccurred())
+
+	if ClusterProvider == "gcp" {
+		appListV1 := BasicApps
+		appFileList := GetAppFileList(appListV1)
+
+		testenvInst.Log.Info("logging download details", "bucket", testDataBucket, "appDirV1", appDirV1, "downloadDirV1", downloadDirV1, "appFileList", appFileList)
+		err = DownloadFilesFromGCP(testDataBucket, appDirV1, downloadDirV1, appFileList)
+		Expect(err).To(Succeed(), "Unable to download V1 app files")
+
+		appListV2 := append(appListV1, NewAppsAddedBetweenPolls...)
+		appFileList = GetAppFileList(appListV2)
+
+		err = DownloadFilesFromGCP(testDataBucket, appDirV2, downloadDirV2, appFileList)
+		Expect(err).To(Succeed(), "Unable to download V2 app files")
+
+		return testenvInst, appListV1, appListV2
+	}
+
+	testenvInst.Log.Info("Skipping Before Suite Setup", "provider", ClusterProvider)
+	return testenvInst, nil, nil
 }
 
 // SetupLicenseConfigMap downloads the license file from the appropriate cloud provider

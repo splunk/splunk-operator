@@ -58,6 +58,42 @@ func NewSecretTestConfigV4() *SecretTestConfig {
 	}
 }
 
+// verifySecretsPropagated checks that the given secret data has been propagated to all
+// versioned secret objects, pods, server config, input config, and via the API.
+func verifySecretsPropagated(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, secretData map[string][]byte, updated bool) {
+	// Once Pods are READY check each versioned secret for updated secret keys
+	secretObjectNames := testenv.GetVersionedSecretNames(testcaseEnvInst.GetName(), 2)
+
+	// Verify Secrets on versioned secret objects
+	testcaseEnvInst.VerifySecretsOnSecretObjects(ctx, deployment, secretObjectNames, secretData, updated)
+
+	// Once Pods are READY check each pod for updated secret keys
+	verificationPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
+
+	// Verify secrets on pods
+	testcaseEnvInst.VerifySecretsOnPods(ctx, deployment, verificationPods, secretData, updated)
+
+	// Verify Secrets on ServerConf on Pod
+	testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, secretData, updated)
+
+	// Verify Hec token on InputConf on Pod
+	testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, secretData, updated)
+
+	// Verify Secrets via api access on Pod
+	testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, secretData, updated)
+}
+
+// generateAndApplySecretUpdate creates randomized secret data and applies it to the namespace-scoped
+// secret object, returning the updated data map for subsequent verification.
+func generateAndApplySecretUpdate(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, namespaceScopedSecretName string) map[string][]byte {
+	modifiedHecToken := testenv.GetRandomeHECToken()
+	modifiedValue := testenv.RandomDNSName(10)
+	updatedSecretData := testenv.GetSecretDataMap(modifiedHecToken, modifiedValue, modifiedValue, modifiedValue, modifiedValue)
+	err := testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, updatedSecretData)
+	Expect(err).To(Succeed(), "Unable to update secret Object")
+	return updatedSecretData
+}
+
 // RunS1SecretUpdateTest runs the standard S1 secret update test workflow
 func RunS1SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *SecretTestConfig) {
 	// Download License File and create config map
@@ -93,11 +129,7 @@ func RunS1SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	Expect(err).To(Succeed(), "Unable to get secret struct")
 
 	// Update Secret Value on Secret Object
-	modifiedHecToken := testenv.GetRandomeHECToken()
-	modifiedValue := testenv.RandomDNSName(10)
-	updatedSecretData := testenv.GetSecretDataMap(modifiedHecToken, modifiedValue, modifiedValue, modifiedValue, modifiedValue)
-	err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, updatedSecretData)
-	Expect(err).To(Succeed(), "Unable to update secret Object")
+	updatedSecretData := generateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, namespaceScopedSecretName)
 
 	// Ensure standalone is updating
 	testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating)
@@ -114,26 +146,7 @@ func RunS1SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	// Verify Monitoring Console is Ready and stays in ready state
 	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
-	// Once Pods are READY check each versioned secret for updated secret keys
-	secretObjectNames := testenv.GetVersionedSecretNames(testcaseEnvInst.GetName(), 2)
-
-	// Verify Secrets on versioned secret objects
-	testcaseEnvInst.VerifySecretsOnSecretObjects(ctx, deployment, secretObjectNames, updatedSecretData, true)
-
-	// Once Pods are READY check each pod for updated secret keys
-	verificationPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-
-	// Verify secrets on pods
-	testcaseEnvInst.VerifySecretsOnPods(ctx, deployment, verificationPods, updatedSecretData, true)
-
-	// Verify Secrets on ServerConf on Pod
-	testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, updatedSecretData, true)
-
-	// Verify Hec token on InputConf on Pod
-	testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, updatedSecretData, true)
-
-	// Verify Secrets via api access on Pod
-	testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, updatedSecretData, true)
+	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, updatedSecretData, true)
 }
 
 // RunS1SecretDeleteTest runs the standard S1 secret delete test workflow
@@ -189,26 +202,7 @@ func RunS1SecretDeleteTest(ctx context.Context, deployment *testenv.Deployment, 
 	// Verify Monitoring Console is Ready and stays in ready state
 	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
-	// Once Pods are READY check each versioned secret for updated secret keys
-	secretObjectNames := testenv.GetVersionedSecretNames(testcaseEnvInst.GetName(), 2)
-
-	// Verify Secrets on versioned secret objects
-	testcaseEnvInst.VerifySecretsOnSecretObjects(ctx, deployment, secretObjectNames, secretStruct.Data, false)
-
-	// Once Pods are READY check each pod for updated secret keys
-	verificationPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-
-	// Verify secrets on pods
-	testcaseEnvInst.VerifySecretsOnPods(ctx, deployment, verificationPods, secretStruct.Data, false)
-
-	// Verify Secrets on ServerConf on Pod
-	testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, secretStruct.Data, false)
-
-	// Verify Hec token on InputConf on Pod
-	testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, secretStruct.Data, false)
-
-	// Verify Secrets via api access on Pod
-	testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, secretStruct.Data, false)
+	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, secretStruct.Data, false)
 }
 
 // RunS1SecretDeleteWithMCRefTest runs the S1 secret delete test with MC reference workflow
@@ -266,26 +260,7 @@ func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Dep
 	// Verify Monitoring Console is Ready and stays in ready state
 	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
-	// Once Pods are READY check each versioned secret for updated secret keys
-	secretObjectNames := testenv.GetVersionedSecretNames(testcaseEnvInst.GetName(), 2)
-
-	// Verify Secrets on versioned secret objects
-	testcaseEnvInst.VerifySecretsOnSecretObjects(ctx, deployment, secretObjectNames, secretStruct.Data, false)
-
-	// Once Pods are READY check each pod for updated secret keys
-	verificationPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-
-	// Verify secrets on pods
-	testcaseEnvInst.VerifySecretsOnPods(ctx, deployment, verificationPods, secretStruct.Data, false)
-
-	// Verify Secrets on ServerConf on Pod
-	testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, secretStruct.Data, false)
-
-	// Verify Hec token on InputConf on Pod
-	testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, secretStruct.Data, false)
-
-	// Verify Secrets via api access on Pod
-	testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, secretStruct.Data, false)
+	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, secretStruct.Data, false)
 }
 
 // RunC3SecretUpdateTest runs the standard C3 secret update test workflow
@@ -330,12 +305,7 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	Expect(err).To(Succeed(), "Unable to get secret struct")
 
 	// Update Secret Value on Secret Object
-	modifiedHecToken := testenv.GetRandomeHECToken()
-	modifiedValue := testenv.RandomDNSName(10)
-	updatedSecretData := testenv.GetSecretDataMap(modifiedHecToken, modifiedValue, modifiedValue, modifiedValue, modifiedValue)
-
-	err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, updatedSecretData)
-	Expect(err).To(Succeed(), "Unable to update secret Object")
+	updatedSecretData := generateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, namespaceScopedSecretName)
 
 	// Ensure that Cluster Manager goes to update phase
 	if config.APIVersion == "v3" {
@@ -375,26 +345,7 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	testcaseEnvInst.Log.Info("Checkin RF SF after secret change")
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-	// Once Pods are READY check each versioned secret for updated secret keys
-	secretObjectNames := testenv.GetVersionedSecretNames(testcaseEnvInst.GetName(), 2)
-
-	// Verify Secrets on versioned secret objects
-	testcaseEnvInst.VerifySecretsOnSecretObjects(ctx, deployment, secretObjectNames, updatedSecretData, true)
-
-	// Once Pods are READY check each pod for updated secret keys
-	verificationPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-
-	// Verify secrets on pods
-	testcaseEnvInst.VerifySecretsOnPods(ctx, deployment, verificationPods, updatedSecretData, true)
-
-	// Verify Pass4SymmKey Secrets on ServerConf on MC, LM Pods
-	testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, updatedSecretData, true)
-
-	// Verify Hec token on InputConf on Pod
-	testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, updatedSecretData, true)
-
-	// Verify Secrets via api access on Pod
-	testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, updatedSecretData, true)
+	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, updatedSecretData, true)
 }
 
 // RunM4SecretUpdateTest runs the standard M4 secret update test workflow
@@ -444,12 +395,7 @@ func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	Expect(err).To(Succeed(), "Unable to get secret struct")
 
 	// Update Secret Value on Secret Object
-	modifiedHecToken := testenv.GetRandomeHECToken()
-	modifiedValue := testenv.RandomDNSName(10)
-	updatedSecretData := testenv.GetSecretDataMap(modifiedHecToken, modifiedValue, modifiedValue, modifiedValue, modifiedValue)
-
-	err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, updatedSecretData)
-	Expect(err).To(Succeed(), "Unable to update secret Object")
+	updatedSecretData := generateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, namespaceScopedSecretName)
 
 	// Ensure that Cluster Manager goes to update phase
 	if config.APIVersion == "v3" {
@@ -480,24 +426,5 @@ func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	testcaseEnvInst.Log.Info("Checkin RF SF after secret change")
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-	// Once Pods are READY check each versioned secret for updated secret keys
-	secretObjectNames := testenv.GetVersionedSecretNames(testcaseEnvInst.GetName(), 2)
-
-	// Verify Secrets on versioned secret objects
-	testcaseEnvInst.VerifySecretsOnSecretObjects(ctx, deployment, secretObjectNames, updatedSecretData, true)
-
-	// Once Pods are READY check each versioned secret for updated secret keys
-	verificationPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-
-	// Verify secrets on pods
-	testcaseEnvInst.VerifySecretsOnPods(ctx, deployment, verificationPods, updatedSecretData, true)
-
-	// Verify Pass4SymmKey Secrets on ServerConf on MC, LM Pods
-	testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, updatedSecretData, true)
-
-	// Verify Hec token on InputConf on Pod
-	testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, updatedSecretData, true)
-
-	// Verify Secrets via api access on Pod
-	testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, updatedSecretData, true)
+	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, updatedSecretData, true)
 }

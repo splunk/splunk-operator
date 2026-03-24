@@ -1377,7 +1377,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Download apps from S3
 			testcaseEnvInst.Log.Info("Download bigger amount of apps from S3 for this test")
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
 			// Create consolidated list of app files
@@ -2151,7 +2151,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download all apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload big-size app to S3 for Cluster Master
@@ -2280,7 +2280,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download all apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload big-size app to S3 for Cluster Master
@@ -2383,7 +2383,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download all apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload V1 apps to S3 for Indexer Cluster
@@ -2477,7 +2477,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download all apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload V1 apps to S3 for Indexer Cluster
@@ -2690,7 +2690,7 @@ var _ = Describe("c3appfw test", func() {
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload V1 apps to S3 for Indexer Cluster
@@ -2807,7 +2807,7 @@ var _ = Describe("c3appfw test", func() {
 			appVersion := "V1"
 			appList := testenv.PVTestApps
 			appFileList := testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3PVTestApps, downloadDirPVTestApps, appFileList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.PVTestAppsLocation, downloadDirPVTestApps, appFileList)
 			Expect(err).To(Succeed(), "Unable to download app files")
 
 			// Upload apps to S3 for Indexer Cluster
@@ -2896,7 +2896,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download big size apps from S3
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload big size app to S3 for Indexer Cluster
@@ -3120,14 +3120,14 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Download ES app from S3")
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
 			appFileList := testenv.GetAppFileList(esApp)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app file from S3")
 
 			// Download Technology add-on app from S3
 			testcaseEnvInst.Log.Info("Download Technology add-on app from S3")
 			taApp := []string{"Splunk_TA_ForIndexers"}
 			appFileListIdxc := testenv.GetAppFileList(taApp)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileListIdxc)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileListIdxc)
 			Expect(err).To(Succeed(), "Unable to download ES app file from S3")
 
 			// Create directory for file upload to S3
@@ -3235,7 +3235,7 @@ var _ = Describe("c3appfw test", func() {
 			// // Download ES App from S3
 			// appVersion = "V2"
 			// testcaseEnvInst.Log.Info("Download updated ES app from S3")
-			// err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
+			// err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV2, downloadDirV2, appFileList)
 			// Expect(err).To(Succeed(), "Unable to download ES app")
 
 			// // Upload V2 ES app to S3 for Search Head Cluster

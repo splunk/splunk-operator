@@ -913,7 +913,7 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Download ES app from Azure")
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
 			appFileList := testenv.GetAppFileList(esApp)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app file from Azure")
 
@@ -1034,7 +1034,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Download ES App from Azure
 			appVersion = "V2"
-			containerName = "/" + AzureDataContainer + "/" + AzureAppDirV2
+			containerName = "/" + AzureDataContainer + "/" + testenv.AppLocationV2
 			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app")
 
@@ -1542,7 +1542,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Download apps from Azure
 			testcaseEnvInst.Log.Info("Download bigger amount of apps from Azure for this test")
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
@@ -2320,7 +2320,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download all apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
@@ -2450,7 +2450,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download all apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
@@ -2554,7 +2554,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download all apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
@@ -2649,7 +2649,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download all apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
@@ -2866,7 +2866,7 @@ var _ = Describe("c3appfw test", func() {
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -3069,7 +3069,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download big size apps from Azure
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 

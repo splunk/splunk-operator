@@ -745,7 +745,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info("Download ES app from S3")
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
 			appFileList := testenv.GetAppFileList(esApp)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app")
 
 			// Upload ES app to S3
@@ -801,7 +801,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Download ES App from S3
 			testcaseEnvInst.Log.Info("Download updated ES app from S3")
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV2, downloadDirV2, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app")
 
 			// Upload V2 apps to S3 for Standalone
@@ -856,7 +856,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Download apps from S3
 			testcaseEnvInst.Log.Info("Download bigger amount of apps from S3 for this test")
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
@@ -1120,7 +1120,7 @@ var _ = Describe("s1appfw test", func() {
 			// Download apps from S3
 			testcaseEnvInst.Log.Info("Download the extra apps from S3 for this test")
 			appFileList := testenv.GetAppFileList(testenv.RestartNeededApps)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
 			// Upload apps to S3 for first Standalone
@@ -1250,7 +1250,7 @@ var _ = Describe("s1appfw test", func() {
 			// Download all test apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to S3 for Standalone
@@ -1329,7 +1329,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to S3 for Standalone
@@ -1419,7 +1419,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to S3 for Standalone
@@ -1724,7 +1724,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload apps to S3 for Standalone
@@ -1816,7 +1816,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appList := testenv.PVTestApps
 			appFileList := testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3PVTestApps, downloadDirPVTestApps, appFileList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.PVTestAppsLocation, downloadDirPVTestApps, appFileList)
 			Expect(err).To(Succeed(), "Unable to download app files")
 
 			// Upload apps to S3
@@ -1883,7 +1883,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big app")
 
 			// Upload big-size app to S3 for Standalone

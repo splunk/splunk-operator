@@ -29,7 +29,6 @@ var (
 
 // TestBasic is the main entry point
 func TestBasic(t *testing.T) {
-
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Running "+testSuiteName)

@@ -1623,7 +1623,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all test apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to GCP for Cluster Master
@@ -1760,7 +1760,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all test apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to GCP for Cluster Master
@@ -1864,7 +1864,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload V1 apps to GCP for Indexer Cluster
@@ -1956,7 +1956,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload V1 apps to GCP for Indexer Cluster
@@ -2355,7 +2355,7 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload V1 apps to GCP for Indexer Cluster
@@ -2471,7 +2471,7 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appList := testenv.PVTestApps
 			appFileList := testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsPVTestApps, downloadDirPVTestApps, appFileList)
+			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.PVTestAppsLocation, downloadDirPVTestApps, appFileList)
 			Expect(err).To(Succeed(), "Unable to download app files")
 
 			// Upload apps to GCP for Indexer Cluster
@@ -2556,7 +2556,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download big size apps from GCP
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload big size app to GCP for Indexer Cluster

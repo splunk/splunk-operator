@@ -745,7 +745,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info("Download ES app from gcs")
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
 			appFileList := testenv.GetAppFileList(esApp)
-			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app")
 
 			// Upload ES app to gcs
@@ -801,7 +801,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Download ES App from gcs
 			testcaseEnvInst.Log.Info("Download updated ES app from gcs")
-			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV2, downloadDirV2, appFileList)
+			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV2, downloadDirV2, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app")
 
 			// Upload V2 apps to gcs for Standalone
@@ -856,7 +856,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Download apps from gcs
 			testcaseEnvInst.Log.Info("Download bigger amount of apps from gcs for this test")
-			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
@@ -1108,7 +1108,7 @@ var _ = Describe("s1appfw test", func() {
 			// Download apps from GCS
 			testcaseEnvInst.Log.Info("Download the extra apps from GCS for this test")
 			appFileList := testenv.GetAppFileList(testenv.RestartNeededApps)
-			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
 			// Upload apps to GCS for first Standalone
@@ -1238,7 +1238,7 @@ var _ = Describe("s1appfw test", func() {
 			// Download all test apps from GCS
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to GCS for Standalone
@@ -1317,7 +1317,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to GCS for Standalone
@@ -1407,7 +1407,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to GCS for Standalone
@@ -1712,7 +1712,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload apps to GCS for Standalone
@@ -1804,7 +1804,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appList := testenv.PVTestApps
 			appFileList := testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsPVTestApps, downloadDirPVTestApps, appFileList)
+			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.PVTestAppsLocation, downloadDirPVTestApps, appFileList)
 			Expect(err).To(Succeed(), "Unable to download app files")
 
 			// Upload apps to GCS
@@ -1871,7 +1871,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big app")
 
 			// Upload big-size app to GCS for Standalone

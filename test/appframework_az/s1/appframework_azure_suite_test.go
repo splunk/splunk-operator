@@ -14,7 +14,6 @@
 package azures1appfw
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -33,9 +32,6 @@ var (
 	AzureDataContainer  = os.Getenv("TEST_CONTAINER")
 	AzureContainer      = os.Getenv("INDEXES_CONTAINER")
 	AzureStorageAccount = os.Getenv("AZURE_STORAGE_ACCOUNT")
-	AzureAppDirV1       = testenv.AppLocationV1
-	AzureAppDirV2       = testenv.AppLocationV2
-	AzureAppDirDisabled = testenv.AppLocationDisabledApps
 	currDir, _          = os.Getwd()
 	downloadDirV1       = filepath.Join(currDir, "s1appfwV1-"+testenv.RandomDNSName(4))
 	downloadDirV2       = filepath.Join(currDir, "s1appfwV2-"+testenv.RandomDNSName(4))
@@ -43,49 +39,15 @@ var (
 
 // TestBasic is the main entry point
 func TestBasic(t *testing.T) {
-
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Running "+testSuiteName)
 }
 
 var _ = BeforeSuite(func() {
-	ctx := context.TODO()
-	var err error
-	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
-	Expect(err).ToNot(HaveOccurred())
-
-	if testenv.ClusterProvider == "azure" {
-		// Create a list of apps to upload to Azure
-		appListV1 = testenv.BasicApps
-		appFileList := testenv.GetAppFileList(appListV1)
-
-		// Download V1 Apps from Azure
-		containerName := "/test-data/appframework/v1apps/"
-		err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V1 app files")
-
-		// Create a list of apps to upload to Azure after poll period
-		appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
-		appFileList = testenv.GetAppFileList(appListV2)
-
-		// Download V2 Apps from Azure
-		containerName = "/test-data/appframework/v2apps/"
-		err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V2 app files")
-	} else {
-		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenv.ClusterProvider)
-	}
+	testenvInstance, appListV1, appListV2 = testenv.SetupAzureAppsSuite(testSuiteName, downloadDirV1, downloadDirV2)
 })
 
 var _ = AfterSuite(func() {
-	if testenvInstance != nil {
-		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
-	}
-
-	// Delete locally downloaded app files
-	err := os.RemoveAll(downloadDirV1)
-	Expect(err).To(Succeed(), "Unable to delete locally downloaded V1 app files")
-	err = os.RemoveAll(downloadDirV2)
-	Expect(err).To(Succeed(), "Unable to delete locally downloaded V2 app files")
+	testenv.CleanupLocalAppDownloads(testenvInstance, downloadDirV1, downloadDirV2)
 })

@@ -90,7 +90,6 @@ var (
 	appSourceVolumeName = "appframework-test-volume-" + testenv.RandomDNSName(3)
 	s3TestDir           = "icappfw-" + testenv.RandomDNSName(4)
 	appListV1           = testenv.BasicApps
-	s3AppDirV1          = testenv.AppLocationV1
 )
 
 // TestBasic is the main entry point
@@ -109,7 +108,7 @@ var _ = BeforeSuite(func() {
 	appFileList := testenv.GetAppFileList(appListV1)
 
 	// Download V1 Apps from S3
-	err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+	err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 	Expect(err).To(Succeed(), "Unable to download V1 app files")
 })
 

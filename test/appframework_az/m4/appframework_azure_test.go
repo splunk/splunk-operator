@@ -1597,7 +1597,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all test apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -1734,7 +1734,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all test apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -1839,7 +1839,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
@@ -1932,7 +1932,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
@@ -2336,7 +2336,7 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -2534,7 +2534,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download big size apps from Azure
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
