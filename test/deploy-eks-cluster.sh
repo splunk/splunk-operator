@@ -140,8 +140,6 @@ function createCluster() {
       return 1
   fi
 
-
-  # Login to ECR registry so images can be push and pull from later whe
   # Output
   echo "EKS cluster nodes:"
   eksctl get cluster --name=${TEST_CLUSTER_NAME}

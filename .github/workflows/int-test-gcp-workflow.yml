@@ -149,10 +149,6 @@ jobs:
           export GKE_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
           make cluster-up
 
-      - name: Get Kubernetes Credentials
-        run: |
-          gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.GCP_ZONE }} --project ${{ env.GCP_PROJECT_ID }}
-
       - name: Allow Pulling from Artifact Registry
         run: |
           gcloud auth configure-docker ${{ secrets.GCP_ARTIFACT_REGISTRY }}
@@ -161,15 +157,6 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v1
-        with:
-          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-
-      - name: Set GCP Project
-        run: |
-          gcloud config set project ${{ env.GCP_PROJECT_ID }}
 
       - name: Install Kubectl
         uses: azure/setup-kubectl@v3
@@ -218,12 +205,6 @@ jobs:
         run: |
           docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
           docker push ${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-
-      - name: Get GKE Credentials
-        uses: google-github-actions/get-gke-credentials@v1
-        with:
-          cluster_name: ${{ env.CLUSTER_NAME }}
-          location: ${{ env.GCP_ZONE }}
 
       - name: Install Metrics Server
         run: |

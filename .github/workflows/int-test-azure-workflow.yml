@@ -204,12 +204,43 @@ jobs:
         run: |
           docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
           docker push ${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-      - name: Azure Kubernetes set context
-        uses: Azure/aks-set-context@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-          resource-group: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
-          cluster-name: ${{ env.TEST_CLUSTER_NAME }}
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} --name ${{ env.TEST_CLUSTER_NAME }} --admin --overwrite-existing
+      - name: Setup long-lived service account auth
+        run: |
+          kubectl create serviceaccount ci-test-runner -n kube-system 2>/dev/null || true
+          kubectl create clusterrolebinding ci-test-runner-admin \
+            --clusterrole=cluster-admin \
+            --serviceaccount=kube-system:ci-test-runner 2>/dev/null || true
+
+          cat <<'EOF' | kubectl apply -f -
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: ci-test-runner-token
+            namespace: kube-system
+            annotations:
+              kubernetes.io/service-account.name: ci-test-runner
+          type: kubernetes.io/service-account-token
+          EOF
+
+          echo "Waiting for service account token..."
+          TOKEN=""
+          for i in $(seq 1 30); do
+            TOKEN=$(kubectl get secret ci-test-runner-token -n kube-system -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null)
+            if [ -n "${TOKEN}" ]; then break; fi
+            sleep 2
+          done
+
+          if [ -n "${TOKEN}" ]; then
+            kubectl config set-credentials ci-test-runner --token="${TOKEN}"
+            kubectl config set-context --current --user=ci-test-runner
+            echo "Switched kubeconfig to long-lived service account token"
+          else
+            echo "WARNING: Could not create SA token, keeping admin cert auth"
+          fi
+          kubectl cluster-info
       - name: install metric server
         run: |
           curl -LO https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
