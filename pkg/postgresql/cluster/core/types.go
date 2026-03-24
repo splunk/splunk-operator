@@ -50,7 +50,9 @@ const (
 	clusterDeletionPolicyDelete string = "Delete"
 	clusterDeletionPolicyRetain string = "Retain"
 
-	postgresClusterFinalizerName string = "postgresclusters.enterprise.splunk.com/finalizer"
+	// PostgresClusterFinalizerName is exported so the primary adapter (controller) can
+	// reference it in event predicates without duplicating the string.
+	PostgresClusterFinalizerName string = "postgresclusters.enterprise.splunk.com/finalizer"
 
 	// cluster phases
 	readyClusterPhase        reconcileClusterPhases = "Ready"

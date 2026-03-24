@@ -238,6 +238,8 @@ spec:
                 description: |-
                   Provisioner identifies which database provisioner to use.
                   Currently supported: "postgresql.cnpg.io" (CloudNativePG)
+                enum:
+                - postgresql.cnpg.io
                 type: string
             required:
             - provisioner
