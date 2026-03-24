@@ -261,6 +261,13 @@ func PostgresDatabaseService(
 	postgresDB.Status.Databases = populateDatabaseStatus(postgresDB)
 	postgresDB.Status.ObservedGeneration = &postgresDB.Generation
 
+	if err := c.Status().Update(ctx, postgresDB); err != nil {
+		if errors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("persisting final status: %w", err)
+	}
+
 	logger.Info("All phases complete")
 	return ctrl.Result{}, nil
 }
