@@ -37,7 +37,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("mastersecret, smoke, c3: secret update on indexers and search head cluster", func() {
-			config := NewSecretTestConfigV3()
+			config := testenv.NewClusterReadinessConfigV3()
 			RunC3SecretUpdateTest(ctx, deployment, testcaseEnvInst, config)
 		})
 	})

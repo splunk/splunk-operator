@@ -38,7 +38,7 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
 		It("managersecret, integration, m4: secret update on multisite indexers and search head cluster", func() {
-			config := NewSecretTestConfigV4()
+			config := testenv.NewClusterReadinessConfigV4()
 			RunM4SecretUpdateTest(ctx, deployment, testcaseEnvInst, config)
 		})
 	})

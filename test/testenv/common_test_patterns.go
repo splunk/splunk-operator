@@ -22,6 +22,40 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 )
 
+// ClusterReadinessConfig holds v3/v4 API version callbacks for cluster and license manager
+// readiness verification. Shared across test packages to avoid per-package duplication.
+type ClusterReadinessConfig struct {
+	LicenseManagerReady func(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv)
+	ClusterManagerReady func(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv)
+	APIVersion          string
+}
+
+// NewClusterReadinessConfigV3 creates a ClusterReadinessConfig for v3 API (LicenseMaster/ClusterMaster)
+func NewClusterReadinessConfigV3() *ClusterReadinessConfig {
+	return &ClusterReadinessConfig{
+		LicenseManagerReady: func(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
+			testcaseEnv.VerifyLicenseMasterReady(ctx, deployment)
+		},
+		ClusterManagerReady: func(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
+			testcaseEnv.VerifyClusterMasterReady(ctx, deployment)
+		},
+		APIVersion: "v3",
+	}
+}
+
+// NewClusterReadinessConfigV4 creates a ClusterReadinessConfig for v4 API (LicenseManager/ClusterManager)
+func NewClusterReadinessConfigV4() *ClusterReadinessConfig {
+	return &ClusterReadinessConfig{
+		LicenseManagerReady: func(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
+			testcaseEnv.VerifyLicenseManagerReady(ctx, deployment)
+		},
+		ClusterManagerReady: func(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
+			testcaseEnv.VerifyClusterManagerReady(ctx, deployment)
+		},
+		APIVersion: "v4",
+	}
+}
+
 // DeployAndVerifyStandalone deploys a standalone instance and verifies it reaches ready state
 func (testcaseenv *TestCaseEnv) DeployAndVerifyStandalone(ctx context.Context, deployment *Deployment, name string, mcRef string, licenseManagerRef string) *enterpriseApi.Standalone {
 	standalone, err := deployment.DeployStandalone(ctx, name, mcRef, licenseManagerRef)

@@ -31,8 +31,6 @@ import (
 
 type LicenseTestConfig struct {
 	DeployStandaloneWithLM               func(ctx context.Context, deployment *testenv.Deployment, name string, mcRef string) (*enterpriseApi.Standalone, error)
-	LicenseManagerReady                  func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv)
-	ClusterManagerReady                  func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv)
 	DeployMultisiteClusterWithSearchHead func(ctx context.Context, deployment *testenv.Deployment, name string, indexerReplicas, siteCount int, mcRef string) error
 	DeployLicenseManagerWithGivenSpec    func(ctx context.Context, deployment *testenv.Deployment, name string, spec interface{}) (interface{}, error)
 	LicenseManagerPodName                string
@@ -43,12 +41,6 @@ func NewLicenseMasterConfig() *LicenseTestConfig {
 	return &LicenseTestConfig{
 		DeployStandaloneWithLM: func(ctx context.Context, deployment *testenv.Deployment, name string, mcRef string) (*enterpriseApi.Standalone, error) {
 			return deployment.DeployStandaloneWithLMaster(ctx, name, mcRef)
-		},
-		LicenseManagerReady: func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv) {
-			testcaseEnv.VerifyLicenseMasterReady(ctx, deployment)
-		},
-		ClusterManagerReady: func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv) {
-			testcaseEnv.VerifyClusterMasterReady(ctx, deployment)
 		},
 		DeployMultisiteClusterWithSearchHead: func(ctx context.Context, deployment *testenv.Deployment, name string, indexerReplicas int, siteCount int, mcRef string) error {
 			return deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef)
@@ -65,12 +57,6 @@ func NewLicenseManagerConfig() *LicenseTestConfig {
 	return &LicenseTestConfig{
 		DeployStandaloneWithLM: func(ctx context.Context, deployment *testenv.Deployment, name string, mcRef string) (*enterpriseApi.Standalone, error) {
 			return deployment.DeployStandaloneWithLM(ctx, name, mcRef)
-		},
-		LicenseManagerReady: func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv) {
-			testcaseEnv.VerifyLicenseManagerReady(ctx, deployment)
-		},
-		ClusterManagerReady: func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv) {
-			testcaseEnv.VerifyClusterManagerReady(ctx, deployment)
 		},
 		DeployMultisiteClusterWithSearchHead: func(ctx context.Context, deployment *testenv.Deployment, name string, indexerReplicas int, siteCount int, mcRef string) error {
 			return deployment.DeployMultisiteClusterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef)

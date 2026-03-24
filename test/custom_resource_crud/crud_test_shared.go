@@ -27,39 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-// CRUDTestConfig holds configuration for CRUD tests to support both v3 and v4 API versions
-type CRUDTestConfig struct {
-	LicenseManagerReady func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv)
-	ClusterManagerReady func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv)
-	APIVersion          string
-}
-
-// NewCRUDTestConfigV3 creates configuration for v3 API (LicenseMaster/ClusterMaster)
-func NewCRUDTestConfigV3() *CRUDTestConfig {
-	return &CRUDTestConfig{
-		LicenseManagerReady: func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv) {
-			testcaseEnv.VerifyLicenseMasterReady(ctx, deployment)
-		},
-		ClusterManagerReady: func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv) {
-			testcaseEnv.VerifyClusterMasterReady(ctx, deployment)
-		},
-		APIVersion: "v3",
-	}
-}
-
-// NewCRUDTestConfigV4 creates configuration for v4 API (LicenseManager/ClusterManager)
-func NewCRUDTestConfigV4() *CRUDTestConfig {
-	return &CRUDTestConfig{
-		LicenseManagerReady: func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv) {
-			testcaseEnv.VerifyLicenseManagerReady(ctx, deployment)
-		},
-		ClusterManagerReady: func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv) {
-			testcaseEnv.VerifyClusterManagerReady(ctx, deployment)
-		},
-		APIVersion: "v4",
-	}
-}
-
 // RunS1CPUUpdateTest runs the standard S1 CPU limit update test workflow
 func RunS1CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, defaultCPULimits string, newCPULimits string) {
 	// Deploy and verify Standalone
@@ -97,7 +64,7 @@ func RunS1CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 }
 
 // RunC3CPUUpdateTest runs the standard C3 CPU limit update test workflow
-func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *CRUDTestConfig, defaultCPULimits string, newCPULimits string) {
+func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig, defaultCPULimits string, newCPULimits string) {
 	// Deploy Single site Cluster and Search Head Clusters
 	mcRef := deployment.GetName()
 	err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
@@ -155,7 +122,7 @@ func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 }
 
 // RunC3PVCDeletionTest runs the standard C3 PVC deletion test workflow
-func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *CRUDTestConfig, verificationTimeout time.Duration) {
+func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig, verificationTimeout time.Duration) {
 	// Deploy Single site Cluster and Search Head Clusters
 	mcRef := deployment.GetName()
 	err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
@@ -236,7 +203,7 @@ func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, t
 }
 
 // RunM4CPUUpdateTest runs the standard M4 CPU limit update test workflow
-func RunM4CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *CRUDTestConfig, defaultCPULimits string, newCPULimits string) {
+func RunM4CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig, defaultCPULimits string, newCPULimits string) {
 	// Deploy Multisite Cluster and Search Head Clusters
 	mcRef := deployment.GetName()
 	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)

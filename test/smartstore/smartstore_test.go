@@ -38,7 +38,7 @@ var _ = Describe("Smartstore test", func() {
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4)", func() {
 		It("mastersmartstore, m4, integration: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
-			config := NewSmartStoreTestConfigV3()
+			config := testenv.NewClusterReadinessConfigV3()
 			RunM4MultisiteSmartStoreTest(ctx, deployment, testcaseEnvInst, config)
 		})
 	})

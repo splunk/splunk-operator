@@ -26,32 +26,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// SmartStoreTestConfig holds configuration for SmartStore tests to support both v3 and v4 API versions
-type SmartStoreTestConfig struct {
-	ClusterManagerReady func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv)
-	APIVersion          string
-}
-
-// NewSmartStoreTestConfigV3 creates configuration for v3 API (ClusterMaster)
-func NewSmartStoreTestConfigV3() *SmartStoreTestConfig {
-	return &SmartStoreTestConfig{
-		ClusterManagerReady: func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv) {
-			testcaseEnv.VerifyClusterMasterReady(ctx, deployment)
-		},
-		APIVersion: "v3",
-	}
-}
-
-// NewSmartStoreTestConfigV4 creates configuration for v4 API (ClusterManager)
-func NewSmartStoreTestConfigV4() *SmartStoreTestConfig {
-	return &SmartStoreTestConfig{
-		ClusterManagerReady: func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv) {
-			testcaseEnv.VerifyClusterManagerReady(ctx, deployment)
-		},
-		APIVersion: "v4",
-	}
-}
-
 // RunS1MultipleIndexesTest runs the standard S1 multiple indexes SmartStore test workflow
 func RunS1MultipleIndexesTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, waitTimeout time.Duration) {
 	volName := "test-volume-" + testenv.RandomDNSName(3)
@@ -195,13 +169,13 @@ func RunS1EphemeralStorageTest(ctx context.Context, deployment *testenv.Deployme
 }
 
 // verifyM4ClusterAndRFSF verifies cluster manager and multisite cluster are ready and RF/SF is met.
-func verifyM4ClusterAndRFSF(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *SmartStoreTestConfig, siteCount int) {
+func verifyM4ClusterAndRFSF(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig, siteCount int) {
 	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 	testcaseEnvInst.VerifyMultisiteClusterReadyAndRFSF(ctx, deployment, siteCount)
 }
 
 // RunM4MultisiteSmartStoreTest runs the standard M4 multisite SmartStore test workflow
-func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *SmartStoreTestConfig) {
+func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
 	volName := "test-volume-" + testenv.RandomDNSName(3)
 	indexName := "test-index-" + testenv.RandomDNSName(3)
 

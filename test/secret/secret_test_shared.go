@@ -25,39 +25,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// SecretTestConfig holds configuration for secret tests to support both v3 and v4 API versions
-type SecretTestConfig struct {
-	LicenseManagerReady func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv)
-	ClusterManagerReady func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv)
-	APIVersion          string
-}
-
-// NewSecretTestConfigV3 creates configuration for v3 API (LicenseMaster/ClusterMaster)
-func NewSecretTestConfigV3() *SecretTestConfig {
-	return &SecretTestConfig{
-		LicenseManagerReady: func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv) {
-			testcaseEnv.VerifyLicenseMasterReady(ctx, deployment)
-		},
-		ClusterManagerReady: func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv) {
-			testcaseEnv.VerifyClusterMasterReady(ctx, deployment)
-		},
-		APIVersion: "v3",
-	}
-}
-
-// NewSecretTestConfigV4 creates configuration for v4 API (LicenseManager/ClusterManager)
-func NewSecretTestConfigV4() *SecretTestConfig {
-	return &SecretTestConfig{
-		LicenseManagerReady: func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv) {
-			testcaseEnv.VerifyLicenseManagerReady(ctx, deployment)
-		},
-		ClusterManagerReady: func(ctx context.Context, deployment *testenv.Deployment, testcaseEnv *testenv.TestCaseEnv) {
-			testcaseEnv.VerifyClusterManagerReady(ctx, deployment)
-		},
-		APIVersion: "v4",
-	}
-}
-
 // verifySecretsPropagated checks that the given secret data has been propagated to all
 // versioned secret objects, pods, server config, input config, and via the API.
 func verifySecretsPropagated(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, secretData map[string][]byte, updated bool) {
@@ -84,13 +51,13 @@ func verifySecretsPropagated(ctx context.Context, deployment *testenv.Deployment
 }
 
 // verifyLMAndStandaloneReady waits for License Manager then Standalone to reach READY status.
-func verifyLMAndStandaloneReady(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *SecretTestConfig, standalone *enterpriseApi.Standalone) {
+func verifyLMAndStandaloneReady(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig, standalone *enterpriseApi.Standalone) {
 	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 }
 
 // verifyLMAndClusterManagerReady waits for License Manager then Cluster Manager to reach READY status.
-func verifyLMAndClusterManagerReady(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *SecretTestConfig) {
+func verifyLMAndClusterManagerReady(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
 	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 }
@@ -107,7 +74,7 @@ func generateAndApplySecretUpdate(ctx context.Context, deployment *testenv.Deplo
 }
 
 // RunS1SecretUpdateTest runs the standard S1 secret update test workflow
-func RunS1SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *SecretTestConfig) {
+func RunS1SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
 	// Download License File and create config map
 	testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
 
@@ -150,7 +117,7 @@ func RunS1SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 }
 
 // RunS1SecretDeleteTest runs the standard S1 secret delete test workflow
-func RunS1SecretDeleteTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *SecretTestConfig) {
+func RunS1SecretDeleteTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
 	// Download License File and create config map
 	testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
 
@@ -194,7 +161,7 @@ func RunS1SecretDeleteTest(ctx context.Context, deployment *testenv.Deployment, 
 }
 
 // RunS1SecretDeleteWithMCRefTest runs the S1 secret delete test with MC reference workflow
-func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *SecretTestConfig) {
+func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
 	// Create standalone Deployment with MonitoringConsoleRef
 	var standalone *enterpriseApi.Standalone
 	var err error
@@ -248,7 +215,7 @@ func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Dep
 }
 
 // RunC3SecretUpdateTest runs the standard C3 secret update test workflow
-func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *SecretTestConfig) {
+func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
 	// Download License File and create config map
 	testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
 
@@ -316,7 +283,7 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 }
 
 // RunM4SecretUpdateTest runs the standard M4 secret update test workflow
-func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *SecretTestConfig) {
+func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
 	// Download License File and create config map
 	testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
 
@@ -332,15 +299,7 @@ func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 	verifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
-
-	// Ensure the indexers of all sites go to Ready phase
-	testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-	// Ensure search head cluster go to Ready phase
-	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-	// Ensure cluster configured as multisite
-	testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 
 	// Deploy and verify Monitoring Console
 	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), deployment.GetName())
