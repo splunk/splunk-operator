@@ -224,7 +224,7 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 	}
 }
 
-func TestGetEffectiveClusterConfig(t *testing.T) {
+func TestGetMergedConfig(t *testing.T) {
 	r := &PostgresClusterReconciler{}
 
 	classInstances := int32(1)
