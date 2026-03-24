@@ -395,7 +395,18 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			_ = r.persistStatusIfChanged(ctx, postgresCluster, persistedStatus)
 			return ctrl.Result{}, createPoolerErr
 		}
-		if !r.arePoolersReady(ctx, postgresCluster) {
+
+		rwPooler := &cnpgv1.Pooler{}
+		rwErr := r.Get(ctx, types.NamespacedName{
+			Name:      poolerResourceName(postgresCluster.Name, readWriteEndpoint),
+			Namespace: postgresCluster.Namespace,
+		}, rwPooler)
+		roPooler := &cnpgv1.Pooler{}
+		roErr := r.Get(ctx, types.NamespacedName{
+			Name:      poolerResourceName(postgresCluster.Name, readOnlyEndpoint),
+			Namespace: postgresCluster.Namespace,
+		}, roPooler)
+		if rwErr != nil || roErr != nil || !r.arePoolersReady(rwPooler, roPooler) {
 			logger.Info("Connection poolers are not ready yet, requeueing")
 			updateStatus(
 				poolerReady,
@@ -984,10 +995,7 @@ func (r *PostgresClusterReconciler) syncPoolerStatus(ctx context.Context, postgr
 
 // isPoolerReady checks if a pooler has all instances scheduled.
 // Note: CNPG PoolerStatus only tracks scheduled instances, not ready pods.
-func (r *PostgresClusterReconciler) isPoolerReady(pooler *cnpgv1.Pooler, err error) bool {
-	if err != nil {
-		return false
-	}
+func (r *PostgresClusterReconciler) isPoolerReady(pooler *cnpgv1.Pooler) bool {
 	desiredInstances := int32(1)
 	if pooler.Spec.Instances != nil {
 		desiredInstances = *pooler.Spec.Instances
@@ -1005,20 +1013,8 @@ func (r *PostgresClusterReconciler) getPoolerInstanceCount(pooler *cnpgv1.Pooler
 }
 
 // arePoolersReady checks if both RW and RO poolers have all instances scheduled.
-func (r *PostgresClusterReconciler) arePoolersReady(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster) bool {
-	rwPooler := &cnpgv1.Pooler{}
-	rwErr := r.Get(ctx, types.NamespacedName{
-		Name:      poolerResourceName(postgresCluster.Name, readWriteEndpoint),
-		Namespace: postgresCluster.Namespace,
-	}, rwPooler)
-
-	roPooler := &cnpgv1.Pooler{}
-	roErr := r.Get(ctx, types.NamespacedName{
-		Name:      poolerResourceName(postgresCluster.Name, readOnlyEndpoint),
-		Namespace: postgresCluster.Namespace,
-	}, roPooler)
-
-	return r.isPoolerReady(rwPooler, rwErr) && r.isPoolerReady(roPooler, roErr)
+func (r *PostgresClusterReconciler) arePoolersReady(rwPooler, roPooler *cnpgv1.Pooler) bool {
+	return r.isPoolerReady(rwPooler) && r.isPoolerReady(roPooler)
 }
 
 // normalizeManagedRole projects a CNPG RoleConfiguration down to only the fields this controller controls.
@@ -1494,6 +1490,7 @@ func cnpgPoolerPredicator() predicate.Predicate {
 		},
 	}
 }
+
 // secretPredicator filters Secret events to trigger reconciles on creation, deletion, or owner reference changes.
 func secretPredicator() predicate.Predicate {
 	return predicate.Funcs{
