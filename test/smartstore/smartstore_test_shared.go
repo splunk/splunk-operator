@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"time"
 
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
@@ -189,11 +188,7 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	siteCount := 3
 	var err error
 
-	if config.APIVersion == "v3" {
-		err = deployment.DeployMultisiteClusterMasterWithSearchHeadAndIndexes(ctx, deployment.GetName(), 1, siteCount, testcaseEnvInst.GetIndexSecretName(), smartStoreSpec)
-	} else {
-		err = deployment.DeployMultisiteClusterWithSearchHeadAndIndexes(ctx, deployment.GetName(), 1, siteCount, testcaseEnvInst.GetIndexSecretName(), smartStoreSpec)
-	}
+	err = config.DeployMultisiteClusterWithIndexes(ctx, deployment, deployment.GetName(), 1, siteCount, testcaseEnvInst.GetIndexSecretName(), smartStoreSpec)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 	verifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)
@@ -202,12 +197,7 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, deployment.GetName(), siteCount, indexName, 2000)
 
 	// Get old bundle hash before adding new index
-	var oldBundleHash string
-	if config.APIVersion == "v3" {
-		oldBundleHash = testenv.GetClusterManagerBundleHash(ctx, deployment, "ClusterMaster")
-	} else {
-		oldBundleHash = testenv.GetClusterManagerBundleHash(ctx, deployment, "ClusterManager")
-	}
+	oldBundleHash := config.GetBundleHash(ctx, deployment)
 
 	testcaseEnvInst.Log.Info("Adding new index to Cluster Manager CR")
 	indexNameTwo := "test-index-" + testenv.RandomDNSName(3)
@@ -215,21 +205,7 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	newIndex := []enterpriseApi.IndexSpec{testenv.GenerateIndexSpec(indexNameTwo, volName)}
 
 	// Update CR with new index based on API version
-	if config.APIVersion == "v3" {
-		cm := &enterpriseApiV3.ClusterMaster{}
-		err = deployment.GetInstance(ctx, deployment.GetName(), cm)
-		Expect(err).To(Succeed(), "Failed to get instance of Cluster Master")
-		cm.Spec.SmartStore.IndexList = append(cm.Spec.SmartStore.IndexList, newIndex...)
-		err = deployment.UpdateCR(ctx, cm)
-		Expect(err).To(Succeed(), "Failed to add new index to cluster master")
-	} else {
-		cm := &enterpriseApi.ClusterManager{}
-		err = deployment.GetInstance(ctx, deployment.GetName(), cm)
-		Expect(err).To(Succeed(), "Failed to get instance of Cluster Manager")
-		cm.Spec.SmartStore.IndexList = append(cm.Spec.SmartStore.IndexList, newIndex...)
-		err = deployment.UpdateCR(ctx, cm)
-		Expect(err).To(Succeed(), "Failed to add new index to cluster manager")
-	}
+	config.AppendSmartStoreIndex(ctx, deployment, newIndex)
 
 	verifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)
 

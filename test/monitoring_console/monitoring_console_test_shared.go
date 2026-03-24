@@ -57,11 +57,7 @@ func RunS1StandaloneAddDeleteMCTest(ctx context.Context, deployment *testenv.Dep
 	standalonePods := testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneOneName, 1, false, 0)
 
 	testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC Config Map")
-	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
-
-	// Check Standalone Pod in MC Peer List
-	testcaseEnvInst.Log.Info("Check standalone instance in MC Peer list")
-	testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, standalonePods, mcName, true, false)
+	verifyStandaloneInMC(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true)
 
 	// get revision number of the resource
 	resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
@@ -102,11 +98,7 @@ func RunS1StandaloneAddDeleteMCTest(ctx context.Context, deployment *testenv.Dep
 	standalonePods = append(standalonePods, fmt.Sprintf(testenv.StandalonePod, standaloneTwoName, 0))
 
 	testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC Config Map after adding new standalone")
-	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
-
-	// Check Standalone Pod in MC Peer List
-	testcaseEnvInst.Log.Info("Check standalone instance in MC Peer list after adding new standalone")
-	testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, standalonePods, mcName, true, false)
+	verifyStandaloneInMC(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true)
 
 	// get revision number of the resource
 	resourceVersion = testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
@@ -123,19 +115,16 @@ func RunS1StandaloneAddDeleteMCTest(ctx context.Context, deployment *testenv.Dep
 	standalonePods = testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneOneName, 1, false, 0)
 
 	testcaseEnvInst.Log.Info("Checking for Standalone One Pod in MC Config Map after deleting second standalone")
-	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
-
-	// Check Standalone Pod in MC Peer List
-	testcaseEnvInst.Log.Info("Check Standalone One Pod in MC Peer list after deleting second standalone")
-	testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, standalonePods, mcName, true, false)
+	verifyStandaloneInMC(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true)
 
 	// Check Standalone Two NOT configured in MC Config Map
 	standalonePods = testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneTwoName, 1, false, 0)
 
 	testcaseEnvInst.Log.Info("Checking for Standalone Two Pod NOT in MC Config Map after deleting second standalone")
-	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, standalonePods, "SPLUNK_STANDALONE_URL", mcName, false)
+	verifyStandaloneInMC(ctx, deployment, testcaseEnvInst, standalonePods, mcName, false)
+}
 
-	// Check Standalone Pod TWO NOT configured in MC Peer List
-	testcaseEnvInst.Log.Info("Check Standalone Two Pod NOT in MC Peer list after deleting second standalone")
-	testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, standalonePods, mcName, false, false)
+func verifyStandaloneInMC(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, pods []string, mcName string, shouldExist bool) {
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, pods, "SPLUNK_STANDALONE_URL", mcName, shouldExist)
+	testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, pods, mcName, shouldExist, false)
 }

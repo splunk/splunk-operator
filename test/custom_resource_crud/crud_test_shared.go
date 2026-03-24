@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"time"
 
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/test/testenv"
 
@@ -145,10 +144,7 @@ func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, t
 	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "idxc-indexer", 3, true, verificationTimeout)
 
 	// Verify Cluster Manager PVCs (etc and var) exists
-	clusterManagerType := "cluster-master"
-	if config.APIVersion == "v4" {
-		clusterManagerType = "cluster-manager"
-	}
+	clusterManagerType := config.ClusterManagerPVCType()
 	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, clusterManagerType, 1, true, verificationTimeout)
 
 	// Delete the Search Head Cluster
@@ -166,19 +162,7 @@ func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, t
 	Expect(err).To(Succeed(), "Unable to delete IDXC instance", "IDXC Name", idxc)
 
 	// Delete the Cluster Manager (v3 or v4)
-	if config.APIVersion == "v3" {
-		cm := &enterpriseApiV3.ClusterMaster{}
-		err = deployment.GetInstance(ctx, deployment.GetName(), cm)
-		Expect(err).To(Succeed(), "Unable to GET Cluster Master instance", "Cluster Master Name", cm)
-		err = deployment.DeleteCR(ctx, cm)
-		Expect(err).To(Succeed(), "Unable to delete Cluster Master instance", "Cluster Master Name", cm)
-	} else {
-		cm := &enterpriseApi.ClusterManager{}
-		err = deployment.GetInstance(ctx, deployment.GetName(), cm)
-		Expect(err).To(Succeed(), "Unable to GET Cluster Manager instance", "Cluster Manager Name", cm)
-		err = deployment.DeleteCR(ctx, cm)
-		Expect(err).To(Succeed(), "Unable to delete Cluster Manager instance", "Cluster Manager Name", cm)
-	}
+	config.DeleteClusterManager(ctx, deployment)
 
 	// Delete Monitoring Console
 	err = deployment.GetInstance(ctx, mcRef, mc)
@@ -210,11 +194,7 @@ func RunM4CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	siteCount := 3
 	var err error
 
-	if config.APIVersion == "v3" {
-		err = deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcRef)
-	} else {
-		err = deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcRef)
-	}
+	err = config.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), 1, siteCount, mcRef)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 	// Ensure that the cluster-manager goes to Ready phase

@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	. "github.com/onsi/gomega"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 )
 
@@ -54,6 +55,107 @@ func NewClusterReadinessConfigV4() *ClusterReadinessConfig {
 		},
 		APIVersion: "v4",
 	}
+}
+
+// DeployStandaloneWithLM deploys a standalone with the appropriate License Manager type for
+// the API version: LicenseMaster (v3) or LicenseManager (v4).
+func (c *ClusterReadinessConfig) DeployStandaloneWithLM(ctx context.Context, deployment *Deployment, name, mcRef string) (*enterpriseApi.Standalone, error) {
+	if c.APIVersion == "v3" {
+		return deployment.DeployStandaloneWithLMaster(ctx, name, mcRef)
+	}
+	return deployment.DeployStandaloneWithLM(ctx, name, mcRef)
+}
+
+// DeployMultisiteCluster deploys a multisite cluster with the appropriate Cluster Manager type
+// for the API version: ClusterMaster (v3) or ClusterManager (v4).
+func (c *ClusterReadinessConfig) DeployMultisiteCluster(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, mcRef string) error {
+	if c.APIVersion == "v3" {
+		return deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef)
+	}
+	return deployment.DeployMultisiteClusterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef)
+}
+
+// VerifyClusterManagerPhaseUpdating asserts the Cluster Manager (or ClusterMaster for v3)
+// has entered the Updating phase.
+func (c *ClusterReadinessConfig) VerifyClusterManagerPhaseUpdating(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
+	if c.APIVersion == "v3" {
+		testcaseEnv.VerifyClusterMasterPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
+	} else {
+		testcaseEnv.VerifyClusterManagerPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
+	}
+}
+
+// ClusterManagerPVCType returns the PVC label fragment for the Cluster Manager:
+// "cluster-master" for v3, "cluster-manager" for v4.
+func (c *ClusterReadinessConfig) ClusterManagerPVCType() string {
+	if c.APIVersion == "v3" {
+		return "cluster-master"
+	}
+	return "cluster-manager"
+}
+
+// DeleteClusterManager fetches and deletes the Cluster Manager CR for the appropriate API version.
+func (c *ClusterReadinessConfig) DeleteClusterManager(ctx context.Context, deployment *Deployment) {
+	name := deployment.GetName()
+	if c.APIVersion == "v3" {
+		cm := &enterpriseApiV3.ClusterMaster{}
+		err := deployment.GetInstance(ctx, name, cm)
+		Expect(err).To(Succeed(), "Unable to GET Cluster Master instance", "Cluster Master Name", cm)
+		err = deployment.DeleteCR(ctx, cm)
+		Expect(err).To(Succeed(), "Unable to delete Cluster Master instance", "Cluster Master Name", cm)
+	} else {
+		cm := &enterpriseApi.ClusterManager{}
+		err := deployment.GetInstance(ctx, name, cm)
+		Expect(err).To(Succeed(), "Unable to GET Cluster Manager instance", "Cluster Manager Name", cm)
+		err = deployment.DeleteCR(ctx, cm)
+		Expect(err).To(Succeed(), "Unable to delete Cluster Manager instance", "Cluster Manager Name", cm)
+	}
+}
+
+// DeployMultisiteClusterWithIndexes deploys a multisite cluster with SmartStore indexes using
+// the appropriate Cluster Manager type for the API version.
+func (c *ClusterReadinessConfig) DeployMultisiteClusterWithIndexes(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, secretName string, smartStoreSpec enterpriseApi.SmartStoreSpec) error {
+	if c.APIVersion == "v3" {
+		return deployment.DeployMultisiteClusterMasterWithSearchHeadAndIndexes(ctx, name, indexerReplicas, siteCount, secretName, smartStoreSpec)
+	}
+	return deployment.DeployMultisiteClusterWithSearchHeadAndIndexes(ctx, name, indexerReplicas, siteCount, secretName, smartStoreSpec)
+}
+
+// GetBundleHash returns the current bundle hash for the Cluster Manager (or ClusterMaster for v3).
+func (c *ClusterReadinessConfig) GetBundleHash(ctx context.Context, deployment *Deployment) string {
+	if c.APIVersion == "v3" {
+		return GetClusterManagerBundleHash(ctx, deployment, "ClusterMaster")
+	}
+	return GetClusterManagerBundleHash(ctx, deployment, "ClusterManager")
+}
+
+// AppendSmartStoreIndex appends a new SmartStore index to the Cluster Manager CR
+// for the appropriate API version.
+func (c *ClusterReadinessConfig) AppendSmartStoreIndex(ctx context.Context, deployment *Deployment, newIndex []enterpriseApi.IndexSpec) {
+	name := deployment.GetName()
+	if c.APIVersion == "v3" {
+		cm := &enterpriseApiV3.ClusterMaster{}
+		err := deployment.GetInstance(ctx, name, cm)
+		Expect(err).To(Succeed(), "Failed to get instance of Cluster Master")
+		cm.Spec.SmartStore.IndexList = append(cm.Spec.SmartStore.IndexList, newIndex...)
+		err = deployment.UpdateCR(ctx, cm)
+		Expect(err).To(Succeed(), "Failed to add new index to cluster master")
+	} else {
+		cm := &enterpriseApi.ClusterManager{}
+		err := deployment.GetInstance(ctx, name, cm)
+		Expect(err).To(Succeed(), "Failed to get instance of Cluster Manager")
+		cm.Spec.SmartStore.IndexList = append(cm.Spec.SmartStore.IndexList, newIndex...)
+		err = deployment.UpdateCR(ctx, cm)
+		Expect(err).To(Succeed(), "Failed to add new index to cluster manager")
+	}
+}
+
+// DeployMCAndGetVersion deploys and verifies a Monitoring Console, then returns both the MC
+// instance and its current resource version.
+func (testcaseenv *TestCaseEnv) DeployMCAndGetVersion(ctx context.Context, deployment *Deployment, name string, lmRef string) (*enterpriseApi.MonitoringConsole, string) {
+	mc := testcaseenv.DeployAndVerifyMonitoringConsole(ctx, deployment, name, lmRef)
+	resourceVersion := testcaseenv.GetResourceVersion(ctx, deployment, mc)
+	return mc, resourceVersion
 }
 
 // DeployAndVerifyStandalone deploys a standalone instance and verifies it reaches ready state

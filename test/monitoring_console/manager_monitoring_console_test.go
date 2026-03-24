@@ -61,10 +61,7 @@ var _ = Describe("Monitoring Console test", func() {
 			*/
 
 			// Deploy Monitoring Console CRD
-			mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
-
-			// get revision number of the resource
-			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
+			mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), "")
 
 			// Create Standalone Spec and apply
 			standaloneOneName := deployment.GetName()
@@ -262,10 +259,7 @@ var _ = Describe("Monitoring Console test", func() {
 			mcName := deployment.GetName()
 
 			// Deploy Monitoring Console Pod
-			mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
-
-			// get revision number of the resource
-			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
+			mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), "")
 
 			err := deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
@@ -424,10 +418,7 @@ var _ = Describe("Monitoring Console test", func() {
 			mcName := deployment.GetName()
 
 			// Deploy Monitoring Console Pod
-			mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
-
-			// get revision number of the resource
-			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
+			mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), "")
 
 			err := deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")

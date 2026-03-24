@@ -83,20 +83,13 @@ func RunS1SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	var standalone *enterpriseApi.Standalone
 	var err error
 
-	if config.APIVersion == "v3" {
-		standalone, err = deployment.DeployStandaloneWithLMaster(ctx, deployment.GetName(), mcRef)
-	} else {
-		standalone, err = deployment.DeployStandaloneWithLM(ctx, deployment.GetName(), mcRef)
-	}
+	standalone, err = config.DeployStandaloneWithLM(ctx, deployment, deployment.GetName(), mcRef)
 	Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 	verifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, standalone)
 
 	// Deploy and verify Monitoring Console
-	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), deployment.GetName())
-
-	// Get revision number of the resource
-	resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
+	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
 
 	// Get Current Secrets Struct
 	namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
@@ -126,20 +119,13 @@ func RunS1SecretDeleteTest(ctx context.Context, deployment *testenv.Deployment, 
 	var standalone *enterpriseApi.Standalone
 	var err error
 
-	if config.APIVersion == "v3" {
-		standalone, err = deployment.DeployStandaloneWithLMaster(ctx, deployment.GetName(), mcRef)
-	} else {
-		standalone, err = deployment.DeployStandaloneWithLM(ctx, deployment.GetName(), mcRef)
-	}
+	standalone, err = config.DeployStandaloneWithLM(ctx, deployment, deployment.GetName(), mcRef)
 	Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 	verifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, standalone)
 
 	// Deploy and verify Monitoring Console
-	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), deployment.GetName())
-
-	// Get revision number of the resource
-	resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
+	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
 
 	// Get Current Secrets Struct
 	namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
@@ -232,10 +218,7 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	Expect(err).To(Succeed(), "Timed out waiting for ClusterInitialized event on IndexerCluster")
 
 	// Deploy and verify Monitoring Console
-	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), deployment.GetName())
-
-	// Get revision number of the resource
-	resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
+	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
 
 	// Verify RF SF is met
 	testcaseEnvInst.Log.Info("Checkin RF SF before secret change")
@@ -249,12 +232,7 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	// Update Secret Value on Secret Object
 	updatedSecretData := generateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, namespaceScopedSecretName)
 
-	// Ensure that Cluster Manager goes to update phase
-	if config.APIVersion == "v3" {
-		testcaseEnvInst.VerifyClusterMasterPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
-	} else {
-		testcaseEnvInst.VerifyClusterManagerPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
-	}
+	config.VerifyClusterManagerPhaseUpdating(ctx, deployment, testcaseEnvInst)
 
 	verifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
 
@@ -291,21 +269,14 @@ func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	mcName := deployment.GetName()
 	var err error
 
-	if config.APIVersion == "v3" {
-		err = deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcName)
-	} else {
-		err = deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcName)
-	}
+	err = config.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), 1, siteCount, mcName)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 	verifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
 	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 
 	// Deploy and verify Monitoring Console
-	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), deployment.GetName())
-
-	// Get revision number of the resource
-	resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
+	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
 
 	// Verify RF SF is met
 	testcaseEnvInst.Log.Info("Checkin RF SF before secret change")
@@ -319,24 +290,10 @@ func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	// Update Secret Value on Secret Object
 	updatedSecretData := generateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, namespaceScopedSecretName)
 
-	// Ensure that Cluster Manager goes to update phase
-	if config.APIVersion == "v3" {
-		testcaseEnvInst.VerifyClusterMasterPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
-	} else {
-		testcaseEnvInst.VerifyClusterManagerPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
-	}
+	config.VerifyClusterManagerPhaseUpdating(ctx, deployment, testcaseEnvInst)
 
-	// Ensure that the cluster-manager goes to Ready phase
-	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-
-	// Wait for License Manager to be in READY status
-	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
-
-	// Ensure the indexers of all sites go to Ready phase
-	testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-	// Ensure search head cluster go to Ready phase
-	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+	verifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
+	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 
 	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
