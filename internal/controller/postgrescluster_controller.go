@@ -331,17 +331,19 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			logger.Error(statusErr, "Failed to update status")
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
-	case !r.arePoolersReady(ctx, postgresCluster):
-		// Poolers exist but not ready yet
-		logger.Info("Connection Poolers are not ready yet, requeueing")
-		if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerCreating, "Connection poolers are being provisioned", pendingClusterPhase); statusErr != nil {
-			if apierrors.IsConflict(statusErr) {
-				logger.Info("Conflict updating pooler status, will requeue")
-				return ctrl.Result{Requeue: true}, nil
-			}
-		}
-		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	default:
+		rwPooler, roPooler, err := r.getPoolers(ctx, postgresCluster)
+		if err != nil || !r.arePoolersReady(rwPooler, roPooler) {
+			// Poolers exist but not ready yet
+			logger.Info("Connection Poolers are not ready yet, requeueing")
+			if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerCreating, "Connection poolers are being provisioned", pendingClusterPhase); statusErr != nil {
+				if apierrors.IsConflict(statusErr) {
+					logger.Info("Conflict updating pooler status, will requeue")
+					return ctrl.Result{Requeue: true}, nil
+				}
+			}
+			return ctrl.Result{RequeueAfter: retryDelay}, nil
+		}
 		if err := r.syncPoolerStatus(ctx, postgresCluster); err != nil {
 			logger.Error(err, "Failed to sync pooler status")
 			if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerReconciliationFailed, fmt.Sprintf("Failed to sync pooler status: %v", err), failedClusterPhase); statusErr != nil {
@@ -354,7 +356,8 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// 8. If CNPG cluster is ready, reconcile ConfigMap with connection details
 	if cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy {
 		logger.Info("CNPG Cluster is ready, reconciling ConfigMap for connection details")
-		configMapName, err := r.reconcileConfigMap(ctx, postgresCluster, cnpgCluster, postgresSecretName)
+		poolersExist := r.poolerExists(ctx, postgresCluster, readWriteEndpoint) && r.poolerExists(ctx, postgresCluster, readOnlyEndpoint)
+		configMapName, err := r.reconcileConfigMap(ctx, postgresCluster, cnpgCluster, postgresSecretName, poolersExist)
 		if err != nil {
 			logger.Error(err, "Failed to reconcile ConfigMap")
 			if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonConfigMapFailed, fmt.Sprintf("Failed to reconcile ConfigMap: %v", err), failedClusterPhase); statusErr != nil {
@@ -376,9 +379,11 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to sync status: %w", err)
 	}
-	if cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy && r.arePoolersReady(ctx, postgresCluster) {
-		logger.Info("Poolers are ready, syncing pooler status")
-		r.syncPoolerStatus(ctx, postgresCluster)
+	if cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy {
+		if rwPooler, roPooler, err := r.getPoolers(ctx, postgresCluster); err == nil && r.arePoolersReady(rwPooler, roPooler) {
+			logger.Info("Poolers are ready, syncing pooler status")
+			r.syncPoolerStatus(ctx, postgresCluster)
+		}
 	}
 	logger.Info("Reconciliation complete")
 	return ctrl.Result{}, nil
@@ -819,14 +824,14 @@ func (r *PostgresClusterReconciler) getPoolerInstanceCount(pooler *cnpgv1.Pooler
 	return desired, pooler.Status.Instances
 }
 
-// arePoolersReady checks if both RW and RO poolers have all instances scheduled.
-func (r *PostgresClusterReconciler) arePoolersReady(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster) bool {
+// getPoolers fetches both RW and RO pooler resources for the given PostgresCluster.
+func (r *PostgresClusterReconciler) getPoolers(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster) (*cnpgv1.Pooler, *cnpgv1.Pooler, error) {
 	rwPooler := &cnpgv1.Pooler{}
 	if err := r.Get(ctx, types.NamespacedName{
 		Name:      poolerResourceName(postgresCluster.Name, readWriteEndpoint),
 		Namespace: postgresCluster.Namespace,
 	}, rwPooler); err != nil {
-		return false
+		return nil, nil, err
 	}
 
 	roPooler := &cnpgv1.Pooler{}
@@ -834,9 +839,14 @@ func (r *PostgresClusterReconciler) arePoolersReady(ctx context.Context, postgre
 		Name:      poolerResourceName(postgresCluster.Name, readOnlyEndpoint),
 		Namespace: postgresCluster.Namespace,
 	}, roPooler); err != nil {
-		return false
+		return nil, nil, err
 	}
 
+	return rwPooler, roPooler, nil
+}
+
+// arePoolersReady checks if both RW and RO poolers have all instances scheduled.
+func (r *PostgresClusterReconciler) arePoolersReady(rwPooler, roPooler *cnpgv1.Pooler) bool {
 	return r.isPoolerReady(rwPooler) && r.isPoolerReady(roPooler)
 }
 
@@ -930,8 +940,6 @@ func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec, customDefinedParameters m
 	return normalizedConf
 }
 
-// buildConfigMapData is a pure function — no API calls. Builds the data map for the
-// PostgresCluster connection ConfigMap. Pooler endpoints are only included when poolersExist is true.
 func buildConfigMapData(cnpgCluster *cnpgv1.Cluster, secretName string, poolersExist bool) map[string]string {
 	data := map[string]string{
 		"CLUSTER_RW_ENDPOINT":   fmt.Sprintf("%s-rw.%s", cnpgCluster.Name, cnpgCluster.Namespace),
@@ -950,15 +958,12 @@ func buildConfigMapData(cnpgCluster *cnpgv1.Cluster, secretName string, poolersE
 
 // reconcileConfigMap resolves the ConfigMap name, checks pooler existence, builds and
 // creates or updates the ConfigMap with connection details for the PostgresCluster.
-func (r *PostgresClusterReconciler) reconcileConfigMap(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster, secretName string) (string, error) {
-	logger := logs.FromContext(ctx)
-
+func (r *PostgresClusterReconciler) reconcileConfigMap(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster, secretName string, poolersExist bool) (string, error) {
 	configMapName := fmt.Sprintf("%s%s", postgresCluster.Name, defaultConfigMapSuffix)
 	if postgresCluster.Status.Resources != nil && postgresCluster.Status.Resources.ConfigMapRef != nil {
 		configMapName = postgresCluster.Status.Resources.ConfigMapRef.Name
 	}
 
-	poolersExist := r.poolerExists(ctx, postgresCluster, readWriteEndpoint) && r.poolerExists(ctx, postgresCluster, readOnlyEndpoint)
 	desiredData := buildConfigMapData(cnpgCluster, secretName, poolersExist)
 
 	configMap := &corev1.ConfigMap{
@@ -967,7 +972,7 @@ func (r *PostgresClusterReconciler) reconcileConfigMap(ctx context.Context, post
 			Namespace: postgresCluster.Namespace,
 		},
 	}
-	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, configMap, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, configMap, func() error {
 		configMap.Data = desiredData
 		configMap.Labels = map[string]string{"app.kubernetes.io/managed-by": "postgrescluster-controller"}
 
@@ -980,15 +985,6 @@ func (r *PostgresClusterReconciler) reconcileConfigMap(ctx context.Context, post
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to reconcile ConfigMap %s: %w", configMapName, err)
-	}
-
-	switch result {
-	case controllerutil.OperationResultCreated:
-		logger.Info("ConfigMap created", "name", configMapName)
-	case controllerutil.OperationResultUpdated:
-		logger.Info("ConfigMap updated", "name", configMapName)
-	default:
-		logger.Info("ConfigMap unchanged", "name", configMapName)
 	}
 
 	return configMapName, nil
