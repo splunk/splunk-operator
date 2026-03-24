@@ -253,18 +253,9 @@ func RunM4CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	// Ensure that the cluster-manager goes to Ready phase
 	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
-	// Ensure the indexers of all sites go to Ready phase
-	testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 
-	// Ensure cluster configured as multisite
-	testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-	// Ensure search head cluster go to Ready phase
-	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-	// Verify telemetry
-	testcaseEnvInst.TriggerTelemetrySubmission(ctx, deployment)
-	testcaseEnvInst.VerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
+	testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
 
 	// Deploy Monitoring Console CRD
 	mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")

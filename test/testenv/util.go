@@ -23,8 +23,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"reflect"
-	"sort"
 	"strings"
 	"time"
 
@@ -1115,16 +1113,6 @@ func GetDirsOrFilesInPath(ctx context.Context, deployment *Deployment, podName s
 	return strings.Fields(stdout), err
 }
 
-// CompareStringSlices checks if two string slices are matching
-func CompareStringSlices(stringOne []string, stringTwo []string) bool {
-	if len(stringOne) != len(stringTwo) {
-		return false
-	}
-	sort.Strings(stringOne)
-	sort.Strings(stringTwo)
-	return reflect.DeepEqual(stringOne, stringTwo)
-}
-
 // CheckStringInSlice check if string is present in a slice
 func CheckStringInSlice(stringSlice []string, compString string) bool {
 	logf.Log.Info("Checking for string in slice", "String", compString, "String Slice", stringSlice)
@@ -1168,16 +1156,6 @@ func GetPodUIDs(ns string) map[string]string {
 		splunkPodUIDs[podName] = restResponse.Metadata.UID
 	}
 	return splunkPodUIDs
-}
-
-// DeletePod Delete pod in the namespace
-func DeletePod(ns string, podName string) error {
-	_, err := exec.Command("kubectl", "delete", "pod", "-n", ns, podName).Output()
-	if err != nil {
-		logf.Log.Error(err, "Failed to delete operator pod ", "PodName", podName, "Namespace", ns)
-		return err
-	}
-	return nil
 }
 
 // DeleteOperatorPod Delete Operator Pod in the namespace

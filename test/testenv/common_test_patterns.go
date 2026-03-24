@@ -40,27 +40,6 @@ func (testcaseenv *TestCaseEnv) DeployAndVerifyMonitoringConsole(ctx context.Con
 	return mc
 }
 
-// DeployAndVerifyC3Cluster deploys a C3 cluster (single site with SHC) and verifies all components are ready
-func (testcaseenv *TestCaseEnv) DeployAndVerifyC3Cluster(ctx context.Context, deployment *Deployment, name string, indexerReplicas int, mcRef string) {
-	err := deployment.DeploySingleSiteCluster(ctx, name, indexerReplicas, true, mcRef)
-	Expect(err).To(Succeed(), "Unable to deploy C3 cluster")
-
-	testcaseenv.VerifyClusterManagerReady(ctx, deployment)
-	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
-	testcaseenv.VerifySingleSiteIndexersReady(ctx, deployment)
-}
-
-// DeployAndVerifyM4Cluster deploys an M4 cluster (multisite with SHC) and verifies all components are ready
-func (testcaseenv *TestCaseEnv) DeployAndVerifyM4Cluster(ctx context.Context, deployment *Deployment, name string, indexerReplicas int, siteCount int, mcRef string) {
-	err := deployment.DeployMultisiteClusterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef)
-	Expect(err).To(Succeed(), "Unable to deploy M4 cluster")
-
-	testcaseenv.VerifyClusterManagerReady(ctx, deployment)
-	testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount)
-	testcaseenv.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
-}
-
 // VerifyIndexerCPULimits verifies CPU limits on all indexer pods in a single-site cluster
 func (testcaseenv *TestCaseEnv) VerifyIndexerCPULimits(deployment *Deployment, deploymentName string, indexerCount int, expectedCPULimit string) {
 	for i := 0; i < indexerCount; i++ {
@@ -77,20 +56,36 @@ func (testcaseenv *TestCaseEnv) VerifySearchHeadCPULimits(deployment *Deployment
 	}
 }
 
+// VerifyC3ComponentsReady verifies SHC and single-site indexers are ready (without CM check or RFSF).
+func (testcaseenv *TestCaseEnv) VerifyC3ComponentsReady(ctx context.Context, deployment *Deployment) {
+	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
+	testcaseenv.VerifySingleSiteIndexersReady(ctx, deployment)
+}
+
+// VerifyM4ComponentsReady verifies multisite indexers, multisite status, and SHC are ready (without CM check or RFSF).
+func (testcaseenv *TestCaseEnv) VerifyM4ComponentsReady(ctx context.Context, deployment *Deployment, siteCount int) {
+	testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount)
+	testcaseenv.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
+}
+
+// VerifyMCVersionChangedAndReady waits for the MC resource version to change then verifies MC is ready.
+func (testcaseenv *TestCaseEnv) VerifyMCVersionChangedAndReady(ctx context.Context, deployment *Deployment, mc *enterpriseApi.MonitoringConsole, resourceVersion string) {
+	testcaseenv.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
+	testcaseenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+}
+
 // VerifyClusterReadyAndRFSF is a common verification pattern that checks cluster is ready and RF/SF is met
 func (testcaseenv *TestCaseEnv) VerifyClusterReadyAndRFSF(ctx context.Context, deployment *Deployment) {
 	testcaseenv.VerifyClusterManagerReady(ctx, deployment)
-	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
-	testcaseenv.VerifySingleSiteIndexersReady(ctx, deployment)
+	testcaseenv.VerifyC3ComponentsReady(ctx, deployment)
 	testcaseenv.VerifyRFSFMet(ctx, deployment)
 }
 
 // VerifyMultisiteClusterReadyAndRFSF is a common verification pattern for multisite clusters
 func (testcaseenv *TestCaseEnv) VerifyMultisiteClusterReadyAndRFSF(ctx context.Context, deployment *Deployment, siteCount int) {
 	testcaseenv.VerifyClusterManagerReady(ctx, deployment)
-	testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount)
-	testcaseenv.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
+	testcaseenv.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 	testcaseenv.VerifyRFSFMet(ctx, deployment)
 }
 
@@ -104,12 +99,5 @@ func (testcaseenv *TestCaseEnv) TriggerAndVerifyTelemetry(ctx context.Context, d
 // This includes cluster ready, RF/SF met, and monitoring console ready
 func (testcaseenv *TestCaseEnv) StandardC3Verification(ctx context.Context, deployment *Deployment, mcName string, mc *enterpriseApi.MonitoringConsole) {
 	testcaseenv.VerifyClusterReadyAndRFSF(ctx, deployment)
-	testcaseenv.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
-}
-
-// StandardM4Verification performs the standard set of verifications for an M4 cluster
-// This includes multisite cluster ready, RF/SF met, and monitoring console ready
-func (testcaseenv *TestCaseEnv) StandardM4Verification(ctx context.Context, deployment *Deployment, siteCount int, mcName string, mc *enterpriseApi.MonitoringConsole) {
-	testcaseenv.VerifyMultisiteClusterReadyAndRFSF(ctx, deployment, siteCount)
 	testcaseenv.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
 }

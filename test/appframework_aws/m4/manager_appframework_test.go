@@ -163,14 +163,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -244,14 +237,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -379,14 +365,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -446,14 +425,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -556,14 +528,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -822,11 +787,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4IndexersAndSHCReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -871,11 +832,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4IndexersAndSHCReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -991,14 +948,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure cluster configured as multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1053,14 +1003,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure cluster configured as multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1215,11 +1158,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4IndexersAndSHCReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1264,11 +1203,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4IndexersAndSHCReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
@@ -1446,14 +1381,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1526,14 +1454,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1901,14 +1822,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1993,14 +1907,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2077,14 +1984,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2195,11 +2095,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4IndexersAndSHCReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2596,14 +2492,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2679,14 +2568,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag for SHC")
 			testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, shc.Name, shc.Kind)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)

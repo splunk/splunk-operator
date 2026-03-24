@@ -60,19 +60,6 @@ func GetIndexOnPod(ctx context.Context, deployment *Deployment, podName string, 
 	return indexFound, indexData
 }
 
-// RestartSplunk Restart splunk inside the container
-func RestartSplunk(ctx context.Context, deployment *Deployment, podName string) bool {
-	stdin := "/opt/splunk/bin/splunk restart -auth admin:$(cat /mnt/splunk-secrets/password)"
-	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
-	if err != nil {
-		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
-		return false
-	}
-	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
-	return true
-}
-
 // RollHotToWarm rolls hot buckets to warm for a given index and pod
 func RollHotToWarm(ctx context.Context, deployment *Deployment, podName string, indexName string) bool {
 	stdin := "/opt/splunk/bin/splunk _internal call /data/indexes/" + indexName + "/roll-hot-buckets admin:$(cat /mnt/splunk-secrets/password)"

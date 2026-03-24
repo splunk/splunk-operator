@@ -272,18 +272,9 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Ensure that the cluster-manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			testcaseEnvInst.VerifyC3ComponentsReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
-
-			// wait for custom resource resource version to change
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 			// Wait for Cluster Manager to appear in Monitoring Console Config Map
 			err = testcaseEnvInst.WaitForPodsInMCConfigMap(ctx, deployment, []string{fmt.Sprintf(testenv.ClusterManagerServiceName, deployment.GetName())}, splcommon.ClusterManagerURL, mcName, true, 2*time.Minute)
@@ -443,18 +434,9 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Ensure that the cluster-manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			testcaseEnvInst.VerifyC3ComponentsReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
-
-			// wait for custom resource resource version to change
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 			// Check Cluster Manager in Monitoring Console Config Map
 			testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, []string{fmt.Sprintf(testenv.ClusterManagerServiceName, deployment.GetName())}, splcommon.ClusterManagerURL, mcName, true)

@@ -83,6 +83,18 @@ func verifySecretsPropagated(ctx context.Context, deployment *testenv.Deployment
 	testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, secretData, updated)
 }
 
+// verifyLMAndStandaloneReady waits for License Manager then Standalone to reach READY status.
+func verifyLMAndStandaloneReady(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *SecretTestConfig, standalone *enterpriseApi.Standalone) {
+	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+}
+
+// verifyLMAndClusterManagerReady waits for License Manager then Cluster Manager to reach READY status.
+func verifyLMAndClusterManagerReady(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *SecretTestConfig) {
+	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+}
+
 // generateAndApplySecretUpdate creates randomized secret data and applies it to the namespace-scoped
 // secret object, returning the updated data map for subsequent verification.
 func generateAndApplySecretUpdate(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, namespaceScopedSecretName string) map[string][]byte {
@@ -111,11 +123,7 @@ func RunS1SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	}
 	Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
-	// Wait for License Manager to be in READY status
-	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
-
-	// Wait for Standalone to be in READY status
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+	verifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, standalone)
 
 	// Deploy and verify Monitoring Console
 	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), deployment.GetName())
@@ -134,17 +142,9 @@ func RunS1SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	// Ensure standalone is updating
 	testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
-	// Wait for License Manager to be in READY status
-	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+	verifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, standalone)
 
-	// Wait for Standalone to be in READY status
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
-
-	// Wait for custom resource resource version to change
-	testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, updatedSecretData, true)
 }
@@ -166,11 +166,7 @@ func RunS1SecretDeleteTest(ctx context.Context, deployment *testenv.Deployment, 
 	}
 	Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
-	// Wait for License Manager to be in READY status
-	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
-
-	// Wait for Standalone to be in READY status
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+	verifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, standalone)
 
 	// Deploy and verify Monitoring Console
 	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), deployment.GetName())
@@ -190,17 +186,9 @@ func RunS1SecretDeleteTest(ctx context.Context, deployment *testenv.Deployment, 
 	// Ensure standalone is updating
 	testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
-	// Wait for License Manager to be in READY status
-	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+	verifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, standalone)
 
-	// Wait for Standalone to be in READY status
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
-
-	// Wait for custom resource resource version to change
-	testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, secretStruct.Data, false)
 }
@@ -254,11 +242,7 @@ func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Dep
 	// Wait for Standalone to be in READY status
 	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
-	// Wait for custom resource resource version to change
-	testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, secretStruct.Data, false)
 }
@@ -272,17 +256,8 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true, mcRef)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-	// Wait for License Manager to be in READY status
-	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
-
-	// Ensure that the cluster-manager goes to Ready phase
-	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-
-	// Ensure Search Head Cluster go to Ready phase
-	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-	// Ensure Indexers go to Ready phase
-	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+	verifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
+	testcaseEnvInst.VerifyC3ComponentsReady(ctx, deployment)
 
 	// Wait for ClusterInitialized event to confirm cluster is fully initialized
 	idxcName := deployment.GetName() + "-idxc"
@@ -314,11 +289,7 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 		testcaseEnvInst.VerifyClusterManagerPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
 	}
 
-	// Wait for License Manager to be in READY status
-	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
-
-	// Ensure that the cluster-manager goes to Ready phase
-	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+	verifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
 
 	// Ensure Search Head Cluster go to Ready phase
 	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
@@ -335,11 +306,7 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	err = testcaseEnvInst.WaitForPasswordSyncCompleted(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
 	Expect(err).To(Succeed(), "Timed out waiting for PasswordSyncCompleted event on IndexerCluster")
 
-	// Wait for custom resource resource version to change
-	testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 	// Verify RF SF is met
 	testcaseEnvInst.Log.Info("Checkin RF SF after secret change")
@@ -364,11 +331,7 @@ func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	}
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-	// Wait for License Manager to be in READY status
-	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
-
-	// Ensure that the cluster-manager goes to Ready phase
-	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+	verifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
 
 	// Ensure the indexers of all sites go to Ready phase
 	testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
@@ -416,11 +379,7 @@ func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	// Ensure search head cluster go to Ready phase
 	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
-	// Wait for custom resource resource version to change
-	testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 	// Verify RF SF is met
 	testcaseEnvInst.Log.Info("Checkin RF SF after secret change")

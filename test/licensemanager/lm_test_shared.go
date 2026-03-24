@@ -201,14 +201,8 @@ func RunLMC3Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 	err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true, mcRef)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-	// Wait for Cluster Manager to be in READY status
 	testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-	// Wait for Search Head Cluster to be in READY status
-	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-	// Wait for Indexers to be in READY status
-	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+	testcaseEnvInst.VerifyC3ComponentsReady(ctx, deployment)
 
 	// Deploy and verify Monitoring Console
 	_ = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
@@ -397,17 +391,8 @@ func RunLMM4Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 	err := config.DeployMultisiteClusterWithSearchHead(ctx, deployment, deployment.GetName(), 1, siteCount, mcRef)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-	// Wait for Cluster Manager to be in READY status
 	testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-	// Wait for Indexers to be in READY status
-	testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-	// Verify Multisite Indexer Cluster status
-	testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-	// Wait for Search Head Cluster to be in READY status
-	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 
 	// Deploy and verify Monitoring Console
 	_ = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())

@@ -316,15 +316,6 @@ func (testenv *TestCaseEnv) VerifyNoDisconnectedSHPresentOnCM(ctx context.Contex
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
 }
 
-// VerifyNoSHCInNamespace verify no SHC is present in namespace
-func (testenv *TestCaseEnv) VerifyNoSHCInNamespace(deployment *Deployment) {
-	gomega.Eventually(func() bool {
-		shcStatus := SHCInNamespace(testenv.GetName())
-		testenv.Log.Info("Verifying no Search Head Cluster is present in namespace", "Status", shcStatus)
-		return shcStatus
-	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(false))
-}
-
 // VerifyLicenseManagerReady verify LM is in ready status and does not flip flop
 func (testenv *TestCaseEnv) VerifyLicenseManagerReady(ctx context.Context, deployment *Deployment) {
 	LicenseManager := &enterpriseApi.LicenseManager{}
@@ -437,15 +428,6 @@ func (testenv *TestCaseEnv) VerifyIndexExistsOnS3(ctx context.Context, deploymen
 		}
 		return indexFound
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
-}
-
-// VerifyRollingRestartFinished verify no rolling restart is active
-func (testenv *TestCaseEnv) VerifyRollingRestartFinished(ctx context.Context, deployment *Deployment) {
-	gomega.Eventually(func() bool {
-		rollingRestartStatus := CheckRollingRestartStatus(ctx, deployment)
-		testenv.Log.Info("Rolling Restart Status", "active", rollingRestartStatus)
-		return rollingRestartStatus
-	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(true))
 }
 
 // VerifyConfOnPod Verify give conf and value on config file on pod

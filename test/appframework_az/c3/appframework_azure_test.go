@@ -163,20 +163,12 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			// wait for custom resource resource version to change
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
 
 			// Verify no SH in disconnected status is present on CM
 			testcaseEnvInst.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment)
@@ -237,19 +229,12 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -377,20 +362,12 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			// wait for custom resource resource version to change
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -447,19 +424,12 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -557,11 +527,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -815,11 +781,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -865,11 +827,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1002,11 +960,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1052,11 +1006,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// // Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1186,11 +1136,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1267,11 +1213,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1413,11 +1355,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1482,11 +1420,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1581,11 +1515,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1708,11 +1638,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1771,11 +1697,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1921,11 +1843,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1971,11 +1889,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2147,11 +2061,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2224,11 +2134,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2597,11 +2503,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2692,11 +2594,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2778,11 +2676,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2931,11 +2825,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -3021,11 +2911,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -3115,11 +3001,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -3199,11 +3081,7 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag")
 			testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, shc.Name, shc.Kind)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)

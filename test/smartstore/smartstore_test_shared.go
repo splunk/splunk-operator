@@ -194,6 +194,12 @@ func RunS1EphemeralStorageTest(ctx context.Context, deployment *testenv.Deployme
 	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 }
 
+// verifyM4ClusterAndRFSF verifies cluster manager and multisite cluster are ready and RF/SF is met.
+func verifyM4ClusterAndRFSF(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *SmartStoreTestConfig, siteCount int) {
+	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+	testcaseEnvInst.VerifyMultisiteClusterReadyAndRFSF(ctx, deployment, siteCount)
+}
+
 // RunM4MultisiteSmartStoreTest runs the standard M4 multisite SmartStore test workflow
 func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *SmartStoreTestConfig) {
 	volName := "test-volume-" + testenv.RandomDNSName(3)
@@ -216,9 +222,7 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	}
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-	// Verify multisite cluster is ready and RF/SF is met
-	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-	testcaseEnvInst.VerifyMultisiteClusterReadyAndRFSF(ctx, deployment, siteCount)
+	verifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)
 
 	// Use multisite workflow helper to verify index, ingest data, roll to warm, and verify on S3
 	testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, deployment.GetName(), siteCount, indexName, 2000)
@@ -253,9 +257,7 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 		Expect(err).To(Succeed(), "Failed to add new index to cluster manager")
 	}
 
-	// Verify multisite cluster is ready and RF/SF is met
-	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-	testcaseEnvInst.VerifyMultisiteClusterReadyAndRFSF(ctx, deployment, siteCount)
+	verifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)
 
 	// Verify new bundle is pushed (only for v3)
 	if config.APIVersion == "v3" {

@@ -96,11 +96,7 @@ func RunS1StandaloneAddDeleteMCTest(ctx context.Context, deployment *testenv.Dep
 	// Wait for standalone two to be in READY status
 	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, standaloneTwoName, standaloneTwo)
 
-	// wait for custom resource resource version to change
-	testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-	// Verify MC is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 	// Check both standalones are configured in MC Config Map
 	standalonePods = append(standalonePods, fmt.Sprintf(testenv.StandalonePod, standaloneTwoName, 0))
@@ -121,11 +117,7 @@ func RunS1StandaloneAddDeleteMCTest(ctx context.Context, deployment *testenv.Dep
 	err = deployment.DeleteCR(ctx, standaloneTwo)
 	Expect(err).To(Succeed(), "Unable to delete standalone instance", "Standalone Name", standaloneTwo)
 
-	// wait for custom resource resource version to change
-	testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-	// Verify MC is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 	// Check standalone one is still configured in MC Config Map
 	standalonePods = testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneOneName, 1, false, 0)

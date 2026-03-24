@@ -194,21 +194,6 @@ func CheckSearchHeadRemoved(ctx context.Context, deployment *Deployment) bool {
 	return searchHeadRemoved
 }
 
-// RollHotBuckets roll hot buckets in cluster
-func RollHotBuckets(ctx context.Context, deployment *Deployment) bool {
-	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-manager")
-	stdin := "/opt/splunk/bin/splunk rolling-restart cluster-peers -auth admin:$(cat /mnt/splunk-secrets/password)"
-	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
-	if err != nil {
-		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
-		return false
-	}
-	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
-
-	return strings.Contains(stdout, "Rolling restart of all cluster peers has been initiated.")
-}
-
 // ClusterManagerInfoEndpointResponse is represtentation of /services/cluster/manager/info endpoint
 type ClusterManagerInfoEndpointResponse struct {
 	Entry []struct {

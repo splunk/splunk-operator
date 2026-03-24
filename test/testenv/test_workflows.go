@@ -42,34 +42,6 @@ func RunStandaloneDeploymentWorkflow(ctx context.Context, deployment *Deployment
 	return &WorkflowResult{Standalone: standalone}
 }
 
-// RunStandaloneWithLMWorkflow deploys standalone with license manager and verifies both are ready
-func RunStandaloneWithLMWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, lmName string) *WorkflowResult {
-	lm, err := deployment.DeployLicenseManager(ctx, lmName)
-	Expect(err).To(Succeed(), "Unable to deploy License Manager")
-
-	testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment)
-
-	standalone, err := deployment.DeployStandalone(ctx, name, lmName, "")
-	Expect(err).To(Succeed(), "Unable to deploy standalone instance")
-
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, name, standalone)
-
-	return &WorkflowResult{Standalone: standalone, LicenseManager: lm}
-}
-
-// RunStandaloneWithMCWorkflow deploys standalone with monitoring console and verifies both are ready
-func RunStandaloneWithMCWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, mcName string) *WorkflowResult {
-	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcName, "")
-
-	standalone, err := deployment.DeployStandalone(ctx, name, "", mcName)
-	Expect(err).To(Succeed(), "Unable to deploy standalone instance")
-
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, name, standalone)
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
-
-	return &WorkflowResult{Standalone: standalone, MonitoringConsole: mc}
-}
-
 // RunC3DeploymentWorkflow deploys a C3 cluster (CM + IDXC + SHC) and verifies all components are ready
 func RunC3DeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int, mcRef string) *WorkflowResult {
 	err := deployment.DeploySingleSiteCluster(ctx, name, indexerReplicas, true, mcRef)
@@ -81,22 +53,6 @@ func RunC3DeploymentWorkflow(ctx context.Context, deployment *Deployment, testca
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 	return &WorkflowResult{}
-}
-
-// RunC3WithMCWorkflow deploys a C3 cluster with monitoring console and verifies all components
-func RunC3WithMCWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int, mcName string) *WorkflowResult {
-	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcName, "")
-
-	err := deployment.DeploySingleSiteCluster(ctx, name, indexerReplicas, true, mcName)
-	Expect(err).To(Succeed(), "Unable to deploy C3 cluster")
-
-	testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
-	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
-
-	return &WorkflowResult{MonitoringConsole: mc}
 }
 
 // RunM4DeploymentWorkflow deploys a M4 multisite cluster and verifies all components are ready
@@ -111,23 +67,6 @@ func RunM4DeploymentWorkflow(ctx context.Context, deployment *Deployment, testca
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 	return &WorkflowResult{}
-}
-
-// RunM4WithMCWorkflow deploys a M4 multisite cluster with monitoring console
-func RunM4WithMCWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int, siteCount int, mcName string) *WorkflowResult {
-	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcName, "")
-
-	err := deployment.DeployMultisiteClusterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcName)
-	Expect(err).To(Succeed(), "Unable to deploy M4 cluster")
-
-	testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-	testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-	testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
-
-	return &WorkflowResult{MonitoringConsole: mc}
 }
 
 // RunM1DeploymentWorkflow deploys a M1 multisite indexer cluster (no SHC) and verifies components
@@ -203,40 +142,4 @@ func RunDeleteC3Workflow(ctx context.Context, deployment *Deployment, testcaseEn
 
 	err = deployment.DeleteCR(ctx, cm)
 	Expect(err).To(Succeed(), "Unable to delete Cluster Manager")
-}
-
-// RunIngestAndSearchWorkflow ingests data and performs a search on a pod
-func RunIngestAndSearchWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, podName string, indexName string, searchQuery string) {
-	logFile := fmt.Sprintf("test-log-%s.log", RandomDNSName(3))
-	CreateMockLogfile(logFile, 100)
-	IngestFileViaMonitor(ctx, logFile, indexName, podName, deployment)
-
-	searchResults, err := PerformSearchSync(ctx, podName, searchQuery, deployment)
-	Expect(err).To(Succeed(), "Failed to perform search")
-	testcaseEnvInst.Log.Info("Search completed", "results", searchResults)
-}
-
-// RunMonitoringConsoleDeploymentWorkflow deploys a Monitoring Console instance and verifies it is ready
-func RunMonitoringConsoleDeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string) *WorkflowResult {
-	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, name, "")
-	return &WorkflowResult{MonitoringConsole: mc}
-}
-
-// RunLicenseManagerDeploymentWorkflow deploys a License Manager instance and verifies it is ready
-func RunLicenseManagerDeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string) *WorkflowResult {
-	lm, err := deployment.DeployLicenseManager(ctx, name)
-	Expect(err).To(Succeed(), "Unable to deploy License Manager")
-	testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment)
-	return &WorkflowResult{LicenseManager: lm}
-}
-
-// RunCompleteDataIngestionWorkflow performs complete data ingestion workflow: ingest, verify, roll to warm, verify on S3
-func RunCompleteDataIngestionWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, podName string, indexName string, logLineCount int) {
-	logFile := fmt.Sprintf("test-log-%s.log", RandomDNSName(3))
-	CreateMockLogfile(logFile, logLineCount)
-	IngestFileViaMonitor(ctx, logFile, indexName, podName, deployment)
-
-	RollHotToWarm(ctx, deployment, podName, indexName)
-
-	testcaseEnvInst.VerifyIndexExistsOnS3(ctx, deployment, podName, indexName)
 }

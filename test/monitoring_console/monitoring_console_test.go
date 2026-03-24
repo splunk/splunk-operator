@@ -71,11 +71,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Deploy and verify C3 cluster with MC
 			testcaseEnvInst.DeployAndVerifyC3WithMC(ctx, deployment, deployment.GetName(), defaultIndexerReplicas, mcName)
 
-			// wait for custom resource resource version to change
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 			// Wait for Cluster Master to appear in Monitoring Console Config Map
 			err := testcaseEnvInst.WaitForPodsInMCConfigMap(ctx, deployment, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true, 2*time.Minute)
@@ -168,18 +164,9 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Ensure that the cluster-master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
+			testcaseEnvInst.VerifyC3ComponentsReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
-
-			// wait for custom resource resource version to change
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 			// Verify MC configuration for C3 cluster
 			testcaseEnvInst.VerifyMCConfigForC3Cluster(ctx, deployment, deployment.GetName(), mcName, defaultSHReplicas, defaultIndexerReplicas, true)
@@ -354,15 +341,7 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Ensure that the cluster-master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
-
-			// Ensure indexers go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure indexer clustered is configured as multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure search head cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 
 			// Deploy and verify Monitoring Console
 			mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
