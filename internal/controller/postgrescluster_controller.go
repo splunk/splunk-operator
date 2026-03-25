@@ -1494,6 +1494,7 @@ func cnpgPoolerPredicator() predicate.Predicate {
 		},
 	}
 }
+
 // secretPredicator filters Secret events to trigger reconciles on creation, deletion, or owner reference changes.
 func secretPredicator() predicate.Predicate {
 	return predicate.Funcs{

@@ -18,10 +18,13 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -61,12 +64,19 @@ var _ = BeforeSuite(func() {
 	var err error
 	err = enterprisev4.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
+	err = cnpgv1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:scheme
 
 	By("bootstrapping test environment")
+	cnpgCRDDirectory, err := getCNPGCRDDirectory()
+	Expect(err).NotTo(HaveOccurred())
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "config", "crd", "bases"),
+			cnpgCRDDirectory,
+		},
 		ErrorIfCRDPathMissing: true,
 	}
 
@@ -113,4 +123,36 @@ func getFirstFoundEnvTestBinaryDir() string {
 		}
 	}
 	return ""
+}
+
+func getCNPGCRDDirectory() (string, error) {
+	// Optional escape hatch for CI/local overrides.
+	if explicit := os.Getenv("CNPG_CRD_DIR"); explicit != "" {
+		return explicit, nil
+	}
+
+	moduleRoot := os.Getenv("GOMODCACHE")
+	if moduleRoot == "" {
+		gopath := os.Getenv("GOPATH")
+		if gopath == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "", err
+			}
+			gopath = filepath.Join(home, "go")
+		}
+		moduleRoot = filepath.Join(gopath, "pkg", "mod")
+	}
+
+	pattern := filepath.Join(moduleRoot, "github.com", "cloudnative-pg", "cloudnative-pg@*", "config", "crd", "bases")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return "", err
+	}
+	if len(matches) == 0 {
+		return "", fmt.Errorf("CNPG CRD directory not found; set CNPG_CRD_DIR or download github.com/cloudnative-pg/cloudnative-pg module")
+	}
+
+	sort.Strings(matches)
+	return matches[len(matches)-1], nil
 }
