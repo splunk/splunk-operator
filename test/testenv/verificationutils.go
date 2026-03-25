@@ -22,9 +22,10 @@ import (
 	"fmt"
 	"math/rand"
 	"os/exec"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	gomega "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -924,7 +925,14 @@ func VerifyAppInstalled(ctx context.Context, deployment *Deployment, testenvInst
 						expectedVersion = AppInfo[appName]["V1"]
 					}
 					testenvInstance.Log.Info("Verify app", "On pod", podName, "App name", appName, "Expected version", expectedVersion, "Version installed", versionInstalled, "Updated", checkupdated)
-					gomega.Expect(versionInstalled).Should(gomega.Equal(expectedVersion))
+					gomega.Eventually(func() string {
+						_, ver, err := GetPodAppStatus(ctx, deployment, podName, ns, appName, clusterWideInstall)
+						if err != nil {
+							testenvInstance.Log.Info("Retrying app version check", "On pod", podName, "App name", appName, "Error", err)
+							return ""
+						}
+						return ver
+					}, 5*time.Minute, PollInterval).Should(gomega.Equal(expectedVersion))
 				}
 			}
 		}
