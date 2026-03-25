@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -105,9 +105,6 @@ var _ = Describe("Monitoring Console test (master)", func() {
 			// wait for custom resource resource version to change
 			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
 
-			// Wait for MC to go to PENDING Phase
-			//testcaseEnvInst.VerifyMonitoringConsolePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhasePending)
-
 			// Verify Monitoring Console is Ready and stays in ready state
 			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
@@ -119,9 +116,7 @@ var _ = Describe("Monitoring Console test (master)", func() {
 			testcaseEnvInst.Log.Info("Verify MC configuration after Scale Up")
 			testcaseEnvInst.VerifyMCConfigForC3Cluster(ctx, deployment, deployment.GetName(), mcName, scaledSHReplicas, scaledIndexerReplicas, true)
 		})
-	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("mastermc, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
 			/*
 				Test Steps
@@ -191,9 +186,6 @@ var _ = Describe("Monitoring Console test (master)", func() {
 
 			// wait for custom resource resource version to change
 			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, cm, resourceVersion)
-
-			// Ensure Cluster Master Goes to Updating Phase
-			//testcaseEnvInst.VerifyClusterMasterPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
 
 			// Ensure that the cluster-master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
@@ -280,9 +272,6 @@ var _ = Describe("Monitoring Console test (master)", func() {
 			cm := &enterpriseApiV3.ClusterMaster{}
 			testenv.UpdateMonitoringConsoleRefAndVerify(ctx, deployment, testcaseEnvInst, cm, deployment.GetName(), mcTwoName)
 
-			// Ensure Cluster Master Goes to Updating Phase
-			//testcaseEnvInst.VerifyClusterMasterPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
-
 			// Ensure that the cluster-master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
@@ -348,7 +337,6 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 
 			// wait for custom resource resource version to change
 			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-			//testcaseEnvInst.VerifyMonitoringConsolePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
 			// Verify MC is Ready and stays in ready state
 			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
@@ -452,9 +440,6 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 			// wait for custom resource resource version to change
 			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
 
-			// Wait for MC to go to Updating Phase
-			//testcaseEnvInst.VerifyMonitoringConsolePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating)
-
 			// Verify MC is Ready and stays in ready state
 			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
@@ -550,9 +535,6 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 			// wait for custom resource resource version to change
 			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
 
-			// Wait for MC to go to PENDING Phase
-			//testcaseEnvInst.VerifyMonitoringConsolePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhasePending)
-
 			// Verify Monitoring Console is Ready and stays in ready state
 			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
@@ -575,9 +557,7 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 			indexerPods = testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas, false, 0)
 			testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, indexerPods, mcName, true, true)
 		})
-	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("managermc1, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
 			/*
 				Test Steps
@@ -658,9 +638,6 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 
 			// wait for custom resource resource version to change
 			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, cm, resourceVersion)
-
-			// Ensure Cluster Manager Goes to Updating Phase
-			//testcaseEnvInst.VerifyClusterManagerPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
 
 			// Ensure that the cluster-manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
@@ -783,9 +760,6 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 
 			// wait for custom resource resource version to change
 			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, cm, resourceVersion)
-
-			// Ensure Cluster Manager Goes to Updating Phase
-			//testcaseEnvInst.VerifyClusterManagerPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
 
 			// Ensure that the cluster-manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)

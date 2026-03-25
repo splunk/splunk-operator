@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -1146,7 +1146,7 @@ func (testenv *TestCaseEnv) VerifyNoPodResetByUID(ctx context.Context, deploymen
 	}
 }
 
-// WaitForSplunkPodCleanup Wait for cleanup to happend
+// WaitForSplunkPodCleanup Wait for cleanup to happen
 func (testenv *TestCaseEnv) WaitForSplunkPodCleanup(ctx context.Context, deployment *Deployment) {
 	gomega.Eventually(func() int {
 		testenv.Log.Info("Waiting for Splunk Pods to be deleted before running test")
