@@ -69,7 +69,7 @@ metadata:
             "name": "clustermanager-sample",
             "namespace": "splunk-operator"
           },
-          "spec": {}
+          "spec": null
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -130,7 +130,7 @@ metadata:
             "name": "monitoringconsole-sample",
             "namespace": "splunk-operator"
           },
-          "spec": {}
+          "spec": null
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -141,7 +141,91 @@ metadata:
             ],
             "name": "objectstorage-sample"
           },
-          "spec": {}
+          "spec": {
+            "provider": "s3",
+            "s3": {
+              "path": "bucket/path"
+            }
+          }
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "PostgresCluster",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "splunk-operator"
+            },
+            "name": "postgresql-cluster-dev"
+          },
+          "spec": {
+            "class": "postgresql-dev"
+          }
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "PostgresClusterClass",
+          "metadata": {
+            "name": "postgresql-dev"
+          },
+          "spec": {
+            "cnpg": {
+              "connectionPooler": {
+                "config": {
+                  "max_client_conn": "100"
+                },
+                "instances": 2,
+                "mode": "transaction"
+              },
+              "primaryUpdateMethod": "restart"
+            },
+            "config": {
+              "connectionPoolerEnabled": true,
+              "instances": 1,
+              "postgresVersion": "18",
+              "resources": {
+                "limits": {
+                  "cpu": "1",
+                  "memory": "2Gi"
+                },
+                "requests": {
+                  "cpu": "500m",
+                  "memory": "1Gi"
+                }
+              },
+              "storage": "10Gi"
+            },
+            "provisioner": "postgresql.cnpg.io"
+          }
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "PostgresDatabase",
+          "metadata": {
+            "name": "splunk-databases"
+          },
+          "spec": {
+            "clusterRef": {
+              "name": "postgresql-cluster-dev"
+            },
+            "databases": [
+              {
+                "deletionPolicy": "Delete",
+                "extensions": [
+                  "pg_stat_statements",
+                  "pgcrypto"
+                ],
+                "name": "kvstore"
+              },
+              {
+                "deletionPolicy": "Delete",
+                "extensions": [
+                  "pg_trgm"
+                ],
+                "name": "analytics"
+              }
+            ]
+          }
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -152,7 +236,14 @@ metadata:
             ],
             "name": "queue-sample"
           },
-          "spec": {}
+          "spec": {
+            "provider": "sqs",
+            "sqs": {
+              "authRegion": "us-west-2",
+              "dlq": "dlq",
+              "name": "queue"
+            }
+          }
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -180,13 +271,13 @@ metadata:
             "name": "standalone-sample",
             "namespace": "splunk-operator"
           },
-          "spec": {}
+          "spec": null
         }
       ]
     capabilities: Seamless Upgrades
     categories: Big Data, Logging & Tracing, Monitoring, Security, AI/Machine Learning
     containerImage: splunk/splunk-operator@sha256:c4e0d314622699496f675760aad314520d050a66627fdf33e1e21fa28ca85d50
-    createdAt: "2026-03-02T17:02:29Z"
+    createdAt: "2026-03-25T20:21:54Z"
     description: The Splunk Operator for Kubernetes enables you to quickly and easily
       deploy Splunk Enterprise on your choice of private or public cloud provider.
       The Operator simplifies scaling and management of Splunk Enterprise by automating
@@ -268,6 +359,23 @@ spec:
       displayName: Object Storage
       kind: ObjectStorage
       name: objectstorages.enterprise.splunk.com
+      version: v4
+    - description: |-
+        PostgresClusterClass is the Schema for the postgresclusterclasses API.
+        PostgresClusterClass defines a reusable template and policy for postgres cluster provisioning.
+      displayName: Postgres Cluster Class
+      kind: PostgresClusterClass
+      name: postgresclusterclasses.enterprise.splunk.com
+      version: v4
+    - description: PostgresCluster is the Schema for the postgresclusters API.
+      displayName: Postgres Cluster
+      kind: PostgresCluster
+      name: postgresclusters.enterprise.splunk.com
+      version: v4
+    - description: PostgresDatabase is the Schema for the postgresdatabases API.
+      displayName: Postgres Database
+      kind: PostgresDatabase
+      name: postgresdatabases.enterprise.splunk.com
       version: v4
     - description: Queue is the Schema for the queues API
       displayName: Queue
@@ -371,6 +479,8 @@ spec:
           - licensemasters
           - monitoringconsoles
           - objectstorages
+          - postgresclusters
+          - postgresdatabases
           - queues
           - searchheadclusters
           - standalones
@@ -393,6 +503,8 @@ spec:
           - licensemasters/finalizers
           - monitoringconsoles/finalizers
           - objectstorages/finalizers
+          - postgresclusters/finalizers
+          - postgresdatabases/finalizers
           - queues/finalizers
           - searchheadclusters/finalizers
           - standalones/finalizers
@@ -409,6 +521,8 @@ spec:
           - licensemasters/status
           - monitoringconsoles/status
           - objectstorages/status
+          - postgresclusters/status
+          - postgresdatabases/status
           - queues/status
           - searchheadclusters/status
           - standalones/status
@@ -416,6 +530,35 @@ spec:
           - get
           - patch
           - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - postgresclusterclasses
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - postgresql.cnpg.io
+          resources:
+          - clusters
+          - databases
+          - poolers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - postgresql.cnpg.io
+          resources:
+          - clusters/status
+          - poolers/status
+          verbs:
+          - get
         - apiGroups:
           - authentication.k8s.io
           resources:
@@ -465,7 +608,7 @@ spec:
                     fieldRef:
                       fieldPath: metadata.annotations['olm.targetNamespaces']
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: docker.io/splunk/splunk:10.2.0
+                  value: docker.io/splunk/splunk
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: SPLUNK_GENERAL_TERMS
@@ -474,7 +617,7 @@ spec:
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.name
-                image: docker.io/splunk/splunk-operator:3.1.0
+                image: controller:latest
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -587,7 +730,7 @@ spec:
     name: Splunk Inc.
     url: www.splunk.com
   relatedImages:
-  - image: docker.io/splunk/splunk:10.2.0
+  - image: docker.io/splunk/splunk
     name: splunk-enterprise
   replaces: splunk-operator.v3.0.0
   version: 3.1.0
