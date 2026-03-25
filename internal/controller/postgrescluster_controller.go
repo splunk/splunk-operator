@@ -30,7 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -61,6 +60,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 // SetupWithManager registers the controller and owned resource watches.
 func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		WithEventFilter(predicate.Funcs{GenericFunc: func(event.GenericEvent) bool { return false }}).
 		For(&enterprisev4.PostgresCluster{}, builder.WithPredicates(postgresClusterPredicator())).
 		Owns(&cnpgv1.Cluster{}, builder.WithPredicates(cnpgClusterPredicator())).
 		Owns(&cnpgv1.Pooler{}, builder.WithPredicates(cnpgPoolerPredicator())).
@@ -73,107 +73,71 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func deletionTimestampChanged(oldObj, newObj metav1.Object) bool {
-	return !equality.Semantic.DeepEqual(oldObj.GetDeletionTimestamp(), newObj.GetDeletionTimestamp())
-}
-
 func ownerReferencesChanged(oldObj, newObj metav1.Object) bool {
 	return !equality.Semantic.DeepEqual(oldObj.GetOwnerReferences(), newObj.GetOwnerReferences())
 }
 
-// postgresClusterPredicator triggers on generation changes, deletion, and finalizer transitions.
+// postgresClusterPredicator triggers on spec changes, deletion, and finalizer transitions.
 func postgresClusterPredicator() predicate.Predicate {
-	return predicate.Funcs{
-		CreateFunc: func(event.CreateEvent) bool { return true },
-		DeleteFunc: func(event.DeleteEvent) bool { return true },
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			oldObj, oldOK := e.ObjectOld.(*enterprisev4.PostgresCluster)
-			newObj, newOK := e.ObjectNew.(*enterprisev4.PostgresCluster)
-			if !oldOK || !newOK {
-				return true
-			}
-			if oldObj.Generation != newObj.Generation {
-				return true
-			}
-			if deletionTimestampChanged(oldObj, newObj) {
-				return true
-			}
-			// Finalizer changes indicate registration or deletion  always reconcile.
-			return controllerutil.ContainsFinalizer(oldObj, clustercore.PostgresClusterFinalizerName) !=
-				controllerutil.ContainsFinalizer(newObj, clustercore.PostgresClusterFinalizerName)
+	return predicate.Or(
+		predicate.GenerationChangedPredicate{},
+		predicate.Funcs{
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				// DeletionTimestamp set means the object entered the deletion phase.
+				if !equality.Semantic.DeepEqual(e.ObjectOld.GetDeletionTimestamp(), e.ObjectNew.GetDeletionTimestamp()) {
+					return true
+				}
+				// Finalizer list change signals a cleanup lifecycle transition.
+				return !equality.Semantic.DeepEqual(e.ObjectOld.GetFinalizers(), e.ObjectNew.GetFinalizers())
+			},
 		},
-		GenericFunc: func(event.GenericEvent) bool { return false },
-	}
+	)
 }
 
-// cnpgClusterPredicator triggers only on phase changes or owner reference changes.
+// cnpgClusterPredicator triggers on spec changes, phase changes, or owner reference changes.
+// Generation catches spec drift before CNPG reflects it in status.
 func cnpgClusterPredicator() predicate.Predicate {
-	return predicate.Funcs{
-		CreateFunc: func(event.CreateEvent) bool { return true },
-		DeleteFunc: func(event.DeleteEvent) bool { return true },
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			oldObj, oldOK := e.ObjectOld.(*cnpgv1.Cluster)
-			newObj, newOK := e.ObjectNew.(*cnpgv1.Cluster)
-			if !oldOK || !newOK {
-				return true
-			}
-			return oldObj.Status.Phase != newObj.Status.Phase ||
-				ownerReferencesChanged(oldObj, newObj)
+	return predicate.Or(
+		predicate.GenerationChangedPredicate{},
+		predicate.Funcs{
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				oldObj := e.ObjectOld.(*cnpgv1.Cluster)
+				newObj := e.ObjectNew.(*cnpgv1.Cluster)
+				return oldObj.Status.Phase != newObj.Status.Phase ||
+					ownerReferencesChanged(oldObj, newObj)
+			},
 		},
-		GenericFunc: func(event.GenericEvent) bool { return false },
-	}
+	)
 }
 
-// cnpgPoolerPredicator triggers only on instance count changes.
+// cnpgPoolerPredicator triggers on spec changes or instance count changes.
+// Generation catches spec drift before CNPG reflects it in instance status.
 func cnpgPoolerPredicator() predicate.Predicate {
-	return predicate.Funcs{
-		CreateFunc: func(event.CreateEvent) bool { return true },
-		DeleteFunc: func(event.DeleteEvent) bool { return true },
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			oldObj, oldOK := e.ObjectOld.(*cnpgv1.Pooler)
-			newObj, newOK := e.ObjectNew.(*cnpgv1.Pooler)
-			if !oldOK || !newOK {
-				return true
-			}
-			return oldObj.Status.Instances != newObj.Status.Instances
+	return predicate.Or(
+		predicate.GenerationChangedPredicate{},
+		predicate.Funcs{
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				oldObj := e.ObjectOld.(*cnpgv1.Pooler)
+				newObj := e.ObjectNew.(*cnpgv1.Pooler)
+				return oldObj.Status.Instances != newObj.Status.Instances
+			},
 		},
-		GenericFunc: func(event.GenericEvent) bool { return false },
-	}
+	)
 }
 
-// secretPredicator triggers only on owner reference changes.
+// secretPredicator triggers only when ownership changes.
+// In retain-state mode we release ownership (remove ownerRef) without deleting the Secret,
+// so this transition must trigger reconciliation to update our tracking state.
 func secretPredicator() predicate.Predicate {
 	return predicate.Funcs{
-		CreateFunc: func(event.CreateEvent) bool { return true },
-		DeleteFunc: func(event.DeleteEvent) bool { return true },
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			oldObj, oldOK := e.ObjectOld.(*corev1.Secret)
-			newObj, newOK := e.ObjectNew.(*corev1.Secret)
-			if !oldOK || !newOK {
-				return true
-			}
-			return ownerReferencesChanged(oldObj, newObj)
+			return ownerReferencesChanged(e.ObjectOld, e.ObjectNew)
 		},
-		GenericFunc: func(event.GenericEvent) bool { return false },
 	}
 }
 
-// configMapPredicator triggers on data, label, annotation, or owner reference changes.
+// configMapPredicator triggers on any content change.
+// ConfigMap has no status subresource, so every resourceVersion bump is a real change.
 func configMapPredicator() predicate.Predicate {
-	return predicate.Funcs{
-		CreateFunc: func(event.CreateEvent) bool { return true },
-		DeleteFunc: func(event.DeleteEvent) bool { return true },
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			oldObj, oldOK := e.ObjectOld.(*corev1.ConfigMap)
-			newObj, newOK := e.ObjectNew.(*corev1.ConfigMap)
-			if !oldOK || !newOK {
-				return true
-			}
-			return !equality.Semantic.DeepEqual(oldObj.Data, newObj.Data) ||
-				!equality.Semantic.DeepEqual(oldObj.Labels, newObj.Labels) ||
-				!equality.Semantic.DeepEqual(oldObj.Annotations, newObj.Annotations) ||
-				ownerReferencesChanged(oldObj, newObj)
-		},
-		GenericFunc: func(event.GenericEvent) bool { return false },
-	}
+	return predicate.ResourceVersionChangedPredicate{}
 }

@@ -105,10 +105,12 @@ func PostgresDatabaseService(
 			"If you deleted a previous PostgresDatabase, recreate it with the original name to re-adopt the orphaned resources.",
 			strings.Join(roleConflicts, ", "))
 		logger.Error(nil, conflictMsg)
+		errs := []error{fmt.Errorf("role conflict detected: %s", strings.Join(roleConflicts, ", "))}
 		if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonRoleConflict, conflictMsg, failedDBPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
+			errs = append(errs, fmt.Errorf("failed to update status: %w", statusErr))
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, stderrors.Join(errs...)
 	}
 
 	// We need the CNPG Cluster directly because PostgresCluster status does not yet

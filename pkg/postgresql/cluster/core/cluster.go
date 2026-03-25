@@ -18,6 +18,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -72,11 +73,13 @@ func PostgresClusterService(ctx context.Context, c client.Client, scheme *runtim
 			return ctrl.Result{}, nil
 		}
 		logger.Error(err, "Failed to handle finalizer")
+		errs := []error{err}
 		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterDeleteFailed,
 			fmt.Sprintf("Failed to delete resources during cleanup: %v", err), failedClusterPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
+			errs = append(errs, statusErr)
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, errors.Join(errs...)
 	}
 	if postgresCluster.GetDeletionTimestamp() != nil {
 		logger.Info("PostgresCluster is being deleted, cleanup complete")
@@ -88,8 +91,8 @@ func PostgresClusterService(ctx context.Context, c client.Client, scheme *runtim
 		controllerutil.AddFinalizer(postgresCluster, PostgresClusterFinalizerName)
 		if err := c.Update(ctx, postgresCluster); err != nil {
 			if apierrors.IsConflict(err) {
-				logger.Info("Conflict while adding finalizer, will retry on next reconcile")
-				return ctrl.Result{Requeue: true}, nil
+				logger.Error(err, "Conflict while adding finalizer. Retrying...")
+				return ctrl.Result{}, fmt.Errorf("conflict while adding finalizer: %w", err)
 			}
 			logger.Error(err, "Failed to add finalizer to PostgresCluster")
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
@@ -98,7 +101,7 @@ func PostgresClusterService(ctx context.Context, c client.Client, scheme *runtim
 		return ctrl.Result{}, nil
 	}
 
-	// 2. Load the referenced PostgresClusterClass.
+	// Load the referenced PostgresClusterClass.
 	clusterClass := &enterprisev4.PostgresClusterClass{}
 	if err := c.Get(ctx, client.ObjectKey{Name: postgresCluster.Spec.Class}, clusterClass); err != nil {
 		logger.Error(err, "Unable to fetch referenced PostgresClusterClass", "className", postgresCluster.Spec.Class)
@@ -109,7 +112,7 @@ func PostgresClusterService(ctx context.Context, c client.Client, scheme *runtim
 		return ctrl.Result{}, err
 	}
 
-	// 3. Merge PostgresClusterSpec on top of PostgresClusterClass defaults.
+	// Merge PostgresClusterSpec on top of PostgresClusterClass defaults.
 	mergedConfig, err := getMergedConfig(clusterClass, postgresCluster)
 	if err != nil {
 		logger.Error(err, "Failed to merge PostgresCluster configuration")
@@ -120,7 +123,7 @@ func PostgresClusterService(ctx context.Context, c client.Client, scheme *runtim
 		return ctrl.Result{}, err
 	}
 
-	// 4. Resolve or derive the superuser secret name.
+	// Resolve or derive the superuser secret name.
 	if postgresCluster.Status.Resources != nil && postgresCluster.Status.Resources.SuperUserSecretRef != nil {
 		postgresSecretName = postgresCluster.Status.Resources.SuperUserSecretRef.Name
 		logger.Info("Using existing secret from status", "name", postgresSecretName)
@@ -189,10 +192,10 @@ func PostgresClusterService(ctx context.Context, c client.Client, scheme *runtim
 		}
 	}
 
-	// 5. Build desired CNPG Cluster spec.
+	// Build desired CNPG Cluster spec.
 	desiredSpec := buildCNPGClusterSpec(mergedConfig, postgresSecretName)
 
-	// 6. Fetch existing CNPG Cluster or create it.
+	// Fetch existing CNPG Cluster or create it.
 	existingCNPG := &cnpgv1.Cluster{}
 	err = c.Get(ctx, types.NamespacedName{Name: postgresCluster.Name, Namespace: postgresCluster.Namespace}, existingCNPG)
 	switch {
@@ -222,7 +225,7 @@ func PostgresClusterService(ctx context.Context, c client.Client, scheme *runtim
 		return ctrl.Result{}, err
 	}
 
-	// 7. Patch CNPG Cluster spec if drift detected.
+	// Patch CNPG Cluster spec if drift detected.
 	cnpgCluster = existingCNPG
 	currentNormalized := normalizeCNPGClusterSpec(cnpgCluster.Spec, mergedConfig.Spec.PostgreSQLConfig)
 	desiredNormalized := normalizeCNPGClusterSpec(desiredSpec, mergedConfig.Spec.PostgreSQLConfig)
@@ -249,7 +252,7 @@ func PostgresClusterService(ctx context.Context, c client.Client, scheme *runtim
 		}
 	}
 
-	// 7a. Reconcile ManagedRoles.
+	// Reconcile ManagedRoles.
 	if err := reconcileManagedRoles(ctx, c, postgresCluster, cnpgCluster); err != nil {
 		logger.Error(err, "Failed to reconcile managed roles")
 		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonManagedRolesFailed,
@@ -259,7 +262,7 @@ func PostgresClusterService(ctx context.Context, c client.Client, scheme *runtim
 		return ctrl.Result{}, err
 	}
 
-	// 7b. Reconcile Connection Pooler.
+	// Reconcile Connection Pooler.
 	poolerEnabled = mergedConfig.Spec.ConnectionPoolerEnabled != nil && *mergedConfig.Spec.ConnectionPoolerEnabled
 	switch {
 	case !poolerEnabled:
@@ -342,7 +345,7 @@ func PostgresClusterService(ctx context.Context, c client.Client, scheme *runtim
 		}
 	}
 
-	// 8. Reconcile ConfigMap when CNPG cluster is healthy.
+	// Reconcile ConfigMap when CNPG cluster is healthy.
 	if cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy {
 		logger.Info("CNPG Cluster is ready, reconciling ConfigMap for connection details")
 		desiredCM, err := generateConfigMap(ctx, c, scheme, postgresCluster, cnpgCluster, postgresSecretName)
@@ -387,7 +390,7 @@ func PostgresClusterService(ctx context.Context, c client.Client, scheme *runtim
 		}
 	}
 
-	// 9. Final status sync.
+	// Final status sync.
 	if err := syncStatus(ctx, c, postgresCluster, cnpgCluster); err != nil {
 		logger.Error(err, "Failed to sync status")
 		if apierrors.IsConflict(err) {
