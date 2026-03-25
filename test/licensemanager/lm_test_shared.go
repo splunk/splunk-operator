@@ -94,30 +94,6 @@ func NewLicenseManagerConfig() *LicenseTestConfig {
 	}
 }
 
-func downloadLicenseAndCreateConfigMap(ctx context.Context, testcaseEnvInst *testenv.TestCaseEnv) {
-	downloadDir := "licenseFolder"
-
-	var err error
-	var licenseFilePath string
-
-	switch testenv.ClusterProvider {
-	case "eks":
-		licenseFilePath, err = testenv.DownloadLicenseFromS3Bucket()
-		Expect(err).To(Succeed(), "Unable to download license file from S3")
-	case "azure":
-		licenseFilePath, err = testenv.DownloadLicenseFromAzure(ctx, downloadDir)
-		Expect(err).To(Succeed(), "Unable to download license file from Azure")
-	case "gcp":
-		licenseFilePath, err = testenv.DownloadLicenseFromGCPBucket()
-		Expect(err).To(Succeed(), "Unable to download license file from GCP")
-	default:
-		fmt.Printf("Unable to download license file")
-		testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
-	}
-
-	testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-}
-
 func downloadAppFiles(ctx context.Context, testDataS3Bucket, azureDataContainer, appDir, downloadDir string, appFileList []string, version string) {
 	switch testenv.ClusterProvider {
 	case "eks":
@@ -169,7 +145,7 @@ func deleteUploadedFiles(ctx context.Context, testS3Bucket string, uploadedApps 
 
 func RunLMS1Test(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *LicenseTestConfig) {
 	// Download License File
-	downloadLicenseAndCreateConfigMap(ctx, testcaseEnvInst)
+	testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
 
 	// Create standalone Deployment with License Manager/Master
 	mcRef := deployment.GetName()
@@ -205,7 +181,7 @@ func RunLMS1Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 
 func RunLMC3Test(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *LicenseTestConfig) {
 	// Download License File
-	downloadLicenseAndCreateConfigMap(ctx, testcaseEnvInst)
+	testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
 
 	// Deploy Single site Cluster with License Manager/Master
 	mcRef := deployment.GetName()
@@ -215,19 +191,13 @@ func RunLMC3Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 	testcaseEnvInst.VerifyC3ComponentsReady(ctx, deployment)
 
-	// Deploy and verify Monitoring Console
-	_ = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
-
-	// Verify RF SF is met
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+	deployMCAndVerifyRFSF(ctx, deployment, testcaseEnvInst, mcRef)
 
 	// Verify License Manager/Master is configured on indexers and search heads
 	testenv.VerifyLMConfiguredOnIndexers(ctx, deployment, deployment.GetName(), 3)
 	testenv.VerifyLMConfiguredOnSearchHeads(ctx, deployment, deployment.GetName(), 3)
 
-	// Verify License Manager/Master is configured on Monitoring Console
-	monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())
-	testenv.VerifyLMConfiguredOnPod(ctx, deployment, monitoringConsolePodName)
+	verifyLMConfiguredOnMC(ctx, deployment)
 }
 
 func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, testenvInstance *testenv.TestEnv, config *LicenseTestConfig) {
@@ -260,7 +230,7 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 	uploadedApps = append(uploadedApps, uploadedFiles...)
 
 	// Download License File
-	downloadLicenseAndCreateConfigMap(ctx, testcaseEnvInst)
+	testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
 
 	// Create App framework Spec
 	volumeName := "lm-test-volume-" + testenv.RandomDNSName(3)
@@ -347,7 +317,7 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 
 func RunLMM4Test(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *LicenseTestConfig) {
 	// Download License File
-	downloadLicenseAndCreateConfigMap(ctx, testcaseEnvInst)
+	testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
 
 	// Deploy Multisite Cluster with License Manager/Master and Search Head
 	siteCount := 3
@@ -358,17 +328,21 @@ func RunLMM4Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 
-	// Deploy and verify Monitoring Console
-	_ = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
-
-	// Verify RF SF is met
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+	deployMCAndVerifyRFSF(ctx, deployment, testcaseEnvInst, mcRef)
 
 	// Verify License Manager/Master is configured on indexers and search heads
 	testenv.VerifyLMConfiguredOnMultisiteIndexers(ctx, deployment, deployment.GetName(), siteCount)
 	testenv.VerifyLMConfiguredOnSearchHeads(ctx, deployment, deployment.GetName(), 3)
 
-	// Verify License Manager/Master is configured on Monitoring Console
+	verifyLMConfiguredOnMC(ctx, deployment)
+}
+
+func deployMCAndVerifyRFSF(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, mcRef string) {
+	_ = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
+	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+}
+
+func verifyLMConfiguredOnMC(ctx context.Context, deployment *testenv.Deployment) {
 	monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())
 	testenv.VerifyLMConfiguredOnPod(ctx, deployment, monitoringConsolePodName)
 }

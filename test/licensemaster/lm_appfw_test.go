@@ -11,41 +11,37 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package licensemanager
+package licensemaster
 
 import (
 	"context"
 
 	. "github.com/onsi/ginkgo/v2"
+
+	"github.com/splunk/splunk-operator/test/licensemanager"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("Licensemanager test", func() {
+var _ = Describe("Licensemaster App Framework test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	var config *LicenseTestConfig
+	var config *licensemanager.LicenseTestConfig
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
+		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "master")
 
-		config = NewLicenseManagerConfig()
+		config = licensemanager.NewLicenseMasterConfig()
 	})
 
 	AfterEach(func() {
 		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)  with License Manager", func() {
-		It("licensemanager, integration, c3: Splunk Operator can configure License Manager with Indexers and Search Heads in C3 SVA", func() {
-			RunLMC3Test(ctx, deployment, testcaseEnvInst, config)
-		})
-	})
-
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)  with License Manager", func() {
-		It("licensemanager, integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
-			RunLMC3AppFrameworkTest(ctx, deployment, testcaseEnvInst, testenvInstance, config)
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster) with License Master", func() {
+		It("licensemaster, integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
+			licensemanager.RunLMC3AppFrameworkTest(ctx, deployment, testcaseEnvInst, testenvInstance, config)
 		})
 	})
 })

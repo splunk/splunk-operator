@@ -16,6 +16,7 @@ package monitoringconsoletest
 import (
 	"context"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/gomega"
 
@@ -127,4 +128,145 @@ func RunS1StandaloneAddDeleteMCTest(ctx context.Context, deployment *testenv.Dep
 func verifyStandaloneInMC(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, pods []string, mcName string, shouldExist bool) {
 	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, pods, "SPLUNK_STANDALONE_URL", mcName, shouldExist)
 	testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, pods, mcName, shouldExist, false)
+}
+
+// MCReconfigParams holds the service name and URL parameters that differ between
+// V3 (master) and V4 (manager) monitoring console tests.
+type MCReconfigParams struct {
+	CMServiceNameFmt string // format string for CM service name (e.g., testenv.ClusterMasterServiceName)
+	CMURLKey         string // config map URL key (e.g., "SPLUNK_CLUSTER_MASTER_URL" or splcommon.ClusterManagerURL)
+}
+
+// newStandaloneSpecWithMCRef creates a StandaloneSpec with a MonitoringConsoleRef.
+func newStandaloneSpecWithMCRef(image string, mcName string) enterpriseApi.StandaloneSpec {
+	return enterpriseApi.StandaloneSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: enterpriseApi.Spec{
+				ImagePullPolicy: "IfNotPresent",
+				Image:           image,
+			},
+			Volumes: []corev1.Volume{},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: mcName,
+			},
+		},
+	}
+}
+
+// VerifyMCTwoAfterCMReconfig verifies that MC Two is correctly configured after the Cluster Manager
+// has been reconfigured to point to it: CM and indexers should be present, SH should be absent.
+// If checkDeployerAbsent is true, also verifies deployer is absent on MC Two (used in C3 tests).
+func VerifyMCTwoAfterCMReconfig(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv,
+	params MCReconfigParams, mcTwoName string, shPods, indexerPods []string, checkDeployerAbsent bool) {
+
+	testcaseEnvInst.Log.Info("Verify CM in MC Two Config Map after CM Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+		[]string{fmt.Sprintf(params.CMServiceNameFmt, deployment.GetName())}, params.CMURLKey, mcTwoName, true)
+
+	testcaseEnvInst.Log.Info("Verify Indexers in MC Two Config String after CM Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, indexerPods, mcTwoName, true, true)
+
+	if checkDeployerAbsent {
+		testcaseEnvInst.Log.Info("Verify Deployer NOT in MC Two Config Map after CM Reconfig")
+		testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+			[]string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcTwoName, false)
+	}
+
+	testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC Two Config Map after CM Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, false)
+
+	testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC Two Config String after CM Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcTwoName, false, false)
+}
+
+// VerifyMCOneAfterCMReconfig verifies that MC One is correctly configured after the Cluster Manager
+// has been reconfigured away from it: CM should be absent, SH should still be present.
+// If checkDeployerPresent is true, also verifies deployer is still present on MC One (used in M4 tests).
+func VerifyMCOneAfterCMReconfig(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv,
+	params MCReconfigParams, mcName string, mc *enterpriseApi.MonitoringConsole, shPods []string, checkDeployerPresent bool) {
+
+	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
+
+	testcaseEnvInst.Log.Info("Verify CM NOT in MC One Config Map after CM Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+		[]string{fmt.Sprintf(params.CMServiceNameFmt, deployment.GetName())}, params.CMURLKey, mcName, false)
+
+	// CSPL-619: Indexer verification on MC One is commented out in all test variants
+
+	if checkDeployerPresent {
+		testcaseEnvInst.Log.Info("Verify Deployer still in MC One Config Map after CM Reconfig")
+		testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+			[]string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, true)
+	}
+
+	testcaseEnvInst.Log.Info("Verify SH Pods still in MC One Config Map after CM Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
+
+	testcaseEnvInst.Log.Info("Verify SH Pods still in MC One Config String after CM Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcName, true, false)
+}
+
+// VerifyMCTwoAfterSHCReconfig verifies that MC Two has all components (CM, deployer, SH, indexers)
+// after the SHC has been reconfigured to point to it.
+// If timeout > 0, uses WaitForPodsInMCConfigString; otherwise uses direct VerifyPodsInMCConfigString.
+func VerifyMCTwoAfterSHCReconfig(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv,
+	params MCReconfigParams, mcTwoName string, shPods, indexerPods []string, timeout time.Duration) {
+
+	testcaseEnvInst.Log.Info("Verify CM in MC Two Config Map after SHC Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+		[]string{fmt.Sprintf(params.CMServiceNameFmt, deployment.GetName())}, params.CMURLKey, mcTwoName, true)
+
+	testcaseEnvInst.Log.Info("Verify Deployer in MC Two Config Map after SHC Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+		[]string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcTwoName, true)
+
+	testcaseEnvInst.Log.Info("Verify SH Pods in MC Two Config Map after SHC Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, true)
+
+	if timeout > 0 {
+		testcaseEnvInst.Log.Info("Verify SH Pods in MC Two Config String after SHC Reconfig (with wait)")
+		err := testcaseEnvInst.WaitForPodsInMCConfigString(ctx, deployment, shPods, mcTwoName, true, false, timeout)
+		Expect(err).To(Succeed(), "Timed out waiting for search heads in MC two config after SHC reconfig")
+
+		testcaseEnvInst.Log.Info("Verify Indexers in MC Two Config String after SHC Reconfig (with wait)")
+		err = testcaseEnvInst.WaitForPodsInMCConfigString(ctx, deployment, indexerPods, mcTwoName, true, true, timeout)
+		Expect(err).To(Succeed(), "Timed out waiting for indexers in MC two config after SHC reconfig")
+	} else {
+		testcaseEnvInst.Log.Info("Verify SH Pods in MC Two Config String after SHC Reconfig")
+		testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcTwoName, true, false)
+
+		testcaseEnvInst.Log.Info("Verify Indexers in MC Two Config String after SHC Reconfig")
+		testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, indexerPods, mcTwoName, true, true)
+	}
+}
+
+// VerifyMCOneAfterSHCReconfig verifies that MC One has lost all components (CM, deployer, SH)
+// after the SHC has been reconfigured away from it.
+// If timeout > 0, uses WaitForPodsInMCConfigString; otherwise uses direct VerifyPodsInMCConfigString.
+func VerifyMCOneAfterSHCReconfig(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv,
+	params MCReconfigParams, mcName string, mc *enterpriseApi.MonitoringConsole, shPods []string, timeout time.Duration) {
+
+	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
+
+	testcaseEnvInst.Log.Info("Verify CM NOT in MC One Config Map after SHC Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+		[]string{fmt.Sprintf(params.CMServiceNameFmt, deployment.GetName())}, params.CMURLKey, mcName, false)
+
+	testcaseEnvInst.Log.Info("Verify Deployer NOT in MC One Config Map after SHC Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+		[]string{fmt.Sprintf(params.CMServiceNameFmt, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, false)
+
+	testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC One Config Map after SHC Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, false)
+
+	if timeout > 0 {
+		testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC One Config String after SHC Reconfig (with wait)")
+		err := testcaseEnvInst.WaitForPodsInMCConfigString(ctx, deployment, shPods, mcName, false, false, timeout)
+		Expect(err).To(Succeed(), "Timed out waiting for search heads to be removed from MC one config after SHC reconfig")
+	} else {
+		testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC One Config String after SHC Reconfig")
+		testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcName, false, false)
+	}
+
+	// CSPL-619: Indexer verification on MC One is commented out in all test variants
 }

@@ -217,17 +217,7 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	err = testcaseEnvInst.WaitForClusterInitialized(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
 	Expect(err).To(Succeed(), "Timed out waiting for ClusterInitialized event on IndexerCluster")
 
-	// Deploy and verify Monitoring Console
-	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
-
-	// Verify RF SF is met
-	testcaseEnvInst.Log.Info("Checkin RF SF before secret change")
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
-
-	// Get Current Secrets Struct
-	namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
-	_, err = testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
-	Expect(err).To(Succeed(), "Unable to get secret struct")
+	mc, resourceVersion, namespaceScopedSecretName := deployMCAndVerifyInitialSecret(ctx, deployment, testcaseEnvInst)
 
 	// Update Secret Value on Secret Object
 	updatedSecretData := generateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, namespaceScopedSecretName)
@@ -260,6 +250,16 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, updatedSecretData, true)
 }
 
+func deployMCAndVerifyInitialSecret(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv) (*enterpriseApi.MonitoringConsole, string, string) {
+	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
+	testcaseEnvInst.Log.Info("Checkin RF SF before secret change")
+	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+	namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
+	_, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
+	Expect(err).To(Succeed(), "Unable to get secret struct")
+	return mc, resourceVersion, namespaceScopedSecretName
+}
+
 // RunM4SecretUpdateTest runs the standard M4 secret update test workflow
 func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
 	// Download License File and create config map
@@ -275,17 +275,7 @@ func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	verifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
 	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 
-	// Deploy and verify Monitoring Console
-	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
-
-	// Verify RF SF is met
-	testcaseEnvInst.Log.Info("Checkin RF SF before secret change")
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
-
-	// Get Current Secrets Struct
-	namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
-	_, err = testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
-	Expect(err).To(Succeed(), "Unable to get secret struct")
+	mc, resourceVersion, namespaceScopedSecretName := deployMCAndVerifyInitialSecret(ctx, deployment, testcaseEnvInst)
 
 	// Update Secret Value on Secret Object
 	updatedSecretData := generateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, namespaceScopedSecretName)

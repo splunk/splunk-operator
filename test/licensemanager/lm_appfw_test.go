@@ -17,11 +17,10 @@ import (
 	"context"
 
 	. "github.com/onsi/ginkgo/v2"
-
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("Licensemanager test", func() {
+var _ = Describe("Licensemanager App Framework test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
@@ -38,10 +37,9 @@ var _ = Describe("Licensemanager test", func() {
 		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 	})
 
-	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)  with License Manager", func() {
-		It("licensemanager, integration, m4: Splunk Operator can configure License Manager with indexers and search head in M4 SVA", func() {
-			RunLMM4Test(ctx, deployment, testcaseEnvInst, config)
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)  with License Manager", func() {
+		It("licensemanager, integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
+			RunLMC3AppFrameworkTest(ctx, deployment, testcaseEnvInst, testenvInstance, config)
 		})
 	})
-
 })

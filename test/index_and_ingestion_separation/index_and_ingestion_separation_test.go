@@ -65,33 +65,7 @@ var _ = Describe("indingsep test", func() {
 
 			setupIngestorStack(ctx, deployment, testcaseEnvInst, queue, objectStorage, cmSpec)
 
-			// Delete the Indexer Cluster
-			idxc := &enterpriseApi.IndexerCluster{}
-			err := deployment.GetInstance(ctx, deployment.GetName()+"-idxc", idxc)
-			Expect(err).To(Succeed(), "Unable to get Indexer Cluster instance", "Indexer Cluster Name", idxc)
-			err = deployment.DeleteCR(ctx, idxc)
-			Expect(err).To(Succeed(), "Unable to delete Indexer Cluster instance", "Indexer Cluster Name", idxc)
-
-			// Delete the Ingestor Cluster
-			ingest := &enterpriseApi.IngestorCluster{}
-			err = deployment.GetInstance(ctx, deployment.GetName()+"-ingest", ingest)
-			Expect(err).To(Succeed(), "Unable to get Ingestor Cluster instance", "Ingestor Cluster Name", ingest)
-			err = deployment.DeleteCR(ctx, ingest)
-			Expect(err).To(Succeed(), "Unable to delete Ingestor Cluster instance", "Ingestor Cluster Name", ingest)
-
-			// Delete the Queue
-			q := &enterpriseApi.Queue{}
-			err = deployment.GetInstance(ctx, "queue", q)
-			Expect(err).To(Succeed(), "Unable to get Queue instance", "Queue Name", q)
-			err = deployment.DeleteCR(ctx, q)
-			Expect(err).To(Succeed(), "Unable to delete Queue", "Queue Name", q)
-
-			// Delete the ObjectStorage
-			objStorage := &enterpriseApi.ObjectStorage{}
-			err = deployment.GetInstance(ctx, "os", objStorage)
-			Expect(err).To(Succeed(), "Unable to get ObjectStorage instance", "ObjectStorage Name", objStorage)
-			err = deployment.DeleteCR(ctx, objStorage)
-			Expect(err).To(Succeed(), "Unable to delete ObjectStorage", "ObjectStorage Name", objStorage)
+			deleteIngestorStack(ctx, deployment)
 		})
 	})
 
@@ -311,4 +285,35 @@ func setupIngestorStack(ctx context.Context, deployment *testenv.Deployment, tes
 	testcaseEnvInst.VerifyIngestorReady(ctx, deployment)
 	testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+}
+
+// deleteIngestorStack tears down the full Queue/ObjectStorage/IngestorCluster/IndexerCluster stack.
+func deleteIngestorStack(ctx context.Context, deployment *testenv.Deployment) {
+	// Delete the Indexer Cluster
+	idxc := &enterpriseApi.IndexerCluster{}
+	err := deployment.GetInstance(ctx, deployment.GetName()+"-idxc", idxc)
+	Expect(err).To(Succeed(), "Unable to get Indexer Cluster instance", "Indexer Cluster Name", idxc)
+	err = deployment.DeleteCR(ctx, idxc)
+	Expect(err).To(Succeed(), "Unable to delete Indexer Cluster instance", "Indexer Cluster Name", idxc)
+
+	// Delete the Ingestor Cluster
+	ingest := &enterpriseApi.IngestorCluster{}
+	err = deployment.GetInstance(ctx, deployment.GetName()+"-ingest", ingest)
+	Expect(err).To(Succeed(), "Unable to get Ingestor Cluster instance", "Ingestor Cluster Name", ingest)
+	err = deployment.DeleteCR(ctx, ingest)
+	Expect(err).To(Succeed(), "Unable to delete Ingestor Cluster instance", "Ingestor Cluster Name", ingest)
+
+	// Delete the Queue
+	q := &enterpriseApi.Queue{}
+	err = deployment.GetInstance(ctx, "queue", q)
+	Expect(err).To(Succeed(), "Unable to get Queue instance", "Queue Name", q)
+	err = deployment.DeleteCR(ctx, q)
+	Expect(err).To(Succeed(), "Unable to delete Queue", "Queue Name", q)
+
+	// Delete the ObjectStorage
+	objStorage := &enterpriseApi.ObjectStorage{}
+	err = deployment.GetInstance(ctx, "os", objStorage)
+	Expect(err).To(Succeed(), "Unable to get ObjectStorage instance", "ObjectStorage Name", objStorage)
+	err = deployment.DeleteCR(ctx, objStorage)
+	Expect(err).To(Succeed(), "Unable to delete ObjectStorage", "ObjectStorage Name", objStorage)
 }

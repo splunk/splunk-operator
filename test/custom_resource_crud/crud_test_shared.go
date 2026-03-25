@@ -134,18 +134,8 @@ func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, t
 	// Deploy and verify Monitoring Console
 	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, "")
 
-	// Verify Search Heads PVCs (etc and var) exists
-	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-search-head", 3, true, verificationTimeout)
-
-	// Verify Deployer PVCs (etc and var) exists
-	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-deployer", 1, true, verificationTimeout)
-
-	// Verify Indexers PVCs (etc and var) exists
-	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "idxc-indexer", 3, true, verificationTimeout)
-
-	// Verify Cluster Manager PVCs (etc and var) exists
 	clusterManagerType := config.ClusterManagerPVCType()
-	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, clusterManagerType, 1, true, verificationTimeout)
+	verifyC3ClusterPVCs(testcaseEnvInst, deployment, clusterManagerType, true, verificationTimeout)
 
 	// Delete the Search Head Cluster
 	shc := &enterpriseApi.SearchHeadCluster{}
@@ -170,20 +160,66 @@ func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, t
 	err = deployment.DeleteCR(ctx, mc)
 	Expect(err).To(Succeed(), "Unable to delete Monitoring Console instance", "Monitoring Console Name", mcRef)
 
-	// Verify Search Heads PVCs (etc and var) have been deleted
-	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-search-head", 3, false, verificationTimeout)
-
-	// Verify Deployer PVCs (etc and var) have been deleted
-	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-deployer", 1, false, verificationTimeout)
-
-	// Verify Indexers PVCs (etc and var) have been deleted
-	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "idxc-indexer", 3, false, verificationTimeout)
-
-	// Verify Cluster Manager PVCs (etc and var) have been deleted
-	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, clusterManagerType, 1, false, verificationTimeout)
+	verifyC3ClusterPVCs(testcaseEnvInst, deployment, clusterManagerType, false, verificationTimeout)
 
 	// Verify Monitoring Console PVCs (etc and var) have been deleted
 	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "monitoring-console", 1, false, verificationTimeout)
+}
+
+func verifyC3ClusterPVCs(testcaseEnvInst *testenv.TestCaseEnv, deployment *testenv.Deployment, clusterManagerType string, exists bool, timeout time.Duration) {
+	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-search-head", 3, exists, timeout)
+	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-deployer", 1, exists, timeout)
+	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "idxc-indexer", 3, exists, timeout)
+	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, clusterManagerType, 1, exists, timeout)
+}
+
+// RunSHCDeployerResourceSpecTest deploys a Search Head Cluster, verifies default CPU limits,
+// updates the deployer resource spec, and verifies the deployer is reconfigured while search heads retain defaults.
+func RunSHCDeployerResourceSpecTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, defaultCPULimits string) {
+	shcName := fmt.Sprintf("%s-shc", deployment.GetName())
+	_, err := deployment.DeploySearchHeadCluster(ctx, shcName, "", "", "", "")
+	if err != nil {
+		Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster", "shc", shcName)
+	}
+
+	// Verify CPU limits on Search Heads and deployer before updating CR
+	searchHeadCount := 3
+	testcaseEnvInst.VerifySearchHeadCPULimits(deployment, deployment.GetName(), searchHeadCount, defaultCPULimits)
+
+	DeployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
+	testcaseEnvInst.VerifyCPULimits(deployment, DeployerPodName, defaultCPULimits)
+
+	shc := &enterpriseApi.SearchHeadCluster{}
+	testenv.GetInstanceWithExpect(ctx, deployment, shc, shcName, "Unable to fetch Search Head Cluster deployment")
+
+	// Assign new resources for deployer pod only
+	newCPULimits := "4"
+	newCPURequests := "2"
+	newMemoryLimits := "14Gi"
+	newMemoryRequests := "12Gi"
+
+	depResSpec := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			"cpu":    resource.MustParse(newCPURequests),
+			"memory": resource.MustParse(newMemoryRequests),
+		},
+		Limits: corev1.ResourceList{
+			"cpu":    resource.MustParse(newCPULimits),
+			"memory": resource.MustParse(newMemoryLimits),
+		},
+	}
+	shc.Spec.DeployerResourceSpec = depResSpec
+
+	testenv.UpdateCRWithExpect(ctx, deployment, shc, "Unable to deploy Search Head Cluster with updated CR")
+
+	// Verify Search Head go to ready state
+	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+
+	// Verify CPU limits on Search Heads - Should be same as before
+	testcaseEnvInst.VerifySearchHeadCPULimits(deployment, deployment.GetName(), searchHeadCount, defaultCPULimits)
+
+	// Verify modified deployer spec
+	testcaseEnvInst.VerifyResourceConstraints(deployment, DeployerPodName, depResSpec)
 }
 
 // RunM4CPUUpdateTest runs the standard M4 CPU limit update test workflow

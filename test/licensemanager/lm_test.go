@@ -42,4 +42,16 @@ var _ = Describe("Licensemanager test", func() {
 			RunLMS1Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})
+
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)  with License Manager", func() {
+		It("licensemanager, integration, c3: Splunk Operator can configure License Manager with Indexers and Search Heads in C3 SVA", func() {
+			RunLMC3Test(ctx, deployment, testcaseEnvInst, config)
+		})
+	})
+
+	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)  with License Manager", func() {
+		It("licensemanager, integration, m4: Splunk Operator can configure License Manager with indexers and search head in M4 SVA", func() {
+			RunLMM4Test(ctx, deployment, testcaseEnvInst, config)
+		})
+	})
 })
