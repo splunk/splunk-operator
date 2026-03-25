@@ -1688,13 +1688,38 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 		return false, err
 	}
 
-	// Check if we did not get the desired output in the status file. There can be 2 scenarios -
+	// Check if we did not get the desired output in the status file. There can be 3 scenarios -
 	// 1. stdOut is empty, which means bundle push is still in progress
-	// 2. stdOut has some other string other than the bundle push success message
+	// 2. stdOut contains only informational lines (e.g. the FIPS provider banner written to
+	//    stderr by the Splunk CLI on FIPS-enabled clusters, captured via the &> shell redirect
+	//    in applySHCBundleCmdStr before the actual push output is written)
+	// 3. stdOut has some other string other than the bundle push success message
 	if stdOut == "" {
 		scopedLog.Info("SHC Bundle Push is still in progress")
 		return false, nil
 	} else if !strings.Contains(stdOut, shcBundlePushCompleteStr) {
+		// Check whether the file contains only known informational lines. On FIPS-enabled
+		// clusters the Splunk binary immediately writes the FIPS provider banner (and SSL
+		// warnings) to stderr at startup; because the bundle push command uses &> to
+		// redirect all output to the status file, these lines appear in the file before the
+		// actual push result. Treat such content as "still in progress" so we do not
+		// prematurely abort a running push and trigger a retry storm.
+		hasMeaningfulContent := false
+		for _, line := range strings.Split(stdOut, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" ||
+				strings.HasPrefix(trimmed, "FIPS provider enabled.") ||
+				strings.HasPrefix(trimmed, "WARNING: Server Certificate") {
+				continue
+			}
+			hasMeaningfulContent = true
+			break
+		}
+		if !hasMeaningfulContent {
+			scopedLog.Info("SHC Bundle Push is still in progress (status file contains only informational messages)")
+			return false, nil
+		}
+
 		// this means there was an error in bundle push command
 		err = fmt.Errorf("there was an error in applying SHC Bundle, err=\"%v\"", stdOut)
 		scopedLog.Error(err, "SHC Bundle push status file reported an error while applying bundle")
@@ -2078,7 +2103,16 @@ func handleEsappPostinstall(rctx context.Context, preCtx *premiumAppScopePlayboo
 
 	streamOptions := splutil.NewStreamOptionsObject(command)
 	stdOut, stdErr, err := preCtx.localCtx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
-	if stdErr != "" || err != nil {
+
+	// Log stderr content for debugging but don't use it for error detection.
+	// On FIPS-enabled clusters the Splunk CLI always writes the FIPS provider
+	// banner and related informational messages to stderr on every invocation,
+	// so a non-empty stderr does not indicate failure.
+	if stdErr != "" {
+		scopedLog.Info("Post install command stderr output (informational only)", "stdout", stdOut, "stderr", stdErr, "post install command", command)
+	}
+
+	if err != nil {
 		phaseInfo.FailCount++
 		scopedLog.Error(err, "premium scoped app package install failed", "stdout", stdOut, "stderr", stdErr, "post install command", command, "failCount", phaseInfo.FailCount)
 		return fmt.Errorf("premium scoped app package install failed. stdOut: %s, stdErr: %s, post install command: %s, failCount: %d", stdOut, stdErr, command, phaseInfo.FailCount)
