@@ -18,11 +18,10 @@ import (
 	"fmt"
 	"time"
 
+	. "github.com/onsi/gomega"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/test/testenv"
-
-	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
 )
 
 // verifySecretsPropagated checks that the given secret data has been propagated to all
@@ -65,7 +64,7 @@ func verifyLMAndClusterManagerReady(ctx context.Context, deployment *testenv.Dep
 // generateAndApplySecretUpdate creates randomized secret data and applies it to the namespace-scoped
 // secret object, returning the updated data map for subsequent verification.
 func generateAndApplySecretUpdate(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, namespaceScopedSecretName string) map[string][]byte {
-	modifiedHecToken := testenv.GetRandomeHECToken()
+	modifiedHecToken := testenv.GetRandomHECToken()
 	modifiedValue := testenv.RandomDNSName(10)
 	updatedSecretData := testenv.GetSecretDataMap(modifiedHecToken, modifiedValue, modifiedValue, modifiedValue, modifiedValue)
 	err := testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, updatedSecretData)
@@ -153,18 +152,7 @@ func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Dep
 	var err error
 
 	mcName := deployment.GetName()
-	standaloneSpec := enterpriseApi.StandaloneSpec{
-		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "IfNotPresent",
-				Image:           testcaseEnvInst.GetSplunkImage(),
-			},
-			Volumes: []corev1.Volume{},
-			MonitoringConsoleRef: corev1.ObjectReference{
-				Name: mcName,
-			},
-		},
-	}
+	standaloneSpec := testenv.NewStandaloneSpecWithMCRef(testcaseEnvInst.GetSplunkImage(), mcName)
 	standalone, err = deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), standaloneSpec)
 	Expect(err).To(Succeed(), "Unable to deploy standalone instance with MonitoringConsoleRef")
 
@@ -212,11 +200,6 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	verifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
 	testcaseEnvInst.VerifyC3ComponentsReady(ctx, deployment)
 
-	// Wait for ClusterInitialized event to confirm cluster is fully initialized
-	idxcName := deployment.GetName() + "-idxc"
-	err = testcaseEnvInst.WaitForClusterInitialized(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
-	Expect(err).To(Succeed(), "Timed out waiting for ClusterInitialized event on IndexerCluster")
-
 	mc, resourceVersion, namespaceScopedSecretName := deployMCAndVerifyInitialSecret(ctx, deployment, testcaseEnvInst)
 
 	// Update Secret Value on Secret Object
@@ -238,13 +221,14 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 	// Wait for PasswordSyncCompleted event on IndexerCluster
+	idxcName := deployment.GetName() + "-idxc"
 	err = testcaseEnvInst.WaitForPasswordSyncCompleted(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
 	Expect(err).To(Succeed(), "Timed out waiting for PasswordSyncCompleted event on IndexerCluster")
 
 	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 	// Verify RF SF is met
-	testcaseEnvInst.Log.Info("Checkin RF SF after secret change")
+	testcaseEnvInst.Log.Info("Checking RF SF after secret change")
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, updatedSecretData, true)
@@ -252,7 +236,7 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 
 func deployMCAndVerifyInitialSecret(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv) (*enterpriseApi.MonitoringConsole, string, string) {
 	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
-	testcaseEnvInst.Log.Info("Checkin RF SF before secret change")
+	testcaseEnvInst.Log.Info("Checking RF SF before secret change")
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 	namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
 	_, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
@@ -288,7 +272,7 @@ func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 	// Verify RF SF is met
-	testcaseEnvInst.Log.Info("Checkin RF SF after secret change")
+	testcaseEnvInst.Log.Info("Checking RF SF after secret change")
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, updatedSecretData, true)

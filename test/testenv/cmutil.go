@@ -44,7 +44,7 @@ type ClusterManagerSitesContent struct {
 	Peers map[string]ClusterManagerSitesPeer `json:"peers"`
 }
 
-// ClusterManagerSitesPeer reprensents an indexer peer member of a site
+// ClusterManagerSitesPeer represents an indexer peer member of a site
 type ClusterManagerSitesPeer struct {
 	ServerName string `json:"server_name"`
 }

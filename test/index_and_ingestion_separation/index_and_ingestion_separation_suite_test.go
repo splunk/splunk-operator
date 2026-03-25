@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package indingsep
+package indexingestionsep
 
 import (
 	"os"
@@ -27,7 +27,7 @@ import (
 
 var (
 	testenvInstance *testenv.TestEnv
-	testSuiteName   = "indingsep-" + testenv.RandomDNSName(3)
+	testSuiteName   = "indexingestionsep-" + testenv.RandomDNSName(3)
 
 	queue = enterpriseApi.QueueSpec{
 		Provider: "sqs",

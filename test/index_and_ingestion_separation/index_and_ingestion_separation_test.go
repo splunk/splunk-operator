@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package indingsep
+package indexingestionsep
 
 import (
 	"context"
@@ -25,18 +25,15 @@ import (
 	. "github.com/onsi/gomega"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("indingsep test", func() {
+var _ = Describe("Index and Ingestion Separation test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-
 	var cmSpec enterpriseApi.ClusterManagerSpec
-
 	ctx := context.TODO()
 
 	BeforeEach(func() {
@@ -57,7 +54,7 @@ var _ = Describe("indingsep test", func() {
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
-		It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers", func() {
+		It("indexingestionsep, smoke: Splunk Operator can deploy Ingestors and Indexers", func() {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")
@@ -70,7 +67,7 @@ var _ = Describe("indingsep test", func() {
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
-		It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers with additional configurations", func() {
+		It("indexingestionsep, smoke: Splunk Operator can deploy Ingestors and Indexers with additional configurations", func() {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")
@@ -171,19 +168,12 @@ var _ = Describe("indingsep test", func() {
 			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify probe configuration
-			testcaseEnvInst.Log.Info("Get config map for probes")
-			ConfigMapName := enterprise.GetProbeConfigMapName(testcaseEnvInst.GetName())
-			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
-			Expect(err).To(Succeed(), "Unable to get config map for probes", "ConfigMap", ConfigMapName)
-			testcaseEnvInst.Log.Info("Verify probe configurations on Ingestor pods")
-			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
-			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-			testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+			testcaseEnvInst.VerifyProbeConfigAndScripts(ctx, deployment, true)
 		})
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
-		It("indingsep, integration, indingsep: Splunk Operator can deploy Ingestors and Indexers with correct setup", func() {
+		It("indexingestionsep, integration: Splunk Operator can deploy Ingestors and Indexers with correct setup", func() {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")

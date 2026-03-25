@@ -18,11 +18,11 @@ import (
 	"fmt"
 	"time"
 
+	. "github.com/onsi/gomega"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
-
-	. "github.com/onsi/gomega"
 )
 
 // RunS1MultipleIndexesTest runs the standard S1 multiple indexes SmartStore test workflow

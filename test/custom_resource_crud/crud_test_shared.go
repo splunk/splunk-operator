@@ -18,10 +18,10 @@ import (
 	"fmt"
 	"time"
 
+	. "github.com/onsi/gomega"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/test/testenv"
-
-	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )

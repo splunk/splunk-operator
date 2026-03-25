@@ -75,7 +75,7 @@ func CheckMCPodReady(ns string) bool {
 	return stsReady && podReady
 }
 
-// GetConfiguredPeers get list of Peers Configured on Montioring Console
+// GetConfiguredPeers get list of Peers Configured on Monitoring Console
 func GetConfiguredPeers(ns string, mcName string) []string {
 	podName := fmt.Sprintf(MonitoringConsolePod, mcName)
 	var peerList []string

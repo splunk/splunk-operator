@@ -33,18 +33,7 @@ func RunS1StandaloneAddDeleteMCTest(ctx context.Context, deployment *testenv.Dep
 	mcName := deployment.GetName()
 
 	// Deploy standalone one with MCRef
-	spec := enterpriseApi.StandaloneSpec{
-		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "IfNotPresent",
-				Image:           testcaseEnvInst.GetSplunkImage(),
-			},
-			Volumes: []corev1.Volume{},
-			MonitoringConsoleRef: corev1.ObjectReference{
-				Name: mcName,
-			},
-		},
-	}
+	spec := testenv.NewStandaloneSpecWithMCRef(testcaseEnvInst.GetSplunkImage(), mcName)
 	standaloneOne, err := deployment.DeployStandaloneWithGivenSpec(ctx, standaloneOneName, spec)
 	Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
@@ -88,7 +77,7 @@ func RunS1StandaloneAddDeleteMCTest(ctx context.Context, deployment *testenv.Dep
 		},
 	}
 	standaloneTwo, err := deployment.DeployStandaloneWithGivenSpec(ctx, standaloneTwoName, standaloneTwoSpec)
-	Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
+	Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
 	// Wait for standalone two to be in READY status
 	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, standaloneTwoName, standaloneTwo)
@@ -105,7 +94,7 @@ func RunS1StandaloneAddDeleteMCTest(ctx context.Context, deployment *testenv.Dep
 	resourceVersion = testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
 
 	// Delete standalone two and ensure MC is updated
-	testcaseEnvInst.Log.Info("Deleting second standalone deployment to namespace", "Standalone Name", standaloneTwoName)
+	testcaseEnvInst.Log.Info("Deleting second standalone deployment from namespace", "Standalone Name", standaloneTwoName)
 	deployment.GetInstance(ctx, standaloneTwoName, standaloneTwo)
 	err = deployment.DeleteCR(ctx, standaloneTwo)
 	Expect(err).To(Succeed(), "Unable to delete standalone instance", "Standalone Name", standaloneTwo)
@@ -135,22 +124,6 @@ func verifyStandaloneInMC(ctx context.Context, deployment *testenv.Deployment, t
 type MCReconfigParams struct {
 	CMServiceNameFmt string // format string for CM service name (e.g., testenv.ClusterMasterServiceName)
 	CMURLKey         string // config map URL key (e.g., "SPLUNK_CLUSTER_MASTER_URL" or splcommon.ClusterManagerURL)
-}
-
-// newStandaloneSpecWithMCRef creates a StandaloneSpec with a MonitoringConsoleRef.
-func newStandaloneSpecWithMCRef(image string, mcName string) enterpriseApi.StandaloneSpec {
-	return enterpriseApi.StandaloneSpec{
-		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "IfNotPresent",
-				Image:           image,
-			},
-			Volumes: []corev1.Volume{},
-			MonitoringConsoleRef: corev1.ObjectReference{
-				Name: mcName,
-			},
-		},
-	}
 }
 
 // VerifyMCTwoAfterCMReconfig verifies that MC Two is correctly configured after the Cluster Manager

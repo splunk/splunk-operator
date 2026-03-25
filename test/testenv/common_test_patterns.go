@@ -21,6 +21,8 @@ import (
 	. "github.com/onsi/gomega"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // ClusterReadinessConfig holds v3/v4 API version callbacks for cluster and license manager
@@ -229,6 +231,43 @@ func (testcaseenv *TestCaseEnv) VerifyMultisiteClusterReadyAndRFSF(ctx context.C
 func (testcaseenv *TestCaseEnv) TriggerAndVerifyTelemetry(ctx context.Context, deployment *Deployment, prevSubmissionTime string) {
 	testcaseenv.TriggerTelemetrySubmission(ctx, deployment)
 	testcaseenv.VerifyTelemetry(ctx, deployment, prevSubmissionTime)
+}
+
+// VerifyProbeConfigAndScripts verifies probe config map exists and probe scripts are present on all pods.
+// If includeStartup is true, the startup probe script is also checked.
+func (testcaseenv *TestCaseEnv) VerifyProbeConfigAndScripts(ctx context.Context, deployment *Deployment, includeStartup bool) {
+	testcaseenv.Log.Info("Get config map for livenessProbe and readinessProbe")
+	configMapName := enterprise.GetProbeConfigMapName(testcaseenv.GetName())
+	_, err := GetConfigMap(ctx, deployment, testcaseenv.GetName(), configMapName)
+	Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", configMapName)
+	scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName()}
+	if includeStartup {
+		scriptsNames = append(scriptsNames, enterprise.GetStartupScriptName())
+	}
+	allPods := DumpGetPods(testcaseenv.GetName())
+	testcaseenv.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+}
+
+// NewStandaloneSpecWithMCRef creates a StandaloneSpec with a MonitoringConsoleRef set to the given MC name.
+func NewStandaloneSpecWithMCRef(image string, mcName string) enterpriseApi.StandaloneSpec {
+	return enterpriseApi.StandaloneSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: enterpriseApi.Spec{
+				ImagePullPolicy: "IfNotPresent",
+				Image:           image,
+			},
+			Volumes: []corev1.Volume{},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: mcName,
+			},
+		},
+	}
+}
+
+// VerifyLMConfiguredOnMC verifies that the License Manager is configured on the Monitoring Console pod.
+func VerifyLMConfiguredOnMC(ctx context.Context, deployment *Deployment) {
+	monitoringConsolePodName := fmt.Sprintf(MonitoringConsolePod, deployment.GetName())
+	VerifyLMConfiguredOnPod(ctx, deployment, monitoringConsolePodName)
 }
 
 // StandardC3Verification performs the standard set of verifications for a C3 cluster

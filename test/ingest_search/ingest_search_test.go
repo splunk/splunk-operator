@@ -39,9 +39,7 @@ var _ = Describe("Ingest and Search Test", func() {
 		It("ingest_search, integration, s1: can search internal logs for standalone instance", func() {
 			RunS1InternalLogSearchTest(ctx, deployment, testcaseEnvInst)
 		})
-	})
 
-	Context("Standalone deployment (S1)", func() {
 		It("ingest_search, integration, s1: can ingest custom data to new index and search", func() {
 			RunS1IngestAndSearchTest(ctx, deployment, testcaseEnvInst)
 		})

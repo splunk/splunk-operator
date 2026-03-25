@@ -20,12 +20,11 @@ import (
 	"path/filepath"
 	"time"
 
+	. "github.com/onsi/gomega"
+
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/test/testenv"
-
-	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -162,13 +161,7 @@ func RunLMS1Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 	_ = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
 
 	// ############ Verify livenessProbe and readinessProbe config object and scripts############
-	testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
-	ConfigMapName := enterprise.GetProbeConfigMapName(testcaseEnvInst.GetName())
-	_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
-	Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
-	scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName()}
-	allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-	testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+	testcaseEnvInst.VerifyProbeConfigAndScripts(ctx, deployment, false)
 
 	// Verify License Manager/Master is configured on standalone instance
 	standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
@@ -197,7 +190,7 @@ func RunLMC3Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 	testenv.VerifyLMConfiguredOnIndexers(ctx, deployment, deployment.GetName(), 3)
 	testenv.VerifyLMConfiguredOnSearchHeads(ctx, deployment, deployment.GetName(), 3)
 
-	verifyLMConfiguredOnMC(ctx, deployment)
+	testenv.VerifyLMConfiguredOnMC(ctx, deployment)
 }
 
 func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, testenvInstance *testenv.TestEnv, config *LicenseTestConfig) {
@@ -334,15 +327,10 @@ func RunLMM4Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 	testenv.VerifyLMConfiguredOnMultisiteIndexers(ctx, deployment, deployment.GetName(), siteCount)
 	testenv.VerifyLMConfiguredOnSearchHeads(ctx, deployment, deployment.GetName(), 3)
 
-	verifyLMConfiguredOnMC(ctx, deployment)
+	testenv.VerifyLMConfiguredOnMC(ctx, deployment)
 }
 
 func deployMCAndVerifyRFSF(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, mcRef string) {
 	_ = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
-}
-
-func verifyLMConfiguredOnMC(ctx context.Context, deployment *testenv.Deployment) {
-	monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())
-	testenv.VerifyLMConfiguredOnPod(ctx, deployment, monitoringConsolePodName)
 }
