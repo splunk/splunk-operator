@@ -1,4 +1,4 @@
-package controller
+package core
 
 import (
 	"context"
@@ -47,7 +47,6 @@ func TestPoolerResourceName(t *testing.T) {
 }
 
 func TestIsPoolerReady(t *testing.T) {
-	r := &PostgresClusterReconciler{}
 	tests := []struct {
 		name     string
 		pooler   *cnpgv1.Pooler
@@ -87,7 +86,7 @@ func TestIsPoolerReady(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := r.isPoolerReady(tt.pooler)
+			got := isPoolerReady(tt.pooler, nil)
 			assert.Equal(t, tt.expected, got)
 		})
 	}
@@ -225,15 +224,13 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 }
 
 func TestGetMergedConfig(t *testing.T) {
-	r := &PostgresClusterReconciler{}
-
 	classInstances := int32(1)
 	classVersion := "17"
 	classStorage := resource.MustParse("50Gi")
 	baseClass := &enterprisev4.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "standard"},
 		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: enterprisev4.PosgresClusterClassConfig{
+			Config: &enterprisev4.PostgresClusterClassConfig{
 				Instances:        &classInstances,
 				PostgresVersion:  &classVersion,
 				Storage:          &classStorage,
@@ -241,7 +238,7 @@ func TestGetMergedConfig(t *testing.T) {
 				PostgreSQLConfig: map[string]string{"shared_buffers": "128MB"},
 				PgHBA:            []string{"host all all 0.0.0.0/0 md5"},
 			},
-			CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: "switchover"},
+			CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("switchover")},
 		},
 	}
 
@@ -259,14 +256,14 @@ func TestGetMergedConfig(t *testing.T) {
 			},
 		}
 
-		cfg, err := r.getMergedConfig(baseClass, cluster)
+		cfg, err := getMergedConfig(baseClass, cluster)
 
 		require.NoError(t, err)
-		assert.Equal(t, int32(5), *cfg.ClusterSpec.Instances)
-		assert.Equal(t, "18", *cfg.ClusterSpec.PostgresVersion)
-		assert.Equal(t, "100Gi", cfg.ClusterSpec.Storage.String())
-		assert.Equal(t, "200", cfg.ClusterSpec.PostgreSQLConfig["max_connections"])
-		assert.Equal(t, "hostssl all all 0.0.0.0/0 scram-sha-256", cfg.ClusterSpec.PgHBA[0])
+		assert.Equal(t, int32(5), *cfg.Spec.Instances)
+		assert.Equal(t, "18", *cfg.Spec.PostgresVersion)
+		assert.Equal(t, "100Gi", cfg.Spec.Storage.String())
+		assert.Equal(t, "200", cfg.Spec.PostgreSQLConfig["max_connections"])
+		assert.Equal(t, "hostssl all all 0.0.0.0/0 scram-sha-256", cfg.Spec.PgHBA[0])
 	})
 
 	t.Run("class defaults fill in nil cluster fields", func(t *testing.T) {
@@ -274,13 +271,13 @@ func TestGetMergedConfig(t *testing.T) {
 			Spec: enterprisev4.PostgresClusterSpec{},
 		}
 
-		cfg, err := r.getMergedConfig(baseClass, cluster)
+		cfg, err := getMergedConfig(baseClass, cluster)
 
 		require.NoError(t, err)
-		assert.Equal(t, int32(1), *cfg.ClusterSpec.Instances)
-		assert.Equal(t, "17", *cfg.ClusterSpec.PostgresVersion)
-		assert.Equal(t, "50Gi", cfg.ClusterSpec.Storage.String())
-		assert.Equal(t, "128MB", cfg.ClusterSpec.PostgreSQLConfig["shared_buffers"])
+		assert.Equal(t, int32(1), *cfg.Spec.Instances)
+		assert.Equal(t, "17", *cfg.Spec.PostgresVersion)
+		assert.Equal(t, "50Gi", cfg.Spec.Storage.String())
+		assert.Equal(t, "128MB", cfg.Spec.PostgreSQLConfig["shared_buffers"])
 	})
 
 	t.Run("returns error when required fields missing from both", func(t *testing.T) {
@@ -292,7 +289,7 @@ func TestGetMergedConfig(t *testing.T) {
 			Spec: enterprisev4.PostgresClusterSpec{},
 		}
 
-		_, err := r.getMergedConfig(emptyClass, cluster)
+		_, err := getMergedConfig(emptyClass, cluster)
 
 		require.Error(t, err)
 	})
@@ -302,18 +299,18 @@ func TestGetMergedConfig(t *testing.T) {
 			Spec: enterprisev4.PostgresClusterSpec{},
 		}
 
-		cfg, err := r.getMergedConfig(baseClass, cluster)
+		cfg, err := getMergedConfig(baseClass, cluster)
 
 		require.NoError(t, err)
-		require.NotNil(t, cfg.ProvisionerConfig)
-		assert.Equal(t, "switchover", cfg.ProvisionerConfig.PrimaryUpdateMethod)
+		require.NotNil(t, cfg.CNPG)
+		assert.Equal(t, "switchover", *cfg.CNPG.PrimaryUpdateMethod)
 	})
 
 	t.Run("nil maps and slices initialized to safe zero values", func(t *testing.T) {
 		classWithNoMaps := &enterprisev4.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: "minimal"},
 			Spec: enterprisev4.PostgresClusterClassSpec{
-				Config: enterprisev4.PosgresClusterClassConfig{
+				Config: &enterprisev4.PostgresClusterClassConfig{
 					Instances:       &classInstances,
 					PostgresVersion: &classVersion,
 					Storage:         &classStorage,
@@ -324,23 +321,21 @@ func TestGetMergedConfig(t *testing.T) {
 			Spec: enterprisev4.PostgresClusterSpec{},
 		}
 
-		cfg, err := r.getMergedConfig(classWithNoMaps, cluster)
+		cfg, err := getMergedConfig(classWithNoMaps, cluster)
 
 		require.NoError(t, err)
-		assert.NotNil(t, cfg.ClusterSpec.PostgreSQLConfig)
-		assert.NotNil(t, cfg.ClusterSpec.PgHBA)
-		assert.NotNil(t, cfg.ClusterSpec.Resources)
+		assert.NotNil(t, cfg.Spec.PostgreSQLConfig)
+		assert.NotNil(t, cfg.Spec.PgHBA)
+		assert.NotNil(t, cfg.Spec.Resources)
 	})
 }
 
 func TestBuildCNPGClusterSpec(t *testing.T) {
-	r := &PostgresClusterReconciler{}
-
 	version := "18"
 	instances := int32(3)
 	storage := resource.MustParse("50Gi")
-	cfg := &EffectiveClusterConfig{
-		ClusterSpec: &enterprisev4.PostgresClusterSpec{
+	cfg := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{
 			PostgresVersion: &version,
 			Instances:       &instances,
 			Storage:         &storage,
@@ -356,7 +351,7 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 		},
 	}
 
-	spec := r.buildCNPGClusterSpec(cfg, "my-secret")
+	spec := buildCNPGClusterSpec(cfg, "my-secret")
 
 	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:18", spec.ImageName)
 	assert.Equal(t, 3, spec.Instances)
@@ -379,7 +374,6 @@ func TestBuildCNPGPooler(t *testing.T) {
 	scheme := runtime.NewScheme()
 	enterprisev4.AddToScheme(scheme)
 	cnpgv1.AddToScheme(scheme)
-	r := &PostgresClusterReconciler{Scheme: scheme}
 
 	poolerInstances := int32(3)
 	poolerMode := enterprisev4.ConnectionPoolerModeTransaction
@@ -395,8 +389,8 @@ func TestBuildCNPGPooler(t *testing.T) {
 			Name: "my-cluster",
 		},
 	}
-	cfg := &EffectiveClusterConfig{
-		ProvisionerConfig: &enterprisev4.CNPGConfig{
+	cfg := &MergedConfig{
+		CNPG: &enterprisev4.CNPGConfig{
 			ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{
 				Instances: &poolerInstances,
 				Mode:      &poolerMode,
@@ -406,7 +400,7 @@ func TestBuildCNPGPooler(t *testing.T) {
 	}
 
 	t.Run("rw pooler", func(t *testing.T) {
-		pooler := r.buildCNPGPooler(postgresCluster, cfg, cnpgCluster, "rw")
+		pooler := buildCNPGPooler(scheme, postgresCluster, cfg, cnpgCluster, "rw")
 
 		assert.Equal(t, "my-cluster-pooler-rw", pooler.Name)
 		assert.Equal(t, "db-ns", pooler.Namespace)
@@ -421,7 +415,7 @@ func TestBuildCNPGPooler(t *testing.T) {
 	})
 
 	t.Run("ro pooler", func(t *testing.T) {
-		pooler := r.buildCNPGPooler(postgresCluster, cfg, cnpgCluster, "ro")
+		pooler := buildCNPGPooler(scheme, postgresCluster, cfg, cnpgCluster, "ro")
 
 		assert.Equal(t, "my-cluster-pooler-ro", pooler.Name)
 		assert.Equal(t, cnpgv1.PoolerType("ro"), pooler.Spec.Type)
@@ -432,7 +426,6 @@ func TestBuildCNPGCluster(t *testing.T) {
 	scheme := runtime.NewScheme()
 	enterprisev4.AddToScheme(scheme)
 	cnpgv1.AddToScheme(scheme)
-	r := &PostgresClusterReconciler{Scheme: scheme}
 
 	instances := int32(3)
 	version := "18"
@@ -444,8 +437,8 @@ func TestBuildCNPGCluster(t *testing.T) {
 			UID:       "pg-uid",
 		},
 	}
-	cfg := &EffectiveClusterConfig{
-		ClusterSpec: &enterprisev4.PostgresClusterSpec{
+	cfg := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storage,
@@ -455,7 +448,7 @@ func TestBuildCNPGCluster(t *testing.T) {
 		},
 	}
 
-	cluster := r.buildCNPGCluster(postgresCluster, cfg, "my-secret")
+	cluster := buildCNPGCluster(scheme, postgresCluster, cfg, "my-secret")
 
 	assert.Equal(t, "my-cluster", cluster.Name)
 	assert.Equal(t, "db-ns", cluster.Namespace)
@@ -505,10 +498,9 @@ func TestClusterSecretExists(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
-			r := &PostgresClusterReconciler{Client: c, Scheme: scheme}
 			secret := &corev1.Secret{}
 
-			exists, err := r.clusterSecretExists(context.Background(), "default", tt.secretName, secret)
+			exists, err := clusterSecretExists(context.Background(), c, "default", tt.secretName, secret)
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedExists, exists)
@@ -520,7 +512,6 @@ func TestRemoveOwnerRef(t *testing.T) {
 	scheme := runtime.NewScheme()
 	corev1.AddToScheme(scheme)
 	enterprisev4.AddToScheme(scheme)
-	r := &PostgresClusterReconciler{Scheme: scheme}
 
 	owner := &enterprisev4.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -579,7 +570,7 @@ func TestRemoveOwnerRef(t *testing.T) {
 				},
 			}
 
-			removed, err := r.removeOwnerRef(owner, secret, "Secret")
+			removed, err := removeOwnerRef(scheme, owner, secret)
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedRemoved, removed)
@@ -601,11 +592,10 @@ func TestPatchObject(t *testing.T) {
 			Data: map[string][]byte{"key": []byte("old-value")},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-		r := &PostgresClusterReconciler{Client: c, Scheme: scheme}
 		original := existing.DeepCopy()
 		existing.Data["key"] = []byte("new-value")
 
-		err := r.patchObject(context.Background(), original, existing, "Secret")
+		err := patchObject(context.Background(), c, original, existing, "Secret")
 
 		require.NoError(t, err)
 		patched := &corev1.Secret{}
@@ -615,7 +605,6 @@ func TestPatchObject(t *testing.T) {
 
 	t.Run("returns nil when object not found", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		r := &PostgresClusterReconciler{Client: c, Scheme: scheme}
 		original := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "deleted-secret",
@@ -625,7 +614,7 @@ func TestPatchObject(t *testing.T) {
 		modified := original.DeepCopy()
 		modified.Data = map[string][]byte{"key": []byte("value")}
 
-		err := r.patchObject(context.Background(), original, modified, "Secret")
+		err := patchObject(context.Background(), c, original, modified, "Secret")
 
 		assert.NoError(t, err)
 	})
@@ -671,9 +660,8 @@ func TestDeleteCNPGCluster(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
-			r := &PostgresClusterReconciler{Client: c, Scheme: scheme}
 
-			err := r.deleteCNPGCluster(context.Background(), tt.cluster)
+			err := deleteCNPGCluster(context.Background(), c, tt.cluster)
 
 			require.NoError(t, err)
 		})
@@ -726,9 +714,8 @@ func TestPoolerExists(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
-			r := &PostgresClusterReconciler{Client: c, Scheme: scheme}
 
-			got := r.poolerExists(context.Background(), cluster, "rw")
+			got := poolerExists(context.Background(), c, cluster, "rw")
 
 			assert.Equal(t, tt.expected, got)
 		})
@@ -762,9 +749,8 @@ func TestDeleteConnectionPoolers(t *testing.T) {
 
 	t.Run("deletes both poolers when they exist", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(rwPooler.DeepCopy(), roPooler.DeepCopy()).Build()
-		r := &PostgresClusterReconciler{Client: c, Scheme: scheme}
 
-		err := r.deleteConnectionPoolers(context.Background(), cluster)
+		err := deleteConnectionPoolers(context.Background(), c, cluster)
 
 		require.NoError(t, err)
 		assert.True(t, apierrors.IsNotFound(c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, &cnpgv1.Pooler{})))
@@ -773,22 +759,20 @@ func TestDeleteConnectionPoolers(t *testing.T) {
 
 	t.Run("no-op when no poolers exist", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		r := &PostgresClusterReconciler{Client: c, Scheme: scheme}
 
-		err := r.deleteConnectionPoolers(context.Background(), cluster)
+		err := deleteConnectionPoolers(context.Background(), c, cluster)
 
 		require.NoError(t, err)
 	})
 }
 
-func TestGenerateSecret(t *testing.T) {
+func TestEnsureClusterSecret(t *testing.T) {
 	scheme := runtime.NewScheme()
 	corev1.AddToScheme(scheme)
 	enterprisev4.AddToScheme(scheme)
 
 	t.Run("creates secret with credentials and owner reference", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		r := &PostgresClusterReconciler{Client: c, Scheme: scheme}
 		cluster := &enterprisev4.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "my-cluster",
@@ -797,7 +781,7 @@ func TestGenerateSecret(t *testing.T) {
 			},
 		}
 
-		err := r.generateSecret(context.Background(), cluster, "my-secret")
+		err := ensureClusterSecret(context.Background(), c, scheme, cluster, "my-secret", &corev1.Secret{})
 
 		require.NoError(t, err)
 		secret := &corev1.Secret{}
@@ -818,7 +802,6 @@ func TestGenerateSecret(t *testing.T) {
 			StringData: map[string]string{"username": "existing-user"},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-		r := &PostgresClusterReconciler{Client: c, Scheme: scheme}
 		cluster := &enterprisev4.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "my-cluster",
@@ -827,57 +810,67 @@ func TestGenerateSecret(t *testing.T) {
 			},
 		}
 
-		err := r.generateSecret(context.Background(), cluster, "my-secret")
+		err := ensureClusterSecret(context.Background(), c, scheme, cluster, "my-secret", &corev1.Secret{})
 
 		require.NoError(t, err)
 	})
 }
 
 func TestArePoolersReady(t *testing.T) {
-	r := &PostgresClusterReconciler{}
+	scheme := runtime.NewScheme()
+	cnpgv1.AddToScheme(scheme)
+	enterprisev4.AddToScheme(scheme)
 
-	readyPooler := func(instances int32) *cnpgv1.Pooler {
-		return &cnpgv1.Pooler{
-			Spec:   cnpgv1.PoolerSpec{Instances: ptr.To(instances)},
-			Status: cnpgv1.PoolerStatus{Instances: instances},
-		}
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-cluster",
+			Namespace: "default",
+		},
 	}
-	notReadyPooler := func(desired, actual int32) *cnpgv1.Pooler {
+
+	makePooler := func(name string, desired, actual int32) *cnpgv1.Pooler {
 		return &cnpgv1.Pooler{
-			Spec:   cnpgv1.PoolerSpec{Instances: ptr.To(desired)},
-			Status: cnpgv1.PoolerStatus{Instances: actual},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec:       cnpgv1.PoolerSpec{Instances: ptr.To(desired)},
+			Status:     cnpgv1.PoolerStatus{Instances: actual},
 		}
 	}
 
 	tests := []struct {
 		name     string
-		rw       *cnpgv1.Pooler
-		ro       *cnpgv1.Pooler
+		objects  []client.Object
 		expected bool
 	}{
 		{
-			name:     "returns true when both poolers are ready",
-			rw:       readyPooler(2),
-			ro:       readyPooler(2),
+			name: "returns true when both poolers are ready",
+			objects: []client.Object{
+				makePooler("my-cluster-pooler-rw", 2, 2),
+				makePooler("my-cluster-pooler-ro", 2, 2),
+			},
 			expected: true,
 		},
 		{
-			name:     "returns false when rw pooler not ready",
-			rw:       notReadyPooler(2, 0),
-			ro:       readyPooler(2),
+			name: "returns false when rw pooler not ready",
+			objects: []client.Object{
+				makePooler("my-cluster-pooler-rw", 2, 0),
+				makePooler("my-cluster-pooler-ro", 2, 2),
+			},
 			expected: false,
 		},
 		{
-			name:     "returns false when ro pooler not ready",
-			rw:       readyPooler(2),
-			ro:       notReadyPooler(2, 1),
+			name: "returns false when ro pooler not ready",
+			objects: []client.Object{
+				makePooler("my-cluster-pooler-rw", 2, 2),
+				makePooler("my-cluster-pooler-ro", 2, 1),
+			},
 			expected: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := r.arePoolersReady(tt.rw, tt.ro)
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
+			got := arePoolersReady(context.Background(), c, cluster)
 			assert.Equal(t, tt.expected, got)
 		})
 	}
@@ -904,8 +897,8 @@ func TestCreateConnectionPooler(t *testing.T) {
 			Namespace: "default",
 		},
 	}
-	cfg := &EffectiveClusterConfig{
-		ProvisionerConfig: &enterprisev4.CNPGConfig{
+	cfg := &MergedConfig{
+		CNPG: &enterprisev4.CNPGConfig{
 			ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{
 				Instances: &poolerInstances,
 				Mode:      &poolerMode,
@@ -942,9 +935,8 @@ func TestCreateConnectionPooler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
-			r := &PostgresClusterReconciler{Client: c, Scheme: scheme}
 
-			err := r.createConnectionPooler(context.Background(), cluster.DeepCopy(), cfg, cnpg, "rw")
+			err := createConnectionPooler(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpg, "rw")
 
 			require.NoError(t, err)
 			fetched := &cnpgv1.Pooler{}
@@ -958,6 +950,7 @@ func TestCreateConnectionPooler(t *testing.T) {
 func TestGenerateConfigMap(t *testing.T) {
 	scheme := runtime.NewScheme()
 	corev1.AddToScheme(scheme)
+	cnpgv1.AddToScheme(scheme)
 	enterprisev4.AddToScheme(scheme)
 
 	cluster := &enterprisev4.PostgresCluster{
@@ -967,10 +960,16 @@ func TestGenerateConfigMap(t *testing.T) {
 			UID:       "cluster-uid",
 		},
 	}
+	cnpgCluster := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-cluster",
+			Namespace: "default",
+		},
+	}
 
 	t.Run("base endpoints without poolers", func(t *testing.T) {
-		r := &PostgresClusterReconciler{Scheme: scheme}
-		cm, err := r.generateConfigMap(cluster.DeepCopy(), "my-secret", false)
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret")
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-configmap", cm.Name)
@@ -986,9 +985,15 @@ func TestGenerateConfigMap(t *testing.T) {
 		assert.Equal(t, "cluster-uid", string(cm.OwnerReferences[0].UID))
 	})
 
-	t.Run("includes pooler endpoints when poolerEnabled is true", func(t *testing.T) {
-		r := &PostgresClusterReconciler{Scheme: scheme}
-		cm, err := r.generateConfigMap(cluster.DeepCopy(), "my-secret", true)
+	t.Run("includes pooler endpoints when poolers exist", func(t *testing.T) {
+		rwPooler := &cnpgv1.Pooler{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-cluster-pooler-rw", Namespace: "default"},
+		}
+		roPooler := &cnpgv1.Pooler{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-cluster-pooler-ro", Namespace: "default"},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(rwPooler, roPooler).Build()
+		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret")
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-pooler-rw.default", cm.Data["CLUSTER_POOLER_RW_ENDPOINT"])
@@ -996,15 +1001,151 @@ func TestGenerateConfigMap(t *testing.T) {
 	})
 
 	t.Run("uses existing configmap name from status", func(t *testing.T) {
-		r := &PostgresClusterReconciler{Scheme: scheme}
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 		pg := cluster.DeepCopy()
 		pg.Status.Resources = &enterprisev4.PostgresClusterResources{
 			ConfigMapRef: &corev1.LocalObjectReference{Name: "custom-configmap"},
 		}
 
-		cm, err := r.generateConfigMap(pg, "my-secret", false)
+		cm, err := generateConfigMap(context.Background(), c, scheme, pg, cnpgCluster, "my-secret")
 
 		require.NoError(t, err)
 		assert.Equal(t, "custom-configmap", cm.Name)
+	})
+}
+
+func TestPoolerInstanceCount(t *testing.T) {
+	tests := []struct {
+		name              string
+		pooler            *cnpgv1.Pooler
+		expectedDesired   int32
+		expectedScheduled int32
+	}{
+		{
+			name: "nil instances defaults desired to 1",
+			pooler: &cnpgv1.Pooler{
+				Status: cnpgv1.PoolerStatus{Instances: 3},
+			},
+			expectedDesired:   1,
+			expectedScheduled: 3,
+		},
+		{
+			name: "explicit instances returns spec value",
+			pooler: &cnpgv1.Pooler{
+				Spec:   cnpgv1.PoolerSpec{Instances: ptr.To(int32(5))},
+				Status: cnpgv1.PoolerStatus{Instances: 2},
+			},
+			expectedDesired:   5,
+			expectedScheduled: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			desired, scheduled := poolerInstanceCount(tt.pooler)
+			assert.Equal(t, tt.expectedDesired, desired)
+			assert.Equal(t, tt.expectedScheduled, scheduled)
+		})
+	}
+}
+
+func TestGeneratePassword(t *testing.T) {
+	pw, err := generatePassword()
+
+	require.NoError(t, err)
+	assert.Len(t, pw, 32)
+
+	t.Run("generates unique passwords", func(t *testing.T) {
+		pw2, err := generatePassword()
+		require.NoError(t, err)
+		assert.NotEqual(t, pw, pw2)
+	})
+}
+
+func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
+	scheme := runtime.NewScheme()
+	corev1.AddToScheme(scheme)
+	cnpgv1.AddToScheme(scheme)
+	enterprisev4.AddToScheme(scheme)
+
+	poolerInstances := int32(2)
+	poolerMode := enterprisev4.ConnectionPoolerModeTransaction
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-cluster",
+			Namespace: "default",
+			UID:       "cluster-uid",
+		},
+	}
+	cnpgCluster := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-cluster",
+			Namespace: "default",
+		},
+	}
+	cfg := &MergedConfig{
+		CNPG: &enterprisev4.CNPGConfig{
+			ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{
+				Instances: &poolerInstances,
+				Mode:      &poolerMode,
+				Config:    map[string]string{"default_pool_size": "25"},
+			},
+		},
+	}
+
+	expectedPoolerSpec := func(poolerType string) cnpgv1.PoolerSpec {
+		return cnpgv1.PoolerSpec{
+			Cluster:   cnpgv1.LocalObjectReference{Name: "my-cluster"},
+			Instances: ptr.To(int32(2)),
+			Type:      cnpgv1.PoolerType(poolerType),
+			PgBouncer: &cnpgv1.PgBouncerSpec{
+				PoolMode:   cnpgv1.PgBouncerPoolMode("transaction"),
+				Parameters: map[string]string{"default_pool_size": "25"},
+			},
+		}
+	}
+
+	t.Run("creates both rw and ro poolers", func(t *testing.T) {
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster)
+
+		require.NoError(t, err)
+
+		rw := &cnpgv1.Pooler{}
+		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, rw))
+		assert.Equal(t, expectedPoolerSpec("rw"), rw.Spec)
+		require.Len(t, rw.OwnerReferences, 1)
+		assert.Equal(t, "cluster-uid", string(rw.OwnerReferences[0].UID))
+
+		ro := &cnpgv1.Pooler{}
+		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-ro", Namespace: "default"}, ro))
+		assert.Equal(t, expectedPoolerSpec("ro"), ro.Spec)
+		require.Len(t, ro.OwnerReferences, 1)
+		assert.Equal(t, "cluster-uid", string(ro.OwnerReferences[0].UID))
+	})
+
+	t.Run("no-op when both poolers already exist", func(t *testing.T) {
+		existing := []client.Object{
+			&cnpgv1.Pooler{
+				ObjectMeta: metav1.ObjectMeta{Name: "my-cluster-pooler-rw", Namespace: "default"},
+				Spec:       cnpgv1.PoolerSpec{Instances: ptr.To(int32(1))},
+			},
+			&cnpgv1.Pooler{
+				ObjectMeta: metav1.ObjectMeta{Name: "my-cluster-pooler-ro", Namespace: "default"},
+				Spec:       cnpgv1.PoolerSpec{Instances: ptr.To(int32(1))},
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing...).Build()
+
+		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster)
+
+		require.NoError(t, err)
+		rw := &cnpgv1.Pooler{}
+		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, rw))
+		assert.Equal(t, int32(1), *rw.Spec.Instances)
+		ro := &cnpgv1.Pooler{}
+		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-ro", Namespace: "default"}, ro))
+		assert.Equal(t, int32(1), *ro.Spec.Instances)
 	})
 }

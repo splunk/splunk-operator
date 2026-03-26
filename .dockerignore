@@ -1,6 +1,7 @@
 .git
 .idea
 test
+vendor
 build/_output/bin/splunk-operator-local
 splunk-operator-*.yaml
 splunk-operator-*.tar.gz
