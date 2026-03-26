@@ -23,6 +23,7 @@ import (
 
 // PostgresDatabaseSpec defines the desired state of PostgresDatabase.
 // +kubebuilder:validation:XValidation:rule="self.clusterRef == oldSelf.clusterRef",message="clusterRef is immutable"
+// +kubebuilder:validation:XValidation:rule="self.clusterRef.name != ''",message="clusterRef.name must not be empty"
 type PostgresDatabaseSpec struct {
 	// Reference to Postgres Cluster managed by postgresCluster controller
 	// +kubebuilder:validation:Required
@@ -37,7 +38,9 @@ type PostgresDatabaseSpec struct {
 
 type DatabaseDefinition struct {
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=30
+	// +kubebuilder:validation:Pattern=`^[a-z_][a-z0-9_]*$`
 	Name       string   `json:"name"`
 	Extensions []string `json:"extensions,omitempty"`
 	// +kubebuilder:validation:Enum=Delete;Retain
@@ -51,7 +54,7 @@ type DatabaseInfo struct {
 	DatabaseRef        *corev1.LocalObjectReference `json:"databaseRef,omitempty"`
 	AdminUserSecretRef *corev1.SecretKeySelector    `json:"adminUserSecretRef,omitempty"`
 	RWUserSecretRef    *corev1.SecretKeySelector    `json:"rwUserSecretRef,omitempty"`
-	ConfigMapRef       *corev1.LocalObjectReference `json:"configMap,omitempty"`
+	ConfigMapRef       *corev1.LocalObjectReference `json:"configMapRef,omitempty"`
 }
 
 // PostgresDatabaseStatus defines the observed state of PostgresDatabase.
@@ -74,6 +77,7 @@ type PostgresDatabaseStatus struct {
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // PostgresDatabase is the Schema for the postgresdatabases API.
+// +kubebuilder:validation:XValidation:rule="size(self.metadata.name) <= 50",message="name must be 50 characters or fewer to accommodate derived resource names"
 type PostgresDatabase struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

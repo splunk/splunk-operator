@@ -47,9 +47,6 @@ spec:
           metadata:
             type: object
           spec:
-            description: |-
-              PostgresClusterSpec defines the desired state of PostgresCluster.
-              Validation rules ensure immutability of Class, and that Storage and PostgresVersion can only be set once and cannot be removed or downgraded.
             properties:
               class:
                 description: This field is IMMUTABLE after creation.
@@ -66,37 +63,7 @@ spec:
                 - Delete
                 - Retain
                 type: string
-              connectionPoolerConfig:
-                description: Only takes effect when connection pooling is enabled.
-                properties:
-                  config:
-                    additionalProperties:
-                      type: string
-                    description: |-
-                      Config contains PgBouncer configuration parameters.
-                      Passed directly to CNPG Pooler spec.pgbouncer.parameters.
-                      See: https://cloudnative-pg.io/docs/1.28/connection_pooling/#pgbouncer-configuration-options
-                    type: object
-                  instances:
-                    default: 3
-                    description: |-
-                      Instances is the number of PgBouncer pod replicas.
-                      Higher values provide better availability and load distribution.
-                    format: int32
-                    maximum: 10
-                    minimum: 1
-                    type: integer
-                  mode:
-                    default: transaction
-                    description: Mode defines the connection pooling strategy.
-                    enum:
-                    - session
-                    - transaction
-                    - statement
-                    type: string
-                type: object
               connectionPoolerEnabled:
-                default: false
                 description: |-
                   ConnectionPoolerEnabled controls whether PgBouncer connection pooling is deployed for this cluster.
                   When set, takes precedence over the class-level connectionPoolerEnabled value.
@@ -270,8 +237,6 @@ spec:
                 '' + string(self.storage) + '')'''
               rule: '!has(oldSelf.storage) || (has(self.storage) && quantity(self.storage).compareTo(quantity(oldSelf.storage))
                 >= 0)'
-            - message: connectionPoolerConfig cannot be overridden on PostgresCluster
-              rule: '!has(self.connectionPoolerConfig)'
           status:
             description: PostgresClusterStatus defines the observed state of PostgresCluster.
             properties:
@@ -463,6 +428,10 @@ spec:
                 type: object
             type: object
         type: object
+        x-kubernetes-validations:
+        - message: name must be 50 characters or fewer to accommodate derived resource
+            names
+          rule: size(self.metadata.name) <= 50
     served: true
     storage: true
     subresources:

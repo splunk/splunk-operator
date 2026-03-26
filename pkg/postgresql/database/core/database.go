@@ -52,12 +52,18 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{}, nil
 	}
+	// Add finalizer if not present.
 	if !controllerutil.ContainsFinalizer(postgresDB, postgresDatabaseFinalizerName) {
 		controllerutil.AddFinalizer(postgresDB, postgresDatabaseFinalizerName)
 		if err := c.Update(ctx, postgresDB); err != nil {
+			if errors.IsConflict(err) {
+				logger.Info("Conflict while adding finalizer, will requeue")
+				return ctrl.Result{Requeue: true}, nil
+			}
 			logger.Error(err, "Failed to add finalizer to PostgresDatabase")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
+		logger.Info("Finalizer added successfully")
 		return ctrl.Result{}, nil
 	}
 
