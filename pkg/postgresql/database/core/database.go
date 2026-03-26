@@ -705,8 +705,8 @@ func buildManagedRoles(postgresDBName string, databases []enterprisev4.DatabaseD
 func buildManagedRolesPatch(cluster *enterprisev4.PostgresCluster, roles []enterprisev4.ManagedRole) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]any{
-			"apiVersion": cluster.APIVersion,
-			"kind":       cluster.Kind,
+			"apiVersion": enterprisev4.GroupVersion.String(),
+			"kind":       "PostgresCluster",
 			"metadata":   map[string]any{"name": cluster.Name, "namespace": cluster.Namespace},
 			"spec":       map[string]any{"managedRoles": roles},
 		},
