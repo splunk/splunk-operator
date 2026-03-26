@@ -308,7 +308,19 @@ func PostgresClusterService(ctx context.Context, c client.Client, scheme *runtim
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 
-	case !arePoolersReady(ctx, c, postgresCluster):
+	case func() bool {
+		rwPooler := &cnpgv1.Pooler{}
+		rwErr := c.Get(ctx, types.NamespacedName{
+			Name:      poolerResourceName(postgresCluster.Name, readWriteEndpoint),
+			Namespace: postgresCluster.Namespace,
+		}, rwPooler)
+		roPooler := &cnpgv1.Pooler{}
+		roErr := c.Get(ctx, types.NamespacedName{
+			Name:      poolerResourceName(postgresCluster.Name, readOnlyEndpoint),
+			Namespace: postgresCluster.Namespace,
+		}, roPooler)
+		return rwErr != nil || roErr != nil || !arePoolersReady(rwPooler, roPooler)
+	}():
 		logger.Info("Connection Poolers are not ready yet, requeueing")
 		if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerCreating,
 			"Connection poolers are being provisioned", pendingClusterPhase); statusErr != nil {
@@ -384,9 +396,21 @@ func PostgresClusterService(ctx context.Context, c client.Client, scheme *runtim
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to sync status: %w", err)
 	}
-	if cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy && arePoolersReady(ctx, c, postgresCluster) {
-		logger.Info("Poolers are ready, syncing pooler status")
-		_ = syncPoolerStatus(ctx, c, postgresCluster)
+	if cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy {
+		rwPooler := &cnpgv1.Pooler{}
+		rwErr := c.Get(ctx, types.NamespacedName{
+			Name:      poolerResourceName(postgresCluster.Name, readWriteEndpoint),
+			Namespace: postgresCluster.Namespace,
+		}, rwPooler)
+		roPooler := &cnpgv1.Pooler{}
+		roErr := c.Get(ctx, types.NamespacedName{
+			Name:      poolerResourceName(postgresCluster.Name, readOnlyEndpoint),
+			Namespace: postgresCluster.Namespace,
+		}, roPooler)
+		if rwErr == nil && roErr == nil && arePoolersReady(rwPooler, roPooler) {
+			logger.Info("Poolers are ready, syncing pooler status")
+			_ = syncPoolerStatus(ctx, c, postgresCluster)
+		}
 	}
 	logger.Info("Reconciliation complete")
 	return ctrl.Result{}, nil
@@ -567,28 +591,13 @@ func poolerExists(ctx context.Context, c client.Client, cluster *enterprisev4.Po
 	return true
 }
 
-func arePoolersReady(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster) bool {
-	rwPooler := &cnpgv1.Pooler{}
-	rwErr := c.Get(ctx, types.NamespacedName{
-		Name:      poolerResourceName(cluster.Name, readWriteEndpoint),
-		Namespace: cluster.Namespace,
-	}, rwPooler)
-
-	roPooler := &cnpgv1.Pooler{}
-	roErr := c.Get(ctx, types.NamespacedName{
-		Name:      poolerResourceName(cluster.Name, readOnlyEndpoint),
-		Namespace: cluster.Namespace,
-	}, roPooler)
-
-	return isPoolerReady(rwPooler, rwErr) && isPoolerReady(roPooler, roErr)
+func arePoolersReady(rwPooler, roPooler *cnpgv1.Pooler) bool {
+	return isPoolerReady(rwPooler) && isPoolerReady(roPooler)
 }
 
 // isPoolerReady checks if a pooler has all instances scheduled.
 // CNPG PoolerStatus only tracks scheduled instances, not ready pods.
-func isPoolerReady(pooler *cnpgv1.Pooler, err error) bool {
-	if err != nil {
-		return false
-	}
+func isPoolerReady(pooler *cnpgv1.Pooler) bool {
 	desired := int32(1)
 	if pooler.Spec.Instances != nil {
 		desired = *pooler.Spec.Instances
