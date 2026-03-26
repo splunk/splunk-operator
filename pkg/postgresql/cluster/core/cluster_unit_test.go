@@ -41,6 +41,7 @@ func TestPoolerResourceName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := poolerResourceName(tt.clusterName, tt.poolerType)
+
 			assert.Equal(t, tt.expected, got)
 		})
 	}
@@ -87,6 +88,7 @@ func TestIsPoolerReady(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := isPoolerReady(tt.pooler, nil)
+
 			assert.Equal(t, tt.expected, got)
 		})
 	}
@@ -218,6 +220,7 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := normalizeCNPGClusterSpec(tt.spec, tt.customDefinedParameters)
+
 			assert.Equal(t, tt.expected, got)
 		})
 	}
@@ -870,7 +873,9 @@ func TestArePoolersReady(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
+
 			got := arePoolersReady(context.Background(), c, cluster)
+
 			assert.Equal(t, tt.expected, got)
 		})
 	}
@@ -1043,6 +1048,7 @@ func TestPoolerInstanceCount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			desired, scheduled := poolerInstanceCount(tt.pooler)
+
 			assert.Equal(t, tt.expectedDesired, desired)
 			assert.Equal(t, tt.expectedScheduled, scheduled)
 		})
@@ -1057,6 +1063,7 @@ func TestGeneratePassword(t *testing.T) {
 
 	t.Run("generates unique passwords", func(t *testing.T) {
 		pw2, err := generatePassword()
+
 		require.NoError(t, err)
 		assert.NotEqual(t, pw, pw2)
 	})
