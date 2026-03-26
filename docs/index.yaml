@@ -56,6 +56,88 @@ entries:
     - https://splunk.github.io/splunk-operator/splunk-enterprise-3.1.0.tgz
     version: 3.1.0
   - apiVersion: v2
+    appVersion: 3.0.0
+    created: "2025-09-22T12:48:31.589008-07:00"
+    dependencies:
+    - condition: splunk-operator.enabled
+      name: splunk-operator
+      repository: file://splunk-operator/helm-chart/splunk-operator
+      version: 3.0.0
+    description: A Helm chart for Splunk Enterprise managed by the Splunk Operator
+    digest: ae82f6c8edee4d827817fe6c9c6447c422a03c59595a0f6e779cef847a83b611
+    maintainers:
+    - email: vivekr@splunk.com
+      name: Vivek Reddy
+    - email: rlieberman@splunk.com
+      name: Raizel Lieberman
+    - email: patrykw@splunk.com
+      name: Patryk Wasielewski
+    - email: igorg@splunk.com
+      name: Igor Grzankowski
+    - email: kkoziol@splunk.com
+      name: Kasia Kozioł
+    name: splunk-enterprise
+    type: application
+    urls:
+    - https://splunk.github.io/splunk-operator/splunk-enterprise-3.0.0.tgz
+    version: 3.0.0
+  - apiVersion: v2
+    appVersion: 2.8.1
+    created: "2025-09-22T12:48:31.587977-07:00"
+    dependencies:
+    - condition: splunk-operator.enabled
+      name: splunk-operator
+      repository: file://splunk-operator/helm-chart/splunk-operator
+      version: 3.0.0
+    description: A Helm chart for Splunk Enterprise managed by the Splunk Operator
+    digest: 9a4133aec6ca98096aaaf787b5a76681239ae877f224e42ad926830c355c369c
+    maintainers:
+    - email: vivekr@splunk.com
+      name: Vivek Reddy
+    - email: rlieberman@splunk.com
+      name: Raizel Lieberman
+    - email: patrykw@splunk.com
+      name: Patryk Wasielewski
+    - email: igorg@splunk.com
+      name: Igor Grzankowski
+    - email: kkoziol@splunk.com
+      name: Kasia Kozioł
+    - email: jbuczak@splunk.com
+      name: Jakub Buczak
+    name: splunk-enterprise
+    type: application
+    urls:
+    - https://splunk.github.io/splunk-operator/splunk-enterprise-3.0.0.tgz
+    version: 3.0.0
+  - apiVersion: v2
+    appVersion: 3.0.0
+    created: "2025-09-08T10:18:06.022991101Z"
+    dependencies:
+    - condition: splunk-operator.enabled
+      name: splunk-operator
+      repository: file://splunk-operator/helm-chart/splunk-operator
+      version: 3.0.0
+    description: A Helm chart for Splunk Enterprise managed by the Splunk Operator
+    digest: db8d639d7332ad61a87bd2c7d1061cf03b0c155eea035ac11e065696d409ed32
+    maintainers:
+    - email: vivekr@splunk.com
+      name: Vivek Reddy
+    - email: rlieberman@splunk.com
+      name: Raizel Lieberman
+    - email: patrykw@splunk.com
+      name: Patryk Wasielewski
+    - email: igorg@splunk.com
+      name: Igor Grzankowski
+    - email: kkoziol@splunk.com
+      name: Kasia Kozioł
+    - email: jbuczak@splunk.com
+      name: Jakub Buczak
+    name: splunk-enterprise
+    type: application
+    urls:
+    - https://splunk.github.io/splunk-operator/splunk-enterprise-3.0.0.tgz
+    version: 3.0.0
+  - apiVersion: v2
     appVersion: 2.8.1
     created: "2026-03-02T17:02:33.789329656Z"
     dependencies:
@@ -381,6 +463,29 @@ entries:
     urls:
     - https://splunk.github.io/splunk-operator/splunk-operator-3.1.0.tgz
     version: 3.1.0
+  - apiVersion: v2
+    appVersion: 3.0.0
+    created: "2025-09-22T12:48:31.716041-07:00"
+    description: A Helm chart for the Splunk Operator for Kubernetes
+    digest: bd318b1f4022421a3fd429b186ca344c61d04a3c2bbdd5cc535d960773558e44
+    maintainers:
+    - email: vivekr@splunk.com
+      name: Vivek Reddy
+    - email: rlieberman@splunk.com
+      name: Raizel Lieberman
+    - email: patrykw@splunk.com
+      name: Patryk Wasielewski
+    - email: igorg@splunk.com
+      name: Igor Grzankowski
+    - email: kkoziol@splunk.com
+      name: Kasia Kozioł
+    - email: jbuczak@splunk.com
+      name: Jakub Buczak
+    name: splunk-operator
+    type: application
+    urls:
+    - https://splunk.github.io/splunk-operator/splunk-operator-3.0.0.tgz
+    version: 3.0.0
   - apiVersion: v2
     appVersion: 2.8.1
     created: "2026-03-02T17:02:33.967789812Z"
