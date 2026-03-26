@@ -87,7 +87,7 @@ func TestIsPoolerReady(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isPoolerReady(tt.pooler, nil)
+			got := isPoolerReady(tt.pooler)
 
 			assert.Equal(t, tt.expected, got)
 		})
@@ -820,61 +820,42 @@ func TestEnsureClusterSecret(t *testing.T) {
 }
 
 func TestArePoolersReady(t *testing.T) {
-	scheme := runtime.NewScheme()
-	cnpgv1.AddToScheme(scheme)
-	enterprisev4.AddToScheme(scheme)
-
-	cluster := &enterprisev4.PostgresCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-cluster",
-			Namespace: "default",
-		},
-	}
-
-	makePooler := func(name string, desired, actual int32) *cnpgv1.Pooler {
+	makePooler := func(desired, actual int32) *cnpgv1.Pooler {
 		return &cnpgv1.Pooler{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
-			Spec:       cnpgv1.PoolerSpec{Instances: ptr.To(desired)},
-			Status:     cnpgv1.PoolerStatus{Instances: actual},
+			Spec:   cnpgv1.PoolerSpec{Instances: ptr.To(desired)},
+			Status: cnpgv1.PoolerStatus{Instances: actual},
 		}
 	}
 
 	tests := []struct {
 		name     string
-		objects  []client.Object
+		rw       *cnpgv1.Pooler
+		ro       *cnpgv1.Pooler
 		expected bool
 	}{
 		{
-			name: "returns true when both poolers are ready",
-			objects: []client.Object{
-				makePooler("my-cluster-pooler-rw", 2, 2),
-				makePooler("my-cluster-pooler-ro", 2, 2),
-			},
+			name:     "returns true when both poolers are ready",
+			rw:       makePooler(2, 2),
+			ro:       makePooler(2, 2),
 			expected: true,
 		},
 		{
-			name: "returns false when rw pooler not ready",
-			objects: []client.Object{
-				makePooler("my-cluster-pooler-rw", 2, 0),
-				makePooler("my-cluster-pooler-ro", 2, 2),
-			},
+			name:     "returns false when rw pooler not ready",
+			rw:       makePooler(2, 0),
+			ro:       makePooler(2, 2),
 			expected: false,
 		},
 		{
-			name: "returns false when ro pooler not ready",
-			objects: []client.Object{
-				makePooler("my-cluster-pooler-rw", 2, 2),
-				makePooler("my-cluster-pooler-ro", 2, 1),
-			},
+			name:     "returns false when ro pooler not ready",
+			rw:       makePooler(2, 2),
+			ro:       makePooler(2, 1),
 			expected: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
-
-			got := arePoolersReady(context.Background(), c, cluster)
+			got := arePoolersReady(tt.rw, tt.ro)
 
 			assert.Equal(t, tt.expected, got)
 		})
