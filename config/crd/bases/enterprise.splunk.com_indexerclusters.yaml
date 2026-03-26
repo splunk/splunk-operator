@@ -1092,19 +1092,25 @@ spec:
                 description: Storage configuration for /opt/splunk/etc volume
                 properties:
                   ephemeralStorage:
-                    description: |-
-                      If true, ephemeral (emptyDir) storage will be used
-                      default false
+                    default: false
+                    description: If true, ephemeral (emptyDir) storage will be used
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
-                      (default=”10Gi” for etc and "100Gi" for var)
+                      (default="10Gi" for etc and "100Gi" for var)
                     type: string
                   storageClassName:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: storageClassName and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
+                    == true)'
+                - message: storageCapacity and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
+                    == true)'
               extraEnv:
                 description: |-
                   ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
@@ -1269,11 +1275,13 @@ spec:
                   environment variables)
                 type: string
               imagePullPolicy:
-                description: 'Sets pull policy for all images (either “Always” or
-                  the default: “IfNotPresent”)'
+                default: IfNotPresent
+                description: 'Sets pull policy for all images ("Always", "Never",
+                  or the default: "IfNotPresent")'
                 enum:
                 - Always
                 - IfNotPresent
+                - Never
                 type: string
               imagePullSecrets:
                 description: |-
@@ -1395,6 +1403,11 @@ spec:
                 minimum: 0
                 type: integer
               livenessProbe:
+                default:
+                  failureThreshold: 3
+                  initialDelaySeconds: 30
+                  periodSeconds: 30
+                  timeoutSeconds: 30
                 description: LivenessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
                 properties:
                   failureThreshold:
@@ -1471,6 +1484,11 @@ spec:
                 minimum: 0
                 type: integer
               readinessProbe:
+                default:
+                  failureThreshold: 3
+                  initialDelaySeconds: 10
+                  periodSeconds: 5
+                  timeoutSeconds: 5
                 description: ReadinessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes
                 properties:
                   failureThreshold:
@@ -2082,6 +2100,11 @@ spec:
                     type: object
                 type: object
               startupProbe:
+                default:
+                  failureThreshold: 12
+                  initialDelaySeconds: 40
+                  periodSeconds: 30
+                  timeoutSeconds: 30
                 description: StartupProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes
                 properties:
                   failureThreshold:
@@ -2323,19 +2346,25 @@ spec:
                 description: Storage configuration for /opt/splunk/var volume
                 properties:
                   ephemeralStorage:
-                    description: |-
-                      If true, ephemeral (emptyDir) storage will be used
-                      default false
+                    default: false
+                    description: If true, ephemeral (emptyDir) storage will be used
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
-                      (default=”10Gi” for etc and "100Gi" for var)
+                      (default="10Gi" for etc and "100Gi" for var)
                     type: string
                   storageClassName:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: storageClassName and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
+                    == true)'
+                - message: storageCapacity and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
+                    == true)'
               volumes:
                 description: List of one or more Kubernetes volumes. These will be
                   mounted in all pod containers as as /mnt/<name>
@@ -4362,7 +4391,7 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    - description: Auxillary message describing CR status
+    - description: Auxiliary message describing CR status
       jsonPath: .status.message
       name: Message
       type: string
@@ -5416,19 +5445,25 @@ spec:
                 description: Storage configuration for /opt/splunk/etc volume
                 properties:
                   ephemeralStorage:
-                    description: |-
-                      If true, ephemeral (emptyDir) storage will be used
-                      default false
+                    default: false
+                    description: If true, ephemeral (emptyDir) storage will be used
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
-                      (default=”10Gi” for etc and "100Gi" for var)
+                      (default="10Gi" for etc and "100Gi" for var)
                     type: string
                   storageClassName:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: storageClassName and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
+                    == true)'
+                - message: storageCapacity and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
+                    == true)'
               extraEnv:
                 description: |-
                   ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
@@ -5593,11 +5628,13 @@ spec:
                   environment variables)
                 type: string
               imagePullPolicy:
-                description: 'Sets pull policy for all images (either “Always” or
-                  the default: “IfNotPresent”)'
+                default: IfNotPresent
+                description: 'Sets pull policy for all images ("Always", "Never",
+                  or the default: "IfNotPresent")'
                 enum:
                 - Always
                 - IfNotPresent
+                - Never
                 type: string
               imagePullSecrets:
                 description: |-
@@ -5719,6 +5756,11 @@ spec:
                 minimum: 0
                 type: integer
               livenessProbe:
+                default:
+                  failureThreshold: 3
+                  initialDelaySeconds: 30
+                  periodSeconds: 30
+                  timeoutSeconds: 30
                 description: LivenessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
                 properties:
                   failureThreshold:
@@ -5787,6 +5829,92 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              objectStorageRef:
+                description: Object Storage reference
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              queueRef:
+                description: Queue reference
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               readinessInitialDelaySeconds:
                 description: |-
                   ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe
@@ -5795,6 +5923,11 @@ spec:
                 minimum: 0
                 type: integer
               readinessProbe:
+                default:
+                  failureThreshold: 3
+                  initialDelaySeconds: 10
+                  periodSeconds: 5
+                  timeoutSeconds: 5
                 description: ReadinessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes
                 properties:
                   failureThreshold:
@@ -5820,8 +5953,7 @@ spec:
                     type: integer
                 type: object
               replicas:
-                description: Number of search head pods; a search head cluster will
-                  be created if > 1
+                description: Number of indexer cluster peers
                 format: int32
                 type: integer
               resources:
@@ -6406,6 +6538,11 @@ spec:
                     type: object
                 type: object
               startupProbe:
+                default:
+                  failureThreshold: 12
+                  initialDelaySeconds: 40
+                  periodSeconds: 30
+                  timeoutSeconds: 30
                 description: StartupProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes
                 properties:
                   failureThreshold:
@@ -6647,19 +6784,25 @@ spec:
                 description: Storage configuration for /opt/splunk/var volume
                 properties:
                   ephemeralStorage:
-                    description: |-
-                      If true, ephemeral (emptyDir) storage will be used
-                      default false
+                    default: false
+                    description: If true, ephemeral (emptyDir) storage will be used
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
-                      (default=”10Gi” for etc and "100Gi" for var)
+                      (default="10Gi" for etc and "100Gi" for var)
                     type: string
                   storageClassName:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: storageClassName and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
+                    == true)'
+                - message: storageCapacity and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
+                    == true)'
               volumes:
                 description: List of one or more Kubernetes volumes. These will be
                   mounted in all pod containers as as /mnt/<name>
@@ -8546,6 +8689,13 @@ spec:
                   type: object
                 type: array
             type: object
+            x-kubernetes-validations:
+            - message: queueRef and objectStorageRef must both be set or both be empty
+              rule: has(self.queueRef) == has(self.objectStorageRef)
+            - message: queueRef is immutable once created
+              rule: '!has(oldSelf.queueRef) || self.queueRef == oldSelf.queueRef'
+            - message: objectStorageRef is immutable once created
+              rule: '!has(oldSelf.objectStorageRef) || self.objectStorageRef == oldSelf.objectStorageRef'
           status:
             description: IndexerClusterStatus defines the observed state of a Splunk
               Enterprise indexer cluster
@@ -8577,6 +8727,11 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              credentialSecretVersion:
+                description: Credential secret version to track changes to the secret
+                  and trigger rolling restart of indexer cluster peers when the secret
+                  is updated
+                type: string
               indexer_secret_changed_flag:
                 description: Indicates when the idxc_secret has been changed for a
                   peer
@@ -8593,7 +8748,7 @@ spec:
                 description: Indicates if the cluster is in maintenance mode.
                 type: boolean
               message:
-                description: Auxillary message describing CR status
+                description: Auxiliary message describing CR status
                 type: string
               namespace_scoped_secret_resource_version:
                 description: Indicates resource version of namespace scoped secret
@@ -8654,6 +8809,11 @@ spec:
                 description: Indicates whether the manager is ready to begin servicing,
                   based on whether it is initialized.
                 type: boolean
+              serviceAccount:
+                description: Service account to track changes to the service account
+                  and trigger rolling restart of indexer cluster peers when the service
+                  account is updated
+                type: string
             type: object
         type: object
     served: true

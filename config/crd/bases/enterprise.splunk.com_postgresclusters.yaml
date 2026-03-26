@@ -117,24 +117,24 @@ spec:
                   description: ManagedRole represents a PostgreSQL role to be created
                     and managed in the cluster.
                   properties:
-                    ensure:
-                      default: present
-                      description: Ensure controls whether the role should exist (present)
-                        or not (absent).
-                      enum:
-                      - present
-                      - absent
-                      type: string
+                    exists:
+                      default: true
+                      description: Exists controls whether the role should be present
+                        (true) or absent (false) in PostgreSQL.
+                      type: boolean
                     name:
                       description: Name of the role/user to create.
                       maxLength: 63
                       minLength: 1
                       type: string
                     passwordSecretRef:
-                      description: |-
-                        PasswordSecretRef references a Secret containing the password for this role.
-                        The Secret should have a key "password" with the password value.
+                      description: PasswordSecretRef references a Secret and the key
+                        within it containing the password for this role.
                       properties:
+                        key:
+                          description: The key of the secret to select from.  Must
+                            be a valid secret key.
+                          type: string
                         name:
                           default: ""
                           description: |-
@@ -144,6 +144,12 @@ spec:
                             almost certainly wrong.
                             More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
                           type: string
+                        optional:
+                          description: Specify whether the Secret or its key must
+                            be defined
+                          type: boolean
+                      required:
+                      - key
                       type: object
                       x-kubernetes-map-type: atomic
                   required:
@@ -431,10 +437,12 @@ spec:
                     type: object
                     x-kubernetes-map-type: atomic
                   secretRef:
-                    description: |-
-                      SecretRef references the Secret with superuser credentials.
-                      Contains: passwords for superuser
+                    description: SecretKeySelector selects a key of a Secret.
                     properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
                       name:
                         default: ""
                         description: |-
@@ -444,6 +452,12 @@ spec:
                           almost certainly wrong.
                           More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
                         type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
                     type: object
                     x-kubernetes-map-type: atomic
                 type: object

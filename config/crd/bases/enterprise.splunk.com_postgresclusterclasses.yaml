@@ -245,6 +245,8 @@ spec:
             - provisioner
             type: object
             x-kubernetes-validations:
+            - message: cnpg config can only be set when provisioner is postgresql.cnpg.io
+              rule: '!has(self.cnpg) || self.provisioner == ''postgresql.cnpg.io'''
             - message: cnpg.connectionPooler must be set when config.connectionPoolerEnabled
                 is true
               rule: '!has(self.config) || !has(self.config.connectionPoolerEnabled)

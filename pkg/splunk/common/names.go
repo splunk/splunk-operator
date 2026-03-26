@@ -108,7 +108,7 @@ const (
 	// MockClientInduceErrorDelete represents an error for delete Api
 	MockClientInduceErrorDelete = "mockClientDeleteError"
 
-	// MockClientInduceErrorApply represents an error for apply Api
+	// MockClientInduceErrorApply represents an error for apply Api (controller-runtime v0.22+ / k8s v0.34+)
 	MockClientInduceErrorApply = "mockClientApplyError"
 
 	// Rerr represents a random error strting
@@ -134,7 +134,7 @@ func GetNamespaceScopedSecretName(namespace string) string {
 
 // GetSplunkSecretTokenTypes returns all types of Splunk secret tokens
 func GetSplunkSecretTokenTypes() []string {
-	return []string{"hec_token", "password", "pass4SymmKey", "idxc_secret", "shc_secret"}
+	return []string{"hec_token", "password", "pass4SymmKey", "splunk_secret", "idxc_secret", "shc_secret"}
 }
 
 // GetLabelTypes returns a map of label types to strings

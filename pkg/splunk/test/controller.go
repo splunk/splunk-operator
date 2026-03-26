@@ -349,11 +349,32 @@ func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		return nil
 	}
 
-	dummySchemaResource := schema.GroupResource{
-		Group:    obj.GetObjectKind().GroupVersionKind().Group,
-		Resource: obj.GetObjectKind().GroupVersionKind().Kind,
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	if gvk.Empty() {
+		// Infer GVK from object type
+		typeName := reflect.TypeOf(obj).Elem().Name()
+		// Determine group based on type
+		var group, version string
+		switch obj.(type) {
+		case *corev1.Pod, *corev1.Service, *corev1.ConfigMap, *corev1.Secret:
+			group, version = "", "v1"
+		case *appsv1.StatefulSet, *appsv1.Deployment:
+			group, version = "apps", "v1"
+		default:
+			group, version = "enterprise.splunk.com", "v4"
+		}
+		gvk = schema.GroupVersionKind{
+			Group:   group,
+			Version: version,
+			Kind:    typeName,
+		}
 	}
-	c.NotFoundError = k8serrors.NewNotFound(dummySchemaResource, obj.GetName())
+
+	dummySchemaResource := schema.GroupResource{
+		Group:    gvk.Group,
+		Resource: gvk.Kind,
+	}
+	c.NotFoundError = k8serrors.NewNotFound(dummySchemaResource, key.Name)
 	return c.NotFoundError
 }
 
@@ -368,13 +389,54 @@ func (c MockClient) List(ctx context.Context, obj client.ObjectList, opts ...cli
 		ListOpts: opts,
 		ObjList:  obj,
 	})
-	listObj := c.ListObj
-	if listObj != nil {
-		srcObj := listObj
-		copyMockObjectList(&obj, &srcObj)
-		return nil
+
+	// Only handle PodList for this test
+	podList, ok := obj.(*corev1.PodList)
+	if !ok {
+		// fallback to old logic
+		listObj := c.ListObj
+		if listObj != nil {
+			srcObj := listObj
+			copyMockObjectList(&obj, &srcObj)
+			return nil
+		}
+		return c.NotFoundError
 	}
-	return c.NotFoundError
+
+	// Gather label selector and namespace from opts
+	var ns string
+	var matchLabels map[string]string
+	for _, opt := range opts {
+		switch v := opt.(type) {
+		case client.InNamespace:
+			ns = string(v)
+		case client.MatchingLabels:
+			matchLabels = v
+		}
+	}
+
+	// Filter pods in State
+	for _, v := range c.State {
+		pod, ok := v.(*corev1.Pod)
+		if !ok {
+			continue
+		}
+		if ns != "" && pod.Namespace != ns {
+			continue
+		}
+		matches := true
+		for k, val := range matchLabels {
+			if pod.Labels[k] != val {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			podList.Items = append(podList.Items, *pod)
+		}
+	}
+
+	return nil
 }
 
 // Create returns mock client's Err field
@@ -455,6 +517,16 @@ func (c MockClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...
 // Status returns the mock client's StatusWriter
 func (c MockClient) Status() client.StatusWriter {
 	return c.StatusWriter
+}
+
+// Apply applies the given apply configuration to the mock client's state.
+// Required by client.Client in controller-runtime v0.22+ (k8s v0.34+).
+func (c MockClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorApply]; ok && value != nil {
+		return value
+	}
+	c.Calls["Apply"] = append(c.Calls["Apply"], MockFuncCall{CTX: ctx})
+	return nil
 }
 
 // ResetCalls resets the function call tracker

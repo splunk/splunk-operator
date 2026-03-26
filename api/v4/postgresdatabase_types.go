@@ -24,6 +24,7 @@ import (
 // PostgresDatabaseSpec defines the desired state of PostgresDatabase.
 // +kubebuilder:validation:XValidation:rule="self.clusterRef == oldSelf.clusterRef",message="clusterRef is immutable"
 type PostgresDatabaseSpec struct {
+	// Reference to Postgres Cluster managed by postgresCluster controller
 	// +kubebuilder:validation:Required
 	ClusterRef corev1.LocalObjectReference `json:"clusterRef"`
 
@@ -48,22 +49,22 @@ type DatabaseInfo struct {
 	Name               string                       `json:"name"`
 	Ready              bool                         `json:"ready"`
 	DatabaseRef        *corev1.LocalObjectReference `json:"databaseRef,omitempty"`
-	AdminUserSecretRef *corev1.LocalObjectReference `json:"adminUserSecretRef,omitempty"`
-	RWUserSecretRef    *corev1.LocalObjectReference `json:"rwUserSecretRef,omitempty"`
+	AdminUserSecretRef *corev1.SecretKeySelector    `json:"adminUserSecretRef,omitempty"`
+	RWUserSecretRef    *corev1.SecretKeySelector    `json:"rwUserSecretRef,omitempty"`
 	ConfigMapRef       *corev1.LocalObjectReference `json:"configMap,omitempty"`
 }
 
 // PostgresDatabaseStatus defines the observed state of PostgresDatabase.
 type PostgresDatabaseStatus struct {
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase *string `json:"phase,omitempty"`
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
 	Databases []DatabaseInfo `json:"databases,omitempty"`
 	// ObservedGeneration represents the .metadata.generation that the status was set based upon.
 	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true

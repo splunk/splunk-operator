@@ -50,9 +50,8 @@ spec:
             description: PostgresDatabaseSpec defines the desired state of PostgresDatabase.
             properties:
               clusterRef:
-                description: |-
-                  LocalObjectReference contains enough information to let you locate the
-                  referenced object inside the same namespace.
+                description: Reference to Postgres Cluster managed by postgresCluster
+                  controller
                 properties:
                   name:
                     default: ""
@@ -160,10 +159,12 @@ spec:
                 items:
                   properties:
                     adminUserSecretRef:
-                      description: |-
-                        LocalObjectReference contains enough information to let you locate the
-                        referenced object inside the same namespace.
+                      description: SecretKeySelector selects a key of a Secret.
                       properties:
+                        key:
+                          description: The key of the secret to select from.  Must
+                            be a valid secret key.
+                          type: string
                         name:
                           default: ""
                           description: |-
@@ -173,6 +174,12 @@ spec:
                             almost certainly wrong.
                             More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
                           type: string
+                        optional:
+                          description: Specify whether the Secret or its key must
+                            be defined
+                          type: boolean
+                      required:
+                      - key
                       type: object
                       x-kubernetes-map-type: atomic
                     configMap:
@@ -212,10 +219,12 @@ spec:
                     ready:
                       type: boolean
                     rwUserSecretRef:
-                      description: |-
-                        LocalObjectReference contains enough information to let you locate the
-                        referenced object inside the same namespace.
+                      description: SecretKeySelector selects a key of a Secret.
                       properties:
+                        key:
+                          description: The key of the secret to select from.  Must
+                            be a valid secret key.
+                          type: string
                         name:
                           default: ""
                           description: |-
@@ -225,6 +234,12 @@ spec:
                             almost certainly wrong.
                             More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
                           type: string
+                        optional:
+                          description: Specify whether the Secret or its key must
+                            be defined
+                          type: boolean
+                      required:
+                      - key
                       type: object
                       x-kubernetes-map-type: atomic
                   type: object

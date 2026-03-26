@@ -22,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// +kubebuilder:validation:XValidation:rule="!has(self.cnpg) || self.provisioner == 'postgresql.cnpg.io'",message="cnpg config can only be set when provisioner is postgresql.cnpg.io"
 // +kubebuilder:validation:XValidation:rule="!has(self.config) || !has(self.config.connectionPoolerEnabled) || !self.config.connectionPoolerEnabled || (has(self.cnpg) && has(self.cnpg.connectionPooler))",message="cnpg.connectionPooler must be set when config.connectionPoolerEnabled is true"
 // PostgresClusterClassSpec defines the desired state of PostgresClusterClass.
 // PostgresClusterClass is immutable after creation - it serves as a template for Cluster CRs.
@@ -37,7 +38,7 @@ type PostgresClusterClassSpec struct {
 	// Can be overridden in PostgresCluster CR.
 	// +kubebuilder:default={}
 	// +optional
-	Config PosgresClusterClassConfig `json:"config,omitempty"`
+	Config *PostgresClusterClassConfig `json:"config,omitempty"`
 
 	// CNPG contains CloudNativePG-specific configuration and policies.
 	// Only used when Provisioner is "postgresql.cnpg.io"
@@ -46,9 +47,9 @@ type PostgresClusterClassSpec struct {
 	CNPG *CNPGConfig `json:"cnpg,omitempty"`
 }
 
-// PosgresClusterClassConfig contains provider-agnostic cluster configuration.
+// PostgresClusterClassConfig contains provider-agnostic cluster configuration.
 // These fields define PostgresCluster infrastructure and can be overridden in PostgresCluster CR.
-type PosgresClusterClassConfig struct {
+type PostgresClusterClassConfig struct {
 	// Instances is the number of database instances (1 primary + N replicas).
 	// Single instance (1) is suitable for development.
 	// High availability requires at least 3 instances (1 primary + 2 replicas).
@@ -149,7 +150,7 @@ type CNPGConfig struct {
 	// +kubebuilder:validation:Enum=restart;switchover
 	// +kubebuilder:default=switchover
 	// +optional
-	PrimaryUpdateMethod string `json:"primaryUpdateMethod,omitempty"`
+	PrimaryUpdateMethod *string `json:"primaryUpdateMethod,omitempty"`
 
 	// ConnectionPooler contains PgBouncer connection pooler configuration.
 	// When enabled, creates RW and RO pooler deployments for clusters using this class.
@@ -166,7 +167,7 @@ type PostgresClusterClassStatus struct {
 	// Phase represents the current phase of the PostgresClusterClass.
 	// Valid phases: "Ready", "Invalid"
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase *string `json:"phase,omitempty"`
 }
 
 // +kubebuilder:object:root=true
