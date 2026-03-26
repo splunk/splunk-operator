@@ -41,7 +41,7 @@ func PostgresDatabaseService(
 	logger.Info("Reconciling PostgresDatabase", "name", postgresDB.Name, "namespace", postgresDB.Namespace)
 
 	updateStatus := func(conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) error {
-		return setStatus(ctx, c, postgresDB, conditionType, conditionStatus, reason, message, phase)
+		return persistStatus(ctx, c, postgresDB, conditionType, conditionStatus, reason, message, phase)
 	}
 
 	// Finalizer: cleanup on deletion, register on creation.
@@ -68,23 +68,24 @@ func PostgresDatabaseService(
 	}
 
 	// Phase: ClusterValidation
-	cluster, clusterStatus, err := ensureClusterReady(ctx, c, postgresDB)
+	cluster, err := fetchCluster(ctx, c, postgresDB)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterNotFound, "Cluster CR not found", pendingDBPhase); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{RequeueAfter: clusterNotFoundRetryDelay}, nil
+		}
 		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterInfoFetchFailed,
 			"Can't reach Cluster CR due to transient errors", pendingDBPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
 		}
 		return ctrl.Result{}, err
 	}
+	clusterStatus := getClusterReadyStatus(cluster)
 	logger.Info("Cluster validation done", "clusterName", postgresDB.Spec.ClusterRef.Name, "status", clusterStatus)
 
 	switch clusterStatus {
-	case ClusterNotFound:
-		if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterNotFound, "Cluster CR not found", pendingDBPhase); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{RequeueAfter: clusterNotFoundRetryDelay}, nil
-
 	case ClusterNotReady, ClusterNoProvisionerRef:
 		if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterProvisioning, "Cluster is not in ready state yet", pendingDBPhase); err != nil {
 			return ctrl.Result{}, err
@@ -299,23 +300,27 @@ func reconcileRWRolePrivileges(
 	return stderrors.Join(errs...)
 }
 
-func ensureClusterReady(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase) (*enterprisev4.PostgresCluster, clusterReadyStatus, error) {
+func fetchCluster(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase) (*enterprisev4.PostgresCluster, error) {
 	logger := log.FromContext(ctx)
 	cluster := &enterprisev4.PostgresCluster{}
 	if err := c.Get(ctx, types.NamespacedName{Name: postgresDB.Spec.ClusterRef.Name, Namespace: postgresDB.Namespace}, cluster); err != nil {
 		if errors.IsNotFound(err) {
-			return nil, ClusterNotFound, nil
+			return nil, err
 		}
 		logger.Error(err, "Failed to fetch Cluster", "name", postgresDB.Spec.ClusterRef.Name)
-		return nil, ClusterNotReady, err
+		return nil, err
 	}
+	return cluster, nil
+}
+
+func getClusterReadyStatus(cluster *enterprisev4.PostgresCluster) clusterReadyStatus {
 	if cluster.Status.Phase == nil || *cluster.Status.Phase != string(ClusterReady) {
-		return cluster, ClusterNotReady, nil
+		return ClusterNotReady
 	}
 	if cluster.Status.ProvisionerRef == nil {
-		return cluster, ClusterNoProvisionerRef, nil
+		return ClusterNoProvisionerRef
 	}
-	return cluster, ClusterReady, nil
+	return ClusterReady
 }
 
 func getDesiredUsers(postgresDB *enterprisev4.PostgresDatabase) []string {
@@ -383,30 +388,8 @@ func parseRoleNames(raw []byte) []string {
 
 func patchManagedRoles(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) error {
 	logger := log.FromContext(ctx)
-	allRoles := make([]enterprisev4.ManagedRole, 0, len(postgresDB.Spec.Databases)*2)
-	for _, dbSpec := range postgresDB.Spec.Databases {
-		allRoles = append(allRoles,
-			enterprisev4.ManagedRole{
-				Name:   adminRoleName(dbSpec.Name),
-				Exists: true,
-				PasswordSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)},
-					Key: secretKeyPassword},
-			},
-			enterprisev4.ManagedRole{
-				Name:   rwRoleName(dbSpec.Name),
-				Exists: true,
-				PasswordSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)},
-					Key: secretKeyPassword},
-			})
-	}
-	rolePatch := &unstructured.Unstructured{
-		Object: map[string]any{
-			"apiVersion": cluster.APIVersion,
-			"kind":       cluster.Kind,
-			"metadata":   map[string]any{"name": cluster.Name, "namespace": cluster.Namespace},
-			"spec":       map[string]any{"managedRoles": allRoles},
-		},
-	}
+	allRoles := buildManagedRoles(postgresDB.Name, postgresDB.Spec.Databases)
+	rolePatch := buildManagedRolesPatch(cluster, allRoles)
 	fieldManager := fieldManagerName(postgresDB.Name)
 	if err := c.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManager)); err != nil {
 		logger.Error(err, "Failed to add users to PostgresCluster", "postgresDatabase", postgresDB.Name)
@@ -442,20 +425,11 @@ func reconcileCNPGDatabases(ctx context.Context, c client.Client, scheme *runtim
 	logger := log.FromContext(ctx)
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		cnpgDBName := cnpgDatabaseName(postgresDB.Name, dbSpec.Name)
-		reclaimPolicy := cnpgv1.DatabaseReclaimDelete
-		if dbSpec.DeletionPolicy == deletionPolicyRetain {
-			reclaimPolicy = cnpgv1.DatabaseReclaimRetain
-		}
 		cnpgDB := &cnpgv1.Database{
 			ObjectMeta: metav1.ObjectMeta{Name: cnpgDBName, Namespace: postgresDB.Namespace},
 		}
 		_, err := controllerutil.CreateOrUpdate(ctx, c, cnpgDB, func() error {
-			cnpgDB.Spec = cnpgv1.DatabaseSpec{
-				Name:          dbSpec.Name,
-				Owner:         adminRoleName(dbSpec.Name),
-				ClusterRef:    corev1.LocalObjectReference{Name: cluster.Status.ProvisionerRef.Name},
-				ReclaimPolicy: reclaimPolicy,
-			}
+			cnpgDB.Spec = buildCNPGDatabaseSpec(cluster.Status.ProvisionerRef.Name, dbSpec)
 			reAdopting := cnpgDB.Annotations[annotationRetainedFrom] == postgresDB.Name
 			if reAdopting {
 				logger.Info("Re-adopting orphaned CNPG Database", "name", cnpgDBName)
@@ -488,7 +462,12 @@ func verifyDatabasesReady(ctx context.Context, c client.Client, postgresDB *ente
 	return notReady, nil
 }
 
-func setStatus(ctx context.Context, c client.Client, db *enterprisev4.PostgresDatabase, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) error {
+func persistStatus(ctx context.Context, c client.Client, db *enterprisev4.PostgresDatabase, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) error {
+	applyStatus(db, conditionType, conditionStatus, reason, message, phase)
+	return c.Status().Update(ctx, db)
+}
+
+func applyStatus(db *enterprisev4.PostgresDatabase, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) {
 	meta.SetStatusCondition(&db.Status.Conditions, metav1.Condition{
 		Type:               string(conditionType),
 		Status:             conditionStatus,
@@ -498,7 +477,6 @@ func setStatus(ctx context.Context, c client.Client, db *enterprisev4.PostgresDa
 	})
 	p := string(phase)
 	db.Status.Phase = &p
-	return c.Status().Update(ctx, db)
 }
 
 func buildDeletionPlan(databases []enterprisev4.DatabaseDefinition) deletionPlan {
@@ -703,9 +681,9 @@ func deleteSecrets(ctx context.Context, c client.Client, postgresDB *enterprisev
 	return nil
 }
 
-func buildRetainedRoles(postgresDBName string, retained []enterprisev4.DatabaseDefinition) []enterprisev4.ManagedRole {
-	roles := make([]enterprisev4.ManagedRole, 0, len(retained)*2)
-	for _, dbSpec := range retained {
+func buildManagedRoles(postgresDBName string, databases []enterprisev4.DatabaseDefinition) []enterprisev4.ManagedRole {
+	roles := make([]enterprisev4.ManagedRole, 0, len(databases)*2)
+	for _, dbSpec := range databases {
 		roles = append(roles,
 			enterprisev4.ManagedRole{
 				Name:   adminRoleName(dbSpec.Name),
@@ -724,9 +702,8 @@ func buildRetainedRoles(postgresDBName string, retained []enterprisev4.DatabaseD
 	return roles
 }
 
-func patchManagedRolesOnDeletion(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster, retained []enterprisev4.DatabaseDefinition) error {
-	roles := buildRetainedRoles(postgresDB.Name, retained)
-	rolePatch := &unstructured.Unstructured{
+func buildManagedRolesPatch(cluster *enterprisev4.PostgresCluster, roles []enterprisev4.ManagedRole) *unstructured.Unstructured {
+	return &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": cluster.APIVersion,
 			"kind":       cluster.Kind,
@@ -734,6 +711,11 @@ func patchManagedRolesOnDeletion(ctx context.Context, c client.Client, postgresD
 			"spec":       map[string]any{"managedRoles": roles},
 		},
 	}
+}
+
+func patchManagedRolesOnDeletion(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster, retained []enterprisev4.DatabaseDefinition) error {
+	roles := buildManagedRoles(postgresDB.Name, retained)
+	rolePatch := buildManagedRolesPatch(cluster, roles)
 	if err := c.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManagerName(postgresDB.Name))); err != nil {
 		return fmt.Errorf("patching managed roles on deletion: %w", err)
 	}
@@ -829,6 +811,19 @@ func buildPasswordSecret(postgresDB *enterprisev4.PostgresDatabase, secretName, 
 			Labels:    map[string]string{labelManagedBy: "splunk-operator", labelCNPGReload: "true"},
 		},
 		Data: map[string][]byte{"username": []byte(roleName), secretKeyPassword: []byte(pw)},
+	}
+}
+
+func buildCNPGDatabaseSpec(clusterName string, dbSpec enterprisev4.DatabaseDefinition) cnpgv1.DatabaseSpec {
+	reclaimPolicy := cnpgv1.DatabaseReclaimDelete
+	if dbSpec.DeletionPolicy == deletionPolicyRetain {
+		reclaimPolicy = cnpgv1.DatabaseReclaimRetain
+	}
+	return cnpgv1.DatabaseSpec{
+		Name:          dbSpec.Name,
+		Owner:         adminRoleName(dbSpec.Name),
+		ClusterRef:    corev1.LocalObjectReference{Name: clusterName},
+		ReclaimPolicy: reclaimPolicy,
 	}
 }
 
