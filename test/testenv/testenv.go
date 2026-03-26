@@ -49,7 +49,7 @@ const (
 	defaultSplunkImage   = "splunk/splunk:latest"
 
 	// defaultTestTimeout is the max timeout in seconds before async test failed.
-	defaultTestTimeout = 1000000
+	defaultTestTimeout = 2700
 
 	// PollInterval specifies the polling interval
 	PollInterval = 5 * time.Second

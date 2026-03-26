@@ -54,14 +54,17 @@ var _ = Describe("m4appfw test", func() {
 	BeforeEach(func() {
 		var err error
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		fmt.Printf("[DEBUG] M4-manager BeforeEach starting, name=%s\n", name)
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
+		fmt.Printf("[DEBUG] M4-manager BeforeEach testcaseenv created, namespace=%s\n", testcaseEnvInst.GetName())
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 		testDirIdxc = "m4appfw-idxc-" + testenv.RandomDNSName(4)
 		testDirShc = "m4appfw-shc-" + testenv.RandomDNSName(4)
 		appSourceVolumeNameIdxc = "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 		appSourceVolumeNameShc = "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
+		fmt.Printf("[DEBUG] M4-manager BeforeEach complete, deployment=%s\n", deployment.GetName())
 	})
 
 	AfterEach(func() {
