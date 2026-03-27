@@ -328,7 +328,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName, ansibleConfi
 
 	new := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterManager",
+			Kind: "ClusterMaster",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,
