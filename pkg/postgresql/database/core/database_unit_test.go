@@ -1289,6 +1289,7 @@ func TestBuildManagedRoles(t *testing.T) {
 }
 
 func TestBuildManagedRolesPatch(t *testing.T) {
+	scheme := testScheme(t)
 	cluster := &enterprisev4.PostgresCluster{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: enterprisev4.GroupVersion.String(),
@@ -1300,8 +1301,10 @@ func TestBuildManagedRolesPatch(t *testing.T) {
 		},
 	}
 	roles := buildManagedRoles("primary", []enterprisev4.DatabaseDefinition{{Name: "payments"}})
+	c := testClient(t, scheme, cluster)
 
-	got := buildManagedRolesPatch(cluster, roles)
+	got, err := buildManagedRolesPatch(cluster, roles, c.Scheme())
+	require.NoError(t, err)
 
 	assert.Equal(t, cluster.APIVersion, got.Object["apiVersion"])
 	assert.Equal(t, cluster.Kind, got.Object["kind"])

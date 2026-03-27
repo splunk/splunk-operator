@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -389,7 +390,11 @@ func parseRoleNames(raw []byte) []string {
 func patchManagedRoles(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) error {
 	logger := log.FromContext(ctx)
 	allRoles := buildManagedRoles(postgresDB.Name, postgresDB.Spec.Databases)
-	rolePatch := buildManagedRolesPatch(cluster, allRoles)
+	rolePatch, err := buildManagedRolesPatch(cluster, allRoles, c.Scheme())
+	if err != nil {
+		logger.Error(err, "Failed to build managed roles patch", "postgresDatabase", postgresDB.Name)
+		return fmt.Errorf("building managed roles patch for PostgresDatabase %s: %w", postgresDB.Name, err)
+	}
 	fieldManager := fieldManagerName(postgresDB.Name)
 	if err := c.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManager)); err != nil {
 		logger.Error(err, "Failed to add users to PostgresCluster", "postgresDatabase", postgresDB.Name)
@@ -702,20 +707,27 @@ func buildManagedRoles(postgresDBName string, databases []enterprisev4.DatabaseD
 	return roles
 }
 
-func buildManagedRolesPatch(cluster *enterprisev4.PostgresCluster, roles []enterprisev4.ManagedRole) *unstructured.Unstructured {
+func buildManagedRolesPatch(cluster *enterprisev4.PostgresCluster, roles []enterprisev4.ManagedRole, scheme *runtime.Scheme) (*unstructured.Unstructured, error) {
+	gvk, err := apiutil.GVKForObject(cluster, scheme)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get GVK for Cluster: %w", err)
+	}
 	return &unstructured.Unstructured{
 		Object: map[string]any{
-			"apiVersion": cluster.APIVersion,
-			"kind":       cluster.Kind,
+			"apiVersion": gvk.GroupVersion().String(),
+			"kind":       gvk.Kind,
 			"metadata":   map[string]any{"name": cluster.Name, "namespace": cluster.Namespace},
 			"spec":       map[string]any{"managedRoles": roles},
 		},
-	}
+	}, nil
 }
 
 func patchManagedRolesOnDeletion(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster, retained []enterprisev4.DatabaseDefinition) error {
 	roles := buildManagedRoles(postgresDB.Name, retained)
-	rolePatch := buildManagedRolesPatch(cluster, roles)
+	rolePatch, err := buildManagedRolesPatch(cluster, roles, c.Scheme())
+	if err != nil {
+		return fmt.Errorf("building managed roles patch: %w", err)
+	}
 	if err := c.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManagerName(postgresDB.Name))); err != nil {
 		return fmt.Errorf("patching managed roles on deletion: %w", err)
 	}
