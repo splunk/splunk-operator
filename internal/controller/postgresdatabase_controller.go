@@ -108,9 +108,12 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			),
 		)).
-		Owns(&cnpgv1.Database{}).
-		Owns(&corev1.Secret{}).
-		Owns(&corev1.ConfigMap{}).
+		Owns(&cnpgv1.Database{}, builder.WithPredicates(predicate.Funcs{
+			CreateFunc: func(event.CreateEvent) bool { return false },
+			DeleteFunc: func(event.DeleteEvent) bool { return false },
+		})).
+		Owns(&corev1.Secret{}, builder.WithPredicates(predicate.NewPredicateFuncs(func(client.Object) bool { return false }))).
+		Owns(&corev1.ConfigMap{}, builder.WithPredicates(predicate.NewPredicateFuncs(func(client.Object) bool { return false }))).
 		Named("postgresdatabase").
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: DatabaseTotalWorker,
