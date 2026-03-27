@@ -90,6 +90,10 @@ func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised
 
 	// check for changes in Pod template
 	hasUpdates := MergePodUpdates(ctx, &current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName())
+
+	// check for changes in StatefulSet-level metadata (labels and annotations)
+	hasUpdates = hasUpdates || splcommon.MergeStatefulSetMetaUpdates(ctx, &current.ObjectMeta, &revised.ObjectMeta, current.GetName())
+
 	*revised = current // caller expects that object passed represents latest state
 
 	// only update if there are material differences, as determined by comparison function
