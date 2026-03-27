@@ -162,6 +162,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			logger.Error(err, "Failed to update status after secret creation")
 			return ctrl.Result{}, err
 		}
+		rc.emitNormal(postgresCluster, EventSecretReady, fmt.Sprintf("Superuser secret %s created", postgresSecretName))
 		logger.Info("SuperUserSecretRef persisted to status")
 	}
 
@@ -173,6 +174,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	}
 	if secretExists && !hasOwnerRef {
 		logger.Info("Connecting existing secret to PostgresCluster by adding owner reference", "name", postgresSecretName)
+		rc.emitNormal(postgresCluster, EventClusterAdopted, fmt.Sprintf("Adopted existing CNPG cluster and secret %s", postgresSecretName))
 		originalSecret := secret.DeepCopy()
 		if err := ctrl.SetControllerReference(postgresCluster, secret, rc.Scheme); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to set controller reference on existing secret: %w", err)
@@ -395,8 +397,10 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		}
 		switch createOrUpdateResult {
 		case controllerutil.OperationResultCreated:
+			rc.emitNormal(postgresCluster, EventConfigMapReady, fmt.Sprintf("ConfigMap %s created", desiredCM.Name))
 			logger.Info("ConfigMap created", "name", desiredCM.Name)
 		case controllerutil.OperationResultUpdated:
+			rc.emitNormal(postgresCluster, EventConfigMapReady, fmt.Sprintf("ConfigMap %s updated", desiredCM.Name))
 			logger.Info("ConfigMap updated", "name", desiredCM.Name)
 		default:
 			logger.Info("ConfigMap unchanged", "name", desiredCM.Name)

@@ -96,7 +96,7 @@ func PostgresDatabaseService(
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 
 	case ClusterReady:
-		rc.emitConditionTransition(postgresDB, postgresDB.Status.Conditions, string(clusterReady), EventClusterValidated, "Referenced PostgresCluster is ready")
+		rc.emitNormal(postgresDB, EventClusterValidated, "Referenced PostgresCluster is ready")
 		if err := updateStatus(clusterReady, metav1.ConditionTrue, reasonClusterAvailable, "Cluster is operational", provisioningDBPhase); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -137,6 +137,7 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{}, err
 	}
+	rc.emitNormal(postgresDB, EventSecretsReady, fmt.Sprintf("All secrets provisioned for %d databases", len(postgresDB.Spec.Databases)))
 	if err := updateStatus(secretsReady, metav1.ConditionTrue, reasonSecretsCreated,
 		fmt.Sprintf("All secrets provisioned for %d databases", len(postgresDB.Spec.Databases)), provisioningDBPhase); err != nil {
 		return ctrl.Result{}, err
@@ -153,6 +154,7 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{}, err
 	}
+	rc.emitNormal(postgresDB, EventConfigMapsReady, fmt.Sprintf("All ConfigMaps provisioned for %d databases", len(postgresDB.Spec.Databases)))
 	if err := updateStatus(configMapsReady, metav1.ConditionTrue, reasonConfigMapsCreated,
 		fmt.Sprintf("All ConfigMaps provisioned for %d databases", len(postgresDB.Spec.Databases)), provisioningDBPhase); err != nil {
 		return ctrl.Result{}, err
@@ -175,7 +177,7 @@ func PostgresDatabaseService(
 			rc.emitWarning(postgresDB, EventManagedRolesPatchFailed, fmt.Sprintf("Failed to patch managed roles: %v", err))
 			return ctrl.Result{}, err
 		}
-		rc.emitNormal(postgresDB, EventUsersReconciling, fmt.Sprintf("Waiting for %d users to reconcile", len(desiredUsers)))
+		rc.emitNormal(postgresDB, EventRoleReconciliationStarted, fmt.Sprintf("Patched managed roles, waiting for %d roles to reconcile", len(desiredUsers)))
 		if err := updateStatus(rolesReady, metav1.ConditionFalse, reasonWaitingForCNPG,
 			fmt.Sprintf("Waiting for %d roles to be reconciled", len(desiredUsers)), provisioningDBPhase); err != nil {
 			return ctrl.Result{}, err
@@ -199,17 +201,21 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	}
-	rc.emitConditionTransition(postgresDB, postgresDB.Status.Conditions, string(rolesReady), EventRolesReady, fmt.Sprintf("All %d users reconciled", len(desiredUsers)))
+	rc.emitNormal(postgresDB, EventRolesReady, fmt.Sprintf("All %d roles reconciled", len(desiredUsers)))
 	if err := updateStatus(rolesReady, metav1.ConditionTrue, reasonUsersAvailable,
 		fmt.Sprintf("All %d users in PostgreSQL", len(desiredUsers)), provisioningDBPhase); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	// Phase: DatabaseProvisioning
-	if err := reconcileCNPGDatabases(ctx, c, rc.Scheme, postgresDB, cluster); err != nil {
+	adopted, err := reconcileCNPGDatabases(ctx, c, rc.Scheme, postgresDB, cluster)
+	if err != nil {
 		logger.Error(err, "Failed to reconcile CNPG Databases")
 		rc.emitWarning(postgresDB, EventDatabasesReconcileFailed, fmt.Sprintf("Failed to reconcile databases: %v", err))
 		return ctrl.Result{}, err
+	}
+	if len(adopted) > 0 {
+		rc.emitNormal(postgresDB, EventResourcesAdopted, fmt.Sprintf("Adopted retained databases: %v", adopted))
 	}
 
 	notReadyDBs, err := verifyDatabasesReady(ctx, c, postgresDB)
@@ -224,7 +230,7 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	}
-	rc.emitConditionTransition(postgresDB, postgresDB.Status.Conditions, string(databasesReady), EventDatabasesReady, fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)))
+	rc.emitNormal(postgresDB, EventDatabasesReady, fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)))
 	if err := updateStatus(databasesReady, metav1.ConditionTrue, reasonDatabasesAvailable,
 		fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)), readyDBPhase); err != nil {
 		return ctrl.Result{}, err
@@ -267,13 +273,14 @@ func PostgresDatabaseService(
 			}
 			return ctrl.Result{}, err
 		}
-		rc.emitConditionTransition(postgresDB, postgresDB.Status.Conditions, string(privilegesReady), EventPrivilegesReady, fmt.Sprintf("RW role privileges granted for all %d databases", len(postgresDB.Spec.Databases)))
+		rc.emitNormal(postgresDB, EventPrivilegesReady, fmt.Sprintf("RW role privileges granted for all %d databases", len(postgresDB.Spec.Databases)))
 		if err := updateStatus(privilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted,
 			fmt.Sprintf("RW role privileges granted for all %d databases", len(postgresDB.Spec.Databases)), readyDBPhase); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
 
+	rc.emitNormal(postgresDB, EventPostgresDatabaseReady, fmt.Sprintf("PostgresDatabase %s is ready", postgresDB.Name))
 	postgresDB.Status.Databases = populateDatabaseStatus(postgresDB)
 	postgresDB.Status.ObservedGeneration = &postgresDB.Generation
 
@@ -436,8 +443,9 @@ func verifyRolesReady(ctx context.Context, expectedUsers []string, cnpgCluster *
 	return notReady, nil
 }
 
-func reconcileCNPGDatabases(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) error {
+func reconcileCNPGDatabases(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) ([]string, error) {
 	logger := log.FromContext(ctx)
+	var adopted []string
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		cnpgDBName := cnpgDatabaseName(postgresDB.Name, dbSpec.Name)
 		cnpgDB := &cnpgv1.Database{
@@ -449,6 +457,7 @@ func reconcileCNPGDatabases(ctx context.Context, c client.Client, scheme *runtim
 			if reAdopting {
 				logger.Info("Re-adopting orphaned CNPG Database", "name", cnpgDBName)
 				delete(cnpgDB.Annotations, annotationRetainedFrom)
+				adopted = append(adopted, dbSpec.Name)
 			}
 			if cnpgDB.CreationTimestamp.IsZero() || reAdopting {
 				return controllerutil.SetControllerReference(postgresDB, cnpgDB, scheme)
@@ -456,10 +465,10 @@ func reconcileCNPGDatabases(ctx context.Context, c client.Client, scheme *runtim
 			return nil
 		})
 		if err != nil {
-			return fmt.Errorf("reconciling CNPG Database %s: %w", cnpgDBName, err)
+			return adopted, fmt.Errorf("reconciling CNPG Database %s: %w", cnpgDBName, err)
 		}
 	}
-	return nil
+	return adopted, nil
 }
 
 func verifyDatabasesReady(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase) ([]string, error) {

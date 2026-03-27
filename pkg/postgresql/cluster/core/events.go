@@ -11,6 +11,9 @@ import (
 
 // Event reason constants — stable strings for kubectl filtering.
 const (
+	EventSecretReady              = "SecretReady"
+	EventConfigMapReady           = "ConfigMapReady"
+	EventClusterAdopted           = "ClusterAdopted"
 	EventClusterCreating          = "ClusterCreating"
 	EventClusterUpdated           = "ClusterUpdated"
 	EventClusterReady             = "ClusterReady"
