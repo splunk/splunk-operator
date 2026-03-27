@@ -9,7 +9,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Event reason constants — stable strings for kubectl filtering.
 const (
 	EventSecretReady              = "SecretReady"
 	EventConfigMapReady           = "ConfigMapReady"

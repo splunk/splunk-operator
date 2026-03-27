@@ -10,8 +10,6 @@ import (
 )
 
 // ReconcileContext bundles infrastructure dependencies injected by the controller
-// shell (primary adapter). The service layer declares what it needs via this struct
-// rather than reaching into context — keeping ports explicit and testable.
 type ReconcileContext struct {
 	Client   client.Client
 	Scheme   *runtime.Scheme
