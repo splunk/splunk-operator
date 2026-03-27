@@ -4,7 +4,17 @@ import (
 	"time"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// ReconcileContext bundles infrastructure dependencies injected by the controller
+type ReconcileContext struct {
+	Client   client.Client
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
+}
 
 type reconcileDBPhases string
 type conditionTypes string

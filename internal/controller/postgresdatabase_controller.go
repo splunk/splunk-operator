@@ -29,6 +29,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,7 +42,8 @@ import (
 // PostgresDatabaseReconciler reconciles a PostgresDatabase object.
 type PostgresDatabaseReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 const (
@@ -56,6 +58,7 @@ const (
 //+kubebuilder:rbac:groups=postgresql.cnpg.io,resources=databases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;delete
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;delete
+//+kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -68,7 +71,8 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		return ctrl.Result{}, err
 	}
-	return dbcore.PostgresDatabaseService(ctx, r.Client, r.Scheme, postgresDB, dbadapter.NewDBRepository)
+	rc := &dbcore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder}
+	return dbcore.PostgresDatabaseService(ctx, rc, postgresDB, dbadapter.NewDBRepository)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -104,9 +108,15 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			),
 		)).
-		Owns(&cnpgv1.Database{}).
-		Owns(&corev1.Secret{}).
-		Owns(&corev1.ConfigMap{}).
+		Owns(&cnpgv1.Database{}, builder.WithPredicates(predicate.Funcs{
+			CreateFunc: func(event.CreateEvent) bool { return false },
+		})).
+		Owns(&corev1.Secret{}, builder.WithPredicates(predicate.Funcs{
+			CreateFunc: func(event.CreateEvent) bool { return false },
+		})).
+		Owns(&corev1.ConfigMap{}, builder.WithPredicates(predicate.Funcs{
+			CreateFunc: func(event.CreateEvent) bool { return false },
+		})).
 		Named("postgresdatabase").
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: DatabaseTotalWorker,
