@@ -52,12 +52,18 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{}, nil
 	}
+	// Add finalizer if not present.
 	if !controllerutil.ContainsFinalizer(postgresDB, postgresDatabaseFinalizerName) {
 		controllerutil.AddFinalizer(postgresDB, postgresDatabaseFinalizerName)
 		if err := c.Update(ctx, postgresDB); err != nil {
+			if errors.IsConflict(err) {
+				logger.Info("Conflict while adding finalizer, will requeue")
+				return ctrl.Result{Requeue: true}, nil
+			}
 			logger.Error(err, "Failed to add finalizer to PostgresDatabase")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
+		logger.Info("Finalizer added successfully")
 		return ctrl.Result{}, nil
 	}
 
@@ -105,10 +111,12 @@ func PostgresDatabaseService(
 			"If you deleted a previous PostgresDatabase, recreate it with the original name to re-adopt the orphaned resources.",
 			strings.Join(roleConflicts, ", "))
 		logger.Error(nil, conflictMsg)
+		errs := []error{fmt.Errorf("role conflict detected: %s", strings.Join(roleConflicts, ", "))}
 		if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonRoleConflict, conflictMsg, failedDBPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
+			errs = append(errs, fmt.Errorf("failed to update status: %w", statusErr))
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, stderrors.Join(errs...)
 	}
 
 	// We need the CNPG Cluster directly because PostgresCluster status does not yet

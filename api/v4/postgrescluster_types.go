@@ -44,7 +44,7 @@ type ManagedRole struct {
 // Validation rules ensure immutability of Class, and that Storage and PostgresVersion can only be set once and cannot be removed or downgraded.
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.postgresVersion) || (has(self.postgresVersion) && int(self.postgresVersion.split('.')[0]) >= int(oldSelf.postgresVersion.split('.')[0]))",messageExpression="!has(self.postgresVersion) ? 'postgresVersion cannot be removed once set (was: ' + oldSelf.postgresVersion + ')' : 'postgresVersion major version cannot be downgraded (from: ' + oldSelf.postgresVersion + ', to: ' + self.postgresVersion + ')'"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.storage) || (has(self.storage) && quantity(self.storage).compareTo(quantity(oldSelf.storage)) >= 0)",messageExpression="!has(self.storage) ? 'storage cannot be removed once set (was: ' + string(oldSelf.storage) + ')' : 'storage size cannot be decreased (from: ' + string(oldSelf.storage) + ', to: ' + string(self.storage) + ')'"
-// +kubebuilder:validation:XValidation:rule="!has(self.connectionPoolerConfig)",message="connectionPoolerConfig cannot be overridden on PostgresCluster"
+
 type PostgresClusterSpec struct {
 	// This field is IMMUTABLE after creation.
 	// +kubebuilder:validation:Required
@@ -92,13 +92,8 @@ type PostgresClusterSpec struct {
 
 	// ConnectionPoolerEnabled controls whether PgBouncer connection pooling is deployed for this cluster.
 	// When set, takes precedence over the class-level connectionPoolerEnabled value.
-	// +kubebuilder:default=false
 	// +optional
 	ConnectionPoolerEnabled *bool `json:"connectionPoolerEnabled,omitempty"`
-
-	// Only takes effect when connection pooling is enabled.
-	// +optional
-	ConnectionPoolerConfig *ConnectionPoolerConfig `json:"connectionPoolerConfig,omitempty"`
 
 	// ManagedRoles contains PostgreSQL roles that should be created in the cluster.
 	// This field supports Server-Side Apply with per-role granularity, allowing
@@ -185,6 +180,7 @@ type ConnectionPoolerStatus struct {
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // PostgresCluster is the Schema for the postgresclusters API.
+// +kubebuilder:validation:XValidation:rule="size(self.metadata.name) <= 50",message="name must be 50 characters or fewer to accommodate derived resource names"
 type PostgresCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
