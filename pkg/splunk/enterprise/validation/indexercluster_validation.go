@@ -40,10 +40,25 @@ func ValidateIndexerClusterCreate(obj *enterpriseApi.IndexerCluster) field.Error
 	return allErrs
 }
 
+// ValidateIndexerClusterCreateWithContext validates an IndexerCluster on CREATE with ValidationContext
+func ValidateIndexerClusterCreateWithContext(obj *enterpriseApi.IndexerCluster, vc *ValidationContext) field.ErrorList {
+	allErrs := ValidateIndexerClusterCreate(obj)
+	if len(obj.Spec.ImagePullSecrets) > 0 {
+		allErrs = append(allErrs, ValidateImagePullSecretsExistence(
+			obj.Spec.ImagePullSecrets, vc, field.NewPath("spec").Child("imagePullSecrets"))...)
+	}
+	return allErrs
+}
+
 // ValidateIndexerClusterUpdate validates an IndexerCluster on UPDATE
 // TODO: Add immutable field validation here (e.g., compare obj vs oldObj for fields that cannot change after creation)
 func ValidateIndexerClusterUpdate(obj, oldObj *enterpriseApi.IndexerCluster) field.ErrorList {
 	return ValidateIndexerClusterCreate(obj)
+}
+
+// ValidateIndexerClusterUpdateWithContext validates an IndexerCluster on UPDATE with ValidationContext
+func ValidateIndexerClusterUpdateWithContext(obj, oldObj *enterpriseApi.IndexerCluster, vc *ValidationContext) field.ErrorList {
+	return ValidateIndexerClusterCreateWithContext(obj, vc)
 }
 
 // GetIndexerClusterWarningsOnCreate returns warnings for IndexerCluster CREATE

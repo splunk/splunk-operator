@@ -76,10 +76,12 @@ var (
 // DefaultValidators is the registry of validators for all Splunk Enterprise CRDs
 var DefaultValidators = map[schema.GroupVersionResource]Validator{
 	StandaloneGVR: &GenericValidator[*enterpriseApi.Standalone]{
-		ValidateCreateFunc:   ValidateStandaloneCreate,
-		ValidateUpdateFunc:   ValidateStandaloneUpdate,
-		WarningsOnCreateFunc: GetStandaloneWarningsOnCreate,
-		WarningsOnUpdateFunc: GetStandaloneWarningsOnUpdate,
+		ValidateCreateFunc:            ValidateStandaloneCreate,
+		ValidateUpdateFunc:            ValidateStandaloneUpdate,
+		ValidateCreateWithContextFunc: ValidateStandaloneCreateWithContext,
+		ValidateUpdateWithContextFunc: ValidateStandaloneUpdateWithContext,
+		WarningsOnCreateFunc:          GetStandaloneWarningsOnCreate,
+		WarningsOnUpdateFunc:          GetStandaloneWarningsOnUpdate,
 		GroupKind: schema.GroupKind{
 			Group: "enterprise.splunk.com",
 			Kind:  "Standalone",
@@ -87,10 +89,12 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 	},
 
 	IndexerClusterGVR: &GenericValidator[*enterpriseApi.IndexerCluster]{
-		ValidateCreateFunc:   ValidateIndexerClusterCreate,
-		ValidateUpdateFunc:   ValidateIndexerClusterUpdate,
-		WarningsOnCreateFunc: GetIndexerClusterWarningsOnCreate,
-		WarningsOnUpdateFunc: GetIndexerClusterWarningsOnUpdate,
+		ValidateCreateFunc:            ValidateIndexerClusterCreate,
+		ValidateUpdateFunc:            ValidateIndexerClusterUpdate,
+		ValidateCreateWithContextFunc: ValidateIndexerClusterCreateWithContext,
+		ValidateUpdateWithContextFunc: ValidateIndexerClusterUpdateWithContext,
+		WarningsOnCreateFunc:          GetIndexerClusterWarningsOnCreate,
+		WarningsOnUpdateFunc:          GetIndexerClusterWarningsOnUpdate,
 		GroupKind: schema.GroupKind{
 			Group: "enterprise.splunk.com",
 			Kind:  "IndexerCluster",
@@ -98,10 +102,12 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 	},
 
 	SearchHeadClusterGVR: &GenericValidator[*enterpriseApi.SearchHeadCluster]{
-		ValidateCreateFunc:   ValidateSearchHeadClusterCreate,
-		ValidateUpdateFunc:   ValidateSearchHeadClusterUpdate,
-		WarningsOnCreateFunc: GetSearchHeadClusterWarningsOnCreate,
-		WarningsOnUpdateFunc: GetSearchHeadClusterWarningsOnUpdate,
+		ValidateCreateFunc:            ValidateSearchHeadClusterCreate,
+		ValidateUpdateFunc:            ValidateSearchHeadClusterUpdate,
+		ValidateCreateWithContextFunc: ValidateSearchHeadClusterCreateWithContext,
+		ValidateUpdateWithContextFunc: ValidateSearchHeadClusterUpdateWithContext,
+		WarningsOnCreateFunc:          GetSearchHeadClusterWarningsOnCreate,
+		WarningsOnUpdateFunc:          GetSearchHeadClusterWarningsOnUpdate,
 		GroupKind: schema.GroupKind{
 			Group: "enterprise.splunk.com",
 			Kind:  "SearchHeadCluster",
@@ -109,10 +115,12 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 	},
 
 	ClusterManagerGVR: &GenericValidator[*enterpriseApi.ClusterManager]{
-		ValidateCreateFunc:   ValidateClusterManagerCreate,
-		ValidateUpdateFunc:   ValidateClusterManagerUpdate,
-		WarningsOnCreateFunc: GetClusterManagerWarningsOnCreate,
-		WarningsOnUpdateFunc: GetClusterManagerWarningsOnUpdate,
+		ValidateCreateFunc:            ValidateClusterManagerCreate,
+		ValidateUpdateFunc:            ValidateClusterManagerUpdate,
+		ValidateCreateWithContextFunc: ValidateClusterManagerCreateWithContext,
+		ValidateUpdateWithContextFunc: ValidateClusterManagerUpdateWithContext,
+		WarningsOnCreateFunc:          GetClusterManagerWarningsOnCreate,
+		WarningsOnUpdateFunc:          GetClusterManagerWarningsOnUpdate,
 		GroupKind: schema.GroupKind{
 			Group: "enterprise.splunk.com",
 			Kind:  "ClusterManager",
@@ -121,10 +129,12 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 
 	// ClusterMaster is an alias for ClusterManager (deprecated)
 	ClusterMasterGVR: &GenericValidator[*enterpriseApi.ClusterManager]{
-		ValidateCreateFunc:   ValidateClusterManagerCreate,
-		ValidateUpdateFunc:   ValidateClusterManagerUpdate,
-		WarningsOnCreateFunc: GetClusterManagerWarningsOnCreate,
-		WarningsOnUpdateFunc: GetClusterManagerWarningsOnUpdate,
+		ValidateCreateFunc:            ValidateClusterManagerCreate,
+		ValidateUpdateFunc:            ValidateClusterManagerUpdate,
+		ValidateCreateWithContextFunc: ValidateClusterManagerCreateWithContext,
+		ValidateUpdateWithContextFunc: ValidateClusterManagerUpdateWithContext,
+		WarningsOnCreateFunc:          GetClusterManagerWarningsOnCreate,
+		WarningsOnUpdateFunc:          GetClusterManagerWarningsOnUpdate,
 		GroupKind: schema.GroupKind{
 			Group: "enterprise.splunk.com",
 			Kind:  "ClusterManager",
@@ -132,10 +142,12 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 	},
 
 	LicenseManagerGVR: &GenericValidator[*enterpriseApi.LicenseManager]{
-		ValidateCreateFunc:   ValidateLicenseManagerCreate,
-		ValidateUpdateFunc:   ValidateLicenseManagerUpdate,
-		WarningsOnCreateFunc: GetLicenseManagerWarningsOnCreate,
-		WarningsOnUpdateFunc: GetLicenseManagerWarningsOnUpdate,
+		ValidateCreateFunc:            ValidateLicenseManagerCreate,
+		ValidateUpdateFunc:            ValidateLicenseManagerUpdate,
+		ValidateCreateWithContextFunc: ValidateLicenseManagerCreateWithContext,
+		ValidateUpdateWithContextFunc: ValidateLicenseManagerUpdateWithContext,
+		WarningsOnCreateFunc:          GetLicenseManagerWarningsOnCreate,
+		WarningsOnUpdateFunc:          GetLicenseManagerWarningsOnUpdate,
 		GroupKind: schema.GroupKind{
 			Group: "enterprise.splunk.com",
 			Kind:  "LicenseManager",
@@ -144,10 +156,12 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 
 	// LicenseMaster is an alias for LicenseManager (deprecated)
 	LicenseMasterGVR: &GenericValidator[*enterpriseApi.LicenseManager]{
-		ValidateCreateFunc:   ValidateLicenseManagerCreate,
-		ValidateUpdateFunc:   ValidateLicenseManagerUpdate,
-		WarningsOnCreateFunc: GetLicenseManagerWarningsOnCreate,
-		WarningsOnUpdateFunc: GetLicenseManagerWarningsOnUpdate,
+		ValidateCreateFunc:            ValidateLicenseManagerCreate,
+		ValidateUpdateFunc:            ValidateLicenseManagerUpdate,
+		ValidateCreateWithContextFunc: ValidateLicenseManagerCreateWithContext,
+		ValidateUpdateWithContextFunc: ValidateLicenseManagerUpdateWithContext,
+		WarningsOnCreateFunc:          GetLicenseManagerWarningsOnCreate,
+		WarningsOnUpdateFunc:          GetLicenseManagerWarningsOnUpdate,
 		GroupKind: schema.GroupKind{
 			Group: "enterprise.splunk.com",
 			Kind:  "LicenseManager",
@@ -155,10 +169,12 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 	},
 
 	MonitoringConsoleGVR: &GenericValidator[*enterpriseApi.MonitoringConsole]{
-		ValidateCreateFunc:   ValidateMonitoringConsoleCreate,
-		ValidateUpdateFunc:   ValidateMonitoringConsoleUpdate,
-		WarningsOnCreateFunc: GetMonitoringConsoleWarningsOnCreate,
-		WarningsOnUpdateFunc: GetMonitoringConsoleWarningsOnUpdate,
+		ValidateCreateFunc:            ValidateMonitoringConsoleCreate,
+		ValidateUpdateFunc:            ValidateMonitoringConsoleUpdate,
+		ValidateCreateWithContextFunc: ValidateMonitoringConsoleCreateWithContext,
+		ValidateUpdateWithContextFunc: ValidateMonitoringConsoleUpdateWithContext,
+		WarningsOnCreateFunc:          GetMonitoringConsoleWarningsOnCreate,
+		WarningsOnUpdateFunc:          GetMonitoringConsoleWarningsOnUpdate,
 		GroupKind: schema.GroupKind{
 			Group: "enterprise.splunk.com",
 			Kind:  "MonitoringConsole",

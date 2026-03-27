@@ -17,8 +17,10 @@ limitations under the License.
 package validation
 
 import (
+	"fmt"
 	"regexp"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -42,12 +44,136 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *fie
 	// Validate VarVolumeStorageConfig
 	allErrs = append(allErrs, validateStorageConfig(&spec.VarVolumeStorageConfig, fldPath.Child("varVolumeStorageConfig"))...)
 
+	// Validate extraEnv uniqueness by Name
+	seenEnvNames := make(map[string]int) // map name -> first index seen
+	for i, env := range spec.ExtraEnv {
+		if firstIdx, exists := seenEnvNames[env.Name]; exists {
+			allErrs = append(allErrs, field.Duplicate(
+				fldPath.Child("extraEnv").Index(i).Child("name"),
+				fmt.Sprintf("environment variable name %q is duplicate (same as extraEnv[%d])", env.Name, firstIdx)))
+		} else {
+			seenEnvNames[env.Name] = i
+		}
+	}
+
+	// Validate imagePullSecrets uniqueness by Name
+	seenSecretNames := make(map[string]int) // map name -> first index seen
+	for i, secret := range spec.ImagePullSecrets {
+		if firstIdx, exists := seenSecretNames[secret.Name]; exists {
+			allErrs = append(allErrs, field.Duplicate(
+				fldPath.Child("imagePullSecrets").Index(i).Child("name"),
+				fmt.Sprintf("secret reference %q is duplicate (same as imagePullSecrets[%d])", secret.Name, firstIdx)))
+		} else {
+			seenSecretNames[secret.Name] = i
+		}
+	}
+
+	// Validate probe configurations
+	if spec.LivenessProbe != nil {
+		allErrs = append(allErrs, validateProbe(spec.LivenessProbe, fldPath.Child("livenessProbe"))...)
+	}
+	if spec.ReadinessProbe != nil {
+		allErrs = append(allErrs, validateProbe(spec.ReadinessProbe, fldPath.Child("readinessProbe"))...)
+	}
+	if spec.StartupProbe != nil {
+		allErrs = append(allErrs, validateProbe(spec.StartupProbe, fldPath.Child("startupProbe"))...)
+	}
+
+	// Validate resource requests <= limits
+	allErrs = append(allErrs, validateResourceRequirements(&spec.Resources, fldPath.Child("resources"))...)
+
+	return allErrs
+}
+
+// validateProbe validates probe configuration
+func validateProbe(probe *enterpriseApi.Probe, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Validate initialDelaySeconds (minimum is 0)
+	if probe.InitialDelaySeconds < 0 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("initialDelaySeconds"),
+			probe.InitialDelaySeconds,
+			"must be greater than or equal to 0"))
+	}
+
+	// Validate timeoutSeconds (minimum is 1)
+	if probe.TimeoutSeconds < 1 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("timeoutSeconds"),
+			probe.TimeoutSeconds,
+			"must be greater than or equal to 1"))
+	}
+
+	// Validate periodSeconds (minimum is 1)
+	if probe.PeriodSeconds < 1 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("periodSeconds"),
+			probe.PeriodSeconds,
+			"must be greater than or equal to 1"))
+	}
+
+	// Validate failureThreshold (minimum is 1)
+	if probe.FailureThreshold < 1 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("failureThreshold"),
+			probe.FailureThreshold,
+			"must be greater than or equal to 1"))
+	}
+
+	return allErrs
+}
+
+// validateResourceRequirements validates that resource requests do not exceed limits
+func validateResourceRequirements(resources *corev1.ResourceRequirements, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Validate memory: request <= limit
+	memoryRequest := resources.Requests.Memory()
+	memoryLimit := resources.Limits.Memory()
+	if !memoryRequest.IsZero() && !memoryLimit.IsZero() {
+		if memoryRequest.Cmp(*memoryLimit) > 0 {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("requests").Child("memory"),
+				memoryRequest.String(),
+				fmt.Sprintf("memory request must be less than or equal to memory limit (%s)", memoryLimit.String())))
+		}
+	}
+
+	// Validate CPU: request <= limit
+	cpuRequest := resources.Requests.Cpu()
+	cpuLimit := resources.Limits.Cpu()
+	if !cpuRequest.IsZero() && !cpuLimit.IsZero() {
+		if cpuRequest.Cmp(*cpuLimit) > 0 {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("requests").Child("cpu"),
+				cpuRequest.String(),
+				fmt.Sprintf("cpu request must be less than or equal to cpu limit (%s)", cpuLimit.String())))
+		}
+	}
+
 	return allErrs
 }
 
 // validateStorageConfig validates storage configuration
 func validateStorageConfig(config *enterpriseApi.StorageClassSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
+
+	// Validate ephemeralStorage is mutually exclusive with storageClassName and storageCapacity
+	if config.EphemeralStorage {
+		if config.StorageClassName != "" {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("storageClassName"),
+				config.StorageClassName,
+				"storageClassName cannot be set when ephemeralStorage is true"))
+		}
+		if config.StorageCapacity != "" {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("storageCapacity"),
+				config.StorageCapacity,
+				"storageCapacity cannot be set when ephemeralStorage is true"))
+		}
+	}
 
 	// Validate storageCapacity format (must be in Gi format, e.g., "10Gi", "100Gi")
 	if config.StorageCapacity != "" {
@@ -73,6 +199,21 @@ func validateStorageConfig(config *enterpriseApi.StorageClassSpec, fldPath *fiel
 func validateSmartStore(smartStore *enterpriseApi.SmartStoreSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
+	// Build a set of valid volume names for reference validation
+	validVolumes := make(map[string]bool)
+	for _, vol := range smartStore.VolList {
+		if vol.Name != "" {
+			validVolumes[vol.Name] = true
+		}
+	}
+
+	// Validate: SmartStore indexes require at least one volume to be configured
+	if len(smartStore.IndexList) > 0 && len(smartStore.VolList) == 0 {
+		allErrs = append(allErrs, field.Required(
+			fldPath.Child("volumes"),
+			"at least one volume must be configured when indexes are defined"))
+	}
+
 	// Validate volume definitions
 	for i, vol := range smartStore.VolList {
 		volPath := fldPath.Child("volumes").Index(i)
@@ -90,17 +231,65 @@ func validateSmartStore(smartStore *enterpriseApi.SmartStoreSpec, fldPath *field
 		if idx.Name == "" {
 			allErrs = append(allErrs, field.Required(idxPath.Child("name"), "index name is required"))
 		}
-		if idx.VolName == "" {
-			allErrs = append(allErrs, field.Required(idxPath.Child("volumeName"), "volume name is required for index"))
+
+		// Determine effective volumeName (index-level or defaults)
+		effectiveVolName := idx.VolName
+		if effectiveVolName == "" {
+			effectiveVolName = smartStore.Defaults.VolName
+		}
+
+		// Validate: Index must have volumeName or defaults.volumeName provided
+		if effectiveVolName == "" {
+			allErrs = append(allErrs, field.Required(
+				idxPath.Child("volumeName"),
+				"volumeName is required for index (either directly or via defaults.volumeName)"))
+		} else {
+			// Validate: Index volumeName must reference an existing volume in volumes list
+			if !validVolumes[effectiveVolName] {
+				allErrs = append(allErrs, field.Invalid(
+					idxPath.Child("volumeName"),
+					effectiveVolName,
+					fmt.Sprintf("volumeName %q does not reference any volume in the volumes list", effectiveVolName)))
+			}
 		}
 	}
 
 	return allErrs
 }
 
+// Constants for appsRepoPollInterval validation
+const (
+	// minAppsRepoPollInterval is the minimum allowed poll interval (1 minute)
+	minAppsRepoPollInterval int64 = 60
+	// maxAppsRepoPollInterval is the maximum allowed poll interval (1 day)
+	maxAppsRepoPollInterval int64 = 86400
+)
+
 // validateAppFramework validates App Framework configuration
 func validateAppFramework(appConfig *enterpriseApi.AppFrameworkSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
+
+	// Validate appsRepoPollInterval
+	// - Default is 0 (disabled)
+	// - Minimum is 0, Maximum is 86400
+	// - Values between (0, 60) are invalid (will be adjusted to 60 at runtime, but we reject here)
+	pollInterval := appConfig.AppsRepoPollInterval
+	if pollInterval < 0 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("appsRepoPollIntervalSeconds"),
+			pollInterval,
+			"must be greater than or equal to 0"))
+	} else if pollInterval > 0 && pollInterval < minAppsRepoPollInterval {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("appsRepoPollIntervalSeconds"),
+			pollInterval,
+			"must be 0 (disabled) or at least 60 seconds"))
+	} else if pollInterval > maxAppsRepoPollInterval {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("appsRepoPollIntervalSeconds"),
+			pollInterval,
+			"must be less than or equal to 86400 seconds (1 day)"))
+	}
 
 	// Validate app sources
 	for i, source := range appConfig.AppSources {
@@ -110,6 +299,42 @@ func validateAppFramework(appConfig *enterpriseApi.AppFrameworkSpec, fldPath *fi
 		}
 		if source.Location == "" {
 			allErrs = append(allErrs, field.Required(sourcePath.Child("location"), "app source location is required"))
+		}
+
+		// Validate premiumAppsProps is required when scope is "premiumApps"
+		scope := source.Scope
+		if scope == "" {
+			scope = appConfig.Defaults.Scope
+		}
+		if scope == "premiumApps" {
+			// Check if premiumAppsProps.Type is set (either in source or defaults)
+			premiumType := source.PremiumAppsProps.Type
+			if premiumType == "" {
+				premiumType = appConfig.Defaults.PremiumAppsProps.Type
+			}
+			if premiumType == "" {
+				allErrs = append(allErrs, field.Required(
+					sourcePath.Child("premiumAppsProps").Child("type"),
+					"premiumAppsProps.type is required when scope is 'premiumApps'"))
+			}
+		}
+	}
+
+	// Validate uniqueness of app sources by Location + Scope combination
+	seenAppSources := make(map[string]int) // map key -> first index seen
+	for i, source := range appConfig.AppSources {
+		// Use defaults if scope not specified in the source
+		scope := source.Scope
+		if scope == "" {
+			scope = appConfig.Defaults.Scope
+		}
+		key := source.Location + "|" + scope
+		if firstIdx, exists := seenAppSources[key]; exists {
+			allErrs = append(allErrs, field.Duplicate(
+				fldPath.Child("appSources").Index(i),
+				fmt.Sprintf("duplicate app source: location=%q, scope=%q (same as appSources[%d])", source.Location, scope, firstIdx)))
+		} else {
+			seenAppSources[key] = i
 		}
 	}
 
@@ -132,4 +357,36 @@ func getCommonWarnings(spec *enterpriseApi.CommonSplunkSpec) []string {
 	// Add warnings as needed based on spec fields
 
 	return warnings
+}
+
+// ValidateImagePullSecretsExistence validates that imagePullSecrets reference existing secrets
+// This function requires a ValidationContext with a Kubernetes client
+func ValidateImagePullSecretsExistence(secrets []corev1.LocalObjectReference, vc *ValidationContext, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if vc == nil || vc.Client == nil {
+		// Skip existence validation if no client is available
+		return allErrs
+	}
+
+	for i, secret := range secrets {
+		if secret.Name == "" {
+			continue // Empty names are validated elsewhere
+		}
+
+		exists, err := vc.SecretExists(secret.Name)
+		if err != nil {
+			// Log the error but don't fail validation for transient errors
+			// This prevents webhook failures due to temporary API issues
+			continue
+		}
+
+		if !exists {
+			allErrs = append(allErrs, field.NotFound(
+				fldPath.Index(i).Child("name"),
+				secret.Name))
+		}
+	}
+
+	return allErrs
 }

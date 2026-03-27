@@ -50,10 +50,32 @@ func ValidateStandaloneCreate(obj *enterpriseApi.Standalone) field.ErrorList {
 	return allErrs
 }
 
+// ValidateStandaloneCreateWithContext validates a Standalone on CREATE with ValidationContext
+// This enables resource existence checks (e.g., verifying imagePullSecrets exist)
+func ValidateStandaloneCreateWithContext(obj *enterpriseApi.Standalone, vc *ValidationContext) field.ErrorList {
+	// First, run all non-context validations
+	allErrs := ValidateStandaloneCreate(obj)
+
+	// Then, run context-aware validations
+	if len(obj.Spec.ImagePullSecrets) > 0 {
+		allErrs = append(allErrs, ValidateImagePullSecretsExistence(
+			obj.Spec.ImagePullSecrets,
+			vc,
+			field.NewPath("spec").Child("imagePullSecrets"))...)
+	}
+
+	return allErrs
+}
+
 // ValidateStandaloneUpdate validates a Standalone on UPDATE
 // TODO: Add immutable field validation here (e.g., compare obj vs oldObj for fields that cannot change after creation)
 func ValidateStandaloneUpdate(obj, oldObj *enterpriseApi.Standalone) field.ErrorList {
 	return ValidateStandaloneCreate(obj)
+}
+
+// ValidateStandaloneUpdateWithContext validates a Standalone on UPDATE with ValidationContext
+func ValidateStandaloneUpdateWithContext(obj, oldObj *enterpriseApi.Standalone, vc *ValidationContext) field.ErrorList {
+	return ValidateStandaloneCreateWithContext(obj, vc)
 }
 
 // GetStandaloneWarningsOnCreate returns warnings for Standalone CREATE
