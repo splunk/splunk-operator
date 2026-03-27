@@ -1,0 +1,30 @@
+@startuml
+skinparam backgroundColor #F0FDF4
+skinparam defaultFontName "Avenir Next"
+skinparam shadowing true
+skinparam ArrowColor #15803D
+skinparam activity {
+  BackgroundColor #DCFCE7
+  BorderColor #166534
+  FontColor #052E16
+}
+start
+:Create TCPRoute in fw-tier namespace;
+:Attach to Gateway in splunk namespace;
+if (allowedRoutes from Same?) then (yes)
+  :Route status Accepted=False\nreason=NotAllowedByListeners;
+endif
+if (backendRef cross-namespace\nwithout ReferenceGrant?) then (yes)
+  :Route status ResolvedRefs=False\nreason=RefNotPermitted;
+endif
+:Update listener policy\nallowedRoutes.from=All;
+:Add ReferenceGrant in backend namespace;
+if (single active TCPRoute\nper listener?) then (yes)
+  :Route Accepted=True\nResolvedRefs=True;
+  :Traffic allowed;
+else (no)
+  :UnsupportedValue (controller-specific);
+  :Consolidate to one route per listener;
+endif
+stop
+@enduml

@@ -1,0 +1,49 @@
+@startuml
+skinparam backgroundColor #FFFDF7
+skinparam shadowing true
+skinparam defaultFontName "Avenir Next"
+skinparam roundCorner 14
+skinparam rectangle {
+  BorderColor #7C2D12
+  BackgroundColor #FFEDD5
+  FontColor #431407
+}
+skinparam arrow {
+  Color #C2410C
+  FontColor #431407
+  Thickness 2
+}
+
+package "AKS Namespace: <splunk-namespace>" #FFFBEB {
+  rectangle "Gateway\nlisteners: 8088, 9997" as GW #FED7AA
+  rectangle "TCPRoute hec-tcp-route\n-> Service:8088" as HECROUTE #FDBA74
+  rectangle "TCPRoute s2s-tcp-route\n-> Service:9997" as S2SROUTE #FDBA74
+  rectangle "splunk-<name>-indexer-service\nports: 8088,9997" as IDXSVC #FCD34D
+  rectangle "Indexer Pods" as IDXPODS #FDE68A
+}
+
+package "AKS Namespace: fw-tier (optional)" #FEF3C7 {
+  rectangle "TCPRoute ext-fw-s2s-route" as EXTROUTE #FDE68A
+}
+
+rectangle "Gateway API Policy Layer" as POLICY #DCFCE7
+rectangle "ReferenceGrant\n(namespace: <splunk-namespace>)" as RG #BBF7D0
+
+GW --> HECROUTE : listener attach
+GW --> S2SROUTE : listener attach
+HECROUTE --> IDXSVC : backendRef 8088
+S2SROUTE --> IDXSVC : backendRef 9997
+IDXSVC --> IDXPODS : kube-proxy/service routing
+
+EXTROUTE --> GW : parentRef cross-namespace
+EXTROUTE --> IDXSVC : backendRef cross-namespace
+POLICY --> EXTROUTE : allowedRoutes check
+RG --> EXTROUTE : permits backendRef across namespaces
+
+note bottom of POLICY
+Without policy allow:
+- NotAllowedByListeners
+- RefNotPermitted
+end note
+
+@enduml

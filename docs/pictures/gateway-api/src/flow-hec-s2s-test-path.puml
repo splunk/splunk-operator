@@ -1,0 +1,35 @@
+@startuml
+skinparam backgroundColor #F5F3FF
+skinparam defaultFontName "Avenir Next"
+skinparam shadowing true
+skinparam ArrowColor #6D28D9
+skinparam activity {
+  BackgroundColor #DDD6FE
+  BorderColor #5B21B6
+  FontColor #2E1065
+}
+start
+:Deploy GatewayClass + Gateway;
+:Create TCPRoute for 8088 (HEC);
+:Create TCPRoute for 9997 (S2S);
+:Check Gateway Accepted=True\nProgrammed=True;
+if (HEC test over 8088?) then (yes)
+  :curl /services/collector/health;
+  :curl /services/collector/event;
+  if (code==0?) then (yes)
+    :HEC path validated;
+  else (no)
+    :Inspect token/TLS/backend service;
+  endif
+endif
+if (S2S test over 9997?) then (yes)
+  :nc -vz <GW_IP> 9997;
+  if (tcp connect ok?) then (yes)
+    :S2S transport path validated;
+  else (no)
+    :Inspect listener/route/backend port;
+  endif
+endif
+:Document pass/fail evidence;
+stop
+@enduml
