@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -82,6 +83,30 @@ func ownedByPostgresDatabase(postgresDB *enterprisev4.PostgresDatabase) []metav1
 		Controller:         &controller,
 		BlockOwnerDeletion: &blockOwnerDeletion,
 	}}
+}
+
+func startPostgresDatabaseManager(ctx context.Context) {
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme:                 k8sClient.Scheme(),
+		Metrics:                metricsserver.Options{BindAddress: "0"},
+		HealthProbeBindAddress: "0",
+	})
+	Expect(err).NotTo(HaveOccurred())
+	Expect((&PostgresDatabaseReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr)).To(Succeed())
+
+	managerCtx, cancel := context.WithCancel(ctx)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- mgr.Start(managerCtx)
+	}()
+
+	DeferCleanup(func() {
+		cancel()
+		Eventually(errCh, time.Second).Should(Receive(BeNil()))
+	})
 }
 
 var _ = Describe("PostgresDatabase Controller", func() {
@@ -287,6 +312,139 @@ var _ = Describe("PostgresDatabase Controller", func() {
 		}
 
 		Expect(meta.FindStatusCondition(current.Status.Conditions, "PrivilegesReady")).To(BeNil())
+	})
+
+	It("completes the ready-cluster workflow under a running manager and progresses on requeue", func() {
+		shortPollingInterval := 10 * time.Millisecond
+		steadyPollingInterval := 25 * time.Millisecond
+		shortTimeout := 5 * time.Second
+		readyDatabaseTimeout := 25 * time.Second
+		workflowCompletionTimeout := 10 * time.Second
+
+		resourceName := "manager-ready-cluster"
+		clusterName := "manager-tenant-cluster"
+		cnpgClusterName := "manager-tenant-cnpg"
+		dbName := "appdb"
+		requestName := namespacedName(namespace, resourceName)
+
+		postgresDB := &enterprisev4.PostgresDatabase{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      resourceName,
+				Namespace: namespace,
+			},
+			Spec: enterprisev4.PostgresDatabaseSpec{
+				ClusterRef: corev1.LocalObjectReference{Name: clusterName},
+				Databases: []enterprisev4.DatabaseDefinition{
+					{Name: dbName},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, postgresDB)).To(Succeed())
+		Expect(k8sClient.Get(ctx, requestName, postgresDB)).To(Succeed())
+		postgresDB.Status.Databases = []enterprisev4.DatabaseInfo{{Name: dbName}}
+		Expect(k8sClient.Status().Update(ctx, postgresDB)).To(Succeed())
+
+		postgresCluster := &enterprisev4.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterName,
+				Namespace: namespace,
+			},
+			Spec: enterprisev4.PostgresClusterSpec{
+				Class: "dev",
+			},
+		}
+		Expect(k8sClient.Create(ctx, postgresCluster)).To(Succeed())
+
+		clusterPhase := "Ready"
+		postgresCluster.Status.Phase = &clusterPhase
+		postgresCluster.Status.ProvisionerRef = &corev1.ObjectReference{
+			APIVersion: cnpgv1.SchemeGroupVersion.String(),
+			Kind:       "Cluster",
+			Name:       cnpgClusterName,
+			Namespace:  namespace,
+		}
+		Expect(k8sClient.Status().Update(ctx, postgresCluster)).To(Succeed())
+
+		cnpgCluster := &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cnpgClusterName,
+				Namespace: namespace,
+			},
+			Spec: cnpgv1.ClusterSpec{
+				Instances: 1,
+				StorageConfiguration: cnpgv1.StorageConfiguration{
+					Size: "1Gi",
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, cnpgCluster)).To(Succeed())
+		cnpgCluster.Status.ManagedRolesStatus = cnpgv1.ManagedRoles{
+			ByStatus: map[cnpgv1.RoleStatus][]string{
+				cnpgv1.RoleStatusReconciled: {"appdb_admin", "appdb_rw"},
+			},
+		}
+		cnpgCluster.Status.WriteService = "tenant-rw"
+		cnpgCluster.Status.ReadService = "tenant-ro"
+		Expect(k8sClient.Status().Update(ctx, cnpgCluster)).To(Succeed())
+
+		startPostgresDatabaseManager(ctx)
+
+		Eventually(func(g Gomega) {
+			current := &enterprisev4.PostgresDatabase{}
+			g.Expect(k8sClient.Get(ctx, requestName, current)).To(Succeed())
+			g.Expect(current.Finalizers).To(ContainElement(postgresDatabaseFinalizer))
+		}).WithTimeout(shortTimeout).WithPolling(shortPollingInterval).Should(Succeed())
+
+		Eventually(func(g Gomega) {
+			adminSecret := &corev1.Secret{}
+			g.Expect(k8sClient.Get(ctx, namespacedName(namespace, "manager-ready-cluster-appdb-admin"), adminSecret)).To(Succeed())
+
+			rwSecret := &corev1.Secret{}
+			g.Expect(k8sClient.Get(ctx, namespacedName(namespace, "manager-ready-cluster-appdb-rw"), rwSecret)).To(Succeed())
+
+			configMap := &corev1.ConfigMap{}
+			g.Expect(k8sClient.Get(ctx, namespacedName(namespace, "manager-ready-cluster-appdb-config"), configMap)).To(Succeed())
+			g.Expect(configMap.Data).To(HaveKeyWithValue("rw-host", "tenant-rw."+namespace+".svc.cluster.local"))
+			g.Expect(configMap.Data).To(HaveKeyWithValue("ro-host", "tenant-ro."+namespace+".svc.cluster.local"))
+		}).WithTimeout(shortTimeout).WithPolling(shortPollingInterval).Should(Succeed())
+
+		Eventually(func(g Gomega) {
+			updatedCluster := &enterprisev4.PostgresCluster{}
+			g.Expect(k8sClient.Get(ctx, namespacedName(namespace, clusterName), updatedCluster)).To(Succeed())
+			g.Expect(managedRoleNames(updatedCluster.Spec.ManagedRoles)).To(ConsistOf("appdb_admin", "appdb_rw"))
+		}).WithTimeout(shortTimeout).WithPolling(shortPollingInterval).Should(Succeed())
+
+		Eventually(func(g Gomega) {
+			cnpgDatabase := &cnpgv1.Database{}
+			g.Expect(k8sClient.Get(ctx, namespacedName(namespace, "manager-ready-cluster-appdb"), cnpgDatabase)).To(Succeed())
+			g.Expect(cnpgDatabase.Spec.Name).To(Equal(dbName))
+			g.Expect(cnpgDatabase.Spec.Owner).To(Equal("appdb_admin"))
+			g.Expect(cnpgDatabase.Spec.ClusterRef.Name).To(Equal(cnpgClusterName))
+
+			applied := true
+			if cnpgDatabase.Status.Applied == nil || !*cnpgDatabase.Status.Applied {
+				cnpgDatabase.Status.Applied = &applied
+				g.Expect(k8sClient.Status().Update(ctx, cnpgDatabase)).To(Succeed())
+			}
+		}).WithTimeout(readyDatabaseTimeout).WithPolling(steadyPollingInterval).Should(Succeed())
+
+		Eventually(func(g Gomega) {
+			current := &enterprisev4.PostgresDatabase{}
+			g.Expect(k8sClient.Get(ctx, requestName, current)).To(Succeed())
+			g.Expect(current.Status.Phase).NotTo(BeNil())
+			g.Expect(*current.Status.Phase).To(Equal("Ready"))
+			g.Expect(current.Status.ObservedGeneration).NotTo(BeNil())
+			g.Expect(*current.Status.ObservedGeneration).To(Equal(current.Generation))
+			g.Expect(current.Status.Databases).To(HaveLen(1))
+			g.Expect(current.Status.Databases[0].Name).To(Equal(dbName))
+			g.Expect(current.Status.Databases[0].Ready).To(BeTrue())
+
+			for _, conditionType := range []string{"ClusterReady", "SecretsReady", "ConfigMapsReady", "RolesReady", "DatabasesReady"} {
+				condition := meta.FindStatusCondition(current.Status.Conditions, conditionType)
+				g.Expect(condition).NotTo(BeNil(), "missing status condition %s", conditionType)
+				g.Expect(condition.Status).To(Equal(metav1.ConditionTrue), "unexpected status for %s", conditionType)
+			}
+		}).WithTimeout(workflowCompletionTimeout).WithPolling(steadyPollingInterval).Should(Succeed())
 	})
 
 	It("marks role conflicts in status and stops before provisioning dependent resources", func() {
