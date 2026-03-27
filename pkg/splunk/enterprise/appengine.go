@@ -26,17 +26,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// AppEngine defines the app framework operations used during reconciliation.
-type AppEngine interface {
-	ensureAppFrameworkStatus(ctx context.Context, client splcommon.ControllerClient, target splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec, scope enterpriseApi.ScopeType) error
-	ensureAppRepoState(ctx context.Context, client splcommon.ControllerClient, target splcommon.MetaObject, appFrameworkConfig *enterpriseApi.AppFrameworkSpec, appDeployContext *enterpriseApi.AppDeploymentContext) error
-	runAppFrameworkIfReady(ctx context.Context, client splcommon.ControllerClient, target splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) *reconcile.Result
-	ensureAppFrameworkStagingVolume(ctx context.Context, client splcommon.ControllerClient, target splcommon.MetaObject, podTemplateSpec *corev1.PodTemplateSpec, appFrameworkConfig *enterpriseApi.AppFrameworkSpec)
-	changeAppSrcDeployInfoStatus(ctx context.Context, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo, repoState enterpriseApi.AppRepoState, oldDeployStatus enterpriseApi.AppDeploymentStatus, newDeployStatus enterpriseApi.AppDeploymentStatus)
-	changePhaseInfo(ctx context.Context, desiredReplicas int32, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo)
-	removeStaleEntriesFromAuxPhaseInfo(ctx context.Context, desiredReplicas int32, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo)
-}
-
 // appFrameworkEngine is the default AppEngine implementation.
 type appFrameworkEngine struct{}
 
