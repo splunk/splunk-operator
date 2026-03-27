@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,7 +43,8 @@ const (
 // PostgresClusterReconciler reconciles PostgresCluster resources.
 type PostgresClusterReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters,verbs=get;list;watch;create;update;patch;delete
@@ -53,9 +55,11 @@ type PostgresClusterReconciler struct {
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters/status,verbs=get
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=poolers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=poolers/status,verbs=get
+// +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	return clustercore.PostgresClusterService(ctx, r.Client, r.Scheme, req)
+	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder}
+	return clustercore.PostgresClusterService(ctx, rc, req)
 }
 
 // SetupWithManager registers the controller and owned resource watches.
