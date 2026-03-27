@@ -96,7 +96,7 @@ func PostgresDatabaseService(
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 
 	case ClusterReady:
-		rc.emitNormal(postgresDB, EventClusterValidated, "Referenced PostgresCluster is ready")
+		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, clusterReady, EventClusterValidated, "Referenced PostgresCluster is ready")
 		if err := updateStatus(clusterReady, metav1.ConditionTrue, reasonClusterAvailable, "Cluster is operational", provisioningDBPhase); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -137,7 +137,7 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{}, err
 	}
-	rc.emitNormal(postgresDB, EventSecretsReady, fmt.Sprintf("All secrets provisioned for %d databases", len(postgresDB.Spec.Databases)))
+	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, secretsReady, EventSecretsReady, fmt.Sprintf("All secrets provisioned for %d databases", len(postgresDB.Spec.Databases)))
 	if err := updateStatus(secretsReady, metav1.ConditionTrue, reasonSecretsCreated,
 		fmt.Sprintf("All secrets provisioned for %d databases", len(postgresDB.Spec.Databases)), provisioningDBPhase); err != nil {
 		return ctrl.Result{}, err
@@ -154,7 +154,7 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{}, err
 	}
-	rc.emitNormal(postgresDB, EventConfigMapsReady, fmt.Sprintf("All ConfigMaps provisioned for %d databases", len(postgresDB.Spec.Databases)))
+	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, configMapsReady, EventConfigMapsReady, fmt.Sprintf("All ConfigMaps provisioned for %d databases", len(postgresDB.Spec.Databases)))
 	if err := updateStatus(configMapsReady, metav1.ConditionTrue, reasonConfigMapsCreated,
 		fmt.Sprintf("All ConfigMaps provisioned for %d databases", len(postgresDB.Spec.Databases)), provisioningDBPhase); err != nil {
 		return ctrl.Result{}, err
@@ -201,7 +201,7 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	}
-	rc.emitNormal(postgresDB, EventRolesReady, fmt.Sprintf("All %d roles reconciled", len(desiredUsers)))
+	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, rolesReady, EventRolesReady, fmt.Sprintf("All %d roles reconciled", len(desiredUsers)))
 	if err := updateStatus(rolesReady, metav1.ConditionTrue, reasonUsersAvailable,
 		fmt.Sprintf("All %d users in PostgreSQL", len(desiredUsers)), provisioningDBPhase); err != nil {
 		return ctrl.Result{}, err
@@ -230,7 +230,7 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	}
-	rc.emitNormal(postgresDB, EventDatabasesReady, fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)))
+	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, databasesReady, EventDatabasesReady, fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)))
 	if err := updateStatus(databasesReady, metav1.ConditionTrue, reasonDatabasesAvailable,
 		fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)), readyDBPhase); err != nil {
 		return ctrl.Result{}, err
@@ -273,7 +273,7 @@ func PostgresDatabaseService(
 			}
 			return ctrl.Result{}, err
 		}
-		rc.emitNormal(postgresDB, EventPrivilegesReady, fmt.Sprintf("RW role privileges granted for all %d databases", len(postgresDB.Spec.Databases)))
+		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, privilegesReady, EventPrivilegesReady, fmt.Sprintf("RW role privileges granted for all %d databases", len(postgresDB.Spec.Databases)))
 		if err := updateStatus(privilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted,
 			fmt.Sprintf("RW role privileges granted for all %d databases", len(postgresDB.Spec.Databases)), readyDBPhase); err != nil {
 			return ctrl.Result{}, err
