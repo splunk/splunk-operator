@@ -18,10 +18,10 @@ jobs:
   build-operator-image:
     runs-on: ubuntu-latest
     env:
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-      S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ vars.SPLUNK_ENTERPRISE_IMAGE }}
+      S3_REGION: ${{ vars.AWS_DEFAULT_REGION }}
     steps:
     - uses: actions/checkout@v2
     - name: Dotenv Action
@@ -53,7 +53,7 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v2
     - name: Build and push Splunk Operator Image
       run: |
-        make docker-buildx IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        make docker-buildx IMG=${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   int-tests:
     strategy:
       fail-fast: false
@@ -77,9 +77,10 @@ jobs:
     env:
       CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
+      SPLUNK_ENTERPRISE_IMAGE: ${{ vars.SPLUNK_ENTERPRISE_IMAGE }}
+      S3_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       TEST_FOCUS: "${{ matrix.test }}"
       # This regex matches any string not containing integration keyword
       TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
@@ -90,7 +91,6 @@ jobs:
       TEST_INDEXES_S3_BUCKET: ${{ secrets.TEST_INDEXES_S3_BUCKET }}
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       PRIVATE_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
-      S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
       AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID: ${{ secrets.AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID }}
@@ -117,10 +117,6 @@ jobs:
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@v1
-      - name: Change splunk enterprise to release image on main branches
-        if: github.ref == 'refs/heads/main'
-        run: |
-          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v3
         with:
@@ -175,8 +171,8 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
       - name: Tag and Push Splunk Enterprise Image to ECR
         run: |
-          docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-          docker push ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+          docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+          docker push ${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Create EKS cluster
         run: |
           export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
@@ -194,7 +190,7 @@ jobs:
           mkdir -p ./bin
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run Integration test
-        timeout-minutes: 240
+        timeout-minutes: 300
         env:
           TEST_TIMEOUT: 225m
           TEST_S3_ACCESS_KEY_ID: ${{ vars.TEST_S3_ACCESS_KEY_ID }}

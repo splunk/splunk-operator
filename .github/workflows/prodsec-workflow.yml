@@ -29,10 +29,10 @@ jobs:
   FOSSA-scanner:
     runs-on: ubuntu-latest
     env:
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-      S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ vars.SPLUNK_ENTERPRISE_IMAGE }}
+      S3_REGION: ${{ vars.AWS_DEFAULT_REGION }}
     steps:
     - uses: actions/checkout@v2
     - name: Dotenv Action

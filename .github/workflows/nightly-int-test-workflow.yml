@@ -8,14 +8,17 @@ permissions:
 on:
   schedule:
     - cron: "0 06 * * 0"
+  push:
+    paths:
+      - '.github/workflows/nightly-int-test-workflow.yml'
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
     env:
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-      S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ vars.SPLUNK_ENTERPRISE_IMAGE }}
+      S3_REGION: ${{ vars.AWS_DEFAULT_REGION }}
     steps:
     - uses: actions/checkout@v2
       with:
@@ -49,7 +52,7 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v2
     - name: Build and Push Splunk Operator Image
       run: |
-        make docker-buildx IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        make docker-buildx IMG=${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   int-tests:
     strategy:
       fail-fast: false
@@ -73,9 +76,10 @@ jobs:
     env:
       CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
+      SPLUNK_ENTERPRISE_IMAGE: ${{ vars.SPLUNK_ENTERPRISE_IMAGE }}
+      S3_REGION: ${{ vars.AWS_DEFAULT_REGION }}
       TEST_FOCUS: "${{ matrix.test }}"
       # This regex matches any string not containing integration keyword
       TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
@@ -86,7 +90,6 @@ jobs:
       TEST_INDEXES_S3_BUCKET: ${{ secrets.TEST_INDEXES_S3_BUCKET }}
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       PRIVATE_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
-      S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       CLUSTER_WIDE: "true"
       AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID: ${{ secrets.AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID }}
       AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY: ${{ secrets.AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY }}
@@ -122,7 +125,7 @@ jobs:
         uses: actions/setup-python@v2
       - name: Install AWS CLI
         run: |
-          curl "${{ steps.dotenv.outputs.AWSCLI_URL}}" -o "awscliv2.zip"
+          curl "${{ steps.dotenv.outputs.AWSCLI_URL }}" -o "awscliv2.zip"
           unzip awscliv2.zip
           sudo ./aws/install --update
           aws --version
@@ -159,15 +162,15 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
       - name: Tag and Push Splunk Enterprise Image to ECR
         run: |
-          docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-          docker push ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+          docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+          docker push ${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Pull Splunk Operator Image Locally
         run: |
-          docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-          docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          docker pull ${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          docker tag ${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
       - name: Change Operator Image Tag to latest
         run: |
-          docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:latest
+          docker tag ${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:latest
       - name: Create EKS cluster
         run: |
           export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
@@ -231,6 +234,7 @@ jobs:
     needs: int-tests
     env:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       TAG: edge
     steps:
     - name: Set up cosign
@@ -254,10 +258,10 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v2
     - name: Pull Splunk Operator Image Locally
       run: |
-        docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        docker pull ${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
     - name: Change Operator Image Tag to edge
       run: |
-        docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}
+        docker tag ${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}
     - name: Configure Docker Hub credentials
       uses: docker/login-action@v3
       with:
@@ -267,12 +271,12 @@ jobs:
       run: docker push ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}
     - name: Sign Splunk Operator image with a key
       run: |
-        cosign sign --yes --key env://COSIGN_PRIVATE_KEY  ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}
+        cosign sign --yes --key env://COSIGN_PRIVATE_KEY  ${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}
       env:
         COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
         COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
     - name: Verify Signed Splunk Operator image
       run: |
-        cosign verify --key env://COSIGN_PUBLIC_KEY  ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}
+        cosign verify --key env://COSIGN_PUBLIC_KEY  ${{ env.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}
       env:
         COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
