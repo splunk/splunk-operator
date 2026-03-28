@@ -21,7 +21,7 @@ import (
 
 // Set Global Variables
 var (
-	ClusterProvider = os.Getenv("TEST_CLUSTER_PLATFORM")
+	ClusterProvider = os.Getenv("CLUSTER_PROVIDER")
 )
 
 // Set S3 Variables

@@ -821,6 +821,56 @@ func DumpGetPods(ns string) []string {
 	return splunkPods
 }
 
+// DumpGetPodsWide prints detailed pod status including node and conditions
+func DumpGetPodsWide(ns string) {
+	output, err := exec.Command("kubectl", "get", "pods", "-n", ns, "-o", "wide").Output()
+	if err != nil {
+		logf.Log.Info("[DEBUG] Failed to get pods wide", "namespace", ns, "error", err)
+		return
+	}
+	logf.Log.Info("[DEBUG] Pod status (wide)", "namespace", ns)
+	for _, line := range strings.Split(string(output), "\n") {
+		if line != "" {
+			logf.Log.Info(line)
+		}
+	}
+}
+
+// DumpGetPVCs prints PVC status in the namespace
+func DumpGetPVCs(ns string) {
+	output, err := exec.Command("kubectl", "get", "pvc", "-n", ns).Output()
+	if err != nil {
+		logf.Log.Info("[DEBUG] Failed to get PVCs", "namespace", ns, "error", err)
+		return
+	}
+	logf.Log.Info("[DEBUG] PVC status", "namespace", ns)
+	for _, line := range strings.Split(string(output), "\n") {
+		if line != "" {
+			logf.Log.Info(line)
+		}
+	}
+}
+
+// DumpGetEvents prints recent events in the namespace
+func DumpGetEvents(ns string) {
+	output, err := exec.Command("kubectl", "get", "events", "-n", ns, "--sort-by=.lastTimestamp").Output()
+	if err != nil {
+		logf.Log.Info("[DEBUG] Failed to get events", "namespace", ns, "error", err)
+		return
+	}
+	lines := strings.Split(string(output), "\n")
+	logf.Log.Info("[DEBUG] Recent events", "namespace", ns, "total", len(lines))
+	start := 0
+	if len(lines) > 30 {
+		start = len(lines) - 30
+	}
+	for _, line := range lines[start:] {
+		if line != "" {
+			logf.Log.Info(line)
+		}
+	}
+}
+
 // DumpDescribePods prints and returns list of pods in the namespace
 func DumpDescribePods(ns string) []string {
 	output, err := exec.Command("kubectl", "describe", "pods", "-n", ns).Output()

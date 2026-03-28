@@ -6,10 +6,6 @@ source ${scriptdir}/env.sh
 
 action=${1:-up}
 
-if [[ -z "${TEST_CLUSTER_PLATFORM}" ]]; then
-  echo "Test Cluster Platform Not Set in Environment Variables. Changing to env.sh value"
-  export TEST_CLUSTER_PLATFORM="${CLUSTER_PROVIDER}"
-fi
 
 if [[ -z "${TEST_CLUSTER_NAME}" ]]; then
   echo "Test Cluster Name Not Set in Environment Variables. Changing to env.sh value"
@@ -22,10 +18,10 @@ if [[ -z "${CLUSTER_WORKERS}" ]]; then
 fi
 
 # source the script file containing the create/delete cluster implementation
-srcfile="${scriptdir}/deploy-${TEST_CLUSTER_PLATFORM}-cluster.sh"
+srcfile="${scriptdir}/deploy-${CLUSTER_PROVIDER}-cluster.sh"
 
 if [ ! -f "$srcfile" ]; then
-    echo "Unknown cluster provider '${TEST_CLUSTER_PLATFORM}'"
+    echo "Unknown cluster provider '${CLUSTER_PROVIDER}'"
     exit 1
 fi
 source $srcfile
