@@ -357,6 +357,11 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 	cr.Spec.EtcVolumeStorageConfig.EphemeralStorage = true
 	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = true
 	test(loadFixture(t, "statefulset_stack1_standalone_base_1.json"))
+	test(loadFixture(t, "statefulset_stack1_standalone_base_1.json"))
+
+	cr.Spec.EtcVolumeStorageConfig.EphemeralStorage = true
+	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = true
+	test(loadFixture(t, "statefulset_stack1_standalone_base_1.json"))
 
 	cr.Spec.EtcVolumeStorageConfig.EphemeralStorage = false
 	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = false
@@ -374,6 +379,10 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 
 	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
 	test(loadFixture(t, "statefulset_stack1_standalone_with_apps.json"))
+	test(loadFixture(t, "statefulset_stack1_standalone_with_apps.json"))
+
+	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
+	test(loadFixture(t, "statefulset_stack1_standalone_with_apps.json"))
 
 	// Create a serviceaccount
 	current := corev1.ServiceAccount{
@@ -385,6 +394,7 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
 	test(loadFixture(t, "statefulset_stack1_standalone_with_service_account.json"))
+	test(loadFixture(t, "statefulset_stack1_standalone_with_service_account.json"))
 
 	// Add extraEnv
 	cr.Spec.CommonSplunkSpec.ExtraEnv = []corev1.EnvVar{
@@ -394,10 +404,12 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 		},
 	}
 	test(loadFixture(t, "statefulset_stack1_standalone_with_service_account_1.json"))
+	test(loadFixture(t, "statefulset_stack1_standalone_with_service_account_1.json"))
 
 	// Add additional label to cr metadata to transfer to the statefulset
 	cr.ObjectMeta.Labels = make(map[string]string)
 	cr.ObjectMeta.Labels["app.kubernetes.io/test-extra-label"] = "test-extra-label-value"
+	test(loadFixture(t, "statefulset_stack1_standalone_with_service_account_2.json"))
 	test(loadFixture(t, "statefulset_stack1_standalone_with_service_account_2.json"))
 }
 

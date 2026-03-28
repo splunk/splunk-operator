@@ -123,6 +123,9 @@ type IndexerClusterStatus struct {
 	// Auxiliary message describing CR status
 	Message string `json:"message"`
 
+	// Rolling restart status
+	RestartStatus RestartStatus `json:"restartStatus,omitempty"`
+
 	// Credential secret version to track changes to the secret and trigger rolling restart of indexer cluster peers when the secret is updated
 	CredentialSecretVersion string `json:"credentialSecretVersion,omitempty"`
 

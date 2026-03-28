@@ -136,6 +136,9 @@ type SearchHeadClusterStatus struct {
 	UpgradeStartTimestamp int64 `json:"upgradeStartTimestamp"`
 
 	UpgradeEndTimestamp int64 `json:"upgradeEndTimestamp"`
+
+	// Rolling restart status
+	RestartStatus RestartStatus `json:"restartStatus,omitempty"`
 }
 
 type UpgradePhase string

@@ -16,10 +16,12 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -32,8 +34,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -61,6 +66,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 	_ = enterpriseApi.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Object definitions
@@ -773,5 +779,293 @@ func newTestIngestorQueuePipelineManager(mockHTTPClient *spltest.MockHTTPClient)
 	}
 	return &ingestorClusterPodManager{
 		newSplunkClient: newSplunkClientForQueuePipeline,
+	}
+}
+
+type fakeIngestorRestartChecker struct {
+	restartRequired bool
+	message         string
+	err             error
+}
+
+func (f fakeIngestorRestartChecker) CheckRestartRequired() (bool, string, error) {
+	return f.restartRequired, f.message, f.err
+}
+
+func newIngestorPodForRestartTests(name, namespace, ip string, phase corev1.PodPhase, ready bool) *corev1.Pod {
+	readyStatus := corev1.ConditionFalse
+	if ready {
+		readyStatus = corev1.ConditionTrue
+	}
+
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Status: corev1.PodStatus{
+			Phase: phase,
+			PodIP: ip,
+			Conditions: []corev1.PodCondition{
+				{
+					Type:   corev1.PodReady,
+					Status: readyStatus,
+				},
+			},
+		},
+	}
+}
+
+func TestCheckAndEvictIngestorsIfNeededSecretMissing(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	_ = enterpriseApi.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	cr := &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "demo",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			Replicas: 1,
+		},
+	}
+
+	err := checkAndEvictIngestorsIfNeeded(ctx, c, cr)
+	if err == nil {
+		t.Fatalf("expected error when namespace-scoped secret is missing")
+	}
+	if !strings.Contains(err.Error(), "failed to get splunk secret") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCheckAndEvictIngestorsIfNeededEvictsOnlyFirstRestartRequiredPod(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	_ = enterpriseApi.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	cr := &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "demo",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			Replicas: 3,
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      splcommon.GetNamespaceScopedSecretName("test"),
+			Namespace: "test",
+		},
+		Data: map[string][]byte{"password": []byte("dummy")},
+	}
+
+	pod0 := newIngestorPodForRestartTests("splunk-demo-ingestor-0", "test", "10.0.0.10", corev1.PodPending, false)
+	pod1 := newIngestorPodForRestartTests("splunk-demo-ingestor-1", "test", "10.0.0.11", corev1.PodRunning, false)
+	pod2 := newIngestorPodForRestartTests("splunk-demo-ingestor-2", "test", "10.0.0.12", corev1.PodRunning, true)
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret, pod0, pod1, pod2).Build()
+
+	originalChecker := newIngestorRestartChecker
+	originalEvict := evictIngestorPod
+	t.Cleanup(func() {
+		newIngestorRestartChecker = originalChecker
+		evictIngestorPod = originalEvict
+	})
+
+	checkCalls := []string{}
+	newIngestorRestartChecker = func(uri, username, password string) ingestorRestartChecker {
+		checkCalls = append(checkCalls, uri)
+		return fakeIngestorRestartChecker{restartRequired: true, message: "restart required"}
+	}
+
+	evictedPods := []string{}
+	evictIngestorPod = func(ctx context.Context, c client.Client, pod *corev1.Pod) error {
+		evictedPods = append(evictedPods, pod.Name)
+		return nil
+	}
+
+	err := checkAndEvictIngestorsIfNeeded(ctx, c, cr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(checkCalls) != 1 || checkCalls[0] != "https://10.0.0.12:8089" {
+		t.Fatalf("restart checks = %v; want [https://10.0.0.12:8089]", checkCalls)
+	}
+	if len(evictedPods) != 1 || evictedPods[0] != "splunk-demo-ingestor-2" {
+		t.Fatalf("evicted pods = %v; want [splunk-demo-ingestor-2]", evictedPods)
+	}
+}
+
+func TestCheckAndEvictIngestorsIfNeededRetriesAfterPDBViolation(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	_ = enterpriseApi.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	cr := &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "demo",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			Replicas: 2,
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      splcommon.GetNamespaceScopedSecretName("test"),
+			Namespace: "test",
+		},
+		Data: map[string][]byte{"password": []byte("dummy")},
+	}
+
+	pod0 := newIngestorPodForRestartTests("splunk-demo-ingestor-0", "test", "10.0.0.20", corev1.PodRunning, true)
+	pod1 := newIngestorPodForRestartTests("splunk-demo-ingestor-1", "test", "10.0.0.21", corev1.PodRunning, true)
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret, pod0, pod1).Build()
+
+	originalChecker := newIngestorRestartChecker
+	originalEvict := evictIngestorPod
+	t.Cleanup(func() {
+		newIngestorRestartChecker = originalChecker
+		evictIngestorPod = originalEvict
+	})
+
+	newIngestorRestartChecker = func(uri, username, password string) ingestorRestartChecker {
+		return fakeIngestorRestartChecker{restartRequired: true, message: "restart required"}
+	}
+
+	evictedPods := []string{}
+	evictIngestorPod = func(ctx context.Context, c client.Client, pod *corev1.Pod) error {
+		evictedPods = append(evictedPods, pod.Name)
+		if pod.Name == "splunk-demo-ingestor-0" {
+			return k8serrors.NewTooManyRequests("Cannot evict pod as it would violate the pod's disruption budget", 1)
+		}
+		return nil
+	}
+
+	err := checkAndEvictIngestorsIfNeeded(ctx, c, cr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	wantEvictions := []string{"splunk-demo-ingestor-0", "splunk-demo-ingestor-1"}
+	if !reflect.DeepEqual(evictedPods, wantEvictions) {
+		t.Fatalf("evicted pods = %v; want %v", evictedPods, wantEvictions)
+	}
+}
+
+func TestCheckAndEvictIngestorsIfNeededReturnsErrorForNonPDBEvictionFailure(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	_ = enterpriseApi.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	cr := &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "demo",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			Replicas: 1,
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      splcommon.GetNamespaceScopedSecretName("test"),
+			Namespace: "test",
+		},
+		Data: map[string][]byte{"password": []byte("dummy")},
+	}
+	pod0 := newIngestorPodForRestartTests("splunk-demo-ingestor-0", "test", "10.0.0.30", corev1.PodRunning, true)
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret, pod0).Build()
+
+	originalChecker := newIngestorRestartChecker
+	originalEvict := evictIngestorPod
+	t.Cleanup(func() {
+		newIngestorRestartChecker = originalChecker
+		evictIngestorPod = originalEvict
+	})
+
+	newIngestorRestartChecker = func(uri, username, password string) ingestorRestartChecker {
+		return fakeIngestorRestartChecker{restartRequired: true, message: "restart required"}
+	}
+	evictIngestorPod = func(ctx context.Context, c client.Client, pod *corev1.Pod) error {
+		return errors.New("eviction failed")
+	}
+
+	err := checkAndEvictIngestorsIfNeeded(ctx, c, cr)
+	if err == nil {
+		t.Fatalf("expected non-PDB eviction error")
+	}
+	if !strings.Contains(err.Error(), "eviction failed") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCheckAndEvictIngestorsIfNeededSkipsRestartCheckErrors(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	_ = enterpriseApi.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	cr := &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "demo",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			Replicas: 2,
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      splcommon.GetNamespaceScopedSecretName("test"),
+			Namespace: "test",
+		},
+		Data: map[string][]byte{"password": []byte("dummy")},
+	}
+	pod0 := newIngestorPodForRestartTests("splunk-demo-ingestor-0", "test", "10.0.0.40", corev1.PodRunning, true)
+	pod1 := newIngestorPodForRestartTests("splunk-demo-ingestor-1", "test", "10.0.0.41", corev1.PodRunning, true)
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret, pod0, pod1).Build()
+
+	originalChecker := newIngestorRestartChecker
+	originalEvict := evictIngestorPod
+	t.Cleanup(func() {
+		newIngestorRestartChecker = originalChecker
+		evictIngestorPod = originalEvict
+	})
+
+	newIngestorRestartChecker = func(uri, username, password string) ingestorRestartChecker {
+		if uri == "https://10.0.0.40:8089" {
+			return fakeIngestorRestartChecker{err: errors.New("connection failed")}
+		}
+		return fakeIngestorRestartChecker{restartRequired: true, message: "restart required"}
+	}
+
+	evictedPods := []string{}
+	evictIngestorPod = func(ctx context.Context, c client.Client, pod *corev1.Pod) error {
+		evictedPods = append(evictedPods, pod.Name)
+		return nil
+	}
+
+	err := checkAndEvictIngestorsIfNeeded(ctx, c, cr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	wantEvictions := []string{"splunk-demo-ingestor-1"}
+	if !reflect.DeepEqual(evictedPods, wantEvictions) {
+		t.Fatalf("evicted pods = %v; want %v", evictedPods, wantEvictions)
 	}
 }

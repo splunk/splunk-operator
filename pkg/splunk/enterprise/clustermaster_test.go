@@ -177,6 +177,18 @@ func TestGetClusterMasterStatefulSet(t *testing.T) {
 
 	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
 	test(loadFixture(t, "statefulset_stack1_cluster_master_with_apps.json"))
+	test(loadFixture(t, "statefulset_stack1_cluster_master_with_apps.json"))
+
+	cr.Spec.LicenseManagerRef.Name = "stack1"
+	cr.Spec.LicenseManagerRef.Namespace = "test"
+	test(loadFixture(t, "statefulset_stack1_cluster_master_base_1_with_apps.json"))
+
+	cr.Spec.LicenseManagerRef.Name = ""
+	cr.Spec.LicenseURL = "/mnt/splunk.lic"
+	test(loadFixture(t, "statefulset_stack1_cluster_master_with_apps.json"))
+
+	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
+	test(loadFixture(t, "statefulset_stack1_cluster_master_with_apps.json"))
 
 	// Create a serviceaccount
 	current := corev1.ServiceAccount{
@@ -188,6 +200,7 @@ func TestGetClusterMasterStatefulSet(t *testing.T) {
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
 	test(loadFixture(t, "statefulset_stack1_cluster_master_with_service_account.json"))
+	test(loadFixture(t, "statefulset_stack1_cluster_master_with_service_account.json"))
 
 	// Add extraEnv
 	cr.Spec.CommonSplunkSpec.ExtraEnv = []corev1.EnvVar{
@@ -197,10 +210,12 @@ func TestGetClusterMasterStatefulSet(t *testing.T) {
 		},
 	}
 	test(loadFixture(t, "statefulset_stack1_cluster_master_with_service_account_1.json"))
+	test(loadFixture(t, "statefulset_stack1_cluster_master_with_service_account_1.json"))
 
 	// Add additional label to cr metadata to transfer to the statefulset
 	cr.ObjectMeta.Labels = make(map[string]string)
 	cr.ObjectMeta.Labels["app.kubernetes.io/test-extra-label"] = "test-extra-label-value"
+	test(loadFixture(t, "statefulset_stack1_cluster_master_with_service_account_2.json"))
 	test(loadFixture(t, "statefulset_stack1_cluster_master_with_service_account_2.json"))
 }
 
@@ -285,7 +300,6 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
-		{MetaName: "*v1.Pod-test-splunk-stack1-cluster-master-0"},
 		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 		{MetaName: "*v3.ClusterMaster-test-stack1"},
 		{MetaName: "*v3.ClusterMaster-test-stack1"},
@@ -323,7 +337,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[13], funcCalls[15]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[16]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[13], funcCalls[15]}, "List": {listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[16]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[10]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApiV3.ClusterMaster{

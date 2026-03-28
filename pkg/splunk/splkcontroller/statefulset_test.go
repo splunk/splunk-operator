@@ -197,11 +197,11 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 		t.Errorf("UpdateStatefulSetPods should not have returned error=%s with phase=%s", err, phase)
 	}
 
-	// CurrentRevision = UpdateRevision
+	// CurrentRevision = UpdateRevision (readyReplicas=2 > desiredReplicas=1 -> ScalingDown)
 	statefulSet.Status.CurrentRevision = "v1"
 	phase, err = updateStatefulSetPodsTester(t, &mgr, statefulSet, 1 /*desiredReplicas*/, statefulSet, pod)
-	if err == nil && phase != enterpriseApi.PhaseScalingUp {
-		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseError, but we got phase=%s", phase)
+	if err == nil && phase != enterpriseApi.PhaseScalingDown {
+		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseScalingDown, but we got phase=%s", phase)
 	}
 
 	// readyReplicas > replicas
@@ -278,23 +278,8 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 		t.Errorf("Expected error")
 	}
 
-	replicas = 3
-	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
-	c.InduceErrorKind[splcommon.MockClientInduceErrorDelete] = rerr
-	pvc := corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pvc-etc-splunk-stack1-2",
-			Namespace: "test",
-		},
-	}
-	c.Create(ctx, &pvc)
-	_, err = UpdateStatefulSetPods(ctx, c, statefulSet, &mgr, 1)
-	if err == nil {
-		t.Errorf("Expected error")
-	}
-
 	// Pod revision different errors
-	c.InduceErrorKind[splcommon.MockClientInduceErrorDelete] = nil
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
 	replicas = 3
 	pod.Name = "splunk-stack1-2"
 	pod.Status.Phase = corev1.PodRunning
@@ -342,6 +327,56 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 	newCtx := context.WithValue(context.TODO(), "errVal", "newVal")
 	_, err = UpdateStatefulSetPods(newCtx, c, statefulSet, &mgr, 3)
 
+}
+
+func TestUpdateStatefulSetPodsScaleDownUsesSpecReplicas(t *testing.T) {
+	ctx := context.TODO()
+	mgr := DefaultStatefulSetPodManager{}
+	c := spltest.NewMockClient()
+
+	var currentReplicas int32 = 3
+	var desiredReplicas int32 = 2
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &currentReplicas,
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      currentReplicas,
+			ReadyReplicas: desiredReplicas,
+		},
+	}
+
+	// Pod that will be marked for scale-down before the replica decrement.
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-2",
+			Namespace: "test",
+		},
+	}
+
+	c.AddObject(statefulSet)
+	c.AddObject(pod)
+
+	phase, err := UpdateStatefulSetPods(ctx, c, statefulSet, &mgr, desiredReplicas)
+	if err != nil {
+		t.Fatalf("UpdateStatefulSetPods() returned unexpected error: %v", err)
+	}
+	if phase != enterpriseApi.PhaseScalingDown {
+		t.Fatalf("UpdateStatefulSetPods() phase=%s; want %s", phase, enterpriseApi.PhaseScalingDown)
+	}
+
+	updatedStatefulSet := &appsv1.StatefulSet{}
+	err = c.Get(ctx, types.NamespacedName{Name: statefulSet.Name, Namespace: statefulSet.Namespace}, updatedStatefulSet)
+	if err != nil {
+		t.Fatalf("failed to fetch updated StatefulSet: %v", err)
+	}
+	if *updatedStatefulSet.Spec.Replicas != desiredReplicas {
+		t.Fatalf("updated replicas=%d; want %d", *updatedStatefulSet.Spec.Replicas, desiredReplicas)
+	}
 }
 
 func TestSetStatefulSetOwnerRef(t *testing.T) {

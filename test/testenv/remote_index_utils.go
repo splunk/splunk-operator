@@ -86,8 +86,9 @@ func RollHotToWarm(ctx context.Context, deployment *Deployment, podName string, 
 	return true
 }
 
-// GenerateQueueVolumeSpec return SQSVolumeSpec struct with given values
-func GenerateQueueVolumeSpec(volumeName string, secretRef string) enterpriseApi.SQSVolumeSpec {
+// GenerateQueueVolumeSpec returns SQSVolumeSpec with the required values.
+// Extra arguments are accepted for backward compatibility with existing tests.
+func GenerateQueueVolumeSpec(volumeName string, secretRef string, _ ...string) enterpriseApi.SQSVolumeSpec {
 	return enterpriseApi.SQSVolumeSpec{
 		Name:      volumeName,
 		SecretRef: secretRef,

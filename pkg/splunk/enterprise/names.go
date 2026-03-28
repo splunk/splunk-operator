@@ -59,6 +59,9 @@ const (
 	// startupScriptName
 	startupScriptName = "startupProbe.sh"
 
+	// preStopScriptName
+	preStopScriptName = "preStop.sh"
+
 	// startupScriptLocation
 	startupScriptLocation = "tools/k8_probes/" + startupScriptName
 
@@ -67,6 +70,9 @@ const (
 
 	// livenessScriptLocation
 	livenessScriptLocation = "tools/k8_probes/" + livenessScriptName
+
+	// preStopScriptLocation
+	preStopScriptLocation = "tools/k8_probes/" + preStopScriptName
 
 	// livenessDriverLocation
 	//livenessDriverLocation = "/opt/splunk/etc/k8_liveness_driver.sh"
@@ -339,6 +345,11 @@ var GetStartupScriptLocation = func() string {
 	return startupScriptLocation
 }
 
+// GetPreStopScriptLocation return the location of preStop script
+var GetPreStopScriptLocation = func() string {
+	return preStopScriptLocation
+}
+
 // GetReadinessScriptName returns the name of liveness script on pod
 var GetReadinessScriptName = func() string {
 	return readinessScriptName
@@ -347,6 +358,11 @@ var GetReadinessScriptName = func() string {
 // GetLivenessScriptName returns the name of liveness script on pod
 var GetLivenessScriptName = func() string {
 	return livenessScriptName
+}
+
+// GetPreStopScriptName returns the name of preStop script on pod
+var GetPreStopScriptName = func() string {
+	return preStopScriptName
 }
 
 // GetProbeMountDirectory returns the name of mount location for probe config map

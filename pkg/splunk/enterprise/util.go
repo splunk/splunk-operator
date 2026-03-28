@@ -41,10 +41,12 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -2612,6 +2614,168 @@ func loadFixture(t *testing.T, filename string) string {
 		t.Fatalf("Failed to compact JSON from fixture %s: %v", filename, err)
 	}
 	return compactJSON.String()
+}
+
+// ============================================================================
+// PodDisruptionBudget Reconciliation (RollingUpdate Support)
+// ============================================================================
+
+// ApplyPodDisruptionBudget creates or updates a PodDisruptionBudget for a Splunk resource
+// This ensures high availability during rolling restarts by preventing too many pods
+// from being unavailable simultaneously.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - client: Kubernetes client for API operations
+//   - cr: The Splunk custom resource (Standalone, IndexerCluster, SearchHeadCluster, IngestorCluster, etc.)
+//   - instanceType: Type of Splunk instance (SplunkStandalone, SplunkIndexer, etc.)
+//   - replicas: Number of replicas for the resource
+//
+// The function:
+//  1. Calculates minAvailable as (replicas - 1) to allow only 1 pod unavailable at a time
+//  2. Creates or updates the PodDisruptionBudget with appropriate labels and selectors
+//  3. Sets the CR as owner so PDB is cleaned up when CR is deleted
+func ApplyPodDisruptionBudget(
+	ctx context.Context,
+	client client.Client,
+	cr splcommon.MetaObject,
+	instanceType InstanceType,
+	replicas int32,
+) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyPodDisruptionBudget").WithValues(
+		"name", cr.GetName(),
+		"namespace", cr.GetNamespace(),
+		"instanceType", instanceType.ToString(),
+	)
+
+	// Calculate minAvailable: allow only 1 pod to be unavailable at a time
+	// For a 3-replica cluster: minAvailable = 2 (allows 1 disruption)
+	// For a 1-replica deployment: minAvailable = 0 (allow eviction)
+	minAvailable := replicas - 1
+	if replicas <= 1 {
+		minAvailable = 0 // Allow eviction for single-replica deployments
+	}
+
+	// Get labels for pod selector - must match StatefulSet pod labels
+	// Need to use same partOfIdentifier logic as StatefulSet pods
+	var partOfIdentifier string
+
+	// Type assertion to get ClusterManagerRef/ClusterMasterRef
+	switch v := cr.(type) {
+	case *enterpriseApi.IndexerCluster:
+		if v.Spec.ClusterManagerRef.Name != "" {
+			partOfIdentifier = v.Spec.ClusterManagerRef.Name
+		} else if v.Spec.ClusterMasterRef.Name != "" {
+			partOfIdentifier = v.Spec.ClusterMasterRef.Name
+		}
+	}
+
+	labels := getSplunkLabels(cr.GetName(), instanceType, partOfIdentifier)
+
+	// Create PodDisruptionBudget spec
+	pdbName := GetSplunkStatefulsetName(instanceType, cr.GetName()) + "-pdb"
+	pdb := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pdbName,
+			Namespace: cr.GetNamespace(),
+			Labels:    labels,
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			MinAvailable: &intstr.IntOrString{
+				Type:   intstr.Int,
+				IntVal: minAvailable,
+			},
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+		},
+	}
+
+	// Set owner reference so PDB is deleted when CR is deleted
+	pdb.SetOwnerReferences(append(pdb.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
+
+	// Check if PDB already exists
+	namespacedName := types.NamespacedName{
+		Name:      pdbName,
+		Namespace: cr.GetNamespace(),
+	}
+	existingPDB := &policyv1.PodDisruptionBudget{}
+	err := client.Get(ctx, namespacedName, existingPDB)
+
+	if err != nil && k8serrors.IsNotFound(err) {
+		// PDB doesn't exist, create it
+		scopedLog.Info("Creating PodDisruptionBudget",
+			"pdbName", pdbName,
+			"minAvailable", minAvailable,
+			"replicas", replicas)
+
+		err = client.Create(ctx, pdb)
+		if err != nil {
+			scopedLog.Error(err, "Failed to create PodDisruptionBudget")
+			return fmt.Errorf("failed to create PodDisruptionBudget: %w", err)
+		}
+
+		scopedLog.Info("Successfully created PodDisruptionBudget", "pdbName", pdbName)
+		return nil
+	} else if err != nil {
+		// Error retrieving PDB
+		scopedLog.Error(err, "Failed to get PodDisruptionBudget")
+		return fmt.Errorf("failed to get PodDisruptionBudget: %w", err)
+	}
+
+	// PDB exists - check if it's managed by this operator
+	// If PDB doesn't have our CR as owner, it's user-created and we should NOT modify it
+	isManagedByOperator := false
+	for _, ownerRef := range existingPDB.GetOwnerReferences() {
+		if ownerRef.UID == cr.GetUID() {
+			isManagedByOperator = true
+			break
+		}
+	}
+
+	if !isManagedByOperator {
+		// PDB exists but is NOT managed by this operator (user-created)
+		// Do not modify it - respect user's configuration
+		scopedLog.Info("PodDisruptionBudget exists but is not managed by operator, skipping update",
+			"pdbName", pdbName,
+			"reason", "user-created PDB detected")
+		return nil
+	}
+
+	// PDB is managed by operator, check if update is needed
+	needsUpdate := false
+
+	// Check if minAvailable changed
+	if existingPDB.Spec.MinAvailable != nil && existingPDB.Spec.MinAvailable.IntVal != minAvailable {
+		scopedLog.Info("MinAvailable changed, updating PDB",
+			"old", existingPDB.Spec.MinAvailable.IntVal,
+			"new", minAvailable)
+		needsUpdate = true
+	}
+
+	// Check if selector changed
+	if !reflect.DeepEqual(existingPDB.Spec.Selector, pdb.Spec.Selector) {
+		scopedLog.Info("Selector changed, updating PDB")
+		needsUpdate = true
+	}
+
+	if needsUpdate {
+		// Update the existing PDB
+		existingPDB.Spec = pdb.Spec
+		existingPDB.Labels = pdb.Labels
+		existingPDB.SetOwnerReferences(pdb.GetOwnerReferences())
+
+		err = client.Update(ctx, existingPDB)
+		if err != nil {
+			scopedLog.Error(err, "Failed to update PodDisruptionBudget")
+			return fmt.Errorf("failed to update PodDisruptionBudget: %w", err)
+		}
+
+		scopedLog.Info("Successfully updated PodDisruptionBudget", "pdbName", pdbName)
+	}
+
+	return nil
 }
 
 // QueueOSConfig holds resolved Queue and ObjectStorage specs with credentials

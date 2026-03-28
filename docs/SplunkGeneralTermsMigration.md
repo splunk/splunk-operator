@@ -1,10 +1,3 @@
----
-title: Splunk General Terms Migration
-parent: Reference
-nav_order: 3
----
-
-
 # FAQ - Splunk General Terms Migration
 
 

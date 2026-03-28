@@ -98,6 +98,8 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 }
 
 // PrepareScaleDown for searchHeadClusterPodManager prepares search head pod to be removed via scale down event; it returns true when ready
+// NOTE: Detention (removal from SHC) is now handled by preStop hook in the pod lifecycle.
+// This function only monitors the detention status and waits for completion.
 func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, error) {
 	// start by quarantining the pod
 	result, err := mgr.PrepareRecycle(ctx, n)
@@ -105,17 +107,28 @@ func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n 
 		return result, err
 	}
 
-	// pod is quarantined; decommission it
+	// Pod is quarantined; preStop hook handles detention when pod terminates
+	// Operator just waits for detention to complete
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
-	mgr.log.Info("Removing member from search head cluster", "memberName", memberName)
+	mgr.log.Info("Waiting for preStop hook to complete detention", "memberName", memberName)
+
+	// Check if member is still in cluster consensus
 	c := mgr.getClient(ctx, n)
-	err = c.RemoveSearchHeadClusterMember()
+	info, err := c.GetSearchHeadClusterMemberInfo()
 	if err != nil {
-		return false, err
+		// If we can't get info, member may already be removed or pod is down
+		mgr.log.Info("Could not get member info, may already be removed", "memberName", memberName, "error", err)
+		return true, nil
 	}
 
-	// all done -> ok to scale down the statefulset
-	return true, nil
+	if !info.Registered {
+		mgr.log.Info("Member successfully removed from cluster", "memberName", memberName)
+		return true, nil
+	}
+
+	// Still registered, wait for detention to complete
+	mgr.log.Info("Member still registered in cluster, waiting", "memberName", memberName)
+	return false, nil
 }
 
 // PrepareRecycle for searchHeadClusterPodManager prepares search head pod to be recycled for updates; it returns true when ready
