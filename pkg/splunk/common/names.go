@@ -108,6 +108,9 @@ const (
 	// MockClientInduceErrorDelete represents an error for delete Api
 	MockClientInduceErrorDelete = "mockClientDeleteError"
 
+	// MockClientInduceErrorApply represents an error for apply Api (controller-runtime v0.22+ / k8s v0.34+)
+	MockClientInduceErrorApply = "mockClientApplyError"
+
 	// Rerr represents a random error strting
 	Rerr = "randomError"
 )

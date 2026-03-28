@@ -1,0 +1,39 @@
+---
+# Development PostgresClusterClass
+# Minimal configuration for local development and testing
+apiVersion: enterprise.splunk.com/v4
+kind: PostgresClusterClass
+metadata:
+  name: postgresql-dev
+spec:
+  provisioner: postgresql.cnpg.io
+
+  config:
+    # Single instance - no HA (suitable for development)
+    instances: 1
+
+    # Small storage for development
+    storage: 10Gi
+
+    # Latest PostgreSQL 18
+    postgresVersion: "18"
+
+    # Minimal resources
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "1"
+        memory: "2Gi"
+    connectionPoolerEnabled: true
+
+  cnpg:
+    # Restart method - tolerate downtime in dev
+    primaryUpdateMethod: restart
+    connectionPooler:
+      instances: 2
+      mode: transaction
+      config:
+        max_client_conn: "100"
+

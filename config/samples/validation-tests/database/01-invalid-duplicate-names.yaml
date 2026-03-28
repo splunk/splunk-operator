@@ -1,0 +1,14 @@
+apiVersion: enterprise.splunk.com/v4
+kind: PostgresDatabase
+metadata:
+  name: test-duplicate-names
+  namespace: default
+spec:
+  clusterRef:
+    name: postgres-cluster
+  databases:
+    - name: kvstore
+      extensions:
+        - pg_stat_statements
+    - name: analytics
+    - name: kvstore  # DUPLICATE! Should fail with: "database names must be unique"

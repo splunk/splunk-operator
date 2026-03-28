@@ -68,6 +68,23 @@ spec:
       kind: ObjectStorage
       name: objectstorages.enterprise.splunk.com
       version: v4
+    - description: |-
+        PostgresClusterClass is the Schema for the postgresclusterclasses API.
+        PostgresClusterClass defines a reusable template and policy for postgres cluster provisioning.
+      displayName: Postgres Cluster Class
+      kind: PostgresClusterClass
+      name: postgresclusterclasses.enterprise.splunk.com
+      version: v4
+    - description: PostgresCluster is the Schema for the postgresclusters API.
+      displayName: Postgres Cluster
+      kind: PostgresCluster
+      name: postgresclusters.enterprise.splunk.com
+      version: v4
+    - description: PostgresDatabase is the Schema for the postgresdatabases API.
+      displayName: Postgres Database
+      kind: PostgresDatabase
+      name: postgresdatabases.enterprise.splunk.com
+      version: v4
     - description: Queue is the Schema for the queues API
       displayName: Queue
       kind: Queue
