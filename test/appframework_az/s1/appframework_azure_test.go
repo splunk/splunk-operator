@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -42,45 +41,17 @@ var _ = Describe("s1appfw test", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
-		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-		Expect(err).To(Succeed(), "Unable to create testcaseenv")
-		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
-		Expect(err).To(Succeed(), "Unable to create deployment")
-
-		// Validate test prerequisites early to fail fast
-		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
-		Expect(err).To(Succeed(), "Test prerequisites validation failed")
+		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
 
 		azTestDir = "s1appfw-" + testenv.RandomDNSName(4)
 		appSourceVolumeName = "appframework-test-volume-" + testenv.RandomDNSName(3)
 	})
 
 	AfterEach(func() {
-		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
-			testcaseEnvInst.SkipTeardown = true
-		}
-		if deployment != nil {
-			deployment.Teardown()
-		}
-
-		// Delete files uploaded to Azure
-		if !testcaseEnvInst.SkipTeardown {
+		testenv.TeardownAppFrameworkTestCaseEnv(ctx, testcaseEnvInst, deployment, func() {
 			azureBlobClient := &testenv.AzureBlobClient{}
 			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
-		}
-		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
-		}
-
-		if filePresentOnOperator {
-			//Delete files from app-directory
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
-			podDownloadPath := filepath.Join(testenv.AppDownloadVolume, "test_file.img")
-			testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
-		}
+		}, filePresentOnOperator)
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
@@ -751,7 +722,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info("Download ES app from Azure")
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
 			appFileList := testenv.GetAppFileList(esApp)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 
 			Expect(err).To(Succeed(), "Unable to download ES app")
@@ -805,7 +776,7 @@ var _ = Describe("s1appfw test", func() {
 			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
 
 			// Download ES App from Azure
-			containerName = "/" + AzureDataContainer + "/" + AzureAppDirV2
+			containerName = "/" + AzureDataContainer + "/" + testenv.AppLocationV2
 			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app")
 
@@ -861,7 +832,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Download apps from Azure
 			testcaseEnvInst.Log.Info("Download bigger amount of apps from Azure for this test")
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
@@ -1115,7 +1086,7 @@ var _ = Describe("s1appfw test", func() {
 			// Download apps from Azure
 			testcaseEnvInst.Log.Info("Download the extra apps from Azure for this test")
 			appFileList := testenv.GetAppFileList(testenv.RestartNeededApps)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
@@ -1246,7 +1217,7 @@ var _ = Describe("s1appfw test", func() {
 			// Download all test apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -1326,7 +1297,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -1397,7 +1368,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -1707,7 +1678,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -1866,7 +1837,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big app")
 

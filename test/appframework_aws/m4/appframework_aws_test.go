@@ -22,7 +22,6 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
@@ -53,16 +52,7 @@ var _ = Describe("m4appfw test", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-		var err error
-		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
-		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-		Expect(err).To(Succeed(), "Unable to create testcaseenv")
-		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
-		Expect(err).To(Succeed(), "Unable to create deployment")
-
-		// Validate test prerequisites early to fail fast
-		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
-		Expect(err).To(Succeed(), "Test prerequisites validation failed")
+		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "master")
 
 		s3TestDirIdxc = "m4appfw-idxc-" + testenv.RandomDNSName(4)
 		s3TestDirShc = "m4appfw-shc-" + testenv.RandomDNSName(4)
@@ -71,27 +61,9 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	AfterEach(func() {
-		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
-			testcaseEnvInst.SkipTeardown = true
-		}
-		if deployment != nil {
-			deployment.Teardown()
-		}
-		// Delete files uploaded to S3
-		if !testcaseEnvInst.SkipTeardown {
+		testenv.TeardownAppFrameworkTestCaseEnv(ctx, testcaseEnvInst, deployment, func() {
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
-		}
-		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
-		}
-
-		if filePresentOnOperator {
-			//Delete files from app-directory
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
-			podDownloadPath := filepath.Join(testenv.AppDownloadVolume, "test_file.img")
-			testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
-		}
+		}, filePresentOnOperator)
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
@@ -192,14 +164,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -273,14 +238,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -408,14 +366,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -475,14 +426,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -585,14 +529,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -851,11 +788,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4IndexersAndSHCReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -900,11 +833,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4IndexersAndSHCReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1020,14 +949,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure cluster configured as multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1082,14 +1004,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure cluster configured as multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1245,11 +1160,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4IndexersAndSHCReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1294,11 +1205,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4IndexersAndSHCReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
@@ -1476,14 +1383,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1556,14 +1456,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1651,7 +1544,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all test apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to S3 for Cluster Master
@@ -1788,7 +1681,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all test apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to S3 for Cluster Master
@@ -1892,7 +1785,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload V1 apps to S3 for Indexer Cluster
@@ -1931,14 +1824,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1984,7 +1870,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload V1 apps to S3 for Indexer Cluster
@@ -2023,14 +1909,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2107,14 +1986,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2225,11 +2097,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4IndexersAndSHCReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2383,7 +2251,7 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload V1 apps to S3 for Indexer Cluster
@@ -2499,7 +2367,7 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appList := testenv.PVTestApps
 			appFileList := testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3PVTestApps, downloadDirPVTestApps, appFileList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.PVTestAppsLocation, downloadDirPVTestApps, appFileList)
 			Expect(err).To(Succeed(), "Unable to download app files")
 
 			// Upload apps to S3 for Indexer Cluster
@@ -2540,11 +2408,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4IndexersAndSHCReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2584,7 +2448,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download big size apps from S3
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload big size app to S3 for Indexer Cluster
@@ -2626,14 +2490,7 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2709,14 +2566,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag for SHC")
 			testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, shc.Name, shc.Kind)
 
-			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-
-			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			verifyM4ClusterReady(ctx, testcaseEnvInst, deployment, siteCount)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)

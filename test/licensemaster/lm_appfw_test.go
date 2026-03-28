@@ -15,16 +15,14 @@ package licensemaster
 
 import (
 	"context"
-	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/onsi/ginkgo/v2/types"
-	. "github.com/onsi/gomega"
+
 	"github.com/splunk/splunk-operator/test/licensemanager"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("licensemaster test", func() {
+var _ = Describe("Licensemaster App Framework test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
@@ -32,41 +30,13 @@ var _ = Describe("licensemaster test", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-		var err error
-		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
-
-		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-		Expect(err).To(Succeed(), "Unable to create testcaseenv")
-
-		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
-		Expect(err).To(Succeed(), "Unable to create deployment")
+		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "master")
 
 		config = licensemanager.NewLicenseMasterConfig()
-
-		// Validate test prerequisites early to fail fast
-		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
-		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {
-		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
-			testcaseEnvInst.SkipTeardown = true
-		}
-
-		if deployment != nil {
-			deployment.Teardown()
-		}
-
-		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
-		}
-	})
-
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster) with License Master", func() {
-		It("licensemaster, integration, c3: Splunk Operator can configure License Master with Indexers and Search Heads in C3 SVA", func() {
-			licensemanager.RunLMC3Test(ctx, deployment, testcaseEnvInst, config)
-		})
+		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster) with License Master", func() {

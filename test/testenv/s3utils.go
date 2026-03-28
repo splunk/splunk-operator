@@ -32,11 +32,6 @@ var (
 	s3deleteWaitTime          = 60
 )
 
-// GetSmartStoreIndexesBucet returns smartstore test bucket name
-func GetSmartStoreIndexesBucet() string {
-	return testIndexesS3Bucket
-}
-
 // GetDefaultS3Region returns default AWS Region
 func GetDefaultS3Region() string {
 	return s3Region

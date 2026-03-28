@@ -17,7 +17,6 @@ import (
 	"context"
 	//"encoding/json"
 	"fmt"
-	"path/filepath"
 
 	//"strings"
 	//"time"
@@ -26,7 +25,6 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
 	//splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -54,44 +52,14 @@ var _ = Describe("c3appfw test", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-
-		var err error
-		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
-		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-		Expect(err).To(Succeed(), "Unable to create testcaseenv")
+		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "master")
 		testenv.SpecifiedTestTimeout = 5000
-		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
-		Expect(err).To(Succeed(), "Unable to create deployment")
-
-		// Validate test prerequisites early to fail fast
-		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
-		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {
-		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
-			testcaseEnvInst.SkipTeardown = true
-		}
-		if deployment != nil {
-			deployment.Teardown()
-		}
-
-		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
-		}
-
-		// Delete files uploaded to GCS
-		if !testcaseEnvInst.SkipTeardown {
+		testenv.TeardownAppFrameworkTestCaseEnv(ctx, testcaseEnvInst, deployment, func() {
 			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
-		}
-
-		if filePresentOnOperator {
-			//Delete files from app-directory
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
-			podDownloadPath := filepath.Join(testenv.AppDownloadVolume, "test_file.img")
-			testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
-		}
+		}, filePresentOnOperator)
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
@@ -197,20 +165,12 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			// wait for custom resource resource version to change
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
 
 			// Verify no SH in disconnected status is present on CM
 			testcaseEnvInst.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment)
@@ -278,19 +238,12 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -418,20 +371,12 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			// wait for custom resource resource version to change
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -487,19 +432,12 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -585,11 +523,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -634,11 +568,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -716,11 +646,7 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag")
 			testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, shc.Name, shc.Kind)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)

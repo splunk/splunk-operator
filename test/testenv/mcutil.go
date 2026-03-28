@@ -75,7 +75,7 @@ func CheckMCPodReady(ns string) bool {
 	return stsReady && podReady
 }
 
-// GetConfiguredPeers get list of Peers Configured on Montioring Console
+// GetConfiguredPeers get list of Peers Configured on Monitoring Console
 func GetConfiguredPeers(ns string, mcName string) []string {
 	podName := fmt.Sprintf(MonitoringConsolePod, mcName)
 	var peerList []string
@@ -102,18 +102,6 @@ func GetConfiguredPeers(ns string, mcName string) []string {
 	}
 	logf.Log.Info("Peer List found on MC Pod", "MC POD", podName, "Configured Peers", peerList)
 	return peerList
-}
-
-// DeleteMCPod delete monitoring console deployment
-func DeleteMCPod(ns string) {
-	mcSts := fmt.Sprintf(MonitoringConsoleSts, ns)
-	output, err := exec.Command("kubectl", "delete", "sts", "-n", ns, mcSts).Output()
-	if err != nil {
-		cmd := fmt.Sprintf("kubectl delete sts -n %s %s", ns, mcSts)
-		logf.Log.Error(err, "Failed to execute command", "command", cmd)
-	} else {
-		logf.Log.Info("Monitoring Console Stateful Set deleted", "Statefulset", mcSts, "stdout", output)
-	}
 }
 
 // CheckPodNameOnMC Check given pod is configured on Monitoring console pod

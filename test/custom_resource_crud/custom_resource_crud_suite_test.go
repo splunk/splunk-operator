@@ -24,12 +24,12 @@ import (
 )
 
 const (
-	// PollInterval specifies the polling interval
-	PollInterval = 5 * time.Second
-
-	// ConsistentPollInterval is the interval to use to consistently check a state is stable
-	ConsistentPollInterval = 200 * time.Millisecond
-	ConsistentDuration     = 2000 * time.Millisecond
+	// DefaultCPULimits is the default CPU limit
+	DefaultCPULimits = "4"
+	// UpdatedCPULimits is the updated CPU limit
+	UpdatedCPULimits = "2"
+	// DefaultVerificationTimeout is the default timeout for CRUD verification steps
+	DefaultVerificationTimeout = 150 * time.Second
 )
 
 var (
@@ -39,7 +39,6 @@ var (
 
 // TestBasic is the main entry point
 func TestBasic(t *testing.T) {
-
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Running "+testSuiteName)

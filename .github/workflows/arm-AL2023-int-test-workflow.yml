@@ -69,7 +69,7 @@ jobs:
             managercrcrud,
             licensemanager,
             managerdeletecr,
-            indingsep,
+            indexingestionsep,
           ]
     runs-on: ubuntu-latest
     needs: build-operator-image-arm-al2023

@@ -22,7 +22,6 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -48,43 +47,14 @@ var _ = Describe("c3appfw test", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
-		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-		Expect(err).To(Succeed(), "Unable to create testcaseenv")
-		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
-		Expect(err).To(Succeed(), "Unable to create deployment")
-
-		// Validate test prerequisites early to fail fast
-		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
-		Expect(err).To(Succeed(), "Test prerequisites validation failed")
+		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
 	})
 
 	AfterEach(func() {
-		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
-			testcaseEnvInst.SkipTeardown = true
-		}
-		if deployment != nil {
-			deployment.Teardown()
-		}
-
-		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
-		}
-
-		// Delete files uploaded to Azure
-		if !testcaseEnvInst.SkipTeardown {
+		testenv.TeardownAppFrameworkTestCaseEnv(ctx, testcaseEnvInst, deployment, func() {
 			azureBlobClient := &testenv.AzureBlobClient{}
 			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
-		}
-
-		if filePresentOnOperator {
-			// Delete files from app-directory
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
-			podDownloadPath := filepath.Join(testenv.AppDownloadVolume, "test_file.img")
-			testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
-		}
+		}, filePresentOnOperator)
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
@@ -191,20 +161,12 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			// wait for custom resource resource version to change
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
 
 			// Verify no SH in disconnected status is present on CM
 			testcaseEnvInst.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment)
@@ -265,19 +227,12 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -405,20 +360,12 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			// wait for custom resource resource version to change
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -475,19 +422,12 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -585,11 +525,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -672,12 +608,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testenv.CheckIndexerOnCM(ctx, deployment, indexerName)).To(Equal(true))
 
 			// Ingest data on Indexers
-			for i := 0; i < int(scaledIndexerReplicas); i++ {
-				podName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
-				logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
-				testenv.CreateMockLogfile(logFile, 2000)
-				testenv.IngestFileViaMonitor(ctx, logFile, "main", podName, deployment)
-			}
+			testenv.IngestDataOnIndexers(ctx, deployment, deployment.GetName(), int(scaledIndexerReplicas), "main", 2000)
 
 			// Ensure Search Head Cluster go to Ready phase
 			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
@@ -848,11 +779,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -898,11 +825,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -948,7 +871,7 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Download ES app from Azure")
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
 			appFileList := testenv.GetAppFileList(esApp)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app file from Azure")
 
@@ -1035,11 +958,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1069,7 +988,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Download ES App from Azure
 			appVersion = "V2"
-			containerName = "/" + AzureDataContainer + "/" + AzureAppDirV2
+			containerName = "/" + AzureDataContainer + "/" + testenv.AppLocationV2
 			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app")
 
@@ -1085,11 +1004,7 @@ var _ = Describe("c3appfw test", func() {
 			// // Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// // Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1220,11 +1135,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1301,11 +1212,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1447,11 +1354,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1517,11 +1420,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1577,7 +1476,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Download apps from Azure
 			testcaseEnvInst.Log.Info("Download bigger amount of apps from Azure for this test")
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
@@ -1616,11 +1515,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1743,11 +1638,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1806,11 +1697,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1956,11 +1843,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2006,11 +1889,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2182,11 +2061,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2259,11 +2134,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2355,7 +2226,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download all apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
@@ -2485,7 +2356,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download all apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
@@ -2589,7 +2460,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download all apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
@@ -2632,11 +2503,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2684,7 +2551,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download all apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
@@ -2727,11 +2594,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2813,11 +2676,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2901,7 +2760,7 @@ var _ = Describe("c3appfw test", func() {
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -2966,11 +2825,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -3056,11 +2911,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure that the Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -3104,7 +2955,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download big size apps from Azure
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
@@ -3150,11 +3001,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -3234,11 +3081,7 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag")
 			testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, shc.Name, shc.Kind)
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)

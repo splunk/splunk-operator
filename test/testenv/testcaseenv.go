@@ -116,11 +116,6 @@ func (testenv *TestCaseEnv) GetSplunkImage() string {
 	return testenv.splunkImage
 }
 
-// IsOperatorInstalledClusterWide returns if operator is installed clusterwide
-func (testenv *TestCaseEnv) IsOperatorInstalledClusterWide() string {
-	return testenv.clusterWideOperator
-}
-
 func (testenv *TestCaseEnv) setup() error {
 	testenv.Log.Info("testenv initializing.\n")
 

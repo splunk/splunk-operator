@@ -15,11 +15,8 @@ package licensemaster
 
 import (
 	"context"
-	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/onsi/ginkgo/v2/types"
-	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/licensemanager"
 	"github.com/splunk/splunk-operator/test/testenv"
@@ -33,35 +30,25 @@ var _ = Describe("Licensemaster test", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-		var err error
-		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
-
-		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-		Expect(err).To(Succeed(), "Unable to create testcaseenv")
-
-		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
-		Expect(err).To(Succeed(), "Unable to create deployment")
+		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "master")
 
 		config = licensemanager.NewLicenseMasterConfig()
-
-		// Validate test prerequisites early to fail fast
-		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
-		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
 	AfterEach(func() {
-		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
-			testcaseEnvInst.SkipTeardown = true
-		}
+		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+	})
 
-		if deployment != nil {
-			deployment.Teardown()
-		}
+	Context("Standalone deployment (S1) with License Master", func() {
+		It("licensemaster, smoke, s1: Splunk Operator can configure License Master with Standalone in S1 SVA", func() {
+			licensemanager.RunLMS1Test(ctx, deployment, testcaseEnvInst, config)
+		})
+	})
 
-		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
-		}
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster) with License Master", func() {
+		It("licensemaster, integration, c3: Splunk Operator can configure License Master with Indexers and Search Heads in C3 SVA", func() {
+			licensemanager.RunLMC3Test(ctx, deployment, testcaseEnvInst, config)
+		})
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster) with License Master", func() {
@@ -69,5 +56,4 @@ var _ = Describe("Licensemaster test", func() {
 			licensemanager.RunLMM4Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})
-
 })

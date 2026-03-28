@@ -14,9 +14,7 @@
 package example
 
 import (
-	"math/rand"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -29,12 +27,7 @@ var (
 	testSuiteName   = "example-" + testenv.RandomDNSName(3)
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 func TestExampleSuite(t *testing.T) {
-
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Running "+testSuiteName)
@@ -47,5 +40,7 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
-	Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
+	if testenvInstance != nil {
+		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
+	}
 })

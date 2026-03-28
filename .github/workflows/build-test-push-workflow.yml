@@ -200,7 +200,7 @@ jobs:
                 managerappframeworkm4,
                 managersecret,
                 managermc,
-                indingsep,
+                indexingestionsep,
                 licensemanager,
                ]
     runs-on: ubuntu-latest

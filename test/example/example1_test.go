@@ -14,12 +14,10 @@
 package example
 
 import (
-	"fmt"
 	"math/rand"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
 )
@@ -31,20 +29,11 @@ var _ = XDescribe("Example1", func() {
 
 	// This is invoke for each "It" spec below
 	BeforeEach(func() {
-		var err error
-		// Create a deployment for this test
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
-		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-		Expect(err).To(Succeed(), "Unable to create testcaseenv")
-		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
-		Expect(err).To(Succeed(), "Unable to create deployment")
+		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
 	})
 
 	AfterEach(func() {
-		deployment.Teardown()
-		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
-		}
+		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 	})
 
 	// "It" spec

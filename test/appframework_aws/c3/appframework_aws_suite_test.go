@@ -22,17 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/joho/godotenv"
 	"github.com/splunk/splunk-operator/test/testenv"
-)
-
-const (
-	// PollInterval specifies the polling interval
-	PollInterval = 5 * time.Second
-
-	// ConsistentPollInterval is the interval to use to consistently check a state is stable
-	ConsistentPollInterval = 200 * time.Millisecond
-	ConsistentDuration     = 2000 * time.Millisecond
 )
 
 var (
@@ -42,9 +32,6 @@ var (
 	appListV2             []string
 	testDataS3Bucket      = os.Getenv("TEST_BUCKET")
 	testS3Bucket          = os.Getenv("TEST_INDEXES_S3_BUCKET")
-	s3AppDirV1            = testenv.AppLocationV1
-	s3AppDirV2            = testenv.AppLocationV2
-	s3PVTestApps          = testenv.PVTestAppsLocation
 	currDir, _            = os.Getwd()
 	downloadDirV1         = filepath.Join(currDir, "c3appfwV1-"+testenv.RandomDNSName(4))
 	downloadDirV2         = filepath.Join(currDir, "c3appfwV2-"+testenv.RandomDNSName(4))
@@ -55,9 +42,7 @@ var (
 func TestBasic(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	// Find and load the .env file from the current directory upwards
-	err := loadEnvFile()
-	Expect(err).ToNot(HaveOccurred(), "Error loading .env file")
+	Expect(testenv.LoadEnvFile()).ToNot(HaveOccurred(), "Error loading .env file")
 
 	sc, _ := GinkgoConfiguration()
 	sc.Timeout = 240 * time.Minute
@@ -65,77 +50,10 @@ func TestBasic(t *testing.T) {
 	RunSpecs(t, "Running "+testSuiteName, sc)
 }
 
-//func TestMain(m *testing.M) {
-// Run the tests
-//    os.Exit(m.Run())
-//}
-
-// loadEnvFile traverses up the directory tree to find a .env file
-func loadEnvFile() error {
-	// Get the current working directory
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	// Traverse up the directory tree
-	for {
-		// Check if .env file exists in the current directory
-		envFile := filepath.Join(dir, ".env")
-		if _, err := os.Stat(envFile); err == nil {
-			// .env file found, load it
-			return godotenv.Load(envFile)
-		}
-
-		// Move up to the parent directory
-		parentDir := filepath.Dir(dir)
-		if parentDir == dir {
-			// Reached the root directory
-			return nil
-		}
-		dir = parentDir
-	}
-}
-
 var _ = BeforeSuite(func() {
-	var err error
-	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
-	Expect(err).ToNot(HaveOccurred())
-
-	if testenv.ClusterProvider == "eks" {
-		// Create a list of apps to upload to S3
-		appListV1 = testenv.BasicApps
-		appFileList := testenv.GetAppFileList(appListV1)
-
-		// Download V1 Apps from S3
-		err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V1 app files")
-
-		// Create a list of apps to upload to S3 after poll period
-		appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
-		appFileList = testenv.GetAppFileList(appListV2)
-
-		// Download V2 Apps from S3
-		err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V2 app files")
-	} else {
-		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenv.ClusterProvider)
-	}
-
+	testenvInstance, appListV1, appListV2 = testenv.SetupS3AppsSuite(testSuiteName, testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, testenv.AppLocationV2, downloadDirV2)
 })
 
 var _ = AfterSuite(func() {
-	if testenvInstance != nil {
-		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
-	}
-
-	if testenvInstance != nil {
-		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
-	}
-
-	// Delete locally downloaded app files
-	err := os.RemoveAll(downloadDirV1)
-	Expect(err).To(Succeed(), "Unable to delete locally downloaded V1 app files")
-	err = os.RemoveAll(downloadDirV2)
-	Expect(err).To(Succeed(), "Unable to delete locally downloaded V2 app files")
+	testenv.CleanupLocalAppDownloads(testenvInstance, downloadDirV1, downloadDirV2)
 })
