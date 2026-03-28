@@ -7,6 +7,13 @@ source ${scriptdir}/env.sh
 
 PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${SPLUNK_ENTERPRISE_IMAGE}
 
+# We deploy to EKS amd64; on arm64 dev machines, force pulls to amd64 so the
+# integration harness can still pull/tag/push images locally.
+DOCKER_PULL_PLATFORM=()
+case "$(uname -m)" in
+  arm64|aarch64) DOCKER_PULL_PLATFORM=(--platform=linux/amd64) ;;
+esac
+
 # if we are using private registry, we need to pull, tag and push images to it
 if [ -n "${PRIVATE_REGISTRY}" ]; then
 
@@ -18,14 +25,14 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   echo "check if image exists, docker manifest inspect $PRIVATE_SPLUNK_ENTERPRISE_IMAGE"
   if docker manifest inspect "$PRIVATE_SPLUNK_ENTERPRISE_IMAGE" > /dev/null 2>&1; then
     echo "Image $PRIVATE_SPLUNK_ENTERPRISE_IMAGE exists on the remote repository."
-    docker pull ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+    docker pull "${DOCKER_PULL_PLATFORM[@]}" ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
     if [ $? -ne 0 ]; then
       echo "Unable to pull ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
       exit 1
     fi
   else
     echo "Image $PRIVATE_SPLUNK_ENTERPRISE_IMAGE does not exist on the remote repository."
-    docker pull ${SPLUNK_ENTERPRISE_IMAGE}
+    docker pull "${DOCKER_PULL_PLATFORM[@]}" ${SPLUNK_ENTERPRISE_IMAGE}
     if [ $? -ne 0 ]; then
       echo "Unable to pull ${SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
       exit 1

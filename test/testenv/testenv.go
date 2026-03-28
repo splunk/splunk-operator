@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
@@ -132,7 +133,9 @@ const (
 )
 
 var (
-	metricsHost              = "0.0.0.0"
+	// Bind the per-testenv controller-runtime manager metrics to loopback to avoid collisions
+	// with other long-running local test processes and to avoid exposing local ports.
+	metricsHost              = "127.0.0.1"
 	metricsPort              = 8383
 	specifiedOperatorImage   = defaultOperatorImage
 	specifiedSplunkImage     = defaultSplunkImage
@@ -262,9 +265,9 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	testenv.kubeAPIServer = cfg.Host
 	testenv.Log.Info("Using kube-apiserver\n", "kube-apiserver", cfg.Host)
 
-	suiteConfig, _ := ginkgo.GinkgoConfiguration()
-
-	metricsAddr := fmt.Sprintf("%s:%d", metricsHost, metricsPort+suiteConfig.ParallelProcess)
+	// Use an ephemeral loopback port to avoid collisions when multiple suites
+	// run concurrently (e.g. `ginkgo -r`) or when previous test processes linger.
+	metricsAddr := fmt.Sprintf("%s:%d", metricsHost, 0)
 
 	kubeManager, err := manager.New(cfg, manager.Options{
 		Metrics: server.Options{
@@ -333,15 +336,36 @@ func (testenv *TestEnv) popCleanupFunc() (cleanupFunc, error) {
 
 // Create a service account config
 func newServiceAccount(ns string, serviceAccountName string) *corev1.ServiceAccount {
+	annotations := map[string]string{}
+	if roleArn := getEKSIRSARoleArn(); roleArn != "" {
+		// IRSA: allow operator/test pods to access AWS APIs (S3 for AppFramework/SmartStore) without static secrets.
+		annotations["eks.amazonaws.com/role-arn"] = roleArn
+	}
+
 	new := corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ServiceAccount",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      serviceAccountName,
-			Namespace: ns,
+			Name:        serviceAccountName,
+			Namespace:   ns,
+			Annotations: annotations,
 		},
 	}
 
 	return &new
+}
+
+func getEKSIRSARoleArn() string {
+	if strings.TrimSpace(ClusterProvider) != "eks" {
+		return ""
+	}
+
+	// TEST_IRSA_ROLE_ARN is the preferred name; keep backwards/alt names for convenience.
+	for _, k := range []string{"TEST_IRSA_ROLE_ARN", "TEST_EKS_IRSA_ROLE_ARN"} {
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			return v
+		}
+	}
+	return ""
 }

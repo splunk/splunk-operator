@@ -392,7 +392,21 @@ func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv,
 	// Create App framework volume
 	switch ClusterProvider {
 	case "eks":
-		volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", GetDefaultS3Region())}
+		// If explicit credentials aren't provided, omit SecretRef so the operator
+		// uses IAM role based auth (e.g. IRSA / node role).
+		accessKey := os.Getenv("TEST_S3_ACCESS_KEY_ID")
+		if accessKey == "" {
+			accessKey = os.Getenv("AWS_ACCESS_KEY_ID")
+		}
+		secretKey := os.Getenv("TEST_S3_SECRET_ACCESS_KEY")
+		if secretKey == "" {
+			secretKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
+		}
+		secretRef := testenvInstance.GetIndexSecretName()
+		if accessKey == "" || secretKey == "" {
+			secretRef = ""
+		}
+		volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), secretRef, "aws", "s3", GetDefaultS3Region())}
 	case "azure":
 		managedID := os.Getenv("AZURE_MANAGED_ID_ENABLED")
 		if managedID == "false" {

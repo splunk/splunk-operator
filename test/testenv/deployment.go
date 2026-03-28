@@ -229,6 +229,24 @@ func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []s
 		Stderr:  true,
 		TTY:     tty,
 	}
+
+	// Multi-container Splunk pods (splunk + sidecar) require an explicit container
+	// name for exec. Default to the main Splunk container when present.
+	if option.Container == "" {
+		if len(pod.Spec.Containers) == 1 {
+			option.Container = pod.Spec.Containers[0].Name
+		} else {
+			for _, c := range pod.Spec.Containers {
+				if c.Name == "splunk" {
+					option.Container = "splunk"
+					break
+				}
+			}
+			if option.Container == "" && len(pod.Spec.Containers) > 0 {
+				option.Container = pod.Spec.Containers[0].Name
+			}
+		}
+	}
 	if stdin == "" {
 		option.Stdin = false
 	}

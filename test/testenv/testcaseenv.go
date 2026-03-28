@@ -531,6 +531,14 @@ func (testenv *TestCaseEnv) createIndexSecret() error {
 		secretKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
 	}
 
+	// If explicit credentials aren't provided, skip creating the secret.
+	// The operator supports IAM role based auth (e.g. IRSA / node role) when SecretRef is empty.
+	if accessKey == "" || secretKey == "" {
+		testenv.Log.Info("Skipping creation of s3 index secret object (no access/secret key in env). Use IAM role based auth instead.",
+			"secretName", secretName)
+		return nil
+	}
+
 	data := map[string][]byte{"s3_access_key": []byte(accessKey),
 		"s3_secret_key": []byte(secretKey)}
 	secret := newSecretSpec(ns, secretName, data)

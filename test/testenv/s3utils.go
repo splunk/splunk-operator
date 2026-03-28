@@ -21,7 +21,14 @@ import (
 
 // Set Global Variables
 var (
-	ClusterProvider = os.Getenv("TEST_CLUSTER_PLATFORM")
+	// Historically, tests used TEST_CLUSTER_PLATFORM. Some runners set CLUSTER_PROVIDER.
+	// Support both to reduce footguns.
+	ClusterProvider = func() string {
+		if v := strings.TrimSpace(os.Getenv("TEST_CLUSTER_PLATFORM")); v != "" {
+			return v
+		}
+		return strings.TrimSpace(os.Getenv("CLUSTER_PROVIDER"))
+	}()
 )
 
 // Set S3 Variables

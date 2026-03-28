@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: splunk-operator-controller-manager
+  namespace: splunk-operator
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        env:
+        # These values are normally injected by `make deploy` via sed placeholders.
+        # In Skaffold workflows we set concrete defaults here so `skaffold dev` works end-to-end.
+        - name: WATCH_NAMESPACE
+          value: ""
+        - name: SPLUNK_GENERAL_TERMS
+          # Update if your org requires a different SGT acceptance string.
+          value: "--accept-sgt-current-at-splunk-com"
+
+        # Multi-container pod orchestration (distroless Splunk + init + sidecar).
+        - name: SPLUNK_POD_ARCH
+          value: "multi-container"
+        - name: RELATED_IMAGE_SPLUNK_INIT
+          value: "667741767953.dkr.ecr.us-west-2.amazonaws.com/splunk-init:latest"
+        - name: RELATED_IMAGE_SPLUNK_SIDECAR
+          value: "667741767953.dkr.ecr.us-west-2.amazonaws.com/splunk-sidecar:latest"
