@@ -116,6 +116,7 @@ func GenerateIndexVolumeSpecAzure(volumeName string, endpoint string, secretRef 
 		SecretRef: secretRef,
 		Provider:  provider,
 		Type:      storageType,
+		Region:    Region,
 	}
 }
 
@@ -127,6 +128,7 @@ func GenerateIndexVolumeSpecAzureManagedID(volumeName string, endpoint string, p
 		Path:     azureIndexesContainer,
 		Provider: provider,
 		Type:     storageType,
+		Region:   Region,
 	}
 }
 

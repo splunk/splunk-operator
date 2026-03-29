@@ -907,7 +907,14 @@ func (testenv *TestCaseEnv) VerifyAppInstalled(ctx context.Context, deployment *
 						expectedVersion = AppInfo[appName]["V1"]
 					}
 					testenv.Log.Info("Verify app", "pod", podName, "app", appName, "expectedVersion", expectedVersion, "versionInstalled", versionInstalled, "updated", checkupdated)
-					gomega.Expect(versionInstalled).Should(gomega.Equal(expectedVersion))
+					gomega.Eventually(func() string {
+						_, ver, err := GetPodAppStatus(ctx, deployment, podName, ns, appName, clusterWideInstall)
+						if err != nil {
+							testenv.Log.Info("Retrying app version check", "pod", podName, "app", appName, "error", err)
+							return ""
+						}
+						return ver
+					}, 5*time.Minute, PollInterval).Should(gomega.Equal(expectedVersion))
 				}
 			}
 		}

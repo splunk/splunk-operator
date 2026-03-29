@@ -55,8 +55,10 @@ var _ = Describe("m4appfw test", func() {
 	BeforeEach(func() {
 		var err error
 		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
+		fmt.Printf("[DEBUG] M4 BeforeEach starting, name=%s\n", name)
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
+		fmt.Printf("[DEBUG] M4 BeforeEach testcaseenv created, namespace=%s\n", testcaseEnvInst.GetName())
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 
@@ -68,6 +70,7 @@ var _ = Describe("m4appfw test", func() {
 		s3TestDirShc = "m4appfw-shc-" + testenv.RandomDNSName(4)
 		appSourceVolumeNameIdxc = "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 		appSourceVolumeNameShc = "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
+		fmt.Printf("[DEBUG] M4 BeforeEach complete, deployment=%s\n", deployment.GetName())
 	})
 
 	AfterEach(func() {
@@ -1106,11 +1109,13 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
 			config, err := testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
+			testcaseEnvInst.Log.Info("[DEBUG] ConfigMap state before CM manual poll trigger", "ClusterMaster", config.Data["ClusterMaster"], "SearchHeadCluster", config.Data["SearchHeadCluster"], "MonitoringConsole", config.Data["MonitoringConsole"])
 
-			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
+			testcaseEnvInst.Log.Info("Modify config map to trigger manual update for ClusterMaster")
 			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
+			testcaseEnvInst.Log.Info("[DEBUG] ConfigMap updated for CM manual poll", "ClusterMaster", config.Data["ClusterMaster"])
 
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
@@ -1121,14 +1126,16 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure Indexer cluster configured as multisite
 			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
 
-			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
+			testcaseEnvInst.Log.Info("Get config map for triggering manual update for SHC")
 			config, err = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
+			testcaseEnvInst.Log.Info("[DEBUG] ConfigMap state before SHC manual poll trigger", "ClusterMaster", config.Data["ClusterMaster"], "SearchHeadCluster", config.Data["SearchHeadCluster"], "MonitoringConsole", config.Data["MonitoringConsole"])
 
-			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
+			testcaseEnvInst.Log.Info("Modify config map to trigger manual update for SearchHeadCluster")
 			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
+			testcaseEnvInst.Log.Info("[DEBUG] ConfigMap updated for SHC manual poll", "SearchHeadCluster", config.Data["SearchHeadCluster"])
 
 			// Ensure Search Head Cluster go to Ready phase
 			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
@@ -1136,14 +1143,16 @@ var _ = Describe("m4appfw test", func() {
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
+			testcaseEnvInst.Log.Info("Get config map for triggering manual update for MC")
 			config, err = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
+			testcaseEnvInst.Log.Info("[DEBUG] ConfigMap state before MC manual poll trigger", "ClusterMaster", config.Data["ClusterMaster"], "SearchHeadCluster", config.Data["SearchHeadCluster"], "MonitoringConsole", config.Data["MonitoringConsole"])
 
-			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
+			testcaseEnvInst.Log.Info("Modify config map to trigger manual update for MonitoringConsole")
 			config.Data["MonitoringConsole"] = strings.Replace(config.Data["MonitoringConsole"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
+			testcaseEnvInst.Log.Info("[DEBUG] ConfigMap updated for MC manual poll", "MonitoringConsole", config.Data["MonitoringConsole"])
 
 			// Wait for Monitoring Console to reach Ready phase
 			err = testcaseEnvInst.WaitForMonitoringConsolePhase(ctx, deployment, testcaseEnvInst.GetName(), mc.Name, enterpriseApi.PhaseReady, 2*time.Minute)
@@ -1164,6 +1173,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			// ############ VERIFY APPS UPDATED TO V2 #############
+			testcaseEnvInst.Log.Info("[DEBUG] Starting V2 verification", "ClusterMasterBundleHash", ClusterMasterBundleHash, "IdxcPods", idxcPodNames, "ShcPods", shcPodNames)
+			configDbg, _ := testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
+			if configDbg != nil {
+				testcaseEnvInst.Log.Info("[DEBUG] Final ConfigMap state before V2 verification", "ClusterMaster", configDbg.Data["ClusterMaster"], "SearchHeadCluster", configDbg.Data["SearchHeadCluster"], "MonitoringConsole", configDbg.Data["MonitoringConsole"])
+			}
 			appVersion = "V2"
 			cmAppSourceInfo.CrAppVersion = appVersion
 			cmAppSourceInfo.CrAppList = appListV2
