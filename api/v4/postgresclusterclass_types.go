@@ -24,8 +24,10 @@ import (
 
 // +kubebuilder:validation:XValidation:rule="!has(self.cnpg) || self.provisioner == 'postgresql.cnpg.io'",message="cnpg config can only be set when provisioner is postgresql.cnpg.io"
 // +kubebuilder:validation:XValidation:rule="!has(self.config) || !has(self.config.connectionPoolerEnabled) || !self.config.connectionPoolerEnabled || (has(self.cnpg) && has(self.cnpg.connectionPooler))",message="cnpg.connectionPooler must be set when config.connectionPoolerEnabled is true"
+// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="PostgresClusterClass is immutable after creation"
 // PostgresClusterClassSpec defines the desired state of PostgresClusterClass.
 // PostgresClusterClass is immutable after creation - it serves as a template for Cluster CRs.
+
 type PostgresClusterClassSpec struct {
 	// Provisioner identifies which database provisioner to use.
 	// Currently supported: "postgresql.cnpg.io" (CloudNativePG)
@@ -174,9 +176,9 @@ type PostgresClusterClassStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Provisioner",type=string,JSONPath=`.spec.provisioner`
-// +kubebuilder:printcolumn:name="Instances",type=integer,JSONPath=`.spec.postgresClusterConfig.instances`
-// +kubebuilder:printcolumn:name="Storage",type=string,JSONPath=`.spec.postgresClusterConfig.storage`
-// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.postgresClusterConfig.postgresVersion`
+// +kubebuilder:printcolumn:name="Instances",type=integer,JSONPath=`.spec.config.instances`
+// +kubebuilder:printcolumn:name="Storage",type=string,JSONPath=`.spec.config.storage`
+// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.config.postgresVersion`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 

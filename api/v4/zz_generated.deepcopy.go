@@ -1413,11 +1413,6 @@ func (in *PostgresClusterSpec) DeepCopyInto(out *PostgresClusterSpec) {
 		*out = new(bool)
 		**out = **in
 	}
-	if in.ConnectionPoolerConfig != nil {
-		in, out := &in.ConnectionPoolerConfig, &out.ConnectionPoolerConfig
-		*out = new(ConnectionPoolerConfig)
-		(*in).DeepCopyInto(*out)
-	}
 	if in.ManagedRoles != nil {
 		in, out := &in.ManagedRoles, &out.ManagedRoles
 		*out = make([]ManagedRole, len(*in))
