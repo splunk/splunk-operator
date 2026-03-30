@@ -83,6 +83,16 @@ The webhook validates the following spec fields:
 | `spec.varVolumeStorageConfig.storageCapacity` | Must match format `^[0-9]+Gi$` | must be in Gi format (e.g., '10Gi', '100Gi') |
 | `spec.etcVolumeStorageConfig.storageClassName` | Required when `ephemeralStorage=false` and `storageCapacity` is set | storageClassName is required when using persistent storage |
 | `spec.varVolumeStorageConfig.storageClassName` | Required when `ephemeralStorage=false` and `storageCapacity` is set | storageClassName is required when using persistent storage |
+| `spec.etcVolumeStorageConfig.ephemeralStorage` | Mutually exclusive with `storageClassName` and `storageCapacity` | storageClassName/storageCapacity cannot be set when ephemeralStorage is true |
+| `spec.varVolumeStorageConfig.ephemeralStorage` | Mutually exclusive with `storageClassName` and `storageCapacity` | storageClassName/storageCapacity cannot be set when ephemeralStorage is true |
+| `spec.extraEnv[*].name` | Must be unique across all entries | duplicate environment variable |
+| `spec.imagePullSecrets[*].name` | Must be unique across all entries | duplicate secret reference |
+| `spec.imagePullSecrets[*].name` | Must reference an existing Secret in the namespace | not found |
+| `spec.livenessProbe.initialDelaySeconds` | Must be ≥ 0 | must be non-negative |
+| `spec.readinessProbe.initialDelaySeconds` | Must be ≥ 0 | must be non-negative |
+| `spec.startupProbe.initialDelaySeconds` | Must be ≥ 0 | must be non-negative |
+| `spec.resources.requests.cpu` | Must be ≤ `limits.cpu` | request must be less than or equal to limit |
+| `spec.resources.requests.memory` | Must be ≤ `limits.memory` | request must be less than or equal to limit |
 
 ### CRD-Specific Fields
 
@@ -111,6 +121,9 @@ AppFramework configuration is validated only when provided:
 |-------|-----------------|
 | `spec.appRepo.appSources[*].name` | Required (non-empty) |
 | `spec.appRepo.appSources[*].location` | Required (non-empty) |
+| `spec.appRepo.appSources[*]` | Combination of `location` + `scope` must be unique across all appSources |
+| `spec.appRepo.appSources[*].premiumAppsProps` | Required when `scope=premiumApps` |
+| `spec.appRepo.appsRepoPollIntervalSeconds` | Must be ≥ 0 |
 | `spec.appRepo.volumes[*].name` | Required (non-empty) |
 
 ## Example Validation Errors
@@ -165,6 +178,42 @@ spec:
 Error:
 ```
 The Standalone "example" is invalid: spec.smartstore.volumes[0].name: Required value: volume name is required
+```
+
+### Non-Existent ImagePullSecret
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: example
+  namespace: splunk
+spec:
+  imagePullSecrets:
+    - name: my-registry-secret  # Invalid: secret does not exist in namespace
+```
+
+Error:
+```
+The Standalone "example" is invalid: spec.imagePullSecrets[0].name: Not found: "my-registry-secret"
+```
+
+### Ephemeral Storage with StorageClassName
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: example
+spec:
+  etcVolumeStorageConfig:
+    ephemeralStorage: true
+    storageClassName: "standard"  # Invalid: cannot set with ephemeralStorage=true
+```
+
+Error:
+```
+The Standalone "example" is invalid: spec.etcVolumeStorageConfig.storageClassName: Invalid value: "standard": storageClassName cannot be set when ephemeralStorage is true
 ```
 
 ## Verifying Webhook Deployment
@@ -263,6 +312,121 @@ The validation webhook consists of:
 4. Webhook server validates the spec fields
 5. Webhook returns Allowed/Denied response
 6. If allowed, the resource is persisted; if denied, user receives error
+
+## Adding a New CRD to the Webhook
+
+To add validation for a new CRD, follow these steps:
+
+### 1. Create Validation Functions
+
+Create a new file `pkg/splunk/enterprise/validation/<crd>_validation.go`:
+
+```go
+package validation
+
+import (
+    "k8s.io/apimachinery/pkg/util/validation/field"
+    enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+)
+
+// Validate<CRD>Create validates a <CRD> on CREATE
+func Validate<CRD>Create(obj *enterpriseApi.<CRD>) field.ErrorList {
+    var allErrs field.ErrorList
+    // Add validation logic
+    allErrs = append(allErrs, validateCommonSplunkSpec(&obj.Spec.CommonSplunkSpec, field.NewPath("spec"))...)
+    return allErrs
+}
+
+// Validate<CRD>CreateWithContext validates with access to Kubernetes API
+// Use this for validations that need to check if resources exist (e.g., Secrets)
+func Validate<CRD>CreateWithContext(obj *enterpriseApi.<CRD>, vc *ValidationContext) field.ErrorList {
+    allErrs := Validate<CRD>Create(obj)
+    if len(obj.Spec.ImagePullSecrets) > 0 {
+        allErrs = append(allErrs, ValidateImagePullSecretsExistence(
+            obj.Spec.ImagePullSecrets, vc, field.NewPath("spec").Child("imagePullSecrets"))...)
+    }
+    return allErrs
+}
+
+// Validate<CRD>Update validates a <CRD> on UPDATE
+func Validate<CRD>Update(obj, oldObj *enterpriseApi.<CRD>) field.ErrorList {
+    return Validate<CRD>Create(obj)
+}
+
+// Validate<CRD>UpdateWithContext validates on UPDATE with Kubernetes API access
+func Validate<CRD>UpdateWithContext(obj, oldObj *enterpriseApi.<CRD>, vc *ValidationContext) field.ErrorList {
+    return Validate<CRD>CreateWithContext(obj, vc)
+}
+
+// Get<CRD>WarningsOnCreate returns warnings for CREATE
+func Get<CRD>WarningsOnCreate(obj *enterpriseApi.<CRD>) []string {
+    return getCommonWarnings(&obj.Spec.CommonSplunkSpec)
+}
+
+// Get<CRD>WarningsOnUpdate returns warnings for UPDATE
+func Get<CRD>WarningsOnUpdate(obj, oldObj *enterpriseApi.<CRD>) []string {
+    return Get<CRD>WarningsOnCreate(obj)
+}
+```
+
+### 2. Register the Validator
+
+Add the GVR and validator to `pkg/splunk/enterprise/validation/registry.go`:
+
+```go
+// Add GVR constant
+var <CRD>GVR = schema.GroupVersionResource{
+    Group:    "enterprise.splunk.com",
+    Version:  "v4",
+    Resource: "<crd>s",  // plural, lowercase
+}
+
+// Add to DefaultValidators map
+var DefaultValidators = map[schema.GroupVersionResource]Validator{
+    // ... existing validators ...
+    
+    <CRD>GVR: &GenericValidator[*enterpriseApi.<CRD>]{
+        ValidateCreateFunc:            Validate<CRD>Create,
+        ValidateUpdateFunc:            Validate<CRD>Update,
+        ValidateCreateWithContextFunc: Validate<CRD>CreateWithContext,  // Optional: for resource lookups
+        ValidateUpdateWithContextFunc: Validate<CRD>UpdateWithContext,  // Optional: for resource lookups
+        WarningsOnCreateFunc:          Get<CRD>WarningsOnCreate,
+        WarningsOnUpdateFunc:          Get<CRD>WarningsOnUpdate,
+        GroupKind: schema.GroupKind{
+            Group: "enterprise.splunk.com",
+            Kind:  "<CRD>",
+        },
+    },
+}
+```
+
+### 3. Add Unit Tests
+
+Create `pkg/splunk/enterprise/validation/<crd>_validation_test.go` with test cases.
+
+### 4. Update ValidatingWebhookConfiguration
+
+Add the new resource to `config/webhook/manifests.yaml`:
+
+```yaml
+webhooks:
+  - name: validate.enterprise.splunk.com
+    rules:
+      - apiGroups: ["enterprise.splunk.com"]
+        apiVersions: ["v4"]
+        operations: ["CREATE", "UPDATE"]
+        resources:
+          - standalones
+          - indexerclusters
+          - <crd>s  # Add new resource here
+```
+
+### Context-Aware vs Basic Validation
+
+- **Basic validation** (`ValidateCreateFunc`): For validations that only need the CR itself (field formats, required fields, cross-field rules)
+- **Context-aware validation** (`ValidateCreateWithContextFunc`): For validations that need to query the Kubernetes API (checking if Secrets, ConfigMaps, or other resources exist)
+
+If your CRD doesn't need context-aware validation, you can omit `ValidateCreateWithContextFunc` and `ValidateUpdateWithContextFunc` - the webhook will automatically fall back to the basic validation functions.
 
 ## Disabling the Webhook
 
