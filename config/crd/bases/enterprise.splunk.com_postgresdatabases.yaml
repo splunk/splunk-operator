@@ -79,6 +79,8 @@ spec:
                       type: array
                     name:
                       maxLength: 30
+                      minLength: 1
+                      pattern: ^[a-z_][a-z0-9_]*$
                       type: string
                   required:
                   - name
@@ -96,6 +98,8 @@ spec:
             x-kubernetes-validations:
             - message: clusterRef is immutable
               rule: self.clusterRef == oldSelf.clusterRef
+            - message: clusterRef.name must not be empty
+              rule: self.clusterRef.name != ''
           status:
             description: PostgresDatabaseStatus defines the observed state of PostgresDatabase.
             properties:
@@ -182,7 +186,7 @@ spec:
                       - key
                       type: object
                       x-kubernetes-map-type: atomic
-                    configMap:
+                    configMapRef:
                       description: |-
                         LocalObjectReference contains enough information to let you locate the
                         referenced object inside the same namespace.
@@ -253,6 +257,10 @@ spec:
                 type: string
             type: object
         type: object
+        x-kubernetes-validations:
+        - message: name must be 50 characters or fewer to accommodate derived resource
+            names
+          rule: size(self.metadata.name) <= 50
     served: true
     storage: true
     subresources:
