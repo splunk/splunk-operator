@@ -429,8 +429,25 @@ func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir strin
 			return err
 		}
 
+		// Find the app root directory inside the extracted folder
+		entries, err := os.ReadDir(untarredCurrentAppFolder)
+		if err != nil {
+			logf.Log.Error(err, "Unable to read untarred app folder", "Folder", untarredCurrentAppFolder)
+			return err
+		}
+		var appRootDir string
+		for _, entry := range entries {
+			if entry.IsDir() {
+				appRootDir = filepath.Join(untarredCurrentAppFolder, entry.Name())
+				break
+			}
+		}
+		if appRootDir == "" {
+			return fmt.Errorf("no app root directory found in %s", untarredCurrentAppFolder)
+		}
+
 		// Disable the app by modifying its config file
-		appConfFile := filepath.Join(untarredCurrentAppFolder, "default", "app.conf")
+		appConfFile := filepath.Join(appRootDir, "default", "app.conf")
 		err = disableAppConfig(appConfFile)
 		if err != nil {
 			logf.Log.Error(err, "Failed to disable app config", "File", appConfFile)
