@@ -127,7 +127,7 @@ func (b *GCPBackend) DeleteFile(_ context.Context, filePath string) error {
 }
 
 func (b *GCPBackend) DisableApps(_ context.Context, downloadDir string, appFileList []string, testDir string) error {
-	return DisableAppsToGCP(downloadDir, appFileList, testDir)
+	return DisableAppsToGCP(b.Bucket, downloadDir, appFileList, testDir)
 }
 
 func (b *GCPBackend) GetCloudProvider() string { return "gcp" }

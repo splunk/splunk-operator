@@ -394,7 +394,7 @@ func UploadFilesToGCP(bucketName, gcpTestDir string, appList []string, uploadDir
 }
 
 // DisableAppsToGCP untars apps, modifies their config files to disable them, re-tars, and uploads the disabled versions to GCP
-func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir string) error {
+func DisableAppsToGCP(bucketName string, downloadDir string, appFileList []string, gcpTestDir string) error {
 	// Create directories for untarred and disabled apps
 	untarredAppsMainFolder := filepath.Join(downloadDir, "untarred_apps")
 	disabledAppsFolder := filepath.Join(downloadDir, "disabled_apps")
@@ -464,7 +464,7 @@ func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir strin
 	}
 
 	// Upload disabled apps to GCP
-	_, err = UploadFilesToGCP(testIndexesGCPBucket, gcpTestDir, appFileList, disabledAppsFolder)
+	_, err = UploadFilesToGCP(bucketName, gcpTestDir, appFileList, disabledAppsFolder)
 	if err != nil {
 		logf.Log.Error(err, "Failed to upload disabled apps to GCP")
 		return err
