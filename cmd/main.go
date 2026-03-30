@@ -157,6 +157,8 @@ func main() {
 	// Logging setup
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	setupLog.Info("siema: replicas error - refactored")
+
 	// Configure metrics certificate watcher if metrics certs are provided
 	var metricsCertWatcher *certwatcher.CertWatcher
 	if len(metricsCertPath) > 0 {
@@ -262,6 +264,14 @@ func main() {
 		Recorder: mgr.GetEventRecorderFor("standalone-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Standalone")
+		os.Exit(1)
+	}
+	if err = (&intController.AppRuntimeReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("appruntime-controller"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "AppRuntime")
 		os.Exit(1)
 	}
 	if err := (&controller.IngestorClusterReconciler{

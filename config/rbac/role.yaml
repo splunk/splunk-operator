@@ -47,6 +47,7 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
+  - appruntimes
   - clustermanagers
   - clustermasters
   - indexerclusters
@@ -69,22 +70,7 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - clustermanagers/finalizers
-  - clustermasters/finalizers
-  - indexerclusters/finalizers
-  - ingestorclusters/finalizers
-  - licensemanagers/finalizers
-  - licensemasters/finalizers
-  - monitoringconsoles/finalizers
-  - objectstorages/finalizers
-  - queues/finalizers
-  - searchheadclusters/finalizers
-  - standalones/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - enterprise.splunk.com
-  resources:
+  - appruntimes/status
   - clustermanagers/status
   - clustermasters/status
   - indexerclusters/status
@@ -99,4 +85,20 @@ rules:
   verbs:
   - get
   - patch
+  - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - clustermanagers/finalizers
+  - clustermasters/finalizers
+  - indexerclusters/finalizers
+  - ingestorclusters/finalizers
+  - licensemanagers/finalizers
+  - licensemasters/finalizers
+  - monitoringconsoles/finalizers
+  - objectstorages/finalizers
+  - queues/finalizers
+  - searchheadclusters/finalizers
+  - standalones/finalizers
+  verbs:
   - update

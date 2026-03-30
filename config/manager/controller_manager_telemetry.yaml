@@ -7,5 +7,5 @@ data:
     {
       "lastTransmission": "",
       "test": "false",
-      "sokVersion": "3.1.0"
+      "sokVersion": "3.1.0-mb-1"
     }
