@@ -14,6 +14,7 @@
 package s1appfw
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -48,6 +49,7 @@ var (
 	downloadDirV1         = filepath.Join(currDir, "s1appfwV1-"+testenv.RandomDNSName(4))
 	downloadDirV2         = filepath.Join(currDir, "s1appfwV2-"+testenv.RandomDNSName(4))
 	downloadDirPVTestApps = filepath.Join(currDir, "s1appfwPVTestApps-"+testenv.RandomDNSName(4))
+	cloudBackend          testenv.CloudStorageBackend
 )
 
 // TestBasic is the main entry point
@@ -59,30 +61,24 @@ func TestBasic(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	ctx := context.TODO()
 	var err error
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
 
-	if testenv.ClusterProvider == "eks" {
-		// Create a list of apps to upload to S3
-		appListV1 = testenv.BasicApps
-		appFileList := testenv.GetAppFileList(appListV1)
+	cloudBackend = testenv.NewCloudStorageBackend(testS3Bucket, testDataS3Bucket)
 
-		// Download V1 Apps from S3
-		err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V1 app files")
+	appListV1 = testenv.BasicApps
+	appFileList := testenv.GetAppFileList(appListV1)
 
-		// Create a list of apps to upload to S3 after poll period
-		appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
-		appFileList = testenv.GetAppFileList(appListV2)
+	err = cloudBackend.DownloadFiles(ctx, s3AppDirV1, downloadDirV1, appFileList)
+	Expect(err).To(Succeed(), "Unable to download V1 app files")
 
-		// Download V2 Apps from S3
-		err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V2 app files")
-	} else {
-		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenv.ClusterProvider)
-	}
+	appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
+	appFileList = testenv.GetAppFileList(appListV2)
 
+	err = cloudBackend.DownloadFiles(ctx, s3AppDirV2, downloadDirV2, appFileList)
+	Expect(err).To(Succeed(), "Unable to download V2 app files")
 })
 
 var _ = AfterSuite(func() {

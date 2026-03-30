@@ -79,7 +79,7 @@ var _ = Describe("m4appfw test", func() {
 		}
 		// Delete files uploaded to S3
 		if !testcaseEnvInst.SkipTeardown {
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			cloudBackend.DeleteFiles(ctx, uploadedApps)
 		}
 		if testcaseEnvInst != nil {
 			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
@@ -130,7 +130,7 @@ var _ = Describe("m4appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -160,13 +160,13 @@ var _ = Describe("m4appfw test", func() {
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V1 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -240,7 +240,7 @@ var _ = Describe("m4appfw test", func() {
 			//############# UPGRADE APPS ################
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			cloudBackend.DeleteFiles(ctx, uploadedApps)
 			uploadedApps = nil
 
 			// get revision number of the resource
@@ -250,19 +250,19 @@ var _ = Describe("m4appfw test", func() {
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V2 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V2 apps for Monitoring Console
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -349,7 +349,7 @@ var _ = Describe("m4appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV2)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -379,13 +379,13 @@ var _ = Describe("m4appfw test", func() {
 
 			// Upload V2 apps to S3 for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V2 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -445,26 +445,26 @@ var _ = Describe("m4appfw test", func() {
 			// Delete V2 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			cloudBackend.DeleteFiles(ctx, uploadedApps)
 			uploadedApps = nil
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			appVersion = "V1"
 			appFileList = testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V1 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V1 apps to S3 for Monitoring Console
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -556,13 +556,13 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V1 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -822,13 +822,13 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V1 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -876,20 +876,20 @@ var _ = Describe("m4appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			cloudBackend.DeleteFiles(ctx, uploadedApps)
 			uploadedApps = nil
 
 			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V2 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -963,7 +963,7 @@ var _ = Describe("m4appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -993,13 +993,13 @@ var _ = Describe("m4appfw test", func() {
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V1 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1059,19 +1059,19 @@ var _ = Describe("m4appfw test", func() {
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V2 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V2 apps to S3 for Monitoring Console
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1216,13 +1216,13 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V1 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1269,20 +1269,20 @@ var _ = Describe("m4appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			cloudBackend.DeleteFiles(ctx, uploadedApps)
 			uploadedApps = nil
 
 			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V2 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1403,14 +1403,14 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
 			s3TestDirIdxcLocal = "m4appfw-" + testenv.RandomDNSName(4)
 			localappFileList := testenv.GetAppFileList(appListLocal)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcLocal, localappFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirIdxcLocal, localappFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload appListLocal list of apps to S3 (to be used for local install) for Shc
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
 			s3TestDirShcLocal = "m4appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcLocal, localappFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShcLocal, localappFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1418,14 +1418,14 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster-wide install (cluster scope)", appVersion))
 			s3TestDirIdxcCluster = "m4appfw-cluster-" + testenv.RandomDNSName(4)
 			clusterappFileList := testenv.GetAppFileList(appListCluster)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcCluster, clusterappFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxcCluster, clusterappFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload appListCluster list of apps to S3 (to be used for cluster-wide install)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster-wide install (cluster scope)", appVersion))
 			s3TestDirShcCluster = "m4appfw-cluster-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcCluster, clusterappFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShcCluster, clusterappFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1508,7 +1508,7 @@ var _ = Describe("m4appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			cloudBackend.DeleteFiles(ctx, uploadedApps)
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
@@ -1519,20 +1519,20 @@ var _ = Describe("m4appfw test", func() {
 			appVersion = "V2"
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
 			localappFileList = testenv.GetAppFileList(appListLocal)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcLocal, localappFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxcLocal, localappFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for local install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcLocal, localappFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShcLocal, localappFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for local install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload appListCluster list of V2 apps to S3 (to be used for cluster-wide install)
 			clusterappFileList = testenv.GetAppFileList(appListCluster)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster install (cluster scope)", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcCluster, clusterappFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxcCluster, clusterappFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcCluster, clusterappFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShcCluster, clusterappFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1617,7 +1617,7 @@ var _ = Describe("m4appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1649,7 +1649,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all test apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err = cloudBackend.DownloadFiles(ctx, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to S3 for Cluster Manager
@@ -1657,14 +1657,14 @@ var _ = Describe("m4appfw test", func() {
 			appFileList = testenv.GetAppFileList(appList)
 			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Cluster Manager")
 			s3TestDirIdxc = "m4appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Cluster Manager")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload big-size app to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Search Head Cluster")
 			s3TestDirShc = "m4appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1690,13 +1690,13 @@ var _ = Describe("m4appfw test", func() {
 			appList = testenv.ExtraApps
 			appFileList = testenv.GetAppFileList(appList)
 			testcaseEnvInst.Log.Info("Upload more apps to S3 for Cluster Manager")
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for  Cluster Manager")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload more apps to S3 for Deployer
 			testcaseEnvInst.Log.Info("Upload more apps to S3 for Deployer")
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for Deployer")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1754,7 +1754,7 @@ var _ = Describe("m4appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1786,7 +1786,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all test apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err = cloudBackend.DownloadFiles(ctx, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to S3 for Cluster Manager
@@ -1794,14 +1794,14 @@ var _ = Describe("m4appfw test", func() {
 			appFileList = testenv.GetAppFileList(appList)
 			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Cluster Manager")
 			s3TestDirIdxc = "m4appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Cluster Manager")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload big-size app to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Search Head Cluster")
 			s3TestDirShc = "m4appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1828,13 +1828,13 @@ var _ = Describe("m4appfw test", func() {
 			appList = testenv.ExtraApps
 			appFileList = testenv.GetAppFileList(appList)
 			testcaseEnvInst.Log.Info("Upload more apps to S3 for Cluster Manager")
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for Cluster Manager")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload more apps to S3 for Deployer
 			testcaseEnvInst.Log.Info("Upload more apps to S3 for Deployer")
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for Deployer")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1890,19 +1890,19 @@ var _ = Describe("m4appfw test", func() {
 			// Download all apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := cloudBackend.DownloadFiles(ctx, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			appVersion := "V1"
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V1 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1982,19 +1982,19 @@ var _ = Describe("m4appfw test", func() {
 			// Download all apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := cloudBackend.DownloadFiles(ctx, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			appVersion := "V1"
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V1 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -2078,13 +2078,13 @@ var _ = Describe("m4appfw test", func() {
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V1 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -2136,7 +2136,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.VerifyAppRepoState(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])
 
 			// Disable the app
-			err = testenv.DisableAppsToS3(downloadDirV1, appFileName, s3TestDirIdxc)
+			err = cloudBackend.DisableApps(ctx, downloadDirV1, appFileName, s3TestDirIdxc)
 			Expect(err).To(Succeed(), "Unable to disable apps on S3")
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -2156,7 +2156,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Delete the file from S3
 			s3Filepath := filepath.Join(s3TestDirIdxc, appFileName[0])
-			err = testenv.DeleteFileOnS3(testS3Bucket, s3Filepath)
+			err = cloudBackend.DeleteFile(ctx, s3Filepath)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on S3 test directory", appFileName))
 
 			// Verify repo state is set to 2 (i.e app deleted from S3 bucket)
@@ -2196,13 +2196,13 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V1 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -2301,20 +2301,20 @@ var _ = Describe("m4appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			cloudBackend.DeleteFiles(ctx, uploadedApps)
 			uploadedApps = nil
 
 			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V2 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -2381,18 +2381,18 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := cloudBackend.DownloadFiles(ctx, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V1 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -2418,13 +2418,13 @@ var _ = Describe("m4appfw test", func() {
 			appListV2 := []string{appListV2[0]}
 			appFileList = testenv.GetAppFileList(appListV2)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V2 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -2497,20 +2497,20 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appList := testenv.PVTestApps
 			appFileList := testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3PVTestApps, downloadDirPVTestApps, appFileList)
+			err = cloudBackend.DownloadFiles(ctx, s3PVTestApps, downloadDirPVTestApps, appFileList)
 			Expect(err).To(Succeed(), "Unable to download app files")
 
 			// Upload apps to S3 for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
 			s3TestDirIdxc := "m4appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirPVTestApps)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirPVTestApps)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search head Cluster", appVersion))
 			s3TestDirShc := "m4appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirPVTestApps)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirPVTestApps)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -2582,19 +2582,19 @@ var _ = Describe("m4appfw test", func() {
 			// Download big size apps from S3
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := cloudBackend.DownloadFiles(ctx, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload big size app to S3 for Indexer Cluster
 			appVersion := "V1"
 			testcaseEnvInst.Log.Info("Upload big size app to S3 for Indexer Cluster")
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload big size to S3 test directory for Indexer Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload big size app to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info("Upload big size app to S3 for Search Head Cluster")
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload big size to S3 test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -2672,13 +2672,13 @@ var _ = Describe("m4appfw test", func() {
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V1 apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 

@@ -14,6 +14,7 @@
 package m4appfw
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,6 +23,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/joho/godotenv"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -48,12 +50,15 @@ var (
 	downloadDirV1         = filepath.Join(currDir, "m4appfwV1-"+testenv.RandomDNSName(4))
 	downloadDirV2         = filepath.Join(currDir, "m4appfwV2-"+testenv.RandomDNSName(4))
 	downloadDirPVTestApps = filepath.Join(currDir, "m4appfwPVTestApps-"+testenv.RandomDNSName(4))
+	cloudBackend          testenv.CloudStorageBackend
 )
 
 // TestBasic is the main entry point
 func TestBasic(t *testing.T) {
-
 	RegisterFailHandler(Fail)
+
+	err := loadEnvFile()
+	Expect(err).ToNot(HaveOccurred(), "Error loading .env file")
 
 	sc, _ := GinkgoConfiguration()
 	sc.Timeout = 240 * time.Minute
@@ -61,38 +66,47 @@ func TestBasic(t *testing.T) {
 	RunSpecs(t, "Running "+testSuiteName, sc)
 }
 
+func loadEnvFile() error {
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	for {
+		envFile := filepath.Join(dir, ".env")
+		if _, err := os.Stat(envFile); err == nil {
+			return godotenv.Load(envFile)
+		}
+		parentDir := filepath.Dir(dir)
+		if parentDir == dir {
+			return nil
+		}
+		dir = parentDir
+	}
+}
+
 var _ = BeforeSuite(func() {
 	var err error
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
 
-	if testenv.ClusterProvider == "eks" {
-		// Create a list of apps to upload to S3
-		appListV1 = testenv.BasicApps
-		appFileList := testenv.GetAppFileList(appListV1)
+	ctx := context.TODO()
+	cloudBackend = testenv.NewCloudStorageBackend(testS3Bucket, testDataS3Bucket)
+	Expect(cloudBackend).NotTo(BeNil(), "failed to initialize cloud storage backend")
 
-		// Download V1 Apps from S3
-		err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V1 app files")
+	appListV1 = testenv.BasicApps
+	appFileList := testenv.GetAppFileList(appListV1)
 
-		// Create a list of apps to upload to S3 after poll period
-		appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
-		appFileList = testenv.GetAppFileList(appListV2)
+	err = cloudBackend.DownloadFiles(ctx, s3AppDirV1, downloadDirV1, appFileList)
+	Expect(err).To(Succeed(), "Unable to download V1 app files")
 
-		// Download V2 Apps from S3
-		err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V2 app files")
-	} else {
-		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenv.ClusterProvider)
-	}
+	appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
+	appFileList = testenv.GetAppFileList(appListV2)
 
+	err = cloudBackend.DownloadFiles(ctx, s3AppDirV2, downloadDirV2, appFileList)
+	Expect(err).To(Succeed(), "Unable to download V2 app files")
 })
 
 var _ = AfterSuite(func() {
-	if testenvInstance != nil {
-		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
-	}
-
 	if testenvInstance != nil {
 		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 	}

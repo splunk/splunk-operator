@@ -14,6 +14,7 @@
 package c3appfw
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -49,6 +50,7 @@ var (
 	downloadDirV1         = filepath.Join(currDir, "c3appfwV1-"+testenv.RandomDNSName(4))
 	downloadDirV2         = filepath.Join(currDir, "c3appfwV2-"+testenv.RandomDNSName(4))
 	downloadDirPVTestApps = filepath.Join(currDir, "c3appfwPVTestApps-"+testenv.RandomDNSName(4))
+	cloudBackend          testenv.CloudStorageBackend
 )
 
 // TestBasic is the main entry point
@@ -102,33 +104,28 @@ var _ = BeforeSuite(func() {
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
 
-	if testenv.ClusterProvider == "eks" {
-		// Create a list of apps to upload to S3
-		appListV1 = testenv.BasicApps
-		appFileList := testenv.GetAppFileList(appListV1)
+	ctx := context.TODO()
+	cloudBackend = testenv.NewCloudStorageBackend(testS3Bucket, testDataS3Bucket)
+	Expect(cloudBackend).NotTo(BeNil(), "failed to initialize cloud storage backend")
 
-		// Download V1 Apps from S3
-		err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V1 app files")
+	// Create a list of apps to upload
+	appListV1 = testenv.BasicApps
+	appFileList := testenv.GetAppFileList(appListV1)
 
-		// Create a list of apps to upload to S3 after poll period
-		appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
-		appFileList = testenv.GetAppFileList(appListV2)
+	// Download V1 Apps
+	err = cloudBackend.DownloadFiles(ctx, s3AppDirV1, downloadDirV1, appFileList)
+	Expect(err).To(Succeed(), "Unable to download V1 app files")
 
-		// Download V2 Apps from S3
-		err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V2 app files")
-	} else {
-		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenv.ClusterProvider)
-	}
+	// Create a list of apps to upload after poll period
+	appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
+	appFileList = testenv.GetAppFileList(appListV2)
 
+	// Download V2 Apps
+	err = cloudBackend.DownloadFiles(ctx, s3AppDirV2, downloadDirV2, appFileList)
+	Expect(err).To(Succeed(), "Unable to download V2 app files")
 })
 
 var _ = AfterSuite(func() {
-	if testenvInstance != nil {
-		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
-	}
-
 	if testenvInstance != nil {
 		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 	}

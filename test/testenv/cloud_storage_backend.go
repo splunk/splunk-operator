@@ -13,7 +13,9 @@ import (
 type CloudStorageBackend interface {
 	UploadFiles(ctx context.Context, testDir string, appFileList []string, localDir string) ([]string, error)
 	DeleteFiles(ctx context.Context, uploadedFiles []string) error
+	DeleteFile(ctx context.Context, filePath string) error
 	DownloadFiles(ctx context.Context, remoteDir string, localDir string, fileList []string) error
+	DisableApps(ctx context.Context, downloadDir string, appFileList []string, testDir string) error
 	GetCloudProvider() string
 }
 
@@ -56,6 +58,14 @@ func (b *S3Backend) DownloadFiles(_ context.Context, remoteDir string, localDir 
 	return DownloadFilesFromS3(b.DataBucket, remoteDir, localDir, fileList)
 }
 
+func (b *S3Backend) DeleteFile(_ context.Context, filePath string) error {
+	return DeleteFileOnS3(b.Bucket, filePath)
+}
+
+func (b *S3Backend) DisableApps(_ context.Context, downloadDir string, appFileList []string, testDir string) error {
+	return DisableAppsToS3(downloadDir, appFileList, testDir)
+}
+
 func (b *S3Backend) GetCloudProvider() string { return "eks" }
 
 // AzureBackend implements CloudStorageBackend for Azure Blob Storage.
@@ -77,6 +87,15 @@ func (b *AzureBackend) DeleteFiles(ctx context.Context, uploadedFiles []string) 
 func (b *AzureBackend) DownloadFiles(ctx context.Context, remoteDir string, localDir string, fileList []string) error {
 	containerName := "/test-data/" + remoteDir
 	return DownloadFilesFromAzure(ctx, GetAzureEndpoint(ctx), StorageAccountKey, StorageAccount, localDir, containerName, fileList)
+}
+
+func (b *AzureBackend) DeleteFile(ctx context.Context, filePath string) error {
+	client := &AzureBlobClient{}
+	return client.DeleteFileOnAzure(ctx, filePath, GetAzureEndpoint(ctx), StorageAccountKey, StorageAccount)
+}
+
+func (b *AzureBackend) DisableApps(ctx context.Context, downloadDir string, appFileList []string, testDir string) error {
+	return DisableAppsOnAzure(ctx, downloadDir, appFileList, testDir)
 }
 
 func (b *AzureBackend) GetCloudProvider() string { return "azure" }
@@ -101,6 +120,14 @@ func (b *GCPBackend) DeleteFiles(_ context.Context, uploadedFiles []string) erro
 
 func (b *GCPBackend) DownloadFiles(_ context.Context, remoteDir string, localDir string, fileList []string) error {
 	return DownloadFilesFromGCP(b.DataBucket, remoteDir, localDir, fileList)
+}
+
+func (b *GCPBackend) DeleteFile(_ context.Context, filePath string) error {
+	return DeleteFileOnGCP(b.Bucket, filePath)
+}
+
+func (b *GCPBackend) DisableApps(_ context.Context, downloadDir string, appFileList []string, testDir string) error {
+	return DisableAppsToGCP(downloadDir, appFileList, testDir)
 }
 
 func (b *GCPBackend) GetCloudProvider() string { return "gcp" }
