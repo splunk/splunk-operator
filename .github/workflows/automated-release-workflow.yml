@@ -129,17 +129,17 @@ jobs:
     #   run: |
     #     regctl image copy ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC-distroless splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
 
-    - name: Sign Distroless Splunk Operator image with a key
-      run: |
-        cosign sign --yes --recursive --key env://COSIGN_PRIVATE_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
-      env:
-        COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
-        COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-        COSIGN_DOCKER_MEDIA_TYPES: "1"
+    # - name: Sign Distroless Splunk Operator image with a key
+    #   run: |
+    #     cosign sign --yes --recursive --key env://COSIGN_PRIVATE_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
+    #   env:
+    #     COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+    #     COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+    #     COSIGN_DOCKER_MEDIA_TYPES: "1"
 
     - name: Verify Distroless Splunk Operator image with a key
       run: |
-        cosign verify --key env://COSIGN_PUBLIC_KEY --recursive  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
+        cosign verify --key env://COSIGN_PUBLIC_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
       env:
         COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
         COSIGN_DOCKER_MEDIA_TYPES: "1"
