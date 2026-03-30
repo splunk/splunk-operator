@@ -4,6 +4,31 @@ metadata:
   labels:
     app.kubernetes.io/name: splunk-operator
     app.kubernetes.io/managed-by: kustomize
-  name: appsource-sample
+  name: appsource-sample-s3
 spec:
-  # TODO(user): Add fields here
+  type: s3
+  s3:
+    endpoint: "https://s3.amazonaws.com"
+    bucket: "my-bucket"
+    basePath: "my-path"
+  auth:
+    secretName: "my-secret"
+  polling: 60
+
+---
+apiVersion: apps.splunk.com/v1alpha1
+kind: AppSource
+metadata:
+  labels:
+    app.kubernetes.io/name: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: appsource-sample-git
+spec:
+  type: git
+  git:
+    repo: "https://github.com/splunk/splunk-operator.git"
+    ref: "main"
+  auth:
+    secretName: "my-secret"
+  polling: 120
+
