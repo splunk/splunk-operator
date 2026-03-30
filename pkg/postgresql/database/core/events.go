@@ -8,27 +8,27 @@ import (
 )
 
 const (
-	EventPostgresDatabaseReady     = "PostgresDatabaseReady"
-	EventResourcesAdopted          = "ResourcesAdopted"
-	EventClusterValidated          = "ClusterValidated"
-	EventSecretsReady              = "SecretsReady"
-	EventConfigMapsReady           = "ConfigMapsReady"
-	EventRoleReconciliationStarted = "RoleReconciliationStarted"
-	EventRolesReady                = "RolesReady"
-	EventDatabasesReady            = "DatabasesReady"
-	EventPrivilegesReady           = "PrivilegesReady"
-	EventDatabaseDeleting          = "DatabaseDeleting"
-	EventCleanupComplete           = "CleanupComplete"
-	EventClusterNotFound           = "ClusterNotFound"
-	EventClusterNotReady           = "ClusterNotReady"
-	EventRoleConflict              = "RoleConflict"
-	EventUserSecretsFailed         = "UserSecretsFailed"
-	EventAccessConfigFailed        = "AccessConfigFailed"
-	EventManagedRolesPatchFailed   = "ManagedRolesPatchFailed"
-	EventRoleFailed                = "RoleFailed"
-	EventDatabasesReconcileFailed  = "DatabasesReconcileFailed"
-	EventPrivilegesGrantFailed     = "PrivilegesGrantFailed"
-	EventCleanupFailed             = "CleanupFailed"
+	EventPostgresDatabaseReady         = "PostgresDatabaseReady"
+	EventResourcesAdopted              = "ResourcesAdopted"
+	EventClusterValidated              = "ClusterValidated"
+	EventSecretsReady                  = "SecretsReady"
+	EventConfigMapsReady               = "ConfigMapsReady"
+	EventRoleReconciliationStarted     = "RoleReconciliationStarted"
+	EventRolesReady                    = "RolesReady"
+	EventDatabaseReconciliationStarted = "DatabaseReconciliationStarted"
+	EventDatabasesReady                = "DatabasesReady"
+	EventPrivilegesReady               = "PrivilegesReady"
+	EventCleanupComplete               = "CleanupComplete"
+	EventClusterNotFound               = "ClusterNotFound"
+	EventClusterNotReady               = "ClusterNotReady"
+	EventRoleConflict                  = "RoleConflict"
+	EventUserSecretsFailed             = "UserSecretsFailed"
+	EventAccessConfigFailed            = "AccessConfigFailed"
+	EventManagedRolesPatchFailed       = "ManagedRolesPatchFailed"
+	EventRoleFailed                    = "RoleFailed"
+	EventDatabasesReconcileFailed      = "DatabasesReconcileFailed"
+	EventPrivilegesGrantFailed         = "PrivilegesGrantFailed"
+	EventCleanupFailed                 = "CleanupFailed"
 )
 
 func (rc *ReconcileContext) emitNormal(obj client.Object, reason, message string) {
@@ -43,6 +43,16 @@ func (rc *ReconcileContext) emitWarning(obj client.Object, reason, message strin
 // already True — prevents duplicate events on repeated reconciles.
 func (rc *ReconcileContext) emitOnConditionTransition(obj client.Object, conditions []metav1.Condition, condType conditionTypes, reason, message string) {
 	if !meta.IsStatusConditionTrue(conditions, string(condType)) {
+		rc.emitNormal(obj, reason, message)
+	}
+}
+
+// emitOnceBeforeWait emits a Normal event when the condition is either absent
+// or currently True — i.e. the first time we enter a wait cycle. On subsequent
+// requeue polls the condition is already False, so no duplicate is emitted.
+func (rc *ReconcileContext) emitOnceBeforeWait(obj client.Object, conditions []metav1.Condition, condType conditionTypes, reason, message string) {
+	cond := meta.FindStatusCondition(conditions, string(condType))
+	if cond == nil || cond.Status == metav1.ConditionTrue {
 		rc.emitNormal(obj, reason, message)
 	}
 }

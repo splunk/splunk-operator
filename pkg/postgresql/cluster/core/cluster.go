@@ -217,7 +217,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			}
 			return ctrl.Result{}, err
 		}
-		rc.emitNormal(postgresCluster, EventClusterCreating, "CNPG cluster created, waiting for healthy state")
+		rc.emitNormal(postgresCluster, EventClusterCreationStarted, "CNPG cluster created, waiting for healthy state")
 		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterBuildSucceeded,
 			"CNPG Cluster created", pendingClusterPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
@@ -256,7 +256,12 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			}
 			return ctrl.Result{}, patchErr
 		default:
-			rc.emitNormal(postgresCluster, EventClusterUpdated, "CNPG cluster spec updated")
+			if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterBuildSucceeded,
+				"CNPG Cluster spec updated, waiting for healthy state", provisioningClusterPhase); statusErr != nil {
+				logger.Error(statusErr, "Failed to update status after patch")
+				return ctrl.Result{Requeue: true}, nil
+			}
+			rc.emitNormal(postgresCluster, EventClusterUpdateStarted, "CNPG cluster spec updated, waiting for healthy state")
 			logger.Info("CNPG Cluster patched successfully, requeueing for status update", "name", cnpgCluster.Name)
 			return ctrl.Result{RequeueAfter: retryDelay}, nil
 		}
@@ -316,6 +321,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			}
 			return ctrl.Result{}, err
 		}
+		rc.emitNormal(postgresCluster, EventPoolerCreationStarted, "Connection poolers created, waiting for readiness")
 		logger.Info("Connection Poolers created, requeueing to check readiness")
 		if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerCreating,
 			"Connection poolers are being provisioned", provisioningClusterPhase); statusErr != nil {
@@ -933,12 +939,10 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 	}
 	logger.Info("Processing finalizer cleanup for PostgresCluster")
 
-	// Emit deletion event — policy is resolved below, use the raw pointer for the message.
 	policy := ""
 	if cluster.Spec.ClusterDeletionPolicy != nil {
 		policy = *cluster.Spec.ClusterDeletionPolicy
 	}
-	rc.emitNormal(cluster, EventClusterDeleting, fmt.Sprintf("Starting cleanup (policy: %s)", policy))
 
 	if err := deleteConnectionPoolers(ctx, c, cluster); err != nil {
 		logger.Error(err, "Failed to delete connection poolers during cleanup")
@@ -1011,7 +1015,7 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 		logger.Error(err, "Failed to remove finalizer from PostgresCluster")
 		return fmt.Errorf("failed to remove finalizer: %w", err)
 	}
-	rc.emitNormal(cluster, EventCleanupComplete, "Cleanup complete")
+	rc.emitNormal(cluster, EventCleanupComplete, fmt.Sprintf("Cleanup complete (policy: %s)", policy))
 	logger.Info("Finalizer removed, cleanup complete")
 	return nil
 }

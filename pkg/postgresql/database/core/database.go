@@ -224,6 +224,7 @@ func PostgresDatabaseService(
 		return ctrl.Result{}, err
 	}
 	if len(notReadyDBs) > 0 {
+		rc.emitOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, databasesReady, EventDatabaseReconciliationStarted, fmt.Sprintf("Reconciling %d databases, waiting for readiness", len(postgresDB.Spec.Databases)))
 		if err := updateStatus(databasesReady, metav1.ConditionFalse, reasonWaitingForCNPG,
 			fmt.Sprintf("Waiting for databases to be ready: %v", notReadyDBs), provisioningDBPhase); err != nil {
 			return ctrl.Result{}, err
@@ -518,7 +519,6 @@ func buildDeletionPlan(databases []enterprisev4.DatabaseDefinition) deletionPlan
 func handleDeletion(ctx context.Context, rc *ReconcileContext, postgresDB *enterprisev4.PostgresDatabase) error {
 	c := rc.Client
 	plan := buildDeletionPlan(postgresDB.Spec.Databases)
-	rc.emitNormal(postgresDB, EventDatabaseDeleting, fmt.Sprintf("Starting cleanup (%d retain, %d delete)", len(plan.retained), len(plan.deleted)))
 	if err := orphanRetainedResources(ctx, c, postgresDB, plan.retained); err != nil {
 		return err
 	}
@@ -535,7 +535,7 @@ func handleDeletion(ctx context.Context, rc *ReconcileContext, postgresDB *enter
 		}
 		return fmt.Errorf("removing finalizer: %w", err)
 	}
-	rc.emitNormal(postgresDB, EventCleanupComplete, "Cleanup complete")
+	rc.emitNormal(postgresDB, EventCleanupComplete, fmt.Sprintf("Cleanup complete (%d retained, %d deleted)", len(plan.retained), len(plan.deleted)))
 	log.FromContext(ctx).Info("Cleanup complete", "name", postgresDB.Name, "retained", len(plan.retained), "deleted", len(plan.deleted))
 	return nil
 }

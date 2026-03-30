@@ -13,11 +13,11 @@ const (
 	EventSecretReady              = "SecretReady"
 	EventConfigMapReady           = "ConfigMapReady"
 	EventClusterAdopted           = "ClusterAdopted"
-	EventClusterCreating          = "ClusterCreating"
-	EventClusterUpdated           = "ClusterUpdated"
+	EventClusterCreationStarted   = "ClusterCreationStarted"
+	EventClusterUpdateStarted     = "ClusterUpdateStarted"
 	EventClusterReady             = "ClusterReady"
+	EventPoolerCreationStarted    = "PoolerCreationStarted"
 	EventPoolerReady              = "PoolerReady"
-	EventClusterDeleting          = "ClusterDeleting"
 	EventCleanupComplete          = "CleanupComplete"
 	EventClusterClassNotFound     = "ClusterClassNotFound"
 	EventConfigMergeFailed        = "ConfigMergeFailed"
@@ -40,12 +40,15 @@ func (rc *ReconcileContext) emitWarning(obj client.Object, reason, message strin
 }
 
 // emitClusterPhaseTransition emits ClusterReady or ClusterDegraded only on
-// actual phase transitions. No event is emitted when the phase is unchanged.
+// actual phase transitions. Provisioning and Configuring are expected phases
+// after our own create/update operations, so they don't emit ClusterDegraded.
 func (rc *ReconcileContext) emitClusterPhaseTransition(obj client.Object, oldPhase, newPhase string) {
 	switch {
 	case oldPhase != string(readyClusterPhase) && newPhase == string(readyClusterPhase):
 		rc.emitNormal(obj, EventClusterReady, "Cluster is up and running")
-	case oldPhase == string(readyClusterPhase) && newPhase != string(readyClusterPhase):
+	// only when cluster degraded from ready but not to provisioning or configuring
+	case oldPhase == string(readyClusterPhase) && newPhase != string(readyClusterPhase) &&
+		newPhase != string(provisioningClusterPhase) && newPhase != string(configuringClusterPhase):
 		rc.emitWarning(obj, EventClusterDegraded, fmt.Sprintf("Cluster entered phase: %s", newPhase))
 	}
 }
