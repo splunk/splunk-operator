@@ -5,7 +5,19 @@ import (
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// ReconcileContext bundles infrastructure dependencies injected by the controller
+// shell (primary adapter). The service layer declares what it needs via this struct
+// rather than reaching into context — keeping ports explicit and testable.
+type ReconcileContext struct {
+	Client   client.Client
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
+}
 
 // normalizedCNPGClusterSpec is a subset of cnpgv1.ClusterSpec fields used for drift detection.
 // Only fields we set in buildCNPGClusterSpec are included — CNPG-injected defaults are excluded
