@@ -23,25 +23,65 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type AppSourceS3Spec struct {
+	// +required
+	Endpoint string `json:"endpoint"`
+
+	// +optional
+	Region string `json:"region,omitempty"`
+
+	// +optional
+	Bucket string `json:"bucket,omitempty"`
+
+	// +optional
+	BasePath string `json:"basePath,omitempty"`
+}
+
+type AppSourceGitSpec struct {
+	// +required
+	Repo string `json:"repo"`
+
+	// +optional
+	// +kubebuilder:default="main"
+	Ref string `json:"ref,omitempty"`
+}
+
+type AppSourceAuth struct {
+	// +required
+	SecretName string `json:"secretName"`
+}
+
 // AppSourceSpec defines the desired state of AppSource.
 type AppSourceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-
-
-	// Type of the App Source.
+	// Type of the App Source
 	// Valid values are "git", "s3", "gcp", "azure"
 	// +required
 	// +kubebuilder:validation:Enum="git";"s3";"gcp";"azure"
 	Type string `json:"type"`
 
-	// Endpoint of the App Source
+	// S3 specific configuration
+	// +optional
+	S3 *AppSourceS3Spec `json:"s3,omitempty"`
+
+	// Git specific configuration
+	// +optional
+	Git *AppSourceGitSpec `json:"git,omitempty"`
+
+	// GCP and Azure specific configuration
+	// +optional
+	// TODO: Add GCP and Azure specific configuration
+
+	// Authentication configuration
 	// +required
-	Endpoint string `json:"endpoint"`
+	Auth *AppSourceAuth `json:"auth"`
 
-	
-
+	// Polling interval in seconds
+	// +optional
+	// +kubebuilder:default=60
+	Polling *int32 `json:"polling,omitempty"`
 }
 
 // AppSourceStatus defines the observed state of AppSource.
