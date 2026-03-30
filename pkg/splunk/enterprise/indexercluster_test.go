@@ -3085,7 +3085,7 @@ func TestClusterQuorumLostEvent(t *testing.T) {
 
 	// Reset recorder and prepare second call with indexing_ready=false
 	recorder.events = []mockEvent{}
-	quorumLostInfo := `{"entry":[{"content":{"initialized_flag":true,"indexing_ready_flag":false,"service_ready_flag":true,"maintenance_mode":false,"rolling_restart_flag":false,"label":"splunk-manager1-cluster-manager-0","active_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7571-1583870198.bundle","checksum":"ABC123","timestamp":1583870198},"latest_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7571-1583870198.bundle","checksum":"ABC123","timestamp":1583870198},"multisite":"false","replication_factor":3,"site_replication_factor":"origin:2,total:3"}}]}`
+	quorumLostInfo := loadFixture(t, "quorum_lost_info.json")
 	quorumLostHandlers := []spltest.MockHTTPHandler{
 		{Method: "GET", URL: "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json", Status: 200, Body: quorumLostInfo},
 		{Method: "GET", URL: "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json", Status: 200, Body: splcommon.TestIndexerClusterPodManagerPeer},
