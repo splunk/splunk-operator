@@ -41,7 +41,7 @@ var _ = Describe("Smartstore test", func() {
 
 	for _, tc := range smartstoreConfigs {
 		tc := tc
-		Context("Standalone Deployment (S1)", func() {
+		Context("Standalone deployment (S1)", func() {
 			BeforeEach(func() {
 				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.namePrefix)
 			})

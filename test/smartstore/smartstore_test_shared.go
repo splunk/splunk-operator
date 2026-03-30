@@ -162,7 +162,7 @@ func RunS1EphemeralStorageTest(ctx context.Context, deployment *testenv.Deployme
 	}
 
 	standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-	Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+	Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 }
@@ -194,7 +194,7 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	verifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)
 
 	// Use multisite workflow helper to verify index, ingest data, roll to warm, and verify on S3
-	testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, deployment.GetName(), siteCount, indexName, 2000)
+	testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, deployment.GetName(), siteCount, indexName)
 
 	// Get old bundle hash before adding new index
 	oldBundleHash := config.GetBundleHash(ctx, deployment)
@@ -224,5 +224,5 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 
 	// Use multisite workflow helper for the new index
 	testcaseEnvInst.Log.Info("Ingesting data on index", "Index Name", indexNameTwo)
-	testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, deployment.GetName(), siteCount, indexNameTwo, 2000)
+	testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, deployment.GetName(), siteCount, indexNameTwo)
 }

@@ -158,7 +158,7 @@ func CheckIndexerOnCM(ctx context.Context, deployment *Deployment, indexerName s
 	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, "peer")
 	found := false
 	for _, entry := range restResponse.Entry {
-		logf.Log.Info("Peer found On CM", "Indexer Name", entry.Content.Label, "Status", entry.Content.Status)
+		logf.Log.Info("Peer found On CM", "indexerName", entry.Content.Label, "status", entry.Content.Status)
 		if entry.Content.Label == indexerName {
 			found = true
 			break
@@ -172,7 +172,7 @@ func CheckSearchHeadOnCM(ctx context.Context, deployment *Deployment, searchHead
 	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, "sh")
 	found := false
 	for _, entry := range restResponse.Entry {
-		logf.Log.Info("Search Head On CM", "Search Head", entry.Content.Label, "Status", entry.Content.Status)
+		logf.Log.Info("Search Head On CM", "searchHead", entry.Content.Label, "status", entry.Content.Status)
 		if entry.Content.Label == searchHeadName {
 			found = true
 			break
@@ -186,7 +186,7 @@ func CheckSearchHeadRemoved(ctx context.Context, deployment *Deployment) bool {
 	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, "sh")
 	searchHeadRemoved := true
 	for _, entry := range restResponse.Entry {
-		logf.Log.Info("Search Found", "Search Head", entry.Content.Label, "Status", entry.Content.Status)
+		logf.Log.Info("Search Found", "searchHead", entry.Content.Label, "status", entry.Content.Status)
 		if entry.Content.Status == "Disconnected" {
 			searchHeadRemoved = false
 		}
@@ -260,7 +260,7 @@ func CMBundlePushstatus(ctx context.Context, deployment *Deployment, previousBun
 		// Check if new bundle was pushed by comparing hash
 		if previousBundleHash != "" {
 			if entry.Content.BundleID == previousBundleHash {
-				logf.Log.Info("Bundle hash not updated", "old Bundle hash", previousBundleHash, "new Bundle hash", entry.Content.BundleID)
+				logf.Log.Info("Bundle hash not updated", "oldBundleHash", previousBundleHash, "newBundleHash", entry.Content.BundleID)
 				continue
 			}
 		}
@@ -283,6 +283,6 @@ func GetClusterManagerBundleHash(ctx context.Context, deployment *Deployment, cr
 	restResponse := ClusterManagerInfoResponse(ctx, deployment, podName)
 
 	bundleHash := restResponse.Entry[0].Content.ActiveBundle.Checksum
-	logf.Log.Info("Bundle Hash on Cluster Manager Found", "Hash", bundleHash)
+	logf.Log.Info("Bundle Hash on Cluster Manager Found", "hash", bundleHash)
 	return bundleHash
 }

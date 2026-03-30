@@ -41,19 +41,19 @@ var _ = Describe("Smoke test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 		It("smoke, basic, c3: can deploy indexers and search head cluster", func() {
 			testenv.RunC3DeploymentWorkflow(ctx, deployment, testcaseEnvInst, deployment.GetName(), 3, "")
 		})
 	})
 
-	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
+	Context("Multisite cluster deployment (M4 - Multisite Indexer Cluster, Search Head Cluster)", func() {
 		It("smoke, basic, m4: can deploy indexers and search head cluster", func() {
 			testenv.RunM4DeploymentWorkflow(ctx, deployment, testcaseEnvInst, deployment.GetName(), 1, 3, "")
 		})
 	})
 
-	Context("Multisite cluster deployment (M1 - multisite indexer cluster)", func() {
+	Context("Multisite cluster deployment (M1 - Multisite Indexer Cluster)", func() {
 		It("smoke, basic: can deploy multisite indexers cluster", func() {
 			testenv.RunM1DeploymentWorkflow(ctx, deployment, testcaseEnvInst, deployment.GetName(), 1, 3)
 		})

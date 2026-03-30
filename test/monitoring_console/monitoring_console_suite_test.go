@@ -15,7 +15,6 @@ package monitoringconsoletest
 
 import (
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -32,10 +31,7 @@ var (
 func TestBasic(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	sc, _ := GinkgoConfiguration()
-	sc.Timeout = 240 * time.Minute
-
-	RunSpecs(t, "Running "+testSuiteName, sc)
+	RunSpecs(t, "Running "+testSuiteName)
 }
 
 var _ = BeforeSuite(func() {

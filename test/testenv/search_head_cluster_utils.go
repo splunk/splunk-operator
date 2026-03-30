@@ -115,7 +115,7 @@ func DeployerBundlePushstatus(ctx context.Context, deployment *Deployment, ns st
 	}
 	for appName := range appChecksum {
 		if _, present := appBundlePush[appName]; !present {
-			logf.Log.Info("Deployer app not found on any members", "Appname", appName)
+			logf.Log.Info("Deployer app not found on any members", "appName", appName)
 			return make(map[string]int)
 		}
 	}

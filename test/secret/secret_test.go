@@ -21,7 +21,7 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("Secret Test", func() {
+var _ = Describe("Secret test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
@@ -70,7 +70,7 @@ var _ = Describe("Secret Test", func() {
 
 	for _, tc := range c3SecretConfigs {
 		tc := tc
-		Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+		Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 			BeforeEach(func() {
 				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.namePrefix)
 			})
@@ -79,7 +79,7 @@ var _ = Describe("Secret Test", func() {
 				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 			})
 
-			It(tc.label+", smoke, c3: secret update on indexers and search head cluster", func() {
+			It(tc.label+", smoke, c3: secret update on Indexers and Search Head Cluster", func() {
 				config := tc.newConfig()
 				RunC3SecretUpdateTest(ctx, deployment, testcaseEnvInst, config)
 			})
@@ -98,7 +98,7 @@ var _ = Describe("Secret Test", func() {
 
 	for _, tc := range m4SecretConfigs {
 		tc := tc
-		Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
+		Context("Multisite cluster deployment (M4 - Multisite Indexer Cluster, Search Head Cluster)", func() {
 			BeforeEach(func() {
 				testenv.SpecifiedTestTimeout = 40000
 				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.namePrefix)
@@ -108,7 +108,7 @@ var _ = Describe("Secret Test", func() {
 				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 			})
 
-			It(tc.label+", integration, m4: secret update on multisite indexers and search head cluster", func() {
+			It(tc.label+", integration, m4: secret update on multisite Indexers and Search Head Cluster", func() {
 				config := tc.newConfig()
 				RunM4SecretUpdateTest(ctx, deployment, testcaseEnvInst, config)
 			})

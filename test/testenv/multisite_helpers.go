@@ -28,11 +28,11 @@ func (testcaseenv *TestCaseEnv) VerifyIndexOnAllSites(ctx context.Context, deplo
 }
 
 // IngestDataOnAllSites ingests data to an index on all indexer pods across all sites
-func IngestDataOnAllSites(ctx context.Context, deployment *Deployment, deploymentName string, siteCount int, indexName string, logLineCount int) {
+func IngestDataOnAllSites(ctx context.Context, deployment *Deployment, deploymentName string, siteCount int, indexName string) {
 	for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 		podName := fmt.Sprintf(MultiSiteIndexerPod, deploymentName, siteNumber, 0)
 		logFile := fmt.Sprintf("test-log-%s.log", RandomDNSName(3))
-		CreateMockLogfile(logFile, logLineCount)
+		CreateMockLogfile(logFile, LogLineCount)
 		IngestFileViaMonitor(ctx, logFile, indexName, podName, deployment)
 	}
 }
@@ -63,12 +63,12 @@ func (testcaseenv *TestCaseEnv) VerifyCPULimitsOnAllSites(deployment *Deployment
 
 // MultisiteIndexerWorkflow encapsulates the common workflow for multisite indexer operations:
 // verify index, ingest data, roll to warm, verify on S3
-func (testcaseenv *TestCaseEnv) MultisiteIndexerWorkflow(ctx context.Context, deployment *Deployment, deploymentName string, siteCount int, indexName string, logLineCount int) {
+func (testcaseenv *TestCaseEnv) MultisiteIndexerWorkflow(ctx context.Context, deployment *Deployment, deploymentName string, siteCount int, indexName string) {
 	// Verify index exists on all sites
 	testcaseenv.VerifyIndexOnAllSites(ctx, deployment, deploymentName, siteCount, indexName)
 
 	// Ingest data on all sites
-	IngestDataOnAllSites(ctx, deployment, deploymentName, siteCount, indexName, logLineCount)
+	IngestDataOnAllSites(ctx, deployment, deploymentName, siteCount, indexName)
 
 	// Roll hot to warm on all sites
 	RollHotToWarmOnAllSites(ctx, deployment, deploymentName, siteCount, indexName)

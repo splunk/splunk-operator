@@ -77,7 +77,7 @@ func PerformSearchSync(ctx context.Context, podName string, search string, deplo
 		return "", err
 	}
 
-	logf.Log.Info("Output of search Query", "Search", search, "Output", searchReqResp)
+	logf.Log.Info("Output of search Query", "search", search, "output", searchReqResp)
 
 	// Since results can have multiple formats depending on the search SPL, leave this response as a string
 	return searchReqResp, err
@@ -102,7 +102,7 @@ func PerformSearchReq(ctx context.Context, podName string, search string, deploy
 		return "", err
 	}
 
-	logf.Log.Info("Output of search Query", "Search", search, "Output", stdout)
+	logf.Log.Info("Output of search Query", "search", search, "output", stdout)
 
 	// Get SID
 	var searchReqResult map[string]interface{}

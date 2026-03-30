@@ -39,7 +39,7 @@ var _ = Describe("Licensemaster App Framework test", func() {
 		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster) with License Master", func() {
+	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster) with License Master", func() {
 		It("licensemaster, integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
 			licensemanager.RunLMC3AppFrameworkTest(ctx, deployment, testcaseEnvInst, testenvInstance, config)
 		})

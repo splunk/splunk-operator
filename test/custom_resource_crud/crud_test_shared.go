@@ -66,12 +66,21 @@ func RunS1CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig, defaultCPULimits string, newCPULimits string) {
 	// Deploy Single site Cluster and Search Head Clusters
 	mcRef := deployment.GetName()
+	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
 	err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-	// Verify cluster is ready, RF/SF is met, and MC is ready
-	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-	testcaseEnvInst.StandardC3Verification(ctx, deployment, deployment.GetName(), testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), ""))
+	// Verify cluster is ready
+	testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, func(ctx context.Context, d *testenv.Deployment) {
+		config.ClusterManagerReady(ctx, d, testcaseEnvInst)
+	})
+
+	// Verify telemetry
+	testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
+
+	// Deploy and verify Monitoring Console, RF/SF
+	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
+	testcaseEnvInst.StandardC3Verification(ctx, deployment, deployment.GetName(), mc)
 
 	// Verify CPU limits on Indexers before updating the CR
 	indexerCount := 3
@@ -80,7 +89,7 @@ func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	// Change CPU limits to trigger CR update
 	idxc := &enterpriseApi.IndexerCluster{}
 	instanceName := fmt.Sprintf("%s-idxc", deployment.GetName())
-	testenv.GetInstanceWithExpect(ctx, deployment, idxc, instanceName, "Unable to get instance of indexer cluster")
+	testenv.GetInstanceWithExpect(ctx, deployment, idxc, instanceName, "Unable to get instance of Indexer Cluster")
 	idxc.Spec.Resources.Limits = corev1.ResourceList{
 		"cpu": resource.MustParse(newCPULimits),
 	}
@@ -116,6 +125,9 @@ func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	// Verify Search Head go to ready state
 	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
+	// Verify Monitoring Console is Ready and stays in ready state
+	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+
 	// Verify CPU limits on Search Heads after updating the CR
 	testcaseEnvInst.VerifySearchHeadCPULimits(deployment, deployment.GetName(), searchHeadCount, newCPULimits)
 }
@@ -128,8 +140,10 @@ func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, t
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 	// Verify cluster is ready and RF/SF is met
-	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-	testcaseEnvInst.VerifyClusterReadyAndRFSF(ctx, deployment)
+	testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, func(ctx context.Context, d *testenv.Deployment) {
+		config.ClusterManagerReady(ctx, d, testcaseEnvInst)
+	})
+	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 	// Deploy and verify Monitoring Console
 	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, "")
@@ -139,15 +153,13 @@ func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, t
 
 	// Delete the Search Head Cluster
 	shc := &enterpriseApi.SearchHeadCluster{}
-	err = deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)
-	Expect(err).To(Succeed(), "Unable to GET SHC instance", "SHC Name", shc)
+	testenv.GetInstanceWithExpect(ctx, deployment, shc, deployment.GetName()+"-shc", "Unable to GET SHC instance")
 	err = deployment.DeleteCR(ctx, shc)
 	Expect(err).To(Succeed(), "Unable to delete SHC instance", "SHC Name", shc)
 
 	// Delete the Indexer Cluster
 	idxc := &enterpriseApi.IndexerCluster{}
-	err = deployment.GetInstance(ctx, deployment.GetName()+"-idxc", idxc)
-	Expect(err).To(Succeed(), "Unable to GET IDXC instance", "IDXC Name", idxc)
+	testenv.GetInstanceWithExpect(ctx, deployment, idxc, deployment.GetName()+"-idxc", "Unable to GET IDXC instance")
 	err = deployment.DeleteCR(ctx, idxc)
 	Expect(err).To(Succeed(), "Unable to delete IDXC instance", "IDXC Name", idxc)
 
@@ -155,8 +167,7 @@ func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, t
 	config.DeleteClusterManager(ctx, deployment)
 
 	// Delete Monitoring Console
-	err = deployment.GetInstance(ctx, mcRef, mc)
-	Expect(err).To(Succeed(), "Unable to GET Monitoring Console instance", "Monitoring Console Name", mcRef)
+	testenv.GetInstanceWithExpect(ctx, deployment, mc, mcRef, "Unable to GET Monitoring Console instance")
 	err = deployment.DeleteCR(ctx, mc)
 	Expect(err).To(Succeed(), "Unable to delete Monitoring Console instance", "Monitoring Console Name", mcRef)
 
@@ -240,21 +251,14 @@ func RunM4CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 
 	testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
 
-	// Deploy Monitoring Console CRD
-	mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+	// Deploy and verify Monitoring Console
+	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, "")
 
 	// Verify RF SF is met
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 	// Verify CPU limits on Indexers before updating the CR
-	for i := 1; i <= siteCount; i++ {
-		podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
-		testcaseEnvInst.VerifyCPULimits(deployment, podName, defaultCPULimits)
-	}
+	testcaseEnvInst.VerifyCPULimitsOnAllSites(deployment, deployment.GetName(), siteCount, defaultCPULimits)
 
 	// Change CPU limits to trigger CR update
 	idxc := &enterpriseApi.IndexerCluster{}

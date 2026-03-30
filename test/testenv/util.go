@@ -741,7 +741,7 @@ func newStandaloneWithSpec(name, ns string, spec enterpriseApi.StandaloneSpec) *
 	return &new
 }
 
-// newMonitoringConsoleSpec returns MC Spec with given name, namespace and license manager Ref
+// newMonitoringConsoleSpec returns MC Spec with given name, namespace and License Manager Ref
 func newMonitoringConsoleSpec(name, ns, LicenseManagerRef, splunkImage string) *enterpriseApi.MonitoringConsole {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, LicenseManagerRef)
@@ -963,7 +963,7 @@ func ExecuteCommandOnPod(ctx context.Context, deployment *Deployment, podName st
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return "", err
 	}
-	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	logf.Log.Info("Command executed", "onPod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 	return stdout, nil
 }
 
@@ -975,7 +975,7 @@ func ExecuteCommandOnOperatorPod(ctx context.Context, deployment *Deployment, po
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "shell", command, "command", stdin, "error", err.Error())
 		return "", err
 	}
-	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	logf.Log.Info("Command executed", "onPod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 	return stdout, nil
 }
 
@@ -984,7 +984,7 @@ func GetConfigMap(ctx context.Context, deployment *Deployment, ns string, config
 	configMap := &corev1.ConfigMap{}
 	err := deployment.GetInstance(ctx, configMapName, configMap)
 	if err != nil {
-		deployment.testenv.Log.Error(err, "Unable to get config map", "Config Map Name", configMap, "Namespace", ns)
+		deployment.testenv.Log.Error(err, "Unable to get config map", "configMapName", configMap, "namespace", ns)
 	}
 	return configMap, err
 }
@@ -1055,7 +1055,7 @@ func newLicenseManagerWithGivenSpec(name, ns string, spec enterpriseApi.LicenseM
 	return &new
 }
 
-// newLicenseMasterWithGivenSpec create and initializes CR for License Manager Kind with Given Spec
+// newLicenseMasterWithGivenSpec create and initializes CR for License Master Kind with Given Spec
 func newLicenseMasterWithGivenSpec(name, ns string, spec enterpriseApiV3.LicenseMasterSpec) *enterpriseApiV3.LicenseMaster {
 	new := enterpriseApiV3.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -1115,7 +1115,7 @@ func GetDirsOrFilesInPath(ctx context.Context, deployment *Deployment, podName s
 
 // CheckStringInSlice check if string is present in a slice
 func CheckStringInSlice(stringSlice []string, compString string) bool {
-	logf.Log.Info("Checking for string in slice", "String", compString, "String Slice", stringSlice)
+	logf.Log.Info("Checking for string in slice", "string", compString, "stringSlice", stringSlice)
 	for _, item := range stringSlice {
 		if strings.Contains(item, compString) {
 			return true
@@ -1171,7 +1171,7 @@ func DeleteOperatorPod(testcaseEnvInst *TestCaseEnv) error {
 
 	_, err := exec.Command("kubectl", "delete", "pod", "-n", ns, podName).Output()
 	if err != nil {
-		logf.Log.Error(err, "Failed to delete operator pod ", "PodName", podName, "Namespace", ns)
+		logf.Log.Error(err, "Failed to delete operator pod ", "podName", podName, "namespace", ns)
 		return err
 	}
 	return nil
@@ -1183,7 +1183,7 @@ func DeleteFilesOnOperatorPod(ctx context.Context, deployment *Deployment, podNa
 		cmd := fmt.Sprintf("rm -f %s", filepath)
 		_, err := ExecuteCommandOnOperatorPod(ctx, deployment, podName, cmd)
 		if err != nil {
-			logf.Log.Error(err, "Failed to delete file on pod ", "PodName", podName, "location", filepath, "command", cmd)
+			logf.Log.Error(err, "Failed to delete file on pod ", "podName", podName, "location", filepath, "command", cmd)
 			return err
 		}
 	}
@@ -1198,9 +1198,9 @@ func DumpGetSplunkVersion(ctx context.Context, ns string, deployment *Deployment
 		if strings.Contains(podName, filterString) {
 			stdout, err := ExecuteCommandOnPod(ctx, deployment, podName, cmd)
 			if err != nil {
-				logf.Log.Error(err, "Failed to get splunkd version on the pod", "Pod Name", podName)
+				logf.Log.Error(err, "Failed to get splunkd version on the pod", "podName", podName)
 			}
-			logf.Log.Info("Splunk Version Found", "Pod Name", podName, "Version", string(stdout))
+			logf.Log.Info("Splunk Version Found", "podName", podName, "version", string(stdout))
 		}
 	}
 }
@@ -1210,7 +1210,7 @@ func CreateDummyFileOnOperator(ctx context.Context, deployment *Deployment, podN
 	cmd := fmt.Sprintf("cd %s && dd if=/dev/zero of=./%s bs=4k iflag=fullblock,count_bytes count=%s", filepath, filename, size)
 	_, err := ExecuteCommandOnOperatorPod(ctx, deployment, podName, cmd)
 	if err != nil {
-		logf.Log.Error(err, "Failed to create file on the pod", "Pod Name", podName)
+		logf.Log.Error(err, "Failed to create file on the pod", "podName", podName)
 		return err
 	}
 	return nil
@@ -1218,10 +1218,10 @@ func CreateDummyFileOnOperator(ctx context.Context, deployment *Deployment, podN
 
 // DeleteConfigMap Delete configMap in the namespace
 func DeleteConfigMap(ns string, ConfigMapName string) error {
-	logf.Log.Info("Delete configMap", "configMap Name", ConfigMapName)
+	logf.Log.Info("Delete configMap", "configMapName", ConfigMapName)
 	_, err := exec.Command("kubectl", "delete", "configmap", "-n", ns, ConfigMapName).Output()
 	if err != nil {
-		logf.Log.Error(err, "Failed to delete config Map", "ConfigMap Name", ConfigMapName, "Namespace", ns)
+		logf.Log.Error(err, "Failed to delete config Map", "configMapName", ConfigMapName, "namespace", ns)
 		return err
 	}
 	return nil

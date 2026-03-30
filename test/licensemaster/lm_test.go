@@ -45,14 +45,14 @@ var _ = Describe("Licensemaster test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster) with License Master", func() {
+	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster) with License Master", func() {
 		It("licensemaster, integration, c3: Splunk Operator can configure License Master with Indexers and Search Heads in C3 SVA", func() {
 			licensemanager.RunLMC3Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})
 
-	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster) with License Master", func() {
-		It("licensemaster, integration, m4: Splunk Operator can configure License Master with indexers and search head in M4 SVA", func() {
+	Context("Multisite cluster deployment (M4 - Multisite Indexer Cluster, Search Head Cluster) with License Master", func() {
+		It("licensemaster, integration, m4: Splunk Operator can configure License Master with Indexers and Search Heads in M4 SVA", func() {
 			licensemanager.RunLMM4Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})

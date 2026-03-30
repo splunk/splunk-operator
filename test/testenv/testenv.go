@@ -70,7 +70,7 @@ const (
 	// C3 deployments require bundle push across all indexers and SHC deployer which can exceed 5 minutes.
 	AppInstallTimeout = 10 * time.Minute
 
-	// SearchHeadPod Template String for search head pod
+	// SearchHeadPod Template String for Search Head pod
 	SearchHeadPod = "splunk-%s-shc-search-head-%d"
 
 	// DeployerPod Template String for deployer pod
@@ -79,10 +79,10 @@ const (
 	// StandalonePod Template String for standalone pod
 	StandalonePod = "splunk-%s-standalone-%d"
 
-	// LicenseManagerPod Template String for standalone pod
+	// LicenseManagerPod Template String for License Manager pod
 	LicenseManagerPod = "splunk-%s-license-manager-%d"
 
-	// LicenseMasterPod Template String for standalone pod
+	// LicenseMasterPod Template String for License Master pod
 	LicenseMasterPod = "splunk-%s-" + splcommon.LicenseManager + "-%d"
 
 	// IngestorPod Template String for ingestor pod
@@ -132,11 +132,17 @@ const (
 	// ClusterMasterServiceName Cluster Master Service Template String
 	ClusterMasterServiceName = "splunk-%s-cluster-master-service"
 
-	// DeployerServiceName Cluster Manager Service Template String
+	// DeployerServiceName Deployer Service Template String
 	DeployerServiceName = "splunk-%s-shc-deployer-service"
 
 	// CRUpdateRetryCount if CR Update fails retry these many time
 	CRUpdateRetryCount = 10
+
+	// LogLineCount is the default number of log lines to ingest for test data
+	LogLineCount = 2000
+
+	// DefaultIngestIndex is the default index name used for test data ingestion
+	DefaultIngestIndex = "main"
 )
 
 var (

@@ -35,7 +35,7 @@ func (testcaseenv *TestCaseEnv) ScaleSearchHeadCluster(ctx context.Context, depl
 	shc.Spec.Replicas = int32(newReplicas)
 	UpdateCRWithExpect(ctx, deployment, shc, "Failed to scale Search Head Cluster")
 
-	// Verify Search Head cluster scales up and goes to ScalingUp phase
+	// Verify Search Head Cluster scales up and goes to ScalingUp phase
 	testcaseenv.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp)
 }
 
@@ -51,7 +51,7 @@ func (testcaseenv *TestCaseEnv) ScaleIndexerCluster(ctx context.Context, deploym
 	idxc.Spec.Replicas = int32(newReplicas)
 	UpdateCRWithExpect(ctx, deployment, idxc, "Failed to scale Indexer Cluster")
 
-	// Verify Indexer cluster scales up and goes to ScalingUp phase
+	// Verify Indexer Cluster scales up and goes to ScalingUp phase
 	testcaseenv.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp, idxcName)
 }
 
@@ -84,7 +84,7 @@ func (testcaseenv *TestCaseEnv) VerifyMCConfigForC3Cluster(ctx context.Context, 
 	// Check Deployer in MC Config Map
 	testcaseenv.VerifyPodsInMCConfigMap(ctx, deployment, []string{fmt.Sprintf(DeployerServiceName, deploymentName)}, "SPLUNK_DEPLOYER_URL", mcName, shouldExist)
 
-	// Check Search Head Pods in MC Config Map
+	// Check Search Head pods in MC Config Map
 	shPods := GeneratePodNameSlice(SearchHeadPod, deploymentName, shReplicas, false, 0)
 	testcaseenv.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, shouldExist)
 
@@ -98,10 +98,10 @@ func (testcaseenv *TestCaseEnv) VerifyMCConfigForC3Cluster(ctx context.Context, 
 
 // VerifyMCConfigForM4Cluster verifies the standard MC configuration for an M4 multisite cluster
 func (testcaseenv *TestCaseEnv) VerifyMCConfigForM4Cluster(ctx context.Context, deployment *Deployment, deploymentName string, mcName string, shReplicas int, indexerReplicas int, siteCount int, shouldExist bool) {
-	// Check Cluster Manager in MC Config Map
+	// Check cluster manager in MC Config Map
 	testcaseenv.VerifyPodsInMCConfigMap(ctx, deployment, []string{fmt.Sprintf(ClusterMasterServiceName, deploymentName)}, "SPLUNK_CLUSTER_MASTER_URL", mcName, shouldExist)
 
-	// Check Deployer in MC Config Map
+	// Check deployer in MC Config Map
 	testcaseenv.VerifyPodsInMCConfigMap(ctx, deployment, []string{fmt.Sprintf(DeployerServiceName, deploymentName)}, "SPLUNK_DEPLOYER_URL", mcName, shouldExist)
 
 	// Check Search Head Pods in MC Config Map
@@ -119,7 +119,7 @@ func (testcaseenv *TestCaseEnv) VerifyMCConfigForM4Cluster(ctx context.Context, 
 // DeployAndVerifyC3WithMC deploys a C3 cluster with a given MC and verifies all components are ready
 func (testcaseenv *TestCaseEnv) DeployAndVerifyC3WithMC(ctx context.Context, deployment *Deployment, deploymentName string, indexerReplicas int, mcName string) {
 	err := deployment.DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx, deploymentName, indexerReplicas, true, mcName)
-	Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
+	Expect(err).To(Succeed(), "Unable to deploy Cluster Master")
 
 	// Verify all components are ready
 	testcaseenv.VerifyClusterMasterReady(ctx, deployment)
@@ -156,46 +156,58 @@ func (testcaseenv *TestCaseEnv) VerifyStandaloneInMC(ctx context.Context, deploy
 	testcaseenv.VerifyPodsInMCConfigString(ctx, deployment, []string{standalonePod}, mcName, shouldExist, false)
 }
 
-// VerifyLMConfiguredOnIndexers verifies License Manager is configured on all indexer pods
-func VerifyLMConfiguredOnIndexers(ctx context.Context, deployment *Deployment, deploymentName string, indexerCount int) {
-	for i := 0; i < indexerCount; i++ {
-		indexerPodName := fmt.Sprintf(IndexerPod, deploymentName, i)
-		VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
-	}
-}
-
-// VerifyLMConfiguredOnSearchHeads verifies License Manager is configured on all search head pods
-func VerifyLMConfiguredOnSearchHeads(ctx context.Context, deployment *Deployment, deploymentName string, searchHeadCount int) {
-	for i := 0; i < searchHeadCount; i++ {
-		searchHeadPodName := fmt.Sprintf(SearchHeadPod, deploymentName, i)
-		VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
-	}
-}
-
-// VerifyLMConfiguredOnMultisiteIndexers verifies License Manager is configured on all multisite indexer pods
-func VerifyLMConfiguredOnMultisiteIndexers(ctx context.Context, deployment *Deployment, deploymentName string, siteCount int) {
-	for i := 1; i <= siteCount; i++ {
-		indexerPodName := fmt.Sprintf(MultiSiteIndexerPod, deploymentName, i, 0)
-		VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
+// VerifyLMConfiguredOnPods verifies License Manager is configured on all given pods
+func VerifyLMConfiguredOnPods(ctx context.Context, deployment *Deployment, podNames []string) {
+	for _, podName := range podNames {
+		VerifyLMConfiguredOnPod(ctx, deployment, podName)
 	}
 }
 
 // IngestDataOnIndexers ingests test data on all indexer pods
-func IngestDataOnIndexers(ctx context.Context, deployment *Deployment, deploymentName string, indexerCount int, indexName string, logLineCount int) {
+func IngestDataOnIndexers(ctx context.Context, deployment *Deployment, deploymentName string, indexerCount int) {
 	for i := 0; i < indexerCount; i++ {
 		podName := fmt.Sprintf(IndexerPod, deploymentName, i)
 		logFile := fmt.Sprintf("test-log-%s.log", RandomDNSName(3))
-		CreateMockLogfile(logFile, logLineCount)
-		IngestFileViaMonitor(ctx, logFile, indexName, podName, deployment)
+		CreateMockLogfile(logFile, LogLineCount)
+		IngestFileViaMonitor(ctx, logFile, DefaultIngestIndex, podName, deployment)
 	}
 }
 
+// VerifyM1ClusterReady verifies the cluster coordinator, indexers, and multisite status are ready (no SHC).
+func (testcaseenv *TestCaseEnv) VerifyM1ClusterReady(ctx context.Context, deployment *Deployment, siteCount int, verifyCoordinator func(context.Context, *Deployment)) {
+	verifyCoordinator(ctx, deployment)
+	testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount)
+	testcaseenv.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+}
+
+// VerifyM4ClusterReady verifies the cluster coordinator, indexers, multisite status, and SHC are ready.
+func (testcaseenv *TestCaseEnv) VerifyM4ClusterReady(ctx context.Context, deployment *Deployment, siteCount int, verifyCoordinator func(context.Context, *Deployment)) {
+	verifyCoordinator(ctx, deployment)
+	testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount)
+	testcaseenv.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
+}
+
+// VerifyM4IndexersAndSHCReady verifies the cluster coordinator, indexers, and SHC are ready (without multisite check).
+func (testcaseenv *TestCaseEnv) VerifyM4IndexersAndSHCReady(ctx context.Context, deployment *Deployment, siteCount int, verifyCoordinator func(context.Context, *Deployment)) {
+	verifyCoordinator(ctx, deployment)
+	testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount)
+	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
+}
+
+// VerifyC3ClusterReady verifies the cluster coordinator, SHC, and single-site indexers are ready.
+func (testcaseenv *TestCaseEnv) VerifyC3ClusterReady(ctx context.Context, deployment *Deployment, verifyCoordinator func(context.Context, *Deployment)) {
+	verifyCoordinator(ctx, deployment)
+	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
+	testcaseenv.VerifySingleSiteIndexersReady(ctx, deployment)
+}
+
 // IngestDataOnMultisiteIndexers ingests test data on all multisite indexer pods
-func IngestDataOnMultisiteIndexers(ctx context.Context, deployment *Deployment, deploymentName string, siteCount int, indexName string, logLineCount int) {
+func IngestDataOnMultisiteIndexers(ctx context.Context, deployment *Deployment, deploymentName string, siteCount int) {
 	for site := 1; site <= siteCount; site++ {
 		podName := fmt.Sprintf(MultiSiteIndexerPod, deploymentName, site, 0)
 		logFile := fmt.Sprintf("test-log-%s.log", RandomDNSName(3))
-		CreateMockLogfile(logFile, logLineCount)
-		IngestFileViaMonitor(ctx, logFile, indexName, podName, deployment)
+		CreateMockLogfile(logFile, LogLineCount)
+		IngestFileViaMonitor(ctx, logFile, DefaultIngestIndex, podName, deployment)
 	}
 }

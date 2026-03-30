@@ -109,7 +109,7 @@ var PVTestAppsLocation = "appframework/100mb_sample_apps/"
 // AppStagingLocOnPod is the volume on Splunk pod where apps will be copied from operator
 var AppStagingLocOnPod = "/operator-staging/appframework/"
 
-// AppDownloadVolume location on Operator pod for App framework downloads
+// AppDownloadVolume location on Operator pod for App Framework downloads
 var AppDownloadVolume = "/opt/splunk/appframework/downloadedApps/"
 
 // GenerateAppSourceSpec return AppSourceSpec struct with given values
@@ -125,7 +125,7 @@ func GenerateAppSourceSpec(appSourceName string, appSourceLocation string, appSo
 func GetPodAppStatus(ctx context.Context, deployment *Deployment, podName string, ns string, appname string, clusterWideInstall bool) (string, string, error) {
 	// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
 	if clusterWideInstall && (strings.Contains(podName, "-cluster-manager-") || strings.Contains(podName, splcommon.TestClusterManagerDashed) || strings.Contains(podName, "-deployer-")) {
-		logf.Log.Info("Pod skipped as install is Cluter-wide", "PodName", podName)
+		logf.Log.Info("Pod skipped as install is Cluter-wide", "podName", podName)
 		return "", "", nil
 	}
 	output, err := GetPodAppInstallStatus(ctx, deployment, podName, ns, appname)
@@ -154,11 +154,11 @@ func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string
 		}
 	}
 	filePath := fmt.Sprintf("/opt/splunk/%s/%s/default/app.conf", path, appname)
-	logf.Log.Info("Check app version", "App", appname, "Conf file", filePath)
+	logf.Log.Info("Check app version", "app", appname, "confFile", filePath)
 
 	confline, err := GetConfLineFromPod(podName, filePath, ns, "version", "launcher", true)
 	if err != nil {
-		logf.Log.Error(err, "Failed to get version from pod", "Pod Name", podName)
+		logf.Log.Error(err, "Failed to get version from pod", "podName", podName)
 		return "", err
 	}
 	version := strings.TrimSpace(strings.Split(confline, "=")[1])
@@ -181,7 +181,7 @@ func GetPodAppInstallStatus(ctx context.Context, deployment *Deployment, podName
 		return "", err
 	}
 
-	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout)
+	logf.Log.Info("Command executed", "onPod", podName, "command", command, "stdin", stdin, "stdout", stdout)
 
 	return strings.TrimSuffix(stdout, "\n"), nil
 }
@@ -195,7 +195,7 @@ func GetPodAppbtoolStatus(ctx context.Context, deployment *Deployment, podName s
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
 		return "", err
 	}
-	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	logf.Log.Info("Command executed", "onPod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 
 	if len(stdout) > 0 {
 		if strings.Contains(strings.Split(stdout, "\n")[0], "App is disabled") {
@@ -218,13 +218,13 @@ func GetAppFileList(appList []string) []string {
 // GetAppframeworkManualUpdateConfigMap gets config map for given manual update configmap
 func GetAppframeworkManualUpdateConfigMap(ctx context.Context, deployment *Deployment, ns string) (*corev1.ConfigMap, error) {
 	ConfigMapName := fmt.Sprintf(AppframeworkManualUpdateConfigMap, ns)
-	logf.Log.Info("Get config map for", "CONFIG MAP NAME", ConfigMapName)
+	logf.Log.Info("Get config map for", "configMapName", ConfigMapName)
 	ConfigMap, err := GetConfigMap(ctx, deployment, ns, ConfigMapName)
 	if err != nil {
 		logf.Log.Error(err, "Failed to get splunk manual poll Config Map")
 		return ConfigMap, err
 	}
-	logf.Log.Info("Config Map contents", "CONFIG MAP NAME", ConfigMapName, "Data", ConfigMap.Data)
+	logf.Log.Info("Config Map contents", "configMapName", ConfigMapName, "data", ConfigMap.Data)
 	return ConfigMap, err
 }
 
@@ -234,19 +234,19 @@ func GetAppDeploymentInfoStandalone(ctx context.Context, deployment *Deployment,
 	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
 	err := deployment.GetInstance(ctx, name, standalone)
 	if err != nil {
-		testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name)
+		testenvInstance.Log.Error(err, "Failed to get CR ", "crName", name)
 		return appDeploymentInfo, err
 	}
 	appInfoList := standalone.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
 	for _, appInfo := range appInfoList {
-		testenvInstance.Log.Info("Checking Standalone AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Standalone Name", name, "AppDeploymentInfo", appInfo)
+		testenvInstance.Log.Info("Checking Standalone AppInfo Struct", "appName", appName, "appSource", appSourceName, "standaloneName", name, "appDeploymentInfo", appInfo)
 		if strings.Contains(appName, appInfo.AppName) {
-			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Standalone Name", name, "AppDeploymentInfo", appInfo)
+			testenvInstance.Log.Info("App Deployment Info found.", "appName", appName, "appSource", appSourceName, "standaloneName", name, "appDeploymentInfo", appInfo)
 			appDeploymentInfo = appInfo
 			return appDeploymentInfo, nil
 		}
 	}
-	testenvInstance.Log.Info("App Info not found in App Info List", "App Name", appName, "App Source", appSourceName, "Standalone Name", name, "App Info List", appInfoList)
+	testenvInstance.Log.Info("App Info not found in App Info List", "appName", appName, "appSource", appSourceName, "standaloneName", name, "appInfoList", appInfoList)
 	return appDeploymentInfo, err
 }
 
@@ -256,19 +256,19 @@ func GetAppDeploymentInfoIngestorCluster(ctx context.Context, deployment *Deploy
 	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
 	err := deployment.GetInstance(ctx, name, ingestor)
 	if err != nil {
-		testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name)
+		testenvInstance.Log.Error(err, "Failed to get CR ", "crName", name)
 		return appDeploymentInfo, err
 	}
 	appInfoList := ingestor.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
 	for _, appInfo := range appInfoList {
-		testenvInstance.Log.Info("Checking Ingestor AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Ingestor Name", name, "AppDeploymentInfo", appInfo)
+		testenvInstance.Log.Info("Checking Ingestor AppInfo Struct", "appName", appName, "appSource", appSourceName, "ingestorName", name, "appDeploymentInfo", appInfo)
 		if strings.Contains(appName, appInfo.AppName) {
-			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Ingestor Name", name, "AppDeploymentInfo", appInfo)
+			testenvInstance.Log.Info("App Deployment Info found.", "appName", appName, "appSource", appSourceName, "ingestorName", name, "appDeploymentInfo", appInfo)
 			appDeploymentInfo = appInfo
 			return appDeploymentInfo, nil
 		}
 	}
-	testenvInstance.Log.Info("App Info not found in App Info List", "App Name", appName, "App Source", appSourceName, "Ingestor Name", name, "App Info List", appInfoList)
+	testenvInstance.Log.Info("App Info not found in App Info List", "appName", appName, "appSource", appSourceName, "ingestorName", name, "appInfoList", appInfoList)
 	return appDeploymentInfo, err
 }
 
@@ -278,19 +278,19 @@ func GetAppDeploymentInfoMonitoringConsole(ctx context.Context, deployment *Depl
 	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
 	err := deployment.GetInstance(ctx, name, mc)
 	if err != nil {
-		testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name)
+		testenvInstance.Log.Error(err, "Failed to get CR ", "crName", name)
 		return appDeploymentInfo, err
 	}
 	appInfoList := mc.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
 	for _, appInfo := range appInfoList {
-		testenvInstance.Log.Info("Checking Monitoring Console AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Monitoring Console Name", name, "AppDeploymentInfo", appInfo)
+		testenvInstance.Log.Info("Checking Monitoring Console AppInfo Struct", "appName", appName, "appSource", appSourceName, "monitoringConsoleName", name, "appDeploymentInfo", appInfo)
 		if strings.Contains(appName, appInfo.AppName) {
-			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Monitoring Console Name", name, "AppDeploymentInfo", appInfo)
+			testenvInstance.Log.Info("App Deployment Info found.", "appName", appName, "appSource", appSourceName, "monitoringConsoleName", name, "appDeploymentInfo", appInfo)
 			appDeploymentInfo = appInfo
 			return appDeploymentInfo, nil
 		}
 	}
-	testenvInstance.Log.Info("App Info not found in App Info List", "App Name", appName, "App Source", appSourceName, "Monitoring Console Name", name, "App Info List", appInfoList)
+	testenvInstance.Log.Info("App Info not found in App Info List", "appName", appName, "appSource", appSourceName, "monitoringConsoleName", name, "appInfoList", appInfoList)
 	return appDeploymentInfo, err
 }
 
@@ -300,41 +300,41 @@ func GetAppDeploymentInfoClusterManager(ctx context.Context, deployment *Deploym
 	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
 	err := deployment.GetInstance(ctx, name, cm)
 	if err != nil {
-		testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name)
+		testenvInstance.Log.Error(err, "Failed to get CR ", "crName", name)
 		return appDeploymentInfo, err
 	}
 	appInfoList := cm.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
 	for _, appInfo := range appInfoList {
-		testenvInstance.Log.Info("Checking Cluster Manager AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Cluster Manager Name", name, "AppDeploymentInfo", appInfo)
+		testenvInstance.Log.Info("Checking Cluster Manager AppInfo Struct", "appName", appName, "appSource", appSourceName, "clusterManagerName", name, "appDeploymentInfo", appInfo)
 		if strings.Contains(appName, appInfo.AppName) {
-			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Cluster Manager Name", name, "AppDeploymentInfo", appInfo)
+			testenvInstance.Log.Info("App Deployment Info found.", "appName", appName, "appSource", appSourceName, "clusterManagerName", name, "appDeploymentInfo", appInfo)
 			appDeploymentInfo = appInfo
 			return appDeploymentInfo, nil
 		}
 	}
-	testenvInstance.Log.Info("App Info not found in App Info List", "App Name", appName, "App Source", appSourceName, "Cluster Manager Name", name, "App Info List", appInfoList)
+	testenvInstance.Log.Info("App Info not found in App Info List", "appName", appName, "appSource", appSourceName, "clusterManagerName", name, "appInfoList", appInfoList)
 	return appDeploymentInfo, err
 }
 
-// GetAppDeploymentInfoClusterMaster returns AppDeploymentInfo for given Cluster Manager, appSourceName and appName
+// GetAppDeploymentInfoClusterMaster returns AppDeploymentInfo for given Cluster Master, appSourceName and appName
 func GetAppDeploymentInfoClusterMaster(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
 	cm := &enterpriseApiV3.ClusterMaster{}
 	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
 	err := deployment.GetInstance(ctx, name, cm)
 	if err != nil {
-		testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name)
+		testenvInstance.Log.Error(err, "Failed to get CR ", "crName", name)
 		return appDeploymentInfo, err
 	}
 	appInfoList := cm.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
 	for _, appInfo := range appInfoList {
-		testenvInstance.Log.Info("Checking Cluster Master AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Cluster Master Name", name, "AppDeploymentInfo", appInfo)
+		testenvInstance.Log.Info("Checking Cluster Master AppInfo Struct", "appName", appName, "appSource", appSourceName, "clusterMasterName", name, "appDeploymentInfo", appInfo)
 		if strings.Contains(appName, appInfo.AppName) {
-			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Cluster Master Name", name, "AppDeploymentInfo", appInfo)
+			testenvInstance.Log.Info("App Deployment Info found.", "appName", appName, "appSource", appSourceName, "clusterMasterName", name, "appDeploymentInfo", appInfo)
 			appDeploymentInfo = appInfo
 			return appDeploymentInfo, nil
 		}
 	}
-	testenvInstance.Log.Info("App Info not found in App Info List", "App Name", appName, "App Source", appSourceName, "Cluster Master Name", name, "App Info List", appInfoList)
+	testenvInstance.Log.Info("App Info not found in App Info List", "appName", appName, "appSource", appSourceName, "clusterMasterName", name, "appInfoList", appInfoList)
 	return appDeploymentInfo, err
 }
 
@@ -344,19 +344,19 @@ func GetAppDeploymentInfoSearchHeadCluster(ctx context.Context, deployment *Depl
 	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
 	err := deployment.GetInstance(ctx, name, cm)
 	if err != nil {
-		testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name)
+		testenvInstance.Log.Error(err, "Failed to get CR ", "crName", name)
 		return appDeploymentInfo, err
 	}
 	appInfoList := cm.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
 	for _, appInfo := range appInfoList {
-		testenvInstance.Log.Info("Checking Search Head Cluster AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Search Head Name Name", name, "AppDeploymentInfo", appInfo)
+		testenvInstance.Log.Info("Checking Search Head Cluster AppInfo Struct", "appName", appName, "appSource", appSourceName, "searchHeadClusterName", name, "appDeploymentInfo", appInfo)
 		if strings.Contains(appName, appInfo.AppName) {
-			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Search Head Name Name", name, "AppDeploymentInfo", appInfo)
+			testenvInstance.Log.Info("App Deployment Info found.", "appName", appName, "appSource", appSourceName, "searchHeadClusterName", name, "appDeploymentInfo", appInfo)
 			appDeploymentInfo = appInfo
 			return appDeploymentInfo, nil
 		}
 	}
-	testenvInstance.Log.Info("App Info not found in App Info List", "App Name", appName, "App Source", appSourceName, "Search Head Name Name", name, "App Info List", appInfoList)
+	testenvInstance.Log.Info("App Info not found in App Info List", "appName", appName, "appSource", appSourceName, "searchHeadClusterName", name, "appInfoList", appInfoList)
 	return appDeploymentInfo, err
 }
 
@@ -389,7 +389,7 @@ func GetAppDeploymentInfo(ctx context.Context, deployment *Deployment, testenvIn
 func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv, volumeName string, scope string, appSourceName string, s3TestDir string, pollInterval int) enterpriseApi.AppFrameworkSpec {
 	var volumeSpec []enterpriseApi.VolumeSpec
 
-	// Create App framework volume
+	// Create App Framework volume
 	switch ClusterProvider {
 	case "eks":
 		volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", GetDefaultS3Region())}
@@ -404,7 +404,7 @@ func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv,
 		volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetGCPEndpoint(), testenvInstance.GetIndexSecretName(), "gcp", "gcs", GetDefaultS3Region())}
 
 	default:
-		testenvInstance.Log.Info("Failed to identify cluster provider name: Should be 'eks' or 'azure' or 'gcp' ")
+		testenvInstance.Log.Info("Failed to identify provider: Should be 'eks' or 'azure' or 'gcp'")
 	}
 
 	// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
@@ -601,7 +601,7 @@ func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, 
 		cr := &enterpriseApi.Standalone{}
 		err := deployment.GetInstance(ctx, name, cr)
 		if err != nil {
-			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			testenvInstance.Log.Error(err, "Failed to get CR ", "crName", name, "crKind", crKind)
 			return isDeploymentInProgress, err
 		}
 		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
@@ -609,7 +609,7 @@ func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, 
 		cr := &enterpriseApi.MonitoringConsole{}
 		err := deployment.GetInstance(ctx, name, cr)
 		if err != nil {
-			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			testenvInstance.Log.Error(err, "Failed to get CR ", "crName", name, "crKind", crKind)
 			return isDeploymentInProgress, err
 		}
 		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
@@ -617,7 +617,7 @@ func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, 
 		cr := &enterpriseApi.SearchHeadCluster{}
 		err := deployment.GetInstance(ctx, name, cr)
 		if err != nil {
-			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			testenvInstance.Log.Error(err, "Failed to get CR ", "crName", name, "crKind", crKind)
 			return isDeploymentInProgress, err
 		}
 		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
@@ -625,7 +625,7 @@ func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, 
 		cr := &enterpriseApiV3.ClusterMaster{}
 		err := deployment.GetInstance(ctx, name, cr)
 		if err != nil {
-			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			testenvInstance.Log.Error(err, "Failed to get CR ", "crName", name, "crKind", crKind)
 			return isDeploymentInProgress, err
 		}
 		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
@@ -633,7 +633,7 @@ func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, 
 		cr := &enterpriseApi.ClusterManager{}
 		err := deployment.GetInstance(ctx, name, cr)
 		if err != nil {
-			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			testenvInstance.Log.Error(err, "Failed to get CR ", "crName", name, "crKind", crKind)
 			return isDeploymentInProgress, err
 		}
 		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
@@ -641,7 +641,7 @@ func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, 
 		cr := &enterpriseApiV3.LicenseMaster{}
 		err := deployment.GetInstance(ctx, name, cr)
 		if err != nil {
-			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			testenvInstance.Log.Error(err, "Failed to get CR ", "crName", name, "crKind", crKind)
 			return isDeploymentInProgress, err
 		}
 		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
@@ -649,7 +649,7 @@ func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, 
 		cr := &enterpriseApi.LicenseManager{}
 		err := deployment.GetInstance(ctx, name, cr)
 		if err != nil {
-			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			testenvInstance.Log.Error(err, "Failed to get CR ", "crName", name, "crKind", crKind)
 			return isDeploymentInProgress, err
 		}
 		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress

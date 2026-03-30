@@ -51,10 +51,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	AfterEach(func() {
-		testenv.TeardownAppFrameworkTestCaseEnv(ctx, testcaseEnvInst, deployment, func() {
-			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
-		}, filePresentOnOperator)
+		testenv.TeardownAppFrameworkTestCaseEnv(ctx, testcaseEnvInst, deployment, testenv.AzureCloudCleanup(ctx, uploadedApps), filePresentOnOperator)
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
@@ -139,7 +136,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -158,15 +155,13 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
+			testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 			// Verify no SH in disconnected status is present on CM
 			testcaseEnvInst.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment)
@@ -224,15 +219,13 @@ var _ = Describe("c3appfw test", func() {
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
+			testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -298,7 +291,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Monitoring Console
+			// Create App Framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
 			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
@@ -338,7 +331,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc := "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc := "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -357,15 +350,13 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
+			testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -419,15 +410,13 @@ var _ = Describe("c3appfw test", func() {
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			verifyMCVersionChangedAndReady(ctx, testcaseEnvInst, deployment, mc, resourceVersion)
+			testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -506,7 +495,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc := "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc := "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -522,10 +511,8 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -565,9 +552,7 @@ var _ = Describe("c3appfw test", func() {
 
 			//#############  SCALING UP ###################
 			// Get instance of current Search Head Cluster CR with latest config
-			err = deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)
-
-			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
+			testenv.GetInstanceWithExpect(ctx, deployment, shc, deployment.GetName()+"-shc", "Failed to get instance of Search Head Cluster")
 
 			// Scale up Search Head Cluster
 			defaultSHReplicas := shc.Spec.Replicas
@@ -585,8 +570,7 @@ var _ = Describe("c3appfw test", func() {
 			// Get instance of current Indexer CR with latest config
 			idxcName := deployment.GetName() + "-idxc"
 			idxc := &enterpriseApi.IndexerCluster{}
-			err = deployment.GetInstance(ctx, idxcName, idxc)
-			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
+			testenv.GetInstanceWithExpect(ctx, deployment, idxc, idxcName, "Failed to get instance of Indexer Cluster")
 			defaultIndexerReplicas := idxc.Spec.Replicas
 			scaledIndexerReplicas := defaultIndexerReplicas + 1
 			testcaseEnvInst.Log.Info("Scale up Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
@@ -608,7 +592,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testenv.CheckIndexerOnCM(ctx, deployment, indexerName)).To(Equal(true))
 
 			// Ingest data on Indexers
-			testenv.IngestDataOnIndexers(ctx, deployment, deployment.GetName(), int(scaledIndexerReplicas), "main", 2000)
+			testenv.IngestDataOnIndexers(ctx, deployment, deployment.GetName(), int(scaledIndexerReplicas))
 
 			// Ensure Search Head Cluster go to Ready phase
 			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
@@ -647,9 +631,7 @@ var _ = Describe("c3appfw test", func() {
 			//############### SCALING DOWN ################
 			// Get instance of current Search Head Cluster CR with latest config
 			shc = &enterpriseApi.SearchHeadCluster{}
-			err = deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)
-
-			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
+			testenv.GetInstanceWithExpect(ctx, deployment, shc, deployment.GetName()+"-shc", "Failed to get instance of Search Head Cluster")
 
 			// Scale down Search Head Cluster
 			defaultSHReplicas = shc.Spec.Replicas
@@ -665,8 +647,7 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown)
 
 			// Get instance of current Indexer CR with latest config
-			err = deployment.GetInstance(ctx, idxcName, idxc)
-			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
+			testenv.GetInstanceWithExpect(ctx, deployment, idxc, idxcName, "Failed to get instance of Indexer Cluster")
 			defaultIndexerReplicas = idxc.Spec.Replicas
 			scaledIndexerReplicas = defaultIndexerReplicas - 1
 			testcaseEnvInst.Log.Info("Scaling down Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
@@ -716,7 +697,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 		It("integration, c3azure, managerappframeworkazurec3, appframeworkazure, azure_sanity: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
 
 			/* Test Steps
@@ -760,7 +741,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -776,10 +757,8 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -822,10 +801,8 @@ var _ = Describe("c3appfw test", func() {
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -848,7 +825,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 		It("integration, c3azure, managerappframeworkazurec3, appframeworkazure: can deploy a C3 SVA and have ES app installed on Search Head Cluster", func() {
 
 			/* Test Steps
@@ -898,7 +875,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for SHC
+			// Create App Framework Spec for SHC
 			appSourceNameShc = "appframework-shc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopePremiumApps, appSourceNameShc, azTestDirShc, 60)
@@ -909,7 +886,7 @@ var _ = Describe("c3appfw test", func() {
 				},
 			}
 
-			// Create App framework Spec for Indexer Cluster
+			// Create App Framework Spec for Indexer Cluster
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, azTestDirIdxc, 60)
@@ -955,10 +932,8 @@ var _ = Describe("c3appfw test", func() {
 			shc, err := deployment.DeploySearchHeadClusterWithGivenSpec(ctx, deployment.GetName()+"-shc", shSpec)
 			Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1001,10 +976,8 @@ var _ = Describe("c3appfw test", func() {
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
 
-			// // Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// // Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// // Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1022,7 +995,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 		It("c3, integration,managerappframeworkazurec3, appframeworkazure, azure_sanity: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", func() {
 
 			/* Test Steps
@@ -1090,7 +1063,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to Azure test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameLocalIdxc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameLocalShc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameClusterIdxc := "appframework-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
@@ -1100,7 +1073,7 @@ var _ = Describe("c3appfw test", func() {
 			appSourceVolumeNameIdxcCluster := "appframework-test-volume-idxc-cluster-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShcCluster := "appframework-test-volume-shc-cluster-" + testenv.RandomDNSName(3)
 
-			// Create App framework Spec for Cluster manager with scope local and append cluster scope
+			// Create App Framework Spec for Cluster manager with scope local and append cluster scope
 
 			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, azTestDirIdxcLocal, 60)
 			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpecAzure(appSourceVolumeNameIdxcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "azure", "blob")}
@@ -1113,7 +1086,7 @@ var _ = Describe("c3appfw test", func() {
 			appSourceSpecCluster := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterIdxc, azTestDirIdxcCluster, appSourceClusterDefaultSpec)}
 			appFrameworkSpecIdxc.AppSources = append(appFrameworkSpecIdxc.AppSources, appSourceSpecCluster...)
 
-			// Create App framework Spec for Search head cluster with scope local and append cluster scope
+			// Create App Framework Spec for Search Head cluster with scope local and append cluster scope
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, azTestDirShcLocal, 60)
 			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpecAzure(appSourceVolumeNameShcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "azure", "blob")}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
@@ -1132,10 +1105,8 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1209,10 +1180,8 @@ var _ = Describe("c3appfw test", func() {
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1242,7 +1211,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 		It("c3, integration,managerappframeworkazurec3, appframeworkazure: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then downgrade them", func() {
 
 			/* Test Steps
@@ -1311,7 +1280,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to Azure test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameLocalIdxc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameLocalShc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameClusterIdxc := "appframework-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
@@ -1321,7 +1290,7 @@ var _ = Describe("c3appfw test", func() {
 			appSourceVolumeNameIdxcCluster := "appframework-test-volume-idxc-cluster-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShcCluster := "appframework-test-volume-shc-cluster-" + testenv.RandomDNSName(3)
 
-			// Create App framework Spec for Cluster manager with scope local and append cluster scope
+			// Create App Framework Spec for Cluster manager with scope local and append cluster scope
 			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, azTestDirIdxcLocal, 60)
 			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpecAzure(appSourceVolumeNameIdxcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "azure", "blob")}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
@@ -1332,7 +1301,7 @@ var _ = Describe("c3appfw test", func() {
 			appSourceSpecCluster := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterIdxc, azTestDirIdxcCluster, appSourceClusterDefaultSpec)}
 			appFrameworkSpecIdxc.AppSources = append(appFrameworkSpecIdxc.AppSources, appSourceSpecCluster...)
 
-			// Create App framework Spec for Search head cluster with scope local and append cluster scope
+			// Create App Framework Spec for Search Head cluster with scope local and append cluster scope
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, azTestDirShcLocal, 60)
 			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpecAzure(appSourceVolumeNameShcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "azure", "blob")}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
@@ -1351,10 +1320,8 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1417,10 +1384,8 @@ var _ = Describe("c3appfw test", func() {
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1450,7 +1415,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 		It("integration, c3azure, managerappframeworkazurec3, appframeworkazure: can deploy a C3 SVA instance with App Framework enabled and install above 200MB of apps at once", func() {
 
 			/* Test Steps
@@ -1496,7 +1461,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -1512,10 +1477,8 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1620,7 +1583,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -1633,12 +1596,10 @@ var _ = Describe("c3appfw test", func() {
 			shReplicas := 3
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster")
 			cm, _, shc, err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "")
-			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App Framework")
 
-			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1694,10 +1655,8 @@ var _ = Describe("c3appfw test", func() {
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1777,7 +1736,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 		It("integration, c3azure, managerappframeworkazurec3, appframeworkazure: can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", func() {
 
 			/* Test Steps
@@ -1825,7 +1784,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -1840,10 +1799,8 @@ var _ = Describe("c3appfw test", func() {
 			cm, _, shc, err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1886,10 +1843,8 @@ var _ = Describe("c3appfw test", func() {
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -1953,7 +1908,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 		It("c3, integration,managerappframeworkazurec3, appframeworkazure: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", func() {
 
 			/* Test Steps
@@ -2019,7 +1974,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to Azure test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameLocalIdxc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameLocalShc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameClusterIdxc := "appframework-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
@@ -2029,7 +1984,7 @@ var _ = Describe("c3appfw test", func() {
 			appSourceVolumeNameIdxcCluster := "appframework-test-volume-idxc-cluster-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShcCluster := "appframework-test-volume-shc-cluster-" + testenv.RandomDNSName(3)
 
-			// Create App framework Spec for Cluster manager with scope local and append cluster scope
+			// Create App Framework Spec for Cluster manager with scope local and append cluster scope
 			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, azTestDirIdxcLocal, 0)
 			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpecAzure(appSourceVolumeNameIdxcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "azure", "blob")}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
@@ -2040,7 +1995,7 @@ var _ = Describe("c3appfw test", func() {
 			appSourceSpecCluster := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterIdxc, azTestDirIdxcCluster, appSourceClusterDefaultSpec)}
 			appFrameworkSpecIdxc.AppSources = append(appFrameworkSpecIdxc.AppSources, appSourceSpecCluster...)
 
-			// Create App framework Spec for Search head cluster with scope local and append cluster scope
+			// Create App Framework Spec for Search Head cluster with scope local and append cluster scope
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, azTestDirShcLocal, 0)
 			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpecAzure(appSourceVolumeNameShcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "azure", "blob")}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
@@ -2058,10 +2013,8 @@ var _ = Describe("c3appfw test", func() {
 			cm, _, shc, err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2131,10 +2084,8 @@ var _ = Describe("c3appfw test", func() {
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2246,7 +2197,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big-size app to Azure test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -2376,7 +2327,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big-size app to Azure test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -2479,7 +2430,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -2500,10 +2451,8 @@ var _ = Describe("c3appfw test", func() {
 			// Delete Operator pod while Install in progress
 			testenv.DeleteOperatorPod(testcaseEnvInst)
 
-			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2570,7 +2519,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -2591,10 +2540,8 @@ var _ = Describe("c3appfw test", func() {
 			// Delete Operator pod while Install in progress
 			testenv.DeleteOperatorPod(testcaseEnvInst)
 
-			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2658,7 +2605,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -2673,10 +2620,8 @@ var _ = Describe("c3appfw test", func() {
 			cm, _, shc, err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2778,7 +2723,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -2822,10 +2767,8 @@ var _ = Describe("c3appfw test", func() {
 			appFileList = testenv.GetAppFileList(appListV2)
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2845,7 +2788,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 		It("c3, integration,managerappframeworkazurec3, appframeworkazure: can deploy a C3 SVA and install a bigger volume of apps than the operator PV disk space", func() {
 
 			/* Test Steps
@@ -2881,7 +2824,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload apps to Azure for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search head Cluster", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search Head Cluster", appVersion))
 			azTestDirShc := "c3appfw-shc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
@@ -2890,7 +2833,7 @@ var _ = Describe("c3appfw test", func() {
 			// Maximum apps to be downloaded in parallel
 			maxConcurrentAppDownloads := 30
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc := "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc := "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -2908,10 +2851,8 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -2974,7 +2915,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big size to Azure test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -2998,10 +2939,8 @@ var _ = Describe("c3appfw test", func() {
 			err = testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
 			Expect(err).To(Succeed(), "Unable to delete file on pod")
 
-			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			// Ensure C3 cluster is ready
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
@@ -3056,7 +2995,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -3081,14 +3020,14 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag")
 			testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, shc.Name, shc.Kind)
 
-			verifyC3ClusterReady(ctx, testcaseEnvInst, deployment)
+			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
 
 			// Verify RF SF is met
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 		It("integration, c3: can deploy a C3 SVA and a Standalone, then add that Standalone as a Search Head to the cluster", func() {
 
 			/* Test Steps

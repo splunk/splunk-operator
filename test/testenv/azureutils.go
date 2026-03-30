@@ -338,7 +338,7 @@ func (client *AzureBlobClient) DownloadFileFromAzure(ctx context.Context, downlo
 		return "", err
 	}
 
-	logf.Log.Info("Download from Azure successful:", "File", downloadRequest.RemoteFile)
+	logf.Log.Info("Download from Azure successful:", "file", downloadRequest.RemoteFile)
 
 	return localFile.Name(), err
 }
@@ -354,7 +354,7 @@ func DownloadFilesFromAzure(ctx context.Context, endPoint, accountKey, accountNa
 		}
 		_, err := azureBlobClient.DownloadFileFromAzure(ctx, downloadRequest, endPoint, StorageAccountKey, StorageAccount)
 		if err != nil {
-			logf.Log.Error(err, "Unable to download file", "File Name", key)
+			logf.Log.Error(err, "Unable to download file", "fileName", key)
 			return err
 		}
 	}
@@ -374,7 +374,7 @@ func DownloadLicenseFromAzure(ctx context.Context, downloadDir string) (string, 
 	azureBlobClient := &AzureBlobClient{}
 	filename, err := azureBlobClient.DownloadFileFromAzure(ctx, downloadRequest, GetAzureEndpoint(ctx), StorageAccountKey, StorageAccount)
 	if err != nil {
-		logf.Log.Error(err, "Unable to download license file", "File", filename)
+		logf.Log.Error(err, "Unable to download license file", "file", filename)
 	}
 	return filename, err
 }
@@ -431,7 +431,7 @@ func UploadFilesToAzure(ctx context.Context, accountName, accountKey, uploadFrom
 		fileFullPath := "https://" + StorageAccount + ".blob.core.windows.net" + "/" + azureIndexesContainer + "/" + containerName + "/" + key
 		fileName, err := UploadFileToAzure(ctx, accountName, accountKey, fileFullPath, fileLocation)
 		if err != nil {
-			logf.Log.Error(err, "Unable to upload file", "File name", key)
+			logf.Log.Error(err, "Unable to upload file", "fileName", key)
 			return nil, err
 		}
 		uploadedFiles = append(uploadedFiles, fileName)

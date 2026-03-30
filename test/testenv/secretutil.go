@@ -46,14 +46,14 @@ func GetSecretStruct(ctx context.Context, deployment *Deployment, ns string, sec
 	secretObject := &corev1.Secret{}
 	err := deployment.GetInstance(ctx, secretName, secretObject)
 	if err != nil {
-		deployment.testenv.Log.Error(err, "Unable to get secret object", "Secret Name", secretName, "Namespace", ns)
+		deployment.testenv.Log.Error(err, "Unable to get secret object", "secretName", secretName, "namespace", ns)
 	}
 	return secretObject, err
 }
 
 // ModifySecretObject Modifies the secret object with given data
 func ModifySecretObject(ctx context.Context, deployment *Deployment, ns string, secretName string, data map[string][]byte) error {
-	logf.Log.Info("Modify secret object", "Secret Name", secretName, "Data", data)
+	logf.Log.Info("Modify secret object", "secretName", secretName, "data", data)
 	secret := newSecretSpec(ns, secretName, data)
 
 	err := deployment.UpdateCR(ctx, secret)
@@ -66,7 +66,7 @@ func ModifySecretObject(ctx context.Context, deployment *Deployment, ns string, 
 
 // DeleteSecretObject Deletes the entire secret object
 func DeleteSecretObject(ctx context.Context, deployment *Deployment, ns string, secretName string) error {
-	logf.Log.Info("Delete secret object", "Secret Name", secretName, "Namespace", ns)
+	logf.Log.Info("Delete secret object", "secretName", secretName, "namespace", ns)
 	secret := newSecretSpec(ns, secretName, map[string][]byte{})
 	err := deployment.DeleteCR(ctx, secret)
 	if err != nil {
@@ -85,7 +85,7 @@ func GetMountedKey(ctx context.Context, deployment *Deployment, podName string, 
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return ""
 	}
-	logf.Log.Info("Key found on pod", "Pod Name", podName, "stdout", stdout, "stderr", stderr)
+	logf.Log.Info("Key found on pod", "podName", podName, "stdout", stdout, "stderr", stderr)
 	return stdout
 }
 
@@ -99,7 +99,7 @@ func GetSecretFromServerConf(ctx context.Context, deployment *Deployment, podNam
 	filePath := "/opt/splunk/etc/system/local/server.conf"
 	confline, err := GetConfLineFromPod(podName, filePath, ns, configName, stanza, true)
 	if err != nil {
-		logf.Log.Error(err, "Failed to get secret from pod", "Pod Name", podName, "Secret Name", configName)
+		logf.Log.Error(err, "Failed to get secret from pod", "podName", podName, "secretName", configName)
 		return "", "", err
 	}
 
@@ -120,7 +120,7 @@ func DecryptSplunkEncodedSecret(ctx context.Context, deployment *Deployment, pod
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 
-	logf.Log.Info("Decrypted Key Value", "Decrypted Key", stdout)
+	logf.Log.Info("Decrypted Key Value", "decryptedKey", stdout)
 	return strings.TrimSuffix(stdout, "\n")
 }
 
@@ -157,7 +157,7 @@ func GetVersionedSecretNames(ns string, version int) []string {
 			}
 		}
 	}
-	logf.Log.Info("Versioned Secret Objects Found in Namespace", "NameSpace", ns, "Versioned Secrets", splunkSecrets)
+	logf.Log.Info("Versioned Secret Objects Found in Namespace", "namespace", ns, "versionedSecrets", splunkSecrets)
 	return splunkSecrets
 }
 
@@ -198,7 +198,7 @@ func GetSecretFromInputsConf(deployment *Deployment, podName string, ns string, 
 	filePath := "/opt/splunk/etc/apps/splunk_httpinput/local/inputs.conf"
 	confline, err := GetConfLineFromPod(podName, filePath, ns, configName, stanza, true)
 	if err != nil {
-		logf.Log.Error(err, "Failed to get secret from pod", "Pod Name", podName, "Secret Name", configName)
+		logf.Log.Error(err, "Failed to get secret from pod", "podName", podName, "secretName", configName)
 		return "", "", err
 	}
 	secretList := strings.Split(confline, "=")

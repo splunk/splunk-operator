@@ -32,12 +32,12 @@ import (
 func RunS1StandaloneAddDeleteMCTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, standaloneOneName, standaloneTwoName string) {
 	mcName := deployment.GetName()
 
-	// Deploy standalone one with MCRef
+	// Deploy Standalone one with MCRef
 	spec := testenv.NewStandaloneSpecWithMCRef(testcaseEnvInst.GetSplunkImage(), mcName)
 	standaloneOne, err := deployment.DeployStandaloneWithGivenSpec(ctx, standaloneOneName, spec)
 	Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
-	// Wait for standalone to be in READY Status
+	// Wait for Standalone to be in READY Status
 	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, standaloneOneName, standaloneOne)
 
 	// Deploy MC and wait for MC to be READY
@@ -49,7 +49,7 @@ func RunS1StandaloneAddDeleteMCTest(ctx context.Context, deployment *testenv.Dep
 	testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC Config Map")
 	verifyStandaloneInMC(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true)
 
-	// get revision number of the resource
+	// Get revision number of the resource
 	resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
 
 	// Add another standalone instance in namespace
@@ -120,7 +120,7 @@ func verifyStandaloneInMC(ctx context.Context, deployment *testenv.Deployment, t
 }
 
 // MCReconfigParams holds the service name and URL parameters that differ between
-// V3 (master) and V4 (manager) monitoring console tests.
+// V3 (master) and V4 (manager) Monitoring Console tests.
 type MCReconfigParams struct {
 	CMServiceNameFmt string // format string for CM service name (e.g., testenv.ClusterMasterServiceName)
 	CMURLKey         string // config map URL key (e.g., "SPLUNK_CLUSTER_MASTER_URL" or splcommon.ClusterManagerURL)

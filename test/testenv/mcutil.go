@@ -60,7 +60,7 @@ func CheckMCPodReady(ns string) bool {
 		return false
 	}
 	stsSlice := strings.Fields(stsLine)
-	logf.Log.Info("MC statefulset found", "POD", stsSlice[0], "READY", stsSlice[1])
+	logf.Log.Info("MC statefulset found", "pod", stsSlice[0], "ready", stsSlice[1])
 	stsReady := strings.Contains(stsSlice[1], "1/1")
 
 	// Check Status of monitoring console pod
@@ -69,7 +69,7 @@ func CheckMCPodReady(ns string) bool {
 		return false
 	}
 	podSlice := strings.Fields(podLine)
-	logf.Log.Info("MC Pod Found", "POD", podSlice[0], "READY", podSlice[1])
+	logf.Log.Info("MC Pod Found", "pod", podSlice[0], "ready", podSlice[1])
 	podReady := strings.Contains(podSlice[1], "1/1") && strings.Contains(podSlice[2], "Running")
 
 	return stsReady && podReady
@@ -100,7 +100,7 @@ func GetConfiguredPeers(ns string, mcName string) []string {
 			}
 		}
 	}
-	logf.Log.Info("Peer List found on MC Pod", "MC POD", podName, "Configured Peers", peerList)
+	logf.Log.Info("Peer List found on MC Pod", "mcPod", podName, "configuredPeers", peerList)
 	return peerList
 }
 
@@ -112,7 +112,7 @@ func CheckPodNameOnMC(ns string, mcName string, podName string) bool {
 	found := false
 	for _, peer := range peerList {
 		if strings.Contains(peer, podName) {
-			logf.Log.Info("Check Peer matches on pod", "Pod Name", podName, "Peer in peer list", peer)
+			logf.Log.Info("Check Peer matches on pod", "podName", podName, "peerInPeerList", peer)
 			found = true
 			break
 		}
@@ -145,12 +145,12 @@ func GetMCConfigMap(ctx context.Context, deployment *Deployment, ns string, mcNa
 		logf.Log.Error(err, "Failed to get Monitoring Console Config Map")
 		return mcConfigMap, err
 	}
-	logf.Log.Info("MC Config Map contents", "MC CONFIG MAP NAME", mcConfigMapName, "Data", mcConfigMap.Data)
+	logf.Log.Info("MC Config Map contents", "mcConfigMapName", mcConfigMapName, "data", mcConfigMap.Data)
 	return mcConfigMap, err
 }
 
 // CheckPodNameInString checks for pod name in string
 func CheckPodNameInString(podName string, configString string) bool {
-	logf.Log.Info("Check MC Config String has Pod configured", "Monitoring Console Config Map Pod Config String", configString, "POD String", podName)
+	logf.Log.Info("Check MC Config String has Pod configured", "configString", configString, "podName", podName)
 	return strings.Contains(configString, podName)
 }

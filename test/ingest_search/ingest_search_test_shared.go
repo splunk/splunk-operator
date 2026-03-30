@@ -32,10 +32,7 @@ import (
 // RunS1InternalLogSearchTest deploys a Standalone instance and verifies internal log searches
 // using both synchronous and asynchronous search APIs.
 func RunS1InternalLogSearchTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv) {
-	standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
-	Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
-
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+	standalone := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), "", "")
 
 	Eventually(func() enterpriseApi.Phase {
 		podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
@@ -102,10 +99,7 @@ func RunS1InternalLogSearchTest(ctx context.Context, deployment *testenv.Deploym
 // RunS1IngestAndSearchTest deploys a Standalone instance, ingests a custom log file into a new
 // index, and verifies the ingested data is searchable via both sync and async search APIs.
 func RunS1IngestAndSearchTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv) {
-	standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
-	Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
-
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+	standalone := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), "", "")
 
 	Eventually(func() enterpriseApi.Phase {
 		podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
@@ -128,14 +122,14 @@ func RunS1IngestAndSearchTest(ctx context.Context, deployment *testenv.Deploymen
 			return enterpriseApi.PhaseError
 		}
 
-		testcaseEnvInst.Log.Info("Waiting for standalone splunkd status to be ready", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
+		testcaseEnvInst.Log.Info("Waiting for standalone splunkd status to be ready", "instance", standalone.ObjectMeta.Name, "phase", standalone.Status.Phase)
 		return standalone.Status.Phase
 	}, deployment.GetTimeout(), testenv.PollInterval).Should(Equal(enterpriseApi.PhaseReady))
 
 	podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
 	indexName := "myTestIndex"
 
-	err = testenv.CreateAnIndexStandalone(ctx, indexName, podName, deployment)
+	err := testenv.CreateAnIndexStandalone(ctx, indexName, podName, deployment)
 	Expect(err).To(Succeed(), "Failed response to add index to splunk")
 
 	logFile := "/tmp/test.log"

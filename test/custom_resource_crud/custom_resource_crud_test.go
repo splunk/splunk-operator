@@ -21,7 +21,7 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("Crcrud test", func() {
+var _ = Describe("Custom Resource CRUD test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
@@ -60,7 +60,7 @@ var _ = Describe("Crcrud test", func() {
 
 	for _, tc := range c3CrudConfigs {
 		tc := tc
-		Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+		Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 			BeforeEach(func() {
 				defaultCPULimits = DefaultCPULimits
 				newCPULimits = UpdatedCPULimits
@@ -72,7 +72,7 @@ var _ = Describe("Crcrud test", func() {
 				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 			})
 
-			It(tc.label+", integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", func() {
+			It(tc.label+", integration, c3: can deploy Indexer and Search Head Cluster, change their CR, update the instances", func() {
 				config := tc.newConfig()
 				RunC3CPUUpdateTest(ctx, deployment, testcaseEnvInst, config, defaultCPULimits, newCPULimits)
 			})
@@ -112,7 +112,7 @@ var _ = Describe("Crcrud test", func() {
 
 	for _, tc := range m4CrudConfigs {
 		tc := tc
-		Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
+		Context("Multisite cluster deployment (M4 - Multisite Indexer Cluster, Search Head Cluster)", func() {
 			BeforeEach(func() {
 				defaultCPULimits = DefaultCPULimits
 				newCPULimits = UpdatedCPULimits
@@ -123,7 +123,7 @@ var _ = Describe("Crcrud test", func() {
 				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 			})
 
-			It(tc.label+", integration, m4: can deploy multisite indexer and search head clusters, change their CR, update the instances", func() {
+			It(tc.label+", integration, m4: can deploy multisite Indexer and Search Head Clusters, change their CR, update the instances", func() {
 				config := tc.newConfig()
 				RunM4CPUUpdateTest(ctx, deployment, testcaseEnvInst, config, defaultCPULimits, newCPULimits)
 			})

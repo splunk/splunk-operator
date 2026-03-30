@@ -357,7 +357,7 @@ func (testenv *TestCaseEnv) attachPVCToOperator(name string) error {
 	operator := &appsv1.Deployment{}
 	err = testenv.GetKubeClient().Get(ctx, namespacedName, operator)
 	if err != nil {
-		testenv.Log.Error(err, "Unable to get operator", "operator name", testenv.operatorName)
+		testenv.Log.Error(err, "Unable to get operator", "operatorName", testenv.operatorName)
 		return err
 	}
 
@@ -382,7 +382,7 @@ func (testenv *TestCaseEnv) attachPVCToOperator(name string) error {
 	// update the operator deployment now
 	err = testenv.GetKubeClient().Update(ctx, operator)
 	if err != nil {
-		testenv.Log.Error(err, "Unable to update operator", "operator name", testenv.operatorName)
+		testenv.Log.Error(err, "Unable to update operator", "operatorName", testenv.operatorName)
 		return err
 	}
 

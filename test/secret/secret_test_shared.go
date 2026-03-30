@@ -162,9 +162,6 @@ func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Dep
 	// Deploy and verify Monitoring Console
 	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
 
-	// Verify Monitoring Console is Ready and stays in ready state
-	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
-
 	// Get revision number of the resource
 	resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
 
@@ -197,8 +194,10 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true, mcRef)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-	verifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
-	testcaseEnvInst.VerifyC3ComponentsReady(ctx, deployment)
+	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+	testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, func(ctx context.Context, d *testenv.Deployment) {
+		config.ClusterManagerReady(ctx, d, testcaseEnvInst)
+	})
 
 	mc, resourceVersion, namespaceScopedSecretName := deployMCAndVerifyInitialSecret(ctx, deployment, testcaseEnvInst)
 
@@ -209,7 +208,7 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 
 	verifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
 
-	// Ensure Search Head Cluster go to Ready phase
+	// Ensure Search Head Cluster goes to Ready phase
 	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 	// Wait for PasswordSyncCompleted event on SearchHeadCluster

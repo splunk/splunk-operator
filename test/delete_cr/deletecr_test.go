@@ -21,7 +21,7 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("DeleteCR test", func() {
+var _ = Describe("Delete CR test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
@@ -35,7 +35,7 @@ var _ = Describe("DeleteCR test", func() {
 		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 	})
 
-	Context("Standalone deployment (S1 - Standalone Pod)", func() {
+	Context("Standalone deployment (S1)", func() {
 		It("integration, managerdeletecr: can deploy standalone and delete", func() {
 			testenv.RunDeleteStandaloneWorkflow(ctx, deployment, testcaseEnvInst, deployment.GetName())
 		})

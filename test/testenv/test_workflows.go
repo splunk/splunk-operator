@@ -34,10 +34,7 @@ type WorkflowResult struct {
 
 // RunStandaloneDeploymentWorkflow deploys a standalone instance and verifies it's ready
 func RunStandaloneDeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string) *WorkflowResult {
-	standalone, err := deployment.DeployStandalone(ctx, name, "", "")
-	Expect(err).To(Succeed(), "Unable to deploy standalone instance")
-
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, name, standalone)
+	standalone := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, name, "", "")
 
 	return &WorkflowResult{Standalone: standalone}
 }
@@ -47,10 +44,7 @@ func RunC3DeploymentWorkflow(ctx context.Context, deployment *Deployment, testca
 	err := deployment.DeploySingleSiteCluster(ctx, name, indexerReplicas, true, mcRef)
 	Expect(err).To(Succeed(), "Unable to deploy C3 cluster")
 
-	testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
-	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+	testcaseEnvInst.VerifyClusterReadyAndRFSF(ctx, deployment)
 
 	return &WorkflowResult{}
 }
@@ -60,10 +54,7 @@ func RunM4DeploymentWorkflow(ctx context.Context, deployment *Deployment, testca
 	err := deployment.DeployMultisiteClusterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef)
 	Expect(err).To(Succeed(), "Unable to deploy M4 cluster")
 
-	testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-	testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-	testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+	testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 	return &WorkflowResult{}
@@ -74,9 +65,7 @@ func RunM1DeploymentWorkflow(ctx context.Context, deployment *Deployment, testca
 	err := deployment.DeployMultisiteCluster(ctx, name, indexerReplicas, siteCount, "")
 	Expect(err).To(Succeed(), "Unable to deploy M1 cluster")
 
-	testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-	testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
-	testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+	testcaseEnvInst.VerifyM1ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 	return &WorkflowResult{}
@@ -122,23 +111,20 @@ func RunDeleteC3Workflow(ctx context.Context, deployment *Deployment, testcaseEn
 
 	idxc := &enterpriseApi.IndexerCluster{}
 	idxcName := name + "-idxc"
-	err := deployment.GetInstance(ctx, idxcName, idxc)
-	Expect(err).To(Succeed(), "Unable to get Indexer Cluster instance")
+	GetInstanceWithExpect(ctx, deployment, idxc, idxcName, "Unable to get Indexer Cluster instance")
 
-	err = deployment.DeleteCR(ctx, idxc)
+	err := deployment.DeleteCR(ctx, idxc)
 	Expect(err).To(Succeed(), "Unable to delete Indexer Cluster")
 
 	shc := &enterpriseApi.SearchHeadCluster{}
 	shcName := name + "-shc"
-	err = deployment.GetInstance(ctx, shcName, shc)
-	Expect(err).To(Succeed(), "Unable to get Search Head Cluster instance")
+	GetInstanceWithExpect(ctx, deployment, shc, shcName, "Unable to get Search Head Cluster instance")
 
 	err = deployment.DeleteCR(ctx, shc)
 	Expect(err).To(Succeed(), "Unable to delete Search Head Cluster")
 
 	cm := &enterpriseApi.ClusterManager{}
-	err = deployment.GetInstance(ctx, name, cm)
-	Expect(err).To(Succeed(), "Unable to get Cluster Manager instance")
+	GetInstanceWithExpect(ctx, deployment, cm, name, "Unable to get Cluster Manager instance")
 
 	err = deployment.DeleteCR(ctx, cm)
 	Expect(err).To(Succeed(), "Unable to delete Cluster Manager")

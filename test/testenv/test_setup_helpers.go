@@ -81,6 +81,28 @@ func TeardownAppFrameworkTestCaseEnv(ctx context.Context, testcaseEnvInst *TestC
 	CleanupOperatorFile(ctx, deployment, testcaseEnvInst, filePresentOnOperator)
 }
 
+// S3CloudCleanup returns a cleanup function that deletes the given files from an S3 bucket.
+func S3CloudCleanup(bucket string, uploadedApps []string) func() {
+	return func() {
+		DeleteFilesOnS3(bucket, uploadedApps)
+	}
+}
+
+// AzureCloudCleanup returns a cleanup function that deletes the given files from Azure Blob storage.
+func AzureCloudCleanup(ctx context.Context, uploadedApps []string) func() {
+	return func() {
+		azureBlobClient := &AzureBlobClient{}
+		azureBlobClient.DeleteFilesOnAzure(ctx, GetAzureEndpoint(ctx), StorageAccountKey, StorageAccount, uploadedApps)
+	}
+}
+
+// GCPCloudCleanup returns a cleanup function that deletes the given files from a GCP bucket.
+func GCPCloudCleanup(bucket string, uploadedApps []string) func() {
+	return func() {
+		DeleteFilesOnGCP(bucket, uploadedApps)
+	}
+}
+
 // LoadEnvFile traverses up the directory tree from the current working directory
 // to find and load a .env file using godotenv. Returns nil if no .env file is found.
 func LoadEnvFile() error {
@@ -197,7 +219,7 @@ func SetupGCPAppsSuite(suiteName, testDataBucket, appDirV1, downloadDirV1, appDi
 	return testenvInst, nil, nil
 }
 
-// SetupLicenseConfigMap downloads the license file from the appropriate cloud provider
+// SetupLicenseConfigMap downloads the license file from the appropriate provider
 // and creates a license config map.
 func SetupLicenseConfigMap(ctx context.Context, testcaseEnvInst *TestCaseEnv) {
 	downloadDir := "licenseFolder"
@@ -215,7 +237,7 @@ func SetupLicenseConfigMap(ctx context.Context, testcaseEnvInst *TestCaseEnv) {
 		licenseFilePath, err = DownloadLicenseFromGCPBucket()
 		Expect(err).To(Succeed(), "Unable to download license file from GCP")
 	default:
-		testcaseEnvInst.Log.Info("Skipping license download", "ClusterProvider", ClusterProvider)
+		testcaseEnvInst.Log.Info("Skipping license download", "provider", ClusterProvider)
 		return
 	}
 

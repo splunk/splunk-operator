@@ -25,7 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// ClusterReadinessConfig holds v3/v4 API version callbacks for cluster and license manager
+// ClusterReadinessConfig holds v3/v4 API version callbacks for cluster and License Manager
 // readiness verification. Shared across test packages to avoid per-package duplication.
 type ClusterReadinessConfig struct {
 	LicenseManagerReady func(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv)
@@ -141,14 +141,14 @@ func (c *ClusterReadinessConfig) AppendSmartStoreIndex(ctx context.Context, depl
 		Expect(err).To(Succeed(), "Failed to get instance of Cluster Master")
 		cm.Spec.SmartStore.IndexList = append(cm.Spec.SmartStore.IndexList, newIndex...)
 		err = deployment.UpdateCR(ctx, cm)
-		Expect(err).To(Succeed(), "Failed to add new index to cluster master")
+		Expect(err).To(Succeed(), "Failed to add new index to Cluster Master")
 	} else {
 		cm := &enterpriseApi.ClusterManager{}
 		err := deployment.GetInstance(ctx, name, cm)
 		Expect(err).To(Succeed(), "Failed to get instance of Cluster Manager")
 		cm.Spec.SmartStore.IndexList = append(cm.Spec.SmartStore.IndexList, newIndex...)
 		err = deployment.UpdateCR(ctx, cm)
-		Expect(err).To(Succeed(), "Failed to add new index to cluster manager")
+		Expect(err).To(Succeed(), "Failed to add new index to Cluster Manager")
 	}
 }
 
@@ -163,13 +163,13 @@ func (testcaseenv *TestCaseEnv) DeployMCAndGetVersion(ctx context.Context, deplo
 // DeployAndVerifyStandalone deploys a standalone instance and verifies it reaches ready state
 func (testcaseenv *TestCaseEnv) DeployAndVerifyStandalone(ctx context.Context, deployment *Deployment, name string, mcRef string, licenseManagerRef string) *enterpriseApi.Standalone {
 	standalone, err := deployment.DeployStandalone(ctx, name, mcRef, licenseManagerRef)
-	Expect(err).To(Succeed(), "Unable to deploy standalone instance")
+	Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
 
 	testcaseenv.VerifyStandaloneReady(ctx, deployment, name, standalone)
 	return standalone
 }
 
-// DeployAndVerifyMonitoringConsole deploys a monitoring console and verifies it reaches ready state
+// DeployAndVerifyMonitoringConsole deploys a Monitoring Console and verifies it reaches ready state
 func (testcaseenv *TestCaseEnv) DeployAndVerifyMonitoringConsole(ctx context.Context, deployment *Deployment, name string, licenseManagerRef string) *enterpriseApi.MonitoringConsole {
 	mc, err := deployment.DeployMonitoringConsole(ctx, name, licenseManagerRef)
 	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
@@ -194,12 +194,6 @@ func (testcaseenv *TestCaseEnv) VerifySearchHeadCPULimits(deployment *Deployment
 	}
 }
 
-// VerifyC3ComponentsReady verifies SHC and single-site indexers are ready (without CM check or RFSF).
-func (testcaseenv *TestCaseEnv) VerifyC3ComponentsReady(ctx context.Context, deployment *Deployment) {
-	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
-	testcaseenv.VerifySingleSiteIndexersReady(ctx, deployment)
-}
-
 // VerifyM4ComponentsReady verifies multisite indexers, multisite status, and SHC are ready (without CM check or RFSF).
 func (testcaseenv *TestCaseEnv) VerifyM4ComponentsReady(ctx context.Context, deployment *Deployment, siteCount int) {
 	testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount)
@@ -215,8 +209,7 @@ func (testcaseenv *TestCaseEnv) VerifyMCVersionChangedAndReady(ctx context.Conte
 
 // VerifyClusterReadyAndRFSF is a common verification pattern that checks cluster is ready and RF/SF is met
 func (testcaseenv *TestCaseEnv) VerifyClusterReadyAndRFSF(ctx context.Context, deployment *Deployment) {
-	testcaseenv.VerifyClusterManagerReady(ctx, deployment)
-	testcaseenv.VerifyC3ComponentsReady(ctx, deployment)
+	testcaseenv.VerifyC3ClusterReady(ctx, deployment, testcaseenv.VerifyClusterManagerReady)
 	testcaseenv.VerifyRFSFMet(ctx, deployment)
 }
 

@@ -52,9 +52,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	AfterEach(func() {
-		testenv.TeardownAppFrameworkTestCaseEnv(ctx, testcaseEnvInst, deployment, func() {
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
-		}, filePresentOnOperator)
+		testenv.TeardownAppFrameworkTestCaseEnv(ctx, testcaseEnvInst, deployment, testenv.S3CloudCleanup(testS3Bucket, uploadedApps), filePresentOnOperator)
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
@@ -102,7 +100,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Monitoring Console
+			// Create App Framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
 			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
@@ -136,7 +134,7 @@ var _ = Describe("s1appfw test", func() {
 			// Maximum apps to be downloaded in parallel
 			maxConcurrentAppDownloads := 5
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
@@ -157,7 +155,7 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -282,7 +280,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Monitoring Console
+			// Create App Framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
 			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
@@ -306,7 +304,7 @@ var _ = Describe("s1appfw test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
-			// Create App framework Spec for Standalone
+			// Create App Framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
@@ -326,7 +324,7 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -453,7 +451,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Monitoring Console
+			// Create App Framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
 			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
@@ -483,7 +481,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Standalone
+			// Create App Framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
@@ -503,7 +501,7 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -538,8 +536,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info("Scale up Standalone")
 
 			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(ctx, deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
+			testenv.GetInstanceWithExpect(ctx, deployment, standalone, deployment.GetName(), "Failed to get instance of Standalone")
 
 			standalone.Spec.Replicas = int32(scaledReplicaCount)
 
@@ -571,8 +568,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info("Scale down Standalone")
 			scaledReplicaCount = 1
 			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(ctx, deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone after scaling down")
+			testenv.GetInstanceWithExpect(ctx, deployment, standalone, deployment.GetName(), "Failed to get instance of Standalone after scaling down")
 
 			standalone.Spec.Replicas = int32(scaledReplicaCount)
 			err = deployment.UpdateCR(ctx, standalone)
@@ -641,7 +637,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Standalone
+			// Create App Framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
@@ -658,7 +654,7 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -678,8 +674,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info("Scale up Standalone")
 
 			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(ctx, deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
+			testenv.GetInstanceWithExpect(ctx, deployment, standalone, deployment.GetName(), "Failed to get instance of Standalone")
 
 			standalone.Spec.Replicas = int32(scaledReplicaCount)
 
@@ -754,7 +749,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload ES app to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopePremiumApps, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.AppSources[0].PremiumAppsProps = enterpriseApi.PremiumAppsProps{
@@ -777,7 +772,7 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone with App Framework")
 
 			// Ensure Standalone goes to Ready phase
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -866,7 +861,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
@@ -946,7 +941,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Monitoring Console
+			// Create App Framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
 			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
@@ -975,7 +970,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 0)
 
@@ -995,7 +990,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create Standalone Deployment with App Framework
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance with App Framework")
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -1138,7 +1133,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
@@ -1152,7 +1147,7 @@ var _ = Describe("s1appfw test", func() {
 				AppFrameworkConfig: appFrameworkSpec,
 			}
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameStandalone2 := "appframework-2-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameStandalone2 := "appframework-test-volume-2-" + testenv.RandomDNSName(3)
 			appFrameworkSpecStandalone2 := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameStandalone2, enterpriseApi.ScopeLocal, appSourceNameStandalone2, s3TestDirStandalone2, 60)
@@ -1222,7 +1217,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Monitoring Console
+			// Create App Framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
 			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
@@ -1261,7 +1256,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
@@ -1281,7 +1276,7 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Verify App installation is in progress on Standalone
 			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
@@ -1338,7 +1333,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
@@ -1355,7 +1350,7 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// ############ Verify livenessProbe and readinessProbe config object and scripts############
 			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
@@ -1428,7 +1423,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
@@ -1445,7 +1440,7 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Verify App download is in progress on Standalone
 			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending)
@@ -1501,7 +1496,7 @@ var _ = Describe("s1appfw test", func() {
 			// Maximum apps to be downloaded in parallel
 			maxConcurrentAppDownloads := 5
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
@@ -1519,7 +1514,7 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -1581,7 +1576,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled  and version by running splunk cmd
 			   // ############  Modify secret key ###########
-			   * Create App framework volume with random credentials and apply to Spec
+			   * Create App Framework volume with random credentials and apply to Spec
 			   * Check for changes in App phase to determine if next poll has been triggered
 			   ############ UPGRADE V2 APPS ###########
 			   * Upload V2 apps to S3 App Source
@@ -1612,7 +1607,7 @@ var _ = Describe("s1appfw test", func() {
 			// Maximum apps to be downloaded in parallel
 			maxConcurrentAppDownloads := 5
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
@@ -1631,7 +1626,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
 			secretref := standalone.Spec.AppFrameworkConfig.VolList[0].SecretRef
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), secretref)
 			Expect(err).To(Succeed(), "Unable to obtain secret object")
@@ -1651,7 +1646,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// ############  Modify secret key ###########
-			// Create App framework volume with invalid credentials and apply to Spec
+			// Create App Framework volume with invalid credentials and apply to Spec
 			testcaseEnvInst.Log.Info("Update Standalone spec with invalid credentials")
 			err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), secretref, modifiedSecretData)
 			Expect(err).To(Succeed(), "Unable to update secret Object")
@@ -1733,7 +1728,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload app to S3 test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 120)
 			spec := enterpriseApi.StandaloneSpec{
@@ -1750,7 +1745,7 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Verify App download is in progress on Standalone
 			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending)
@@ -1828,7 +1823,7 @@ var _ = Describe("s1appfw test", func() {
 			// Maximum apps to be downloaded in parallel
 			maxConcurrentAppDownloads := 15
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceName := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
@@ -1892,7 +1887,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
@@ -1909,7 +1904,7 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Verify App Download is completed on Standalone
 			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending)
@@ -1963,7 +1958,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Monitoring Console
+			// Create App Framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
 			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
@@ -2001,7 +1996,7 @@ var _ = Describe("s1appfw test", func() {
 			// Maximum apps to be downloaded in parallel
 			maxConcurrentAppDownloads := 5
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
@@ -2022,7 +2017,7 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Verify IsDeploymentInProgress Flag is set to true for Standalone CR
 			testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, deployment.GetName(), standalone.Kind)

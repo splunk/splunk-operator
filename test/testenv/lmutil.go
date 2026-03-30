@@ -54,6 +54,6 @@ func CheckLicenseManagerConfigured(ctx context.Context, deployment *Deployment, 
 		return false
 	}
 	licenseManager := restResponse.Entry[0].Content.ManagerURI
-	logf.Log.Info("License Manager configuration on POD", "POD", podName, "License Manager", licenseManager)
+	logf.Log.Info("License Manager configuration on POD", "pod", podName, "licenseManager", licenseManager)
 	return strings.Contains(licenseManager, "license-manager-service:8089") || strings.Contains(licenseManager, "license-master-service:8089")
 }
