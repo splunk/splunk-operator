@@ -24,7 +24,7 @@ jobs:
       contents: write
       id-token: write
       pull-requests: write
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/hotfix/release-workflow-perms'
+    if: github.ref == 'refs/heads/main'
     env:
       SPLUNK_OPERATOR_RC_IMAGE_NAME: splunk/splunk-operator-rc
     steps:
@@ -81,61 +81,61 @@ jobs:
         sudo chmod +x operator-sdk_${OS}_${ARCH}
         sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
 
-    # - name: Generate Release Artifacts
-    #   run: |
-    #     make generate-artifacts  IMG=splunk/splunk-operator:${{ github.event.inputs.release_version }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.enterprise_version }}
+    - name: Generate Release Artifacts
+      run: |
+        make generate-artifacts  IMG=splunk/splunk-operator:${{ github.event.inputs.release_version }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.enterprise_version }}
 
-    # - name: Upload Release Artifacts
-    #   uses: actions/upload-artifact@v6
-    #   with:
-    #     name: "release-artifacts-${{ github.event.inputs.release_version }}"
-    #     path: "release-**"
+    - name: Upload Release Artifacts
+      uses: actions/upload-artifact@v6
+      with:
+        name: "release-artifacts-${{ github.event.inputs.release_version }}"
+        path: "release-**"
 
-    # - name: Generate Release Notes
-    #   run: |
-    #     a=`cat docs/ChangeLog.md | grep -n -m2 "^##" | awk -F":" '{print $1}' | tail -1`
-    #     a=`expr $a - 1`
-    #     sed -n "4,${a}p" docs/ChangeLog.md >> docs/ReleaseNotes.md >> docs/ReleaseNotes.md
+    - name: Generate Release Notes
+      run: |
+        a=`cat docs/ChangeLog.md | grep -n -m2 "^##" | awk -F":" '{print $1}' | tail -1`
+        a=`expr $a - 1`
+        sed -n "4,${a}p" docs/ChangeLog.md >> docs/ReleaseNotes.md >> docs/ReleaseNotes.md
 
-    # - name: Create Release
-    #   uses: ncipollo/release-action@40bb172bd05f266cf9ba4ff965cb61e9ee5f6d01
-    #   with:
-    #     artifacts: "release-${{ github.event.inputs.release_version }}/splunk-operator-cluster.yaml,release-${{ github.event.inputs.release_version }}/splunk-operator-namespace.yaml,release-${{ github.event.inputs.release_version }}/splunk-operator-crds.yaml"
-    #     bodyFile: "docs/ReleaseNotes.md"
-    #     tag: "${{ github.event.inputs.release_version }}"
-    #     draft: true
+    - name: Create Release
+      uses: ncipollo/release-action@40bb172bd05f266cf9ba4ff965cb61e9ee5f6d01
+      with:
+        artifacts: "release-${{ github.event.inputs.release_version }}/splunk-operator-cluster.yaml,release-${{ github.event.inputs.release_version }}/splunk-operator-namespace.yaml,release-${{ github.event.inputs.release_version }}/splunk-operator-crds.yaml"
+        bodyFile: "docs/ReleaseNotes.md"
+        tag: "${{ github.event.inputs.release_version }}"
+        draft: true
 
-    # - name: Promote RC Image to Release
-    #   run: |
-    #     regctl image copy ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
-    #     regctl image copy ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC splunk/splunk-operator:latest
+    - name: Promote RC Image to Release
+      run: |
+        regctl image copy ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
+        regctl image copy ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC splunk/splunk-operator:latest
 
-    # - name: Sign Splunk Operator image with a key
-    #   run: |
-    #     cosign sign --yes --key env://COSIGN_PRIVATE_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
-    #   env:
-    #     COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
-    #     COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-    #     COSIGN_DOCKER_MEDIA_TYPES: "1"
+    - name: Sign Splunk Operator image with a key
+      run: |
+        cosign sign --yes --key env://COSIGN_PRIVATE_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
+      env:
+        COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+        COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        COSIGN_DOCKER_MEDIA_TYPES: "1"
 
-    # - name: Verify Splunk Operator image with a key
-    #   run: |
-    #     cosign verify --key env://COSIGN_PUBLIC_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
-    #   env:
-    #     COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
-    #     COSIGN_DOCKER_MEDIA_TYPES: "1"
+    - name: Verify Splunk Operator image with a key
+      run: |
+        cosign verify --key env://COSIGN_PUBLIC_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
+      env:
+        COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+        COSIGN_DOCKER_MEDIA_TYPES: "1"
 
-    # - name: Promote Distroless RC Image to Release
-    #   run: |
-    #     regctl image copy ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC-distroless splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
+    - name: Promote Distroless RC Image to Release
+      run: |
+        regctl image copy ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC-distroless splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
 
-    # - name: Sign Distroless Splunk Operator image with a key
-    #   run: |
-    #     cosign sign --yes --recursive --key env://COSIGN_PRIVATE_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
-    #   env:
-    #     COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
-    #     COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-    #     COSIGN_DOCKER_MEDIA_TYPES: "1"
+    - name: Sign Distroless Splunk Operator image with a key
+      run: |
+        cosign sign --yes --recursive --key env://COSIGN_PRIVATE_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
+      env:
+        COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+        COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        COSIGN_DOCKER_MEDIA_TYPES: "1"
 
     - name: Verify Distroless Splunk Operator image with a key
       run: |
