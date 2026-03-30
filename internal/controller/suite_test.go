@@ -19,10 +19,13 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap/zapcore"
@@ -46,6 +49,14 @@ var k8sClient client.Client
 var testEnv *envtest.Environment
 var k8sManager ctrl.Manager
 
+func resolveCNPGModuleDir() string {
+	cmd := exec.Command("go", "list", "-f", "{{.Dir}}", "-m", "github.com/cloudnative-pg/cloudnative-pg")
+	output, err := cmd.Output()
+	Expect(err).NotTo(HaveOccurred())
+
+	return strings.TrimSpace(string(output))
+}
+
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -61,8 +72,12 @@ var _ = BeforeSuite(func(ctx context.Context) {
 
 	By("bootstrapping test environment")
 
+	cnpgModuleDir := resolveCNPGModuleDir()
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "config", "crd", "bases"),
+			filepath.Join(cnpgModuleDir, "config", "crd", "bases"),
+		},
 		ErrorIfCRDPathMissing: true,
 	}
 
@@ -74,6 +89,9 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	Expect(cfg).NotTo(BeNil())
 
 	err = enterpriseApi.AddToScheme(clientgoscheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = cnpgv1.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = enterpriseApiV3.AddToScheme(clientgoscheme.Scheme)
@@ -152,7 +170,6 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	}).SetupWithManager(k8sManager); err != nil {
 		Expect(err).NotTo(HaveOccurred())
 	}
-
 	go func() {
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
 		fmt.Printf("error %v", err.Error())

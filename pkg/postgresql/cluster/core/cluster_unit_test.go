@@ -717,9 +717,8 @@ func TestPoolerExists(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
-
-			got := poolerExists(context.Background(), c, cluster, "rw")
-
+			got, err := poolerExists(context.Background(), c, cluster, "rw")
+			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 		})
 	}
