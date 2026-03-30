@@ -35,6 +35,7 @@ rules:
 - apiGroups:
   - apps
   resources:
+  - deployments
   - statefulsets
   verbs:
   - create
@@ -44,6 +45,58 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - apps.splunk.com
+  resources:
+  - appsources
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps.splunk.com
+  resources:
+  - appsources/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - apps.splunk.com
+  resources:
+  - appsources/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - cache.example.com
+  resources:
+  - memcacheds
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cache.example.com
+  resources:
+  - memcacheds/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - cache.example.com
+  resources:
+  - memcacheds/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - enterprise.splunk.com
   resources:
