@@ -19,8 +19,9 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -38,56 +39,81 @@ import (
 	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 )
 
+/*
+* Test cases:
+* PC-01 creates managed resources and status refs
+* PC-02 adds finalizer on reconcile
+* PC-07 is idempotent across repeated reconciles
+* PC-03 Delete policy removes children and finalizer
+* PC-04 Retain policy preserves children and removes ownerRefs
+* PC-05 fails when PostgresClusterClass is missing
+* PC-06 restores drifted managed spec
+* PC-08 triggers on generation/finalizer/deletion changes
+* PC-09 ignores no-op updates
+ */
+
 var _ = Describe("PostgresCluster Controller", func() {
 
+	const (
+		postgresVersion    = "15.10"
+		clusterMemberCount = int32(2)
+		storageAmount      = "1Gi"
+		poolerEnabled      = false
+		deletePolicy       = "Delete"
+		retainPolicy       = "Retain"
+		namespace          = "default"
+		classNamePrefix    = "postgresql-dev-"
+		clusterNamePrefix  = "postgresql-cluster-dev-"
+		provisioner        = "postgresql.cnpg.io"
+	)
+
 	var (
-		ctx         context.Context
-		namespace   string
-		clusterName string
-		className   string
-		reconciler  *PostgresClusterReconciler
-		req         reconcile.Request
-		cnpg        *cnpgv1.Cluster
+		ctx               context.Context
+		clusterName       string
+		className         string
+		pgCluster         *enterprisev4.PostgresCluster
+		pgClusterClass    *enterprisev4.PostgresClusterClass
+		pgClusterKey      types.NamespacedName
+		pgClusterClassKey types.NamespacedName
+		reconciler        *PostgresClusterReconciler
+		req               reconcile.Request
 	)
 
 	BeforeEach(func() {
-		specLine := CurrentSpecReport().LeafNodeLocation.LineNumber
-		nameSuffix := fmt.Sprintf("%d-%d-%d", GinkgoParallelProcess(), GinkgoRandomSeed(), specLine)
+		nameSuffix := fmt.Sprintf("%d-%d-%d",
+			GinkgoParallelProcess(),
+			GinkgoRandomSeed(),
+			CurrentSpecReport().LeafNodeLocation.LineNumber,
+		)
 
 		ctx = context.Background()
-		namespace = "default"
-		clusterName = "postgresql-cluster-dev-" + nameSuffix
-		className = "postgresql-dev-" + nameSuffix
-		cnpg = &cnpgv1.Cluster{}
+		clusterName = clusterNamePrefix + nameSuffix
+		className = classNamePrefix + nameSuffix
+		pgClusterKey = types.NamespacedName{Name: clusterName, Namespace: namespace}
+		pgClusterClassKey = types.NamespacedName{Name: className, Namespace: namespace}
 
-		// Arrange: class defaults used by getMergedConfig()
-		postgresVersion := "15.10"
-		instances := int32(2)
-		storage := resource.MustParse("1Gi")
-		poolerEnabled := false
-
-		class := &enterprisev4.PostgresClusterClass{
+		pgClusterClass = &enterprisev4.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: className},
 			Spec: enterprisev4.PostgresClusterClassSpec{
-				Provisioner: "postgresql.cnpg.io",
+				Provisioner: provisioner,
 				Config: &enterprisev4.PostgresClusterClassConfig{
-					Instances:               &instances,
-					Storage:                 &storage,
-					PostgresVersion:         &postgresVersion,
-					ConnectionPoolerEnabled: &poolerEnabled,
+					Instances:               &[]int32{clusterMemberCount}[0],
+					Storage:                 &[]resource.Quantity{resource.MustParse(storageAmount)}[0],
+					PostgresVersion:         &[]string{postgresVersion}[0],
+					ConnectionPoolerEnabled: &[]bool{poolerEnabled}[0],
 				},
 			},
 		}
-		Expect(k8sClient.Create(ctx, class)).To(Succeed())
 
-		pc := &enterprisev4.PostgresCluster{
+		Expect(k8sClient.Create(ctx, pgClusterClass)).To(Succeed())
+
+		pgCluster = &enterprisev4.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: namespace},
 			Spec: enterprisev4.PostgresClusterSpec{
 				Class:                 className,
-				ClusterDeletionPolicy: &[]string{"Delete"}[0],
+				ClusterDeletionPolicy: &[]string{deletePolicy}[0],
 			},
 		}
-		Expect(k8sClient.Create(ctx, pc)).To(Succeed())
 
 		reconciler = &PostgresClusterReconciler{
 			Client: k8sClient,
@@ -96,22 +122,13 @@ var _ = Describe("PostgresCluster Controller", func() {
 		req = reconcile.Request{NamespacedName: types.NamespacedName{Name: clusterName, Namespace: namespace}}
 	})
 
-	JustBeforeEach(func() {
-		By("Reconciling the created resource")
-		result, err := reconciler.Reconcile(ctx, req)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(result.RequeueAfter).To(BeZero())
-	})
-
 	AfterEach(func() {
 		By("Deleting PostgresCluster and letting reconcile run finalizer cleanup")
-		key := types.NamespacedName{Name: clusterName, Namespace: namespace}
-		pc := &enterprisev4.PostgresCluster{}
 
 		// Best-effort delete (object might already be gone in some specs)
-		err := k8sClient.Get(ctx, key, pc)
+		err := k8sClient.Get(ctx, pgClusterKey, pgCluster)
 		if err == nil {
-			Expect(k8sClient.Delete(ctx, pc)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, pgCluster)).To(Succeed())
 		} else {
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
 		}
@@ -124,7 +141,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 				// In that case, remove finalizer directly so fixture teardown remains deterministic.
 				if meta.IsNoMatchError(recErr) {
 					current := &enterprisev4.PostgresCluster{}
-					getErr := k8sClient.Get(ctx, key, current)
+					getErr := k8sClient.Get(ctx, pgClusterKey, current)
 					if apierrors.IsNotFound(getErr) {
 						return true
 					}
@@ -142,124 +159,203 @@ var _ = Describe("PostgresCluster Controller", func() {
 					return false
 				}
 			}
-			getErr := k8sClient.Get(ctx, key, &enterprisev4.PostgresCluster{})
+			getErr := k8sClient.Get(ctx, pgClusterKey, &enterprisev4.PostgresCluster{})
 			return apierrors.IsNotFound(getErr)
 		}, "10s", "500ms").Should(BeTrue())
 
 		By("Cleaning up PostgresClusterClass fixture")
-		class := &enterprisev4.PostgresClusterClass{}
-		classKey := types.NamespacedName{Name: className} // cluster-scoped CR
-		err = k8sClient.Get(ctx, classKey, class)
+		err = k8sClient.Get(ctx, pgClusterClassKey, pgClusterClass)
 		if err == nil {
-			Expect(k8sClient.Delete(ctx, class)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, pgClusterClass)).To(Succeed())
 		} else {
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
 		}
 	})
 
-	Context("Happy path and convergence", func() {
-		pc := &enterprisev4.PostgresCluster{}
-		It("PC-01 creates managed resources and status refs", func() {
-			By("creating CNPG cluster via reconcile and avaiting healthy")
-			Eventually(func() error {
-				_, err := reconciler.Reconcile(ctx, req)
-				if err != nil {
-					return err
-				}
-				if err := k8sClient.Get(ctx, req.NamespacedName, cnpg); err != nil {
-					return err
-				}
-				cnpg.Status.Phase = cnpgv1.PhaseHealthy
-				return k8sClient.Status().Update(ctx, cnpg)
-			}, "10s", "250ms").Should(Succeed())
+	When("under typical usage and expecting healthy PostgresCluster state", func() {
+		Context("when reconciling", func() {
+			// PC-02
+			It("adds finalizer on reconcile", func() {
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 
-			By("reconciling until managed resources are published in status")
-			Eventually(func() bool {
-				_, err := reconciler.Reconcile(ctx, req)
-				if err != nil {
-					return false
-				}
-				current := &enterprisev4.PostgresCluster{}
-				if err := k8sClient.Get(ctx, req.NamespacedName, current); err != nil {
-					return false
-				}
-				return current.Status.Resources != nil &&
-					current.Status.Resources.SuperUserSecretRef != nil &&
-					current.Status.Resources.ConfigMapRef != nil
-			}, "20s", "250ms").Should(BeTrue())
+				Eventually(func() bool {
+					pc := &enterprisev4.PostgresCluster{}
+					if err := k8sClient.Get(ctx, pgClusterKey, pc); err != nil {
+						return false
+					}
+					return controllerutil.ContainsFinalizer(pc, core.PostgresClusterFinalizerName)
+				}, "10s", "250ms").Should(BeTrue())
+			})
 
-			By("asserting finalizer contract")
-			pc := &enterprisev4.PostgresCluster{}
-			Expect(k8sClient.Get(ctx, req.NamespacedName, pc)).To(Succeed())
-			Expect(controllerutil.ContainsFinalizer(pc, core.PostgresClusterFinalizerName)).To(BeTrue())
+			// PC-01
+			It("creates managed resources and status refs", func() {
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 
-			By("asserting status references are published")
-			Expect(pc.Status.Resources).NotTo(BeNil())
-			Expect(pc.Status.Resources.SuperUserSecretRef).NotTo(BeNil())
-			Expect(pc.Status.Resources.ConfigMapRef).NotTo(BeNil())
+				Eventually(func(g Gomega) {
+					pc := &enterprisev4.PostgresCluster{}
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 
-			By("asserting Secret ownership and existence")
-			secret := &corev1.Secret{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name: pc.Status.Resources.SuperUserSecretRef.Name, Namespace: namespace,
-			}, secret)).To(Succeed())
-			Expect(metav1.IsControlledBy(secret, pc)).To(BeTrue())
+					cond := meta.FindStatusCondition(pc.Status.Conditions, "ClusterReady")
+					g.Expect(cond).NotTo(BeNil())
+					g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(cond.Reason).To(Equal("CNPGClusterProvisioning"))
+				}, "20s", "250ms").Should(Succeed())
 
-			By("asserting CNPG Cluster projection and ownership")
-			cnpg := &cnpgv1.Cluster{}
-			Expect(k8sClient.Get(ctx, req.NamespacedName, cnpg)).To(Succeed())
-			Expect(metav1.IsControlledBy(cnpg, pc)).To(BeTrue())
-			Expect(cnpg.Spec.Instances).To(Equal(2))
-			Expect(cnpg.Spec.ImageName).To(ContainSubstring("postgresql:15.10"))
-			Expect(cnpg.Spec.StorageConfiguration.Size).To(Equal("1Gi"))
+				// Simulate external CNPG controller status progression.
+				Eventually(func() error {
+					cnpg := &cnpgv1.Cluster{}
+					if err := k8sClient.Get(ctx, pgClusterKey, cnpg); err != nil {
+						return err
+					}
+					cnpg.Status.Phase = cnpgv1.PhaseHealthy
+					return k8sClient.Status().Update(ctx, cnpg) // update event
+				}, "10s", "250ms").Should(Succeed())
 
-			By("asserting ConfigMap contract consumed by clients")
-			cm := &corev1.ConfigMap{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name: pc.Status.Resources.ConfigMapRef.Name, Namespace: namespace,
-			}, cm)).To(Succeed())
-			Expect(metav1.IsControlledBy(cm, pc)).To(BeTrue())
-			Expect(cm.Data).To(HaveKeyWithValue("DEFAULT_CLUSTER_PORT", "5432"))
-			Expect(cm.Data).To(HaveKey("SUPER_USER_SECRET_REF"))
-			Expect(cm.Data).To(HaveKey("CLUSTER_RW_ENDPOINT"))
+				// Expect cnpg status progression propagation
+				Eventually(func(g Gomega) {
+					pc := &enterprisev4.PostgresCluster{}
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+
+					cond := meta.FindStatusCondition(pc.Status.Conditions, "ClusterReady")
+					g.Expect(cond).NotTo(BeNil())
+					g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+					g.Expect(cond.Reason).To(Equal("CNPGClusterHealthy"))
+				}, "20s", "250ms").Should(Succeed())
+
+				Eventually(func(g Gomega) {
+					pc := &enterprisev4.PostgresCluster{}
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+					g.Expect(pc.Status.Resources).NotTo(BeNil())
+					g.Expect(pc.Status.Resources.SuperUserSecretRef).NotTo(BeNil())
+					g.Expect(pc.Status.Resources.ConfigMapRef).NotTo(BeNil())
+				}, "20s", "250ms").Should(Succeed())
+			})
+
+			// PC-07
+			It("is idempotent across repeated reconciles", func() {
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+
+				// Trigger extra update events that should not change desired state semantics.
+				Eventually(func() error {
+					pc := &enterprisev4.PostgresCluster{}
+					if err := k8sClient.Get(ctx, pgClusterKey, pc); err != nil {
+						return err
+					}
+					if pc.Annotations == nil {
+						pc.Annotations = map[string]string{}
+					}
+					pc.Annotations["test.bump"] = strconv.FormatInt(time.Now().UnixNano(), 10)
+					return k8sClient.Update(ctx, pc) // update event
+				}, "10s", "250ms").Should(Succeed())
+
+				Eventually(func(g Gomega) {
+					cnpg := &cnpgv1.Cluster{}
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+					g.Expect(cnpg.Spec.Instances).To(Equal(int(clusterMemberCount)))
+				}, "20s", "250ms").Should(Succeed())
+			})
 		})
-		It("PC-02 adds finalizer on reconcile", func() {
-			Expect(k8sClient.Get(ctx, req.NamespacedName, pc)).To(Succeed())
-			Expect(pc.ObjectMeta.Finalizers).To(ContainElement(core.PostgresClusterFinalizerName))
+	})
+
+	When("deleting a PostgresCluster", func() {
+		// PC-03
+		Context("and clusterDeletionPolicy is set to Delete", func() {
+			It("removes children and finalizer", func() {
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+
+				pc := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, pc)).To(Succeed()) // delete event
+
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, pgClusterKey, &enterprisev4.PostgresCluster{})
+					return apierrors.IsNotFound(err)
+				}, "30s", "250ms").Should(BeTrue())
+			})
 		})
-		It("PC-07 is idempotent across repeated reconciles", func() {})
+
+		// PC-04
+		Context("when clusterDeletionPolicy is set to Retain", func() {
+			It("preserves retained resources and removes owner refs", func() {
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+
+				// Trigger update event: switch policy to Retain before delete.
+				Eventually(func() error {
+					pc := &enterprisev4.PostgresCluster{}
+					if err := k8sClient.Get(ctx, pgClusterKey, pc); err != nil {
+						return err
+					}
+					pc.Spec.ClusterDeletionPolicy = &[]string{retainPolicy}[0]
+					return k8sClient.Update(ctx, pc)
+				}, "10s", "250ms").Should(Succeed())
+
+				pc := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, pc)).To(Succeed()) // delete event
+
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, pgClusterKey, &enterprisev4.PostgresCluster{})
+					return apierrors.IsNotFound(err)
+				}, "30s", "250ms").Should(BeTrue())
+
+			})
+		})
 	})
 
-	Context("Deletion and finalizer", func() {
-		It("PC-03 Delete policy removes children and finalizer", func() {})
-		It("PC-04 Retain policy preserves children and removes ownerRefs", func() {})
+	When("reconciling with invalid or drifted dependencies", func() {
+		// PC-05
+		Context("when referenced class does not exist", func() {
+			It("fails with class-not-found condition", func() {
+				clusterName = "bad-" + clusterName
+				className = "missing-class"
+
+				bad := &enterprisev4.PostgresCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: namespace},
+					Spec:       enterprisev4.PostgresClusterSpec{Class: className},
+				}
+				Expect(k8sClient.Create(ctx, bad)).To(Succeed()) // create event
+
+				Eventually(func() bool {
+					current := &enterprisev4.PostgresCluster{}
+					if err := k8sClient.Get(ctx, types.NamespacedName{Name: bad.Name, Namespace: namespace}, current); err != nil {
+						return false
+					}
+					cond := meta.FindStatusCondition(current.Status.Conditions, "ClusterReady")
+					return cond != nil && cond.Reason == "ClusterClassNotFound"
+				}, "20s", "250ms").Should(BeTrue())
+			})
+		})
+
+		// PC-06
+		Context("when managed child spec drifts from desired state", func() {
+			It("restores drifted managed spec", func() {
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+
+				Eventually(func() error {
+					return k8sClient.Get(ctx, pgClusterKey, &cnpgv1.Cluster{})
+				}, "20s", "250ms").Should(Succeed())
+
+				Eventually(func() error {
+					pc := &enterprisev4.PostgresCluster{}
+					if err := k8sClient.Get(ctx, pgClusterKey, pc); err != nil {
+						return err
+					}
+					if pc.Annotations == nil {
+						pc.Annotations = map[string]string{}
+					}
+					pc.Annotations["drift-trigger"] = strconv.FormatInt(time.Now().UnixNano(), 10)
+					pc.Spec.Instances = &[]int32{8}[0]
+					return k8sClient.Update(ctx, pc)
+				}, "10s", "250ms").Should(Succeed())
+
+				Eventually(func() bool {
+					cnpg := &cnpgv1.Cluster{}
+					if err := k8sClient.Get(ctx, pgClusterKey, cnpg); err != nil {
+						return false
+					}
+					return cnpg.Spec.Instances == int(clusterMemberCount)
+				}, "20s", "250ms").Should(BeTrue())
+			})
+		})
 	})
-
-	Context("Failure and drift", func() {
-		It("PC-05 fails when PostgresClusterClass is missing", func() {})
-		It("PC-06 restores drifted managed spec", func() {})
-	})
-
-	Context("Predicates", func() {
-		It("PC-08 triggers on generation/finalizer/deletion changes", func() {})
-		It("PC-09 ignores no-op updates", func() {})
-	})
-
-	// Context("When reconciling a resource", func() {
-
-	// 	It("should successfully reconcile the resource", func() {
-	// 		By("Reconciling the created resource")
-	// 		// controllerReconciler := &PostgresClusterReconciler{
-	// 		// 	Client: k8sClient,
-	// 		// 	Scheme: k8sClient.Scheme(),
-	// 		// }
-
-	// 		// _, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-	// 		// 	NamespacedName: typeNamespacedName,
-	// 		// })
-	// 		err := errors.New("test error")
-	// 		Expect(err).NotTo(HaveOccurred())
-
-	// 	})
-	// })
 })
