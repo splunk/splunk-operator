@@ -39,10 +39,56 @@ spec:
           spec:
             description: AppSourceSpec defines the desired state of AppSource.
             properties:
-              foo:
-                description: Foo is an example field of AppSource. Edit appsource_types.go
-                  to remove/update
+              auth:
+                description: Authentication configuration
+                properties:
+                  secretName:
+                    type: string
+                required:
+                - secretName
+                type: object
+              git:
+                description: Git specific configuration
+                properties:
+                  ref:
+                    default: main
+                    type: string
+                  repo:
+                    type: string
+                required:
+                - repo
+                type: object
+              polling:
+                default: 60
+                description: Polling interval in seconds
+                format: int32
+                type: integer
+              s3:
+                description: S3 specific configuration
+                properties:
+                  basePath:
+                    type: string
+                  bucket:
+                    type: string
+                  endpoint:
+                    type: string
+                  region:
+                    type: string
+                required:
+                - endpoint
+                type: object
+              type:
+                description: |-
+                  Type of the App Source
+                  Valid values are "git", "s3", "gcp", "azure"
+                enum:
+                - git
+                - s3
+                - gcp
+                - azure
                 type: string
+            required:
+            - type
             type: object
           status:
             description: AppSourceStatus defines the observed state of AppSource.
