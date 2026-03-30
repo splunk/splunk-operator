@@ -28,8 +28,20 @@ type AppSourceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of AppSource. Edit appsource_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+
+
+	// Type of the App Source.
+	// Valid values are "git", "s3", "gcp", "azure"
+	// +required
+	// +kubebuilder:validation:Enum="git";"s3";"gcp";"azure"
+	Type string `json:"type"`
+
+	// Endpoint of the App Source
+	// +required
+	Endpoint string `json:"endpoint"`
+
+	
+
 }
 
 // AppSourceStatus defines the observed state of AppSource.
