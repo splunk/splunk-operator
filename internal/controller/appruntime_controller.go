@@ -282,6 +282,29 @@ func (r *AppRuntimeReconciler) createStatefulSet(ctx context.Context, appRuntime
 	ss.Spec.Selector = &v1.LabelSelector{MatchLabels: ss.Labels}
 	ss.Spec.ServiceName = getHeadlessName(appRuntime.Name)
 	ss.Spec.PodManagementPolicy = appsv1.ParallelPodManagement
+
+	//quantity, err := resource2.ParseQuantity(splcommon.DefaultEtcVolumeStorageCapacity)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//pvc := corev1.PersistentVolumeClaim{
+	//	ObjectMeta: v1.ObjectMeta{
+	//		Name:      "pvc-etc",
+	//		Namespace: nn.Namespace,
+	//		Labels:    getCommonLabels(appRuntime.Name),
+	//	},
+	//	Spec: corev1.PersistentVolumeClaimSpec{
+	//		AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
+	//		Resources: corev1.VolumeResourceRequirements{
+	//			Requests: corev1.ResourceList{
+	//				corev1.ResourceStorage: quantity,
+	//			},
+	//		},
+	//	},
+	//}
+	//ss.Spec.VolumeClaimTemplates = append(ss.Spec.VolumeClaimTemplates, pvc)
+
 	ss.Spec.Template = corev1.PodTemplateSpec{
 		ObjectMeta: v1.ObjectMeta{
 			Labels: ss.Labels,
@@ -295,8 +318,36 @@ func (r *AppRuntimeReconciler) createStatefulSet(ctx context.Context, appRuntime
 						"sleep",
 						"infinity",
 					},
+					//VolumeMounts: []corev1.VolumeMount{
+					//	{
+					//		Name:      "pvc-etc",
+					//		MountPath: "/opt/splunk/etc",
+					//	},
+					//	{
+					//		Name:      "pvc-var",
+					//		MountPath: "/opt/splunk/var",
+					//	},
+					//},
 				},
 			},
+			//Volumes: []corev1.Volume{
+			//	{
+			//		Name: "pvc-etc",
+			//		VolumeSource: corev1.VolumeSource{
+			//			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+			//				ClaimName: "pvc-etc-splunk",
+			//			},
+			//		},
+			//	},
+			//	{
+			//		Name: "pvc-var",
+			//		VolumeSource: corev1.VolumeSource{
+			//			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+			//				ClaimName: "pvc-var-splunk",
+			//			},
+			//		},
+			//	},
+			//},
 		},
 	}
 	err = r.Create(ctx, ss)
