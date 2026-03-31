@@ -291,6 +291,24 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 		Spec: corev1.PodSpec{
 			Hostname:  nn.Name,
 			Subdomain: getHeadlessName(appRuntime.Name),
+			Affinity: &corev1.Affinity{
+				PodAffinity: &corev1.PodAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+						{
+							LabelSelector: &v1.LabelSelector{
+								MatchExpressions: []v1.LabelSelectorRequirement{
+									{
+										Key:      "statefulset.kubernetes.io/pod-name",
+										Operator: v1.LabelSelectorOpIn,
+										Values:   []string{fmt.Sprintf("%s-%d", splunkStsName, ordinal)},
+									},
+								},
+							},
+							TopologyKey: "kubernetes.io/hostname",
+						},
+					},
+				},
+			},
 			Containers: []corev1.Container{
 				{
 					Image: appRuntime.Spec.Image,
