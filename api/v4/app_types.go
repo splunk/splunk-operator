@@ -81,8 +81,29 @@ type AppStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message,omitempty"`
 
+	// InstalledVersion is the app version installed on target
+	InstalledVersion string `json:"installedVersion,omitempty"`
+
+	// Artifact tracks the resolved app package details
+	Artifact *AppArtifactStatus `json:"artifact,omitempty"`
+
 	// ObservedGeneration tracks the latest reconciled generation
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions represent the latest available observations of the app
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// AppArtifactStatus defines resolved app artifact details.
+type AppArtifactStatus struct {
+	// ResolvedPath is the resolved artifact path within the source
+	ResolvedPath string `json:"resolvedPath,omitempty"`
+
+	// Etag is the artifact hash or ETag used for change detection
+	Etag string `json:"etag,omitempty"`
+
+	// LastFetchedTime is the last time the artifact was fetched
+	LastFetchedTime metav1.Time `json:"lastFetchedTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true
