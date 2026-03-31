@@ -6,12 +6,13 @@ import (
 
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"time"
 
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -22,7 +23,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-var _ = Describe("SearchHeadCluster Controller", func() {
+var _ = Describe("LicenseMaster Controller", func() {
 
 	BeforeEach(func() {
 		time.Sleep(2 * time.Second)
@@ -32,57 +33,56 @@ var _ = Describe("SearchHeadCluster Controller", func() {
 
 	})
 
-	Context("SearchHeadCluster Management", func() {
+	Context("LicenseMaster Management", func() {
 
-		It("Get SearchHeadCluster custom resource should failed", func() {
-			namespace := "ns-splunk-shc-1"
-			ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
+		It("Get LicenseMaster custom resource should failed", func() {
+			namespace := "ns-splunk-lmaster-1"
+			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			// check when resource not found
-			_, err := GetSearchHeadCluster("test", nsSpecs.Name)
-			Expect(err.Error()).Should(Equal("searchheadclusters.enterprise.splunk.com \"test\" not found"))
+			_, err := GetLicenseMaster("test", nsSpecs.Name)
+			Expect(err.Error()).Should(Equal("licensemasters.enterprise.splunk.com \"test\" not found"))
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create SearchHeadCluster custom resource with annotations should pause", func() {
-			namespace := "ns-splunk-shc-2"
-			ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
+		It("Create LicenseMaster custom resource with annotations should pause", func() {
+			namespace := "ns-splunk-lmaster-2"
+			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.SearchHeadClusterPausedAnnotation] = ""
-			CreateSearchHeadCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			ssSpec, _ := GetSearchHeadCluster("test", nsSpecs.Name)
+			annotations[enterpriseApiV3.LicenseMasterPausedAnnotation] = ""
+			CreateLicenseMaster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			ssSpec, _ := GetLicenseMaster("test", nsSpecs.Name)
 			annotations = map[string]string{}
 			ssSpec.Annotations = annotations
-			ssSpec.Status.DeployerPhase = "Ready"
 			ssSpec.Status.Phase = "Ready"
-			UpdateSearchHeadCluster(ssSpec, enterpriseApi.PhaseReady)
-			DeleteSearchHeadCluster("test", nsSpecs.Name)
+			UpdateLicenseMaster(ssSpec, enterpriseApi.PhaseReady)
+			DeleteLicenseMaster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create SearchHeadCluster custom resource should succeeded", func() {
-			namespace := "ns-splunk-shc-3"
-			ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
+		It("Create LicenseMaster custom resource should succeeded", func() {
+			namespace := "ns-splunk-lmaster-3"
+			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
+
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			CreateSearchHeadCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			DeleteSearchHeadCluster("test", nsSpecs.Name)
+			CreateLicenseMaster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			DeleteLicenseMaster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
-
 		It("Cover Unused methods", func() {
-			namespace := "ns-splunk-shc-4"
-			ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
+			namespace := "ns-splunk-lmaster-4"
+			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -90,7 +90,7 @@ var _ = Describe("SearchHeadCluster Controller", func() {
 			ctx := context.TODO()
 			builder := fake.NewClientBuilder()
 			c := builder.Build()
-			instance := SearchHeadClusterReconciler{
+			instance := LicenseMasterReconciler{
 				Client: c,
 				Scheme: scheme.Scheme,
 			}
@@ -104,11 +104,11 @@ var _ = Describe("SearchHeadCluster Controller", func() {
 			_, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 			// create resource first and then reconcile for the first time
-			ssSpec := testutils.NewSearchHeadCluster("test", namespace, "image")
+			ssSpec := testutils.NewLicenseMaster("test", namespace, "image")
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 			// reconcile with updated annotations for pause
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.SearchHeadClusterPausedAnnotation] = ""
+			annotations[enterpriseApiV3.LicenseMasterPausedAnnotation] = ""
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
 			_, err = instance.Reconcile(ctx, request)
@@ -128,13 +128,13 @@ var _ = Describe("SearchHeadCluster Controller", func() {
 	})
 })
 
-func GetSearchHeadCluster(name string, namespace string) (*enterpriseApi.SearchHeadCluster, error) {
+func GetLicenseMaster(name string, namespace string) (*enterpriseApiV3.LicenseMaster, error) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	By("Expecting SearchHeadCluster custom resource to be created successfully")
-	ss := &enterpriseApi.SearchHeadCluster{}
+	By("Expecting LicenseMaster custom resource to be created successfully")
+	ss := &enterpriseApiV3.LicenseMaster{}
 	err := k8sClient.Get(context.Background(), key, ss)
 	if err != nil {
 		return nil, err
@@ -142,23 +142,22 @@ func GetSearchHeadCluster(name string, namespace string) (*enterpriseApi.SearchH
 	return ss, err
 }
 
-func CreateSearchHeadCluster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApi.SearchHeadCluster {
+func CreateLicenseMaster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApiV3.LicenseMaster {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	ssSpec := testutils.NewSearchHeadCluster(name, namespace, "image")
+	ssSpec := testutils.NewLicenseMaster(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
-	By("Expecting SearchHeadCluster custom resource to be created successfully")
-	ss := &enterpriseApi.SearchHeadCluster{}
+	By("Expecting LicenseMaster custom resource to be created successfully")
+	ss := &enterpriseApiV3.LicenseMaster{}
 	Eventually(func() bool {
 		_ = k8sClient.Get(context.Background(), key, ss)
 		if status != "" {
 			fmt.Printf("status is set to %v", status)
 			ss.Status.Phase = status
-			ss.Status.DeployerPhase = status
 			Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
 			time.Sleep(2 * time.Second)
 		}
@@ -168,25 +167,24 @@ func CreateSearchHeadCluster(name string, namespace string, annotations map[stri
 	return ss
 }
 
-func UpdateSearchHeadCluster(instance *enterpriseApi.SearchHeadCluster, status enterpriseApi.Phase) *enterpriseApi.SearchHeadCluster {
+func UpdateLicenseMaster(instance *enterpriseApiV3.LicenseMaster, status enterpriseApi.Phase) *enterpriseApiV3.LicenseMaster {
 	key := types.NamespacedName{
 		Name:      instance.Name,
 		Namespace: instance.Namespace,
 	}
 
-	ssSpec := testutils.NewSearchHeadCluster(instance.Name, instance.Namespace, "image")
+	ssSpec := testutils.NewLicenseMaster(instance.Name, instance.Namespace, "image")
 	ssSpec.ResourceVersion = instance.ResourceVersion
 	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
-	By("Expecting SearchHeadCluster custom resource to be created successfully")
-	ss := &enterpriseApi.SearchHeadCluster{}
+	By("Expecting LicenseMaster custom resource to be created successfully")
+	ss := &enterpriseApiV3.LicenseMaster{}
 	Eventually(func() bool {
 		_ = k8sClient.Get(context.Background(), key, ss)
 		if status != "" {
 			fmt.Printf("status is set to %v", status)
 			ss.Status.Phase = status
-			ss.Status.DeployerPhase = status
 			Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
 			time.Sleep(2 * time.Second)
 		}
@@ -196,15 +194,15 @@ func UpdateSearchHeadCluster(instance *enterpriseApi.SearchHeadCluster, status e
 	return ss
 }
 
-func DeleteSearchHeadCluster(name string, namespace string) {
+func DeleteLicenseMaster(name string, namespace string) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
 
-	By("Expecting SearchHeadCluster Deleted successfully")
+	By("Expecting LicenseMaster Deleted successfully")
 	Eventually(func() error {
-		ssys := &enterpriseApi.SearchHeadCluster{}
+		ssys := &enterpriseApiV3.LicenseMaster{}
 		_ = k8sClient.Get(context.Background(), key, ssys)
 		err := k8sClient.Delete(context.Background(), ssys)
 		return err

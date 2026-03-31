@@ -17,7 +17,7 @@ limitations under the License.
 package v3
 
 import (
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -30,40 +30,46 @@ import (
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
 const (
-	// ClusterMasterPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// StandalonePausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	ClusterMasterPausedAnnotation = "clustermaster.enterprise.splunk.com/paused"
+	StandalonePausedAnnotation = "standalone.enterprise.splunk.com/paused"
 )
 
-// ClusterMasterSpec defines the desired state of ClusterMaster
-type ClusterMasterSpec struct {
+// StandaloneSpec defines the desired state of a Splunk Enterprise standalone instances.
+type StandaloneSpec struct {
 	enterpriseApi.CommonSplunkSpec `json:",inline"`
 
-	// Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
+	// Number of standalone pods
+	Replicas int32 `json:"replicas"`
+
+	//Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
 	SmartStore enterpriseApi.SmartStoreSpec `json:"smartstore,omitempty"`
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
 	AppFrameworkConfig enterpriseApi.AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
-// ClusterMasterStatus defines the observed state of ClusterMaster
-type ClusterMasterStatus struct {
-	// current phase of the cluster manager
+// StandaloneStatus defines the observed state of a Splunk Enterprise standalone instances.
+type StandaloneStatus struct {
+	// current phase of the standalone instances
 	Phase enterpriseApi.Phase `json:"phase"`
+
+	// number of desired standalone instances
+	Replicas int32 `json:"replicas"`
+
+	// current number of ready standalone instances
+	ReadyReplicas int32 `json:"readyReplicas"`
 
 	// selector for pods, used by HorizontalPodAutoscaler
 	Selector string `json:"selector"`
 
-	// Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
+	//Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
 	SmartStore enterpriseApi.SmartStoreSpec `json:"smartstore,omitempty"`
-
-	// Bundle push status tracker
-	BundlePushTracker enterpriseApi.BundlePushInfo `json:"bundlePushInfo"`
 
 	// Resource Revision tracker
 	ResourceRevMap map[string]string `json:"resourceRevMap"`
 
-	// App Framework status
+	// App Framework Context
 	AppContext enterpriseApi.AppDeploymentContext `json:"appContext"`
 
 	// Telemetry App installation flag
@@ -72,62 +78,61 @@ type ClusterMasterStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ClusterMaster is the Schema for the cluster manager API
+// Standalone is the Schema for a Splunk Enterprise standalone instances.
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=clustermasters,scope=Namespaced,shortName=cm-idxc
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Phase of the cluster master"
-// +kubebuilder:printcolumn:name="Master",type="string",JSONPath=".status.clusterMasterPhase",description="Status of cluster master"
-// +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of indexer peers"
-// +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready indexer peers"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of cluster manager"
-// +kubebuilder:storageversion
-type ClusterMaster struct {
+// +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
+// +kubebuilder:resource:path=standalones,scope=Namespaced,shortName=stdaln
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of standalone instances"
+// +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Number of desired standalone instances"
+// +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready standalone instances"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of standalone resource"
+type Standalone struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ClusterMasterSpec   `json:"spec,omitempty"`
-	Status ClusterMasterStatus `json:"status,omitempty"`
+	Spec   StandaloneSpec   `json:"spec,omitempty"`
+	Status StandaloneStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// ClusterMasterList contains a list of ClusterMaster
-type ClusterMasterList struct {
+// StandaloneList contains a list of Standalone
+type StandaloneList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ClusterMaster `json:"items"`
+	Items           []Standalone `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&ClusterMaster{}, &ClusterMasterList{})
+	SchemeBuilder.Register(&Standalone{}, &StandaloneList{})
 }
 
 // NewEvent creates a new event associated with the object and ready
 // to be published to the kubernetes API.
-func (cmstr *ClusterMaster) NewEvent(eventType, reason, message string) corev1.Event {
+func (standln *Standalone) NewEvent(eventType, reason, message string) corev1.Event {
 	t := metav1.Now()
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    cmstr.ObjectMeta.Namespace,
+			Namespace:    standln.ObjectMeta.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "Clustermaster",
-			Namespace:  cmstr.Namespace,
-			Name:       cmstr.Name,
-			UID:        cmstr.UID,
+			Kind:       "Standalone",
+			Namespace:  standln.Namespace,
+			Name:       standln.Name,
+			UID:        standln.UID,
 			APIVersion: GroupVersion.String(),
 		},
 		Reason:  reason,
 		Message: message,
 		Source: corev1.EventSource{
-			Component: "splunk-clustermaster-controller",
+			Component: "splunk-standalone-controller",
 		},
 		FirstTimestamp:      t,
 		LastTimestamp:       t,
 		Count:               1,
 		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/clustermaster-controller",
+		ReportingController: "enterprise.splunk.com/standalone-controller",
 	}
 }

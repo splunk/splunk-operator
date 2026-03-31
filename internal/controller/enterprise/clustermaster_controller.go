@@ -20,43 +20,38 @@ import (
 	"context"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
-	"github.com/splunk/splunk-operator/pkg/splunk/appframework"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	"github.com/pkg/errors"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const (
-	pauseRetryDelay = time.Second * 30
-)
-
-// StandaloneReconciler reconciles a Standalone object
-type StandaloneReconciler struct {
+// ClusterMasterReconciler reconciles a ClusterMaster object
+type ClusterMasterReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 }
 
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=standalones,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=standalones/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=standalones/finalizers,verbs=update
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=clustermasters,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=clustermasters/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=clustermasters/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -73,21 +68,22 @@ type StandaloneReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the Standalone object against the actual cluster state, and then
+// the ClusterMaster object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
-func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "Standalone")).Inc()
-	defer recordInstrumentionData(time.Now(), req, "controller", "Standalone")
+func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// your logic here
+	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "ClusterMaster")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "ClusterMaster")
 
 	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("standalone", req.NamespacedName)
+	reqLogger = reqLogger.WithValues("clustermaster", req.NamespacedName)
 
-	// Fetch the Standalone
-	instance := &enterpriseApi.Standalone{}
+	// Fetch the ClusterMaster
+	instance := &enterpriseApiV3.ClusterMaster{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -98,13 +94,13 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load standalone data")
+		return ctrl.Result{}, errors.Wrap(err, "could not load cluster manager data")
 	}
 
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterpriseApi.StandalonePausedAnnotation]; ok {
+		if _, ok := annotations[enterpriseApi.ClusterManagerPausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
@@ -114,7 +110,7 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Pass event recorder through context
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
-	result, err := ApplyStandalone(ctx, r.Client, instance, enterprise.NewAppFrameworkEngine())
+	result, err := ApplyClusterMaster(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
 		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
 	}
@@ -122,52 +118,52 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return result, err
 }
 
-// ApplyStandalone adding to handle unit test case
-var ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone, appEngine appframework.AppEngine) (reconcile.Result, error) {
-	return enterprise.ApplyStandalone(ctx, client, instance, appEngine)
+// ApplyClusterMaster adding to handle unit test case
+var ApplyClusterMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.ClusterMaster) (reconcile.Result, error) {
+	return enterprise.ApplyClusterMaster(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterpriseApi.Standalone{}).
+		For(&enterpriseApiV3.ClusterMaster{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
 			common.AnnotationChangedPredicate(),
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
-			common.ConfigMapChangedPredicate(),
 			common.StatefulsetChangedPredicate(),
 			common.PodChangedPredicate(),
+			common.ConfigMapChangedPredicate(),
 			common.CrdChangedPredicate(),
 		)).
 		Watches(&appsv1.StatefulSet{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.Standalone{},
+				&enterpriseApiV3.ClusterMaster{},
 			)).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.Standalone{},
-			)).
-		Watches(&corev1.ConfigMap{},
-			handler.EnqueueRequestForOwner(
-				mgr.GetScheme(),
-				mgr.GetRESTMapper(),
-				&enterpriseApi.Standalone{},
+				&enterpriseApiV3.ClusterMaster{},
 			)).
 		Watches(&corev1.Pod{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.Standalone{},
+				&enterpriseApiV3.ClusterMaster{},
+			)).
+		Watches(&corev1.ConfigMap{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&enterpriseApiV3.ClusterMaster{},
 			)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
-		Named("standalone-controller").
+		Named("cluster-master-controller").
 		Complete(r)
 }

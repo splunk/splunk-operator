@@ -19,7 +19,7 @@ package validation
 import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 )
 
 // GVR constants for all Splunk Enterprise CRDs

@@ -5,13 +5,14 @@ import (
 	"fmt"
 
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
+	"github.com/splunk/splunk-operator/pkg/splunk/appframework"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -22,7 +23,10 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-var _ = Describe("LicenseManager Controller", func() {
+const timeout = time.Second * 120
+const interval = time.Second * 2
+
+var _ = Describe("Standalone Controller", func() {
 
 	BeforeEach(func() {
 		time.Sleep(2 * time.Second)
@@ -32,56 +36,56 @@ var _ = Describe("LicenseManager Controller", func() {
 
 	})
 
-	Context("LicenseManager Management", func() {
+	Context("Standalone Management", func() {
 
-		It("Get LicenseManager custom resource should failed", func() {
-			namespace := "ns-splunk-lm-1"
-			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
+		It("Get Standalone custom resource should failed", func() {
+			namespace := "ns-splunk-st-1"
+			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone, appEngine appframework.AppEngine) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			// check when resource not found
-			_, err := GetLicenseManager("test", nsSpecs.Name)
-			Expect(err.Error()).Should(Equal("licensemanagers.enterprise.splunk.com \"test\" not found"))
+			_, err := GetStandalone("test", nsSpecs.Name)
+			Expect(err.Error()).Should(Equal("standalones.enterprise.splunk.com \"test\" not found"))
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create LicenseManager custom resource with annotations should pause", func() {
-			namespace := "ns-splunk-lm-2"
-			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
+		It("Create Standalone custom resource with annotations should pause", func() {
+			namespace := "ns-splunk-st-2"
+			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone, appEngine appframework.AppEngine) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.LicenseManagerPausedAnnotation] = ""
-			CreateLicenseManager("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			ssSpec, _ := GetLicenseManager("test", nsSpecs.Name)
+			annotations[enterpriseApi.StandalonePausedAnnotation] = ""
+			CreateStandalone("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			ssSpec, _ := GetStandalone("test", nsSpecs.Name)
 			annotations = map[string]string{}
 			ssSpec.Annotations = annotations
 			ssSpec.Status.Phase = "Ready"
-			UpdateLicenseManager(ssSpec, enterpriseApi.PhaseReady)
-			DeleteLicenseManager("test", nsSpecs.Name)
+			UpdateStandalone(ssSpec, enterpriseApi.PhaseReady)
+			DeleteStandalone("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create LicenseManager custom resource should succeeded", func() {
-			namespace := "ns-splunk-lm-3"
-			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
+		It("Create Standalone custom resource should succeeded", func() {
+			namespace := "ns-splunk-st-3"
+			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone, appEngine appframework.AppEngine) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			CreateLicenseManager("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			DeleteLicenseManager("test", nsSpecs.Name)
+			CreateStandalone("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			DeleteStandalone("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
 		It("Cover Unused methods", func() {
-			namespace := "ns-splunk-lm-4"
-			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
+			namespace := "ns-splunk-st-4"
+			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone, appEngine appframework.AppEngine) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -89,7 +93,7 @@ var _ = Describe("LicenseManager Controller", func() {
 			ctx := context.TODO()
 			builder := fake.NewClientBuilder()
 			c := builder.Build()
-			instance := LicenseManagerReconciler{
+			instance := StandaloneReconciler{
 				Client: c,
 				Scheme: scheme.Scheme,
 			}
@@ -99,15 +103,15 @@ var _ = Describe("LicenseManager Controller", func() {
 					Namespace: namespace,
 				},
 			}
-			// econcile for the first time err is resource not found
+			// reconcile for the first time err is resource not found
 			_, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
-			// create resource first adn then reconcile for the first time
-			ssSpec := testutils.NewLicenseManager("test", namespace, "image")
+			// create resource first and then reconcile for the first time
+			ssSpec := testutils.NewStandalone("test", namespace, "image")
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 			// reconcile with updated annotations for pause
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.LicenseManagerPausedAnnotation] = ""
+			annotations[enterpriseApi.StandalonePausedAnnotation] = ""
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
 			_, err = instance.Reconcile(ctx, request)
@@ -127,13 +131,13 @@ var _ = Describe("LicenseManager Controller", func() {
 	})
 })
 
-func GetLicenseManager(name string, namespace string) (*enterpriseApi.LicenseManager, error) {
+func GetStandalone(name string, namespace string) (*enterpriseApi.Standalone, error) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	By("Expecting LicenseManager custom resource to be created successfully")
-	ss := &enterpriseApi.LicenseManager{}
+	By("Expecting Standalone custom resource to be created successfully")
+	ss := &enterpriseApi.Standalone{}
 	err := k8sClient.Get(context.Background(), key, ss)
 	if err != nil {
 		return nil, err
@@ -141,17 +145,25 @@ func GetLicenseManager(name string, namespace string) (*enterpriseApi.LicenseMan
 	return ss, err
 }
 
-func CreateLicenseManager(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApi.LicenseManager {
+func CreateStandalone(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApi.Standalone {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	ssSpec := testutils.NewLicenseManager(name, namespace, "image")
+	ssSpec := &enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        name,
+			Namespace:   namespace,
+			Annotations: annotations,
+		},
+		Spec: enterpriseApi.StandaloneSpec{},
+	}
+	ssSpec = testutils.NewStandalone(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
-	By("Expecting LicenseManager custom resource to be created successfully")
-	ss := &enterpriseApi.LicenseManager{}
+	By("Expecting Standalone custom resource to be created successfully")
+	ss := &enterpriseApi.Standalone{}
 	Eventually(func() bool {
 		_ = k8sClient.Get(context.Background(), key, ss)
 		if status != "" {
@@ -166,19 +178,19 @@ func CreateLicenseManager(name string, namespace string, annotations map[string]
 	return ss
 }
 
-func UpdateLicenseManager(instance *enterpriseApi.LicenseManager, status enterpriseApi.Phase) *enterpriseApi.LicenseManager {
+func UpdateStandalone(instance *enterpriseApi.Standalone, status enterpriseApi.Phase) *enterpriseApi.Standalone {
 	key := types.NamespacedName{
 		Name:      instance.Name,
 		Namespace: instance.Namespace,
 	}
 
-	ssSpec := testutils.NewLicenseManager(instance.Name, instance.Namespace, "image")
+	ssSpec := testutils.NewStandalone(instance.Name, instance.Namespace, "image")
 	ssSpec.ResourceVersion = instance.ResourceVersion
 	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
-	By("Expecting LicenseManager custom resource to be created successfully")
-	ss := &enterpriseApi.LicenseManager{}
+	By("Expecting Standalone custom resource to be created successfully")
+	ss := &enterpriseApi.Standalone{}
 	Eventually(func() bool {
 		_ = k8sClient.Get(context.Background(), key, ss)
 		if status != "" {
@@ -193,15 +205,15 @@ func UpdateLicenseManager(instance *enterpriseApi.LicenseManager, status enterpr
 	return ss
 }
 
-func DeleteLicenseManager(name string, namespace string) {
+func DeleteStandalone(name string, namespace string) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
 
-	By("Expecting LicenseManager Deleted successfully")
+	By("Expecting Standalone Deleted successfully")
 	Eventually(func() error {
-		ssys := &enterpriseApi.LicenseManager{}
+		ssys := &enterpriseApi.Standalone{}
 		_ = k8sClient.Get(context.Background(), key, ssys)
 		err := k8sClient.Delete(context.Background(), ssys)
 		return err
