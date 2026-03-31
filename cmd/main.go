@@ -27,11 +27,12 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+
 	"github.com/splunk/splunk-operator/internal/controller/debug"
 	intController "github.com/splunk/splunk-operator/internal/controller/enterprise"
 	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise/validation"
-	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -50,8 +51,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	appsv1alpha1 "github.com/splunk/splunk-operator/api/apps/v1alpha1"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	appscontroller "github.com/splunk/splunk-operator/internal/controller/apps"
 	//+kubebuilder:scaffold:imports
 	//extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
@@ -65,6 +68,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
 	utilruntime.Must(enterpriseApiV3.AddToScheme(scheme))
+	utilruntime.Must(appsv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 	//utilruntime.Must(extapi.AddToScheme(scheme))
 }
@@ -314,6 +318,13 @@ func main() {
 		setupLog.Info("Validation webhook enabled via ENABLE_VALIDATION_WEBHOOK=true")
 	} else {
 		setupLog.Info("Validation webhook disabled (set ENABLE_VALIDATION_WEBHOOK=true to enable)")
+	}
+	if err := (&appscontroller.AppSourceReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "AppSource")
+		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
 
