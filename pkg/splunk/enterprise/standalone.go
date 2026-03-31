@@ -23,6 +23,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
+	"github.com/splunk/splunk-operator/pkg/splunk/appframework"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -35,7 +36,7 @@ import (
 )
 
 // ApplyStandalone reconciles the StatefulSet for N standalone instances of Splunk Enterprise.
-func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone, appEngine AppEngine) (reconcile.Result, error) {
+func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone, appEngine appframework.AppEngine) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -72,7 +73,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	cr.Status.Replicas = cr.Spec.Replicas
 
 	// If needed, Migrate the app framework status
-	err = appEngine.ensureAppFrameworkStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, enterpriseApi.ScopeLocal)
+	err = appEngine.EnsureStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, enterpriseApi.ScopeLocal)
 	if err != nil {
 		return result, err
 	}
@@ -97,7 +98,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := appEngine.ensureAppRepoState(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		err := appEngine.EnsureRepoState(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
 			eventPublisher.Warning(ctx, "ensureAppRepoState", fmt.Sprintf("ensure app repo state failed %s", err.Error()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
@@ -187,14 +188,14 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			cr.Status.AppContext.IsDeploymentInProgress = true
 
 			for appSrc := range appStatusContext.AppsSrcDeployStatus {
-				appEngine.changeAppSrcDeployInfoStatus(ctx, appSrc, appStatusContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete, enterpriseApi.DeployStatusPending)
-				appEngine.changePhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
+				appEngine.SetDeployStatus(ctx, appSrc, appStatusContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete, enterpriseApi.DeployStatusPending)
+				appEngine.UpdatePhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
 			}
 
 		// if we are scaling down, just delete the state auxPhaseInfo entries
 		case enterpriseApi.StatefulSetScalingDown:
 			for appSrc := range appStatusContext.AppsSrcDeployStatus {
-				appEngine.removeStaleEntriesFromAuxPhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
+				appEngine.PrunePhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
 			}
 		default:
 			// nothing to be done
@@ -262,7 +263,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
 		}
 
-		finalResult := appEngine.runAppFrameworkIfReady(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
+		finalResult := appEngine.Run(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
 
 		// Add a splunk operator telemetry app
@@ -287,7 +288,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 }
 
 // getStandaloneStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise standalone instances.
-func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone, appEngine AppEngine) (*appsv1.StatefulSet, error) {
+func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone, appEngine appframework.AppEngine) (*appsv1.StatefulSet, error) {
 	// get generic statefulset for Splunk Enterprise objects
 	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{})
 	if err != nil {
@@ -301,7 +302,7 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	}
 
 	// Setup App framework staging volume for apps
-	appEngine.ensureAppFrameworkStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	appEngine.EnsureStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, nil
 }

@@ -22,6 +22,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/appframework"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -122,7 +123,7 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 // ApplyStandalone adding to handle unit test case
-var ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone, appEngine enterprise.AppEngine) (reconcile.Result, error) {
+var ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone, appEngine appframework.AppEngine) (reconcile.Result, error) {
 	return enterprise.ApplyStandalone(ctx, client, instance, appEngine)
 }
 
