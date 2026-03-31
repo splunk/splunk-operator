@@ -38,8 +38,9 @@ func PostgresDatabaseService(
 	newDBRepo NewDBRepoFunc,
 ) (ctrl.Result, error) {
 	c := rc.Client
-	logger := log.FromContext(ctx)
-	logger.Info("Reconciling PostgresDatabase", "name", postgresDB.Name, "namespace", postgresDB.Namespace)
+	logger := log.FromContext(ctx).WithValues("postgresDatabase", postgresDB.Name)
+	ctx = log.IntoContext(ctx, logger)
+	logger.Info("Reconciling PostgresDatabase")
 
 	updateStatus := func(conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) error {
 		return persistStatus(ctx, c, postgresDB, conditionType, conditionStatus, reason, message, phase)
@@ -48,7 +49,7 @@ func PostgresDatabaseService(
 	// Finalizer: cleanup on deletion, register on creation.
 	if postgresDB.GetDeletionTimestamp() != nil {
 		if err := handleDeletion(ctx, rc, postgresDB); err != nil {
-			logger.Error(err, "Cleanup failed for PostgresDatabase")
+			logger.Error(err, "Failed to clean up PostgresDatabase")
 			rc.emitWarning(postgresDB, EventCleanupFailed, fmt.Sprintf("Cleanup failed: %v", err))
 			return ctrl.Result{}, err
 		}
@@ -65,7 +66,7 @@ func PostgresDatabaseService(
 			logger.Error(err, "Failed to add finalizer to PostgresDatabase")
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
-		logger.Info("Finalizer added successfully")
+		logger.Info("Finalizer added")
 		return ctrl.Result{}, nil
 	}
 
@@ -92,7 +93,7 @@ func PostgresDatabaseService(
 		return ctrl.Result{}, err
 	}
 	clusterStatus := getClusterReadyStatus(cluster)
-	logger.Info("Cluster validation done", "clusterName", postgresDB.Spec.ClusterRef.Name, "status", clusterStatus)
+	logger.Info("Cluster validation complete", "clusterName", postgresDB.Spec.ClusterRef.Name, "status", clusterStatus)
 
 	switch clusterStatus {
 	case ClusterNotReady, ClusterNoProvisionerRef:
@@ -115,9 +116,10 @@ func PostgresDatabaseService(
 		conflictMsg := fmt.Sprintf("Role conflict: %s. "+
 			"If you deleted a previous PostgresDatabase, recreate it with the original name to re-adopt the orphaned resources.",
 			strings.Join(roleConflicts, ", "))
-		logger.Error(nil, conflictMsg)
+		conflictErr := fmt.Errorf("role conflict detected: %s", strings.Join(roleConflicts, ", "))
+		logger.Error(conflictErr, conflictMsg)
 		rc.emitWarning(postgresDB, EventRoleConflict, conflictMsg)
-		errs := []error{fmt.Errorf("role conflict detected: %s", strings.Join(roleConflicts, ", "))}
+		errs := []error{conflictErr}
 		if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonRoleConflict, conflictMsg, failedDBPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
 			errs = append(errs, fmt.Errorf("failed to update status: %w", statusErr))
@@ -180,7 +182,7 @@ func PostgresDatabaseService(
 	}
 
 	if len(missing) > 0 {
-		logger.Info("User spec changed, patching CNPG Cluster", "missing", missing)
+		logger.Info("CNPG Cluster patch started, missing roles detected", "missing", missing)
 		if err := patchManagedRoles(ctx, c, postgresDB, cluster); err != nil {
 			logger.Error(err, "Failed to patch users in CNPG Cluster")
 			rc.emitWarning(postgresDB, EventManagedRolesPatchFailed, fmt.Sprintf("Failed to patch managed roles: %v", err))
@@ -255,7 +257,7 @@ func PostgresDatabaseService(
 		// (name + key) when the cluster was provisioned. This avoids depending on CNPG's
 		// spec field and makes the key explicit.
 		if cluster.Status.Resources == nil || cluster.Status.Resources.SuperUserSecretRef == nil {
-			return ctrl.Result{}, fmt.Errorf("PostgresCluster %s has no superuser secret ref in status", cluster.Name)
+			return ctrl.Result{}, fmt.Errorf("postgresCluster %s has no superuser secret ref in status", cluster.Name)
 		}
 		superSecretRef := cluster.Status.Resources.SuperUserSecretRef
 		superSecret := &corev1.Secret{}
@@ -263,7 +265,7 @@ func PostgresDatabaseService(
 			Name:      superSecretRef.Name,
 			Namespace: postgresDB.Namespace,
 		}, superSecret); err != nil {
-			return ctrl.Result{}, fmt.Errorf("fetching superuser secret %s: %w", superSecretRef.Name, err)
+			return ctrl.Result{}, fmt.Errorf("failed to fetch superuser secret %s: %w", superSecretRef.Name, err)
 		}
 		pw, ok := superSecret.Data[superSecretRef.Key]
 		if !ok {
@@ -298,7 +300,7 @@ func PostgresDatabaseService(
 		if errors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("persisting final status: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to persist final status: %w", err)
 	}
 
 	logger.Info("All phases complete")
@@ -318,13 +320,11 @@ func reconcileRWRolePrivileges(
 	for _, dbName := range dbNames {
 		repo, err := newDBRepo(ctx, rwHost, dbName, superPassword)
 		if err != nil {
-			logger.Error(err, "Failed to connect to database", "database", dbName)
-			errs = append(errs, fmt.Errorf("database %s: %w", dbName, err))
+			errs = append(errs, fmt.Errorf("connecting to database %s: %w", dbName, err))
 			continue
 		}
 		if err := repo.ExecGrants(ctx, dbName); err != nil {
-			logger.Error(err, "Failed to grant RW role privileges", "database", dbName)
-			errs = append(errs, fmt.Errorf("database %s: %w", dbName, err))
+			errs = append(errs, fmt.Errorf("granting RW privileges on database %s: %w", dbName, err))
 			continue
 		}
 		logger.Info("RW role privileges granted", "database", dbName, "rwRole", rwRoleName(dbName))
@@ -333,13 +333,8 @@ func reconcileRWRolePrivileges(
 }
 
 func fetchCluster(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase) (*enterprisev4.PostgresCluster, error) {
-	logger := log.FromContext(ctx)
 	cluster := &enterprisev4.PostgresCluster{}
 	if err := c.Get(ctx, types.NamespacedName{Name: postgresDB.Spec.ClusterRef.Name, Namespace: postgresDB.Namespace}, cluster); err != nil {
-		if errors.IsNotFound(err) {
-			return nil, err
-		}
-		logger.Error(err, "Failed to fetch Cluster", "name", postgresDB.Spec.ClusterRef.Name)
 		return nil, err
 	}
 	return cluster, nil
@@ -423,15 +418,13 @@ func patchManagedRoles(ctx context.Context, c client.Client, postgresDB *enterpr
 	allRoles := buildManagedRoles(postgresDB.Name, postgresDB.Spec.Databases)
 	rolePatch, err := buildManagedRolesPatch(cluster, allRoles, c.Scheme())
 	if err != nil {
-		logger.Error(err, "Failed to build managed roles patch", "postgresDatabase", postgresDB.Name)
 		return fmt.Errorf("building managed roles patch for PostgresDatabase %s: %w", postgresDB.Name, err)
 	}
 	fieldManager := fieldManagerName(postgresDB.Name)
 	if err := c.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManager)); err != nil {
-		logger.Error(err, "Failed to add users to PostgresCluster", "postgresDatabase", postgresDB.Name)
 		return fmt.Errorf("patching managed roles for PostgresDatabase %s: %w", postgresDB.Name, err)
 	}
-	logger.Info("Users added to PostgresCluster via SSA", "postgresDatabase", postgresDB.Name, "roleCount", len(allRoles))
+	logger.Info("Users added to PostgresCluster via SSA", "roleCount", len(allRoles))
 	return nil
 }
 
@@ -440,7 +433,7 @@ func verifyRolesReady(ctx context.Context, expectedUsers []string, cnpgCluster *
 	if cnpgCluster.Status.ManagedRolesStatus.CannotReconcile != nil {
 		for _, userName := range expectedUsers {
 			if errs, exists := cnpgCluster.Status.ManagedRolesStatus.CannotReconcile[userName]; exists {
-				return nil, fmt.Errorf("user %s reconciliation failed: %v", userName, errs)
+				return nil, fmt.Errorf("reconciling user %s: %v", userName, errs)
 			}
 		}
 	}
@@ -469,7 +462,7 @@ func reconcileCNPGDatabases(ctx context.Context, c client.Client, scheme *runtim
 			cnpgDB.Spec = buildCNPGDatabaseSpec(cluster.Status.ProvisionerRef.Name, dbSpec)
 			reAdopting := cnpgDB.Annotations[annotationRetainedFrom] == postgresDB.Name
 			if reAdopting {
-				logger.Info("Re-adopting orphaned CNPG Database", "name", cnpgDBName)
+				logger.Info("Orphaned CNPG Database re-adopted", "name", cnpgDBName)
 				delete(cnpgDB.Annotations, annotationRetainedFrom)
 				adopted = append(adopted, dbSpec.Name)
 			}
@@ -530,6 +523,7 @@ func buildDeletionPlan(databases []enterprisev4.DatabaseDefinition) deletionPlan
 }
 
 func handleDeletion(ctx context.Context, rc *ReconcileContext, postgresDB *enterprisev4.PostgresDatabase) error {
+	logger := log.FromContext(ctx)
 	c := rc.Client
 	plan := buildDeletionPlan(postgresDB.Spec.Databases)
 	if err := orphanRetainedResources(ctx, c, postgresDB, plan.retained); err != nil {
@@ -549,7 +543,7 @@ func handleDeletion(ctx context.Context, rc *ReconcileContext, postgresDB *enter
 		return fmt.Errorf("removing finalizer: %w", err)
 	}
 	rc.emitNormal(postgresDB, EventCleanupComplete, fmt.Sprintf("Cleanup complete (%d retained, %d deleted)", len(plan.retained), len(plan.deleted)))
-	log.FromContext(ctx).Info("Cleanup complete", "name", postgresDB.Name, "retained", len(plan.retained), "deleted", len(plan.deleted))
+	logger.Info("Cleanup complete", "retained", len(plan.retained), "deleted", len(plan.deleted))
 	return nil
 }
 
@@ -574,6 +568,7 @@ func deleteRemovedResources(ctx context.Context, c client.Client, postgresDB *en
 }
 
 func cleanupManagedRoles(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, plan deletionPlan) error {
+	logger := log.FromContext(ctx)
 	if len(plan.deleted) == 0 {
 		return nil
 	}
@@ -582,7 +577,7 @@ func cleanupManagedRoles(ctx context.Context, c client.Client, postgresDB *enter
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("getting PostgresCluster for role cleanup: %w", err)
 		}
-		log.FromContext(ctx).Info("PostgresCluster already deleted, skipping role cleanup")
+		logger.Info("PostgresCluster already deleted, skipping role cleanup")
 		return nil
 	}
 	return patchManagedRolesOnDeletion(ctx, c, postgresDB, cluster, plan.retained)
@@ -745,7 +740,7 @@ func buildManagedRoles(postgresDBName string, databases []enterprisev4.DatabaseD
 func buildManagedRolesPatch(cluster *enterprisev4.PostgresCluster, roles []enterprisev4.ManagedRole, scheme *runtime.Scheme) (*unstructured.Unstructured, error) {
 	gvk, err := apiutil.GVKForObject(cluster, scheme)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get GVK for Cluster: %w", err)
+		return nil, fmt.Errorf("getting GVK for Cluster: %w", err)
 	}
 	return &unstructured.Unstructured{
 		Object: map[string]any{
@@ -758,6 +753,7 @@ func buildManagedRolesPatch(cluster *enterprisev4.PostgresCluster, roles []enter
 }
 
 func patchManagedRolesOnDeletion(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster, retained []enterprisev4.DatabaseDefinition) error {
+	logger := log.FromContext(ctx)
 	roles := buildManagedRoles(postgresDB.Name, retained)
 	rolePatch, err := buildManagedRolesPatch(cluster, roles, c.Scheme())
 	if err != nil {
@@ -766,7 +762,7 @@ func patchManagedRolesOnDeletion(ctx context.Context, c client.Client, postgresD
 	if err := c.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManagerName(postgresDB.Name))); err != nil {
 		return fmt.Errorf("patching managed roles on deletion: %w", err)
 	}
-	log.FromContext(ctx).Info("Patched managed roles on deletion", "postgresDatabase", postgresDB.Name, "retainedRoles", len(roles))
+	logger.Info("Managed roles patched on deletion", "retainedRoles", len(roles))
 	return nil
 }
 
@@ -811,10 +807,10 @@ func ensureSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, 
 	logger := log.FromContext(ctx)
 	switch {
 	case secret == nil:
-		logger.Info("Creating missing user secret", "name", secretName)
+		logger.Info("User secret creation started", "name", secretName)
 		return createUserSecret(ctx, c, scheme, postgresDB, roleName, secretName)
 	case secret.Annotations[annotationRetainedFrom] == postgresDB.Name:
-		logger.Info("Re-adopting orphaned secret", "name", secretName)
+		logger.Info("Orphaned secret re-adopted", "name", secretName)
 		return adoptResource(ctx, c, scheme, postgresDB, secret)
 	}
 	return nil
@@ -889,7 +885,7 @@ func reconcileRoleConfigMaps(ctx context.Context, c client.Client, scheme *runti
 			cm.Data = buildDatabaseConfigMapBody(dbSpec.Name, endpoints)
 			reAdopting := cm.Annotations[annotationRetainedFrom] == postgresDB.Name
 			if reAdopting {
-				logger.Info("Re-adopting orphaned ConfigMap", "name", cmName)
+				logger.Info("Orphaned ConfigMap re-adopted", "name", cmName)
 				delete(cm.Annotations, annotationRetainedFrom)
 			}
 			if cm.CreationTimestamp.IsZero() || reAdopting {

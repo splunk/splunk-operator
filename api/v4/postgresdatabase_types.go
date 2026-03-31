@@ -23,7 +23,7 @@ import (
 
 // PostgresDatabaseSpec defines the desired state of PostgresDatabase.
 // +kubebuilder:validation:XValidation:rule="self.clusterRef == oldSelf.clusterRef",message="clusterRef is immutable"
-// +kubebuilder:validation:XValidation:rule="self.clusterRef.name != ''",message="clusterRef.name must not be empty"
+// +kubebuilder:validation:XValidation:rule="self.clusterRef.name.size() > 0",message="clusterRef.name must not be empty"
 type PostgresDatabaseSpec struct {
 	// Reference to Postgres Cluster managed by postgresCluster controller
 	// +kubebuilder:validation:Required
