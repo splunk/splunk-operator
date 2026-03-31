@@ -170,7 +170,8 @@ func RunS1EphemeralStorageTest(ctx context.Context, deployment *testenv.Deployme
 // verifyM4ClusterAndRFSF verifies cluster manager and multisite cluster are ready and RF/SF is met.
 func verifyM4ClusterAndRFSF(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig, siteCount int) {
 	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-	testcaseEnvInst.VerifyMultisiteClusterReadyAndRFSF(ctx, deployment, siteCount)
+	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
+	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 }
 
 // RunM4MultisiteSmartStoreTest runs the standard M4 multisite SmartStore test workflow
@@ -186,9 +187,7 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	}
 
 	siteCount := 3
-	var err error
-
-	err = config.DeployMultisiteClusterWithIndexes(ctx, deployment, deployment.GetName(), 1, siteCount, testcaseEnvInst.GetIndexSecretName(), smartStoreSpec)
+	err := config.DeployMultisiteClusterWithIndexes(ctx, deployment, deployment.GetName(), 1, siteCount, testcaseEnvInst.GetIndexSecretName(), smartStoreSpec)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 	verifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)

@@ -23,53 +23,57 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
+// smartstoreTestConfig extends MasterManagerTestConfig with a per-variant
+// timeout used by the S1 multiple-indexes test.
+type smartstoreTestConfig struct {
+	testenv.MasterManagerTestConfig
+	S1IndexesTimeout time.Duration
+}
+
+// masterManagerSmartstoreConfigs defines the V3 (master) and V4 (manager) variants
+// shared by the S1 and M4 smartstore test tables.
+var masterManagerSmartstoreConfigs = []smartstoreTestConfig{
+	{testenv.MasterManagerTestConfig{NamePrefix: "master", Label: "mastersmartstore", NewConfig: testenv.NewClusterReadinessConfigV3}, 2 * time.Minute},
+	{testenv.MasterManagerTestConfig{NamePrefix: "", Label: "managersmartstore", NewConfig: testenv.NewClusterReadinessConfigV4}, 5 * time.Minute},
+}
+
 var _ = Describe("Smartstore test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	ctx := context.TODO()
 
-	smartstoreConfigs := []struct {
-		namePrefix       string
-		label            string
-		s1IndexesTimeout time.Duration
-		newConfig        func() *testenv.ClusterReadinessConfig
-	}{
-		{"master", "mastersmartstore", 2 * time.Minute, testenv.NewClusterReadinessConfigV3},
-		{"", "managersmartstore", 5 * time.Minute, testenv.NewClusterReadinessConfigV4},
-	}
-
-	for _, tc := range smartstoreConfigs {
+	for _, tc := range masterManagerSmartstoreConfigs {
 		tc := tc
 		Context("Standalone deployment (S1)", func() {
 			BeforeEach(func() {
-				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.namePrefix)
+				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
 			})
 
 			AfterEach(func() {
 				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 			})
 
-			It(tc.label+", integration: Can configure multiple indexes through app", func() {
-				RunS1MultipleIndexesTest(ctx, deployment, testcaseEnvInst, tc.s1IndexesTimeout)
+			It(tc.Label+", integration: Can configure multiple indexes through app", func() {
+				RunS1MultipleIndexesTest(ctx, deployment, testcaseEnvInst, tc.S1IndexesTimeout)
 			})
 
-			It(tc.label+", integration: Can configure indexes which use default volumes through app", func() {
+			It(tc.Label+", integration: Can configure indexes which use default volumes through app", func() {
 				RunS1DefaultVolumesTest(ctx, deployment, testcaseEnvInst)
 			})
 		})
 
 		Context("Multisite Indexer Cluster with Search Head Cluster (M4)", func() {
 			BeforeEach(func() {
-				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.namePrefix)
+				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
 			})
 
 			AfterEach(func() {
 				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 			})
 
-			It(tc.label+", m4, integration: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
-				config := tc.newConfig()
+			It(tc.Label+", m4, integration: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
+				config := tc.NewConfig()
 				RunM4MultisiteSmartStoreTest(ctx, deployment, testcaseEnvInst, config)
 			})
 		})

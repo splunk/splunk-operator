@@ -35,7 +35,7 @@ func RunS1InternalLogSearchTest(ctx context.Context, deployment *testenv.Deploym
 	standalone := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), "", "")
 
 	Eventually(func() enterpriseApi.Phase {
-		podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
+		podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 
 		searchString := "index=_internal | stats count by host"
 		searchResultsResp, err := testenv.PerformSearchSync(ctx, podName, searchString, deployment)
@@ -62,7 +62,7 @@ func RunS1InternalLogSearchTest(ctx context.Context, deployment *testenv.Deploym
 	}, deployment.GetTimeout(), testenv.PollInterval).Should(Equal(enterpriseApi.PhaseReady))
 
 	Eventually(func() enterpriseApi.Phase {
-		podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
+		podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 		searchString := "index=_internal GUID component=ServerConfig"
 
 		sid, reqErr := testenv.PerformSearchReq(ctx, podName, searchString, deployment)
@@ -102,7 +102,7 @@ func RunS1IngestAndSearchTest(ctx context.Context, deployment *testenv.Deploymen
 	standalone := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), "", "")
 
 	Eventually(func() enterpriseApi.Phase {
-		podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
+		podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 
 		splunkBin := "/opt/splunk/bin/splunk"
 		username := "admin"
@@ -126,7 +126,7 @@ func RunS1IngestAndSearchTest(ctx context.Context, deployment *testenv.Deploymen
 		return standalone.Status.Phase
 	}, deployment.GetTimeout(), testenv.PollInterval).Should(Equal(enterpriseApi.PhaseReady))
 
-	podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
+	podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 	indexName := "myTestIndex"
 
 	err := testenv.CreateAnIndexStandalone(ctx, indexName, podName, deployment)

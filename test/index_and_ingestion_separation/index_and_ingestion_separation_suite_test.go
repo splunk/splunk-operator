@@ -27,7 +27,7 @@ import (
 
 var (
 	testenvInstance *testenv.TestEnv
-	testSuiteName   = "indexingestionsep-" + testenv.RandomDNSName(3)
+	testSuiteName   = "idxingsep-" + testenv.RandomDNSName(3)
 
 	queue = enterpriseApi.QueueSpec{
 		Provider: "sqs",

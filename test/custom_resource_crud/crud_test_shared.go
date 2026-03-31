@@ -71,9 +71,7 @@ func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 	// Verify cluster is ready
-	testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, func(ctx context.Context, d *testenv.Deployment) {
-		config.ClusterManagerReady(ctx, d, testcaseEnvInst)
-	})
+	config.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst)
 
 	// Verify telemetry
 	testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
@@ -140,9 +138,7 @@ func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, t
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 	// Verify cluster is ready and RF/SF is met
-	testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, func(ctx context.Context, d *testenv.Deployment) {
-		config.ClusterManagerReady(ctx, d, testcaseEnvInst)
-	})
+	config.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst)
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 	// Deploy and verify Monitoring Console
@@ -177,6 +173,7 @@ func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, t
 	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "monitoring-console", 1, false, verificationTimeout)
 }
 
+// verifyC3ClusterPVCs verifies that PVCs for SHC, deployer, indexers, and cluster manager exist or are deleted.
 func verifyC3ClusterPVCs(testcaseEnvInst *testenv.TestCaseEnv, deployment *testenv.Deployment, clusterManagerType string, exists bool, timeout time.Duration) {
 	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-search-head", 3, exists, timeout)
 	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-deployer", 1, exists, timeout)
@@ -189,16 +186,14 @@ func verifyC3ClusterPVCs(testcaseEnvInst *testenv.TestCaseEnv, deployment *teste
 func RunSHCDeployerResourceSpecTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, defaultCPULimits string) {
 	shcName := fmt.Sprintf("%s-shc", deployment.GetName())
 	_, err := deployment.DeploySearchHeadCluster(ctx, shcName, "", "", "", "")
-	if err != nil {
-		Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster", "shc", shcName)
-	}
+	Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster", "shc", shcName)
 
 	// Verify CPU limits on Search Heads and deployer before updating CR
 	searchHeadCount := 3
 	testcaseEnvInst.VerifySearchHeadCPULimits(deployment, deployment.GetName(), searchHeadCount, defaultCPULimits)
 
-	DeployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
-	testcaseEnvInst.VerifyCPULimits(deployment, DeployerPodName, defaultCPULimits)
+	deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
+	testcaseEnvInst.VerifyCPULimits(deployment, deployerPodName, defaultCPULimits)
 
 	shc := &enterpriseApi.SearchHeadCluster{}
 	testenv.GetInstanceWithExpect(ctx, deployment, shc, shcName, "Unable to fetch Search Head Cluster deployment")
@@ -230,7 +225,7 @@ func RunSHCDeployerResourceSpecTest(ctx context.Context, deployment *testenv.Dep
 	testcaseEnvInst.VerifySearchHeadCPULimits(deployment, deployment.GetName(), searchHeadCount, defaultCPULimits)
 
 	// Verify modified deployer spec
-	testcaseEnvInst.VerifyResourceConstraints(deployment, DeployerPodName, depResSpec)
+	testcaseEnvInst.VerifyResourceConstraints(deployment, deployerPodName, depResSpec)
 }
 
 // RunM4CPUUpdateTest runs the standard M4 CPU limit update test workflow
@@ -239,9 +234,7 @@ func RunM4CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	mcRef := deployment.GetName()
 	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
 	siteCount := 3
-	var err error
-
-	err = config.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), 1, siteCount, mcRef)
+	err := config.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), 1, siteCount, mcRef)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 	// Ensure that the cluster-manager goes to Ready phase
@@ -273,7 +266,7 @@ func RunM4CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	}
 
 	// Verify Indexer Cluster is updating
-	idxcName := deployment.GetName() + "-" + "site1"
+	idxcName := deployment.GetName() + "-site1"
 	testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseUpdating, idxcName)
 
 	// Verify Indexers go to ready state

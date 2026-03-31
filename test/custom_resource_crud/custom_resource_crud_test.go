@@ -21,6 +21,13 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
+// masterManagerCrudConfigs defines the V3 (master) and V4 (manager) variants
+// shared by the C3 and M4 CRUD test tables.
+var masterManagerCrudConfigs = []testenv.MasterManagerTestConfig{
+	{NamePrefix: "master", Label: "mastercrcrud", NewConfig: testenv.NewClusterReadinessConfigV3},
+	{NamePrefix: "", Label: "managercrcrud", NewConfig: testenv.NewClusterReadinessConfigV4},
+}
+
 var _ = Describe("Custom Resource CRUD test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
@@ -49,36 +56,27 @@ var _ = Describe("Custom Resource CRUD test", func() {
 	})
 
 	// C3 tests — V3 (master) and V4 (manager) variants
-	c3CrudConfigs := []struct {
-		namePrefix string
-		label      string
-		newConfig  func() *testenv.ClusterReadinessConfig
-	}{
-		{"master", "mastercrcrud", testenv.NewClusterReadinessConfigV3},
-		{"", "managercrcrud", testenv.NewClusterReadinessConfigV4},
-	}
-
-	for _, tc := range c3CrudConfigs {
+	for _, tc := range masterManagerCrudConfigs {
 		tc := tc
 		Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 			BeforeEach(func() {
 				defaultCPULimits = DefaultCPULimits
 				newCPULimits = UpdatedCPULimits
 				verificationTimeout = DefaultVerificationTimeout
-				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.namePrefix)
+				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
 			})
 
 			AfterEach(func() {
 				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 			})
 
-			It(tc.label+", integration, c3: can deploy Indexer and Search Head Cluster, change their CR, update the instances", func() {
-				config := tc.newConfig()
+			It(tc.Label+", integration, c3: can deploy Indexer and Search Head Cluster, change their CR, update the instances", func() {
+				config := tc.NewConfig()
 				RunC3CPUUpdateTest(ctx, deployment, testcaseEnvInst, config, defaultCPULimits, newCPULimits)
 			})
 
-			It(tc.label+", integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", func() {
-				config := tc.newConfig()
+			It(tc.Label+", integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", func() {
+				config := tc.NewConfig()
 				RunC3PVCDeletionTest(ctx, deployment, testcaseEnvInst, config, verificationTimeout)
 			})
 		})
@@ -101,30 +99,21 @@ var _ = Describe("Custom Resource CRUD test", func() {
 	})
 
 	// M4 tests — V3 (master) and V4 (manager) variants
-	m4CrudConfigs := []struct {
-		namePrefix string
-		label      string
-		newConfig  func() *testenv.ClusterReadinessConfig
-	}{
-		{"master", "mastercrcrud", testenv.NewClusterReadinessConfigV3},
-		{"", "managercrcrud", testenv.NewClusterReadinessConfigV4},
-	}
-
-	for _, tc := range m4CrudConfigs {
+	for _, tc := range masterManagerCrudConfigs {
 		tc := tc
 		Context("Multisite cluster deployment (M4 - Multisite Indexer Cluster, Search Head Cluster)", func() {
 			BeforeEach(func() {
 				defaultCPULimits = DefaultCPULimits
 				newCPULimits = UpdatedCPULimits
-				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.namePrefix)
+				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
 			})
 
 			AfterEach(func() {
 				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 			})
 
-			It(tc.label+", integration, m4: can deploy multisite Indexer and Search Head Clusters, change their CR, update the instances", func() {
-				config := tc.newConfig()
+			It(tc.Label+", integration, m4: can deploy multisite Indexer and Search Head Clusters, change their CR, update the instances", func() {
+				config := tc.NewConfig()
 				RunM4CPUUpdateTest(ctx, deployment, testcaseEnvInst, config, defaultCPULimits, newCPULimits)
 			})
 		})

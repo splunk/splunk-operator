@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	. "github.com/onsi/gomega"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -66,6 +67,10 @@ func UpdateMonitoringConsoleRefAndVerify(ctx context.Context, deployment *Deploy
 		GetInstanceWithExpect(ctx, deployment, cr, instanceName, "Failed to get instance")
 		cr.Spec.MonitoringConsoleRef.Name = newMCName
 		UpdateCRWithExpect(ctx, deployment, cr, "Failed to update MonitoringConsoleRef")
+	case *enterpriseApiV3.ClusterMaster:
+		GetInstanceWithExpect(ctx, deployment, cr, instanceName, "Failed to get instance")
+		cr.Spec.MonitoringConsoleRef.Name = newMCName
+		UpdateCRWithExpect(ctx, deployment, cr, "Failed to update MonitoringConsoleRef")
 	case *enterpriseApi.SearchHeadCluster:
 		GetInstanceWithExpect(ctx, deployment, cr, instanceName, "Failed to get instance")
 		cr.Spec.MonitoringConsoleRef.Name = newMCName
@@ -93,26 +98,6 @@ func (testcaseenv *TestCaseEnv) VerifyMCConfigForC3Cluster(ctx context.Context, 
 
 	// Check Indexers in MC Pod config string
 	indexerPods := GeneratePodNameSlice(IndexerPod, deploymentName, indexerReplicas, false, 0)
-	testcaseenv.VerifyPodsInMCConfigString(ctx, deployment, indexerPods, mcName, shouldExist, true)
-}
-
-// VerifyMCConfigForM4Cluster verifies the standard MC configuration for an M4 multisite cluster
-func (testcaseenv *TestCaseEnv) VerifyMCConfigForM4Cluster(ctx context.Context, deployment *Deployment, deploymentName string, mcName string, shReplicas int, indexerReplicas int, siteCount int, shouldExist bool) {
-	// Check cluster manager in MC Config Map
-	testcaseenv.VerifyPodsInMCConfigMap(ctx, deployment, []string{fmt.Sprintf(ClusterMasterServiceName, deploymentName)}, "SPLUNK_CLUSTER_MASTER_URL", mcName, shouldExist)
-
-	// Check deployer in MC Config Map
-	testcaseenv.VerifyPodsInMCConfigMap(ctx, deployment, []string{fmt.Sprintf(DeployerServiceName, deploymentName)}, "SPLUNK_DEPLOYER_URL", mcName, shouldExist)
-
-	// Check Search Head Pods in MC Config Map
-	shPods := GeneratePodNameSlice(SearchHeadPod, deploymentName, shReplicas, false, 0)
-	testcaseenv.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, shouldExist)
-
-	// Check Search Heads in MC Pod config string
-	testcaseenv.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcName, shouldExist, false)
-
-	// Check Indexers in MC Pod config string
-	indexerPods := GeneratePodNameSlice(MultiSiteIndexerPod, deploymentName, indexerReplicas, true, siteCount)
 	testcaseenv.VerifyPodsInMCConfigString(ctx, deployment, indexerPods, mcName, shouldExist, true)
 }
 

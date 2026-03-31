@@ -61,6 +61,51 @@ func verifyLMAndClusterManagerReady(ctx context.Context, deployment *testenv.Dep
 	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 }
 
+// s1WithLMSetup holds the resources created by setupS1WithLMAndMC so that
+// individual test functions can operate on them without repeating the setup.
+type s1WithLMSetup struct {
+	standalone                *enterpriseApi.Standalone
+	mc                        *enterpriseApi.MonitoringConsole
+	resourceVersion           string
+	namespaceScopedSecretName string
+}
+
+// setupS1WithLMAndMC performs the common S1 setup shared by the secret-update
+// and secret-delete tests: license config map, standalone with LM, MC, and
+// initial secret verification.
+func setupS1WithLMAndMC(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) s1WithLMSetup {
+	testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
+
+	mcRef := deployment.GetName()
+	standalone, err := config.DeployStandaloneWithLM(ctx, deployment, deployment.GetName(), mcRef)
+	Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
+
+	verifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, standalone)
+
+	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
+
+	namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
+	_, err = testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
+	Expect(err).To(Succeed(), "Unable to get secret struct")
+
+	return s1WithLMSetup{
+		standalone:                standalone,
+		mc:                        mc,
+		resourceVersion:           resourceVersion,
+		namespaceScopedSecretName: namespaceScopedSecretName,
+	}
+}
+
+// verifyS1SecretChangeApplied verifies that a secret change (update or delete)
+// has been applied to the S1 stack: standalone enters Updating phase, LM and
+// standalone return to Ready, MC version changes, and secrets are propagated.
+func verifyS1SecretChangeApplied(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig, setup s1WithLMSetup, secretData map[string][]byte, updated bool) {
+	testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating)
+	verifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, setup.standalone)
+	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, setup.mc, setup.resourceVersion)
+	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, secretData, updated)
+}
+
 // generateAndApplySecretUpdate creates randomized secret data and applies it to the namespace-scoped
 // secret object, returning the updated data map for subsequent verification.
 func generateAndApplySecretUpdate(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, namespaceScopedSecretName string) map[string][]byte {
@@ -74,90 +119,34 @@ func generateAndApplySecretUpdate(ctx context.Context, deployment *testenv.Deplo
 
 // RunS1SecretUpdateTest runs the standard S1 secret update test workflow
 func RunS1SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
-	// Download License File and create config map
-	testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
-
-	// Create standalone Deployment with License Manager
-	mcRef := deployment.GetName()
-	var standalone *enterpriseApi.Standalone
-	var err error
-
-	standalone, err = config.DeployStandaloneWithLM(ctx, deployment, deployment.GetName(), mcRef)
-	Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
-
-	verifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, standalone)
-
-	// Deploy and verify Monitoring Console
-	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
-
-	// Get Current Secrets Struct
-	namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
-	_, err = testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
-	Expect(err).To(Succeed(), "Unable to get secret struct")
+	setup := setupS1WithLMAndMC(ctx, deployment, testcaseEnvInst, config)
 
 	// Update Secret Value on Secret Object
-	updatedSecretData := generateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, namespaceScopedSecretName)
+	updatedSecretData := generateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, setup.namespaceScopedSecretName)
 
-	// Ensure standalone is updating
-	testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating)
-
-	verifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, standalone)
-
-	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
-
-	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, updatedSecretData, true)
+	verifyS1SecretChangeApplied(ctx, deployment, testcaseEnvInst, config, setup, updatedSecretData, true)
 }
 
 // RunS1SecretDeleteTest runs the standard S1 secret delete test workflow
 func RunS1SecretDeleteTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
-	// Download License File and create config map
-	testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
+	setup := setupS1WithLMAndMC(ctx, deployment, testcaseEnvInst, config)
 
-	// Create standalone Deployment with License Manager
-	mcRef := deployment.GetName()
-	var standalone *enterpriseApi.Standalone
-	var err error
-
-	standalone, err = config.DeployStandaloneWithLM(ctx, deployment, deployment.GetName(), mcRef)
-	Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
-
-	verifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, standalone)
-
-	// Deploy and verify Monitoring Console
-	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
-
-	// Get Current Secrets Struct
-	namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
-	secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
+	// Re-fetch secret struct so we can verify its data is restored after deletion
+	secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), setup.namespaceScopedSecretName)
 	Expect(err).To(Succeed(), "Unable to get secret struct")
 
 	// Delete Secret Object
-	err = testenv.DeleteSecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
+	err = testenv.DeleteSecretObject(ctx, deployment, testcaseEnvInst.GetName(), setup.namespaceScopedSecretName)
 	Expect(err).To(Succeed(), "Unable to delete secret Object")
 
-	// Ensure standalone is updating
-	testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating)
-
-	verifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, standalone)
-
-	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
-
-	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, secretStruct.Data, false)
+	verifyS1SecretChangeApplied(ctx, deployment, testcaseEnvInst, config, setup, secretStruct.Data, false)
 }
 
 // RunS1SecretDeleteWithMCRefTest runs the S1 secret delete test with MC reference workflow
 func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
 	// Create standalone Deployment with MonitoringConsoleRef
-	var standalone *enterpriseApi.Standalone
-	var err error
-
 	mcName := deployment.GetName()
-	standaloneSpec := testenv.NewStandaloneSpecWithMCRef(testcaseEnvInst.GetSplunkImage(), mcName)
-	standalone, err = deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), standaloneSpec)
-	Expect(err).To(Succeed(), "Unable to deploy standalone instance with MonitoringConsoleRef")
-
-	// Wait for Standalone to be in READY status
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+	standalone := testcaseEnvInst.DeployStandaloneWithMCRef(ctx, deployment, deployment.GetName(), mcName)
 
 	// Deploy and verify Monitoring Console
 	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
@@ -168,10 +157,11 @@ func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Dep
 	// Get Current Secrets Struct
 	namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
 	secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
+	testcaseEnvInst.Log.Info("Data in secret object", "data", secretStruct.Data)
 	Expect(err).To(Succeed(), "Unable to get secret struct")
 
-	// Delete Secret Object
-	err = testenv.DeleteSecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
+	// Delete secret by passing empty Data Map
+	err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, map[string][]byte{})
 	Expect(err).To(Succeed(), "Unable to delete secret Object")
 
 	// Ensure standalone is updating
@@ -187,7 +177,7 @@ func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Dep
 
 // RunC3SecretUpdateTest runs the standard C3 secret update test workflow
 func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
-	// Download License File and create config map
+	// Set up license config map
 	testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
 
 	mcRef := deployment.GetName()
@@ -195,16 +185,9 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
-	testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, func(ctx context.Context, d *testenv.Deployment) {
-		config.ClusterManagerReady(ctx, d, testcaseEnvInst)
-	})
+	config.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst)
 
-	mc, resourceVersion, namespaceScopedSecretName := deployMCAndVerifyInitialSecret(ctx, deployment, testcaseEnvInst)
-
-	// Update Secret Value on Secret Object
-	updatedSecretData := generateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, namespaceScopedSecretName)
-
-	config.VerifyClusterManagerPhaseUpdating(ctx, deployment, testcaseEnvInst)
+	mc, resourceVersion, updatedSecretData := applySecretUpdateAndVerifyCMUpdating(ctx, deployment, testcaseEnvInst, config)
 
 	verifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
 
@@ -224,55 +207,54 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	err = testcaseEnvInst.WaitForPasswordSyncCompleted(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
 	Expect(err).To(Succeed(), "Timed out waiting for PasswordSyncCompleted event on IndexerCluster")
 
+	verifyPostSecretChangeCluster(ctx, deployment, testcaseEnvInst, mc, resourceVersion, updatedSecretData)
+}
+
+// verifyPostSecretChangeCluster performs the common tail verification after a
+// secret change on a clustered deployment: MC version changed, RF/SF met, and
+// secrets propagated to all pods.
+func verifyPostSecretChangeCluster(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, mc *enterpriseApi.MonitoringConsole, resourceVersion string, updatedSecretData map[string][]byte) {
 	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
-	// Verify RF SF is met
 	testcaseEnvInst.Log.Info("Checking RF SF after secret change")
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, updatedSecretData, true)
 }
 
-func deployMCAndVerifyInitialSecret(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv) (*enterpriseApi.MonitoringConsole, string, string) {
+// applySecretUpdateAndVerifyCMUpdating deploys MC, verifies RF/SF and initial secret state,
+// applies a secret update, and confirms the Cluster Manager enters the Updating phase.
+// Returns the MC, its resource version, and the updated secret data for post-change verification.
+func applySecretUpdateAndVerifyCMUpdating(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) (*enterpriseApi.MonitoringConsole, string, map[string][]byte) {
 	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
 	testcaseEnvInst.Log.Info("Checking RF SF before secret change")
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 	namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
 	_, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
 	Expect(err).To(Succeed(), "Unable to get secret struct")
-	return mc, resourceVersion, namespaceScopedSecretName
+	updatedSecretData := generateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, namespaceScopedSecretName)
+	config.VerifyClusterManagerPhaseUpdating(ctx, deployment, testcaseEnvInst)
+	return mc, resourceVersion, updatedSecretData
 }
 
 // RunM4SecretUpdateTest runs the standard M4 secret update test workflow
 func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
-	// Download License File and create config map
+	// Set up license config map
 	testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)
 
 	siteCount := 3
 	mcName := deployment.GetName()
-	var err error
 
-	err = config.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), 1, siteCount, mcName)
+	err := config.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), 1, siteCount, mcName)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 	verifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
 	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 
-	mc, resourceVersion, namespaceScopedSecretName := deployMCAndVerifyInitialSecret(ctx, deployment, testcaseEnvInst)
-
-	// Update Secret Value on Secret Object
-	updatedSecretData := generateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, namespaceScopedSecretName)
-
-	config.VerifyClusterManagerPhaseUpdating(ctx, deployment, testcaseEnvInst)
+	mc, resourceVersion, updatedSecretData := applySecretUpdateAndVerifyCMUpdating(ctx, deployment, testcaseEnvInst, config)
 
 	verifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
 	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 
-	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
-
-	// Verify RF SF is met
-	testcaseEnvInst.Log.Info("Checking RF SF after secret change")
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
-
-	verifySecretsPropagated(ctx, deployment, testcaseEnvInst, updatedSecretData, true)
+	verifyPostSecretChangeCluster(ctx, deployment, testcaseEnvInst, mc, resourceVersion, updatedSecretData)
 }

@@ -33,6 +33,16 @@ type ClusterReadinessConfig struct {
 	APIVersion          string
 }
 
+// MasterManagerTestConfig pairs a name prefix and test label with a factory
+// function that returns the appropriate ClusterReadinessConfig.
+// This is the standard config type shared by test packages that loop over
+// V3 (master) and V4 (manager) variants.
+type MasterManagerTestConfig struct {
+	NamePrefix string
+	Label      string
+	NewConfig  func() *ClusterReadinessConfig
+}
+
 // NewClusterReadinessConfigV3 creates a ClusterReadinessConfig for v3 API (LicenseMaster/ClusterMaster)
 func NewClusterReadinessConfigV3() *ClusterReadinessConfig {
 	return &ClusterReadinessConfig{
@@ -75,6 +85,13 @@ func (c *ClusterReadinessConfig) DeployMultisiteCluster(ctx context.Context, dep
 		return deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef)
 	}
 	return deployment.DeployMultisiteClusterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef)
+}
+
+// VerifyC3ClusterReady verifies the C3 cluster is ready using the config's ClusterManagerReady callback.
+func (c *ClusterReadinessConfig) VerifyC3ClusterReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
+	testcaseEnv.VerifyC3ClusterReady(ctx, deployment, func(ctx context.Context, d *Deployment) {
+		c.ClusterManagerReady(ctx, d, testcaseEnv)
+	})
 }
 
 // VerifyClusterManagerPhaseUpdating asserts the Cluster Manager (or ClusterMaster for v3)

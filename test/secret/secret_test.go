@@ -21,6 +21,13 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
+// masterManagerConfigs defines the V3 (master) and V4 (manager) variants
+// shared by the C3 and M4 secret test tables.
+var masterManagerConfigs = []testenv.MasterManagerTestConfig{
+	{NamePrefix: "master", Label: "mastersecret", NewConfig: testenv.NewClusterReadinessConfigV3},
+	{NamePrefix: "", Label: "managersecret", NewConfig: testenv.NewClusterReadinessConfigV4},
+}
+
 var _ = Describe("Secret test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
@@ -59,57 +66,39 @@ var _ = Describe("Secret test", func() {
 	}
 
 	// C3 tests — V3 (master) and V4 (manager) variants
-	c3SecretConfigs := []struct {
-		namePrefix string
-		label      string
-		newConfig  func() *testenv.ClusterReadinessConfig
-	}{
-		{"master", "mastersecret", testenv.NewClusterReadinessConfigV3},
-		{"", "managersecret", testenv.NewClusterReadinessConfigV4},
-	}
-
-	for _, tc := range c3SecretConfigs {
+	for _, tc := range masterManagerConfigs {
 		tc := tc
 		Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 			BeforeEach(func() {
-				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.namePrefix)
+				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
 			})
 
 			AfterEach(func() {
 				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 			})
 
-			It(tc.label+", smoke, c3: secret update on Indexers and Search Head Cluster", func() {
-				config := tc.newConfig()
+			It(tc.Label+", smoke, c3: secret update on Indexers and Search Head Cluster", func() {
+				config := tc.NewConfig()
 				RunC3SecretUpdateTest(ctx, deployment, testcaseEnvInst, config)
 			})
 		})
 	}
 
 	// M4 tests — V3 (master) and V4 (manager) variants
-	m4SecretConfigs := []struct {
-		namePrefix string
-		label      string
-		newConfig  func() *testenv.ClusterReadinessConfig
-	}{
-		{"master", "mastersecret", testenv.NewClusterReadinessConfigV3},
-		{"", "managersecret", testenv.NewClusterReadinessConfigV4},
-	}
-
-	for _, tc := range m4SecretConfigs {
+	for _, tc := range masterManagerConfigs {
 		tc := tc
 		Context("Multisite cluster deployment (M4 - Multisite Indexer Cluster, Search Head Cluster)", func() {
 			BeforeEach(func() {
 				testenv.SpecifiedTestTimeout = 40000
-				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.namePrefix)
+				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
 			})
 
 			AfterEach(func() {
 				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
 			})
 
-			It(tc.label+", integration, m4: secret update on multisite Indexers and Search Head Cluster", func() {
-				config := tc.newConfig()
+			It(tc.Label+", integration, m4: secret update on multisite Indexers and Search Head Cluster", func() {
+				config := tc.NewConfig()
 				RunM4SecretUpdateTest(ctx, deployment, testcaseEnvInst, config)
 			})
 		})
