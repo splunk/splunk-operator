@@ -36,8 +36,9 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/splunk/splunk-operator/pkg/logging"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -2591,8 +2592,7 @@ func TestUpdateReconcileRequeueTime(t *testing.T) {
 	//  to test the value
 	var result *reconcile.Result
 	ctx := context.TODO()
-	// set logger in context
-	ctx = log.IntoContext(ctx, log.Log)
+	ctx = logging.WithLogger(ctx, logging.FromContext(ctx))
 	rqTime := time.Duration(time.Second * 12)
 
 	// failure when result is nil

@@ -26,15 +26,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // ApplyConfigMap creates or updates a Kubernetes ConfigMap
 func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, configMap *corev1.ConfigMap) (bool, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyConfigMap").WithValues(
+	scopedLog := logging.FromContext(ctx).With("func", "ApplyConfigMap",
 		"name", configMap.GetObjectMeta().GetName(),
 		"namespace", configMap.GetObjectMeta().GetNamespace())
 
@@ -53,14 +52,14 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 		// from the data on the configMap passed as an argument to this function
 		dataDifferent := false
 		if !reflect.DeepEqual(configMap.Data, current.Data) {
-			scopedLog.Info("Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
+			scopedLog.InfoContext(ctx, "Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
 			current.Data = configMap.Data
 			updateNeeded = true
 			dataDifferent = true
 			configMap = &current
 		}
 		if !reflect.DeepEqual(configMap.GetOwnerReferences(), current.GetOwnerReferences()) {
-			scopedLog.Info("Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
+			scopedLog.InfoContext(ctx, "Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
 			current.OwnerReferences = configMap.OwnerReferences
 			updateNeeded = true
 			configMap = &current
@@ -77,7 +76,7 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 				}
 			}
 		} else {
-			scopedLog.Info("No changes for ConfigMap")
+			scopedLog.InfoContext(ctx, "No changes for ConfigMap")
 		}
 
 	} else if k8serrors.IsNotFound(err) {
@@ -87,7 +86,7 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 			retryCount := 0
 			gerr := client.Get(ctx, namespacedName, &current)
 			for ; gerr != nil; gerr = client.Get(ctx, namespacedName, &current) {
-				scopedLog.Error(gerr, "Newly created resource still not in cache sleeping for 10 micro second", "configmap", configMap.Name, "error", gerr.Error())
+				scopedLog.ErrorContext(ctx, "Newly created resource still not in cache sleeping for 10 micro second", "configmap", configMap.Name, "error", gerr)
 				time.Sleep(10 * time.Microsecond)
 				retryCount++
 				if retryCount > 20 {

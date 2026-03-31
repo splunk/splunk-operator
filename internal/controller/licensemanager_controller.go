@@ -78,7 +78,7 @@ func (r *LicenseManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "LicenseManager")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "LicenseManager")
 
-	logger := slog.Default().With("controller", "LicenseManager", "name", req.Name, "namespace", req.Namespace)
+	logger := slog.Default().With("controller", "LicenseManager", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 	ctx = logging.WithLogger(ctx, logger)
 
 	// Fetch the LicenseManager

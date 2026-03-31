@@ -18,18 +18,17 @@ package splkcontroller
 import (
 	"context"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // ApplyService creates or updates a Kubernetes Service
 func ApplyService(ctx context.Context, client splcommon.ControllerClient, revised *corev1.Service) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyService").WithValues(
+	scopedLog := logging.FromContext(ctx).With("func", "ApplyService",
 		"name", revised.GetObjectMeta().GetName(),
 		"namespace", revised.GetObjectMeta().GetNamespace())
 
@@ -49,7 +48,7 @@ func ApplyService(ctx context.Context, client splcommon.ControllerClient, revise
 
 	// only update if there are material differences, as determined by comparison function
 	if hasUpdates {
-		scopedLog.Info("Updating existing Service")
+		scopedLog.InfoContext(ctx, "Updating existing Service")
 		err = splutil.UpdateResource(ctx, client, revised)
 		if err != nil {
 			return err
@@ -61,6 +60,6 @@ func ApplyService(ctx context.Context, client splcommon.ControllerClient, revise
 	}
 
 	// all is good!
-	scopedLog.Info("No update to existing Service")
+	scopedLog.InfoContext(ctx, "No update to existing Service")
 	return nil
 }

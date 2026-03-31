@@ -27,7 +27,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"github.com/splunk/splunk-operator/pkg/logging"
 )
 
 // blank assignment to verify that MinioClient implements RemoteDataClient
@@ -88,27 +88,26 @@ func InitMinioClientWrapper(ctx context.Context, appS3Endpoint string, accessKey
 
 // InitMinioClientSession initializes and returns a client session object
 func InitMinioClientSession(ctx context.Context, appS3Endpoint string, accessKeyID string, secretAccessKey string) SplunkMinioClient {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("InitMinioClientSession")
+	scopedLog := logging.FromContext(ctx).With("func", "InitMinioClientSession")
 
 	// Check if SSL is needed
 	useSSL := true
 	if strings.HasPrefix(appS3Endpoint, "http://") {
 		// We should always use a secure SSL endpoint, so we won't set useSSL = false
-		scopedLog.Info("Using insecure endpoint, useSSL=false for Minio Client Session", "appS3Endpoint", appS3Endpoint)
+		scopedLog.InfoContext(ctx, "Using insecure endpoint, useSSL=false for Minio Client Session", "appS3Endpoint", appS3Endpoint)
 		appS3Endpoint = strings.TrimPrefix(appS3Endpoint, "http://")
 		useSSL = false
 	} else if strings.HasPrefix(appS3Endpoint, "https://") {
 		appS3Endpoint = strings.TrimPrefix(appS3Endpoint, "https://")
 	} else {
 		// Unsupported endpoint
-		scopedLog.Info("Unsupported endpoint for Minio S3 client", "appS3Endpoint", appS3Endpoint)
+		scopedLog.InfoContext(ctx, "Unsupported endpoint for Minio S3 client", "appS3Endpoint", appS3Endpoint)
 		return nil
 	}
 
 	// New returns an Minio compatible client object. API compatibility (v2 or v4) is automatically
 	// determined based on the Endpoint value.
-	scopedLog.Info("Connecting to Minio S3 for apps", "appS3Endpoint", appS3Endpoint)
+	scopedLog.InfoContext(ctx, "Connecting to Minio S3 for apps", "appS3Endpoint", appS3Endpoint)
 	var s3Client *minio.Client
 	var err error
 
@@ -130,12 +129,12 @@ func InitMinioClientSession(ctx context.Context, appS3Endpoint string, accessKey
 	if accessKeyID != "" && secretAccessKey != "" {
 		options.Creds = credentials.NewStaticV4(accessKeyID, secretAccessKey, "")
 	} else {
-		scopedLog.Info("No Access/Secret Keys, attempt connection without them using IAM", "appS3Endpoint", appS3Endpoint)
+		scopedLog.InfoContext(ctx, "No Access/Secret Keys, attempt connection without them using IAM", "appS3Endpoint", appS3Endpoint)
 		options.Creds = credentials.NewIAM("")
 	}
 	s3Client, err = minio.New(appS3Endpoint, options)
 	if err != nil {
-		scopedLog.Info("Error creating new Minio Client Session", "err", err)
+		scopedLog.InfoContext(ctx, "Error creating new Minio Client Session", "err", err)
 		return nil
 	}
 
@@ -144,10 +143,9 @@ func InitMinioClientSession(ctx context.Context, appS3Endpoint string, accessKey
 
 // GetAppsList get the list of apps from remote storage
 func (client *MinioClient) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("GetAppsList")
+	scopedLog := logging.FromContext(ctx).With("func", "GetAppsList")
 
-	scopedLog.Info("Getting Apps list", " S3 Bucket", client.BucketName, "Prefix", client.Prefix)
+	scopedLog.InfoContext(ctx, "Getting Apps list", "S3 Bucket", client.BucketName, "Prefix", client.Prefix)
 	remoteDataClientResponse := RemoteDataListResponse{}
 	s3Client := client.Client
 
@@ -164,7 +162,7 @@ func (client *MinioClient) GetAppsList(ctx context.Context) (RemoteDataListRespo
 			err := fmt.Errorf("got an object error: %v for bucket: %s", object.Err, client.BucketName)
 			return remoteDataClientResponse, err
 		}
-		scopedLog.Info("Got an object", "object", object)
+		scopedLog.InfoContext(ctx, "Got an object", "object", object)
 
 		// Create a new object to add to append to the response
 		newETag := object.ETag
@@ -181,13 +179,12 @@ func (client *MinioClient) GetAppsList(ctx context.Context) (RemoteDataListRespo
 
 // DownloadApp downloads an app package from remote storage
 func (client *MinioClient) DownloadApp(ctx context.Context, downloadRequest RemoteDataDownloadRequest) (bool, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("DownloadApp").WithValues("remoteFile", downloadRequest.RemoteFile,
-		downloadRequest.LocalFile, downloadRequest.Etag)
+	scopedLog := logging.FromContext(ctx).With("func", "DownloadApp", "remoteFile", downloadRequest.RemoteFile,
+		"localFile", downloadRequest.LocalFile, "etag", downloadRequest.Etag)
 
 	file, err := os.Create(downloadRequest.LocalFile)
 	if err != nil {
-		scopedLog.Error(err, "Unable to create local file")
+		scopedLog.ErrorContext(ctx, "Unable to create local file", "error", err)
 		return false, err
 	}
 	defer file.Close()
@@ -197,17 +194,17 @@ func (client *MinioClient) DownloadApp(ctx context.Context, downloadRequest Remo
 	options := minio.GetObjectOptions{}
 	// set the option to match the specified etag on remote storage
 	if err = options.SetMatchETag(downloadRequest.Etag); err != nil {
-		scopedLog.Error(err, "Unable to set match etag")
+		scopedLog.ErrorContext(ctx, "Unable to set match etag", "error", err)
 		return false, err
 	}
 
 	err = s3Client.FGetObject(ctx, client.BucketName, downloadRequest.RemoteFile, downloadRequest.LocalFile, options)
 	if err != nil {
-		scopedLog.Error(err, "Unable to download remote file")
+		scopedLog.ErrorContext(ctx, "Unable to download remote file", "error", err)
 		return false, err
 	}
 
-	scopedLog.Info("File downloaded")
+	scopedLog.InfoContext(ctx, "File downloaded")
 
 	return true, nil
 }

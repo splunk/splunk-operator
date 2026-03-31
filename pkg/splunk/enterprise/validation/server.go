@@ -25,11 +25,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var serverLog = ctrl.Log.WithName("webhook-server")
@@ -138,8 +138,8 @@ func (s *WebhookServer) Start(ctx context.Context) error {
 
 // handleValidate handles validation requests
 func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
-	reqLog := log.FromContext(r.Context()).WithName("webhook-server")
-	reqLog.V(1).Info("Received validation request", "method", r.Method, "path", r.URL.Path)
+	logger := logging.FromContext(r.Context()).With("func", "handleValidate")
+	logger.DebugContext(r.Context(), "Received validation request", "method", r.Method, "path", r.URL.Path)
 
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -148,7 +148,7 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		reqLog.Error(err, "Failed to read request body")
+		logger.ErrorContext(r.Context(), "Failed to read request body", "error", err)
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return
 	}
@@ -156,13 +156,13 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 
 	var admissionReview admissionv1.AdmissionReview
 	if err := json.Unmarshal(body, &admissionReview); err != nil {
-		reqLog.Error(err, "Failed to decode admission review")
+		logger.ErrorContext(r.Context(), "Failed to decode admission review", "error", err)
 		http.Error(w, "Failed to decode admission review", http.StatusBadRequest)
 		return
 	}
 
 	if admissionReview.Request != nil {
-		reqLog.Info("Processing admission request",
+		logger.InfoContext(r.Context(), "Processing admission request",
 			"kind", admissionReview.Request.Kind.Kind,
 			"name", admissionReview.Request.Name,
 			"namespace", admissionReview.Request.Namespace,
@@ -177,7 +177,7 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if validationErr != nil {
-		reqLog.Info("Validation failed",
+		logger.InfoContext(r.Context(), "Validation failed",
 			"kind", admissionReview.Request.Kind.Kind,
 			"name", admissionReview.Request.Name,
 			"error", validationErr.Error())

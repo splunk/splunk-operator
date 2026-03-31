@@ -80,7 +80,7 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "IndexerCluster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "IndexerCluster")
 
-	logger := slog.Default().With("controller", "IndexerCluster", "name", req.Name, "namespace", req.Namespace)
+	logger := slog.Default().With("controller", "IndexerCluster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 	ctx = logging.WithLogger(ctx, logger)
 
 	// Fetch the IndexerCluster

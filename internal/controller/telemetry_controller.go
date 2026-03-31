@@ -54,7 +54,7 @@ func (r *TelemetryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "Telemetry")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "Telemetry")
 
-	logger := slog.Default().With("controller", "Telemetry", "name", req.Name, "namespace", req.Namespace)
+	logger := slog.Default().With("controller", "Telemetry", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 	ctx = logging.WithLogger(ctx, logger)
 
 	logger.InfoContext(ctx, "Reconciling telemetry")

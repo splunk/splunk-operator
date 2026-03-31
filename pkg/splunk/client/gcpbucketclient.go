@@ -23,9 +23,9 @@ import (
 
 	"cloud.google.com/go/storage"
 	//"golang.org/x/oauth2/google"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // blank assignment to verify that GCSClient implements RemoteDataClient
@@ -109,8 +109,7 @@ type GCSClient struct {
 
 // InitGCSClient initializes and returns a GCS client implementing GCSClientInterface
 func InitGCSClient(ctx context.Context, gcpCredentials string) (GCSClientInterface, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("InitGCSClient")
+	scopedLog := logging.FromContext(ctx).With("func", "InitGCSClient")
 
 	var client *storage.Client
 	var err error
@@ -134,11 +133,11 @@ func InitGCSClient(ctx context.Context, gcpCredentials string) (GCSClientInterfa
 	}
 
 	if err != nil {
-		scopedLog.Error(err, "Failed to initialize a GCS client.")
+		scopedLog.ErrorContext(ctx, "Failed to initialize a GCS client.", "error", err)
 		return nil, err
 	}
 
-	scopedLog.Info("GCS Client initialization successful.")
+	scopedLog.InfoContext(ctx, "GCS Client initialization successful.")
 	return &GCSClientWrapper{Client: client}, nil
 }
 
@@ -175,10 +174,9 @@ func RegisterGCSClient() {
 
 // GetAppsList gets the list of apps from remote storage
 func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("GetAppsList")
+	scopedLog := logging.FromContext(ctx).With("func", "GetAppsList")
 
-	scopedLog.Info("Getting Apps list", "GCS Bucket", gcsClient.BucketName)
+	scopedLog.InfoContext(ctx, "Getting Apps list", "GCS Bucket", gcsClient.BucketName)
 	remoteDataClientResponse := RemoteDataListResponse{}
 
 	query := &storage.Query{
@@ -202,7 +200,7 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 			break
 		}
 		if err != nil {
-			scopedLog.Error(err, "Error fetching object from GCS", "GCS Bucket", gcsClient.BucketName)
+			scopedLog.ErrorContext(ctx, "Error fetching object from GCS", "GCS Bucket", gcsClient.BucketName, "error", err)
 			return remoteDataClientResponse, err
 		}
 
@@ -234,13 +232,12 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 
 // DownloadApp downloads the app from remote storage to the local file system
 func (gcsClient *GCSClient) DownloadApp(ctx context.Context, downloadRequest RemoteDataDownloadRequest) (bool, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("DownloadApp").WithValues("remoteFile", downloadRequest.RemoteFile, "localFile",
+	scopedLog := logging.FromContext(ctx).With("func", "DownloadApp", "remoteFile", downloadRequest.RemoteFile, "localFile",
 		downloadRequest.LocalFile, "etag", downloadRequest.Etag)
 
 	file, err := os.Create(downloadRequest.LocalFile)
 	if err != nil {
-		scopedLog.Error(err, "Unable to open local file")
+		scopedLog.ErrorContext(ctx, "Unable to open local file", "error", err)
 		return false, err
 	}
 	defer file.Close()
@@ -248,18 +245,18 @@ func (gcsClient *GCSClient) DownloadApp(ctx context.Context, downloadRequest Rem
 	objHandle := gcsClient.BucketHandle.Object(downloadRequest.RemoteFile)
 	reader, err := objHandle.NewReader(ctx)
 	if err != nil {
-		scopedLog.Error(err, "Unable to download item", "RemoteFile", downloadRequest.RemoteFile)
+		scopedLog.ErrorContext(ctx, "Unable to download item", "RemoteFile", downloadRequest.RemoteFile, "error", err)
 		os.Remove(downloadRequest.LocalFile)
 		return false, err
 	}
 	defer reader.Close()
 
 	if _, err := io.Copy(file, reader); err != nil {
-		scopedLog.Error(err, "Unable to copy data to local file")
+		scopedLog.ErrorContext(ctx, "Unable to copy data to local file", "error", err)
 		return false, err
 	}
 
-	scopedLog.Info("File downloaded")
+	scopedLog.InfoContext(ctx, "File downloaded")
 
 	return true, nil
 }

@@ -26,8 +26,8 @@ import (
 	//stdlog "log"
 	//"github.com/go-logr/stdr"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // kubernetes logger used by splunk.reconcile package
@@ -53,20 +53,19 @@ func MergePodUpdates(ctx context.Context, current *corev1.PodTemplateSpec, revis
 // current. This enables us to minimize updates. It returns true if there
 // are material differences between them, or false otherwise.
 func MergePodMetaUpdates(ctx context.Context, current *metav1.ObjectMeta, revised *metav1.ObjectMeta, name string) bool {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("MergePodMetaUpdates").WithValues("name", name)
+	scopedLog := logging.FromContext(ctx).With("func", "MergePodMetaUpdates", "name", name)
 	result := false
 
 	// check Annotations
 	if !reflect.DeepEqual(current.Annotations, revised.Annotations) {
-		scopedLog.Info("Container Annotations differ", "current", current.Annotations, "revised", revised.Annotations)
+		scopedLog.InfoContext(ctx, "Container Annotations differ", "current", current.Annotations, "revised", revised.Annotations)
 		current.Annotations = revised.Annotations
 		result = true
 	}
 
 	// check Labels
 	if !reflect.DeepEqual(current.Labels, revised.Labels) {
-		scopedLog.Info("Container Labels differ", "current", current.Labels, "revised", revised.Labels)
+		scopedLog.InfoContext(ctx, "Container Labels differ", "current", current.Labels, "revised", revised.Labels)
 		current.Labels = revised.Labels
 		result = true
 	}
@@ -79,13 +78,12 @@ func MergePodMetaUpdates(ctx context.Context, current *metav1.ObjectMeta, revise
 // current. This enables us to minimize updates. It returns true if there
 // are material differences between them, or false otherwise.
 func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *corev1.PodSpec, name string) bool {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("MergePodUpdates").WithValues("name", name)
+	scopedLog := logging.FromContext(ctx).With("func", "MergePodUpdates", "name", name)
 	result := false
 
 	// check for changes in ServiceAccount
 	if splcommon.CompareByMarshall(current.ServiceAccountName, revised.ServiceAccountName) {
-		scopedLog.Info("Pod service account differs",
+		scopedLog.InfoContext(ctx, "Pod service account differs",
 			"current", current.ServiceAccountName,
 			"revised", revised.ServiceAccountName)
 		current.ServiceAccountName = revised.ServiceAccountName
@@ -94,7 +92,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 
 	// check for changes in Affinity
 	if splcommon.CompareByMarshall(current.Affinity, revised.Affinity) {
-		scopedLog.Info("Pod Affinity differs",
+		scopedLog.InfoContext(ctx, "Pod Affinity differs",
 			"current", current.Affinity,
 			"revised", revised.Affinity)
 		current.Affinity = revised.Affinity
@@ -103,7 +101,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 
 	// check for changes in Tolerations
 	if splcommon.CompareTolerations(current.Tolerations, revised.Tolerations) {
-		scopedLog.Info("Pod Tolerations differs",
+		scopedLog.InfoContext(ctx, "Pod Tolerations differs",
 			"current", current.Tolerations,
 			"revised", revised.Tolerations)
 		current.Tolerations = revised.Tolerations
@@ -112,7 +110,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 
 	// check for changes in TopologySpreadConstraint
 	if splcommon.CompareTopologySpreadConstraints(current.TopologySpreadConstraints, revised.TopologySpreadConstraints) {
-		scopedLog.Info("Pod TopologySpreadConstraint differs",
+		scopedLog.InfoContext(ctx, "Pod TopologySpreadConstraint differs",
 			"current", current.TopologySpreadConstraints,
 			"revised", revised.TopologySpreadConstraints)
 		current.TopologySpreadConstraints = revised.TopologySpreadConstraints
@@ -121,7 +119,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 
 	// check for changes in ImagePullSecrets
 	if splcommon.CompareImagePullSecrets(current.ImagePullSecrets, revised.ImagePullSecrets) {
-		scopedLog.Info("Pod ImagePullSecrets differs",
+		scopedLog.InfoContext(ctx, "Pod ImagePullSecrets differs",
 			"current", current.ImagePullSecrets,
 			"revised", revised.ImagePullSecrets)
 		current.ImagePullSecrets = revised.ImagePullSecrets
@@ -130,7 +128,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 
 	// check for changes in SchedulerName
 	if current.SchedulerName != revised.SchedulerName {
-		scopedLog.Info("Pod SchedulerName differs",
+		scopedLog.InfoContext(ctx, "Pod SchedulerName differs",
 			"current", current.SchedulerName,
 			"revised", revised.SchedulerName)
 		current.SchedulerName = revised.SchedulerName
@@ -139,7 +137,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 
 	// Check for changes in Volumes
 	if splcommon.CompareVolumes(current.Volumes, revised.Volumes) {
-		scopedLog.Info("Pod Volumes differ",
+		scopedLog.InfoContext(ctx, "Pod Volumes differ",
 			"current", current.Volumes,
 			"revised", revised.Volumes)
 		current.Volumes = revised.Volumes
@@ -148,7 +146,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 
 	// Check for changes in Init containers
 	if len(current.InitContainers) != len(revised.InitContainers) {
-		scopedLog.Info("Pod init containers  differ",
+		scopedLog.InfoContext(ctx, "Pod init containers  differ",
 			"current", len(current.InitContainers),
 			"revised", len(revised.InitContainers))
 		current.InitContainers = revised.InitContainers
@@ -157,7 +155,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 		for idx := range current.InitContainers {
 			// check Image
 			if current.InitContainers[idx].Image != revised.InitContainers[idx].Image {
-				scopedLog.Info("Init Container Images differ",
+				scopedLog.InfoContext(ctx, "Init Container Images differ",
 					"current", current.InitContainers[idx].Image,
 					"revised", revised.InitContainers[idx].Image)
 				current.InitContainers[idx].Image = revised.InitContainers[idx].Image
@@ -168,7 +166,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 
 	// check for changes in container images; assume that the ordering is same for pods with > 1 container
 	if len(current.Containers) != len(revised.Containers) {
-		scopedLog.Info("Pod Container counts differ",
+		scopedLog.InfoContext(ctx, "Pod Container counts differ",
 			"current", len(current.Containers),
 			"revised", len(revised.Containers))
 		current.Containers = revised.Containers
@@ -177,7 +175,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 		for idx := range current.Containers {
 			// check Image
 			if current.Containers[idx].Image != revised.Containers[idx].Image {
-				scopedLog.Info("Pod Container Images differ",
+				scopedLog.InfoContext(ctx, "Pod Container Images differ",
 					"current", current.Containers[idx].Image,
 					"revised", revised.Containers[idx].Image)
 				current.Containers[idx].Image = revised.Containers[idx].Image
@@ -186,7 +184,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 
 			// check Ports
 			if splcommon.CompareContainerPorts(current.Containers[idx].Ports, revised.Containers[idx].Ports) {
-				scopedLog.Info("Pod Container Ports differ",
+				scopedLog.InfoContext(ctx, "Pod Container Ports differ",
 					"current", current.Containers[idx].Ports,
 					"revised", revised.Containers[idx].Ports)
 				current.Containers[idx].Ports = revised.Containers[idx].Ports
@@ -195,7 +193,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 
 			// check VolumeMounts
 			if splcommon.CompareVolumeMounts(current.Containers[idx].VolumeMounts, revised.Containers[idx].VolumeMounts) {
-				scopedLog.Info("Pod Container VolumeMounts differ",
+				scopedLog.InfoContext(ctx, "Pod Container VolumeMounts differ",
 					"current", current.Containers[idx].VolumeMounts,
 					"revised", revised.Containers[idx].VolumeMounts)
 				current.Containers[idx].VolumeMounts = revised.Containers[idx].VolumeMounts
@@ -204,7 +202,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 
 			// check Resources
 			if splcommon.CompareByMarshall(&current.Containers[idx].Resources, &revised.Containers[idx].Resources) {
-				scopedLog.Info("Pod Container Resources differ",
+				scopedLog.InfoContext(ctx, "Pod Container Resources differ",
 					"current", current.Containers[idx].Resources,
 					"revised", revised.Containers[idx].Resources)
 				current.Containers[idx].Resources = revised.Containers[idx].Resources
@@ -213,7 +211,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 
 			// check Env
 			if splcommon.CompareEnvs(current.Containers[idx].Env, revised.Containers[idx].Env) {
-				scopedLog.Info("Pod Container Envs differ",
+				scopedLog.InfoContext(ctx, "Pod Container Envs differ",
 					"current", current.Containers[idx].Env,
 					"revised", revised.Containers[idx].Env)
 				current.Containers[idx].Env = revised.Containers[idx].Env
@@ -222,7 +220,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 
 			// check probes
 			if hasProbeChanged(current.Containers[idx].LivenessProbe, revised.Containers[idx].LivenessProbe) {
-				scopedLog.Info("Pod Container Liveness Probe differ",
+				scopedLog.InfoContext(ctx, "Pod Container Liveness Probe differ",
 					"current", current.Containers[idx].LivenessProbe,
 					"revised", revised.Containers[idx].LivenessProbe)
 				current.Containers[idx].LivenessProbe = revised.Containers[idx].LivenessProbe
@@ -230,7 +228,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 			}
 
 			if hasProbeChanged(current.Containers[idx].ReadinessProbe, revised.Containers[idx].ReadinessProbe) {
-				scopedLog.Info("Pod Container ReadinessProbe Probe differ",
+				scopedLog.InfoContext(ctx, "Pod Container ReadinessProbe Probe differ",
 					"current", current.Containers[idx].ReadinessProbe,
 					"revised", revised.Containers[idx].ReadinessProbe)
 				current.Containers[idx].ReadinessProbe = revised.Containers[idx].ReadinessProbe
@@ -238,7 +236,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 			}
 
 			if hasProbeChanged(current.Containers[idx].StartupProbe, revised.Containers[idx].StartupProbe) {
-				scopedLog.Info("Pod Container StartupProbe Probe differ",
+				scopedLog.InfoContext(ctx, "Pod Container StartupProbe Probe differ",
 					"current", current.Containers[idx].StartupProbe,
 					"revised", revised.Containers[idx].StartupProbe)
 				current.Containers[idx].StartupProbe = revised.Containers[idx].StartupProbe
@@ -252,8 +250,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 
 // SortStatefulSetSlices sorts required slices in a statefulSet
 func SortStatefulSetSlices(ctx context.Context, current *corev1.PodSpec, name string) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("SortStatefulSetSlices").WithValues("name", name)
+	scopedLog := logging.FromContext(ctx).With("func", "SortStatefulSetSlices", "name", name)
 
 	// Sort tolerations
 	splcommon.SortSlice(current.Tolerations, splcommon.SortFieldKey)
@@ -278,20 +275,19 @@ func SortStatefulSetSlices(ctx context.Context, current *corev1.PodSpec, name st
 		// Sort env variables
 		splcommon.SortSlice(current.Containers[idx].Env, splcommon.SortFieldName)
 	}
-	scopedLog.Info("Successfully sorted slices in statefulSet")
+	scopedLog.InfoContext(ctx, "Successfully sorted slices in statefulSet")
 
 	return nil
 }
 
 // MergeServiceSpecUpdates merges the current and revised spec of the service object
 func MergeServiceSpecUpdates(ctx context.Context, current *corev1.ServiceSpec, revised *corev1.ServiceSpec, name string) bool {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("MergeServiceSpecUpdates").WithValues("name", name)
+	scopedLog := logging.FromContext(ctx).With("func", "MergeServiceSpecUpdates", "name", name)
 	result := false
 
 	// check service Type
 	if current.Type != revised.Type {
-		scopedLog.Info("Service Type differs",
+		scopedLog.InfoContext(ctx, "Service Type differs",
 			"current", current.Type,
 			"revised", revised.Type)
 		current.Type = revised.Type
@@ -299,7 +295,7 @@ func MergeServiceSpecUpdates(ctx context.Context, current *corev1.ServiceSpec, r
 	}
 
 	if current.ExternalName != revised.ExternalName {
-		scopedLog.Info("External Name differs",
+		scopedLog.InfoContext(ctx, "External Name differs",
 			"current", current.ExternalName,
 			"revised", revised.ExternalName)
 		current.ExternalName = revised.ExternalName
@@ -307,7 +303,7 @@ func MergeServiceSpecUpdates(ctx context.Context, current *corev1.ServiceSpec, r
 	}
 
 	if current.ExternalTrafficPolicy != revised.ExternalTrafficPolicy {
-		scopedLog.Info("External Traffic Policy differs",
+		scopedLog.InfoContext(ctx, "External Traffic Policy differs",
 			"current", current.ExternalTrafficPolicy,
 			"revised", revised.ExternalTrafficPolicy)
 		current.ExternalTrafficPolicy = revised.ExternalTrafficPolicy
@@ -315,7 +311,7 @@ func MergeServiceSpecUpdates(ctx context.Context, current *corev1.ServiceSpec, r
 	}
 
 	if splcommon.CompareSortedStrings(current.ExternalIPs, revised.ExternalIPs) {
-		scopedLog.Info("External IPs differs",
+		scopedLog.InfoContext(ctx, "External IPs differs",
 			"current", current.ExternalIPs,
 			"revised", revised.ExternalIPs)
 		current.ExternalIPs = revised.ExternalIPs
@@ -324,7 +320,7 @@ func MergeServiceSpecUpdates(ctx context.Context, current *corev1.ServiceSpec, r
 
 	// check for changes in Ports
 	if splcommon.CompareServicePorts(current.Ports, revised.Ports) {
-		scopedLog.Info("Service Ports differs",
+		scopedLog.InfoContext(ctx, "Service Ports differs",
 			"current", current.Ports,
 			"revised", revised.Ports)
 		current.Ports = revised.Ports

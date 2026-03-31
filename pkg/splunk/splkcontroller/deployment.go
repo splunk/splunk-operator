@@ -19,20 +19,19 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 )
 
 // ApplyDeployment creates or updates a Kubernetes Deployment
 func ApplyDeployment(ctx context.Context, c splcommon.ControllerClient, revised *appsv1.Deployment) (enterpriseApi.Phase, error) {
-	log := log.FromContext(ctx)
-	scopedLog := log.WithName("ApplyDeployment").WithValues(
+	scopedLog := logging.FromContext(ctx).With("func", "ApplyDeployment",
 		"name", revised.GetObjectMeta().GetName(),
 		"namespace", revised.GetObjectMeta().GetNamespace())
 
@@ -56,11 +55,11 @@ func ApplyDeployment(ctx context.Context, c splcommon.ControllerClient, revised 
 	// check for scaling
 	if revised.Spec.Replicas != nil {
 		if *revised.Spec.Replicas < desiredReplicas {
-			scopedLog.Info(fmt.Sprintf("Scaling replicas up to %d", desiredReplicas))
+			scopedLog.InfoContext(ctx, fmt.Sprintf("Scaling replicas up to %d", desiredReplicas))
 			*revised.Spec.Replicas = desiredReplicas
 			return enterpriseApi.PhaseScalingUp, splutil.UpdateResource(ctx, c, revised)
 		} else if *revised.Spec.Replicas > desiredReplicas {
-			scopedLog.Info(fmt.Sprintf("Scaling replicas down to %d", desiredReplicas))
+			scopedLog.InfoContext(ctx, fmt.Sprintf("Scaling replicas down to %d", desiredReplicas))
 			*revised.Spec.Replicas = desiredReplicas
 			return enterpriseApi.PhaseScalingDown, splutil.UpdateResource(ctx, c, revised)
 		}
@@ -73,13 +72,13 @@ func ApplyDeployment(ctx context.Context, c splcommon.ControllerClient, revised 
 
 	// check if updates are in progress
 	if revised.Status.UpdatedReplicas < revised.Status.Replicas {
-		scopedLog.Info("Waiting for updates to complete")
+		scopedLog.InfoContext(ctx, "Waiting for updates to complete")
 		return enterpriseApi.PhaseUpdating, nil
 	}
 
 	// check if replicas are not yet ready
 	if revised.Status.ReadyReplicas < desiredReplicas {
-		scopedLog.Info("Waiting for pods to become ready")
+		scopedLog.InfoContext(ctx, "Waiting for pods to become ready")
 		if revised.Status.ReadyReplicas > 0 {
 			return enterpriseApi.PhaseScalingUp, nil
 		}
@@ -87,6 +86,6 @@ func ApplyDeployment(ctx context.Context, c splcommon.ControllerClient, revised 
 	}
 
 	// all is good!
-	scopedLog.Info("All pods are ready")
+	scopedLog.InfoContext(ctx, "All pods are ready")
 	return enterpriseApi.PhaseReady, nil
 }

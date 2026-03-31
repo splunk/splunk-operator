@@ -78,7 +78,7 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "SearchHeadCluster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "SearchHeadCluster")
 
-	logger := slog.Default().With("controller", "SearchHeadCluster", "name", req.Name, "namespace", req.Namespace)
+	logger := slog.Default().With("controller", "SearchHeadCluster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 	ctx = logging.WithLogger(ctx, logger)
 
 	// Fetch the SearchHeadCluster

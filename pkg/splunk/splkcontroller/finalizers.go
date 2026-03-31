@@ -19,10 +19,9 @@ import (
 	"context"
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func init() {
@@ -38,25 +37,24 @@ var SplunkFinalizerRegistry map[string]SplunkFinalizerMethod
 // CheckForDeletion checks to see if deletion was requested for the custom resource.
 // If so, it will process and remove any remaining finalizers.
 func CheckForDeletion(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("CheckSplunkDeletion").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind,
+	scopedLog := logging.FromContext(ctx).With("func", "CheckSplunkDeletion", "kind", cr.GetObjectKind().GroupVersionKind().Kind,
 		"name", cr.GetName(), "namespace", cr.GetNamespace())
 	currentTime := metav1.Now()
 
 	// sanity check: return early if missing GetDeletionTimestamp
 	if cr.GetObjectMeta().GetDeletionTimestamp() == nil {
-		scopedLog.Info("DeletionTimestamp is nil")
+		scopedLog.InfoContext(ctx, "DeletionTimestamp is nil")
 		return false, nil
 	}
 
 	// just log warning if deletion time is in the future
 	if !cr.GetObjectMeta().GetDeletionTimestamp().Before(&currentTime) {
-		scopedLog.Info("DeletionTimestamp is in the future",
+		scopedLog.InfoContext(ctx, "DeletionTimestamp is in the future",
 			"Now", currentTime,
 			"DeletionTimestamp", cr.GetObjectMeta().GetDeletionTimestamp())
 	}
 
-	scopedLog.Info("Deletion requested")
+	scopedLog.InfoContext(ctx, "Deletion requested")
 
 	// process each finalizer
 	for _, finalizer := range cr.GetObjectMeta().GetFinalizers() {
@@ -67,7 +65,7 @@ func CheckForDeletion(ctx context.Context, cr splcommon.MetaObject, c splcommon.
 		}
 
 		// process finalizer callback
-		scopedLog.Info("Processing callback", "Finalizer", finalizer)
+		scopedLog.InfoContext(ctx, "Processing callback", "Finalizer", finalizer)
 		err := callback(ctx, cr, c)
 		if err != nil {
 			return false, err
@@ -80,16 +78,15 @@ func CheckForDeletion(ctx context.Context, cr splcommon.MetaObject, c splcommon.
 		}
 	}
 
-	scopedLog.Info("Deletion complete")
+	scopedLog.InfoContext(ctx, "Deletion complete")
 
 	return true, nil
 }
 
 // removeSplunkFinalizer removes a finalizer from a custom resource.
 func removeSplunkFinalizer(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient, finalizer string) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("RemoveFinalizer").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-	scopedLog.Info("Removing finalizer", "name", finalizer)
+	scopedLog := logging.FromContext(ctx).With("func", "RemoveFinalizer", "kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog.InfoContext(ctx, "Removing finalizer", "name", finalizer)
 
 	// create new list of finalizers that doesn't include the one being removed
 	var newFinalizers []string
