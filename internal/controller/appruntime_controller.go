@@ -34,8 +34,9 @@ type AppRuntimeReconciler struct {
 	Recorder record.EventRecorder
 }
 
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=appruntimes,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=appruntimes/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=appruntimes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=appruntimes/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reconciles the AppRuntime
 func (r *AppRuntimeReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
@@ -46,7 +47,7 @@ func (r *AppRuntimeReconciler) Reconcile(ctx context.Context, req reconcile.Requ
 
 	reqLogger.Info("entered AppRuntime reconciliation")
 
-	// Fetch or create the AppRuntime
+	// Fetch or create AppRuntime CR
 	appRuntime := &enterpriseApi.AppRuntime{}
 	err := r.Get(ctx, req.NamespacedName, appRuntime)
 	if err != nil {
@@ -71,9 +72,31 @@ func (r *AppRuntimeReconciler) Reconcile(ctx context.Context, req reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Fetch or create Headless Service
+	svcNN := types.NamespacedName{
+		Name:      getHeadlessName(req.Name),
+		Namespace: req.Namespace,
+	}
+	svc := &corev1.Service{}
+	err = r.Get(ctx, svcNN, svc)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			reqLogger.Info(svcNN.Name + " service not found; creating new one")
+			svc, err = r.createHeadlessService(ctx, appRuntime, svcNN)
+			if err != nil {
+				reqLogger.Error(err, "failed to create service; returning reconcilation")
+				return reconcile.Result{}, nil
+			}
+			reqLogger.Info("successfully created headless service")
+		} else {
+			reqLogger.Error(err, "failed to get service; returning reconciliation with error")
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Fetch or create StatefulSet
 	statefulSetNN := types.NamespacedName{
-		Name:      getStatefulSetName(req.Name),
+		Name:      getCommonName(req.Name),
 		Namespace: req.Namespace,
 	}
 	statefulSet := &appsv1.StatefulSet{}
@@ -86,9 +109,11 @@ func (r *AppRuntimeReconciler) Reconcile(ctx context.Context, req reconcile.Requ
 				reqLogger.Error(err, "failed to create statefulset; returning reconcilation")
 				return reconcile.Result{}, nil
 			}
+			reqLogger.Info("successfully created statefulset")
+		} else {
+			reqLogger.Error(err, "failed to get statefulset; returning reconciliation with error")
+			return reconcile.Result{}, err
 		}
-		reqLogger.Error(err, "failed to get statefulset; returning reconciliation with error")
-		return reconcile.Result{}, err
 	}
 	// Check statefulSet Replicas
 	err = r.checkStatefulSetReplicas(ctx, statefulSet, appRuntime, err, reqLogger)
@@ -219,6 +244,28 @@ func (r *AppRuntimeReconciler) createCR(ctx context.Context, crNN types.Namespac
 	return nil, nil // parent not found, nothing to create
 }
 
+func (r *AppRuntimeReconciler) createHeadlessService(ctx context.Context, ar *enterpriseApi.AppRuntime, nn types.NamespacedName) (*corev1.Service, error) {
+	svc := &corev1.Service{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      nn.Name,
+			Namespace: nn.Namespace,
+		},
+	}
+
+	err := ctrl.SetControllerReference(ar, svc, r.Scheme)
+	if err != nil {
+		return nil, err
+	}
+	svc.Labels = getCommonLabels(ar.Name)
+	svc.Spec.Selector = svc.Labels
+	svc.Spec.ClusterIP = corev1.ClusterIPNone
+	err = r.Create(ctx, svc)
+	if err != nil {
+		return nil, err
+	}
+	return svc, nil
+}
+
 func (r *AppRuntimeReconciler) createStatefulSet(ctx context.Context, appRuntime *enterpriseApi.AppRuntime, nn types.NamespacedName) (*appsv1.StatefulSet, error) {
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: v1.ObjectMeta{
@@ -231,13 +278,9 @@ func (r *AppRuntimeReconciler) createStatefulSet(ctx context.Context, appRuntime
 		return nil, err
 	}
 	ss.Spec.Replicas = &appRuntime.Spec.Replicas
-	ss.Labels = make(map[string]string)
-	ss.Labels["app.kubernetes.io/managed-by"] = "splunk-operator"
-	ss.Labels["app.kubernetes.io/component"] = appRuntimeKindName
-	ss.Labels["app.kubernetes.io/name"] = appRuntimeKindName
-	ss.Labels["app.kubernetes.io/instance"] = nn.Name
-	ss.Labels["app.kubernetes.io/part-of"] = nn.Name
+	ss.Labels = getCommonLabels(appRuntime.Name)
 	ss.Spec.Selector = &v1.LabelSelector{MatchLabels: ss.Labels}
+	ss.Spec.ServiceName = getHeadlessName(appRuntime.Name)
 	ss.Spec.PodManagementPolicy = appsv1.ParallelPodManagement
 	ss.Spec.Template = corev1.PodTemplateSpec{
 		ObjectMeta: v1.ObjectMeta{
@@ -288,6 +331,7 @@ func (r *AppRuntimeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&enterpriseApi.IndexerCluster{}, getEventHandlerForAppRuntime(enterprise.SplunkIndexer)).
 		Watches(&enterpriseApi.SearchHeadCluster{}, getEventHandlerForAppRuntime(enterprise.SplunkSearchHead)).
 		Owns(&appsv1.StatefulSet{}).
+		Owns(&corev1.Service{}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: enterpriseApi.TotalWorker}).
 		Named("appruntime-controller").
 		Complete(r)
@@ -320,6 +364,20 @@ func getParentKind(appRuntimeName string) string {
 	return strings.Split(appRuntimeName, "-")[1] // todo mb: bug - if name consists '-'
 }
 
-func getStatefulSetName(appRuntimeName string) string {
+func getCommonName(appRuntimeName string) string {
 	return fmt.Sprintf("%s-%s", "splunk", appRuntimeName)
+}
+
+func getHeadlessName(appRuntimeName string) string {
+	return fmt.Sprintf("%s-%s-%s", "splunk", appRuntimeName, "headless")
+}
+
+func getCommonLabels(appRuntimeName string) map[string]string {
+	labels := make(map[string]string)
+	labels["app.kubernetes.io/managed-by"] = "splunk-operator"
+	labels["app.kubernetes.io/component"] = appRuntimeKindName
+	labels["app.kubernetes.io/name"] = appRuntimeKindName
+	labels["app.kubernetes.io/instance"] = getCommonName(appRuntimeName)
+	labels["app.kubernetes.io/part-of"] = getCommonName(appRuntimeName)
+	return labels
 }
