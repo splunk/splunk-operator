@@ -1,0 +1,132 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: apps.enterprise.splunk.com
+spec:
+  group: enterprise.splunk.com
+  names:
+    kind: App
+    listKind: AppList
+    plural: apps
+    singular: app
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Status of app
+      jsonPath: .status.phase
+      name: Phase
+      type: string
+    - description: Age of app resource
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - description: Auxillary message describing CR status
+      jsonPath: .status.message
+      name: Message
+      type: string
+    name: v4
+    schema:
+      openAPIV3Schema:
+        description: App is the Schema for the apps API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AppSpec defines the desired state of App.
+            properties:
+              appID:
+                minLength: 1
+                type: string
+              package:
+                description: AppPackageSpec defines the package location within the
+                  source.
+                properties:
+                  path:
+                    minLength: 1
+                    type: string
+                required:
+                - path
+                type: object
+              scope:
+                minLength: 1
+                type: string
+              sourceRef:
+                description: AppSourceRef defines the AppSource backing this App -
+                  for now its a stub implementation.
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              targetRef:
+                description: AppTargetRef defines the target environment the app should
+                  bind to.
+                properties:
+                  kind:
+                    minLength: 1
+                    type: string
+                  name:
+                    minLength: 1
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
+              version:
+                minLength: 1
+                type: string
+            required:
+            - appID
+            - package
+            - scope
+            - sourceRef
+            - targetRef
+            - version
+            type: object
+          status:
+            description: AppStatus defines the observed state of App.
+            properties:
+              message:
+                description: Auxillary message describing CR status
+                type: string
+              observedGeneration:
+                description: ObservedGeneration tracks the latest reconciled generation
+                format: int64
+                type: integer
+              phase:
+                description: Phase of the app resource
+                enum:
+                - Pending
+                - Ready
+                - Updating
+                - ScalingUp
+                - ScalingDown
+                - Terminating
+                - Error
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

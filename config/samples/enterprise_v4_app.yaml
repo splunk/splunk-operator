@@ -1,0 +1,15 @@
+apiVersion: enterprise.splunk.com/v4
+kind: App
+metadata:
+  name: app-sample
+spec:
+  appID: sample-app
+  version: "1.0.0"
+  targetRef:
+    kind: Standalone
+    name: standalone-sample
+  sourceRef:
+    name: appsource-sample
+  package:
+    path: apps/sample-app.tgz
+  scope: local

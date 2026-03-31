@@ -1,5 +1,6 @@
 ## Append samples you want in your CSV to this file as resources ##
 resources:
+- enterprise_v4_app.yaml
 - enterprise_v3_clustermaster.yaml
 - enterprise_v3_indexercluster.yaml
 - enterprise_v3_licensemaster.yaml
