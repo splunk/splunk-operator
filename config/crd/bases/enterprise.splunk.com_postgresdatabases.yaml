@@ -99,7 +99,7 @@ spec:
             - message: clusterRef is immutable
               rule: self.clusterRef == oldSelf.clusterRef
             - message: clusterRef.name must not be empty
-              rule: self.clusterRef.name != ''
+              rule: self.clusterRef.name.size() > 0
           status:
             description: PostgresDatabaseStatus defines the observed state of PostgresDatabase.
             properties:

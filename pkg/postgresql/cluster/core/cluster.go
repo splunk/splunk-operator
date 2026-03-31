@@ -42,7 +42,7 @@ import (
 func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.Request) (ctrl.Result, error) {
 	c := rc.Client
 	logger := log.FromContext(ctx)
-	logger.Info("Reconciling PostgresCluster", "name", req.Name, "namespace", req.Namespace)
+	logger.Info("Reconciling PostgresCluster")
 
 	var cnpgCluster *cnpgv1.Cluster
 	var poolerEnabled bool
@@ -56,12 +56,15 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			logger.Info("PostgresCluster deleted, skipping reconciliation")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "Unable to fetch PostgresCluster")
+		logger.Error(err, "Failed to fetch PostgresCluster")
 		return ctrl.Result{}, err
 	}
 	if postgresCluster.Status.Resources == nil {
 		postgresCluster.Status.Resources = &enterprisev4.PostgresClusterResources{}
 	}
+
+	logger = logger.WithValues("postgresCluster", postgresCluster.Name)
+	ctx = log.IntoContext(ctx, logger)
 
 	updateStatus := func(conditionType conditionTypes, status metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileClusterPhases) error {
 		return setStatus(ctx, c, postgresCluster, conditionType, status, reason, message, phase)
@@ -84,7 +87,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		return ctrl.Result{}, errors.Join(errs...)
 	}
 	if postgresCluster.GetDeletionTimestamp() != nil {
-		logger.Info("PostgresCluster is being deleted, cleanup complete")
+		logger.Info("Deletion cleanup complete, finalizer removed")
 		return ctrl.Result{}, nil
 	}
 
@@ -99,14 +102,14 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			logger.Error(err, "Failed to add finalizer to PostgresCluster")
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
-		logger.Info("Finalizer added successfully")
+		logger.Info("Finalizer added")
 		return ctrl.Result{}, nil
 	}
 
 	// Load the referenced PostgresClusterClass.
 	clusterClass := &enterprisev4.PostgresClusterClass{}
 	if err := c.Get(ctx, client.ObjectKey{Name: postgresCluster.Spec.Class}, clusterClass); err != nil {
-		logger.Error(err, "Unable to fetch referenced PostgresClusterClass", "className", postgresCluster.Spec.Class)
+		logger.Error(err, "Failed to fetch PostgresClusterClass", "className", postgresCluster.Spec.Class)
 		rc.emitWarning(postgresCluster, EventClusterClassNotFound, fmt.Sprintf("ClusterClass %s not found", postgresCluster.Spec.Class))
 		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterClassNotFound,
 			fmt.Sprintf("ClusterClass %s not found: %v", postgresCluster.Spec.Class, err), failedClusterPhase); statusErr != nil {
@@ -130,10 +133,10 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	// Resolve or derive the superuser secret name.
 	if postgresCluster.Status.Resources != nil && postgresCluster.Status.Resources.SuperUserSecretRef != nil {
 		postgresSecretName = postgresCluster.Status.Resources.SuperUserSecretRef.Name
-		logger.Info("Using existing secret from status", "name", postgresSecretName)
+		logger.Info("Superuser secret resolved from status", "name", postgresSecretName)
 	} else {
 		postgresSecretName = fmt.Sprintf("%s%s", postgresCluster.Name, defaultSecretSuffix)
-		logger.Info("Generating new secret name", "name", postgresSecretName)
+		logger.Info("Superuser secret name derived", "name", postgresSecretName)
 	}
 
 	secretExists, secretErr := clusterSecretExists(ctx, c, postgresCluster.Namespace, postgresSecretName, secret)
@@ -147,7 +150,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		return ctrl.Result{}, secretErr
 	}
 	if !secretExists {
-		logger.Info("Creating PostgresCluster secret", "name", postgresSecretName)
+		logger.Info("Superuser secret creation started", "name", postgresSecretName)
 		if err := ensureClusterSecret(ctx, c, rc.Scheme, postgresCluster, postgresSecretName, secret); err != nil {
 			logger.Error(err, "Failed to ensure PostgresCluster secret", "name", postgresSecretName)
 			rc.emitWarning(postgresCluster, EventSecretReconcileFailed, fmt.Sprintf("Failed to generate cluster secret: %v", err))
@@ -166,7 +169,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			return ctrl.Result{}, err
 		}
 		rc.emitNormal(postgresCluster, EventSecretReady, fmt.Sprintf("Superuser secret %s created", postgresSecretName))
-		logger.Info("SuperUserSecretRef persisted to status")
+		logger.Info("Superuser secret ref persisted to status")
 	}
 
 	// Re-attach ownerRef if it was stripped (e.g. by a Retain-policy deletion of a previous cluster).
@@ -176,7 +179,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		return ctrl.Result{}, fmt.Errorf("failed to check owner reference on secret: %w", ownerRefErr)
 	}
 	if secretExists && !hasOwnerRef {
-		logger.Info("Connecting existing secret to PostgresCluster by adding owner reference", "name", postgresSecretName)
+		logger.Info("Existing secret linked to PostgresCluster", "name", postgresSecretName)
 		rc.emitNormal(postgresCluster, EventClusterAdopted, fmt.Sprintf("Adopted existing CNPG cluster and secret %s", postgresSecretName))
 		originalSecret := secret.DeepCopy()
 		if err := ctrl.SetControllerReference(postgresCluster, secret, rc.Scheme); err != nil {
@@ -191,7 +194,6 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			}
 			return ctrl.Result{}, err
 		}
-		logger.Info("Existing secret linked successfully")
 	}
 
 	if postgresCluster.Status.Resources.SuperUserSecretRef == nil {
@@ -209,7 +211,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	err = c.Get(ctx, types.NamespacedName{Name: postgresCluster.Name, Namespace: postgresCluster.Namespace}, existingCNPG)
 	switch {
 	case apierrors.IsNotFound(err):
-		logger.Info("CNPG Cluster not found, creating", "name", postgresCluster.Name)
+		logger.Info("CNPG Cluster creation started", "name", postgresCluster.Name)
 		newCluster := buildCNPGCluster(rc.Scheme, postgresCluster, mergedConfig, postgresSecretName)
 		if err := c.Create(ctx, newCluster); err != nil {
 			logger.Error(err, "Failed to create CNPG Cluster")
@@ -225,7 +227,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			"CNPG Cluster created", pendingClusterPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
 		}
-		logger.Info("CNPG Cluster created successfully, requeueing for status update", "name", postgresCluster.Name)
+		logger.Info("CNPG Cluster created, requeueing for status update", "name", postgresCluster.Name)
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	case err != nil:
 		logger.Error(err, "Failed to get CNPG Cluster")
@@ -242,7 +244,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	desiredNormalized := normalizeCNPGClusterSpec(desiredSpec, mergedConfig.Spec.PostgreSQLConfig)
 
 	if !equality.Semantic.DeepEqual(currentNormalized, desiredNormalized) {
-		logger.Info("Detected drift in CNPG Cluster spec, patching", "name", cnpgCluster.Name)
+		logger.Info("CNPG Cluster spec drift detected, patch started", "name", cnpgCluster.Name)
 		originalCluster := cnpgCluster.DeepCopy()
 		cnpgCluster.Spec = desiredSpec
 
@@ -265,7 +267,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 				return ctrl.Result{Requeue: true}, nil
 			}
 			rc.emitNormal(postgresCluster, EventClusterUpdateStarted, "CNPG cluster spec updated, waiting for healthy state")
-			logger.Info("CNPG Cluster patched successfully, requeueing for status update", "name", cnpgCluster.Name)
+			logger.Info("CNPG Cluster patched, requeueing for status update", "name", cnpgCluster.Name)
 			return ctrl.Result{RequeueAfter: retryDelay}, nil
 		}
 	}
@@ -349,7 +351,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			return ctrl.Result{}, err
 		}
 		rc.emitNormal(postgresCluster, EventPoolerCreationStarted, "Connection poolers created, waiting for readiness")
-		logger.Info("Connection Poolers created, requeueing to check readiness")
+		logger.Info("Connection pooler creation started, requeueing")
 		if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerCreating,
 			"Connection poolers are being provisioned", provisioningClusterPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
@@ -396,7 +398,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 
 	// Reconcile ConfigMap when CNPG cluster is healthy.
 	if cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy {
-		logger.Info("CNPG Cluster is ready, reconciling ConfigMap for connection details")
+		logger.Info("CNPG Cluster healthy, reconciling ConfigMap")
 		desiredCM, err := generateConfigMap(ctx, c, rc.Scheme, postgresCluster, cnpgCluster, postgresSecretName)
 		if err != nil {
 			logger.Error(err, "Failed to generate ConfigMap")
@@ -414,7 +416,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			cm.Labels = desiredCM.Labels
 			if !metav1.IsControlledBy(cm, postgresCluster) {
 				if err := ctrl.SetControllerReference(postgresCluster, cm, rc.Scheme); err != nil {
-					return fmt.Errorf("set controller reference failed: %w", err)
+					return fmt.Errorf("setting controller reference: %w", err)
 				}
 			}
 			return nil
@@ -473,7 +475,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			Namespace: postgresCluster.Namespace,
 		}, roPooler)
 		if rwErr == nil && roErr == nil && arePoolersReady(rwPooler, roPooler) {
-			logger.Info("Poolers are ready, syncing pooler status")
+			logger.Info("Poolers ready, syncing status")
 			poolerOldConditions := make([]metav1.Condition, len(postgresCluster.Status.Conditions))
 			copy(poolerOldConditions, postgresCluster.Status.Conditions)
 			_ = syncPoolerStatus(ctx, c, postgresCluster)
@@ -626,7 +628,7 @@ func reconcileManagedRoles(ctx context.Context, c client.Client, cluster *enterp
 		return nil
 	}
 
-	logger.Info("CNPG Cluster roles differ from desired state, updating",
+	logger.Info("CNPG Cluster roles drift detected, update started",
 		"currentCount", len(currentRoles), "desiredCount", len(desiredRoles))
 
 	originalCluster := cnpgCluster.DeepCopy()
@@ -636,9 +638,9 @@ func reconcileManagedRoles(ctx context.Context, c client.Client, cluster *enterp
 	cnpgCluster.Spec.Managed.Roles = desiredRoles
 
 	if err := c.Patch(ctx, cnpgCluster, client.MergeFrom(originalCluster)); err != nil {
-		return fmt.Errorf("failed to patch CNPG Cluster with managed roles: %w", err)
+		return fmt.Errorf("patching CNPG Cluster managed roles: %w", err)
 	}
-	logger.Info("Successfully updated CNPG Cluster with managed roles", "roleCount", len(desiredRoles))
+	logger.Info("CNPG Cluster managed roles updated", "roleCount", len(desiredRoles))
 	return nil
 }
 
@@ -655,11 +657,7 @@ func poolerExists(ctx context.Context, c client.Client, cluster *enterprisev4.Po
 	if apierrors.IsNotFound(err) {
 		return false, nil
 	}
-	if err != nil {
-		log.FromContext(ctx).Error(err, "Failed to check pooler existence", "type", poolerType)
-		return false, err
-	}
-	return true, nil
+	return err == nil, err
 }
 
 func arePoolersReady(rwPooler, roPooler *cnpgv1.Pooler) bool {
@@ -687,15 +685,16 @@ func poolerInstanceCount(p *cnpgv1.Pooler) (desired, scheduled int32) {
 // createOrUpdateConnectionPoolers creates RW and RO poolers if they don't exist.
 func createOrUpdateConnectionPoolers(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster) error {
 	if err := createConnectionPooler(ctx, c, scheme, cluster, cfg, cnpgCluster, readWriteEndpoint); err != nil {
-		return fmt.Errorf("failed to reconcile RW pooler: %w", err)
+		return fmt.Errorf("reconciling RW pooler: %w", err)
 	}
 	if err := createConnectionPooler(ctx, c, scheme, cluster, cfg, cnpgCluster, readOnlyEndpoint); err != nil {
-		return fmt.Errorf("failed to reconcile RO pooler: %w", err)
+		return fmt.Errorf("reconciling RO pooler: %w", err)
 	}
 	return nil
 }
 
 func createConnectionPooler(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerType string) error {
+	logger := log.FromContext(ctx)
 	poolerName := poolerResourceName(cluster.Name, poolerType)
 	existing := &cnpgv1.Pooler{}
 	err := c.Get(ctx, types.NamespacedName{Name: poolerName, Namespace: cluster.Namespace}, existing)
@@ -705,7 +704,7 @@ func createConnectionPooler(ctx context.Context, c client.Client, scheme *runtim
 	if !apierrors.IsNotFound(err) {
 		return err
 	}
-	log.FromContext(ctx).Info("Creating CNPG Pooler", "name", poolerName, "type", poolerType)
+	logger.Info("CNPG Pooler creation started", "name", poolerName, "type", poolerType)
 	return c.Create(ctx, buildCNPGPooler(scheme, cluster, cfg, cnpgCluster, poolerType))
 }
 
@@ -736,7 +735,7 @@ func deleteConnectionPoolers(ctx context.Context, c client.Client, cluster *ente
 		poolerName := poolerResourceName(cluster.Name, poolerType)
 		exist, err := poolerExists(ctx, c, cluster, poolerType)
 		if err != nil {
-			return fmt.Errorf("Can't check the pooler exist due to transient error %w", err)
+			return fmt.Errorf("checking pooler existence: %w", err)
 		}
 		if !exist {
 			continue
@@ -746,11 +745,11 @@ func deleteConnectionPoolers(ctx context.Context, c client.Client, cluster *ente
 			if apierrors.IsNotFound(err) {
 				continue
 			}
-			return fmt.Errorf("failed to get pooler %s: %w", poolerName, err)
+			return fmt.Errorf("getting pooler %s: %w", poolerName, err)
 		}
-		logger.Info("Deleting CNPG Pooler", "name", poolerName)
+		logger.Info("CNPG Pooler deletion started", "name", poolerName)
 		if err := c.Delete(ctx, pooler); err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("failed to delete pooler %s: %w", poolerName, err)
+			return fmt.Errorf("deleting pooler %s: %w", poolerName, err)
 		}
 	}
 	return nil
@@ -956,9 +955,9 @@ func deleteCNPGCluster(ctx context.Context, c client.Client, cnpgCluster *cnpgv1
 		logger.Info("CNPG Cluster not found, skipping deletion")
 		return nil
 	}
-	logger.Info("Deleting CNPG Cluster", "name", cnpgCluster.Name)
+	logger.Info("CNPG Cluster deletion started", "name", cnpgCluster.Name)
 	if err := c.Delete(ctx, cnpgCluster); err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("failed to delete CNPG Cluster: %w", err)
+		return fmt.Errorf("deleting CNPG Cluster: %w", err)
 	}
 	return nil
 }
@@ -985,10 +984,10 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 			cnpgCluster = nil
 			logger.Info("CNPG cluster not found during cleanup")
 		} else {
-			return fmt.Errorf("failed to fetch CNPG cluster during cleanup: %w", err)
+			return fmt.Errorf("fetching CNPG cluster: %w", err)
 		}
 	}
-	logger.Info("Processing finalizer cleanup for PostgresCluster")
+	logger.Info("Finalizer cleanup started")
 
 	policy := ""
 	if cluster.Spec.ClusterDeletionPolicy != nil {
@@ -996,35 +995,33 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 	}
 
 	if err := deleteConnectionPoolers(ctx, c, cluster); err != nil {
-		logger.Error(err, "Failed to delete connection poolers during cleanup")
-		return fmt.Errorf("failed to delete connection poolers: %w", err)
+		return fmt.Errorf("deleting connection poolers: %w", err)
 	}
 
 	switch policy {
 	case clusterDeletionPolicyDelete:
-		logger.Info("ClusterDeletionPolicy is 'Delete', deleting CNPG Cluster and associated resources")
+		logger.Info("ClusterDeletionPolicy 'Delete', CNPG Cluster deletion started")
 		if cnpgCluster != nil {
 			if err := deleteCNPGCluster(ctx, c, cnpgCluster); err != nil {
-				logger.Error(err, "Failed to delete CNPG Cluster during finalizer cleanup")
-				return fmt.Errorf("failed to delete CNPG Cluster during finalizer cleanup: %w", err)
+				return fmt.Errorf("deleting CNPG Cluster: %w", err)
 			}
 		} else {
 			logger.Info("CNPG Cluster not found, skipping deletion")
 		}
 
 	case clusterDeletionPolicyRetain:
-		logger.Info("ClusterDeletionPolicy is 'Retain', removing owner references to orphan CNPG Cluster")
+		logger.Info("ClusterDeletionPolicy 'Retain', orphaning CNPG Cluster")
 		if cnpgCluster != nil {
 			originalCNPG := cnpgCluster.DeepCopy()
 			refRemoved, err := removeOwnerRef(scheme, cluster, cnpgCluster)
 			if err != nil {
-				return fmt.Errorf("failed to remove owner reference from CNPG cluster: %w", err)
+				return fmt.Errorf("removing owner reference from CNPG cluster: %w", err)
 			}
 			if !refRemoved {
 				logger.Info("Owner reference already removed from CNPG Cluster, skipping patch")
 			}
 			if err := patchObject(ctx, c, originalCNPG, cnpgCluster, "CNPGCluster"); err != nil {
-				return fmt.Errorf("failed to patch CNPG cluster after removing owner reference: %w", err)
+				return fmt.Errorf("patching CNPG cluster after removing owner reference: %w", err)
 			}
 			logger.Info("Removed owner reference from CNPG Cluster")
 		}
@@ -1034,19 +1031,18 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 			secretName := cluster.Status.Resources.SuperUserSecretRef.Name
 			if err := c.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cluster.Namespace}, secret); err != nil {
 				if !apierrors.IsNotFound(err) {
-					logger.Error(err, "Failed to fetch Secret during cleanup")
-					return fmt.Errorf("failed to fetch secret during cleanup: %w", err)
+					return fmt.Errorf("fetching secret during cleanup: %w", err)
 				}
 				logger.Info("Secret not found, skipping owner reference removal", "secret", secretName)
 			} else {
 				originalSecret := secret.DeepCopy()
 				refRemoved, err := removeOwnerRef(scheme, cluster, secret)
 				if err != nil {
-					return fmt.Errorf("failed to remove owner reference from Secret: %w", err)
+					return fmt.Errorf("removing owner reference from Secret: %w", err)
 				}
 				if refRemoved {
 					if err := patchObject(ctx, c, originalSecret, secret, "Secret"); err != nil {
-						return fmt.Errorf("failed to patch Secret after removing owner reference: %w", err)
+						return fmt.Errorf("patching Secret after removing owner reference: %w", err)
 					}
 				}
 				logger.Info("Removed owner reference from Secret")
@@ -1063,8 +1059,7 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 			logger.Info("PostgresCluster already deleted, skipping finalizer update")
 			return nil
 		}
-		logger.Error(err, "Failed to remove finalizer from PostgresCluster")
-		return fmt.Errorf("failed to remove finalizer: %w", err)
+		return fmt.Errorf("removing finalizer: %w", err)
 	}
 	rc.emitNormal(cluster, EventCleanupComplete, fmt.Sprintf("Cleanup complete (policy: %s)", policy))
 	logger.Info("Finalizer removed, cleanup complete")
@@ -1074,13 +1069,13 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 func removeOwnerRef(scheme *runtime.Scheme, owner, obj client.Object) (bool, error) {
 	hasRef, err := controllerutil.HasOwnerReference(obj.GetOwnerReferences(), owner, scheme)
 	if err != nil {
-		return false, fmt.Errorf("failed to check owner reference: %w", err)
+		return false, fmt.Errorf("checking owner reference: %w", err)
 	}
 	if !hasRef {
 		return false, nil
 	}
 	if err := controllerutil.RemoveOwnerReference(owner, obj, scheme); err != nil {
-		return false, fmt.Errorf("failed to remove owner reference: %w", err)
+		return false, fmt.Errorf("removing owner reference: %w", err)
 	}
 	return true, nil
 }
@@ -1093,9 +1088,9 @@ func patchObject(ctx context.Context, c client.Client, original, obj client.Obje
 			logger.Info("Object not found, skipping patch", "kind", kind, "name", obj.GetName())
 			return nil
 		}
-		return fmt.Errorf("failed to patch %s object: %w", kind, err)
+		return fmt.Errorf("patching %s: %w", kind, err)
 	}
-	logger.Info("Patched object successfully", "kind", kind, "name", obj.GetName())
+	logger.Info("Object patched", "kind", kind, "name", obj.GetName())
 	return nil
 }
 
