@@ -19,8 +19,9 @@ package controller
 import (
 	"context"
 	"fmt"
-	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,6 +49,14 @@ var k8sClient client.Client
 var testEnv *envtest.Environment
 var k8sManager ctrl.Manager
 
+func resolveCNPGModuleDir() string {
+	cmd := exec.Command("go", "list", "-f", "{{.Dir}}", "-m", "github.com/cloudnative-pg/cloudnative-pg")
+	output, err := cmd.Output()
+	Expect(err).NotTo(HaveOccurred())
+
+	return strings.TrimSpace(string(output))
+}
+
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -63,20 +72,14 @@ var _ = BeforeSuite(func(ctx context.Context) {
 
 	By("bootstrapping test environment")
 
+	cnpgModuleDir := resolveCNPGModuleDir()
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "config", "crd", "bases"),
+			filepath.Join(cnpgModuleDir, "config", "crd", "bases"),
+		},
 		ErrorIfCRDPathMissing: true,
 	}
-	cnpgCRDDir := os.Getenv("CNPG_CRD_DIR")
-	if cnpgCRDDir == "" {
-		homeDir, err := os.UserHomeDir()
-		Expect(err).NotTo(HaveOccurred())
-		matches, err := filepath.Glob(filepath.Join(homeDir, "go", "pkg", "mod", "github.com", "cloudnative-pg", "cloudnative-pg@*", "config", "crd", "bases"))
-		Expect(err).NotTo(HaveOccurred())
-		Expect(matches).NotTo(BeEmpty(), "CNPG CRD directory not found; set CNPG_CRD_DIR if module cache is custom")
-		cnpgCRDDir = matches[len(matches)-1]
-	}
-	testEnv.CRDDirectoryPaths = append(testEnv.CRDDirectoryPaths, cnpgCRDDir)
 
 	var err error
 
@@ -87,6 +90,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 
 	err = enterpriseApi.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
+
 	err = cnpgv1.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
@@ -166,7 +170,6 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	}).SetupWithManager(k8sManager); err != nil {
 		Expect(err).NotTo(HaveOccurred())
 	}
-
 	go func() {
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
 		fmt.Printf("error %v", err.Error())

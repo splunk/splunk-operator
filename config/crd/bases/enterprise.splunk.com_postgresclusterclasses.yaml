@@ -18,13 +18,13 @@ spec:
     - jsonPath: .spec.provisioner
       name: Provisioner
       type: string
-    - jsonPath: .spec.postgresClusterConfig.instances
+    - jsonPath: .spec.config.instances
       name: Instances
       type: integer
-    - jsonPath: .spec.postgresClusterConfig.storage
+    - jsonPath: .spec.config.storage
       name: Storage
       type: string
-    - jsonPath: .spec.postgresClusterConfig.postgresVersion
+    - jsonPath: .spec.config.postgresVersion
       name: Version
       type: string
     - jsonPath: .status.phase
@@ -58,9 +58,6 @@ spec:
           metadata:
             type: object
           spec:
-            description: |-
-              PostgresClusterClassSpec defines the desired state of PostgresClusterClass.
-              PostgresClusterClass is immutable after creation - it serves as a template for Cluster CRs.
             properties:
               cnpg:
                 description: |-
@@ -251,6 +248,8 @@ spec:
                 is true
               rule: '!has(self.config) || !has(self.config.connectionPoolerEnabled)
                 || !self.config.connectionPoolerEnabled || (has(self.cnpg) && has(self.cnpg.connectionPooler))'
+            - message: PostgresClusterClass is immutable after creation
+              rule: self == oldSelf
           status:
             description: PostgresClusterClassStatus defines the observed state of
               PostgresClusterClass.
