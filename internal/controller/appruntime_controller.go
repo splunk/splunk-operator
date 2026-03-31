@@ -314,8 +314,7 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 					Image: appRuntime.Spec.Image,
 					Name:  "appruntime",
 					Command: []string{
-						"sleep",
-						"infinity",
+						"/usr/bin/splunk-eps",
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						{
@@ -370,7 +369,7 @@ func (r *AppRuntimeReconciler) updateStatus(ctx context.Context, appRuntime *ent
 func getImageFromEnv() string {
 	image, ok := os.LookupEnv("RELATED_IMAGE_APP_RUNTIME")
 	if !ok {
-		image = "busybox:latest"
+		image = "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/supervisor:v3.1.0-mb-1"
 	}
 	return image
 }

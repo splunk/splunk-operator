@@ -157,7 +157,7 @@ func main() {
 	// Logging setup
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	setupLog.Info("siema: pvc")
+	setupLog.Info("siema: supervisor image")
 
 	// Configure metrics certificate watcher if metrics certs are provided
 	var metricsCertWatcher *certwatcher.CertWatcher
