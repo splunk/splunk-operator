@@ -12,10 +12,10 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -37,6 +37,7 @@ type AppRuntimeReconciler struct {
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=appruntimes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=appruntimes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reconciles the AppRuntime
 func (r *AppRuntimeReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
@@ -94,48 +95,59 @@ func (r *AppRuntimeReconciler) Reconcile(ctx context.Context, req reconcile.Requ
 		}
 	}
 
-	// Fetch or create StatefulSet
-	statefulSetNN := types.NamespacedName{
-		Name:      getCommonName(req.Name),
-		Namespace: req.Namespace,
-	}
-	statefulSet := &appsv1.StatefulSet{}
-	err = r.Get(ctx, statefulSetNN, statefulSet)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			reqLogger.Info(statefulSetNN.Name + " statefulSet not found; creating new one")
-			statefulSet, err = r.createStatefulSet(ctx, appRuntime, statefulSetNN)
-			if err != nil {
-				reqLogger.Error(err, "failed to create statefulset; returning reconcilation")
-				return reconcile.Result{}, nil
+	// Reconcile individual Pods (one per replica, each with its own Splunk PVCs)
+	parentName := getParentName(appRuntime.Name)
+	parentKind := getParentKind(appRuntime.Name)
+	splunkStsName := getSplunkStatefulSetName(parentName, parentKind)
+
+	// Create missing pods
+	for i := int32(0); i < appRuntime.Spec.Replicas; i++ {
+		podName := getPodName(appRuntime.Name, i)
+		podNN := types.NamespacedName{Name: podName, Namespace: req.Namespace}
+		pod := &corev1.Pod{}
+		err = r.Get(ctx, podNN, pod)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				reqLogger.Info(fmt.Sprintf("pod %s not found; creating", podName))
+				err = r.createPod(ctx, appRuntime, podNN, splunkStsName, i)
+				if err != nil {
+					reqLogger.Error(err, fmt.Sprintf("failed to create pod %s", podName))
+					return reconcile.Result{}, err
+				}
+				reqLogger.Info(fmt.Sprintf("created pod %s", podName))
+			} else {
+				reqLogger.Error(err, fmt.Sprintf("failed to get pod %s", podName))
+				return reconcile.Result{}, err
 			}
-			reqLogger.Info("successfully created statefulset")
-		} else {
-			reqLogger.Error(err, "failed to get statefulset; returning reconciliation with error")
-			return reconcile.Result{}, err
 		}
 	}
-	// Check statefulSet Replicas
-	err = r.checkStatefulSetReplicas(ctx, statefulSet, appRuntime, err, reqLogger)
+
+	// Delete excess pods (scale down)
+	existingPods := &corev1.PodList{}
+	err = r.List(ctx, existingPods, &client.ListOptions{
+		Namespace:     req.Namespace,
+		LabelSelector: labels.SelectorFromSet(getCommonLabels(appRuntime.Name)),
+	})
 	if err != nil {
-		reqLogger.Error(err, "failed to check statefulset replicas")
+		reqLogger.Error(err, "failed to list pods")
 		return reconcile.Result{}, err
+	}
+	for idx := range existingPods.Items {
+		pod := &existingPods.Items[idx]
+		ordinal, err := getPodOrdinal(pod.Name)
+		if err != nil {
+			continue
+		}
+		if ordinal >= appRuntime.Spec.Replicas {
+			reqLogger.Info(fmt.Sprintf("deleting excess pod %s", pod.Name))
+			if err := r.Delete(ctx, pod); err != nil {
+				reqLogger.Error(err, fmt.Sprintf("failed to delete pod %s", pod.Name))
+				return reconcile.Result{}, err
+			}
+		}
 	}
 
 	return reconcile.Result{}, nil
-}
-
-func (r *AppRuntimeReconciler) checkStatefulSetReplicas(ctx context.Context, statefulSet *appsv1.StatefulSet, appRuntime *enterpriseApi.AppRuntime, err error, reqLogger logr.Logger) error {
-	if *statefulSet.Spec.Replicas != appRuntime.Spec.Replicas {
-		statefulSet.Spec.Replicas = &appRuntime.Spec.Replicas
-		err = r.Update(ctx, statefulSet)
-		if err != nil {
-			reqLogger.Error(err, "cannot update statefulset")
-			return err
-		}
-		reqLogger.Info("updated statefulset replicas")
-	}
-	return nil
 }
 
 // checkReplicas check if replicas number is correct
@@ -230,7 +242,7 @@ func (r *AppRuntimeReconciler) createCR(ctx context.Context, crNN types.Namespac
 			return cr, r.Create(ctx, cr)
 		}
 	case enterprise.SplunkSearchHead.ToString():
-		searchHead := &enterpriseApi.SearchHeadCluster{} // can it be client.Object and then reuse the following code?
+		searchHead := &enterpriseApi.SearchHeadCluster{}
 		if err := r.Get(ctx, parentName, searchHead); err == nil {
 			cr.Spec.Replicas = searchHead.Spec.Replicas
 			err = ctrl.SetControllerReference(searchHead, cr, r.Scheme)
@@ -266,50 +278,19 @@ func (r *AppRuntimeReconciler) createHeadlessService(ctx context.Context, ar *en
 	return svc, nil
 }
 
-func (r *AppRuntimeReconciler) createStatefulSet(ctx context.Context, appRuntime *enterpriseApi.AppRuntime, nn types.NamespacedName) (*appsv1.StatefulSet, error) {
-	ss := &appsv1.StatefulSet{
+func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterpriseApi.AppRuntime, nn types.NamespacedName, splunkStsName string, ordinal int32) error {
+	etcPvcName := fmt.Sprintf("pvc-etc-%s-%d", splunkStsName, ordinal)
+	varPvcName := fmt.Sprintf("pvc-var-%s-%d", splunkStsName, ordinal)
+
+	pod := &corev1.Pod{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      nn.Name,
 			Namespace: nn.Namespace,
-		},
-	}
-	err := ctrl.SetControllerReference(appRuntime, ss, r.Scheme)
-	if err != nil {
-		return nil, err
-	}
-	ss.Spec.Replicas = &appRuntime.Spec.Replicas
-	ss.Labels = getCommonLabels(appRuntime.Name)
-	ss.Spec.Selector = &v1.LabelSelector{MatchLabels: ss.Labels}
-	ss.Spec.ServiceName = getHeadlessName(appRuntime.Name)
-	ss.Spec.PodManagementPolicy = appsv1.ParallelPodManagement
-
-	//quantity, err := resource2.ParseQuantity(splcommon.DefaultEtcVolumeStorageCapacity)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//pvc := corev1.PersistentVolumeClaim{
-	//	ObjectMeta: v1.ObjectMeta{
-	//		Name:      "pvc-etc",
-	//		Namespace: nn.Namespace,
-	//		Labels:    getCommonLabels(appRuntime.Name),
-	//	},
-	//	Spec: corev1.PersistentVolumeClaimSpec{
-	//		AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
-	//		Resources: corev1.VolumeResourceRequirements{
-	//			Requests: corev1.ResourceList{
-	//				corev1.ResourceStorage: quantity,
-	//			},
-	//		},
-	//	},
-	//}
-	//ss.Spec.VolumeClaimTemplates = append(ss.Spec.VolumeClaimTemplates, pvc)
-
-	ss.Spec.Template = corev1.PodTemplateSpec{
-		ObjectMeta: v1.ObjectMeta{
-			Labels: ss.Labels,
+			Labels:    getCommonLabels(appRuntime.Name),
 		},
 		Spec: corev1.PodSpec{
+			Hostname:  nn.Name,
+			Subdomain: getHeadlessName(appRuntime.Name),
 			Containers: []corev1.Container{
 				{
 					Image: appRuntime.Spec.Image,
@@ -318,44 +299,45 @@ func (r *AppRuntimeReconciler) createStatefulSet(ctx context.Context, appRuntime
 						"sleep",
 						"infinity",
 					},
-					//VolumeMounts: []corev1.VolumeMount{
-					//	{
-					//		Name:      "pvc-etc",
-					//		MountPath: "/opt/splunk/etc",
-					//	},
-					//	{
-					//		Name:      "pvc-var",
-					//		MountPath: "/opt/splunk/var",
-					//	},
-					//},
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "pvc-etc",
+							MountPath: "/opt/splunk/etc",
+						},
+						{
+							Name:      "pvc-var",
+							MountPath: "/opt/splunk/var",
+						},
+					},
 				},
 			},
-			//Volumes: []corev1.Volume{
-			//	{
-			//		Name: "pvc-etc",
-			//		VolumeSource: corev1.VolumeSource{
-			//			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-			//				ClaimName: "pvc-etc-splunk",
-			//			},
-			//		},
-			//	},
-			//	{
-			//		Name: "pvc-var",
-			//		VolumeSource: corev1.VolumeSource{
-			//			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-			//				ClaimName: "pvc-var-splunk",
-			//			},
-			//		},
-			//	},
-			//},
+			Volumes: []corev1.Volume{
+				{
+					Name: "pvc-etc",
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: etcPvcName,
+						},
+					},
+				},
+				{
+					Name: "pvc-var",
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: varPvcName,
+						},
+					},
+				},
+			},
 		},
 	}
-	err = r.Create(ctx, ss)
+
+	err := ctrl.SetControllerReference(appRuntime, pod, r.Scheme)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return &appsv1.StatefulSet{}, nil
+	return r.Create(ctx, pod)
 }
 
 func (r *AppRuntimeReconciler) updateStatus(ctx context.Context, appRuntime *enterpriseApi.AppRuntime, phase enterpriseApi.Phase, message string) error {
@@ -381,7 +363,7 @@ func (r *AppRuntimeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&enterpriseApi.Standalone{}, getEventHandlerForAppRuntime(enterprise.SplunkStandalone)).
 		Watches(&enterpriseApi.IndexerCluster{}, getEventHandlerForAppRuntime(enterprise.SplunkIndexer)).
 		Watches(&enterpriseApi.SearchHeadCluster{}, getEventHandlerForAppRuntime(enterprise.SplunkSearchHead)).
-		Owns(&appsv1.StatefulSet{}).
+		Owns(&corev1.Pod{}).
 		Owns(&corev1.Service{}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: enterpriseApi.TotalWorker}).
 		Named("appruntime-controller").
@@ -421,6 +403,25 @@ func getCommonName(appRuntimeName string) string {
 
 func getHeadlessName(appRuntimeName string) string {
 	return fmt.Sprintf("%s-%s-%s", "splunk", appRuntimeName, "headless")
+}
+
+// getSplunkStatefulSetName returns the Splunk StatefulSet name: splunk-{parentName}-{parentKind}
+func getSplunkStatefulSetName(parentName string, parentKind string) string {
+	return fmt.Sprintf("splunk-%s-%s", parentName, parentKind)
+}
+
+// getPodName returns the AppRuntime pod name for a given ordinal: splunk-{appRuntimeName}-{ordinal}
+func getPodName(appRuntimeName string, ordinal int32) string {
+	return fmt.Sprintf("splunk-%s-%d", appRuntimeName, ordinal)
+}
+
+// getPodOrdinal extracts the ordinal index from a pod name (last segment after "-")
+func getPodOrdinal(podName string) (int32, error) {
+	parts := strings.Split(podName, "-")
+	last := parts[len(parts)-1]
+	var ordinal int32
+	_, err := fmt.Sscanf(last, "%d", &ordinal)
+	return ordinal, err
 }
 
 func getCommonLabels(appRuntimeName string) map[string]string {
