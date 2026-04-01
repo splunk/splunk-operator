@@ -824,7 +824,7 @@ func getAppRuntimeSidecar(instanceType InstanceType) []corev1.Container {
 	return []corev1.Container{
 		{
 			Image:           getAppRuntimeImage(),
-			ImagePullPolicy: corev1.PullIfNotPresent,
+			ImagePullPolicy: corev1.PullAlways,
 			Name:            "appruntime",
 			Command:         []string{"/usr/bin/splunk-eps"},
 			RestartPolicy:   &restartAlways,
