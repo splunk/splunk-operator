@@ -73,6 +73,15 @@ func RandomDNSName(n int) string {
 	return string(b)
 }
 
+// RandomHex returns a random string of hex characters
+func RandomHex(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = splcommon.HexBytes[rand.Intn(len(splcommon.HexBytes))]
+	}
+	return string(b)
+}
+
 // newStandalone creates and initializes CR for Standalone Kind
 func newStandalone(name, ns, splunkImage string) *enterpriseApi.Standalone {
 
@@ -255,7 +264,7 @@ func newClusterMaster(name, ns, licenseManagerName, ansibleConfig, splunkImage s
 
 	new := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,

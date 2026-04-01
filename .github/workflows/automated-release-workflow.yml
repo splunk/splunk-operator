@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
       pull-requests: write
     if: github.ref == 'refs/heads/main'
     env:
@@ -111,16 +112,18 @@ jobs:
 
     - name: Sign Splunk Operator image with a key
       run: |
-        cosign sign --yes --key env://COSIGN_PRIVATE_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
+        cosign sign --yes --recursive --key env://COSIGN_PRIVATE_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
       env:
         COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
         COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        COSIGN_DOCKER_MEDIA_TYPES: "1"
 
     - name: Verify Splunk Operator image with a key
       run: |
         cosign verify --key env://COSIGN_PUBLIC_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
       env:
         COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+        COSIGN_DOCKER_MEDIA_TYPES: "1"
 
     - name: Promote Distroless RC Image to Release
       run: |
@@ -128,14 +131,16 @@ jobs:
 
     - name: Sign Distroless Splunk Operator image with a key
       run: |
-        cosign sign --yes --key env://COSIGN_PRIVATE_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
+        cosign sign --yes --recursive --key env://COSIGN_PRIVATE_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
       env:
         COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
         COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        COSIGN_DOCKER_MEDIA_TYPES: "1"
 
     - name: Verify Distroless Splunk Operator image with a key
       run: |
         cosign verify --key env://COSIGN_PUBLIC_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
       env:
         COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+        COSIGN_DOCKER_MEDIA_TYPES: "1"
 
