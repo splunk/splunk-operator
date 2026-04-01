@@ -171,10 +171,7 @@ func main() {
 		addSourcePtr = &logAddSource
 	}
 	logCfg := logging.LoadConfigWithFlags(logLevel, logFormat, addSourcePtr)
-	_ = logging.SetupLogger(logCfg,
-		slog.String("component", "splunk-operator"),
-		slog.String("version", version),
-		slog.String("build", gitCommit))
+	_ = logging.SetupLogger(logCfg)
 
 	// Log startup information using slog
 	slog.Info("Splunk Operator starting",
