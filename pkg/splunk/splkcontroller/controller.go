@@ -17,7 +17,6 @@ package splkcontroller
 
 import (
 	"context"
-
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"

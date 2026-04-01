@@ -45,10 +45,25 @@ func ValidateSearchHeadClusterCreate(obj *enterpriseApi.SearchHeadCluster) field
 	return allErrs
 }
 
+// ValidateSearchHeadClusterCreateWithContext validates a SearchHeadCluster on CREATE with ValidationContext
+func ValidateSearchHeadClusterCreateWithContext(obj *enterpriseApi.SearchHeadCluster, vc *ValidationContext) field.ErrorList {
+	allErrs := ValidateSearchHeadClusterCreate(obj)
+	if len(obj.Spec.ImagePullSecrets) > 0 {
+		allErrs = append(allErrs, ValidateImagePullSecretsExistence(
+			obj.Spec.ImagePullSecrets, vc, field.NewPath("spec").Child("imagePullSecrets"))...)
+	}
+	return allErrs
+}
+
 // ValidateSearchHeadClusterUpdate validates a SearchHeadCluster on UPDATE
 // TODO: Add immutable field validation here (e.g., compare obj vs oldObj for fields that cannot change after creation)
 func ValidateSearchHeadClusterUpdate(obj, oldObj *enterpriseApi.SearchHeadCluster) field.ErrorList {
 	return ValidateSearchHeadClusterCreate(obj)
+}
+
+// ValidateSearchHeadClusterUpdateWithContext validates a SearchHeadCluster on UPDATE with ValidationContext
+func ValidateSearchHeadClusterUpdateWithContext(obj, oldObj *enterpriseApi.SearchHeadCluster, vc *ValidationContext) field.ErrorList {
+	return ValidateSearchHeadClusterCreateWithContext(obj, vc)
 }
 
 // GetSearchHeadClusterWarningsOnCreate returns warnings for SearchHeadCluster CREATE
