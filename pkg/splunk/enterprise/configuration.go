@@ -544,14 +544,19 @@ func addPVCVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec
 	}
 	statefulSet.Spec.VolumeClaimTemplates = append(statefulSet.Spec.VolumeClaimTemplates, volumeClaimTemplate)
 
-	// add volume mounts to splunk and appruntime containers for the PVCs
-	volumeMount := corev1.VolumeMount{
-		Name:      volumeClaimTemplate.GetName(),
-		MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
-	}
-	for idx := range statefulSet.Spec.Template.Spec.Containers {
-		statefulSet.Spec.Template.Spec.Containers[idx].VolumeMounts = append(
-			statefulSet.Spec.Template.Spec.Containers[idx].VolumeMounts, volumeMount)
+	// add volume mounts to splunk container for the PVCs
+	statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts,
+		corev1.VolumeMount{
+			Name:      volumeClaimTemplate.GetName(),
+			MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
+		})
+	// add volume mounts to appruntime sidecar for the PVCs
+	if len(statefulSet.Spec.Template.Spec.InitContainers) > 0 {
+		statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts,
+			corev1.VolumeMount{
+				Name:      volumeClaimTemplate.GetName(),
+				MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
+			})
 	}
 
 	return nil
@@ -568,14 +573,19 @@ func addEphemeralVolumes(statefulSet *appsv1.StatefulSet, volumeType string) err
 			Name: fmt.Sprintf(splcommon.SplunkMountNamePrefix, volumeType), VolumeSource: emptyVolumeSource,
 		})
 
-	// add volume mounts to splunk and appruntime containers for the ephemeral volumes
-	volumeMount := corev1.VolumeMount{
-		Name:      fmt.Sprintf(splcommon.SplunkMountNamePrefix, volumeType),
-		MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
-	}
-	for idx := range statefulSet.Spec.Template.Spec.Containers {
-		statefulSet.Spec.Template.Spec.Containers[idx].VolumeMounts = append(
-			statefulSet.Spec.Template.Spec.Containers[idx].VolumeMounts, volumeMount)
+	// add volume mounts to splunk container for the ephemeral volumes
+	statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts,
+		corev1.VolumeMount{
+			Name:      fmt.Sprintf(splcommon.SplunkMountNamePrefix, volumeType),
+			MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
+		})
+	// add volume mounts to appruntime sidecar for the ephemeral volumes
+	if len(statefulSet.Spec.Template.Spec.InitContainers) > 0 {
+		statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts,
+			corev1.VolumeMount{
+				Name:      fmt.Sprintf(splcommon.SplunkMountNamePrefix, volumeType),
+				MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
+			})
 	}
 
 	return nil
@@ -757,7 +767,15 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 				TopologySpreadConstraints: spec.TopologySpreadConstraints,
 				SchedulerName:             spec.SchedulerName,
 				ImagePullSecrets:          spec.ImagePullSecrets,
-				Containers:                getSplunkContainers(spec, instanceType, ports),
+				InitContainers:            getAppRuntimeSidecar(instanceType),
+				Containers: []corev1.Container{
+					{
+						Image:           spec.Image,
+						ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
+						Name:            "splunk",
+						Ports:           ports,
+					},
+				},
 			},
 		},
 	}
@@ -796,26 +814,22 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	return statefulSet, nil
 }
 
-// getSplunkContainers returns the container list for a Splunk StatefulSet pod.
-// AppRuntime sidecar is added only for Standalone, Indexer, and SearchHead instance types.
-func getSplunkContainers(spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, ports []corev1.ContainerPort) []corev1.Container {
-	containers := []corev1.Container{
-		{
-			Image:           spec.Image,
-			ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
-			Name:            "splunk",
-			Ports:           ports,
-		},
+// getAppRuntimeSidecar returns the AppRuntime sidecar init container for Standalone, Indexer, and SearchHead.
+// Returns nil for other instance types.
+func getAppRuntimeSidecar(instanceType InstanceType) []corev1.Container {
+	if instanceType != SplunkStandalone && instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
+		return nil
 	}
-	if instanceType == SplunkStandalone || instanceType == SplunkIndexer || instanceType == SplunkSearchHead {
-		containers = append(containers, corev1.Container{
+	restartAlways := corev1.ContainerRestartPolicyAlways
+	return []corev1.Container{
+		{
 			Image:           getAppRuntimeImage(),
 			ImagePullPolicy: corev1.PullIfNotPresent,
 			Name:            "appruntime",
 			Command:         []string{"/usr/bin/splunk-eps"},
-		})
+			RestartPolicy:   &restartAlways,
+		},
 	}
-	return containers
 }
 
 // getAppRuntimeImage returns the AppRuntime container image from env or a default.
