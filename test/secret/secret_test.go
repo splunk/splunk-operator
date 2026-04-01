@@ -94,9 +94,8 @@ var _ = Describe("Secret test", func() {
 		tc := tc
 		Context("Multisite cluster deployment (M4 - Multisite Indexer Cluster, Search Head Cluster)", func() {
 			BeforeEach(func() {
-				testenv.SpecifiedTestTimeout = 40000
 				var err error
-				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix, testenv.WithTimeout(40000))
 				Expect(err).ToNot(HaveOccurred())
 			})
 

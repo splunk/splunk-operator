@@ -646,12 +646,18 @@ func (testenv *TestCaseEnv) GetLMConfigMap() string {
 	return testenv.licenseCMName
 }
 
-// NewDeployment creates a new deployment
-func (testenv *TestCaseEnv) NewDeployment(name string) (*Deployment, error) {
+// NewDeployment creates a new deployment. If timeout is non-nil it overrides
+// the default SpecifiedTestTimeout.
+func (testenv *TestCaseEnv) NewDeployment(name string, timeout *time.Duration) (*Deployment, error) {
+	t := time.Duration(SpecifiedTestTimeout) * time.Second
+	if timeout != nil {
+		t = *timeout
+	}
+
 	d := Deployment{
 		name:        testenv.GetName() + "-" + name,
 		testenv:     testenv,
-		testTimeout: time.Duration(SpecifiedTestTimeout) * time.Second,
+		testTimeout: t,
 	}
 
 	return &d, nil

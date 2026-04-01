@@ -19,22 +19,43 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/ginkgo/v2/types"
 )
 
+// SetupOption configures optional parameters for SetupTestCaseEnv.
+type SetupOption func(*setupOptions)
+
+type setupOptions struct {
+	timeout *time.Duration
+}
+
+// WithTimeout overrides the default test timeout for the deployment.
+func WithTimeout(seconds int) SetupOption {
+	return func(o *setupOptions) {
+		d := time.Duration(seconds) * time.Second
+		o.timeout = &d
+	}
+}
+
 // SetupTestCaseEnv creates a new test case environment and deployment for use in BeforeEach blocks.
 // It also validates test prerequisites immediately to fail fast before any long operations.
-func SetupTestCaseEnv(testenvInstance *TestEnv, namePrefix string) (*TestCaseEnv, *Deployment, error) {
+func SetupTestCaseEnv(testenvInstance *TestEnv, namePrefix string, opts ...SetupOption) (*TestCaseEnv, *Deployment, error) {
+	var o setupOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	name := fmt.Sprintf("%s-%s", namePrefix+testenvInstance.GetName(), RandomDNSName(3))
 	testcaseEnvInst, err := NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to create testcaseenv: %w", err)
 	}
 
-	deployment, err := testcaseEnvInst.NewDeployment(RandomDNSName(3))
+	deployment, err := testcaseEnvInst.NewDeployment(RandomDNSName(3), o.timeout)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to create deployment: %w", err)
 	}

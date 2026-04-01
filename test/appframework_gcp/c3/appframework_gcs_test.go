@@ -53,9 +53,8 @@ var _ = Describe("c3appfw test", func() {
 
 	BeforeEach(func() {
 		var err error
-		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "master")
+		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "master", testenv.WithTimeout(5000))
 		Expect(err).ToNot(HaveOccurred())
-		testenv.SpecifiedTestTimeout = 5000
 	})
 
 	AfterEach(func() {
