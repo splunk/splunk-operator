@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -48,7 +49,7 @@ type AppSourceGitSpec struct {
 
 type AppSourceAuth struct {
 	// +required
-	SecretName string `json:"secretName"`
+	SecretRef corev1.LocalObjectReference `json:"secretRef"`
 }
 
 // AppSourceSpec defines the desired state of AppSource.
@@ -76,7 +77,7 @@ type AppSourceSpec struct {
 
 	// Authentication configuration
 	// +required
-	Auth *AppSourceAuth `json:"auth"`
+	Auth AppSourceAuth `json:"auth"`
 
 	// Polling interval in seconds
 	// +optional
