@@ -32,3 +32,10 @@ func UpdateCRWithExpect(ctx context.Context, deployment *Deployment, obj client.
 	err := deployment.UpdateCR(ctx, obj)
 	Expect(err).To(Succeed(), errorMsg)
 }
+
+// DeleteCRWithExpect fetches a CR by name and deletes it, with Gomega expectations.
+func DeleteCRWithExpect(ctx context.Context, deployment *Deployment, obj client.Object, instanceName string, getErrorMsg string, deleteErrorMsg string) {
+	GetInstanceWithExpect(ctx, deployment, obj, instanceName, getErrorMsg)
+	err := deployment.DeleteCR(ctx, obj)
+	Expect(err).To(Succeed(), deleteErrorMsg)
+}

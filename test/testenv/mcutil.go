@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	corev1 "k8s.io/api/core/v1"
@@ -153,4 +154,47 @@ func GetMCConfigMap(ctx context.Context, deployment *Deployment, ns string, mcNa
 func CheckPodNameInString(podName string, configString string) bool {
 	logf.Log.Info("Check MC Config String has Pod configured", "configString", configString, "podName", podName)
 	return strings.Contains(configString, podName)
+}
+
+// MCReconfigParams holds the service name and URL parameters that differ between
+// V3 (master) and V4 (manager) Monitoring Console tests.
+type MCReconfigParams struct {
+	CMServiceNameFmt string // format string for CM service name (e.g., ClusterMasterServiceName)
+	CMURLKey         string // config map URL key (e.g., "SPLUNK_CLUSTER_MASTER_URL" or splcommon.ClusterManagerURL)
+}
+
+// MCVersionConfig captures the API-version-specific behaviour that differs
+// between V3 (master) and V4 (manager) monitoring console tests.
+type MCVersionConfig struct {
+	MCReconfigParams
+
+	NamePrefix string
+	Label      string
+
+	// DeployC3WithMC deploys a C3 single-site cluster with the given MC ref.
+	DeployC3WithMC func(ctx context.Context, d *Deployment, name string, replicas int, shc bool, mcRef string) error
+
+	// DeployM4WithMC deploys an M4 multisite cluster with the given MC ref.
+	DeployM4WithMC func(ctx context.Context, d *Deployment, name string, replicas int, siteCount int, mcRef string, shc bool) error
+
+	// NewCMObject returns a new, empty cluster-coordinator CR
+	// (*ClusterMaster for V3, *ClusterManager for V4).
+	NewCMObject func() interface{}
+
+	// VerifyCMReady asserts the cluster coordinator has reached Ready phase.
+	VerifyCMReady func(ctx context.Context, te *TestCaseEnv, d *Deployment)
+
+	// SHCReconfigTimeout is the timeout used when verifying MC config strings
+	// after an SHC MC-ref reconfig (0 means use the synchronous check).
+	SHCReconfigTimeout time.Duration
+
+	// VerifyMCTwoReadyAfterSHC controls whether MC Two is explicitly
+	// verified ready after the SHC reconfig step.
+	VerifyMCTwoReadyAfterSHC bool
+}
+
+// DeployMCAndVerifyRFSF deploys a Monitoring Console and verifies RF/SF is met.
+func DeployMCAndVerifyRFSF(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, mcRef string) {
+	_ = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
+	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 }

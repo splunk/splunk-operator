@@ -286,3 +286,37 @@ func (testcaseenv *TestCaseEnv) StandardC3Verification(ctx context.Context, depl
 	testcaseenv.VerifyClusterReadyAndRFSF(ctx, deployment)
 	testcaseenv.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
 }
+
+// DeployAndVerifyC3 deploys a C3 single-site cluster and verifies it reaches the ready state.
+func (c *ClusterReadinessConfig) DeployAndVerifyC3(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, replicas int, shc bool, mcRef string) {
+	err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), replicas, shc, mcRef)
+	Expect(err).To(Succeed(), "Unable to deploy cluster")
+	c.VerifyC3ClusterReady(ctx, deployment, testcaseEnv)
+}
+
+// DeployAndVerifyM4 deploys an M4 multisite cluster and verifies the Cluster Manager
+// and all M4 components reach the ready state.
+func (c *ClusterReadinessConfig) DeployAndVerifyM4(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, indexerReplicas int, siteCount int, mcRef string) {
+	err := c.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), indexerReplicas, siteCount, mcRef)
+	Expect(err).To(Succeed(), "Unable to deploy cluster")
+	c.ClusterManagerReady(ctx, deployment, testcaseEnv)
+	testcaseEnv.VerifyM4ComponentsReady(ctx, deployment, siteCount)
+}
+
+// DeployC3WithLicense sets up the license config map, deploys a C3 cluster,
+// and verifies both the License Manager and cluster reach the ready state.
+func (c *ClusterReadinessConfig) DeployC3WithLicense(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, replicas int, shc bool, mcRef string) {
+	SetupLicenseConfigMap(ctx, testcaseEnv)
+	c.DeployAndVerifyC3(ctx, deployment, testcaseEnv, replicas, shc, mcRef)
+	c.LicenseManagerReady(ctx, deployment, testcaseEnv)
+}
+
+// DeployM4WithLicense sets up the license config map, deploys an M4 multisite cluster,
+// and verifies the License Manager, Cluster Manager, and all M4 components reach the ready state.
+func (c *ClusterReadinessConfig) DeployM4WithLicense(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, indexerReplicas int, siteCount int, mcRef string) {
+	SetupLicenseConfigMap(ctx, testcaseEnv)
+	err := c.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), indexerReplicas, siteCount, mcRef)
+	Expect(err).To(Succeed(), "Unable to deploy cluster")
+	VerifyLMAndClusterManagerReady(ctx, deployment, testcaseEnv, c)
+	testcaseEnv.VerifyM4ComponentsReady(ctx, deployment, siteCount)
+}

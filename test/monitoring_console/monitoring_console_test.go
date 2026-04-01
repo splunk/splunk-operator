@@ -29,9 +29,9 @@ import (
 
 // masterManagerMCConfigs defines the V3 (master) and V4 (manager) variants
 // shared by the C3 reconfig and M4 MC reconfig test tables.
-var masterManagerMCConfigs = []MCVersionConfig{
+var masterManagerMCConfigs = []testenv.MCVersionConfig{
 	{
-		MCReconfigParams: MCReconfigParams{CMServiceNameFmt: testenv.ClusterMasterServiceName, CMURLKey: "SPLUNK_CLUSTER_MASTER_URL"},
+		MCReconfigParams: testenv.MCReconfigParams{CMServiceNameFmt: testenv.ClusterMasterServiceName, CMURLKey: "SPLUNK_CLUSTER_MASTER_URL"},
 		NamePrefix:       "master",
 		Label:            "mastermc",
 		DeployC3WithMC: func(ctx context.Context, d *testenv.Deployment, name string, replicas int, shc bool, mcRef string) error {
@@ -48,7 +48,7 @@ var masterManagerMCConfigs = []MCVersionConfig{
 		VerifyMCTwoReadyAfterSHC: true,
 	},
 	{
-		MCReconfigParams: MCReconfigParams{CMServiceNameFmt: testenv.ClusterManagerServiceName, CMURLKey: splcommon.ClusterManagerURL},
+		MCReconfigParams: testenv.MCReconfigParams{CMServiceNameFmt: testenv.ClusterManagerServiceName, CMURLKey: splcommon.ClusterManagerURL},
 		NamePrefix:       "",
 		Label:            "managermc",
 		DeployC3WithMC: func(ctx context.Context, d *testenv.Deployment, name string, replicas int, shc bool, mcRef string) error {
@@ -292,7 +292,7 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 
 			// Check both Standalone pods are configured in MC after scale up
 			testcaseEnvInst.Log.Info("Checking for Standalone Pods on MC after scale up")
-			verifyStandaloneInMC(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true)
+			testenv.VerifyStandalonePodsInMC(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true)
 		})
 	})
 

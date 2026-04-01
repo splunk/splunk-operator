@@ -38,6 +38,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
+	gomega "github.com/onsi/gomega"
+
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 )
@@ -1929,4 +1931,39 @@ func (d *Deployment) GetConfigMap(ctx context.Context, name string) (*corev1.Con
 		return nil, err
 	}
 	return cm, nil
+}
+
+// S1WithLMSetup holds the resources created by SetupS1WithLMAndMC so that
+// individual test functions can operate on them without repeating the setup.
+type S1WithLMSetup struct {
+	Standalone                *enterpriseApi.Standalone
+	Mc                        *enterpriseApi.MonitoringConsole
+	ResourceVersion           string
+	NamespaceScopedSecretName string
+}
+
+// SetupS1WithLMAndMC performs the common S1 setup shared by the secret-update
+// and secret-delete tests: license config map, standalone with LM, MC, and
+// initial secret verification.
+func SetupS1WithLMAndMC(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig) S1WithLMSetup {
+	SetupLicenseConfigMap(ctx, testcaseEnvInst)
+
+	mcRef := deployment.GetName()
+	standalone, err := config.DeployStandaloneWithLM(ctx, deployment, deployment.GetName(), mcRef)
+	gomega.Expect(err).To(gomega.Succeed(), "Unable to deploy standalone instance with LM")
+
+	VerifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, standalone)
+
+	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
+
+	namespaceScopedSecretName := fmt.Sprintf(NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
+	_, err = GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
+	gomega.Expect(err).To(gomega.Succeed(), "Unable to get secret struct")
+
+	return S1WithLMSetup{
+		Standalone:                standalone,
+		Mc:                        mc,
+		ResourceVersion:           resourceVersion,
+		NamespaceScopedSecretName: namespaceScopedSecretName,
+	}
 }

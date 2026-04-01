@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 
 	"github.com/splunk/splunk-operator/test/licensemanager"
+
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -26,13 +27,13 @@ var _ = Describe("Licensemaster test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	var config *licensemanager.LicenseTestConfig
+	var config *testenv.LicenseTestConfig
 	ctx := context.TODO()
 
 	BeforeEach(func() {
 		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "master")
 
-		config = licensemanager.NewLicenseMasterConfig()
+		config = testenv.NewLicenseMasterConfig()
 	})
 
 	AfterEach(func() {

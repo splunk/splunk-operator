@@ -24,13 +24,13 @@ var _ = Describe("Licensemanager App Framework test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	var config *LicenseTestConfig
+	var config *testenv.LicenseTestConfig
 	ctx := context.TODO()
 
 	BeforeEach(func() {
 		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
 
-		config = NewLicenseManagerConfig()
+		config = testenv.NewLicenseManagerConfig()
 	})
 
 	AfterEach(func() {

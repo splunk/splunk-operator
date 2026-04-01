@@ -67,11 +67,7 @@ func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	// Deploy Single site Cluster and Search Head Clusters
 	mcRef := deployment.GetName()
 	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
-	err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
-	Expect(err).To(Succeed(), "Unable to deploy cluster")
-
-	// Verify cluster is ready
-	config.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst)
+	config.DeployAndVerifyC3(ctx, deployment, testcaseEnvInst, 3, true /*shc*/, mcRef)
 
 	// Verify telemetry
 	testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
@@ -134,51 +130,31 @@ func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig, verificationTimeout time.Duration) {
 	// Deploy Single site Cluster and Search Head Clusters
 	mcRef := deployment.GetName()
-	err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
-	Expect(err).To(Succeed(), "Unable to deploy cluster")
-
-	// Verify cluster is ready and RF/SF is met
-	config.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst)
+	config.DeployAndVerifyC3(ctx, deployment, testcaseEnvInst, 3, true /*shc*/, mcRef)
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 	// Deploy and verify Monitoring Console
 	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, "")
 
 	clusterManagerType := config.ClusterManagerPVCType()
-	verifyC3ClusterPVCs(testcaseEnvInst, deployment, clusterManagerType, true, verificationTimeout)
+	testenv.VerifyC3ClusterPVCs(testcaseEnvInst, deployment, clusterManagerType, true, verificationTimeout)
 
 	// Delete the Search Head Cluster
-	shc := &enterpriseApi.SearchHeadCluster{}
-	testenv.GetInstanceWithExpect(ctx, deployment, shc, deployment.GetName()+"-shc", "Unable to GET SHC instance")
-	err = deployment.DeleteCR(ctx, shc)
-	Expect(err).To(Succeed(), "Unable to delete SHC instance", "SHC Name", shc)
+	testenv.DeleteCRWithExpect(ctx, deployment, &enterpriseApi.SearchHeadCluster{}, deployment.GetName()+"-shc", "Unable to GET SHC instance", "Unable to delete SHC instance")
 
 	// Delete the Indexer Cluster
-	idxc := &enterpriseApi.IndexerCluster{}
-	testenv.GetInstanceWithExpect(ctx, deployment, idxc, deployment.GetName()+"-idxc", "Unable to GET IDXC instance")
-	err = deployment.DeleteCR(ctx, idxc)
-	Expect(err).To(Succeed(), "Unable to delete IDXC instance", "IDXC Name", idxc)
+	testenv.DeleteCRWithExpect(ctx, deployment, &enterpriseApi.IndexerCluster{}, deployment.GetName()+"-idxc", "Unable to GET IDXC instance", "Unable to delete IDXC instance")
 
 	// Delete the Cluster Manager (v3 or v4)
 	config.DeleteClusterManager(ctx, deployment)
 
 	// Delete Monitoring Console
-	testenv.GetInstanceWithExpect(ctx, deployment, mc, mcRef, "Unable to GET Monitoring Console instance")
-	err = deployment.DeleteCR(ctx, mc)
-	Expect(err).To(Succeed(), "Unable to delete Monitoring Console instance", "Monitoring Console Name", mcRef)
+	testenv.DeleteCRWithExpect(ctx, deployment, mc, mcRef, "Unable to GET Monitoring Console instance", "Unable to delete Monitoring Console instance")
 
-	verifyC3ClusterPVCs(testcaseEnvInst, deployment, clusterManagerType, false, verificationTimeout)
+	testenv.VerifyC3ClusterPVCs(testcaseEnvInst, deployment, clusterManagerType, false, verificationTimeout)
 
 	// Verify Monitoring Console PVCs (etc and var) have been deleted
 	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "monitoring-console", 1, false, verificationTimeout)
-}
-
-// verifyC3ClusterPVCs verifies that PVCs for SHC, deployer, indexers, and cluster manager exist or are deleted.
-func verifyC3ClusterPVCs(testcaseEnvInst *testenv.TestCaseEnv, deployment *testenv.Deployment, clusterManagerType string, exists bool, timeout time.Duration) {
-	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-search-head", 3, exists, timeout)
-	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-deployer", 1, exists, timeout)
-	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "idxc-indexer", 3, exists, timeout)
-	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, clusterManagerType, 1, exists, timeout)
 }
 
 // RunSHCDeployerResourceSpecTest deploys a Search Head Cluster, verifies default CPU limits,
@@ -234,13 +210,7 @@ func RunM4CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	mcRef := deployment.GetName()
 	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
 	siteCount := 3
-	err := config.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), 1, siteCount, mcRef)
-	Expect(err).To(Succeed(), "Unable to deploy cluster")
-
-	// Ensure that the cluster-manager goes to Ready phase
-	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-
-	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
+	config.DeployAndVerifyM4(ctx, deployment, testcaseEnvInst, 1, siteCount, mcRef)
 
 	testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
 

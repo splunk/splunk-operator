@@ -167,13 +167,6 @@ func RunS1EphemeralStorageTest(ctx context.Context, deployment *testenv.Deployme
 	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 }
 
-// verifyM4ClusterAndRFSF verifies cluster manager and multisite cluster are ready and RF/SF is met.
-func verifyM4ClusterAndRFSF(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig, siteCount int) {
-	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
-}
-
 // RunM4MultisiteSmartStoreTest runs the standard M4 multisite SmartStore test workflow
 func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
 	volName := "test-volume-" + testenv.RandomDNSName(3)
@@ -190,7 +183,7 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	err := config.DeployMultisiteClusterWithIndexes(ctx, deployment, deployment.GetName(), 1, siteCount, testcaseEnvInst.GetIndexSecretName(), smartStoreSpec)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-	verifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)
+	testenv.VerifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)
 
 	// Use multisite workflow helper to verify index, ingest data, roll to warm, and verify on S3
 	testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, deployment.GetName(), siteCount, indexName)
@@ -206,7 +199,7 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	// Update CR with new index based on API version
 	config.AppendSmartStoreIndex(ctx, deployment, newIndex)
 
-	verifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)
+	testenv.VerifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)
 
 	// Verify new bundle is pushed (only for v3)
 	if config.APIVersion == "v3" {

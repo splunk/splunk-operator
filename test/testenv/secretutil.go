@@ -21,6 +21,8 @@ import (
 	"os/exec"
 	"strings"
 
+	. "github.com/onsi/gomega"
+
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	corev1 "k8s.io/api/core/v1"
@@ -205,4 +207,15 @@ func GetSecretFromInputsConf(deployment *Deployment, podName string, ns string, 
 	key := strings.TrimSpace(secretList[0])
 	value := strings.TrimSpace(secretList[1])
 	return key, value, nil
+}
+
+// GenerateAndApplySecretUpdate creates randomized secret data and applies it to the namespace-scoped
+// secret object, returning the updated data map for subsequent verification.
+func GenerateAndApplySecretUpdate(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, namespaceScopedSecretName string) map[string][]byte {
+	modifiedHecToken := GetRandomHECToken()
+	modifiedValue := RandomDNSName(10)
+	updatedSecretData := GetSecretDataMap(modifiedHecToken, modifiedValue, modifiedValue, modifiedValue, modifiedValue)
+	err := ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, updatedSecretData)
+	Expect(err).To(Succeed(), "Unable to update secret Object")
+	return updatedSecretData
 }

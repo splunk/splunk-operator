@@ -1546,3 +1546,253 @@ func (testenv *TestCaseEnv) WaitForAppRepoStateChange(ctx context.Context, deplo
 		return false, nil
 	})
 }
+
+// VerifyC3ClusterPVCs verifies that PVCs for SHC, deployer, indexers, and cluster manager exist or are deleted.
+func VerifyC3ClusterPVCs(testcaseEnvInst *TestCaseEnv, deployment *Deployment, clusterManagerType string, exists bool, timeout time.Duration) {
+	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-search-head", 3, exists, timeout)
+	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-deployer", 1, exists, timeout)
+	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "idxc-indexer", 3, exists, timeout)
+	testcaseEnvInst.VerifyPVCsPerDeployment(deployment, clusterManagerType, 1, exists, timeout)
+}
+
+// VerifyM4ClusterAndRFSF verifies cluster manager and multisite cluster are ready and RF/SF is met.
+func VerifyM4ClusterAndRFSF(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig, siteCount int) {
+	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
+	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+}
+
+// VerifyLMAppsOnPod verifies that apps are copied and installed on the License Manager pod.
+// The updated flag controls whether apps are expected to be updated versions.
+func VerifyLMAppsOnPod(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, testenvInstance *TestEnv, podName []string, appList []string, updated bool) {
+	testcaseEnvInst.VerifyAppsCopied(ctx, deployment, testenvInstance.GetName(), podName, appList, true, enterpriseApi.ScopeLocal)
+	testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), podName, appList, updated, "enabled", updated, false)
+}
+
+// VerifyLMConfiguredOnCluster verifies that the License Manager is configured on
+// the given indexer pods, on search head pods, and on the Monitoring Console.
+func VerifyLMConfiguredOnCluster(ctx context.Context, deployment *Deployment, indexerPods []string) {
+	shPods := GeneratePodNameSlice(SearchHeadPod, deployment.GetName(), 3, false, 0)
+	VerifyLMConfiguredOnPods(ctx, deployment, append(indexerPods, shPods...))
+	VerifyLMConfiguredOnMC(ctx, deployment)
+}
+
+// VerifyMCConfigForCluster verifies that the CM, deployer, search heads, and indexers
+// are all correctly registered in the MC config map and pod config string.
+// It uses the service name and URL key from the MCVersionConfig so it works for both V3 and V4.
+func VerifyMCConfigForCluster(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv,
+	cfg MCVersionConfig, mcName string, shPods, indexerPods []string) {
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+		[]string{fmt.Sprintf(cfg.CMServiceNameFmt, deployment.GetName())}, cfg.CMURLKey, mcName, true)
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+		[]string{fmt.Sprintf(DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, true)
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
+	testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcName, true, false)
+	testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, indexerPods, mcName, true, true)
+}
+
+// VerifyStandalonePodsInMC verifies that the given standalone pods are present (or absent) in the
+// MC config map and pod config string.
+func VerifyStandalonePodsInMC(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, pods []string, mcName string, shouldExist bool) {
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, pods, "SPLUNK_STANDALONE_URL", mcName, shouldExist)
+	testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, pods, mcName, shouldExist, false)
+}
+
+// VerifyMCTwoAfterCMReconfig verifies that MC Two is correctly configured after the Cluster Manager
+// has been reconfigured to point to it: CM and indexers should be present, SH should be absent.
+// If checkDeployerAbsent is true, also verifies deployer is absent on MC Two (used in C3 tests).
+func VerifyMCTwoAfterCMReconfig(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv,
+	params MCReconfigParams, mcTwoName string, shPods, indexerPods []string, checkDeployerAbsent bool) {
+
+	testcaseEnvInst.Log.Info("Verify CM in MC Two Config Map after CM Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+		[]string{fmt.Sprintf(params.CMServiceNameFmt, deployment.GetName())}, params.CMURLKey, mcTwoName, true)
+
+	testcaseEnvInst.Log.Info("Verify Indexers in MC Two Config String after CM Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, indexerPods, mcTwoName, true, true)
+
+	if checkDeployerAbsent {
+		testcaseEnvInst.Log.Info("Verify Deployer NOT in MC Two Config Map after CM Reconfig")
+		testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+			[]string{fmt.Sprintf(DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcTwoName, false)
+	}
+
+	testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC Two Config Map after CM Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, false)
+
+	testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC Two Config String after CM Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcTwoName, false, false)
+}
+
+// VerifyMCOneAfterCMReconfig verifies that MC One is correctly configured after the Cluster Manager
+// has been reconfigured away from it: CM should be absent, SH should still be present.
+// If checkDeployerPresent is true, also verifies deployer is still present on MC One (used in M4 tests).
+func VerifyMCOneAfterCMReconfig(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv,
+	params MCReconfigParams, mcName string, mc *enterpriseApi.MonitoringConsole, shPods []string, checkDeployerPresent bool) {
+
+	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
+
+	testcaseEnvInst.Log.Info("Verify CM NOT in MC One Config Map after CM Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+		[]string{fmt.Sprintf(params.CMServiceNameFmt, deployment.GetName())}, params.CMURLKey, mcName, false)
+
+	// CSPL-619: Indexer verification on MC One is commented out in all test variants
+
+	if checkDeployerPresent {
+		testcaseEnvInst.Log.Info("Verify Deployer still in MC One Config Map after CM Reconfig")
+		testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+			[]string{fmt.Sprintf(DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, true)
+	}
+
+	testcaseEnvInst.Log.Info("Verify SH Pods still in MC One Config Map after CM Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
+
+	testcaseEnvInst.Log.Info("Verify SH Pods still in MC One Config String after CM Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcName, true, false)
+}
+
+// VerifyMCTwoAfterSHCReconfig verifies that MC Two has all components (CM, deployer, SH, indexers)
+// after the SHC has been reconfigured to point to it.
+// If timeout > 0, uses WaitForPodsInMCConfigString; otherwise uses direct VerifyPodsInMCConfigString.
+func VerifyMCTwoAfterSHCReconfig(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv,
+	params MCReconfigParams, mcTwoName string, shPods, indexerPods []string, timeout time.Duration) {
+
+	testcaseEnvInst.Log.Info("Verify CM in MC Two Config Map after SHC Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+		[]string{fmt.Sprintf(params.CMServiceNameFmt, deployment.GetName())}, params.CMURLKey, mcTwoName, true)
+
+	testcaseEnvInst.Log.Info("Verify Deployer in MC Two Config Map after SHC Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+		[]string{fmt.Sprintf(DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcTwoName, true)
+
+	testcaseEnvInst.Log.Info("Verify SH Pods in MC Two Config Map after SHC Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, true)
+
+	if timeout > 0 {
+		testcaseEnvInst.Log.Info("Verify SH Pods in MC Two Config String after SHC Reconfig (with wait)")
+		err := testcaseEnvInst.WaitForPodsInMCConfigString(ctx, deployment, shPods, mcTwoName, true, false, timeout)
+		gomega.Expect(err).To(gomega.Succeed(), "Timed out waiting for search heads in MC two config after SHC reconfig")
+
+		testcaseEnvInst.Log.Info("Verify Indexers in MC Two Config String after SHC Reconfig (with wait)")
+		err = testcaseEnvInst.WaitForPodsInMCConfigString(ctx, deployment, indexerPods, mcTwoName, true, true, timeout)
+		gomega.Expect(err).To(gomega.Succeed(), "Timed out waiting for indexers in MC two config after SHC reconfig")
+	} else {
+		testcaseEnvInst.Log.Info("Verify SH Pods in MC Two Config String after SHC Reconfig")
+		testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcTwoName, true, false)
+
+		testcaseEnvInst.Log.Info("Verify Indexers in MC Two Config String after SHC Reconfig")
+		testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, indexerPods, mcTwoName, true, true)
+	}
+}
+
+// VerifyMCOneAfterSHCReconfig verifies that MC One has lost all components (CM, deployer, SH)
+// after the SHC has been reconfigured away from it.
+// If timeout > 0, uses WaitForPodsInMCConfigString; otherwise uses direct VerifyPodsInMCConfigString.
+func VerifyMCOneAfterSHCReconfig(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv,
+	params MCReconfigParams, mcName string, mc *enterpriseApi.MonitoringConsole, shPods []string, timeout time.Duration) {
+
+	testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
+
+	testcaseEnvInst.Log.Info("Verify CM NOT in MC One Config Map after SHC Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+		[]string{fmt.Sprintf(params.CMServiceNameFmt, deployment.GetName())}, params.CMURLKey, mcName, false)
+
+	testcaseEnvInst.Log.Info("Verify Deployer NOT in MC One Config Map after SHC Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
+		[]string{fmt.Sprintf(DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, false)
+
+	testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC One Config Map after SHC Reconfig")
+	testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, false)
+
+	if timeout > 0 {
+		testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC One Config String after SHC Reconfig (with wait)")
+		err := testcaseEnvInst.WaitForPodsInMCConfigString(ctx, deployment, shPods, mcName, false, false, timeout)
+		gomega.Expect(err).To(gomega.Succeed(), "Timed out waiting for search heads to be removed from MC one config after SHC reconfig")
+	} else {
+		testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC One Config String after SHC Reconfig")
+		testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcName, false, false)
+	}
+
+	// CSPL-619: Indexer verification on MC One is commented out in all test variants
+}
+
+// VerifySecretsPropagated checks that the given secret data has been propagated to all
+// versioned secret objects, pods, server config, input config, and via the API.
+func VerifySecretsPropagated(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, secretData map[string][]byte, updated bool) {
+	// Once Pods are READY check each versioned secret for updated secret keys
+	secretObjectNames := GetVersionedSecretNames(testcaseEnvInst.GetName(), 2)
+
+	// Verify Secrets on versioned secret objects
+	testcaseEnvInst.VerifySecretsOnSecretObjects(ctx, deployment, secretObjectNames, secretData, updated)
+
+	// Once Pods are READY check each pod for updated secret keys
+	verificationPods := DumpGetPods(testcaseEnvInst.GetName())
+
+	// Verify secrets on pods
+	testcaseEnvInst.VerifySecretsOnPods(ctx, deployment, verificationPods, secretData, updated)
+
+	// Verify Secrets on ServerConf on Pod
+	testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, secretData, updated)
+
+	// Verify Hec token on InputConf on Pod
+	testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, secretData, updated)
+
+	// Verify Secrets via api access on Pod
+	testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, secretData, updated)
+}
+
+// VerifyLMAndStandaloneReady waits for License Manager then Standalone to reach READY status.
+func VerifyLMAndStandaloneReady(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig, standalone *enterpriseApi.Standalone) {
+	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+}
+
+// VerifyLMAndClusterManagerReady waits for License Manager then Cluster Manager to reach READY status.
+func VerifyLMAndClusterManagerReady(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig) {
+	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+	config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+}
+
+// VerifyS1SecretChangeApplied verifies that a secret change (update or delete)
+// has been applied to the S1 stack: standalone enters Updating phase, LM and
+// standalone return to Ready, MC version changes, and secrets are propagated.
+func VerifyS1SecretChangeApplied(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig, setup S1WithLMSetup, secretData map[string][]byte, updated bool) {
+	testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating)
+	VerifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, setup.Standalone)
+	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, setup.Mc, setup.ResourceVersion)
+	VerifySecretsPropagated(ctx, deployment, testcaseEnvInst, secretData, updated)
+}
+
+// VerifyPostSecretChangeCluster performs the common tail verification after a
+// secret change on a clustered deployment: MC version changed, RF/SF met, and
+// secrets propagated to all pods.
+func VerifyPostSecretChangeCluster(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, mc *enterpriseApi.MonitoringConsole, resourceVersion string, updatedSecretData map[string][]byte) {
+	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
+
+	testcaseEnvInst.Log.Info("Checking RF SF after secret change")
+	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+
+	VerifySecretsPropagated(ctx, deployment, testcaseEnvInst, updatedSecretData, true)
+}
+
+// VerifyConfFileContent retrieves a conf file from a pod and validates its content.
+func VerifyConfFileContent(pod, confPath, deploymentName string, expectedContent []string, errorMsg string) {
+	conf, err := GetConfFile(pod, confPath, deploymentName)
+	gomega.Expect(err).To(gomega.Succeed(), errorMsg)
+	ValidateContent(conf, expectedContent, true)
+}
+
+// ApplySecretUpdateAndVerifyCMUpdating deploys MC, verifies RF/SF and initial secret state,
+// applies a secret update, and confirms the Cluster Manager enters the Updating phase.
+// Returns the MC, its resource version, and the updated secret data for post-change verification.
+func ApplySecretUpdateAndVerifyCMUpdating(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig) (*enterpriseApi.MonitoringConsole, string, map[string][]byte) {
+	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
+	testcaseEnvInst.Log.Info("Checking RF SF before secret change")
+	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+	namespaceScopedSecretName := fmt.Sprintf(NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
+	_, err := GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
+	gomega.Expect(err).To(gomega.Succeed(), "Unable to get secret struct")
+	updatedSecretData := GenerateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, namespaceScopedSecretName)
+	config.VerifyClusterManagerPhaseUpdating(ctx, deployment, testcaseEnvInst)
+	return mc, resourceVersion, updatedSecretData
+}

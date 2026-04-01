@@ -60,9 +60,9 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			// testcaseEnvInst.Log.Info("Create Service Account")
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
-			setupIngestorStack(ctx, deployment, testcaseEnvInst, queue, objectStorage, cmSpec)
+			testenv.SetupIngestorStack(ctx, deployment, testcaseEnvInst, queue, objectStorage, cmSpec)
 
-			deleteIngestorStack(ctx, deployment)
+			testenv.DeleteIngestorStack(ctx, deployment)
 		})
 
 		It("indexingestionsep, smoke: Splunk Operator can deploy Ingestors and Indexers with additional configurations", func() {
@@ -79,7 +79,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			queue.SQS.VolList = volumeSpec
 
 			// Deploy Queue and ObjectStorage
-			q, objStorage := deployQueueAndObjectStorage(ctx, deployment, queue, objectStorage)
+			q, objStorage := testenv.DeployQueueAndObjectStorage(ctx, deployment, queue, objectStorage)
 
 			// Deploy Ingestor Cluster with additional configurations (similar to standalone app framework test)
 			appSourceName := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
@@ -168,7 +168,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			// testcaseEnvInst.Log.Info("Create Service Account")
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
-			setupIngestorStack(ctx, deployment, testcaseEnvInst, queue, objectStorage, cmSpec)
+			testenv.SetupIngestorStack(ctx, deployment, testcaseEnvInst, queue, objectStorage, cmSpec)
 
 			// Get instance of current Ingestor Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Ingestor Cluster CR with latest config")
@@ -198,10 +198,10 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 
 				if strings.Contains(pod, "ingest") || strings.Contains(pod, "idxc") {
 					// Verify outputs.conf
-					verifyConfFileContent(pod, "opt/splunk/etc/system/local/outputs.conf", deployment.GetName(), outputs, "Failed to get outputs.conf from Ingestor Cluster pod")
+					testenv.VerifyConfFileContent(pod, "opt/splunk/etc/system/local/outputs.conf", deployment.GetName(), outputs, "Failed to get outputs.conf from Ingestor Cluster pod")
 
 					// Verify default-mode.conf
-					verifyConfFileContent(pod, "opt/splunk/etc/system/local/default-mode.conf", deployment.GetName(), defaultsAll, "Failed to get default-mode.conf from Ingestor Cluster pod")
+					testenv.VerifyConfFileContent(pod, "opt/splunk/etc/system/local/default-mode.conf", deployment.GetName(), defaultsAll, "Failed to get default-mode.conf from Ingestor Cluster pod")
 
 					// Verify AWS env variables
 					testcaseEnvInst.Log.Info("Verify AWS env variables")
@@ -216,79 +216,9 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 					testenv.ValidateContent(defaultsConf, defaultsIngest, true)
 				} else if strings.Contains(pod, "idxc") {
 					// Verify inputs.conf
-					verifyConfFileContent(pod, "opt/splunk/etc/system/local/inputs.conf", deployment.GetName(), inputs, "Failed to get inputs.conf from Indexer Cluster pod")
+					testenv.VerifyConfFileContent(pod, "opt/splunk/etc/system/local/inputs.conf", deployment.GetName(), inputs, "Failed to get inputs.conf from Indexer Cluster pod")
 				}
 			}
 		})
 	})
 })
-
-// verifyConfFileContent retrieves a conf file from a pod and validates its content.
-func verifyConfFileContent(pod, confPath, deploymentName string, expectedContent []string, errorMsg string) {
-	conf, err := testenv.GetConfFile(pod, confPath, deploymentName)
-	Expect(err).To(Succeed(), errorMsg)
-	testenv.ValidateContent(conf, expectedContent, true)
-}
-
-// deployQueueAndObjectStorage deploys a Queue and ObjectStorage CR and returns both.
-func deployQueueAndObjectStorage(ctx context.Context, deployment *testenv.Deployment, qSpec enterpriseApi.QueueSpec, osSpec enterpriseApi.ObjectStorageSpec) (*enterpriseApi.Queue, *enterpriseApi.ObjectStorage) {
-	q, err := deployment.DeployQueue(ctx, "queue", qSpec)
-	Expect(err).To(Succeed(), "Unable to deploy Queue")
-
-	objStorage, err := deployment.DeployObjectStorage(ctx, "os", osSpec)
-	Expect(err).To(Succeed(), "Unable to deploy ObjectStorage")
-
-	return q, objStorage
-}
-
-// setupIngestorStack deploys the full Queue/ObjectStorage/IngestorCluster/ClusterManager/IndexerCluster stack
-// and verifies each component reaches the Ready phase.
-func setupIngestorStack(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, qSpec enterpriseApi.QueueSpec, osSpec enterpriseApi.ObjectStorageSpec, cmSpec enterpriseApi.ClusterManagerSpec) {
-	volumeSpec := []enterpriseApi.SQSVolumeSpec{testenv.GenerateQueueVolumeSpec(
-		"queue-secret-ref-volume",
-		testcaseEnvInst.GetIndexIngestSepSecretName(),
-	)}
-	qSpec.SQS.VolList = volumeSpec
-
-	q, objStorage := deployQueueAndObjectStorage(ctx, deployment, qSpec, osSpec)
-
-	_, err := deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, "")
-	Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
-
-	_, err = deployment.DeployClusterManagerWithGivenSpec(ctx, deployment.GetName(), cmSpec)
-	Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
-
-	_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, "")
-	Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
-
-	testcaseEnvInst.VerifyIngestorReady(ctx, deployment)
-	testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
-}
-
-// deleteIngestorStack tears down the full Queue/ObjectStorage/IngestorCluster/IndexerCluster stack.
-func deleteIngestorStack(ctx context.Context, deployment *testenv.Deployment) {
-	// Delete the Indexer Cluster
-	idxc := &enterpriseApi.IndexerCluster{}
-	testenv.GetInstanceWithExpect(ctx, deployment, idxc, deployment.GetName()+"-idxc", "Unable to get Indexer Cluster instance")
-	err := deployment.DeleteCR(ctx, idxc)
-	Expect(err).To(Succeed(), "Unable to delete Indexer Cluster instance", "Indexer Cluster Name", idxc)
-
-	// Delete the Ingestor Cluster
-	ingest := &enterpriseApi.IngestorCluster{}
-	testenv.GetInstanceWithExpect(ctx, deployment, ingest, deployment.GetName()+"-ingest", "Unable to get Ingestor Cluster instance")
-	err = deployment.DeleteCR(ctx, ingest)
-	Expect(err).To(Succeed(), "Unable to delete Ingestor Cluster instance", "Ingestor Cluster Name", ingest)
-
-	// Delete the Queue
-	q := &enterpriseApi.Queue{}
-	testenv.GetInstanceWithExpect(ctx, deployment, q, "queue", "Unable to get Queue instance")
-	err = deployment.DeleteCR(ctx, q)
-	Expect(err).To(Succeed(), "Unable to delete Queue", "Queue Name", q)
-
-	// Delete the ObjectStorage
-	objStorage := &enterpriseApi.ObjectStorage{}
-	testenv.GetInstanceWithExpect(ctx, deployment, objStorage, "os", "Unable to get ObjectStorage instance")
-	err = deployment.DeleteCR(ctx, objStorage)
-	Expect(err).To(Succeed(), "Unable to delete ObjectStorage", "ObjectStorage Name", objStorage)
-}
