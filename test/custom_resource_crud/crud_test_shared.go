@@ -29,14 +29,16 @@ import (
 // RunS1CPUUpdateTest runs the standard S1 CPU limit update test workflow
 func RunS1CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, defaultCPULimits string, newCPULimits string) {
 	// Deploy and verify Standalone
-	standalone := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), deployment.GetName(), "")
+	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), deployment.GetName(), "")
+	Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
 
 	// Verify telemetry
 	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
 	testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
 
 	// Deploy and verify Monitoring Console
-	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
+	mc, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
+	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 	// Verify CPU limits before updating the CR
 	standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
@@ -46,7 +48,7 @@ func RunS1CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	standalone.Spec.Resources.Limits = corev1.ResourceList{
 		"cpu": resource.MustParse(newCPULimits),
 	}
-	err := deployment.UpdateCR(ctx, standalone)
+	err = deployment.UpdateCR(ctx, standalone)
 	Expect(err).To(Succeed(), "Unable to deploy standalone instance with updated CR ")
 
 	// Verify Standalone is updating
@@ -67,13 +69,14 @@ func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	// Deploy Single site Cluster and Search Head Clusters
 	mcRef := deployment.GetName()
 	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
-	config.DeployAndVerifyC3(ctx, deployment, testcaseEnvInst, 3, true /*shc*/, mcRef)
+	Expect(config.DeployAndVerifyC3(ctx, deployment, testcaseEnvInst, 3, true /*shc*/, mcRef)).To(Succeed(), "Unable to deploy C3 cluster")
 
 	// Verify telemetry
 	testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
 
 	// Deploy and verify Monitoring Console, RF/SF
-	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
+	mc, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
+	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 	testcaseEnvInst.StandardC3Verification(ctx, deployment, deployment.GetName(), mc)
 
 	// Verify CPU limits on Indexers before updating the CR
@@ -130,26 +133,27 @@ func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig, verificationTimeout time.Duration) {
 	// Deploy Single site Cluster and Search Head Clusters
 	mcRef := deployment.GetName()
-	config.DeployAndVerifyC3(ctx, deployment, testcaseEnvInst, 3, true /*shc*/, mcRef)
+	Expect(config.DeployAndVerifyC3(ctx, deployment, testcaseEnvInst, 3, true /*shc*/, mcRef)).To(Succeed(), "Unable to deploy C3 cluster")
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 	// Deploy and verify Monitoring Console
-	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, "")
+	mc, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, "")
+	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 	clusterManagerType := config.ClusterManagerPVCType()
 	testenv.VerifyC3ClusterPVCs(testcaseEnvInst, deployment, clusterManagerType, true, verificationTimeout)
 
 	// Delete the Search Head Cluster
-	testenv.DeleteCRWithExpect(ctx, deployment, &enterpriseApi.SearchHeadCluster{}, deployment.GetName()+"-shc", "Unable to GET SHC instance", "Unable to delete SHC instance")
+	Expect(testenv.GetAndDeleteCR(ctx, deployment, &enterpriseApi.SearchHeadCluster{}, deployment.GetName()+"-shc")).To(Succeed(), "Unable to delete SHC instance")
 
 	// Delete the Indexer Cluster
-	testenv.DeleteCRWithExpect(ctx, deployment, &enterpriseApi.IndexerCluster{}, deployment.GetName()+"-idxc", "Unable to GET IDXC instance", "Unable to delete IDXC instance")
+	Expect(testenv.GetAndDeleteCR(ctx, deployment, &enterpriseApi.IndexerCluster{}, deployment.GetName()+"-idxc")).To(Succeed(), "Unable to delete IDXC instance")
 
 	// Delete the Cluster Manager (v3 or v4)
-	config.DeleteClusterManager(ctx, deployment)
+	Expect(config.DeleteClusterManager(ctx, deployment)).To(Succeed(), "Unable to delete Cluster Manager")
 
 	// Delete Monitoring Console
-	testenv.DeleteCRWithExpect(ctx, deployment, mc, mcRef, "Unable to GET Monitoring Console instance", "Unable to delete Monitoring Console instance")
+	Expect(testenv.GetAndDeleteCR(ctx, deployment, mc, mcRef)).To(Succeed(), "Unable to delete Monitoring Console instance")
 
 	testenv.VerifyC3ClusterPVCs(testcaseEnvInst, deployment, clusterManagerType, false, verificationTimeout)
 
@@ -210,12 +214,13 @@ func RunM4CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	mcRef := deployment.GetName()
 	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
 	siteCount := 3
-	config.DeployAndVerifyM4(ctx, deployment, testcaseEnvInst, 1, siteCount, mcRef)
+	Expect(config.DeployAndVerifyM4(ctx, deployment, testcaseEnvInst, 1, siteCount, mcRef)).To(Succeed(), "Unable to deploy M4 cluster")
 
 	testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
 
 	// Deploy and verify Monitoring Console
-	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, "")
+	mc, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, "")
+	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 	// Verify RF SF is met
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)

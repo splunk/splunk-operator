@@ -1782,17 +1782,31 @@ func VerifyConfFileContent(pod, confPath, deploymentName string, expectedContent
 	ValidateContent(conf, expectedContent, true)
 }
 
+// GetInstanceWithExpect retrieves a CR instance and asserts success
+func GetInstanceWithExpect(ctx context.Context, deployment *Deployment, instance client.Object, name string, message string) {
+	err := deployment.GetInstance(ctx, name, instance)
+	gomega.Expect(err).To(gomega.Succeed(), message)
+}
+
+// UpdateCRWithExpect updates a CR and asserts success
+func UpdateCRWithExpect(ctx context.Context, deployment *Deployment, cr client.Object, message string) {
+	err := deployment.UpdateCR(ctx, cr)
+	gomega.Expect(err).To(gomega.Succeed(), message)
+}
+
 // ApplySecretUpdateAndVerifyCMUpdating deploys MC, verifies RF/SF and initial secret state,
 // applies a secret update, and confirms the Cluster Manager enters the Updating phase.
 // Returns the MC, its resource version, and the updated secret data for post-change verification.
 func ApplySecretUpdateAndVerifyCMUpdating(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig) (*enterpriseApi.MonitoringConsole, string, map[string][]byte) {
-	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
+	mc, resourceVersion, err := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
+	gomega.Expect(err).To(gomega.Succeed(), "Unable to deploy Monitoring Console")
 	testcaseEnvInst.Log.Info("Checking RF SF before secret change")
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 	namespaceScopedSecretName := fmt.Sprintf(NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
-	_, err := GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
+	_, err = GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
 	gomega.Expect(err).To(gomega.Succeed(), "Unable to get secret struct")
-	updatedSecretData := GenerateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, namespaceScopedSecretName)
+	updatedSecretData, err := GenerateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, namespaceScopedSecretName)
+	gomega.Expect(err).To(gomega.Succeed(), "Unable to generate and apply secret update")
 	config.VerifyClusterManagerPhaseUpdating(ctx, deployment, testcaseEnvInst)
 	return mc, resourceVersion, updatedSecretData
 }

@@ -74,11 +74,13 @@ var _ = Describe("Monitoring Console test (master)", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "master")
+		var err error
+		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "master")
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	AfterEach(func() {
-		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 	})
 
 	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
@@ -104,7 +106,8 @@ var _ = Describe("Monitoring Console test (master)", func() {
 			mcName := deployment.GetName()
 
 			// Deploy and verify Monitoring Console
-			mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), "")
+			mc, resourceVersion, err := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Deploy and verify C3 cluster with MC
 			testcaseEnvInst.DeployAndVerifyC3WithMC(ctx, deployment, deployment.GetName(), defaultIndexerReplicas, mcName)
@@ -112,7 +115,7 @@ var _ = Describe("Monitoring Console test (master)", func() {
 			testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
 
 			// Wait for Cluster Master to appear in Monitoring Console Config Map
-			err := testcaseEnvInst.WaitForPodsInMCConfigMap(ctx, deployment, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true, 2*time.Minute)
+			err = testcaseEnvInst.WaitForPodsInMCConfigMap(ctx, deployment, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true, 2*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for Cluster Master in MC ConfigMap")
 
 			// Verify MC configuration for C3 cluster
@@ -163,11 +166,13 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
+		var err error
+		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	AfterEach(func() {
-		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 	})
 
 	Context("Deploy Monitoring Console", func() {
@@ -189,12 +194,14 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 			*/
 
 			// Deploy Monitoring Console CRD
-			mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), "")
+			mc, resourceVersion, err := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Create Standalone Spec and apply
 			standaloneOneName := deployment.GetName()
 			mcName := deployment.GetName()
-			standaloneOne := testcaseEnvInst.DeployStandaloneWithMCRef(ctx, deployment, standaloneOneName, mcName)
+			standaloneOne, err := testcaseEnvInst.DeployStandaloneWithMCRef(ctx, deployment, standaloneOneName, mcName)
+			Expect(err).To(Succeed(), "Unable to deploy Standalone with MC reference")
 
 			// wait for custom resource resource version to change and verify MC is ready
 			testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
@@ -211,11 +218,12 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 			standaloneOne.Spec.MonitoringConsoleRef.Name = mcTwoName
 
 			// Update Standalone with 2nd MC
-			err := deployment.UpdateCR(ctx, standaloneOne)
+			err = deployment.UpdateCR(ctx, standaloneOne)
 			Expect(err).To(Succeed(), "Unable to update Standalone with new MC Name")
 
 			// Deploy 2nd MC Pod
-			testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcTwoName, "")
+			_, err = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcTwoName, "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console Two")
 
 			// Check Standalone is configured in MC Two
 			testcaseEnvInst.Log.Info("Checking for Standalone on SECOND MC after Standalone RECONFIG")
@@ -256,10 +264,12 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 
 			standaloneName := deployment.GetName()
 			mcName := deployment.GetName()
-			standalone := testcaseEnvInst.DeployStandaloneWithMCRef(ctx, deployment, standaloneName, mcName)
+			standalone, err := testcaseEnvInst.DeployStandaloneWithMCRef(ctx, deployment, standaloneName, mcName)
+			Expect(err).To(Succeed(), "Unable to deploy Standalone with MC reference")
 
 			// Deploy MC and wait for MC to be READY
-			mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
+			mc, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Check Standalone is configured in MC
 			testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC")
@@ -276,7 +286,7 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 
 			standalone.Spec.Replicas = int32(scaledReplicaCount)
 
-			err := deployment.UpdateCR(ctx, standalone)
+			err = deployment.UpdateCR(ctx, standalone)
 			Expect(err).To(Succeed(), "Failed to scale Standalone")
 
 			// Ensure standalone is scaling up
@@ -319,9 +329,10 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 			mcName := deployment.GetName()
 
 			// Deploy Monitoring Console Pod
-			mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), "")
+			mc, resourceVersion, err := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
-			err := deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
+			err = deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Ensure C3 cluster is ready
@@ -414,11 +425,13 @@ var _ = Describe("Monitoring Console reconfig tests", func() {
 		cfg := cfg
 		Context("Clustered deployment C3 reconfig ("+cfg.Label+")", func() {
 			BeforeEach(func() {
-				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, cfg.NamePrefix)
+				var err error
+				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, cfg.NamePrefix)
+				Expect(err).ToNot(HaveOccurred())
 			})
 
 			AfterEach(func() {
-				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 			})
 
 			It(cfg.Label+", integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
@@ -432,11 +445,13 @@ var _ = Describe("Monitoring Console reconfig tests", func() {
 		cfg := cfg
 		Context("Multisite Clustered deployment M4 reconfig ("+cfg.Label+")", func() {
 			BeforeEach(func() {
-				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, cfg.NamePrefix)
+				var err error
+				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, cfg.NamePrefix)
+				Expect(err).ToNot(HaveOccurred())
 			})
 
 			AfterEach(func() {
-				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 			})
 
 			It(cfg.Label+", integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", func() {

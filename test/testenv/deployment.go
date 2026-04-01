@@ -38,8 +38,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
-	gomega "github.com/onsi/gomega"
-
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 )
@@ -1945,25 +1943,33 @@ type S1WithLMSetup struct {
 // SetupS1WithLMAndMC performs the common S1 setup shared by the secret-update
 // and secret-delete tests: license config map, standalone with LM, MC, and
 // initial secret verification.
-func SetupS1WithLMAndMC(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig) S1WithLMSetup {
-	SetupLicenseConfigMap(ctx, testcaseEnvInst)
+func SetupS1WithLMAndMC(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig) (S1WithLMSetup, error) {
+	if err := SetupLicenseConfigMap(ctx, testcaseEnvInst); err != nil {
+		return S1WithLMSetup{}, err
+	}
 
 	mcRef := deployment.GetName()
 	standalone, err := config.DeployStandaloneWithLM(ctx, deployment, deployment.GetName(), mcRef)
-	gomega.Expect(err).To(gomega.Succeed(), "Unable to deploy standalone instance with LM")
+	if err != nil {
+		return S1WithLMSetup{}, fmt.Errorf("unable to deploy standalone instance with LM: %w", err)
+	}
 
 	VerifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, standalone)
 
-	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
+	mc, resourceVersion, err := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
+	if err != nil {
+		return S1WithLMSetup{}, fmt.Errorf("unable to deploy Monitoring Console: %w", err)
+	}
 
 	namespaceScopedSecretName := fmt.Sprintf(NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
-	_, err = GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
-	gomega.Expect(err).To(gomega.Succeed(), "Unable to get secret struct")
+	if _, err = GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName); err != nil {
+		return S1WithLMSetup{}, fmt.Errorf("unable to get secret struct: %w", err)
+	}
 
 	return S1WithLMSetup{
 		Standalone:                standalone,
 		Mc:                        mc,
 		ResourceVersion:           resourceVersion,
 		NamespaceScopedSecretName: namespaceScopedSecretName,
-	}
+	}, nil
 }

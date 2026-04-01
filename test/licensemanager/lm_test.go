@@ -17,6 +17,8 @@ import (
 	"context"
 
 	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -28,13 +30,15 @@ var _ = Describe("Licensemanager test", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
+		var err error
+		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "master")
+		Expect(err).ToNot(HaveOccurred())
 
 		config = testenv.NewLicenseManagerConfig()
 	})
 
 	AfterEach(func() {
-		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 	})
 
 	Context("Standalone deployment (S1) with License Manager", func() {

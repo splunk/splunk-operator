@@ -17,6 +17,7 @@ import (
 	"context"
 
 	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
 )
@@ -41,11 +42,13 @@ var _ = Describe("Secret test", func() {
 		label := label
 		Context("Standalone deployment (S1) with LM and MC", func() {
 			BeforeEach(func() {
-				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
+				var err error
+				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+				Expect(err).ToNot(HaveOccurred())
 			})
 
 			AfterEach(func() {
-				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 			})
 
 			It(label+", integration, s1: Secret update on a standalone instance with LM and MC", func() {
@@ -70,11 +73,13 @@ var _ = Describe("Secret test", func() {
 		tc := tc
 		Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 			BeforeEach(func() {
-				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				var err error
+				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				Expect(err).ToNot(HaveOccurred())
 			})
 
 			AfterEach(func() {
-				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 			})
 
 			It(tc.Label+", smoke, c3: secret update on Indexers and Search Head Cluster", func() {
@@ -90,11 +95,13 @@ var _ = Describe("Secret test", func() {
 		Context("Multisite cluster deployment (M4 - Multisite Indexer Cluster, Search Head Cluster)", func() {
 			BeforeEach(func() {
 				testenv.SpecifiedTestTimeout = 40000
-				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				var err error
+				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				Expect(err).ToNot(HaveOccurred())
 			})
 
 			AfterEach(func() {
-				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 			})
 
 			It(tc.Label+", integration, m4: secret update on multisite Indexers and Search Head Cluster", func() {

@@ -23,27 +23,31 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/ginkgo/v2/types"
-	. "github.com/onsi/gomega"
 )
 
 // SetupTestCaseEnv creates a new test case environment and deployment for use in BeforeEach blocks.
 // It also validates test prerequisites immediately to fail fast before any long operations.
-func SetupTestCaseEnv(testenvInstance *TestEnv, namePrefix string) (*TestCaseEnv, *Deployment) {
+func SetupTestCaseEnv(testenvInstance *TestEnv, namePrefix string) (*TestCaseEnv, *Deployment, error) {
 	name := fmt.Sprintf("%s-%s", namePrefix+testenvInstance.GetName(), RandomDNSName(3))
 	testcaseEnvInst, err := NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-	Expect(err).To(Succeed(), "Unable to create testcaseenv")
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to create testcaseenv: %w", err)
+	}
 
 	deployment, err := testcaseEnvInst.NewDeployment(RandomDNSName(3))
-	Expect(err).To(Succeed(), "Unable to create deployment")
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to create deployment: %w", err)
+	}
 
-	err = testcaseEnvInst.ValidateTestPrerequisites(context.TODO(), deployment)
-	Expect(err).To(Succeed(), "Test prerequisites validation failed")
+	if err = testcaseEnvInst.ValidateTestPrerequisites(context.TODO(), deployment); err != nil {
+		return nil, nil, fmt.Errorf("test prerequisites validation failed: %w", err)
+	}
 
-	return testcaseEnvInst, deployment
+	return testcaseEnvInst, deployment, nil
 }
 
 // TeardownTestCaseEnv handles the common teardown logic for test case environments.
-func TeardownTestCaseEnv(testcaseEnvInst *TestCaseEnv, deployment *Deployment) {
+func TeardownTestCaseEnv(testcaseEnvInst *TestCaseEnv, deployment *Deployment) error {
 	if types.SpecState(ginkgo.CurrentSpecReport().State) == types.SpecStateFailed {
 		if testcaseEnvInst != nil {
 			testcaseEnvInst.SkipTeardown = true
@@ -55,8 +59,11 @@ func TeardownTestCaseEnv(testcaseEnvInst *TestCaseEnv, deployment *Deployment) {
 	}
 
 	if testcaseEnvInst != nil {
-		Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
+		if err := testcaseEnvInst.Teardown(); err != nil {
+			return fmt.Errorf("teardown failed: %w", err)
+		}
 	}
+	return nil
 }
 
 // CleanupOperatorFile deletes the test_file.img from the operator pod's app download directory
@@ -71,14 +78,17 @@ func CleanupOperatorFile(ctx context.Context, deployment *Deployment, testcaseEn
 
 // TeardownAppFrameworkTestCaseEnv handles teardown for app framework tests with provider-specific
 // cloud storage cleanup. cloudCleanup is called only if SkipTeardown is false.
-func TeardownAppFrameworkTestCaseEnv(ctx context.Context, testcaseEnvInst *TestCaseEnv, deployment *Deployment, cloudCleanup func(), filePresentOnOperator bool) {
-	TeardownTestCaseEnv(testcaseEnvInst, deployment)
+func TeardownAppFrameworkTestCaseEnv(ctx context.Context, testcaseEnvInst *TestCaseEnv, deployment *Deployment, cloudCleanup func(), filePresentOnOperator bool) error {
+	if err := TeardownTestCaseEnv(testcaseEnvInst, deployment); err != nil {
+		return err
+	}
 
 	if testcaseEnvInst != nil && !testcaseEnvInst.SkipTeardown && cloudCleanup != nil {
 		cloudCleanup()
 	}
 
 	CleanupOperatorFile(ctx, deployment, testcaseEnvInst, filePresentOnOperator)
+	return nil
 }
 
 // S3CloudCleanup returns a cleanup function that deletes the given files from an S3 bucket.
@@ -127,46 +137,57 @@ func LoadEnvFile() error {
 
 // SetupS3AppsSuite initialises the test environment and, when running on EKS,
 // downloads the V1 and V2 app sets from S3.
-func SetupS3AppsSuite(suiteName, testDataBucket, appDirV1, downloadDirV1, appDirV2, downloadDirV2 string) (*TestEnv, []string, []string) {
+func SetupS3AppsSuite(suiteName, testDataBucket, appDirV1, downloadDirV1, appDirV2, downloadDirV2 string) (*TestEnv, []string, []string, error) {
 	testenvInst, err := NewDefaultTestEnv(suiteName)
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("unable to create test env: %w", err)
+	}
 
 	if ClusterProvider == "eks" {
 		appListV1 := BasicApps
 		appFileList := GetAppFileList(appListV1)
 
-		err = DownloadFilesFromS3(testDataBucket, appDirV1, downloadDirV1, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V1 app files")
+		if err = DownloadFilesFromS3(testDataBucket, appDirV1, downloadDirV1, appFileList); err != nil {
+			return nil, nil, nil, fmt.Errorf("unable to download V1 app files: %w", err)
+		}
 
 		appListV2 := append(appListV1, NewAppsAddedBetweenPolls...)
 		appFileList = GetAppFileList(appListV2)
 
-		err = DownloadFilesFromS3(testDataBucket, appDirV2, downloadDirV2, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V2 app files")
+		if err = DownloadFilesFromS3(testDataBucket, appDirV2, downloadDirV2, appFileList); err != nil {
+			return nil, nil, nil, fmt.Errorf("unable to download V2 app files: %w", err)
+		}
 
-		return testenvInst, appListV1, appListV2
+		return testenvInst, appListV1, appListV2, nil
 	}
 
 	testenvInst.Log.Info("Skipping Before Suite Setup", "provider", ClusterProvider)
-	return testenvInst, nil, nil
+	return testenvInst, nil, nil, nil
 }
 
 // CleanupLocalAppDownloads tears down the test environment and removes locally
 // downloaded app directories after a suite run.
-func CleanupLocalAppDownloads(testenvInst *TestEnv, dirs ...string) {
+func CleanupLocalAppDownloads(testenvInst *TestEnv, dirs ...string) error {
 	if testenvInst != nil {
-		Expect(testenvInst.Teardown()).ToNot(HaveOccurred())
+		if err := testenvInst.Teardown(); err != nil {
+			return fmt.Errorf("teardown failed: %w", err)
+		}
 	}
 	for _, dir := range dirs {
-		Expect(os.RemoveAll(dir)).To(Succeed(), "Unable to delete locally downloaded app files from "+dir)
+		if err := os.RemoveAll(dir); err != nil {
+			return fmt.Errorf("unable to delete locally downloaded app files from %s: %w", dir, err)
+		}
 	}
+	return nil
 }
 
 // SetupAzureAppsSuite initialises the test environment and, when running on Azure,
 // downloads the V1 and V2 app sets from Azure Blob.
-func SetupAzureAppsSuite(suiteName, downloadDirV1, downloadDirV2 string) (*TestEnv, []string, []string) {
+func SetupAzureAppsSuite(suiteName, downloadDirV1, downloadDirV2 string) (*TestEnv, []string, []string, error) {
 	testenvInst, err := NewDefaultTestEnv(suiteName)
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("unable to create test env: %w", err)
+	}
 
 	if ClusterProvider == "azure" {
 		ctx := context.TODO()
@@ -175,53 +196,59 @@ func SetupAzureAppsSuite(suiteName, downloadDirV1, downloadDirV2 string) (*TestE
 		appFileList := GetAppFileList(appListV1)
 
 		containerName := "/test-data/appframework/v1apps/"
-		err = DownloadFilesFromAzure(ctx, GetAzureEndpoint(ctx), StorageAccountKey, StorageAccount, downloadDirV1, containerName, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V1 app files")
+		if err = DownloadFilesFromAzure(ctx, GetAzureEndpoint(ctx), StorageAccountKey, StorageAccount, downloadDirV1, containerName, appFileList); err != nil {
+			return nil, nil, nil, fmt.Errorf("unable to download V1 app files: %w", err)
+		}
 
 		appListV2 := append(appListV1, NewAppsAddedBetweenPolls...)
 		appFileList = GetAppFileList(appListV2)
 
 		containerName = "/test-data/appframework/v2apps/"
-		err = DownloadFilesFromAzure(ctx, GetAzureEndpoint(ctx), StorageAccountKey, StorageAccount, downloadDirV2, containerName, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V2 app files")
+		if err = DownloadFilesFromAzure(ctx, GetAzureEndpoint(ctx), StorageAccountKey, StorageAccount, downloadDirV2, containerName, appFileList); err != nil {
+			return nil, nil, nil, fmt.Errorf("unable to download V2 app files: %w", err)
+		}
 
-		return testenvInst, appListV1, appListV2
+		return testenvInst, appListV1, appListV2, nil
 	}
 
 	testenvInst.Log.Info("Skipping Before Suite Setup", "provider", ClusterProvider)
-	return testenvInst, nil, nil
+	return testenvInst, nil, nil, nil
 }
 
 // SetupGCPAppsSuite initialises the test environment and, when running on GCP,
 // downloads the V1 and V2 app sets from GCS.
-func SetupGCPAppsSuite(suiteName, testDataBucket, appDirV1, downloadDirV1, appDirV2, downloadDirV2 string) (*TestEnv, []string, []string) {
+func SetupGCPAppsSuite(suiteName, testDataBucket, appDirV1, downloadDirV1, appDirV2, downloadDirV2 string) (*TestEnv, []string, []string, error) {
 	testenvInst, err := NewDefaultTestEnv(suiteName)
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("unable to create test env: %w", err)
+	}
 
 	if ClusterProvider == "gcp" {
 		appListV1 := BasicApps
 		appFileList := GetAppFileList(appListV1)
 
 		testenvInst.Log.Info("logging download details", "bucket", testDataBucket, "appDirV1", appDirV1, "downloadDirV1", downloadDirV1, "appFileList", appFileList)
-		err = DownloadFilesFromGCP(testDataBucket, appDirV1, downloadDirV1, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V1 app files")
+		if err = DownloadFilesFromGCP(testDataBucket, appDirV1, downloadDirV1, appFileList); err != nil {
+			return nil, nil, nil, fmt.Errorf("unable to download V1 app files: %w", err)
+		}
 
 		appListV2 := append(appListV1, NewAppsAddedBetweenPolls...)
 		appFileList = GetAppFileList(appListV2)
 
-		err = DownloadFilesFromGCP(testDataBucket, appDirV2, downloadDirV2, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V2 app files")
+		if err = DownloadFilesFromGCP(testDataBucket, appDirV2, downloadDirV2, appFileList); err != nil {
+			return nil, nil, nil, fmt.Errorf("unable to download V2 app files: %w", err)
+		}
 
-		return testenvInst, appListV1, appListV2
+		return testenvInst, appListV1, appListV2, nil
 	}
 
 	testenvInst.Log.Info("Skipping Before Suite Setup", "provider", ClusterProvider)
-	return testenvInst, nil, nil
+	return testenvInst, nil, nil, nil
 }
 
 // SetupLicenseConfigMap downloads the license file from the appropriate provider
 // and creates a license config map.
-func SetupLicenseConfigMap(ctx context.Context, testcaseEnvInst *TestCaseEnv) {
+func SetupLicenseConfigMap(ctx context.Context, testcaseEnvInst *TestCaseEnv) error {
 	downloadDir := "licenseFolder"
 	var licenseFilePath string
 	var err error
@@ -229,17 +256,19 @@ func SetupLicenseConfigMap(ctx context.Context, testcaseEnvInst *TestCaseEnv) {
 	switch ClusterProvider {
 	case "eks":
 		licenseFilePath, err = DownloadLicenseFromS3Bucket()
-		Expect(err).To(Succeed(), "Unable to download license file from S3")
 	case "azure":
 		licenseFilePath, err = DownloadLicenseFromAzure(ctx, downloadDir)
-		Expect(err).To(Succeed(), "Unable to download license file from Azure")
 	case "gcp":
 		licenseFilePath, err = DownloadLicenseFromGCPBucket()
-		Expect(err).To(Succeed(), "Unable to download license file from GCP")
 	default:
 		testcaseEnvInst.Log.Info("Skipping license download", "provider", ClusterProvider)
-		return
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("unable to download license file: %w", err)
 	}
 
 	testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+	return nil
 }

@@ -18,6 +18,8 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -41,13 +43,15 @@ var _ = Describe("Custom Resource CRUD test", func() {
 	// S1 test — single variant (manager, V4)
 	Context("Standalone deployment (S1)", func() {
 		BeforeEach(func() {
-			testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
+			var err error
+			testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+			Expect(err).ToNot(HaveOccurred())
 			defaultCPULimits = DefaultCPULimits
 			newCPULimits = UpdatedCPULimits
 		})
 
 		AfterEach(func() {
-			testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+			Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 		})
 
 		It("managercrcrud, integration, s1: can deploy a standalone instance, change its CR, update the instance", func() {
@@ -63,11 +67,13 @@ var _ = Describe("Custom Resource CRUD test", func() {
 				defaultCPULimits = DefaultCPULimits
 				newCPULimits = UpdatedCPULimits
 				verificationTimeout = DefaultVerificationTimeout
-				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				var err error
+				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				Expect(err).ToNot(HaveOccurred())
 			})
 
 			AfterEach(func() {
-				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 			})
 
 			It(tc.Label+", integration, c3: can deploy Indexer and Search Head Cluster, change their CR, update the instances", func() {
@@ -86,11 +92,13 @@ var _ = Describe("Custom Resource CRUD test", func() {
 	Context("Search Head Cluster", func() {
 		BeforeEach(func() {
 			defaultCPULimits = DefaultCPULimits
-			testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
+			var err error
+			testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 		AfterEach(func() {
-			testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+			Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 		})
 
 		It("managercrcrud, integration, shc: can deploy Search Head Cluster with Deployer resource spec configured", func() {
@@ -105,11 +113,13 @@ var _ = Describe("Custom Resource CRUD test", func() {
 			BeforeEach(func() {
 				defaultCPULimits = DefaultCPULimits
 				newCPULimits = UpdatedCPULimits
-				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				var err error
+				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				Expect(err).ToNot(HaveOccurred())
 			})
 
 			AfterEach(func() {
-				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 			})
 
 			It(tc.Label+", integration, m4: can deploy multisite Indexer and Search Head Clusters, change their CR, update the instances", func() {

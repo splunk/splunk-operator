@@ -45,9 +45,11 @@ func TestBasic(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	testenvInstance, appListV1, appListV2 = testenv.SetupAzureAppsSuite(testSuiteName, downloadDirV1, downloadDirV2)
+	var err error
+	testenvInstance, appListV1, appListV2, err = testenv.SetupAzureAppsSuite(testSuiteName, downloadDirV1, downloadDirV2)
+	Expect(err).ToNot(HaveOccurred())
 })
 
 var _ = AfterSuite(func() {
-	testenv.CleanupLocalAppDownloads(testenvInstance, downloadDirV1, downloadDirV2)
+	Expect(testenv.CleanupLocalAppDownloads(testenvInstance, downloadDirV1, downloadDirV2)).To(Succeed())
 })

@@ -43,7 +43,8 @@ func RunM4MCReconfigTest(ctx context.Context, deployment *testenv.Deployment, te
 	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 
 	// Deploy and verify Monitoring Console
-	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
+	mc, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
+	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 	// Generate pod name slices for verification
 	shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), defaultSHReplicas, false, 0)
@@ -75,9 +76,10 @@ func RunC3MCReconfigTest(ctx context.Context, deployment *testenv.Deployment, te
 	mcName := deployment.GetName()
 
 	// Deploy Monitoring Console Pod
-	mc, resourceVersion := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), "")
+	mc, resourceVersion, err := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), "")
+	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
-	err := cfg.DeployC3WithMC(ctx, deployment, deployment.GetName(), defaultIndexerReplicas, true, mcName)
+	err = cfg.DeployC3WithMC(ctx, deployment, deployment.GetName(), defaultIndexerReplicas, true, mcName)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 	// Ensure C3 cluster is ready
@@ -107,7 +109,8 @@ func RunC3MCReconfigTest(ctx context.Context, deployment *testenv.Deployment, te
 	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 	// Deploy and verify Monitoring Console Two
-	mcTwo := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcTwoName, "")
+	mcTwo, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcTwoName, "")
+	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console Two")
 
 	// ###########   VERIFY MONITORING CONSOLE TWO AFTER CLUSTER MANAGER RECONFIG  ###################################
 	testenv.VerifyMCTwoAfterCMReconfig(ctx, deployment, testcaseEnvInst, cfg.MCReconfigParams, mcTwoName, shPods, indexerPods, true)
@@ -145,7 +148,8 @@ func RunS1StandaloneAddDeleteMCTest(ctx context.Context, deployment *testenv.Dep
 	testcaseEnvInst.DeployStandaloneWithMCRef(ctx, deployment, standaloneOneName, mcName)
 
 	// Deploy MC and wait for MC to be READY
-	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
+	mc, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
+	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 	// Check Standalone is configured in MC Config Map
 	standalonePods := testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneOneName, 1, false, 0)

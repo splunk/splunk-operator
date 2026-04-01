@@ -52,12 +52,14 @@ var _ = Describe("c3appfw test", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "master")
+		var err error
+		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "master")
+		Expect(err).ToNot(HaveOccurred())
 		testenv.SpecifiedTestTimeout = 4000
 	})
 
 	AfterEach(func() {
-		testenv.TeardownAppFrameworkTestCaseEnv(ctx, testcaseEnvInst, deployment, testenv.S3CloudCleanup(testS3Bucket, uploadedApps), filePresentOnOperator)
+		Expect(testenv.TeardownAppFrameworkTestCaseEnv(ctx, testcaseEnvInst, deployment, testenv.S3CloudCleanup(testS3Bucket, uploadedApps), filePresentOnOperator)).To(Succeed())
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
@@ -194,7 +196,8 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			ClusterMasterBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			ClusterMasterBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -253,7 +256,8 @@ var _ = Describe("c3appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV2
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, ClusterMasterBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, ClusterMasterBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -384,7 +388,8 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: "V2", CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: "V2", CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			ClusterMasterBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			ClusterMasterBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -443,7 +448,8 @@ var _ = Describe("c3appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV1
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, ClusterMasterBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, ClusterMasterBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -555,7 +561,8 @@ var _ = Describe("c3appfw test", func() {
 					Expect(err).To(Succeed(), "Timed out waiting for apps to reach Install phase on %s", appSource.CrName)
 				}
 			}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 			// Validate cluster-scoped apps also reached Install phase (bundle push already done by VerifyAppFrameworkState)
 			for _, appSource := range allAppSourceInfo {
 				if appSource.CrAppScope == enterpriseApi.ScopeCluster {
@@ -642,7 +649,8 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", indexerName, resultLine["host"].(string))
 
 			//########## SCALING UP VERIFICATIONS #########
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// ############ Verify livenessProbe and readinessProbe config object and scripts############
 			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
@@ -718,7 +726,8 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", indexerName, resultLine["host"].(string))
 
 			//######## SCALING DOWN VERIFICATIONS #########
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, shcPodNames)
@@ -804,7 +813,8 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -846,7 +856,8 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -983,7 +994,8 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListLocal, CrAppFileList: localappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListCluster, CrAppFileList: clusterappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			ClusterMasterBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			ClusterMasterBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -1044,7 +1056,8 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoCluster.CrAppList = appListCluster
 			shcAppSourceInfoCluster.CrAppFileList = clusterappFileList
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, ClusterMasterBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, ClusterMasterBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -1187,7 +1200,8 @@ var _ = Describe("c3appfw test", func() {
 					Expect(err).To(Succeed(), "Timed out waiting for apps to reach Install phase on %s", appSource.CrName)
 				}
 			}
-			ClusterMasterBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			ClusterMasterBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 			// Validate cluster-scoped apps also reached Install phase (bundle push already done by VerifyAppFrameworkState)
 			for _, appSource := range allAppSourceInfo {
 				if appSource.CrAppScope == enterpriseApi.ScopeCluster {
@@ -1255,7 +1269,8 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoCluster.CrAppList = appListCluster
 			shcAppSourceInfoCluster.CrAppFileList = clusterappFileList
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, ClusterMasterBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, ClusterMasterBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -1342,7 +1357,8 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -1468,7 +1484,8 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			ClusterMasterBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			ClusterMasterBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -1575,7 +1592,8 @@ var _ = Describe("c3appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV2
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, ClusterMasterBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, ClusterMasterBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -1663,7 +1681,8 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -1695,7 +1714,8 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			//  ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// ############ ENABLE MANUAL POLL ############
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
@@ -1746,7 +1766,8 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -1878,7 +1899,8 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListLocal, CrAppFileList: localappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListCluster, CrAppFileList: clusterappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			ClusterMasterBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			ClusterMasterBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -1958,7 +1980,8 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoCluster.CrAppList = appListCluster
 			shcAppSourceInfoCluster.CrAppFileList = clusterappFileList
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, ClusterMasterBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, ClusterMasterBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -2306,7 +2329,8 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -2394,7 +2418,8 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -2472,7 +2497,8 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify repo state on App to be disabled to be 1 (i.e app present on S3 bucket)
 			appName := appListV1[0]
@@ -2615,7 +2641,8 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 		})
 	})
@@ -2705,7 +2732,8 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 		})
 	})
 
@@ -2792,7 +2820,8 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
 			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
@@ -3043,13 +3072,15 @@ var _ = Describe("c3appfw test", func() {
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: esApp, CrAppFileList: appFileList, CrReplicas: int(shSpec.Replicas), CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			idxcPodNames := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName())}
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: taApp, CrAppFileList: appFileListIdxc, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// //############### UPGRADE APPS ################
 			// // Download ES App from S3

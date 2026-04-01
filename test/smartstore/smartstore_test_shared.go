@@ -197,7 +197,7 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	newIndex := []enterpriseApi.IndexSpec{testenv.GenerateIndexSpec(indexNameTwo, volName)}
 
 	// Update CR with new index based on API version
-	config.AppendSmartStoreIndex(ctx, deployment, newIndex)
+	Expect(config.AppendSmartStoreIndex(ctx, deployment, newIndex)).To(Succeed(), "Unable to append SmartStore index")
 
 	testenv.VerifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)
 

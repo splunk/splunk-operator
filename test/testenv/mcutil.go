@@ -194,7 +194,11 @@ type MCVersionConfig struct {
 }
 
 // DeployMCAndVerifyRFSF deploys a Monitoring Console and verifies RF/SF is met.
-func DeployMCAndVerifyRFSF(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, mcRef string) {
-	_ = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
+func DeployMCAndVerifyRFSF(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, mcRef string) error {
+	_, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
+	if err != nil {
+		return err
+	}
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+	return nil
 }

@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"strings"
 
-	. "github.com/onsi/gomega"
-
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -127,7 +125,7 @@ func NewLicenseManagerConfig() *LicenseTestConfig {
 }
 
 // DownloadAppFiles downloads app files from the appropriate cloud provider.
-func DownloadAppFiles(ctx context.Context, testDataS3Bucket, azureDataContainer, appDir, downloadDir string, appFileList []string, version string) {
+func DownloadAppFiles(ctx context.Context, testDataS3Bucket, azureDataContainer, appDir, downloadDir string, appFileList []string, version string) error {
 	var err error
 
 	switch ClusterProvider {
@@ -140,11 +138,14 @@ func DownloadAppFiles(ctx context.Context, testDataS3Bucket, azureDataContainer,
 		err = DownloadFilesFromGCP(testDataS3Bucket, appDir, downloadDir, appFileList)
 	}
 
-	Expect(err).To(Succeed(), fmt.Sprintf("Unable to download %s app files", version))
+	if err != nil {
+		return fmt.Errorf("unable to download %s app files: %w", version, err)
+	}
+	return nil
 }
 
 // UploadAppFiles uploads app files to the appropriate cloud provider and returns the uploaded file paths.
-func UploadAppFiles(ctx context.Context, testcaseEnvInst *TestCaseEnv, testS3Bucket, testDir, downloadDir string, appFileList []string, version string) []string {
+func UploadAppFiles(ctx context.Context, testcaseEnvInst *TestCaseEnv, testS3Bucket, testDir, downloadDir string, appFileList []string, version string) ([]string, error) {
 	var uploadedFiles []string
 	var err error
 
@@ -152,18 +153,18 @@ func UploadAppFiles(ctx context.Context, testcaseEnvInst *TestCaseEnv, testS3Buc
 	case "eks":
 		testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3", version))
 		uploadedFiles, err = UploadFilesToS3(testS3Bucket, testDir, appFileList, downloadDir)
-		Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3", version))
 	case "azure":
 		testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure", version))
 		uploadedFiles, err = UploadFilesToAzure(ctx, StorageAccount, StorageAccountKey, downloadDir, testDir, appFileList)
-		Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure", version))
 	case "gcp":
 		testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP", version))
 		uploadedFiles, err = UploadFilesToGCP(testS3Bucket, testDir, appFileList, downloadDir)
-		Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP", version))
 	}
 
-	return uploadedFiles
+	if err != nil {
+		return nil, fmt.Errorf("unable to upload %s apps: %w", version, err)
+	}
+	return uploadedFiles, nil
 }
 
 // DeleteUploadedFiles removes previously uploaded app files from the appropriate cloud provider.

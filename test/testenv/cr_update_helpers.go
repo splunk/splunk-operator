@@ -16,26 +16,18 @@ package testenv
 
 import (
 	"context"
+	"fmt"
 
-	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// GetInstanceWithExpect is a wrapper around GetInstance that includes Gomega expectations
-func GetInstanceWithExpect(ctx context.Context, deployment *Deployment, obj client.Object, instanceName string, errorMsg string) {
-	err := deployment.GetInstance(ctx, instanceName, obj)
-	Expect(err).To(Succeed(), errorMsg, "Instance Name", instanceName)
-}
-
-// UpdateCRWithExpect is a wrapper around UpdateCR that includes Gomega expectations
-func UpdateCRWithExpect(ctx context.Context, deployment *Deployment, obj client.Object, errorMsg string) {
-	err := deployment.UpdateCR(ctx, obj)
-	Expect(err).To(Succeed(), errorMsg)
-}
-
-// DeleteCRWithExpect fetches a CR by name and deletes it, with Gomega expectations.
-func DeleteCRWithExpect(ctx context.Context, deployment *Deployment, obj client.Object, instanceName string, getErrorMsg string, deleteErrorMsg string) {
-	GetInstanceWithExpect(ctx, deployment, obj, instanceName, getErrorMsg)
-	err := deployment.DeleteCR(ctx, obj)
-	Expect(err).To(Succeed(), deleteErrorMsg)
+// GetAndDeleteCR fetches a CR by name and deletes it, returning any error encountered.
+func GetAndDeleteCR(ctx context.Context, deployment *Deployment, obj client.Object, instanceName string) error {
+	if err := deployment.GetInstance(ctx, instanceName, obj); err != nil {
+		return fmt.Errorf("unable to get instance %s: %w", instanceName, err)
+	}
+	if err := deployment.DeleteCR(ctx, obj); err != nil {
+		return fmt.Errorf("unable to delete instance %s: %w", instanceName, err)
+	}
+	return nil
 }

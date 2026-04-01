@@ -26,17 +26,20 @@ import (
 
 // RunS1SecretUpdateTest runs the standard S1 secret update test workflow
 func RunS1SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
-	setup := testenv.SetupS1WithLMAndMC(ctx, deployment, testcaseEnvInst, config)
+	setup, err := testenv.SetupS1WithLMAndMC(ctx, deployment, testcaseEnvInst, config)
+	Expect(err).To(Succeed(), "Unable to setup S1 with LM and MC")
 
 	// Update Secret Value on Secret Object
-	updatedSecretData := testenv.GenerateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, setup.NamespaceScopedSecretName)
+	updatedSecretData, err := testenv.GenerateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, setup.NamespaceScopedSecretName)
+	Expect(err).To(Succeed(), "Unable to generate and apply secret update")
 
 	testenv.VerifyS1SecretChangeApplied(ctx, deployment, testcaseEnvInst, config, setup, updatedSecretData, true)
 }
 
 // RunS1SecretDeleteTest runs the standard S1 secret delete test workflow
 func RunS1SecretDeleteTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
-	setup := testenv.SetupS1WithLMAndMC(ctx, deployment, testcaseEnvInst, config)
+	setup, err := testenv.SetupS1WithLMAndMC(ctx, deployment, testcaseEnvInst, config)
+	Expect(err).To(Succeed(), "Unable to setup S1 with LM and MC")
 
 	// Re-fetch secret struct so we can verify its data is restored after deletion
 	secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), setup.NamespaceScopedSecretName)
@@ -53,10 +56,12 @@ func RunS1SecretDeleteTest(ctx context.Context, deployment *testenv.Deployment, 
 func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
 	// Create standalone Deployment with MonitoringConsoleRef
 	mcName := deployment.GetName()
-	standalone := testcaseEnvInst.DeployStandaloneWithMCRef(ctx, deployment, deployment.GetName(), mcName)
+	standalone, err := testcaseEnvInst.DeployStandaloneWithMCRef(ctx, deployment, deployment.GetName(), mcName)
+	Expect(err).To(Succeed(), "Unable to deploy Standalone with MC reference")
 
 	// Deploy and verify Monitoring Console
-	mc := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
+	mc, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
+	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 	// Get revision number of the resource
 	resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)

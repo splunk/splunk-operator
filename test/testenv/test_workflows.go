@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 
-	. "github.com/onsi/gomega"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -33,46 +32,51 @@ type WorkflowResult struct {
 }
 
 // RunStandaloneDeploymentWorkflow deploys a standalone instance and verifies it's ready
-func RunStandaloneDeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string) *WorkflowResult {
-	standalone := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, name, "", "")
-
-	return &WorkflowResult{Standalone: standalone}
+func RunStandaloneDeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string) (*WorkflowResult, error) {
+	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, name, "", "")
+	if err != nil {
+		return nil, err
+	}
+	return &WorkflowResult{Standalone: standalone}, nil
 }
 
 // RunC3DeploymentWorkflow deploys a C3 cluster (CM + IDXC + SHC) and verifies all components are ready
-func RunC3DeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int, mcRef string) *WorkflowResult {
-	err := deployment.DeploySingleSiteCluster(ctx, name, indexerReplicas, true, mcRef)
-	Expect(err).To(Succeed(), "Unable to deploy C3 cluster")
+func RunC3DeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int, mcRef string) (*WorkflowResult, error) {
+	if err := deployment.DeploySingleSiteCluster(ctx, name, indexerReplicas, true, mcRef); err != nil {
+		return nil, fmt.Errorf("unable to deploy C3 cluster: %w", err)
+	}
 
 	testcaseEnvInst.VerifyClusterReadyAndRFSF(ctx, deployment)
 
-	return &WorkflowResult{}
+	return &WorkflowResult{}, nil
 }
 
 // RunM4DeploymentWorkflow deploys a M4 multisite cluster and verifies all components are ready
-func RunM4DeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int, siteCount int, mcRef string) *WorkflowResult {
-	err := deployment.DeployMultisiteClusterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef)
-	Expect(err).To(Succeed(), "Unable to deploy M4 cluster")
+func RunM4DeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int, siteCount int, mcRef string) (*WorkflowResult, error) {
+	if err := deployment.DeployMultisiteClusterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef); err != nil {
+		return nil, fmt.Errorf("unable to deploy M4 cluster: %w", err)
+	}
 
 	testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-	return &WorkflowResult{}
+	return &WorkflowResult{}, nil
 }
 
 // RunM1DeploymentWorkflow deploys a M1 multisite indexer cluster (no SHC) and verifies components
-func RunM1DeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int, siteCount int) *WorkflowResult {
-	err := deployment.DeployMultisiteCluster(ctx, name, indexerReplicas, siteCount, "")
-	Expect(err).To(Succeed(), "Unable to deploy M1 cluster")
+func RunM1DeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int, siteCount int) (*WorkflowResult, error) {
+	if err := deployment.DeployMultisiteCluster(ctx, name, indexerReplicas, siteCount, ""); err != nil {
+		return nil, fmt.Errorf("unable to deploy M1 cluster: %w", err)
+	}
 
 	testcaseEnvInst.VerifyM1ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)
 	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-	return &WorkflowResult{}
+	return &WorkflowResult{}, nil
 }
 
 // RunStandaloneWithServiceAccountWorkflow deploys standalone with a service account
-func RunStandaloneWithServiceAccountWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, serviceAccountName string) *WorkflowResult {
+func RunStandaloneWithServiceAccountWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, serviceAccountName string) (*WorkflowResult, error) {
 	testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
 	spec := enterpriseApi.StandaloneSpec{
@@ -87,45 +91,48 @@ func RunStandaloneWithServiceAccountWorkflow(ctx context.Context, deployment *De
 	}
 
 	standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, name, spec)
-	Expect(err).To(Succeed(), "Unable to deploy standalone with service account")
+	if err != nil {
+		return nil, fmt.Errorf("unable to deploy standalone with service account: %w", err)
+	}
 
 	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, name, standalone)
 
 	standalonePodName := fmt.Sprintf(StandalonePod, name, 0)
 	testcaseEnvInst.VerifyServiceAccountConfiguredOnPod(deployment, testcaseEnvInst.GetName(), standalonePodName, serviceAccountName)
 
-	return &WorkflowResult{Standalone: standalone}
+	return &WorkflowResult{Standalone: standalone}, nil
 }
 
 // RunDeleteStandaloneWorkflow deploys and deletes a standalone instance
-func RunDeleteStandaloneWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string) {
-	result := RunStandaloneDeploymentWorkflow(ctx, deployment, testcaseEnvInst, name)
+func RunDeleteStandaloneWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string) error {
+	result, err := RunStandaloneDeploymentWorkflow(ctx, deployment, testcaseEnvInst, name)
+	if err != nil {
+		return fmt.Errorf("unable to deploy standalone instance: %w", err)
+	}
 
-	err := deployment.DeleteCR(ctx, result.Standalone)
-	Expect(err).To(Succeed(), "Unable to delete standalone instance")
+	if err := deployment.DeleteCR(ctx, result.Standalone); err != nil {
+		return fmt.Errorf("unable to delete standalone instance: %w", err)
+	}
+	return nil
 }
 
 // RunDeleteC3Workflow deploys and deletes a C3 cluster
-func RunDeleteC3Workflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int) {
-	RunC3DeploymentWorkflow(ctx, deployment, testcaseEnvInst, name, indexerReplicas, "")
+func RunDeleteC3Workflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int) error {
+	if _, err := RunC3DeploymentWorkflow(ctx, deployment, testcaseEnvInst, name, indexerReplicas, ""); err != nil {
+		return err
+	}
 
-	idxc := &enterpriseApi.IndexerCluster{}
-	idxcName := name + "-idxc"
-	GetInstanceWithExpect(ctx, deployment, idxc, idxcName, "Unable to get Indexer Cluster instance")
+	if err := GetAndDeleteCR(ctx, deployment, &enterpriseApi.IndexerCluster{}, name+"-idxc"); err != nil {
+		return fmt.Errorf("unable to delete Indexer Cluster: %w", err)
+	}
 
-	err := deployment.DeleteCR(ctx, idxc)
-	Expect(err).To(Succeed(), "Unable to delete Indexer Cluster")
+	if err := GetAndDeleteCR(ctx, deployment, &enterpriseApi.SearchHeadCluster{}, name+"-shc"); err != nil {
+		return fmt.Errorf("unable to delete Search Head Cluster: %w", err)
+	}
 
-	shc := &enterpriseApi.SearchHeadCluster{}
-	shcName := name + "-shc"
-	GetInstanceWithExpect(ctx, deployment, shc, shcName, "Unable to get Search Head Cluster instance")
+	if err := GetAndDeleteCR(ctx, deployment, &enterpriseApi.ClusterManager{}, name); err != nil {
+		return fmt.Errorf("unable to delete Cluster Manager: %w", err)
+	}
 
-	err = deployment.DeleteCR(ctx, shc)
-	Expect(err).To(Succeed(), "Unable to delete Search Head Cluster")
-
-	cm := &enterpriseApi.ClusterManager{}
-	GetInstanceWithExpect(ctx, deployment, cm, name, "Unable to get Cluster Manager instance")
-
-	err = deployment.DeleteCR(ctx, cm)
-	Expect(err).To(Succeed(), "Unable to delete Cluster Manager")
+	return nil
 }

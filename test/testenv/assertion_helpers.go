@@ -18,67 +18,89 @@ import (
 	"context"
 	"fmt"
 
-	. "github.com/onsi/gomega"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
 )
 
 // ScaleSearchHeadCluster scales a Search Head Cluster to the specified replica count
-func (testcaseenv *TestCaseEnv) ScaleSearchHeadCluster(ctx context.Context, deployment *Deployment, deploymentName string, newReplicas int) {
+func (testcaseenv *TestCaseEnv) ScaleSearchHeadCluster(ctx context.Context, deployment *Deployment, deploymentName string, newReplicas int) error {
 	shcName := deploymentName + "-shc"
 
 	// Get instance of current SHC CR with latest config
 	shc := &enterpriseApi.SearchHeadCluster{}
-	GetInstanceWithExpect(ctx, deployment, shc, shcName, "Failed to get instance of Search Head Cluster")
+	if err := deployment.GetInstance(ctx, shcName, shc); err != nil {
+		return fmt.Errorf("failed to get instance of Search Head Cluster: %w", err)
+	}
 
 	// Update Replicas of SHC
 	shc.Spec.Replicas = int32(newReplicas)
-	UpdateCRWithExpect(ctx, deployment, shc, "Failed to scale Search Head Cluster")
+	if err := deployment.UpdateCR(ctx, shc); err != nil {
+		return fmt.Errorf("failed to scale Search Head Cluster: %w", err)
+	}
 
 	// Verify Search Head Cluster scales up and goes to ScalingUp phase
 	testcaseenv.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp)
+	return nil
 }
 
 // ScaleIndexerCluster scales an Indexer Cluster to the specified replica count
-func (testcaseenv *TestCaseEnv) ScaleIndexerCluster(ctx context.Context, deployment *Deployment, deploymentName string, newReplicas int) {
+func (testcaseenv *TestCaseEnv) ScaleIndexerCluster(ctx context.Context, deployment *Deployment, deploymentName string, newReplicas int) error {
 	idxcName := deploymentName + "-idxc"
 
 	// Get instance of current Indexer CR with latest config
 	idxc := &enterpriseApi.IndexerCluster{}
-	GetInstanceWithExpect(ctx, deployment, idxc, idxcName, "Failed to get instance of Indexer Cluster")
+	if err := deployment.GetInstance(ctx, idxcName, idxc); err != nil {
+		return fmt.Errorf("failed to get instance of Indexer Cluster: %w", err)
+	}
 
 	// Update Replicas of Indexer Cluster
 	idxc.Spec.Replicas = int32(newReplicas)
-	UpdateCRWithExpect(ctx, deployment, idxc, "Failed to scale Indexer Cluster")
+	if err := deployment.UpdateCR(ctx, idxc); err != nil {
+		return fmt.Errorf("failed to scale Indexer Cluster: %w", err)
+	}
 
 	// Verify Indexer Cluster scales up and goes to ScalingUp phase
 	testcaseenv.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp, idxcName)
+	return nil
 }
 
-// UpdateMonitoringConsoleRef updates the MonitoringConsoleRef in a CR and waits for the change to apply
-func UpdateMonitoringConsoleRefAndVerify(ctx context.Context, deployment *Deployment, testcaseenv *TestCaseEnv, obj interface{}, instanceName string, newMCName string) {
+// UpdateMonitoringConsoleRefAndVerify updates the MonitoringConsoleRef in a CR and waits for the change to apply
+func UpdateMonitoringConsoleRefAndVerify(ctx context.Context, deployment *Deployment, testcaseenv *TestCaseEnv, obj interface{}, instanceName string, newMCName string) error {
 	// Get current resource version before update
 	resourceVersion := testcaseenv.GetResourceVersion(ctx, deployment, obj)
 
 	// Update the MonitoringConsoleRef based on the type
 	switch cr := obj.(type) {
 	case *enterpriseApi.ClusterManager:
-		GetInstanceWithExpect(ctx, deployment, cr, instanceName, "Failed to get instance")
+		if err := deployment.GetInstance(ctx, instanceName, cr); err != nil {
+			return fmt.Errorf("failed to get instance %s: %w", instanceName, err)
+		}
 		cr.Spec.MonitoringConsoleRef.Name = newMCName
-		UpdateCRWithExpect(ctx, deployment, cr, "Failed to update MonitoringConsoleRef")
+		if err := deployment.UpdateCR(ctx, cr); err != nil {
+			return fmt.Errorf("failed to update MonitoringConsoleRef: %w", err)
+		}
 	case *enterpriseApiV3.ClusterMaster:
-		GetInstanceWithExpect(ctx, deployment, cr, instanceName, "Failed to get instance")
+		if err := deployment.GetInstance(ctx, instanceName, cr); err != nil {
+			return fmt.Errorf("failed to get instance %s: %w", instanceName, err)
+		}
 		cr.Spec.MonitoringConsoleRef.Name = newMCName
-		UpdateCRWithExpect(ctx, deployment, cr, "Failed to update MonitoringConsoleRef")
+		if err := deployment.UpdateCR(ctx, cr); err != nil {
+			return fmt.Errorf("failed to update MonitoringConsoleRef: %w", err)
+		}
 	case *enterpriseApi.SearchHeadCluster:
-		GetInstanceWithExpect(ctx, deployment, cr, instanceName, "Failed to get instance")
+		if err := deployment.GetInstance(ctx, instanceName, cr); err != nil {
+			return fmt.Errorf("failed to get instance %s: %w", instanceName, err)
+		}
 		cr.Spec.MonitoringConsoleRef.Name = newMCName
-		UpdateCRWithExpect(ctx, deployment, cr, "Failed to update MonitoringConsoleRef")
+		if err := deployment.UpdateCR(ctx, cr); err != nil {
+			return fmt.Errorf("failed to update MonitoringConsoleRef: %w", err)
+		}
 	}
 
 	// Wait for custom resource version to change
 	testcaseenv.VerifyCustomResourceVersionChanged(ctx, deployment, obj, resourceVersion)
+	return nil
 }
 
 // VerifyMCConfigForC3Cluster verifies the standard MC configuration for a C3 cluster
@@ -102,18 +124,20 @@ func (testcaseenv *TestCaseEnv) VerifyMCConfigForC3Cluster(ctx context.Context, 
 }
 
 // DeployAndVerifyC3WithMC deploys a C3 cluster with a given MC and verifies all components are ready
-func (testcaseenv *TestCaseEnv) DeployAndVerifyC3WithMC(ctx context.Context, deployment *Deployment, deploymentName string, indexerReplicas int, mcName string) {
-	err := deployment.DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx, deploymentName, indexerReplicas, true, mcName)
-	Expect(err).To(Succeed(), "Unable to deploy Cluster Master")
+func (testcaseenv *TestCaseEnv) DeployAndVerifyC3WithMC(ctx context.Context, deployment *Deployment, deploymentName string, indexerReplicas int, mcName string) error {
+	if err := deployment.DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx, deploymentName, indexerReplicas, true, mcName); err != nil {
+		return fmt.Errorf("unable to deploy Cluster Master: %w", err)
+	}
 
 	// Verify all components are ready
 	testcaseenv.VerifyClusterMasterReady(ctx, deployment)
 	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
 	testcaseenv.VerifySingleSiteIndexersReady(ctx, deployment)
+	return nil
 }
 
 // DeployStandaloneWithMCRef deploys a standalone instance with a MonitoringConsoleRef
-func (testcaseenv *TestCaseEnv) DeployStandaloneWithMCRef(ctx context.Context, deployment *Deployment, deploymentName string, mcName string) *enterpriseApi.Standalone {
+func (testcaseenv *TestCaseEnv) DeployStandaloneWithMCRef(ctx context.Context, deployment *Deployment, deploymentName string, mcName string) (*enterpriseApi.Standalone, error) {
 	spec := enterpriseApi.StandaloneSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
@@ -126,12 +150,14 @@ func (testcaseenv *TestCaseEnv) DeployStandaloneWithMCRef(ctx context.Context, d
 		},
 	}
 	standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deploymentName, spec)
-	Expect(err).To(Succeed(), "Unable to deploy standalone instance")
+	if err != nil {
+		return nil, fmt.Errorf("unable to deploy standalone instance: %w", err)
+	}
 
 	// Wait for Standalone to be in READY status
 	testcaseenv.VerifyStandaloneReady(ctx, deployment, deploymentName, standalone)
 
-	return standalone
+	return standalone, nil
 }
 
 // VerifyStandaloneInMC verifies that a standalone instance is configured in the MC

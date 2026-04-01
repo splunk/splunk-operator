@@ -17,6 +17,7 @@ import (
 	"context"
 
 	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/licensemanager"
 
@@ -31,13 +32,15 @@ var _ = Describe("Licensemaster App Framework test", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "master")
+		var err error
+		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "master")
+		Expect(err).ToNot(HaveOccurred())
 
 		config = testenv.NewLicenseMasterConfig()
 	})
 
 	AfterEach(func() {
-		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 	})
 
 	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster) with License Master", func() {

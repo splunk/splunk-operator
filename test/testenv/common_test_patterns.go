@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	. "github.com/onsi/gomega"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
@@ -114,21 +113,12 @@ func (c *ClusterReadinessConfig) ClusterManagerPVCType() string {
 }
 
 // DeleteClusterManager fetches and deletes the Cluster Manager CR for the appropriate API version.
-func (c *ClusterReadinessConfig) DeleteClusterManager(ctx context.Context, deployment *Deployment) {
+func (c *ClusterReadinessConfig) DeleteClusterManager(ctx context.Context, deployment *Deployment) error {
 	name := deployment.GetName()
 	if c.APIVersion == "v3" {
-		cm := &enterpriseApiV3.ClusterMaster{}
-		err := deployment.GetInstance(ctx, name, cm)
-		Expect(err).To(Succeed(), "Unable to GET Cluster Master instance", "Cluster Master Name", cm)
-		err = deployment.DeleteCR(ctx, cm)
-		Expect(err).To(Succeed(), "Unable to delete Cluster Master instance", "Cluster Master Name", cm)
-	} else {
-		cm := &enterpriseApi.ClusterManager{}
-		err := deployment.GetInstance(ctx, name, cm)
-		Expect(err).To(Succeed(), "Unable to GET Cluster Manager instance", "Cluster Manager Name", cm)
-		err = deployment.DeleteCR(ctx, cm)
-		Expect(err).To(Succeed(), "Unable to delete Cluster Manager instance", "Cluster Manager Name", cm)
+		return GetAndDeleteCR(ctx, deployment, &enterpriseApiV3.ClusterMaster{}, name)
 	}
+	return GetAndDeleteCR(ctx, deployment, &enterpriseApi.ClusterManager{}, name)
 }
 
 // DeployMultisiteClusterWithIndexes deploys a multisite cluster with SmartStore indexes using
@@ -150,49 +140,59 @@ func (c *ClusterReadinessConfig) GetBundleHash(ctx context.Context, deployment *
 
 // AppendSmartStoreIndex appends a new SmartStore index to the Cluster Manager CR
 // for the appropriate API version.
-func (c *ClusterReadinessConfig) AppendSmartStoreIndex(ctx context.Context, deployment *Deployment, newIndex []enterpriseApi.IndexSpec) {
+func (c *ClusterReadinessConfig) AppendSmartStoreIndex(ctx context.Context, deployment *Deployment, newIndex []enterpriseApi.IndexSpec) error {
 	name := deployment.GetName()
 	if c.APIVersion == "v3" {
 		cm := &enterpriseApiV3.ClusterMaster{}
-		err := deployment.GetInstance(ctx, name, cm)
-		Expect(err).To(Succeed(), "Failed to get instance of Cluster Master")
+		if err := deployment.GetInstance(ctx, name, cm); err != nil {
+			return fmt.Errorf("failed to get instance of Cluster Master: %w", err)
+		}
 		cm.Spec.SmartStore.IndexList = append(cm.Spec.SmartStore.IndexList, newIndex...)
-		err = deployment.UpdateCR(ctx, cm)
-		Expect(err).To(Succeed(), "Failed to add new index to Cluster Master")
-	} else {
-		cm := &enterpriseApi.ClusterManager{}
-		err := deployment.GetInstance(ctx, name, cm)
-		Expect(err).To(Succeed(), "Failed to get instance of Cluster Manager")
-		cm.Spec.SmartStore.IndexList = append(cm.Spec.SmartStore.IndexList, newIndex...)
-		err = deployment.UpdateCR(ctx, cm)
-		Expect(err).To(Succeed(), "Failed to add new index to Cluster Manager")
+		if err := deployment.UpdateCR(ctx, cm); err != nil {
+			return fmt.Errorf("failed to add new index to Cluster Master: %w", err)
+		}
+		return nil
 	}
+	cm := &enterpriseApi.ClusterManager{}
+	if err := deployment.GetInstance(ctx, name, cm); err != nil {
+		return fmt.Errorf("failed to get instance of Cluster Manager: %w", err)
+	}
+	cm.Spec.SmartStore.IndexList = append(cm.Spec.SmartStore.IndexList, newIndex...)
+	if err := deployment.UpdateCR(ctx, cm); err != nil {
+		return fmt.Errorf("failed to add new index to Cluster Manager: %w", err)
+	}
+	return nil
 }
 
 // DeployMCAndGetVersion deploys and verifies a Monitoring Console, then returns both the MC
 // instance and its current resource version.
-func (testcaseenv *TestCaseEnv) DeployMCAndGetVersion(ctx context.Context, deployment *Deployment, name string, lmRef string) (*enterpriseApi.MonitoringConsole, string) {
-	mc := testcaseenv.DeployAndVerifyMonitoringConsole(ctx, deployment, name, lmRef)
+func (testcaseenv *TestCaseEnv) DeployMCAndGetVersion(ctx context.Context, deployment *Deployment, name string, lmRef string) (*enterpriseApi.MonitoringConsole, string, error) {
+	mc, err := testcaseenv.DeployAndVerifyMonitoringConsole(ctx, deployment, name, lmRef)
+	if err != nil {
+		return nil, "", err
+	}
 	resourceVersion := testcaseenv.GetResourceVersion(ctx, deployment, mc)
-	return mc, resourceVersion
+	return mc, resourceVersion, nil
 }
 
 // DeployAndVerifyStandalone deploys a standalone instance and verifies it reaches ready state
-func (testcaseenv *TestCaseEnv) DeployAndVerifyStandalone(ctx context.Context, deployment *Deployment, name string, mcRef string, licenseManagerRef string) *enterpriseApi.Standalone {
+func (testcaseenv *TestCaseEnv) DeployAndVerifyStandalone(ctx context.Context, deployment *Deployment, name string, mcRef string, licenseManagerRef string) (*enterpriseApi.Standalone, error) {
 	standalone, err := deployment.DeployStandalone(ctx, name, mcRef, licenseManagerRef)
-	Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
-
+	if err != nil {
+		return nil, fmt.Errorf("unable to deploy Standalone instance: %w", err)
+	}
 	testcaseenv.VerifyStandaloneReady(ctx, deployment, name, standalone)
-	return standalone
+	return standalone, nil
 }
 
 // DeployAndVerifyMonitoringConsole deploys a Monitoring Console and verifies it reaches ready state
-func (testcaseenv *TestCaseEnv) DeployAndVerifyMonitoringConsole(ctx context.Context, deployment *Deployment, name string, licenseManagerRef string) *enterpriseApi.MonitoringConsole {
+func (testcaseenv *TestCaseEnv) DeployAndVerifyMonitoringConsole(ctx context.Context, deployment *Deployment, name string, licenseManagerRef string) (*enterpriseApi.MonitoringConsole, error) {
 	mc, err := deployment.DeployMonitoringConsole(ctx, name, licenseManagerRef)
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
-
+	if err != nil {
+		return nil, fmt.Errorf("unable to deploy Monitoring Console instance: %w", err)
+	}
 	testcaseenv.VerifyMonitoringConsoleReady(ctx, deployment, name, mc)
-	return mc
+	return mc, nil
 }
 
 // VerifyIndexerCPULimits verifies CPU limits on all indexer pods in a single-site cluster
@@ -245,17 +245,20 @@ func (testcaseenv *TestCaseEnv) TriggerAndVerifyTelemetry(ctx context.Context, d
 
 // VerifyProbeConfigAndScripts verifies probe config map exists and probe scripts are present on all pods.
 // If includeStartup is true, the startup probe script is also checked.
-func (testcaseenv *TestCaseEnv) VerifyProbeConfigAndScripts(ctx context.Context, deployment *Deployment, includeStartup bool) {
+func (testcaseenv *TestCaseEnv) VerifyProbeConfigAndScripts(ctx context.Context, deployment *Deployment, includeStartup bool) error {
 	testcaseenv.Log.Info("Get config map for livenessProbe and readinessProbe")
 	configMapName := enterprise.GetProbeConfigMapName(testcaseenv.GetName())
 	_, err := GetConfigMap(ctx, deployment, testcaseenv.GetName(), configMapName)
-	Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", configMapName)
+	if err != nil {
+		return fmt.Errorf("unable to get config map for livenessProbe and readinessProbe %s: %w", configMapName, err)
+	}
 	scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName()}
 	if includeStartup {
 		scriptsNames = append(scriptsNames, enterprise.GetStartupScriptName())
 	}
 	allPods := DumpGetPods(testcaseenv.GetName())
 	testcaseenv.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+	return nil
 }
 
 // NewStandaloneSpecWithMCRef creates a StandaloneSpec with a MonitoringConsoleRef set to the given MC name.
@@ -288,35 +291,48 @@ func (testcaseenv *TestCaseEnv) StandardC3Verification(ctx context.Context, depl
 }
 
 // DeployAndVerifyC3 deploys a C3 single-site cluster and verifies it reaches the ready state.
-func (c *ClusterReadinessConfig) DeployAndVerifyC3(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, replicas int, shc bool, mcRef string) {
-	err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), replicas, shc, mcRef)
-	Expect(err).To(Succeed(), "Unable to deploy cluster")
+func (c *ClusterReadinessConfig) DeployAndVerifyC3(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, replicas int, shc bool, mcRef string) error {
+	if err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), replicas, shc, mcRef); err != nil {
+		return fmt.Errorf("unable to deploy C3 cluster: %w", err)
+	}
 	c.VerifyC3ClusterReady(ctx, deployment, testcaseEnv)
+	return nil
 }
 
 // DeployAndVerifyM4 deploys an M4 multisite cluster and verifies the Cluster Manager
 // and all M4 components reach the ready state.
-func (c *ClusterReadinessConfig) DeployAndVerifyM4(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, indexerReplicas int, siteCount int, mcRef string) {
-	err := c.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), indexerReplicas, siteCount, mcRef)
-	Expect(err).To(Succeed(), "Unable to deploy cluster")
+func (c *ClusterReadinessConfig) DeployAndVerifyM4(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, indexerReplicas int, siteCount int, mcRef string) error {
+	if err := c.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), indexerReplicas, siteCount, mcRef); err != nil {
+		return fmt.Errorf("unable to deploy M4 cluster: %w", err)
+	}
 	c.ClusterManagerReady(ctx, deployment, testcaseEnv)
 	testcaseEnv.VerifyM4ComponentsReady(ctx, deployment, siteCount)
+	return nil
 }
 
 // DeployC3WithLicense sets up the license config map, deploys a C3 cluster,
 // and verifies both the License Manager and cluster reach the ready state.
-func (c *ClusterReadinessConfig) DeployC3WithLicense(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, replicas int, shc bool, mcRef string) {
-	SetupLicenseConfigMap(ctx, testcaseEnv)
-	c.DeployAndVerifyC3(ctx, deployment, testcaseEnv, replicas, shc, mcRef)
+func (c *ClusterReadinessConfig) DeployC3WithLicense(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, replicas int, shc bool, mcRef string) error {
+	if err := SetupLicenseConfigMap(ctx, testcaseEnv); err != nil {
+		return err
+	}
+	if err := c.DeployAndVerifyC3(ctx, deployment, testcaseEnv, replicas, shc, mcRef); err != nil {
+		return err
+	}
 	c.LicenseManagerReady(ctx, deployment, testcaseEnv)
+	return nil
 }
 
 // DeployM4WithLicense sets up the license config map, deploys an M4 multisite cluster,
 // and verifies the License Manager, Cluster Manager, and all M4 components reach the ready state.
-func (c *ClusterReadinessConfig) DeployM4WithLicense(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, indexerReplicas int, siteCount int, mcRef string) {
-	SetupLicenseConfigMap(ctx, testcaseEnv)
-	err := c.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), indexerReplicas, siteCount, mcRef)
-	Expect(err).To(Succeed(), "Unable to deploy cluster")
+func (c *ClusterReadinessConfig) DeployM4WithLicense(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, indexerReplicas int, siteCount int, mcRef string) error {
+	if err := SetupLicenseConfigMap(ctx, testcaseEnv); err != nil {
+		return err
+	}
+	if err := c.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), indexerReplicas, siteCount, mcRef); err != nil {
+		return fmt.Errorf("unable to deploy M4 cluster: %w", err)
+	}
 	VerifyLMAndClusterManagerReady(ctx, deployment, testcaseEnv, c)
 	testcaseEnv.VerifyM4ComponentsReady(ctx, deployment, siteCount)
+	return nil
 }

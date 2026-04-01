@@ -18,6 +18,7 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/test/testenv"
@@ -47,11 +48,13 @@ var _ = Describe("Smartstore test", func() {
 		tc := tc
 		Context("Standalone deployment (S1)", func() {
 			BeforeEach(func() {
-				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				var err error
+				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				Expect(err).ToNot(HaveOccurred())
 			})
 
 			AfterEach(func() {
-				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 			})
 
 			It(tc.Label+", integration: Can configure multiple indexes through app", func() {
@@ -65,11 +68,13 @@ var _ = Describe("Smartstore test", func() {
 
 		Context("Multisite Indexer Cluster with Search Head Cluster (M4)", func() {
 			BeforeEach(func() {
-				testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				var err error
+				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				Expect(err).ToNot(HaveOccurred())
 			})
 
 			AfterEach(func() {
-				testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 			})
 
 			It(tc.Label+", m4, integration: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
@@ -81,11 +86,13 @@ var _ = Describe("Smartstore test", func() {
 
 	Context("Standalone deployment (S1) with App Framework", func() {
 		BeforeEach(func() {
-			testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "master")
+			var err error
+			testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "master")
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 		AfterEach(func() {
-			testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+			Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 		})
 
 		It("integration, s1, smartstore: can deploy a Standalone instance with Ephemeral Etc storage", func() {

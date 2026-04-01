@@ -37,7 +37,9 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
+		var err error
+		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+		Expect(err).ToNot(HaveOccurred())
 
 		cmSpec = enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -50,7 +52,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 	})
 
 	AfterEach(func() {
-		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
@@ -60,9 +62,9 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			// testcaseEnvInst.Log.Info("Create Service Account")
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
-			testenv.SetupIngestorStack(ctx, deployment, testcaseEnvInst, queue, objectStorage, cmSpec)
+			Expect(testenv.SetupIngestorStack(ctx, deployment, testcaseEnvInst, queue, objectStorage, cmSpec)).To(Succeed(), "Unable to setup ingestor stack")
 
-			testenv.DeleteIngestorStack(ctx, deployment)
+			Expect(testenv.DeleteIngestorStack(ctx, deployment)).To(Succeed(), "Unable to delete ingestor stack")
 		})
 
 		It("indexingestionsep, smoke: Splunk Operator can deploy Ingestors and Indexers with additional configurations", func() {
@@ -79,7 +81,8 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			queue.SQS.VolList = volumeSpec
 
 			// Deploy Queue and ObjectStorage
-			q, objStorage := testenv.DeployQueueAndObjectStorage(ctx, deployment, queue, objectStorage)
+			q, objStorage, err := testenv.DeployQueueAndObjectStorage(ctx, deployment, queue, objectStorage)
+			Expect(err).To(Succeed(), "Unable to deploy Queue and ObjectStorage")
 
 			// Deploy Ingestor Cluster with additional configurations (similar to standalone app framework test)
 			appSourceName := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
@@ -127,7 +130,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			}
 
 			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster with additional configurations")
-			_, err := deployment.DeployIngestorClusterWithAdditionalConfiguration(ctx, ic)
+			_, err = deployment.DeployIngestorClusterWithAdditionalConfiguration(ctx, ic)
 			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase
@@ -156,10 +159,11 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			}
 			allAppSourceInfo := []testenv.AppSourceInfo{ingestorAppSourceInfo}
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify probe configuration
-			testcaseEnvInst.VerifyProbeConfigAndScripts(ctx, deployment, true)
+			Expect(testcaseEnvInst.VerifyProbeConfigAndScripts(ctx, deployment, true)).To(Succeed(), "Probe config verification failed")
 		})
 
 		It("indexingestionsep, integration: Splunk Operator can deploy Ingestors and Indexers with correct setup", func() {
@@ -168,7 +172,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			// testcaseEnvInst.Log.Info("Create Service Account")
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
-			testenv.SetupIngestorStack(ctx, deployment, testcaseEnvInst, queue, objectStorage, cmSpec)
+			Expect(testenv.SetupIngestorStack(ctx, deployment, testcaseEnvInst, queue, objectStorage, cmSpec)).To(Succeed(), "Unable to setup ingestor stack")
 
 			// Get instance of current Ingestor Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Ingestor Cluster CR with latest config")

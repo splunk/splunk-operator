@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	gomega "github.com/onsi/gomega"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	wait "k8s.io/apimachinery/pkg/util/wait"
@@ -451,7 +450,7 @@ func WaitForAppPhaseChange(ctx context.Context, deployment *Deployment, testenvI
 }
 
 // VerifyAppFrameworkState will perform several verifications needed between the different steps of App Framework tests
-func (testenv *TestCaseEnv) VerifyAppFrameworkState(ctx context.Context, deployment *Deployment, appSource []AppSourceInfo, splunkPodAge map[string]string, clusterManagerBundleHash string) string {
+func (testenv *TestCaseEnv) VerifyAppFrameworkState(ctx context.Context, deployment *Deployment, appSource []AppSourceInfo, splunkPodAge map[string]string, clusterManagerBundleHash string) (string, error) {
 	/* Function Steps
 	 * Verify apps 'download' and 'podCopy' states for all CRs (PARALLELIZED)
 	 * Verify apps packages are deleted from the operator pod for all CRs
@@ -490,11 +489,15 @@ func (testenv *TestCaseEnv) VerifyAppFrameworkState(ctx context.Context, deploym
 	wg.Wait()
 	close(errChan)
 
+	var phaseErrs []error
 	for err := range errChan {
 		if err != nil {
 			testenv.Log.Error(err, "Parallel phase verification failed")
-			gomega.Expect(err).To(gomega.Succeed())
+			phaseErrs = append(phaseErrs, err)
 		}
+	}
+	if len(phaseErrs) > 0 {
+		return "", fmt.Errorf("parallel download/podCopy phase verification failed: %w", errors.Join(phaseErrs...))
 	}
 	testenv.Log.Info("Parallel verification of app download and podCopy phases completed successfully")
 
@@ -532,11 +535,15 @@ func (testenv *TestCaseEnv) VerifyAppFrameworkState(ctx context.Context, deploym
 	wg.Wait()
 	close(errChan)
 
+	var installErrs []error
 	for err := range errChan {
 		if err != nil {
 			testenv.Log.Error(err, "Parallel install phase verification failed")
-			gomega.Expect(err).To(gomega.Succeed())
+			installErrs = append(installErrs, err)
 		}
+	}
+	if len(installErrs) > 0 {
+		return "", fmt.Errorf("parallel install phase verification failed: %w", errors.Join(installErrs...))
 	}
 	testenv.Log.Info("Parallel verification of app install phase completed successfully")
 
@@ -589,7 +596,7 @@ func (testenv *TestCaseEnv) VerifyAppFrameworkState(ctx context.Context, deploym
 			testenv.VerifyAppInstalled(ctx, deployment, testenv.GetName(), allPodNames, appSource.CrAppList, true, "enabled", checkUpdated, true)
 		}
 	}
-	return clusterManagerBundleHash
+	return clusterManagerBundleHash, nil
 }
 
 // GetIsDeploymentInProgressFlag returns IsDeploymentInProgress for given CR Name, CR Kind

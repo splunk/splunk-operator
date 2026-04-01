@@ -15,8 +15,7 @@ package testenv
 
 import (
 	"context"
-
-	gomega "github.com/onsi/gomega"
+	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 
@@ -24,52 +23,69 @@ import (
 )
 
 // DeployQueueAndObjectStorage deploys a Queue and ObjectStorage CR and returns both.
-func DeployQueueAndObjectStorage(ctx context.Context, deployment *Deployment, qSpec enterpriseApi.QueueSpec, osSpec enterpriseApi.ObjectStorageSpec) (*enterpriseApi.Queue, *enterpriseApi.ObjectStorage) {
+func DeployQueueAndObjectStorage(ctx context.Context, deployment *Deployment, qSpec enterpriseApi.QueueSpec, osSpec enterpriseApi.ObjectStorageSpec) (*enterpriseApi.Queue, *enterpriseApi.ObjectStorage, error) {
 	q, err := deployment.DeployQueue(ctx, "queue", qSpec)
-	gomega.Expect(err).To(gomega.Succeed(), "Unable to deploy Queue")
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to deploy Queue: %w", err)
+	}
 
 	objStorage, err := deployment.DeployObjectStorage(ctx, "os", osSpec)
-	gomega.Expect(err).To(gomega.Succeed(), "Unable to deploy ObjectStorage")
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to deploy ObjectStorage: %w", err)
+	}
 
-	return q, objStorage
+	return q, objStorage, nil
 }
 
 // SetupIngestorStack deploys the full Queue/ObjectStorage/IngestorCluster/ClusterManager/IndexerCluster stack
 // and verifies each component reaches the Ready phase.
-func SetupIngestorStack(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, qSpec enterpriseApi.QueueSpec, osSpec enterpriseApi.ObjectStorageSpec, cmSpec enterpriseApi.ClusterManagerSpec) {
+func SetupIngestorStack(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, qSpec enterpriseApi.QueueSpec, osSpec enterpriseApi.ObjectStorageSpec, cmSpec enterpriseApi.ClusterManagerSpec) error {
 	volumeSpec := []enterpriseApi.SQSVolumeSpec{GenerateQueueVolumeSpec(
 		"queue-secret-ref-volume",
 		testcaseEnvInst.GetIndexIngestSepSecretName(),
 	)}
 	qSpec.SQS.VolList = volumeSpec
 
-	q, objStorage := DeployQueueAndObjectStorage(ctx, deployment, qSpec, osSpec)
+	q, objStorage, err := DeployQueueAndObjectStorage(ctx, deployment, qSpec, osSpec)
+	if err != nil {
+		return err
+	}
 
-	_, err := deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, "")
-	gomega.Expect(err).To(gomega.Succeed(), "Unable to deploy Ingestor Cluster")
+	if _, err := deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, ""); err != nil {
+		return fmt.Errorf("unable to deploy Ingestor Cluster: %w", err)
+	}
 
-	_, err = deployment.DeployClusterManagerWithGivenSpec(ctx, deployment.GetName(), cmSpec)
-	gomega.Expect(err).To(gomega.Succeed(), "Unable to deploy Cluster Manager")
+	if _, err := deployment.DeployClusterManagerWithGivenSpec(ctx, deployment.GetName(), cmSpec); err != nil {
+		return fmt.Errorf("unable to deploy Cluster Manager: %w", err)
+	}
 
-	_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, "")
-	gomega.Expect(err).To(gomega.Succeed(), "Unable to deploy Indexer Cluster")
+	if _, err := deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, ""); err != nil {
+		return fmt.Errorf("unable to deploy Indexer Cluster: %w", err)
+	}
 
 	testcaseEnvInst.VerifyIngestorReady(ctx, deployment)
 	testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+	return nil
 }
 
 // DeleteIngestorStack tears down the full Queue/ObjectStorage/IngestorCluster/IndexerCluster stack.
-func DeleteIngestorStack(ctx context.Context, deployment *Deployment) {
+func DeleteIngestorStack(ctx context.Context, deployment *Deployment) error {
 	// Delete the Indexer Cluster
-	DeleteCRWithExpect(ctx, deployment, &enterpriseApi.IndexerCluster{}, deployment.GetName()+"-idxc", "Unable to get Indexer Cluster instance", "Unable to delete Indexer Cluster instance")
+	if err := GetAndDeleteCR(ctx, deployment, &enterpriseApi.IndexerCluster{}, deployment.GetName()+"-idxc"); err != nil {
+		return err
+	}
 
 	// Delete the Ingestor Cluster
-	DeleteCRWithExpect(ctx, deployment, &enterpriseApi.IngestorCluster{}, deployment.GetName()+"-ingest", "Unable to get Ingestor Cluster instance", "Unable to delete Ingestor Cluster instance")
+	if err := GetAndDeleteCR(ctx, deployment, &enterpriseApi.IngestorCluster{}, deployment.GetName()+"-ingest"); err != nil {
+		return err
+	}
 
 	// Delete the Queue
-	DeleteCRWithExpect(ctx, deployment, &enterpriseApi.Queue{}, "queue", "Unable to get Queue instance", "Unable to delete Queue")
+	if err := GetAndDeleteCR(ctx, deployment, &enterpriseApi.Queue{}, "queue"); err != nil {
+		return err
+	}
 
 	// Delete the ObjectStorage
-	DeleteCRWithExpect(ctx, deployment, &enterpriseApi.ObjectStorage{}, "os", "Unable to get ObjectStorage instance", "Unable to delete ObjectStorage")
+	return GetAndDeleteCR(ctx, deployment, &enterpriseApi.ObjectStorage{}, "os")
 }

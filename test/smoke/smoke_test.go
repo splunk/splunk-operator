@@ -17,6 +17,7 @@ import (
 	"context"
 
 	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
 )
@@ -28,16 +29,19 @@ var _ = Describe("Smoke test", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-		testcaseEnvInst, deployment = testenv.SetupTestCaseEnv(testenvInstance, "")
+		var err error
+		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	AfterEach(func() {
-		testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)
+		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
 	})
 
 	Context("Standalone deployment (S1)", func() {
 		It("smoke, basic, s1: can deploy a standalone instance", func() {
-			testenv.RunStandaloneDeploymentWorkflow(ctx, deployment, testcaseEnvInst, deployment.GetName())
+			_, err := testenv.RunStandaloneDeploymentWorkflow(ctx, deployment, testcaseEnvInst, deployment.GetName())
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 		})
 	})
 

@@ -32,7 +32,8 @@ import (
 // RunS1InternalLogSearchTest deploys a Standalone instance and verifies internal log searches
 // using both synchronous and asynchronous search APIs.
 func RunS1InternalLogSearchTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv) {
-	standalone := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), "", "")
+	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), "", "")
+	Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
 
 	Eventually(func() enterpriseApi.Phase {
 		podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
@@ -99,7 +100,8 @@ func RunS1InternalLogSearchTest(ctx context.Context, deployment *testenv.Deploym
 // RunS1IngestAndSearchTest deploys a Standalone instance, ingests a custom log file into a new
 // index, and verifies the ingested data is searchable via both sync and async search APIs.
 func RunS1IngestAndSearchTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv) {
-	standalone := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), "", "")
+	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), "", "")
+	Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
 
 	Eventually(func() enterpriseApi.Phase {
 		podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
@@ -129,7 +131,7 @@ func RunS1IngestAndSearchTest(ctx context.Context, deployment *testenv.Deploymen
 	podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 	indexName := "myTestIndex"
 
-	err := testenv.CreateAnIndexStandalone(ctx, indexName, podName, deployment)
+	err = testenv.CreateAnIndexStandalone(ctx, indexName, podName, deployment)
 	Expect(err).To(Succeed(), "Failed response to add index to splunk")
 
 	logFile := "/tmp/test.log"
