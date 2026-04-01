@@ -544,12 +544,15 @@ func addPVCVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec
 	}
 	statefulSet.Spec.VolumeClaimTemplates = append(statefulSet.Spec.VolumeClaimTemplates, volumeClaimTemplate)
 
-	// add volume mounts to splunk container for the PVCs
-	statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts,
-		corev1.VolumeMount{
-			Name:      volumeClaimTemplate.GetName(),
-			MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
-		})
+	// add volume mounts to splunk and appruntime containers for the PVCs
+	volumeMount := corev1.VolumeMount{
+		Name:      volumeClaimTemplate.GetName(),
+		MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
+	}
+	for idx := range statefulSet.Spec.Template.Spec.Containers {
+		statefulSet.Spec.Template.Spec.Containers[idx].VolumeMounts = append(
+			statefulSet.Spec.Template.Spec.Containers[idx].VolumeMounts, volumeMount)
+	}
 
 	return nil
 }
@@ -565,12 +568,15 @@ func addEphemeralVolumes(statefulSet *appsv1.StatefulSet, volumeType string) err
 			Name: fmt.Sprintf(splcommon.SplunkMountNamePrefix, volumeType), VolumeSource: emptyVolumeSource,
 		})
 
-	// add volume mounts to splunk container for the ephemeral volumes
-	statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts,
-		corev1.VolumeMount{
-			Name:      fmt.Sprintf(splcommon.SplunkMountNamePrefix, volumeType),
-			MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
-		})
+	// add volume mounts to splunk and appruntime containers for the ephemeral volumes
+	volumeMount := corev1.VolumeMount{
+		Name:      fmt.Sprintf(splcommon.SplunkMountNamePrefix, volumeType),
+		MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
+	}
+	for idx := range statefulSet.Spec.Template.Spec.Containers {
+		statefulSet.Spec.Template.Spec.Containers[idx].VolumeMounts = append(
+			statefulSet.Spec.Template.Spec.Containers[idx].VolumeMounts, volumeMount)
+	}
 
 	return nil
 }
@@ -751,14 +757,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 				TopologySpreadConstraints: spec.TopologySpreadConstraints,
 				SchedulerName:             spec.SchedulerName,
 				ImagePullSecrets:          spec.ImagePullSecrets,
-				Containers: []corev1.Container{
-					{
-						Image:           spec.Image,
-						ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
-						Name:            "splunk",
-						Ports:           ports,
-					},
-				},
+				Containers:                getSplunkContainers(spec, instanceType, ports),
 			},
 		},
 	}
@@ -795,6 +794,36 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
 	return statefulSet, nil
+}
+
+// getSplunkContainers returns the container list for a Splunk StatefulSet pod.
+// AppRuntime sidecar is added only for Standalone, Indexer, and SearchHead instance types.
+func getSplunkContainers(spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, ports []corev1.ContainerPort) []corev1.Container {
+	containers := []corev1.Container{
+		{
+			Image:           spec.Image,
+			ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
+			Name:            "splunk",
+			Ports:           ports,
+		},
+	}
+	if instanceType == SplunkStandalone || instanceType == SplunkIndexer || instanceType == SplunkSearchHead {
+		containers = append(containers, corev1.Container{
+			Image:           getAppRuntimeImage(),
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			Name:            "appruntime",
+			Command:         []string{"/usr/bin/splunk-eps"},
+		})
+	}
+	return containers
+}
+
+// getAppRuntimeImage returns the AppRuntime container image from env or a default.
+func getAppRuntimeImage() string {
+	if image, ok := os.LookupEnv("RELATED_IMAGE_APP_RUNTIME"); ok {
+		return image
+	}
+	return "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/supervisor:v3.1.0-mb-1"
 }
 
 // getSmartstoreConfigMap returns the smartstore configMap, if it exists and applicable for that instanceType
