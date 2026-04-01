@@ -1,0 +1,136 @@
+{
+  "title": "PostgreSQL __CLUSTER_NAME__",
+  "uid": "pg-__CLUSTER_NAME__",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "timezone": "browser",
+  "tags": ["postgresql", "cnpg", "pgbouncer"],
+  "editable": true,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "PostgreSQL Instances",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "count(max by (pod) (cnpg_pg_postmaster_start_time_seconds{namespace=\"__NAMESPACE__\",service=\"__POSTGRES_SERVICE__\"}))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "RW PgBouncer Pods Up",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "round(sum(max by (pod) (cnpg_pgbouncer_up{namespace=\"__NAMESPACE__\",service=\"__RW_POOLER_SERVICE__\"})))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "RO PgBouncer Pods Up",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "round(sum(max by (pod) (cnpg_pgbouncer_up{namespace=\"__NAMESPACE__\",service=\"__RO_POOLER_SERVICE__\"})))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Total Database Size",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(max by (datname) (cnpg_pg_database_size_bytes{namespace=\"__NAMESPACE__\",service=\"__POSTGRES_SERVICE__\"}))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "WAL Files by Pod",
+      "gridPos": { "x": 0, "y": 4, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "round(max by (pod) (cnpg_pg_wal_files_total{namespace=\"__NAMESPACE__\",service=\"__POSTGRES_SERVICE__\"}))",
+          "legendFormat": "{{pod}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Archived WAL Rate by Pod",
+      "gridPos": { "x": 8, "y": 4, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "max by (pod) (rate(cnpg_pg_stat_archiver_archived_count{namespace=\"__NAMESPACE__\",service=\"__POSTGRES_SERVICE__\"}[5m]))",
+          "legendFormat": "{{pod}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "PgBouncer Active Clients",
+      "gridPos": { "x": 16, "y": 4, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "round(sum(cnpg_pgbouncer_pools_cl_active{namespace=\"__NAMESPACE__\",service=\"__RW_POOLER_SERVICE__\"}))",
+          "legendFormat": "rw",
+          "refId": "A"
+        },
+        {
+          "expr": "round(sum(cnpg_pgbouncer_pools_cl_active{namespace=\"__NAMESPACE__\",service=\"__RO_POOLER_SERVICE__\"}))",
+          "legendFormat": "ro",
+          "refId": "B"
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}

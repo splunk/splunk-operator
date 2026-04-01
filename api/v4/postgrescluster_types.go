@@ -107,6 +107,30 @@ type PostgresClusterSpec struct {
 	// +kubebuilder:default=Retain
 	// +optional
 	ClusterDeletionPolicy *string `json:"clusterDeletionPolicy,omitempty"`
+
+	// Observability contains configuration for monitoring and observability features.
+	// +optional
+	Observability *PostgresObservabilityOverride `json:"observability,omitempty"`
+}
+
+// PostgresObservabilityOverride overrides observability configuration options for PostgresClusterClass.
+type PostgresObservabilityOverride struct {
+
+	// +optional
+	PostgreSQL *FeatureDisableOverride `json:"postgresql,omitempty"`
+
+	// +optional
+	PgBouncer *FeatureDisableOverride `json:"pgbouncer,omitempty"`
+
+	// +optional
+	GrafanaDashboard *FeatureDisableOverride `json:"grafanaDashboard,omitempty"`
+}
+
+type FeatureDisableOverride struct {
+	// Disable set to true will disable the feature even if it's enabled in the class.
+	// +kubebuilder:default=false
+	// +optional
+	Disabled *bool `json:"disabled,omitempty"`
 }
 
 // PostgresClusterResources defines references to Kubernetes resources related to the PostgresCluster, such as ConfigMaps and Secrets.

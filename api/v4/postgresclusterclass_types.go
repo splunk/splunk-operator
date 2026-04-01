@@ -99,6 +99,13 @@ type PostgresClusterClassConfig struct {
 	// +kubebuilder:default=false
 	// +optional
 	ConnectionPoolerEnabled *bool `json:"connectionPoolerEnabled,omitempty"`
+
+	// Observability contains configuration for metrics and dashboards.
+	// When enabled, creates metrics resources and Grafana dashboard for clusters using this class.
+	// Can be overridden in PostgresCluster CR.
+	// +kubebuilder:default={}
+	// +optional
+	Observability *PostgresObservabilityClassConfig `json:"observability,omitempty"`
 }
 
 // ConnectionPoolerMode defines the PgBouncer connection pooling strategy.
@@ -170,6 +177,29 @@ type PostgresClusterClassStatus struct {
 	// Valid phases: "Ready", "Invalid"
 	// +optional
 	Phase *string `json:"phase,omitempty"`
+}
+
+type PostgresObservabilityClassConfig struct {
+	// +optional
+	PostgreSQL *MetricsClassConfig `json:"postgresql,omitempty"`
+	// +optional
+	PgBouncer *MetricsClassConfig `json:"pgbouncer,omitempty"`
+	// +optional
+	GrafanaDashboard *GrafanaDashboardClassConfig `json:"grafanaDashboard,omitempty"`	
+}
+
+type MetricsClassConfig struct {
+	// Enabled controls whether metrics resources should be created for this target.
+	// +kubebuilder:default=false
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+type GrafanaDashboardClassConfig struct {
+	// Enabled controls whether a Grafana dashboard ConfigMap should be created for this class.
+	// +kubebuilder:default=false
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // +kubebuilder:object:root=true

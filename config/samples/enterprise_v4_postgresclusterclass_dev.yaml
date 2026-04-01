@@ -27,6 +27,11 @@ spec:
         cpu: "1"
         memory: "2Gi"
     connectionPoolerEnabled: true
+    observability:
+      grafanaDashboard:
+        enabled: true
+      pgbouncer:
+        enabled: true
 
   cnpg:
     # Restart method - tolerate downtime in dev

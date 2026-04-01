@@ -56,6 +56,7 @@ import (
 	"github.com/splunk/splunk-operator/internal/controller"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	//+kubebuilder:scaffold:imports
 	//extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -71,6 +72,7 @@ func init() {
 	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
 	utilruntime.Must(enterpriseApiV3.AddToScheme(scheme))
 	utilruntime.Must(cnpgv1.AddToScheme(scheme))
+	utilruntime.Must(monitoringv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 	//utilruntime.Must(extapi.AddToScheme(scheme))
 }

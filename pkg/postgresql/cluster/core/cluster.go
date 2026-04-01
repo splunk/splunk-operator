@@ -344,6 +344,64 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		rc.emitPoolerReadyTransition(postgresCluster, oldConditions)
 	}
 
+	if err := reconcilePostgreSQLMetricsService(ctx, c, rc.Scheme, postgresCluster, isPostgreSQLMetricsEnabled(postgresCluster, clusterClass)); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	poolerMetricsEnabled := isConnectionPoolerMetricsEnabled(postgresCluster, clusterClass)
+	rwPoolerMetricsEnabled := poolerMetricsEnabled && rwPoolerExists
+	roPoolerMetricsEnabled := poolerMetricsEnabled && roPoolerExists
+	if err := reconcileConnectionPoolerMetricsService(ctx, c, rc.Scheme, postgresCluster, readWriteEndpoint, rwPoolerMetricsEnabled); err != nil {
+		return ctrl.Result{}, err
+	}
+	if err := reconcileConnectionPoolerMetricsService(ctx, c, rc.Scheme, postgresCluster, readOnlyEndpoint, roPoolerMetricsEnabled); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := reconcileGrafanaDashboardConfigMap(ctx, c, rc.Scheme, postgresCluster, isGrafanaDashboardEnabled(postgresCluster, clusterClass)); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	serviceMonitorUnavailableEmitted := false
+	handleServiceMonitorError := func(err error) (bool, error) {
+		if err == nil {
+			return false, nil
+		}
+		if !isServiceMonitorUnavailable(err) {
+			return false, err
+		}
+		if !serviceMonitorUnavailableEmitted {
+			serviceMonitorUnavailableEmitted = true
+			logger.Info("ServiceMonitor CRD unavailable, continuing without ServiceMonitors")
+			rc.emitWarning(postgresCluster, EventServiceMonitorUnavailable,
+				"ServiceMonitor CRD not found; continuing without Prometheus ServiceMonitors")
+		}
+		return true, nil
+	}
+
+	if handled, err := handleServiceMonitorError(
+		reconcilePostgreSQLMetricsServiceMonitor(ctx, c, rc.Scheme, postgresCluster, isPostgreSQLMetricsEnabled(postgresCluster, clusterClass)),
+	); err != nil {
+		return ctrl.Result{}, err
+	} else if handled {
+		logger.Info("Skipped PostgreSQL ServiceMonitor reconciliation")
+	}
+
+	if handled, err := handleServiceMonitorError(
+		reconcileConnectionPoolerMetricsServiceMonitor(ctx, c, rc.Scheme, postgresCluster, readWriteEndpoint, rwPoolerMetricsEnabled),
+	); err != nil {
+		return ctrl.Result{}, err
+	} else if handled {
+		logger.Info("Skipped RW PgBouncer ServiceMonitor reconciliation")
+	}
+	if handled, err := handleServiceMonitorError(
+		reconcileConnectionPoolerMetricsServiceMonitor(ctx, c, rc.Scheme, postgresCluster, readOnlyEndpoint, roPoolerMetricsEnabled),
+	); err != nil {
+		return ctrl.Result{}, err
+	} else if handled {
+		logger.Info("Skipped RO PgBouncer ServiceMonitor reconciliation")
+	}
+
 	// Reconcile ConfigMap when CNPG cluster is healthy.
 	if cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy {
 		logger.Info("CNPG Cluster healthy, reconciling ConfigMap")
