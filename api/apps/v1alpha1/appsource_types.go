@@ -51,16 +51,18 @@ type AppSourceAuth struct {
 	// +required
 	SecretRef corev1.LocalObjectReference `json:"secretRef"`
 }
-
+// +kubebuilder:validation:XValidation:rule="self.type != 's3' || has(self.s3)", message="s3 configuration is required when type is s3"
+// +kubebuilder:validation:XValidation:rule="self.type != 'git' || has(self.git)", message="git configuration is required when type is git"
 // AppSourceSpec defines the desired state of AppSource.
 type AppSourceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+
+	// +kubebuilder:validation:Enum="git";"s3";"gcp";"azure"
+	// +required
 	// Type of the App Source
 	// Valid values are "git", "s3", "gcp", "azure"
-	// +required
-	// +kubebuilder:validation:Enum="git";"s3";"gcp";"azure"
 	Type string `json:"type"`
 
 	// S3 specific configuration
@@ -75,13 +77,13 @@ type AppSourceSpec struct {
 	// +optional
 	// TODO: Add GCP and Azure specific configuration
 
-	// Authentication configuration
 	// +required
+	// Authentication configuration
 	Auth AppSourceAuth `json:"auth"`
 
-	// Polling interval in seconds
-	// +optional
 	// +kubebuilder:default=60
+	// +optional
+	// Polling interval in seconds
 	Polling *int32 `json:"polling,omitempty"`
 }
 
