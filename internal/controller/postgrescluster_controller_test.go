@@ -23,6 +23,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/client-go/tools/record"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
@@ -121,8 +122,9 @@ var _ = Describe("PostgresCluster Controller", func() {
 		}
 
 		reconciler = &PostgresClusterReconciler{
-			Client: k8sClient,
-			Scheme: k8sClient.Scheme(),
+			Client:   k8sClient,
+			Scheme:   k8sClient.Scheme(),
+			Recorder: record.NewFakeRecorder(100),
 		}
 		req = reconcile.Request{NamespacedName: types.NamespacedName{Name: clusterName, Namespace: namespace}}
 	})
