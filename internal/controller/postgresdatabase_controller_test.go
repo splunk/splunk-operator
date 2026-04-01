@@ -32,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -41,8 +42,9 @@ const postgresDatabaseFinalizer = "postgresdatabases.enterprise.splunk.com/final
 
 func reconcilePostgresDatabase(ctx context.Context, nn types.NamespacedName) (ctrl.Result, error) {
 	reconciler := &PostgresDatabaseReconciler{
-		Client: k8sClient,
-		Scheme: k8sClient.Scheme(),
+		Client:   k8sClient,
+		Scheme:   k8sClient.Scheme(),
+		Recorder: record.NewFakeRecorder(100),
 	}
 	return reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
 }
