@@ -12,7 +12,8 @@ spec:
     bucket: "my-bucket"
     basePath: "my-path"
   auth:
-    secretName: "my-secret"
+    secretRef:
+      name: my-secret
   polling: 60
 
 ---
@@ -29,6 +30,25 @@ spec:
     repo: "https://github.com/splunk/splunk-operator.git"
     ref: "main"
   auth:
-    secretName: "my-secret"
+    secretRef:
+      name: my-secret
   polling: 120
 
+---
+apiVersion: apps.splunk.com/v1alpha1
+kind: AppSource
+metadata:
+  labels:
+    app.kubernetes.io/name: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: appsource-sample-invalid-git
+spec:
+  type: git
+  s3:
+    endpoint: "https://s3.amazonaws.com"
+    bucket: "my-bucket"
+    basePath: "my-path"
+  auth:
+    secretRef:
+      name: my-secret
+  polling: 120

@@ -51,8 +51,8 @@ type AppSourceAuth struct {
 	// +required
 	SecretRef corev1.LocalObjectReference `json:"secretRef"`
 }
-// +kubebuilder:validation:XValidation:rule="self.type != 's3' || has(self.s3)", message="s3 configuration is required when type is s3"
-// +kubebuilder:validation:XValidation:rule="self.type != 'git' || has(self.git)", message="git configuration is required when type is git"
+// +kubebuilder:validation:XValidation:rule="self.type != 's3' || has(self.s3)",message="s3 configuration is required when type is s3"
+// +kubebuilder:validation:XValidation:rule="self.type != 'git' || has(self.git)",message="git configuration is required when type is git"
 // AppSourceSpec defines the desired state of AppSource.
 type AppSourceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
