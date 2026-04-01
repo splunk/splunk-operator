@@ -1663,7 +1663,7 @@ var _ = Describe("s1appfw test", func() {
 			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), secretref)
 			Expect(err).To(Succeed(), "Unable to obtain secret object")
 			secretData := secretStruct.Data
-			modifiedSecretData := map[string][]byte{"s3_access_key": []byte(testenv.RandomDNSName(5)), "s3_secret_key": []byte(testenv.RandomDNSName(5))}
+			modifiedSecretData := cloudBackend.GetFakeSecretData()
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)

@@ -17,6 +17,7 @@ type CloudStorageBackend interface {
 	DownloadFiles(ctx context.Context, remoteDir string, localDir string, fileList []string) error
 	DisableApps(ctx context.Context, downloadDir string, appFileList []string, testDir string) error
 	GetCloudProvider() string
+	GetFakeSecretData() map[string][]byte
 }
 
 // NewCloudStorageBackend returns the correct CloudStorageBackend implementation
@@ -68,6 +69,10 @@ func (b *S3Backend) DisableApps(_ context.Context, downloadDir string, appFileLi
 
 func (b *S3Backend) GetCloudProvider() string { return "eks" }
 
+func (b *S3Backend) GetFakeSecretData() map[string][]byte {
+	return map[string][]byte{"s3_access_key": []byte(RandomDNSName(5)), "s3_secret_key": []byte(RandomDNSName(5))}
+}
+
 // AzureBackend implements CloudStorageBackend for Azure Blob Storage.
 type AzureBackend struct{}
 
@@ -100,6 +105,10 @@ func (b *AzureBackend) DisableApps(ctx context.Context, downloadDir string, appF
 
 func (b *AzureBackend) GetCloudProvider() string { return "azure" }
 
+func (b *AzureBackend) GetFakeSecretData() map[string][]byte {
+	return map[string][]byte{"azure_sa_name": []byte(RandomDNSName(5)), "azure_sa_secret_key": []byte(RandomDNSName(5))}
+}
+
 // GCPBackend implements CloudStorageBackend for Google Cloud Storage.
 type GCPBackend struct {
 	Bucket     string
@@ -131,3 +140,7 @@ func (b *GCPBackend) DisableApps(_ context.Context, downloadDir string, appFileL
 }
 
 func (b *GCPBackend) GetCloudProvider() string { return "gcp" }
+
+func (b *GCPBackend) GetFakeSecretData() map[string][]byte {
+	return map[string][]byte{"key.json": []byte(RandomDNSName(5))}
+}
