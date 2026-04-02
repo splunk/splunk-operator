@@ -24,6 +24,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	password "github.com/sethvargo/go-password/password"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+	pgmetrics "github.com/splunk/splunk-operator/pkg/postgresql/metrics"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -78,6 +79,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		}
 		logger.Error(err, "Failed to handle finalizer")
 		rc.emitWarning(postgresCluster, EventCleanupFailed, fmt.Sprintf("Cleanup failed: %v", err))
+		rc.Metrics.IncFinalizerOp(pgmetrics.ControllerCluster, pgmetrics.ResultError)
 		errs := []error{err}
 		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterDeleteFailed,
 			fmt.Sprintf("Failed to delete resources during cleanup: %v", err), failedClusterPhase); statusErr != nil {
@@ -111,6 +113,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	if err := c.Get(ctx, client.ObjectKey{Name: postgresCluster.Spec.Class}, clusterClass); err != nil {
 		logger.Error(err, "Failed to fetch PostgresClusterClass", "className", postgresCluster.Spec.Class)
 		rc.emitWarning(postgresCluster, EventClusterClassNotFound, fmt.Sprintf("ClusterClass %s not found", postgresCluster.Spec.Class))
+		rc.Metrics.IncValidationFailure(pgmetrics.ControllerCluster, pgmetrics.ReasonClassNotFound)
 		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterClassNotFound,
 			fmt.Sprintf("ClusterClass %s not found: %v", postgresCluster.Spec.Class, err), failedClusterPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
@@ -123,6 +126,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	if err != nil {
 		logger.Error(err, "Failed to merge PostgresCluster configuration")
 		rc.emitWarning(postgresCluster, EventConfigMergeFailed, fmt.Sprintf("Failed to merge configuration: %v", err))
+		rc.Metrics.IncValidationFailure(pgmetrics.ControllerCluster, pgmetrics.ReasonInvalidConfig)
 		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonInvalidConfiguration,
 			fmt.Sprintf("Failed to merge configuration: %v", err), failedClusterPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
@@ -169,6 +173,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			return ctrl.Result{}, err
 		}
 		rc.emitNormal(postgresCluster, EventSecretReady, fmt.Sprintf("Superuser secret %s created", postgresSecretName))
+		rc.Metrics.IncOwnedResourceOp(pgmetrics.ControllerCluster, pgmetrics.ResourceSecret, pgmetrics.OpCreate, pgmetrics.ResultSuccess)
 		logger.Info("Superuser secret ref persisted to status")
 	}
 
@@ -223,6 +228,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			return ctrl.Result{}, err
 		}
 		rc.emitNormal(postgresCluster, EventClusterCreationStarted, "CNPG cluster created, waiting for healthy state")
+		rc.Metrics.IncOwnedResourceOp(pgmetrics.ControllerCluster, pgmetrics.ResourceCluster, pgmetrics.OpCreate, pgmetrics.ResultSuccess)
 		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterBuildSucceeded,
 			"CNPG Cluster created", pendingClusterPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
@@ -267,6 +273,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 				return ctrl.Result{Requeue: true}, nil
 			}
 			rc.emitNormal(postgresCluster, EventClusterUpdateStarted, "CNPG cluster spec updated, waiting for healthy state")
+			rc.Metrics.IncOwnedResourceOp(pgmetrics.ControllerCluster, pgmetrics.ResourceCluster, pgmetrics.OpUpdate, pgmetrics.ResultSuccess)
 			logger.Info("CNPG Cluster patched, requeueing for status update", "name", cnpgCluster.Name)
 			return ctrl.Result{RequeueAfter: retryDelay}, nil
 		}
@@ -276,6 +283,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	if err := reconcileManagedRoles(ctx, c, postgresCluster, cnpgCluster); err != nil {
 		logger.Error(err, "Failed to reconcile managed roles")
 		rc.emitWarning(postgresCluster, EventManagedRolesFailed, fmt.Sprintf("Failed to reconcile managed roles: %v", err))
+		rc.Metrics.IncUserAction(pgmetrics.ActionRolePatch, pgmetrics.ResultError)
 		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonManagedRolesFailed,
 			fmt.Sprintf("Failed to reconcile managed roles: %v", err), failedClusterPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
@@ -326,6 +334,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		if mergedConfig.CNPG == nil || mergedConfig.CNPG.ConnectionPooler == nil {
 			logger.Info("Connection pooler enabled but no config found in class or cluster spec, skipping",
 				"class", postgresCluster.Spec.Class, "cluster", postgresCluster.Name)
+			rc.Metrics.IncValidationFailure(pgmetrics.ControllerCluster, pgmetrics.ReasonPoolerConfigMissing)
 			if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerConfigMissing,
 				fmt.Sprintf("Connection pooler is enabled but no config found in class %q or cluster %q",
 					postgresCluster.Spec.Class, postgresCluster.Name), failedClusterPhase); statusErr != nil {
@@ -351,6 +360,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			return ctrl.Result{}, err
 		}
 		rc.emitNormal(postgresCluster, EventPoolerCreationStarted, "Connection poolers created, waiting for readiness")
+		rc.Metrics.IncOwnedResourceOp(pgmetrics.ControllerCluster, pgmetrics.ResourcePooler, pgmetrics.OpCreate, pgmetrics.ResultSuccess)
 		logger.Info("Connection pooler creation started, requeueing")
 		if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerCreating,
 			"Connection poolers are being provisioned", provisioningClusterPhase); statusErr != nil {
@@ -433,9 +443,11 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		switch createOrUpdateResult {
 		case controllerutil.OperationResultCreated:
 			rc.emitNormal(postgresCluster, EventConfigMapReady, fmt.Sprintf("ConfigMap %s created", desiredCM.Name))
+			rc.Metrics.IncOwnedResourceOp(pgmetrics.ControllerCluster, pgmetrics.ResourceConfigMap, pgmetrics.OpCreate, pgmetrics.ResultSuccess)
 			logger.Info("ConfigMap created", "name", desiredCM.Name)
 		case controllerutil.OperationResultUpdated:
 			rc.emitNormal(postgresCluster, EventConfigMapReady, fmt.Sprintf("ConfigMap %s updated", desiredCM.Name))
+			rc.Metrics.IncOwnedResourceOp(pgmetrics.ControllerCluster, pgmetrics.ResourceConfigMap, pgmetrics.OpUpdate, pgmetrics.ResultSuccess)
 			logger.Info("ConfigMap updated", "name", desiredCM.Name)
 		default:
 			logger.Info("ConfigMap unchanged", "name", desiredCM.Name)
@@ -1062,6 +1074,7 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 		return fmt.Errorf("removing finalizer: %w", err)
 	}
 	rc.emitNormal(cluster, EventCleanupComplete, fmt.Sprintf("Cleanup complete (policy: %s)", policy))
+	rc.Metrics.IncFinalizerOp(pgmetrics.ControllerCluster, pgmetrics.ResultSuccess)
 	logger.Info("Finalizer removed, cleanup complete")
 	return nil
 }

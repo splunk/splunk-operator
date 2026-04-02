@@ -306,7 +306,7 @@ func TestVerifyRolesReady(t *testing.T) {
 					},
 				},
 			},
-			wantErr: "user main_db_rw reconciliation failed: [reserved role]",
+			wantErr: "reconciling user main_db_rw: [reserved role]",
 		},
 		{
 			name:          "returns missing roles that are not reconciled yet",

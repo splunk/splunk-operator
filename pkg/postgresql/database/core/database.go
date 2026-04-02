@@ -11,6 +11,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/sethvargo/go-password/password"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+	pgmetrics "github.com/splunk/splunk-operator/pkg/postgresql/metrics"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -51,6 +52,7 @@ func PostgresDatabaseService(
 		if err := handleDeletion(ctx, rc, postgresDB); err != nil {
 			logger.Error(err, "Failed to clean up PostgresDatabase")
 			rc.emitWarning(postgresDB, EventCleanupFailed, fmt.Sprintf("Cleanup failed: %v", err))
+			rc.Metrics.IncFinalizerOp(pgmetrics.ControllerDatabase, pgmetrics.ResultError)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -81,6 +83,7 @@ func PostgresDatabaseService(
 	if err != nil {
 		if errors.IsNotFound(err) {
 			rc.emitWarning(postgresDB, EventClusterNotFound, fmt.Sprintf("PostgresCluster %s not found", postgresDB.Spec.ClusterRef.Name))
+			rc.Metrics.IncValidationFailure(pgmetrics.ControllerDatabase, pgmetrics.ReasonClusterNotFound)
 			if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterNotFound, "Cluster CR not found", pendingDBPhase); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -98,6 +101,7 @@ func PostgresDatabaseService(
 	switch clusterStatus {
 	case ClusterNotReady, ClusterNoProvisionerRef:
 		rc.emitWarning(postgresDB, EventClusterNotReady, "Referenced PostgresCluster is not ready yet")
+		rc.Metrics.IncValidationFailure(pgmetrics.ControllerDatabase, pgmetrics.ReasonClusterNotReady)
 		if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterProvisioning, "Cluster is not in ready state yet", pendingDBPhase); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -119,6 +123,7 @@ func PostgresDatabaseService(
 		conflictErr := fmt.Errorf("role conflict detected: %s", strings.Join(roleConflicts, ", "))
 		logger.Error(conflictErr, conflictMsg)
 		rc.emitWarning(postgresDB, EventRoleConflict, conflictMsg)
+		rc.Metrics.IncValidationFailure(pgmetrics.ControllerDatabase, pgmetrics.ReasonRoleConflict)
 		errs := []error{conflictErr}
 		if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonRoleConflict, conflictMsg, failedDBPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
@@ -142,12 +147,14 @@ func PostgresDatabaseService(
 	// CNPG rejects a PasswordSecretRef pointing at a missing secret.
 	if err := reconcileUserSecrets(ctx, c, rc.Scheme, postgresDB); err != nil {
 		rc.emitWarning(postgresDB, EventUserSecretsFailed, fmt.Sprintf("Failed to reconcile user secrets: %v", err))
+		rc.Metrics.IncUserAction(pgmetrics.ActionSecretReconcile, pgmetrics.ResultError)
 		if statusErr := updateStatus(secretsReady, metav1.ConditionFalse, reasonSecretsCreationFailed,
 			fmt.Sprintf("Failed to reconcile user secrets: %v", err), provisioningDBPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
 		}
 		return ctrl.Result{}, err
 	}
+	rc.Metrics.IncUserAction(pgmetrics.ActionSecretReconcile, pgmetrics.ResultSuccess)
 	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, secretsReady, EventSecretsReady, fmt.Sprintf("All secrets provisioned for %d databases", len(postgresDB.Spec.Databases)))
 	if err := updateStatus(secretsReady, metav1.ConditionTrue, reasonSecretsCreated,
 		fmt.Sprintf("All secrets provisioned for %d databases", len(postgresDB.Spec.Databases)), provisioningDBPhase); err != nil {
@@ -159,12 +166,14 @@ func PostgresDatabaseService(
 	endpoints := resolveClusterEndpoints(cluster, cnpgCluster, postgresDB.Namespace)
 	if err := reconcileRoleConfigMaps(ctx, c, rc.Scheme, postgresDB, endpoints); err != nil {
 		rc.emitWarning(postgresDB, EventAccessConfigFailed, fmt.Sprintf("Failed to reconcile ConfigMaps: %v", err))
+		rc.Metrics.IncUserAction(pgmetrics.ActionConfigMapReconcile, pgmetrics.ResultError)
 		if statusErr := updateStatus(configMapsReady, metav1.ConditionFalse, reasonConfigMapsCreationFailed,
 			fmt.Sprintf("Failed to reconcile ConfigMaps: %v", err), provisioningDBPhase); statusErr != nil {
 			logger.Error(statusErr, "Failed to update status")
 		}
 		return ctrl.Result{}, err
 	}
+	rc.Metrics.IncUserAction(pgmetrics.ActionConfigMapReconcile, pgmetrics.ResultSuccess)
 	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, configMapsReady, EventConfigMapsReady, fmt.Sprintf("All ConfigMaps provisioned for %d databases", len(postgresDB.Spec.Databases)))
 	if err := updateStatus(configMapsReady, metav1.ConditionTrue, reasonConfigMapsCreated,
 		fmt.Sprintf("All ConfigMaps provisioned for %d databases", len(postgresDB.Spec.Databases)), provisioningDBPhase); err != nil {
@@ -186,9 +195,11 @@ func PostgresDatabaseService(
 		if err := patchManagedRoles(ctx, c, postgresDB, cluster); err != nil {
 			logger.Error(err, "Failed to patch users in CNPG Cluster")
 			rc.emitWarning(postgresDB, EventManagedRolesPatchFailed, fmt.Sprintf("Failed to patch managed roles: %v", err))
+			rc.Metrics.IncUserAction(pgmetrics.ActionRolePatch, pgmetrics.ResultError)
 			return ctrl.Result{}, err
 		}
 		rc.emitNormal(postgresDB, EventRoleReconciliationStarted, fmt.Sprintf("Patched managed roles, waiting for %d roles to reconcile", len(desiredUsers)))
+		rc.Metrics.IncUserAction(pgmetrics.ActionRolePatch, pgmetrics.ResultSuccess)
 		if err := updateStatus(rolesReady, metav1.ConditionFalse, reasonWaitingForCNPG,
 			fmt.Sprintf("Waiting for %d roles to be reconciled", len(desiredUsers)), provisioningDBPhase); err != nil {
 			return ctrl.Result{}, err
@@ -223,6 +234,7 @@ func PostgresDatabaseService(
 	if err != nil {
 		logger.Error(err, "Failed to reconcile CNPG Databases")
 		rc.emitWarning(postgresDB, EventDatabasesReconcileFailed, fmt.Sprintf("Failed to reconcile databases: %v", err))
+		rc.Metrics.IncUserAction(pgmetrics.ActionDatabaseReconcile, pgmetrics.ResultError)
 		return ctrl.Result{}, err
 	}
 	if len(adopted) > 0 {
@@ -279,12 +291,14 @@ func PostgresDatabaseService(
 
 		if err := reconcileRWRolePrivileges(ctx, endpoints.RWHost, string(pw), dbNames, newDBRepo); err != nil {
 			rc.emitWarning(postgresDB, EventPrivilegesGrantFailed, fmt.Sprintf("Failed to grant RW role privileges: %v", err))
+			rc.Metrics.IncUserAction(pgmetrics.ActionPrivilegeGrant, pgmetrics.ResultError)
 			if statusErr := updateStatus(privilegesReady, metav1.ConditionFalse, reasonPrivilegesGrantFailed,
 				fmt.Sprintf("Failed to grant RW role privileges: %v", err), provisioningDBPhase); statusErr != nil {
 				logger.Error(statusErr, "Failed to update status")
 			}
 			return ctrl.Result{}, err
 		}
+		rc.Metrics.IncUserAction(pgmetrics.ActionPrivilegeGrant, pgmetrics.ResultSuccess)
 		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, privilegesReady, EventPrivilegesReady, fmt.Sprintf("RW role privileges granted for all %d databases", len(postgresDB.Spec.Databases)))
 		if err := updateStatus(privilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted,
 			fmt.Sprintf("RW role privileges granted for all %d databases", len(postgresDB.Spec.Databases)), readyDBPhase); err != nil {
@@ -543,6 +557,7 @@ func handleDeletion(ctx context.Context, rc *ReconcileContext, postgresDB *enter
 		return fmt.Errorf("removing finalizer: %w", err)
 	}
 	rc.emitNormal(postgresDB, EventCleanupComplete, fmt.Sprintf("Cleanup complete (%d retained, %d deleted)", len(plan.retained), len(plan.deleted)))
+	rc.Metrics.IncFinalizerOp(pgmetrics.ControllerDatabase, pgmetrics.ResultSuccess)
 	logger.Info("Cleanup complete", "retained", len(plan.retained), "deleted", len(plan.deleted))
 	return nil
 }

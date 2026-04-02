@@ -19,11 +19,13 @@ package controller
 import (
 	"context"
 	"reflect"
+	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	dbadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter"
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
+	pgmetrics "github.com/splunk/splunk-operator/pkg/postgresql/metrics"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -42,8 +44,10 @@ import (
 // PostgresDatabaseReconciler reconciles a PostgresDatabase object.
 type PostgresDatabaseReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme         *runtime.Scheme
+	Recorder       record.EventRecorder
+	Metrics        pgmetrics.Recorder
+	FleetCollector *pgmetrics.FleetCollector
 }
 
 const (
@@ -61,6 +65,7 @@ const (
 //+kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	start := time.Now()
 	logger := log.FromContext(ctx)
 
 	postgresDB := &enterprisev4.PostgresDatabase{}
@@ -71,8 +76,20 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		return ctrl.Result{}, err
 	}
-	rc := &dbcore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder}
-	return dbcore.PostgresDatabaseService(ctx, rc, postgresDB, dbadapter.NewDBRepository)
+	rc := &dbcore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics}
+	result, err := dbcore.PostgresDatabaseService(ctx, rc, postgresDB, dbadapter.NewDBRepository)
+
+	resultLabel := pgmetrics.ResultSuccess
+	if err != nil {
+		resultLabel = pgmetrics.ResultError
+		r.Metrics.IncReconcileError(pgmetrics.ControllerDatabase, classifyError(err))
+	} else if result.RequeueAfter > 0 || result.Requeue {
+		resultLabel = pgmetrics.ResultRequeue
+	}
+	r.Metrics.ObserveReconcile(pgmetrics.ControllerDatabase, resultLabel, time.Since(start))
+	r.FleetCollector.CollectDatabaseMetrics(ctx, r.Client, r.Metrics)
+
+	return result, err
 }
 
 // SetupWithManager sets up the controller with the Manager.

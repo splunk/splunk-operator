@@ -18,12 +18,15 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
+	pgmetrics "github.com/splunk/splunk-operator/pkg/postgresql/metrics"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -42,8 +45,10 @@ const (
 // PostgresClusterReconciler reconciles PostgresCluster resources.
 type PostgresClusterReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme         *runtime.Scheme
+	Recorder       record.EventRecorder
+	Metrics        pgmetrics.Recorder
+	FleetCollector *pgmetrics.FleetCollector
 }
 
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters,verbs=get;list;watch;create;update;patch;delete
@@ -57,8 +62,34 @@ type PostgresClusterReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder}
-	return clustercore.PostgresClusterService(ctx, rc, req)
+	start := time.Now()
+	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics}
+	result, err := clustercore.PostgresClusterService(ctx, rc, req)
+
+	resultLabel := pgmetrics.ResultSuccess
+	if err != nil {
+		resultLabel = pgmetrics.ResultError
+		r.Metrics.IncReconcileError(pgmetrics.ControllerCluster, classifyError(err))
+	} else if result.RequeueAfter > 0 || result.Requeue {
+		resultLabel = pgmetrics.ResultRequeue
+	}
+	r.Metrics.ObserveReconcile(pgmetrics.ControllerCluster, resultLabel, time.Since(start))
+	r.FleetCollector.CollectClusterMetrics(ctx, r.Client, r.Metrics)
+
+	return result, err
+}
+
+func classifyError(err error) string {
+	switch {
+	case apierrors.IsNotFound(err):
+		return pgmetrics.ErrorClassNotFound
+	case apierrors.IsConflict(err):
+		return pgmetrics.ErrorClassConflict
+	case apierrors.IsInvalid(err):
+		return pgmetrics.ErrorClassValidation
+	default:
+		return pgmetrics.ErrorClassUnknown
+	}
 }
 
 // SetupWithManager registers the controller and owned resource watches.
