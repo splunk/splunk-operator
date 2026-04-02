@@ -28,7 +28,7 @@ spec:
         memory: "2Gi"
     connectionPoolerEnabled: true
     observability:
-      grafanaDashboard:
+      postgresql:
         enabled: true
       pgbouncer:
         enabled: true
@@ -41,4 +41,3 @@ spec:
       mode: transaction
       config:
         max_client_conn: "100"
-

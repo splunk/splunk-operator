@@ -1,8 +1,6 @@
 package core
 
 import (
-	"encoding/json"
-	"errors"
 	"testing"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -10,10 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 )
 
@@ -40,7 +36,6 @@ func TestIsPostgreSQLMetricsEnabled(t *testing.T) {
 				ptr.To(true),
 				nil,
 				nil,
-				nil,
 			),
 			want: true,
 		},
@@ -57,7 +52,6 @@ func TestIsPostgreSQLMetricsEnabled(t *testing.T) {
 				ptr.To(true),
 				nil,
 				nil,
-				nil,
 			),
 			want: false,
 		},
@@ -72,7 +66,6 @@ func TestIsPostgreSQLMetricsEnabled(t *testing.T) {
 			},
 			class: newClassWithObservability(
 				ptr.To(false),
-				nil,
 				nil,
 				nil,
 			),
@@ -168,7 +161,6 @@ func TestIsConnectionPoolerMetricsEnabled(t *testing.T) {
 				nil,
 				ptr.To(true),
 				nil,
-				ptr.To(false),
 			),
 			want: false,
 		},
@@ -177,7 +169,6 @@ func TestIsConnectionPoolerMetricsEnabled(t *testing.T) {
 			cluster: &enterprisev4.PostgresCluster{},
 			class: newClassWithObservability(
 				nil,
-				ptr.To(true),
 				ptr.To(true),
 				ptr.To(true),
 			),
@@ -196,7 +187,6 @@ func TestIsConnectionPoolerMetricsEnabled(t *testing.T) {
 				nil,
 				ptr.To(true),
 				ptr.To(true),
-				ptr.To(true),
 			),
 			want: false,
 		},
@@ -207,7 +197,6 @@ func TestIsConnectionPoolerMetricsEnabled(t *testing.T) {
 				nil,
 				ptr.To(true),
 				ptr.To(false),
-				ptr.To(true),
 			),
 			want: false,
 		},
@@ -216,62 +205,6 @@ func TestIsConnectionPoolerMetricsEnabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := isConnectionPoolerMetricsEnabled(tt.cluster, tt.class)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestIsGrafanaDashboardEnabled(t *testing.T) {
-	tests := []struct {
-		name    string
-		cluster *enterprisev4.PostgresCluster
-		class   *enterprisev4.PostgresClusterClass
-		want    bool
-	}{
-		{
-			name:    "enabled when class enables and cluster override is unset",
-			cluster: &enterprisev4.PostgresCluster{},
-			class: newClassWithObservability(
-				nil,
-				nil,
-				nil,
-				ptr.To(true),
-			),
-			want: true,
-		},
-		{
-			name: "disabled when cluster override disables dashboard",
-			cluster: &enterprisev4.PostgresCluster{
-				Spec: enterprisev4.PostgresClusterSpec{
-					Observability: &enterprisev4.PostgresObservabilityOverride{
-						GrafanaDashboard: &enterprisev4.FeatureDisableOverride{Disabled: ptr.To(true)},
-					},
-				},
-			},
-			class: newClassWithObservability(
-				nil,
-				nil,
-				nil,
-				ptr.To(true),
-			),
-			want: false,
-		},
-		{
-			name:    "disabled when class disables dashboard",
-			cluster: &enterprisev4.PostgresCluster{},
-			class: newClassWithObservability(
-				nil,
-				nil,
-				nil,
-				ptr.To(false),
-			),
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isGrafanaDashboardEnabled(tt.cluster, tt.class)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -315,29 +248,6 @@ func TestBuildConnectionPoolerMetricsService(t *testing.T) {
 	assertMonitoringOwnerRef(t, svc.OwnerReferences, cluster)
 }
 
-func TestBuildGrafanaDashboardConfigMap(t *testing.T) {
-	scheme := newMonitoringTestScheme(t)
-	cluster := newTestMonitoringCluster()
-
-	cm, err := buildGrafanaDashboardConfigMap(scheme, cluster)
-	require.NoError(t, err)
-
-	assert.Equal(t, "postgresql-cluster-dev-grafana-dashboard", cm.Name)
-	assert.Equal(t, "grafana-dashboard", cm.Labels[labelObservabilityComponent])
-	assert.Equal(t, grafanaDashboardLabelValue, cm.Labels[grafanaDashboardLabelKey])
-	assert.Contains(t, cm.Data, "dashboard.json")
-	assert.NotContains(t, cm.Data["dashboard.json"], "__CLUSTER_NAME__")
-	assert.Contains(t, cm.Data["dashboard.json"], cluster.Name)
-	assert.Contains(t, cm.Data["dashboard.json"], cluster.Namespace)
-	assert.Contains(t, cm.Data["dashboard.json"], cluster.Name+postgresMetricsServiceSuffix)
-	assert.Contains(t, cm.Data["dashboard.json"], poolerMetricsServiceName(cluster.Name, readWriteEndpoint))
-	assert.Contains(t, cm.Data["dashboard.json"], poolerMetricsServiceName(cluster.Name, readOnlyEndpoint))
-
-	var dashboard map[string]any
-	require.NoError(t, json.Unmarshal([]byte(cm.Data["dashboard.json"]), &dashboard))
-	assertMonitoringOwnerRef(t, cm.OwnerReferences, cluster)
-}
-
 func TestBuildPostgreSQLMetricsServiceMonitor(t *testing.T) {
 	scheme := newMonitoringTestScheme(t)
 	cluster := newTestMonitoringCluster()
@@ -373,47 +283,6 @@ func TestBuildConnectionPoolerMetricsServiceMonitor(t *testing.T) {
 	assertMonitoringOwnerRef(t, sm.OwnerReferences, cluster)
 }
 
-func TestIsServiceMonitorUnavailable(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{
-			name: "nil error",
-			err:  nil,
-			want: false,
-		},
-		{
-			name: "not found error",
-			err:  apierrors.NewNotFound(schema.GroupResource{Group: "monitoring.coreos.com", Resource: "servicemonitors"}, "test"),
-			want: true,
-		},
-		{
-			name: "kind match string error",
-			err:  errors.New("no matches for kind \"ServiceMonitor\" in version \"monitoring.coreos.com/v1\""),
-			want: true,
-		},
-		{
-			name: "resource string error",
-			err:  errors.New("servicemonitors.monitoring.coreos.com not found"),
-			want: true,
-		},
-		{
-			name: "unrelated error",
-			err:  errors.New("boom"),
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isServiceMonitorUnavailable(tt.err)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
 func newMonitoringTestScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 
@@ -443,16 +312,14 @@ func newClassWithObservability(
 	postgresEnabled *bool,
 	poolerEnabled *bool,
 	pgBouncerMetricsEnabled *bool,
-	grafanaEnabled *bool,
 ) *enterprisev4.PostgresClusterClass {
 	return &enterprisev4.PostgresClusterClass{
 		Spec: enterprisev4.PostgresClusterClassSpec{
 			Config: &enterprisev4.PostgresClusterClassConfig{
 				ConnectionPoolerEnabled: poolerEnabled,
 				Observability: &enterprisev4.PostgresObservabilityClassConfig{
-					PostgreSQL:       &enterprisev4.MetricsClassConfig{Enabled: postgresEnabled},
-					PgBouncer:        &enterprisev4.MetricsClassConfig{Enabled: pgBouncerMetricsEnabled},
-					GrafanaDashboard: &enterprisev4.GrafanaDashboardClassConfig{Enabled: grafanaEnabled},
+					PostgreSQL: &enterprisev4.MetricsClassConfig{Enabled: postgresEnabled},
+					PgBouncer:  &enterprisev4.MetricsClassConfig{Enabled: pgBouncerMetricsEnabled},
 				},
 			},
 		},

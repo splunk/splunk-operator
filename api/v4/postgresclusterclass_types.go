@@ -100,8 +100,8 @@ type PostgresClusterClassConfig struct {
 	// +optional
 	ConnectionPoolerEnabled *bool `json:"connectionPoolerEnabled,omitempty"`
 
-	// Observability contains configuration for metrics and dashboards.
-	// When enabled, creates metrics resources and Grafana dashboard for clusters using this class.
+	// Observability contains configuration for metrics exposure.
+	// When enabled, creates metrics resources for clusters using this class.
 	// Can be overridden in PostgresCluster CR.
 	// +kubebuilder:default={}
 	// +optional
@@ -184,19 +184,10 @@ type PostgresObservabilityClassConfig struct {
 	PostgreSQL *MetricsClassConfig `json:"postgresql,omitempty"`
 	// +optional
 	PgBouncer *MetricsClassConfig `json:"pgbouncer,omitempty"`
-	// +optional
-	GrafanaDashboard *GrafanaDashboardClassConfig `json:"grafanaDashboard,omitempty"`	
 }
 
 type MetricsClassConfig struct {
 	// Enabled controls whether metrics resources should be created for this target.
-	// +kubebuilder:default=false
-	// +optional
-	Enabled *bool `json:"enabled,omitempty"`
-}
-
-type GrafanaDashboardClassConfig struct {
-	// Enabled controls whether a Grafana dashboard ConfigMap should be created for this class.
 	// +kubebuilder:default=false
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`

@@ -108,7 +108,7 @@ type PostgresClusterSpec struct {
 	// +optional
 	ClusterDeletionPolicy *string `json:"clusterDeletionPolicy,omitempty"`
 
-	// Observability contains configuration for monitoring and observability features.
+	// Observability contains configuration for metrics exposure features.
 	// +optional
 	Observability *PostgresObservabilityOverride `json:"observability,omitempty"`
 }
@@ -121,9 +121,6 @@ type PostgresObservabilityOverride struct {
 
 	// +optional
 	PgBouncer *FeatureDisableOverride `json:"pgbouncer,omitempty"`
-
-	// +optional
-	GrafanaDashboard *FeatureDisableOverride `json:"grafanaDashboard,omitempty"`
 }
 
 type FeatureDisableOverride struct {

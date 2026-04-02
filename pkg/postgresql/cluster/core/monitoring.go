@@ -2,13 +2,12 @@ package core
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
+
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -17,17 +16,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"strings"
 )
 
 const (
 	// metrics
-	postgresMetricsServiceSuffix    = "-postgres-metrics"
-	postgresMetricsPortName         = "metrics"
-	postgresMetricsPort             = int32(9187)
-	poolerMetricsPortName           = "metrics"
-	poolerMetricsPort               = int32(9127)
-	grafanaDashboardConfigMapSuffix = "-grafana-dashboard"
+	postgresMetricsServiceSuffix = "-postgres-metrics"
+	postgresMetricsPortName      = "metrics"
+	postgresMetricsPort          = int32(9187)
+	poolerMetricsPortName        = "metrics"
+	poolerMetricsPort            = int32(9127)
 
 	// labels
 	labelManagedBy              = "app.kubernetes.io/managed-by"
@@ -37,8 +34,6 @@ const (
 	cnpgPoolerNameLabel         = "cnpg.io/poolerName"
 	cnpgPodRoleInstance         = "instance"
 	cnpgPodRoleLabelName        = "cnpg.io/podRole"
-	grafanaDashboardLabelKey    = "grafana_dashboard"
-	grafanaDashboardLabelValue  = "1"
 )
 
 func isPostgreSQLMetricsEnabled(cluster *enterprisev4.PostgresCluster, class *enterprisev4.PostgresClusterClass) bool {
@@ -84,21 +79,6 @@ func isConnectionPoolerMetricsEnabled(cluster *enterprisev4.PostgresCluster, cla
 		return true
 	}
 	override := cluster.Spec.Observability.PgBouncer.Disabled
-	return override == nil || !*override
-}
-
-func isGrafanaDashboardEnabled(cluster *enterprisev4.PostgresCluster, class *enterprisev4.PostgresClusterClass) bool {
-	if class == nil || class.Spec.Config == nil || class.Spec.Config.Observability == nil {
-		return false
-	}
-	classCfg := class.Spec.Config.Observability.GrafanaDashboard
-	if classCfg == nil || classCfg.Enabled == nil || !*classCfg.Enabled {
-		return false
-	}
-	if cluster == nil || cluster.Spec.Observability == nil || cluster.Spec.Observability.GrafanaDashboard == nil {
-		return true
-	}
-	override := cluster.Spec.Observability.GrafanaDashboard.Disabled
 	return override == nil || !*override
 }
 
@@ -179,44 +159,6 @@ func buildConnectionPoolerMetricsService(
 	}
 
 	return svc, nil
-}
-
-func buildGrafanaDashboardConfigMap(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster) (*corev1.ConfigMap, error) {
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name + grafanaDashboardConfigMapSuffix,
-			Namespace: cluster.Namespace,
-			Labels: map[string]string{
-				labelManagedBy:              labelManagedByValue,
-				labelObservabilityComponent: "grafana-dashboard",
-				cnpgClusterLabelName:        cluster.Name,
-				grafanaDashboardLabelKey:    grafanaDashboardLabelValue,
-			},
-		},
-		Data: map[string]string{
-			"dashboard.json": buildBasicGrafanaDashboard(cluster),
-		},
-	}
-
-	if err := ctrl.SetControllerReference(cluster, cm, scheme); err != nil {
-		return nil, fmt.Errorf("setting controller reference on Grafana dashboard ConfigMap: %w", err)
-	}
-
-	return cm, nil
-}
-
-func isServiceMonitorUnavailable(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	if apierrors.IsNotFound(err) || apimeta.IsNoMatchError(err) {
-		return true
-	}
-
-	msg := err.Error()
-	return strings.Contains(msg, "no matches for kind \"ServiceMonitor\"") ||
-		strings.Contains(msg, "servicemonitors.monitoring.coreos.com")
 }
 
 func reconcilePostgreSQLMetricsService(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, enabled bool) error {
@@ -329,64 +271,6 @@ func reconcileConnectionPoolerMetricsService(
 	})
 	if err != nil {
 		return fmt.Errorf("reconciling PgBouncer metrics Service %s: %w", desired.Name, err)
-	}
-
-	return nil
-}
-
-func reconcileGrafanaDashboardConfigMap(
-	ctx context.Context,
-	c client.Client,
-	scheme *runtime.Scheme,
-	cluster *enterprisev4.PostgresCluster,
-	enabled bool,
-) error {
-	logger := log.FromContext(ctx)
-	configMapName := cluster.Name + grafanaDashboardConfigMapSuffix
-
-	if !enabled {
-		existing := &corev1.ConfigMap{}
-		err := c.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: cluster.Namespace}, existing)
-		switch {
-		case apierrors.IsNotFound(err):
-			return nil
-		case err != nil:
-			return fmt.Errorf("getting Grafana dashboard ConfigMap %s: %w", configMapName, err)
-		}
-
-		logger.Info("Deleting Grafana dashboard ConfigMap", "name", configMapName)
-		if err := c.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("deleting Grafana dashboard ConfigMap %s: %w", configMapName, err)
-		}
-		return nil
-	}
-
-	desired, err := buildGrafanaDashboardConfigMap(scheme, cluster)
-	if err != nil {
-		return fmt.Errorf("building Grafana dashboard ConfigMap: %w", err)
-	}
-
-	live := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      desired.Name,
-			Namespace: desired.Namespace,
-		},
-	}
-
-	_, err = controllerutil.CreateOrUpdate(ctx, c, live, func() error {
-		live.Labels = desired.Labels
-		live.Annotations = desired.Annotations
-		live.Data = desired.Data
-
-		if !metav1.IsControlledBy(live, cluster) {
-			if err := ctrl.SetControllerReference(cluster, live, scheme); err != nil {
-				return fmt.Errorf("setting controller reference on Grafana dashboard ConfigMap: %w", err)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("reconciling Grafana dashboard ConfigMap %s: %w", desired.Name, err)
 	}
 
 	return nil
@@ -596,19 +480,4 @@ func reconcileConnectionPoolerMetricsServiceMonitor(
 	}
 
 	return nil
-}
-
-//go:embed dashboards/postgres_observability.json
-var postgresObservabilityDashboardTemplate string
-
-func buildBasicGrafanaDashboard(cluster *enterprisev4.PostgresCluster) string {
-	replacer := strings.NewReplacer(
-		"__CLUSTER_NAME__", cluster.Name,
-		"__NAMESPACE__", cluster.Namespace,
-		"__POSTGRES_SERVICE__", cluster.Name+postgresMetricsServiceSuffix,
-		"__RW_POOLER_SERVICE__", poolerMetricsServiceName(cluster.Name, readWriteEndpoint),
-		"__RO_POOLER_SERVICE__", poolerMetricsServiceName(cluster.Name, readOnlyEndpoint),
-	)
-
-	return replacer.Replace(postgresObservabilityDashboardTemplate)
 }
