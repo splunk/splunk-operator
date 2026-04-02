@@ -53,6 +53,7 @@ type AppSourceAuth struct {
 }
 // +kubebuilder:validation:XValidation:rule="self.type != 's3' || has(self.s3)",message="s3 configuration is required when type is s3"
 // +kubebuilder:validation:XValidation:rule="self.type != 'git' || has(self.git)",message="git configuration is required when type is git"
+// +kubebuilder:validation:XValidation:rule="[has(self.s3), has(self.git)].filter(x, x == true).size() == 1",message="exactly one of s3 or git must be specified"
 // AppSourceSpec defines the desired state of AppSource.
 type AppSourceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster

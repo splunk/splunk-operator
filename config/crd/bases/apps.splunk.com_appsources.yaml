@@ -109,6 +109,9 @@ spec:
               rule: self.type != 's3' || has(self.s3)
             - message: git configuration is required when type is git
               rule: self.type != 'git' || has(self.git)
+            - message: exactly one of s3 or git must be specified
+              rule: '[has(self.s3), has(self.git)].filter(x, x == true).size() ==
+                1'
           status:
             description: AppSourceStatus defines the observed state of AppSource.
             type: object
