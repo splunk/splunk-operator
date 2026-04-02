@@ -4876,6 +4876,26 @@ func TestSHCIsBundlePushComplete(t *testing.T) {
 			expectedError:  false,
 			description:    "FIPS banner before success string should still be recognized as complete",
 		},
+		{
+			name:           "ConfDeploymentException alone - treated as still in progress",
+			catStdOut:      "ConfDeploymentException: Can't start deployment job as one is already running!",
+			catStdErr:      "",
+			catErr:         nil,
+			expectsRemoval: false,
+			expectedResult: false,
+			expectedError:  false,
+			description:    "ConfDeploymentException must not reset state to Pending; treat as still in progress to avoid retry storm",
+		},
+		{
+			name:           "FIPS banner followed by ConfDeploymentException - treated as still in progress",
+			catStdOut:      "FIPS provider enabled.\nWARNING: Server Certificate Hostname Validation is disabled.\nConfDeploymentException: Can't start deployment job as one is already running!",
+			catStdErr:      "",
+			catErr:         nil,
+			expectsRemoval: false,
+			expectedResult: false,
+			expectedError:  false,
+			description:    "FIPS banner plus ConfDeploymentException is the primary FIPS retry-storm scenario; must not reset to Pending",
+		},
 	}
 
 	for _, tt := range tests {
