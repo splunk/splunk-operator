@@ -914,7 +914,7 @@ func (testenv *TestCaseEnv) VerifyAppInstalled(ctx context.Context, deployment *
 							return ""
 						}
 						return ver
-					}, 5*time.Minute, PollInterval).Should(gomega.Equal(expectedVersion))
+					}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(expectedVersion))
 				}
 			}
 		}
