@@ -42,10 +42,24 @@ spec:
               auth:
                 description: Authentication configuration
                 properties:
-                  secretName:
-                    type: string
+                  secretRef:
+                    description: |-
+                      LocalObjectReference contains enough information to let you locate the
+                      referenced object inside the same namespace.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
                 required:
-                - secretName
+                - secretRef
                 type: object
               git:
                 description: Git specific configuration
@@ -90,6 +104,14 @@ spec:
             required:
             - type
             type: object
+            x-kubernetes-validations:
+            - message: s3 configuration is required when type is s3
+              rule: self.type != 's3' || has(self.s3)
+            - message: git configuration is required when type is git
+              rule: self.type != 'git' || has(self.git)
+            - message: exactly one of s3 or git must be specified
+              rule: '[has(self.s3), has(self.git)].filter(x, x == true).size() ==
+                1'
           status:
             description: AppSourceStatus defines the observed state of AppSource.
             type: object
