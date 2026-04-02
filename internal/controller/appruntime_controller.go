@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -271,6 +272,14 @@ func (r *AppRuntimeReconciler) createHeadlessService(ctx context.Context, ar *en
 	svc.Labels = getCommonLabels(ar.Name)
 	svc.Spec.Selector = svc.Labels
 	svc.Spec.ClusterIP = corev1.ClusterIPNone
+	svc.Spec.Ports = []corev1.ServicePort{
+		{
+			Name:       "appruntime",
+			Port:       9000,
+			Protocol:   corev1.ProtocolTCP,
+			TargetPort: intstr.FromInt(9000),
+		},
+	}
 	err = r.Create(ctx, svc)
 	if err != nil {
 		return nil, err
@@ -315,6 +324,13 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 					Name:  "appruntime",
 					Command: []string{
 						"/usr/bin/splunk-eps",
+					},
+					Ports: []corev1.ContainerPort{
+						{
+							Name:          "appruntime",
+							ContainerPort: 9000,
+							Protocol:      corev1.ProtocolTCP,
+						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						{

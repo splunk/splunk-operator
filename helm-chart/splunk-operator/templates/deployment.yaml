@@ -78,7 +78,7 @@ spec:
             - name: SPLUNK_GENERAL_TERMS
               value: {{ .Values.splunkOperator.splunkGeneralTerms | default "" }}
 {{- with .Values.extraEnvs }}
-{{- toYaml . | trim | nindent 10 }}
+{{- toYaml . | trim | nindent 12 }}
 {{- end }}
           ports:
             {{- range .Values.splunkOperator.service.ports }}
