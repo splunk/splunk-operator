@@ -21,7 +21,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
-	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
+	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/business/core"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

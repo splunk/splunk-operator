@@ -24,6 +24,8 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	password "github.com/sethvargo/go-password/password"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/business/core/types/constants"
+	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/business/ports/secondary"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -37,6 +39,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	log "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+type PgClusterReconciler struct {
+	Provisioner secondary.Provisioner
+}
 
 // PostgresClusterService is the application service entry point called by the primary adapter (reconciler).
 func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.Request) (ctrl.Result, error) {
@@ -445,45 +451,119 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		}
 	}
 
-	// Final status sync.
-	var oldPhase string
-	if postgresCluster.Status.Phase != nil {
-		oldPhase = *postgresCluster.Status.Phase
+	/*
+				rewrite to consider taking state of other objects into account
+				before declaring readyness.
+
+		CNPG cluster
+		Poolers
+		Access resources (configmap and secret)
+		And all of them needs to be set to Ready for our PostgresCluster phase to become Ready?
+
+	*/
+
+	// basically a sync logic
+	state := pgcConstants.EmptyState
+	conditions := []clusterReadynessCheck{
+		&provisionerHealthCheck{},
+		&poolerHealthCheck{},
+		&configMapHealthCheck{},
+		&secretHealthCheck{},
 	}
-	if err := syncStatus(ctx, c, postgresCluster, cnpgCluster); err != nil {
-		logger.Error(err, "Failed to sync status")
-		if apierrors.IsConflict(err) {
-			logger.Info("Conflict during status update, will requeue")
-			return ctrl.Result{Requeue: true}, nil
+
+	for _, check := range conditions {
+		componentHealth, err := check.Condition()
+		if err != nil {
+			if apierrors.IsConflict(err) {
+				logger.Info("Conflict during whatever happened")
+				return ctrl.Result{Requeue: true}, nil
+			}
 		}
-		return ctrl.Result{}, fmt.Errorf("failed to sync status: %w", err)
+		state |= componentHealth
 	}
-	var newPhase string
-	if postgresCluster.Status.Phase != nil {
-		newPhase = *postgresCluster.Status.Phase
+
+	if state&pgcConstants.ComponentsReady != 0 {
+		logger.Info("Reconciliation complete")
+		state = pgcConstants.ClusterReady
 	}
-	rc.emitClusterPhaseTransition(postgresCluster, oldPhase, newPhase)
-	if cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy {
-		rwPooler := &cnpgv1.Pooler{}
-		rwErr := c.Get(ctx, types.NamespacedName{
-			Name:      poolerResourceName(postgresCluster.Name, readWriteEndpoint),
-			Namespace: postgresCluster.Namespace,
-		}, rwPooler)
-		roPooler := &cnpgv1.Pooler{}
-		roErr := c.Get(ctx, types.NamespacedName{
-			Name:      poolerResourceName(postgresCluster.Name, readOnlyEndpoint),
-			Namespace: postgresCluster.Namespace,
-		}, roPooler)
-		if rwErr == nil && roErr == nil && arePoolersReady(rwPooler, roPooler) {
-			logger.Info("Poolers ready, syncing status")
-			poolerOldConditions := make([]metav1.Condition, len(postgresCluster.Status.Conditions))
-			copy(poolerOldConditions, postgresCluster.Status.Conditions)
-			_ = syncPoolerStatus(ctx, c, postgresCluster)
-			rc.emitPoolerReadyTransition(postgresCluster, poolerOldConditions)
-		}
-	}
-	logger.Info("Reconciliation complete")
 	return ctrl.Result{}, nil
+
+	// // Final status sync.
+	// var oldPhase string
+	// if postgresCluster.Status.Phase != nil {
+	// 	oldPhase = *postgresCluster.Status.Phase
+	// }
+	// if err := syncStatus(ctx, c, postgresCluster, cnpgCluster); err != nil {
+	// 	logger.Error(err, "Failed to sync status")
+	// 	if apierrors.IsConflict(err) {
+	// 		logger.Info("Conflict during status update, will requeue")
+	// 		return ctrl.Result{Requeue: true}, nil
+	// 	}
+	// 	return ctrl.Result{}, fmt.Errorf("failed to sync status: %w", err)
+	// }
+	// var newPhase string
+	// if postgresCluster.Status.Phase != nil {
+	// 	newPhase = *postgresCluster.Status.Phase
+	// }
+	// rc.emitClusterPhaseTransition(postgresCluster, oldPhase, newPhase)
+	// if cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy {
+	// 	rwPooler := &cnpgv1.Pooler{}
+	// 	rwErr := c.Get(ctx, types.NamespacedName{
+	// 		Name:      poolerResourceName(postgresCluster.Name, readWriteEndpoint),
+	// 		Namespace: postgresCluster.Namespace,
+	// 	}, rwPooler)
+	// 	roPooler := &cnpgv1.Pooler{}
+	// 	roErr := c.Get(ctx, types.NamespacedName{
+	// 		Name:      poolerResourceName(postgresCluster.Name, readOnlyEndpoint),
+	// 		Namespace: postgresCluster.Namespace,
+	// 	}, roPooler)
+	// 	if rwErr == nil && roErr == nil && arePoolersReady(rwPooler, roPooler) {
+	// 		logger.Info("Poolers ready, syncing status")
+	// 		poolerOldConditions := make([]metav1.Condition, len(postgresCluster.Status.Conditions))
+	// 		copy(poolerOldConditions, postgresCluster.Status.Conditions)
+	// 		_ = syncPoolerStatus(ctx, c, postgresCluster)
+	// 		rc.emitPoolerReadyTransition(postgresCluster, poolerOldConditions)
+	// 	}
+	// }
+	// logger.Info("Reconciliation complete")
+	// return ctrl.Result{}, nil
+}
+
+type clusterReadynessCheck interface {
+	Condition() (pgcConstants.State, error)
+}
+
+type provisionerHealthCheck struct {
+	cnpgCluster *cnpgv1.Cluster
+}
+
+func (c *provisionerHealthCheck) Condition() (pgcConstants.State, error) {
+	return pgcConstants.ProvisionerReady, nil
+}
+
+type poolerHealthCheck struct {
+	rwPooler *cnpgv1.Pooler
+	roPooler *cnpgv1.Pooler
+}
+
+func (p *poolerHealthCheck) Condition() (pgcConstants.State, error) {
+	return pgcConstants.PoolerReady, nil
+}
+
+type configMapHealthCheck struct {
+	configMap *corev1.ConfigMap
+}
+
+func (c *configMapHealthCheck) Condition() (pgcConstants.State, error) {
+	return pgcConstants.ConfigMapReady, nil
+}
+
+type secretHealthCheck struct {
+	secret *corev1.Secret
+}
+
+func (s *secretHealthCheck) Condition() (pgcConstants.State, error) {
+	return pgcConstants.SecretReady, nil
 }
 
 // getMergedConfig overlays PostgresCluster spec on top of the class defaults.
