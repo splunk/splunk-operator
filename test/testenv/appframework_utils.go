@@ -359,6 +359,50 @@ func GetAppDeploymentInfoSearchHeadCluster(ctx context.Context, deployment *Depl
 	return appDeploymentInfo, err
 }
 
+// GetAppDeploymentInfoLicenseManager returns AppDeploymentInfo for given License Manager, appSourceName and appName
+func GetAppDeploymentInfoLicenseManager(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
+	lm := &enterpriseApi.LicenseManager{}
+	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
+	err := deployment.GetInstance(ctx, name, lm)
+	if err != nil {
+		testenvInstance.Log.Error(err, "Failed to get CR ", "crName", name)
+		return appDeploymentInfo, err
+	}
+	appInfoList := lm.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
+	for _, appInfo := range appInfoList {
+		testenvInstance.Log.Info("Checking License Manager AppInfo Struct", "appName", appName, "appSource", appSourceName, "licenseManagerName", name, "appDeploymentInfo", appInfo)
+		if strings.Contains(appName, appInfo.AppName) {
+			testenvInstance.Log.Info("App Deployment Info found.", "appName", appName, "appSource", appSourceName, "licenseManagerName", name, "appDeploymentInfo", appInfo)
+			appDeploymentInfo = appInfo
+			return appDeploymentInfo, nil
+		}
+	}
+	testenvInstance.Log.Info("App Info not found in App Info List", "appName", appName, "appSource", appSourceName, "licenseManagerName", name, "appInfoList", appInfoList)
+	return appDeploymentInfo, err
+}
+
+// GetAppDeploymentInfoLicenseMaster returns AppDeploymentInfo for given License Master, appSourceName and appName
+func GetAppDeploymentInfoLicenseMaster(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
+	lm := &enterpriseApiV3.LicenseMaster{}
+	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
+	err := deployment.GetInstance(ctx, name, lm)
+	if err != nil {
+		testenvInstance.Log.Error(err, "Failed to get CR ", "crName", name)
+		return appDeploymentInfo, err
+	}
+	appInfoList := lm.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
+	for _, appInfo := range appInfoList {
+		testenvInstance.Log.Info("Checking License Master AppInfo Struct", "appName", appName, "appSource", appSourceName, "licenseMasterName", name, "appDeploymentInfo", appInfo)
+		if strings.Contains(appName, appInfo.AppName) {
+			testenvInstance.Log.Info("App Deployment Info found.", "appName", appName, "appSource", appSourceName, "licenseMasterName", name, "appDeploymentInfo", appInfo)
+			appDeploymentInfo = appInfo
+			return appDeploymentInfo, nil
+		}
+	}
+	testenvInstance.Log.Info("App Info not found in App Info List", "appName", appName, "appSource", appSourceName, "licenseMasterName", name, "appInfoList", appInfoList)
+	return appDeploymentInfo, err
+}
+
 // GetAppDeploymentInfo returns AppDeploymentInfo for given CR Kind, appSourceName and appName
 func GetAppDeploymentInfo(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
 	var appDeploymentInfo enterpriseApi.AppDeploymentInfo
@@ -376,6 +420,10 @@ func GetAppDeploymentInfo(ctx context.Context, deployment *Deployment, testenvIn
 		appDeploymentInfo, err = GetAppDeploymentInfoClusterManager(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	case "ClusterMaster":
 		appDeploymentInfo, err = GetAppDeploymentInfoClusterMaster(ctx, deployment, testenvInstance, name, appSourceName, appName)
+	case "LicenseManager":
+		appDeploymentInfo, err = GetAppDeploymentInfoLicenseManager(ctx, deployment, testenvInstance, name, appSourceName, appName)
+	case "LicenseMaster":
+		appDeploymentInfo, err = GetAppDeploymentInfoLicenseMaster(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	default:
 		message := fmt.Sprintf("Failed to fetch AppDeploymentInfo. Incorrect CR Kind %s", crKind)
 		err = errors.New(message)

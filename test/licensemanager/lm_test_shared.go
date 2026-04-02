@@ -146,6 +146,10 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 	// Wait for License Manager/Master to be in READY status
 	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
+	// Wait for V1 apps to reach Install phase on License Manager/Master
+	err = testcaseEnvInst.WaitForAllAppsPhase(ctx, deployment, deployment.GetName(), config.CrKind, appSourceName, appListV1, enterpriseApi.PhaseInstall, 2*time.Minute)
+	Expect(err).To(Succeed(), "Timed out waiting for V1 apps to reach Install phase on LicenseManager")
+
 	// Verify apps are copied and installed on License Manager/Master
 	podName := []string{fmt.Sprintf(config.LicenseManagerPodName, deployment.GetName(), 0)}
 	testenv.VerifyLMAppsOnPod(ctx, deployment, testcaseEnvInst, testenvInstance, podName, appListV1, false)
@@ -167,11 +171,15 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 	Expect(err).To(Succeed(), "Unable to upload V2 app files")
 	uploadedApps = append(uploadedApps, uploadedFiles...)
 
-	err = testcaseEnvInst.WaitForLicenseManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), deployment.GetName(), enterpriseApi.PhaseReady, 2*time.Minute)
-	Expect(err).To(Succeed(), "Timed out waiting for LicenseManager to reach Ready phase")
+	// Wait for operator to detect V2 apps (any app leaves Install phase)
+	testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), config.CrKind, appSourceName, appFileList)
 
-	// Verify LM stays in ready state
+	// Wait for License Manager/Master to finish processing V2 apps and become Ready
 	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+
+	// Wait for V2 apps to reach Install phase on License Manager/Master
+	err = testcaseEnvInst.WaitForAllAppsPhase(ctx, deployment, deployment.GetName(), config.CrKind, appSourceName, appListV2, enterpriseApi.PhaseInstall, 2*time.Minute)
+	Expect(err).To(Succeed(), "Timed out waiting for V2 apps to reach Install phase on LicenseManager")
 
 	// Verify apps are copied and installed on License Manager/Master
 	testenv.VerifyLMAppsOnPod(ctx, deployment, testcaseEnvInst, testenvInstance, podName, appListV2, true)

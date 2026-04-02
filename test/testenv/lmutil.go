@@ -69,6 +69,7 @@ type LicenseTestConfig struct {
 	DeployLicenseManagerWithGivenSpec func(ctx context.Context, deployment *Deployment, name string, spec interface{}) (interface{}, error)
 	BuildLMAppFrameworkSpec           func(testcaseEnvInst *TestCaseEnv, appFrameworkSpec enterpriseApi.AppFrameworkSpec) interface{}
 	LicenseManagerPodName             string
+	CrKind                            string
 }
 
 // NewLicenseCommonSplunkSpec returns a CommonSplunkSpec pre-configured with the
@@ -104,6 +105,7 @@ func NewLicenseMasterConfig() *LicenseTestConfig {
 			}
 		},
 		LicenseManagerPodName: LicenseMasterPod,
+		CrKind:                "LicenseMaster",
 	}
 }
 
@@ -121,6 +123,7 @@ func NewLicenseManagerConfig() *LicenseTestConfig {
 			}
 		},
 		LicenseManagerPodName: LicenseManagerPod,
+		CrKind:                "LicenseManager",
 	}
 }
 
