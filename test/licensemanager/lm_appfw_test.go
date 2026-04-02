@@ -31,7 +31,7 @@ var _ = Describe("Licensemanager App Framework test", func() {
 
 	BeforeEach(func() {
 		var err error
-		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "master")
+		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
 		Expect(err).ToNot(HaveOccurred())
 
 		config = testenv.NewLicenseManagerConfig()
