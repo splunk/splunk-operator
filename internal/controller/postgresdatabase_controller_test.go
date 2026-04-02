@@ -36,6 +36,8 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -53,13 +55,15 @@ const (
 
 // condition reasons
 const (
-	reasonClusterNotFound    = "ClusterNotFound"
-	reasonClusterAvailable   = "ClusterAvailable"
-	reasonSecretsCreated     = "SecretsCreated"
-	reasonConfigMapsCreated  = "ConfigMapsCreated"
-	reasonUsersAvailable     = "UsersAvailable"
-	reasonDatabasesAvailable = "DatabasesAvailable"
-	reasonRoleConflict       = "RoleConflict"
+	reasonClusterNotFound     = "ClusterNotFound"
+	reasonClusterAvailable    = "ClusterAvailable"
+	reasonClusterProvisioning = "ClusterProvisioning"
+	reasonSecretsCreated      = "SecretsCreated"
+	reasonConfigMapsCreated   = "ConfigMapsCreated"
+	reasonRolesAvailable      = "RolesAvailable"
+	reasonDatabasesAvailable  = "DatabasesAvailable"
+	reasonRoleConflict        = "RoleConflict"
+	reasonWaitingForCNPG      = "WaitingForCNPG"
 )
 
 // phases
@@ -325,6 +329,10 @@ func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, cl
 				Namespace:       namespace,
 				OwnerReferences: ownerReferences,
 			},
+			Data: map[string][]byte{
+				"username": []byte(adminRoleNameForTest(dbName)),
+				"password": []byte("test-password"),
+			},
 		})).To(Succeed())
 
 		Expect(k8sClient.Create(ctx, &corev1.Secret{
@@ -332,6 +340,10 @@ func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, cl
 				Name:            rwSecretNameForTest(resourceName, dbName),
 				Namespace:       namespace,
 				OwnerReferences: ownerReferences,
+			},
+			Data: map[string][]byte{
+				"username": []byte(rwRoleNameForTest(dbName)),
+				"password": []byte("test-password"),
 			},
 		})).To(Succeed())
 
@@ -392,14 +404,41 @@ func expectStatusCondition(current *enterprisev4.PostgresDatabase, conditionType
 
 func expectReadyStatus(current *enterprisev4.PostgresDatabase, generation int64, expectedDatabase enterprisev4.DatabaseInfo) {
 	expectStatusPhase(current, phaseReady)
-	Expect(current.Status.ObservedGeneration).NotTo(BeNil())
-	Expect(*current.Status.ObservedGeneration).To(Equal(generation))
 	Expect(current.Status.Databases).To(HaveLen(1))
 	Expect(current.Status.Databases[0].Name).To(Equal(expectedDatabase.Name))
 	Expect(current.Status.Databases[0].Ready).To(Equal(expectedDatabase.Ready))
 	Expect(current.Status.Databases[0].AdminUserSecretRef).NotTo(BeNil())
 	Expect(current.Status.Databases[0].RWUserSecretRef).NotTo(BeNil())
 	Expect(current.Status.Databases[0].ConfigMapRef).NotTo(BeNil())
+	Expect(current.Status.ObservedGeneration).NotTo(BeNil())
+	Expect(*current.Status.ObservedGeneration).To(Equal(generation))
+}
+
+func reconcilePostgresDatabaseToReady(ctx context.Context, scenario readyClusterScenario, poolerEnabled bool) *enterprisev4.PostgresDatabase {
+	seedReadyClusterScenario(ctx, scenario, poolerEnabled)
+
+	result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+	expectEmptyReconcileResult(result, err)
+
+	current := expectFinalizerAdded(ctx, scenario.requestName)
+	seedExistingDatabaseStatus(ctx, current, scenario.dbName)
+
+	result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+	expectReconcileResult(result, err, 15*time.Second)
+	expectProvisionedArtifacts(ctx, scenario, current)
+	expectManagedRolesPatched(ctx, scenario)
+
+	result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+	expectReconcileResult(result, err, 15*time.Second)
+	cnpgDatabase := expectCNPGDatabaseCreated(ctx, scenario, current)
+	markCNPGDatabaseApplied(ctx, cnpgDatabase)
+
+	result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+	expectEmptyReconcileResult(result, err)
+
+	current = fetchPostgresDatabase(ctx, scenario.requestName)
+	expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+	return current
 }
 
 var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
@@ -480,7 +519,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				expectStatusCondition(current, condClusterReady, metav1.ConditionTrue, reasonClusterAvailable)
 				expectStatusCondition(current, condSecretsReady, metav1.ConditionTrue, reasonSecretsCreated)
 				expectStatusCondition(current, condConfigMapsReady, metav1.ConditionTrue, reasonConfigMapsCreated)
-				expectStatusCondition(current, condRolesReady, metav1.ConditionTrue, reasonUsersAvailable)
+				expectStatusCondition(current, condRolesReady, metav1.ConditionTrue, reasonRolesAvailable)
 				expectStatusCondition(current, condDatabasesReady, metav1.ConditionTrue, reasonDatabasesAvailable)
 				Expect(meta.FindStatusCondition(current.Status.Conditions, condPrivilegesReady)).To(BeNil())
 			})
@@ -501,6 +540,246 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				expectReconcileResult(result, err, 15*time.Second)
 				expectPoolerConfigMap(ctx, scenario)
 			})
+		})
+	})
+
+	When("the referenced PostgresCluster exists but is not ready", func() {
+		It("waits for cluster to be provisioned and sets ClusterReady=False with reason ClusterProvisioning", func() {
+			scenario := newReadyClusterScenario(namespace, "not-ready-cluster", "not-ready-postgres", "not-ready-cnpg", dbAppdb)
+			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []enterprisev4.DatabaseDefinition{{Name: scenario.dbName}})
+			createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
+			// Do NOT call markPostgresClusterReady to leave it in provisioning state
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectEmptyReconcileResult(result, err)
+
+			current := expectFinalizerAdded(ctx, scenario.requestName)
+
+			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+
+			current = fetchPostgresDatabase(ctx, scenario.requestName)
+			expectStatusPhase(current, phasePending)
+			expectStatusCondition(current, condClusterReady, metav1.ConditionFalse, reasonClusterProvisioning)
+		})
+	})
+
+	When("owned resource drift occurs after the PostgresDatabase is ready", func() {
+		It("repairs configmap content drift", func() {
+			scenario := newReadyClusterScenario(namespace, "configmap-drift", "tenant-cluster", "tenant-cnpg", "appdb")
+			owner := reconcilePostgresDatabaseToReady(ctx, scenario, false)
+
+			configMap := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s-config", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, configMap)).To(Succeed())
+			configMap.Data["rw-host"] = "unexpected.example"
+			Expect(k8sClient.Update(ctx, configMap)).To(Succeed())
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectEmptyReconcileResult(result, err)
+
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, configMap)).To(Succeed())
+			Expect(configMap.Data).To(HaveKeyWithValue("rw-host", "tenant-rw."+scenario.namespace+".svc.cluster.local"))
+
+			current := fetchPostgresDatabase(ctx, scenario.requestName)
+			expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+			Expect(metav1.IsControlledBy(configMap, owner)).To(BeTrue())
+		})
+
+		It("recreates a deleted configmap", func() {
+			scenario := newReadyClusterScenario(namespace, "configmap-delete", "tenant-cluster", "tenant-cnpg", "appdb")
+			reconcilePostgresDatabaseToReady(ctx, scenario, false)
+
+			configMapName := fmt.Sprintf("%s-%s-config", scenario.resourceName, scenario.dbName)
+			Expect(k8sClient.Delete(ctx, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: scenario.namespace},
+			})).To(Succeed())
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectEmptyReconcileResult(result, err)
+
+			configMap := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: scenario.namespace}, configMap)).To(Succeed())
+			Expect(configMap.Data).To(HaveKeyWithValue("rw-host", "tenant-rw."+scenario.namespace+".svc.cluster.local"))
+		})
+
+		It("does not recreate a deleted managed user secret", func() {
+			scenario := newReadyClusterScenario(namespace, "secret-delete", "tenant-cluster", "tenant-cnpg", "appdb")
+			reconcilePostgresDatabaseToReady(ctx, scenario, false)
+
+			secretName := fmt.Sprintf("%s-%s-admin", scenario.resourceName, scenario.dbName)
+			Expect(k8sClient.Delete(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: scenario.namespace},
+			})).To(Succeed())
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+
+			current := fetchPostgresDatabase(ctx, scenario.requestName)
+			expectStatusPhase(current, "Provisioning")
+			expectStatusCondition(current, "SecretsReady", metav1.ConditionFalse, "SecretsDriftDetected")
+
+			missing := &corev1.Secret{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: scenario.namespace}, missing)
+			Expect(apierrors.IsNotFound(err)).To(BeTrue())
+		})
+
+		It("re-attaches ownership when a managed user secret loses its owner reference", func() {
+			scenario := newReadyClusterScenario(namespace, "secret-adopt", "tenant-cluster", "tenant-cnpg", "appdb")
+			owner := reconcilePostgresDatabaseToReady(ctx, scenario, false)
+
+			secret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s-admin", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, secret)).To(Succeed())
+			secret.OwnerReferences = nil
+			Expect(k8sClient.Update(ctx, secret)).To(Succeed())
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectEmptyReconcileResult(result, err)
+
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, secret)).To(Succeed())
+			Expect(metav1.IsControlledBy(secret, owner)).To(BeTrue())
+
+			current := fetchPostgresDatabase(ctx, scenario.requestName)
+			expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+		})
+
+		It("creates secrets and configmaps for a newly added database while preserving existing ones", func() {
+			scenario := newReadyClusterScenario(namespace, "new-database", "tenant-cluster", "tenant-cnpg", "appdb")
+			current := reconcilePostgresDatabaseToReady(ctx, scenario, false)
+
+			current.Spec.Databases = append(current.Spec.Databases, enterprisev4.DatabaseDefinition{Name: "analytics"})
+			Expect(k8sClient.Update(ctx, current)).To(Succeed())
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+
+			for _, secretName := range []string{
+				fmt.Sprintf("%s-analytics-admin", scenario.resourceName),
+				fmt.Sprintf("%s-analytics-rw", scenario.resourceName),
+			} {
+				secret := &corev1.Secret{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: scenario.namespace}, secret)).To(Succeed())
+			}
+
+			configMap := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-analytics-config", scenario.resourceName), Namespace: scenario.namespace}, configMap)).To(Succeed())
+			Expect(configMap.Data).To(HaveKeyWithValue("dbname", "analytics"))
+
+			existingSecret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s-admin", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, existingSecret)).To(Succeed())
+		})
+
+		It("recreates a deleted CNPG Database", func() {
+			scenario := newReadyClusterScenario(namespace, "cnpg-database-delete", "tenant-cluster", "tenant-cnpg", "appdb")
+			owner := reconcilePostgresDatabaseToReady(ctx, scenario, false)
+
+			cnpgDatabaseName := fmt.Sprintf("%s-%s", scenario.resourceName, scenario.dbName)
+			Expect(k8sClient.Delete(ctx, &cnpgv1.Database{
+				ObjectMeta: metav1.ObjectMeta{Name: cnpgDatabaseName, Namespace: scenario.namespace},
+			})).To(Succeed())
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+
+			cnpgDatabase := &cnpgv1.Database{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseName, Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
+			Expect(cnpgDatabase.Spec.Name).To(Equal(scenario.dbName))
+			Expect(metav1.IsControlledBy(cnpgDatabase, owner)).To(BeTrue())
+
+			markCNPGDatabaseApplied(ctx, cnpgDatabase)
+			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectEmptyReconcileResult(result, err)
+		})
+	})
+
+	When("the CNPG Database exists but has not been applied yet", func() {
+		It("waits for CNPG to apply the database and sets DatabasesReady=False with reason WaitingForCNPG", func() {
+			scenario := newReadyClusterScenario(namespace, "cnpg-wait", "tenant-cluster", "tenant-cnpg", dbAppdb)
+			seedReadyClusterScenario(ctx, scenario, false)
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectEmptyReconcileResult(result, err)
+
+			current := expectFinalizerAdded(ctx, scenario.requestName)
+			seedExistingDatabaseStatus(ctx, current, scenario.dbName)
+
+			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+			expectProvisionedArtifacts(ctx, scenario, current)
+			expectManagedRolesPatched(ctx, scenario)
+
+			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+			expectCNPGDatabaseCreated(ctx, scenario, current)
+			// Do NOT call markCNPGDatabaseApplied to leave it waiting
+
+			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+
+			current = fetchPostgresDatabase(ctx, scenario.requestName)
+			expectStatusCondition(current, condDatabasesReady, metav1.ConditionFalse, reasonWaitingForCNPG)
+		})
+	})
+
+	When("managed roles have been patched but CNPG has not reconciled them yet", func() {
+		It("waits for CNPG to reconcile roles and sets RolesReady=False with reason WaitingForCNPG", func() {
+			scenario := newReadyClusterScenario(namespace, "roles-wait", "tenant-cluster", "tenant-cnpg", dbAppdb)
+			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []enterprisev4.DatabaseDefinition{{Name: scenario.dbName}})
+			postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
+			markPostgresClusterReady(ctx, postgresCluster, scenario.cnpgClusterName, scenario.namespace, false)
+			cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
+			// Mark with service endpoints but no reconciled roles — ConfigMaps need hosts but roles should stay pending
+			markCNPGClusterReady(ctx, cnpgCluster, []string{}, "tenant-rw", "tenant-ro")
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectEmptyReconcileResult(result, err)
+
+			current := expectFinalizerAdded(ctx, scenario.requestName)
+			seedExistingDatabaseStatus(ctx, current, scenario.dbName)
+
+			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+			expectProvisionedArtifacts(ctx, scenario, current)
+			expectManagedRolesPatched(ctx, scenario)
+
+			current = fetchPostgresDatabase(ctx, scenario.requestName)
+			expectStatusCondition(current, condRolesReady, metav1.ConditionFalse, reasonWaitingForCNPG)
+		})
+	})
+
+	When("postgresdatabase secondary-resource predicates run", func() {
+		It("triggers on cnpg database generation change and ignores status-only updates", func() {
+			pred := predicate.GenerationChangedPredicate{}
+
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{Generation: 1}},
+				ObjectNew: &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{Generation: 2}},
+			})).To(BeTrue())
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{Generation: 1}},
+				ObjectNew: &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{Generation: 1}},
+			})).To(BeFalse())
+		})
+
+		It("treats secret create, update, and delete events as drift triggers", func() {
+			pred := predicate.ResourceVersionChangedPredicate{}
+
+			Expect(pred.Create(event.CreateEvent{})).To(BeTrue())
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret", Namespace: "test", ResourceVersion: "1"}},
+				ObjectNew: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret", Namespace: "test", ResourceVersion: "2"}},
+			})).To(BeTrue())
+			Expect(pred.Delete(event.DeleteEvent{})).To(BeTrue())
+		})
+
+		It("treats configmap create, update, and delete events as drift triggers", func() {
+			pred := predicate.ResourceVersionChangedPredicate{}
+
+			Expect(pred.Create(event.CreateEvent{})).To(BeTrue())
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "config", Namespace: "test", ResourceVersion: "1"}},
+				ObjectNew: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "config", Namespace: "test", ResourceVersion: "2"}},
+			})).To(BeTrue())
+			Expect(pred.Delete(event.DeleteEvent{})).To(BeTrue())
 		})
 	})
 
@@ -671,6 +950,57 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				err = k8sClient.Get(ctx, requestName, current)
 				Expect(apierrors.IsNotFound(err) || !slices.Contains(current.Finalizers, postgresDatabaseFinalizer)).To(BeTrue())
 			})
+		})
+	})
+
+	When("a retained CNPG Database exists without owner reference", func() {
+		It("re-adopts the resource and removes retained annotation", func() {
+			scenario := newReadyClusterScenario(namespace, "adopt-cnpg", "tenant-cluster", "tenant-cnpg", dbAppdb)
+			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []enterprisev4.DatabaseDefinition{{Name: scenario.dbName}}, postgresDatabaseFinalizer)
+			postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
+			markPostgresClusterReady(ctx, postgresCluster, scenario.cnpgClusterName, scenario.namespace, false)
+			cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
+			markCNPGClusterReady(ctx, cnpgCluster, []string{adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)}, "tenant-rw", "tenant-ro")
+
+			// Create a CNPG Database with retained annotation but no owner reference
+			retainedCNPGDb := &cnpgv1.Database{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName),
+					Namespace: scenario.namespace,
+					Annotations: map[string]string{
+						retainedFromAnnotation: scenario.resourceName,
+					},
+				},
+				Spec: cnpgv1.DatabaseSpec{
+					ClusterRef: corev1.LocalObjectReference{Name: scenario.cnpgClusterName},
+					Name:       scenario.dbName,
+					Owner:      adminRoleNameForTest(scenario.dbName),
+				},
+			}
+			Expect(k8sClient.Create(ctx, retainedCNPGDb)).To(Succeed())
+
+			// Finalizer already present — first reconcile goes straight to provisioning
+			current := fetchPostgresDatabase(ctx, scenario.requestName)
+			seedExistingDatabaseStatus(ctx, current, scenario.dbName)
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+			expectProvisionedArtifacts(ctx, scenario, current)
+			expectManagedRolesPatched(ctx, scenario)
+
+			// Second reconcile: roles ready, re-adopts the retained CNPG Database, waits for applied
+			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+
+			adoptedDb := &cnpgv1.Database{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, adoptedDb)).To(Succeed())
+			Expect(metav1.IsControlledBy(adoptedDb, current)).To(BeTrue())
+			_, hasRetainedAnnotation := adoptedDb.Annotations[retainedFromAnnotation]
+			Expect(hasRetainedAnnotation).To(BeFalse())
+
+			markCNPGDatabaseApplied(ctx, adoptedDb)
+			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectEmptyReconcileResult(result, err)
 		})
 	})
 })

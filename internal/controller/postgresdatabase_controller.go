@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"reflect"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
@@ -29,6 +28,7 @@ import (
 	sharedreconcile "github.com/splunk/splunk-operator/pkg/postgresql/shared/reconcile"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -106,31 +106,28 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterprisev4.PostgresDatabase{}, builder.WithPredicates(
-			predicate.Or(
-				predicate.GenerationChangedPredicate{},
-				predicate.Funcs{
-					UpdateFunc: func(e event.UpdateEvent) bool {
-						return !reflect.DeepEqual(
-							e.ObjectOld.GetFinalizers(),
-							e.ObjectNew.GetFinalizers(),
-						)
-					},
-				},
-			),
-		)).
-		Owns(&cnpgv1.Database{}, builder.WithPredicates(predicate.Funcs{
-			CreateFunc: func(event.CreateEvent) bool { return false },
-		})).
-		Owns(&corev1.Secret{}, builder.WithPredicates(predicate.Funcs{
-			CreateFunc: func(event.CreateEvent) bool { return false },
-		})).
-		Owns(&corev1.ConfigMap{}, builder.WithPredicates(predicate.Funcs{
-			CreateFunc: func(event.CreateEvent) bool { return false },
-		})).
+		WithEventFilter(predicate.Funcs{GenericFunc: func(event.GenericEvent) bool { return false }}).
+		For(&enterprisev4.PostgresDatabase{}, builder.WithPredicates(postgresDatabasePredicator())).
+		Owns(&cnpgv1.Database{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Owns(&corev1.Secret{}, builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
+		Owns(&corev1.ConfigMap{}, builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
 		Named("postgresdatabase").
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: DatabaseTotalWorker,
 		}).
 		Complete(r)
+}
+
+func postgresDatabasePredicator() predicate.Predicate {
+	return predicate.Or(
+		predicate.GenerationChangedPredicate{},
+		predicate.Funcs{
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				if !equality.Semantic.DeepEqual(e.ObjectOld.GetDeletionTimestamp(), e.ObjectNew.GetDeletionTimestamp()) {
+					return true
+				}
+				return !equality.Semantic.DeepEqual(e.ObjectOld.GetFinalizers(), e.ObjectNew.GetFinalizers())
+			},
+		},
+	)
 }

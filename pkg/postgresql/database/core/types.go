@@ -22,6 +22,7 @@ type reconcileDBPhases string
 type conditionTypes string
 type conditionReasons string
 type clusterReadyStatus string
+type reconcileConflictCategory string
 
 const (
 	retryDelay                = time.Second * 15
@@ -33,7 +34,6 @@ const (
 	readWriteEndpoint string = "rw"
 
 	deletionPolicyRetain string = "Retain"
-	deletionPolicyDelete string = "Delete"
 
 	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"
 	annotationRetainedFrom        string = "enterprise.splunk.com/retained-from"
@@ -74,9 +74,10 @@ const (
 	reasonDatabasesAvailable       conditionReasons = "DatabasesAvailable"
 	reasonSecretsCreated           conditionReasons = "SecretsCreated"
 	reasonSecretsCreationFailed    conditionReasons = "SecretsCreationFailed"
+	reasonSecretsDriftDetected     conditionReasons = "SecretsDriftDetected"
 	reasonWaitingForCNPG           conditionReasons = "WaitingForCNPG"
-	reasonUsersCreationFailed      conditionReasons = "UsersCreationFailed"
-	reasonUsersAvailable           conditionReasons = "UsersAvailable"
+	reasonRolesCreationFailed      conditionReasons = "RolesCreationFailed"
+	reasonRolesAvailable           conditionReasons = "RolesAvailable"
 	reasonRoleConflict             conditionReasons = "RoleConflict"
 	reasonConfigMapsCreationFailed conditionReasons = "ConfigMapsCreationFailed"
 	reasonConfigMapsCreated        conditionReasons = "ConfigMapsCreated"
@@ -90,6 +91,21 @@ const (
 	ClusterNotReady         clusterReadyStatus = "NotReady"
 	ClusterNoProvisionerRef clusterReadyStatus = "NoProvisionerRef"
 	ClusterReady            clusterReadyStatus = "Ready"
+
+	conflictDeletion               reconcileConflictCategory = "deletion"
+	conflictFinalizer              reconcileConflictCategory = "finalizer"
+	conflictClusterStatus          reconcileConflictCategory = "cluster_status"
+	conflictRoleConflictStatus     reconcileConflictCategory = "role_conflict_status"
+	conflictSecretsReconcile       reconcileConflictCategory = "secrets_reconcile"
+	conflictSecretsStatus          reconcileConflictCategory = "secrets_status"
+	conflictConfigMapsReconcile    reconcileConflictCategory = "configmaps_reconcile"
+	conflictConfigMapsStatus       reconcileConflictCategory = "configmaps_status"
+	conflictManagedRolesPatch      reconcileConflictCategory = "managed_roles_patch"
+	conflictRolesStatus            reconcileConflictCategory = "roles_status"
+	conflictCNPGDatabasesReconcile reconcileConflictCategory = "cnpg_databases_reconcile"
+	conflictDatabasesStatus        reconcileConflictCategory = "databases_status"
+	conflictPrivilegesStatus       reconcileConflictCategory = "privileges_status"
+	conflictFinalStatus            reconcileConflictCategory = "final_status"
 )
 
 // clusterEndpoints holds fully-resolved connection hostnames for a cluster.

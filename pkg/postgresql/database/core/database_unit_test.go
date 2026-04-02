@@ -3,7 +3,6 @@ package core
 // The following functions are intentionally not tested directly here.
 // Their business logic is covered by narrower helper tests where practical,
 // and the remaining behavior is mostly controller-runtime orchestration:
-// - PostgresDatabaseService
 // - patchManagedRoles
 // - reconcileCNPGDatabases
 // - handleDeletion
@@ -27,9 +26,12 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -124,7 +126,160 @@ func testClient(t *testing.T, scheme *runtime.Scheme, objs ...client.Object) cli
 	return builder.Build()
 }
 
-func TestGetDesiredUsers(t *testing.T) {
+func postgresDatabaseConflict(name string) error {
+	return apierrors.NewConflict(
+		schema.GroupResource{
+			Group:    enterprisev4.GroupVersion.Group,
+			Resource: "postgresdatabases",
+		},
+		name,
+		errors.New("resource version conflict"),
+	)
+}
+
+func TestPostgresDatabaseServiceRequeuesOnConflict(t *testing.T) {
+	scheme := testScheme(t)
+	tests := []struct {
+		name     string
+		existing *enterprisev4.PostgresDatabase
+		build    func(*enterprisev4.PostgresDatabase) client.Client
+	}{
+		{
+			name: "when adding the finalizer",
+			existing: &enterprisev4.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "primary",
+					Namespace: "dbs",
+				},
+			},
+			build: func(existing *enterprisev4.PostgresDatabase) client.Client {
+				return fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+					WithObjects(existing).
+					WithInterceptorFuncs(interceptor.Funcs{
+						Update: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.UpdateOption) error {
+							return postgresDatabaseConflict(obj.GetName())
+						},
+					}).
+					Build()
+			},
+		},
+		{
+			name: "when persisting status",
+			existing: &enterprisev4.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "primary",
+					Namespace:  "dbs",
+					Finalizers: []string{postgresDatabaseFinalizerName},
+				},
+				Spec: enterprisev4.PostgresDatabaseSpec{
+					ClusterRef: corev1.LocalObjectReference{Name: "missing-cluster"},
+				},
+			},
+			build: func(existing *enterprisev4.PostgresDatabase) client.Client {
+				return fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+					WithObjects(existing).
+					WithInterceptorFuncs(interceptor.Funcs{
+						SubResourceUpdate: func(_ context.Context, _ client.Client, subResourceName string, obj client.Object, _ ...client.SubResourceUpdateOption) error {
+							if subResourceName != "status" {
+								return nil
+							}
+							return postgresDatabaseConflict(obj.GetName())
+						},
+					}).
+					Build()
+			},
+		},
+		{
+			name: "when status update conflicts while handling another error",
+			existing: &enterprisev4.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "primary",
+					Namespace:  "dbs",
+					Finalizers: []string{postgresDatabaseFinalizerName},
+				},
+				Spec: enterprisev4.PostgresDatabaseSpec{
+					ClusterRef: corev1.LocalObjectReference{Name: "primary"},
+				},
+			},
+			build: func(existing *enterprisev4.PostgresDatabase) client.Client {
+				return fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+					WithObjects(existing).
+					WithInterceptorFuncs(interceptor.Funcs{
+						Get: func(ctx context.Context, client client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+							if _, ok := obj.(*enterprisev4.PostgresCluster); ok {
+								return errors.New("temporary get failure")
+							}
+							return client.Get(ctx, key, obj, opts...)
+						},
+						SubResourceUpdate: func(_ context.Context, _ client.Client, subResourceName string, obj client.Object, _ ...client.SubResourceUpdateOption) error {
+							if subResourceName != "status" {
+								return nil
+							}
+							return postgresDatabaseConflict(obj.GetName())
+						},
+					}).
+					Build()
+			},
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			c := tst.build(tst.existing)
+
+			postgresDB := &enterprisev4.PostgresDatabase{}
+			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: tst.existing.Name, Namespace: tst.existing.Namespace}, postgresDB))
+
+			result, err := PostgresDatabaseService(
+				context.Background(),
+				&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}},
+				postgresDB,
+				nil,
+			)
+
+			require.NoError(t, err)
+			assert.Equal(t, ctrl.Result{Requeue: true}, result)
+		})
+	}
+}
+
+func TestSecretMissingPolicyForDB(t *testing.T) {
+	tests := []struct {
+		name        string
+		dbName      string
+		existingDBs map[string]struct{}
+		want        secretMissingPolicy
+	}{
+		{
+			name:        "creates secrets for new databases",
+			dbName:      "payments",
+			existingDBs: map[string]struct{}{},
+			want:        createSecretIfMissing,
+		},
+		{
+			name:   "reports drift for previously provisioned databases",
+			dbName: "payments",
+			existingDBs: map[string]struct{}{
+				"payments": {},
+			},
+			want: reportSecretDriftIfMissing,
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			assert.Equal(t, tst.want, secretMissingPolicyForDB(tst.dbName, tst.existingDBs))
+		})
+	}
+}
+
+func TestGetDesiredRoles(t *testing.T) {
 	postgresDB := &enterprisev4.PostgresDatabase{
 		Spec: enterprisev4.PostgresDatabaseSpec{
 			Databases: []enterprisev4.DatabaseDefinition{
@@ -140,23 +295,7 @@ func TestGetDesiredUsers(t *testing.T) {
 		"secondary_db_rw",
 	}
 
-	got := getDesiredUsers(postgresDB)
-
-	assert.Equal(t, want, got)
-}
-
-func TestGetUsersInClusterSpec(t *testing.T) {
-	cluster := &enterprisev4.PostgresCluster{
-		Spec: enterprisev4.PostgresClusterSpec{
-			ManagedRoles: []enterprisev4.ManagedRole{
-				{Name: "main_db_admin"},
-				{Name: "main_db_rw"},
-			},
-		},
-	}
-	want := []string{"main_db_admin", "main_db_rw"}
-
-	got := getUsersInClusterSpec(cluster)
+	got := getDesiredRoles(postgresDB)
 
 	assert.Equal(t, want, got)
 }
@@ -290,14 +429,14 @@ func TestGetRoleConflicts(t *testing.T) {
 func TestVerifyRolesReady(t *testing.T) {
 	tests := []struct {
 		name          string
-		expectedUsers []string
+		expectedRoles []string
 		cluster       *cnpgv1.Cluster
 		wantNotReady  []string
 		wantErr       string
 	}{
 		{
 			name:          "returns error when a role cannot reconcile",
-			expectedUsers: []string{"main_db_admin", "main_db_rw"},
+			expectedRoles: []string{"main_db_admin", "main_db_rw"},
 			cluster: &cnpgv1.Cluster{
 				Status: cnpgv1.ClusterStatus{
 					ManagedRolesStatus: cnpgv1.ManagedRoles{
@@ -311,7 +450,7 @@ func TestVerifyRolesReady(t *testing.T) {
 		},
 		{
 			name:          "returns missing roles that are not reconciled yet",
-			expectedUsers: []string{"main_db_admin", "main_db_rw", "analytics_admin"},
+			expectedRoles: []string{"main_db_admin", "main_db_rw", "analytics_admin"},
 			cluster: &cnpgv1.Cluster{
 				Status: cnpgv1.ClusterStatus{
 					ManagedRolesStatus: cnpgv1.ManagedRoles{
@@ -325,7 +464,7 @@ func TestVerifyRolesReady(t *testing.T) {
 		},
 		{
 			name:          "returns pending reconciliation roles as not ready",
-			expectedUsers: []string{"main_db_admin", "main_db_rw"},
+			expectedRoles: []string{"main_db_admin", "main_db_rw"},
 			cluster: &cnpgv1.Cluster{
 				Status: cnpgv1.ClusterStatus{
 					ManagedRolesStatus: cnpgv1.ManagedRoles{
@@ -340,7 +479,7 @@ func TestVerifyRolesReady(t *testing.T) {
 		},
 		{
 			name:          "returns empty when all roles are reconciled",
-			expectedUsers: []string{"main_db_admin"},
+			expectedRoles: []string{"main_db_admin"},
 			cluster: &cnpgv1.Cluster{
 				Status: cnpgv1.ClusterStatus{
 					ManagedRolesStatus: cnpgv1.ManagedRoles{
@@ -357,7 +496,7 @@ func TestVerifyRolesReady(t *testing.T) {
 	for _, tst := range tests {
 
 		t.Run(tst.name, func(t *testing.T) {
-			gotNotReady, err := verifyRolesReady(context.Background(), tst.expectedUsers, tst.cluster)
+			gotNotReady, err := verifyRolesReady(context.Background(), tst.expectedRoles, tst.cluster)
 			if tst.wantErr != "" {
 				require.Error(t, err)
 				assert.Equal(t, tst.wantErr, err.Error())
@@ -666,14 +805,14 @@ func TestVerifyDatabasesReady(t *testing.T) {
 			wantNotReady: []string{"payments", "analytics"},
 		},
 		{
-			name: "returns error when a database is missing",
+			name: "returns not ready when a database is missing",
 			objects: []client.Object{
 				&cnpgv1.Database{
 					ObjectMeta: metav1.ObjectMeta{Name: "primary-payments", Namespace: "dbs"},
 					Status:     cnpgv1.DatabaseStatus{Applied: boolPtr(true)},
 				},
 			},
-			wantErr: "getting CNPG Database primary-analytics",
+			wantNotReady: []string{"analytics"},
 		},
 	}
 
@@ -858,7 +997,7 @@ func TestGeneratePassword(t *testing.T) {
 }
 
 // Uses a fake client because the helper creates Secret objects and persists owner references through the Kubernetes API.
-func TestCreateUserSecret(t *testing.T) {
+func TestCreateRoleSecret(t *testing.T) {
 	scheme := testScheme(t)
 	postgresDB := &enterprisev4.PostgresDatabase{
 		TypeMeta: metav1.TypeMeta{
@@ -877,13 +1016,13 @@ func TestCreateUserSecret(t *testing.T) {
 		secretName := "primary-payments-admin"
 		wantManagedBy := "splunk-operator"
 		wantReload := "true"
-		wantUsername := roleName
+		wantRolename := roleName
 		wantOwnerUID := postgresDB.UID
 		wantPasswordLength := passwordLength
 		wantPasswordDigits := passwordDigits
 		c := testClient(t, scheme)
 
-		err := createUserSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+		err := createRoleSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
 
 		require.NoError(t, err)
 
@@ -893,7 +1032,7 @@ func TestCreateUserSecret(t *testing.T) {
 		assert.Equal(t, postgresDB.Namespace, got.Namespace)
 		assert.Equal(t, wantManagedBy, got.Labels[labelManagedBy])
 		assert.Equal(t, wantReload, got.Labels[labelCNPGReload])
-		assert.Equal(t, wantUsername, string(got.Data["username"]))
+		assert.Equal(t, wantRolename, string(got.Data["username"]))
 		assertGeneratedPassword(t, string(got.Data[secretKeyPassword]), wantPasswordLength, wantPasswordDigits)
 		require.Len(t, got.OwnerReferences, 1)
 		assert.Equal(t, wantOwnerUID, got.OwnerReferences[0].UID)
@@ -902,18 +1041,18 @@ func TestCreateUserSecret(t *testing.T) {
 	t.Run("returns nil when secret already exists", func(t *testing.T) {
 		roleName := "payments_admin"
 		secretName := "primary-payments-admin"
-		wantUsername := roleName
+		wantRolename := roleName
 		wantPassword := "existing-password"
-		existing := buildPasswordSecret(postgresDB, secretName, wantUsername, wantPassword)
+		existing := buildPasswordSecret(postgresDB, secretName, wantRolename, wantPassword)
 		c := testClient(t, scheme, existing)
 
-		err := createUserSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+		err := createRoleSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
 
 		require.NoError(t, err)
 
 		got := &corev1.Secret{}
 		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
-		assert.Equal(t, wantUsername, string(got.Data["username"]))
+		assert.Equal(t, wantRolename, string(got.Data["username"]))
 		assert.Equal(t, wantPassword, string(got.Data[secretKeyPassword]))
 		assert.Empty(t, got.OwnerReferences)
 	})
@@ -939,7 +1078,7 @@ func TestEnsureSecret(t *testing.T) {
 		secretName := "primary-payments-admin"
 		wantManagedBy := "splunk-operator"
 		wantReload := "true"
-		wantUsername := roleName
+		wantRolename := roleName
 		wantOwnerUID := postgresDB.UID
 		wantPasswordLength := passwordLength
 		wantPasswordDigits := passwordDigits
@@ -953,7 +1092,7 @@ func TestEnsureSecret(t *testing.T) {
 		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
 		assert.Equal(t, wantManagedBy, got.Labels[labelManagedBy])
 		assert.Equal(t, wantReload, got.Labels[labelCNPGReload])
-		assert.Equal(t, wantUsername, string(got.Data["username"]))
+		assert.Equal(t, wantRolename, string(got.Data["username"]))
 		assertGeneratedPassword(t, string(got.Data[secretKeyPassword]), wantPasswordLength, wantPasswordDigits)
 		require.Len(t, got.OwnerReferences, 1)
 		assert.Equal(t, wantOwnerUID, got.OwnerReferences[0].UID)
@@ -962,7 +1101,7 @@ func TestEnsureSecret(t *testing.T) {
 	t.Run("re-adopts retained secret", func(t *testing.T) {
 		roleName := "payments_admin"
 		secretName := "primary-payments-admin"
-		wantUsername := roleName
+		wantRolename := roleName
 		wantPassword := "existing-password"
 		wantOwnerUID := postgresDB.UID
 		wantKeep := "true"
@@ -979,7 +1118,7 @@ func TestEnsureSecret(t *testing.T) {
 				},
 			},
 			Data: map[string][]byte{
-				"username":        []byte(wantUsername),
+				"username":        []byte(wantRolename),
 				secretKeyPassword: []byte(wantPassword),
 			},
 		}
@@ -994,7 +1133,7 @@ func TestEnsureSecret(t *testing.T) {
 		assert.Equal(t, wantKeep, got.Annotations["keep"])
 		_, hasRetainedAnnotation := got.Annotations[annotationRetainedFrom]
 		assert.False(t, hasRetainedAnnotation)
-		assert.Equal(t, wantUsername, string(got.Data["username"]))
+		assert.Equal(t, wantRolename, string(got.Data["username"]))
 		assert.Equal(t, wantPassword, string(got.Data[secretKeyPassword]))
 		assert.Contains(t, got.OwnerReferences, metav1.OwnerReference{
 			APIVersion:         enterprisev4.GroupVersion.String(),
@@ -1009,7 +1148,7 @@ func TestEnsureSecret(t *testing.T) {
 	t.Run("does nothing for existing managed secret", func(t *testing.T) {
 		roleName := "payments_admin"
 		secretName := "primary-payments-admin"
-		wantUsername := roleName
+		wantRolename := roleName
 		wantPassword := "existing-password"
 		wantKeep := "true"
 		wantOwnerUID := postgresDB.UID
@@ -1021,11 +1160,18 @@ func TestEnsureSecret(t *testing.T) {
 					"keep": wantKeep,
 				},
 				OwnerReferences: []metav1.OwnerReference{
-					{UID: wantOwnerUID, Name: postgresDB.Name},
+					{
+						APIVersion:         enterprisev4.GroupVersion.String(),
+						Kind:               "PostgresDatabase",
+						Name:               postgresDB.Name,
+						UID:                wantOwnerUID,
+						Controller:         boolPtr(true),
+						BlockOwnerDeletion: boolPtr(true),
+					},
 				},
 			},
 			Data: map[string][]byte{
-				"username":        []byte(wantUsername),
+				"username":        []byte(wantRolename),
 				secretKeyPassword: []byte(wantPassword),
 			},
 		}
@@ -1038,15 +1184,124 @@ func TestEnsureSecret(t *testing.T) {
 		got := &corev1.Secret{}
 		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
 		assert.Equal(t, wantKeep, got.Annotations["keep"])
-		assert.Equal(t, wantUsername, string(got.Data["username"]))
+		assert.Equal(t, wantRolename, string(got.Data["username"]))
 		assert.Equal(t, wantPassword, string(got.Data[secretKeyPassword]))
 		require.Len(t, got.OwnerReferences, 1)
 		assert.Equal(t, wantOwnerUID, got.OwnerReferences[0].UID)
 	})
+
+	t.Run("returns drift error when a previously provisioned secret is missing", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		c := testClient(t, scheme)
+
+		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+
+		require.Error(t, err)
+		var driftErr *secretReconcileError
+		require.ErrorAs(t, err, &driftErr)
+		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+		assert.ErrorContains(t, err, secretName)
+	})
+
+	t.Run("re-attaches owner reference when ownership was manually stripped", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		existing := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: postgresDB.Namespace,
+				Labels: map[string]string{
+					labelManagedBy:  "splunk-operator",
+					labelCNPGReload: "true",
+				},
+				Annotations: map[string]string{"keep": "true"},
+			},
+			Data: map[string][]byte{
+				"username":        []byte(roleName),
+				secretKeyPassword: []byte("existing-password"),
+			},
+		}
+		c := testClient(t, scheme, existing)
+
+		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+
+		require.NoError(t, err)
+
+		got := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, "true", got.Annotations["keep"])
+		require.Len(t, got.OwnerReferences, 1)
+		assert.Equal(t, postgresDB.UID, got.OwnerReferences[0].UID)
+	})
+
+	t.Run("accepts an existing secret with mutated data without rewriting it", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		wantUsername := "wrong_user"
+		existing := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: postgresDB.Namespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{UID: postgresDB.UID, Name: postgresDB.Name},
+				},
+			},
+			Data: map[string][]byte{
+				"username":        []byte(wantUsername),
+				secretKeyPassword: []byte("existing-password"),
+			},
+		}
+		c := testClient(t, scheme, existing)
+
+		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+
+		require.NoError(t, err)
+
+		got := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, wantUsername, string(got.Data["username"]))
+		assert.Equal(t, "existing-password", string(got.Data[secretKeyPassword]))
+	})
+
+	t.Run("returns drift error when secret is owned by a different controller", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		otherOwnerUID := types.UID("other-owner-uid")
+		existing := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: postgresDB.Namespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         "v1",
+						Kind:               "SomeOtherController",
+						Name:               "other-controller",
+						UID:                otherOwnerUID,
+						Controller:         boolPtr(true),
+						BlockOwnerDeletion: boolPtr(true),
+					},
+				},
+			},
+			Data: map[string][]byte{
+				"username":        []byte(roleName),
+				secretKeyPassword: []byte("existing-password"),
+			},
+		}
+		c := testClient(t, scheme, existing)
+
+		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+
+		require.Error(t, err)
+		var driftErr *secretReconcileError
+		require.ErrorAs(t, err, &driftErr)
+		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+		assert.ErrorContains(t, err, secretName)
+	})
 }
 
 // Uses a fake client because the helper reconciles multiple Secret objects through the Kubernetes API.
-func TestReconcileUserSecrets(t *testing.T) {
+func TestReconcileRoleSecrets(t *testing.T) {
 	scheme := testScheme(t)
 	postgresDB := &enterprisev4.PostgresDatabase{
 		TypeMeta: metav1.TypeMeta{
@@ -1078,7 +1333,7 @@ func TestReconcileUserSecrets(t *testing.T) {
 			{name: "primary-analytics-rw", username: "analytics_rw"},
 		}
 
-		err := reconcileUserSecrets(context.Background(), c, scheme, postgresDB)
+		err := reconcileRoleSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB))
 
 		require.NoError(t, err)
 		for _, want := range wantSecrets {
@@ -1094,13 +1349,13 @@ func TestReconcileUserSecrets(t *testing.T) {
 	t.Run("is idempotent when secrets already exist", func(t *testing.T) {
 		c := testClient(t, scheme)
 
-		require.NoError(t, reconcileUserSecrets(context.Background(), c, scheme, postgresDB))
+		require.NoError(t, reconcileRoleSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB)))
 
 		before := &corev1.Secret{}
 		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments-admin", Namespace: postgresDB.Namespace}, before))
 		beforePassword := append([]byte(nil), before.Data[secretKeyPassword]...)
 
-		err := reconcileUserSecrets(context.Background(), c, scheme, postgresDB)
+		err := reconcileRoleSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB))
 
 		require.NoError(t, err)
 
@@ -1109,6 +1364,19 @@ func TestReconcileUserSecrets(t *testing.T) {
 		assert.Equal(t, beforePassword, after.Data[secretKeyPassword])
 		require.Len(t, after.OwnerReferences, 1)
 		assert.Equal(t, postgresDB.UID, after.OwnerReferences[0].UID)
+	})
+
+	t.Run("does not recreate missing secrets for previously provisioned databases", func(t *testing.T) {
+		postgresDB.Status.Phase = strPtr(string(readyDBPhase))
+		postgresDB.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
+		c := testClient(t, scheme)
+
+		err := reconcileRoleSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB))
+
+		require.Error(t, err)
+		var driftErr *secretReconcileError
+		require.ErrorAs(t, err, &driftErr)
+		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
 	})
 }
 
@@ -1227,6 +1495,47 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 			Controller:         boolPtr(true),
 			BlockOwnerDeletion: boolPtr(true),
 		})
+	})
+
+	t.Run("re-attaches owner reference when configmap ownership was manually stripped", func(t *testing.T) {
+		postgresDB := &enterprisev4.PostgresDatabase{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: enterprisev4.GroupVersion.String(),
+				Kind:       "PostgresDatabase",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary",
+				Namespace: "dbs",
+				UID:       types.UID("postgresdb-uid"),
+			},
+			Spec: enterprisev4.PostgresDatabaseSpec{
+				Databases: []enterprisev4.DatabaseDefinition{
+					{Name: "payments"},
+				},
+			},
+		}
+		cmName := "primary-payments-config"
+		existing := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        cmName,
+				Namespace:   postgresDB.Namespace,
+				Labels:      map[string]string{labelManagedBy: "splunk-operator"},
+				Annotations: map[string]string{"keep": "true"},
+			},
+			Data: map[string]string{"dbname": "payments"},
+		}
+		c := testClient(t, scheme, existing)
+
+		err := reconcileRoleConfigMaps(context.Background(), c, scheme, postgresDB, endpoints)
+
+		require.NoError(t, err)
+
+		got := &corev1.ConfigMap{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: cmName, Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, "true", got.Annotations["keep"])
+		require.Len(t, got.OwnerReferences, 1)
+		assert.Equal(t, postgresDB.UID, got.OwnerReferences[0].UID)
+		assert.Equal(t, buildDatabaseConfigMapBody("payments", endpoints), got.Data)
 	})
 }
 
@@ -1485,16 +1794,16 @@ func TestBuildPasswordSecret(t *testing.T) {
 	wantNamespace := "dbs"
 	wantManagedBy := "splunk-operator"
 	wantReload := "true"
-	wantUsername := "payments_admin"
+	wantRolename := "payments_admin"
 	wantPassword := "topsecret"
 
-	got := buildPasswordSecret(postgresDB, wantName, wantUsername, wantPassword)
+	got := buildPasswordSecret(postgresDB, wantName, wantRolename, wantPassword)
 
 	assert.Equal(t, wantName, got.Name)
 	assert.Equal(t, wantNamespace, got.Namespace)
 	assert.Equal(t, wantManagedBy, got.Labels[labelManagedBy])
 	assert.Equal(t, wantReload, got.Labels[labelCNPGReload])
-	assert.Equal(t, wantUsername, string(got.Data["username"]))
+	assert.Equal(t, wantRolename, string(got.Data["username"]))
 	assert.Equal(t, wantPassword, string(got.Data[secretKeyPassword]))
 }
 
