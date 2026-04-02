@@ -70,6 +70,27 @@ func TestGetSplunkServiceName(t *testing.T) {
 	test("splunk-stack1-license-manager-service", SplunkLicenseManager, LicenseManagerRefName, false)
 }
 
+func TestGetSplunkAppRuntimeServiceName(t *testing.T) {
+	test := func(want string, instanceType InstanceType, identifier string) {
+		got := GetSplunkAppRuntimeServiceName(instanceType, identifier)
+		if got != want {
+			t.Errorf("GetSplunkAppRuntimeServiceName(\"%s\",\"%s\") = %s; want %s",
+				instanceType.ToString(), identifier, got, want)
+		}
+	}
+
+	test("splunk-t1-standalone-appruntime-headless", SplunkStandalone, "t1")
+	test("splunk-t2-cluster-manager-appruntime-headless", SplunkClusterManager, "t2")
+}
+
+func TestGetSplunkAppRuntimeServiceFQDN(t *testing.T) {
+	want := "splunk-t1-search-head-appruntime-headless.splunktest.svc.cluster.local"
+	got := GetSplunkAppRuntimeServiceFQDN("splunktest", SplunkSearchHead, "t1")
+	if got != want {
+		t.Errorf("GetSplunkAppRuntimeServiceFQDN() = %s; want %s", got, want)
+	}
+}
+
 func TestGetSplunkDefaultsName(t *testing.T) {
 	got := GetSplunkDefaultsName("t1", SplunkSearchHead)
 	want := "splunk-t1-search-head-defaults"
