@@ -74,6 +74,7 @@ const (
 	reasonDatabasesAvailable       conditionReasons = "DatabasesAvailable"
 	reasonSecretsCreated           conditionReasons = "SecretsCreated"
 	reasonSecretsCreationFailed    conditionReasons = "SecretsCreationFailed"
+	reasonSecretsDriftDetected     conditionReasons = "SecretsDriftDetected"
 	reasonWaitingForCNPG           conditionReasons = "WaitingForCNPG"
 	reasonUsersCreationFailed      conditionReasons = "UsersCreationFailed"
 	reasonUsersAvailable           conditionReasons = "UsersAvailable"

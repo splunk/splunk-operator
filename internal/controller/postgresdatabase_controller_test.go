@@ -36,6 +36,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -390,16 +391,41 @@ func expectStatusCondition(current *enterprisev4.PostgresDatabase, conditionType
 	Expect(condition.Reason).To(Equal(expectedReason), "unexpected reason for %s", conditionType)
 }
 
-func expectReadyStatus(current *enterprisev4.PostgresDatabase, generation int64, expectedDatabase enterprisev4.DatabaseInfo) {
-	expectStatusPhase(current, phaseReady)
-	Expect(current.Status.ObservedGeneration).NotTo(BeNil())
-	Expect(*current.Status.ObservedGeneration).To(Equal(generation))
+func expectReadyStatus(current *enterprisev4.PostgresDatabase, expectedDatabase enterprisev4.DatabaseInfo) {
+	expectStatusPhase(current, "Ready")
 	Expect(current.Status.Databases).To(HaveLen(1))
 	Expect(current.Status.Databases[0].Name).To(Equal(expectedDatabase.Name))
 	Expect(current.Status.Databases[0].Ready).To(Equal(expectedDatabase.Ready))
 	Expect(current.Status.Databases[0].AdminUserSecretRef).NotTo(BeNil())
 	Expect(current.Status.Databases[0].RWUserSecretRef).NotTo(BeNil())
 	Expect(current.Status.Databases[0].ConfigMapRef).NotTo(BeNil())
+}
+
+func reconcilePostgresDatabaseToReady(ctx context.Context, scenario readyClusterScenario, poolerEnabled bool) *enterprisev4.PostgresDatabase {
+	seedReadyClusterScenario(ctx, scenario, poolerEnabled)
+
+	result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+	expectEmptyReconcileResult(result, err)
+
+	current := expectFinalizerAdded(ctx, scenario.requestName)
+	seedExistingDatabaseStatus(ctx, current, scenario.dbName)
+
+	result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+	expectReconcileResult(result, err, 15*time.Second)
+	expectProvisionedArtifacts(ctx, scenario, current)
+	expectManagedRolesPatched(ctx, scenario)
+
+	result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+	expectReconcileResult(result, err, 15*time.Second)
+	cnpgDatabase := expectCNPGDatabaseCreated(ctx, scenario, current)
+	markCNPGDatabaseApplied(ctx, cnpgDatabase)
+
+	result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+	expectEmptyReconcileResult(result, err)
+
+	current = fetchPostgresDatabase(ctx, scenario.requestName)
+	expectReadyStatus(current, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+	return current
 }
 
 var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
@@ -442,10 +468,8 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				expectReconcileResult(result, err, 30*time.Second)
 
 				current := fetchPostgresDatabase(ctx, requestName)
-				expectStatusPhase(current, phasePending)
-				expectStatusCondition(current, condClusterReady, metav1.ConditionFalse, reasonClusterNotFound)
-				clusterReady := meta.FindStatusCondition(current.Status.Conditions, condClusterReady)
-				Expect(clusterReady.ObservedGeneration).To(Equal(current.Generation))
+				expectStatusPhase(current, "Pending")
+				expectStatusCondition(current, "ClusterReady", metav1.ConditionFalse, "ClusterNotFound")
 			})
 		})
 	})
@@ -476,13 +500,13 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				expectEmptyReconcileResult(result, err)
 
 				current = fetchPostgresDatabase(ctx, scenario.requestName)
-				expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
-				expectStatusCondition(current, condClusterReady, metav1.ConditionTrue, reasonClusterAvailable)
-				expectStatusCondition(current, condSecretsReady, metav1.ConditionTrue, reasonSecretsCreated)
-				expectStatusCondition(current, condConfigMapsReady, metav1.ConditionTrue, reasonConfigMapsCreated)
-				expectStatusCondition(current, condRolesReady, metav1.ConditionTrue, reasonUsersAvailable)
-				expectStatusCondition(current, condDatabasesReady, metav1.ConditionTrue, reasonDatabasesAvailable)
-				Expect(meta.FindStatusCondition(current.Status.Conditions, condPrivilegesReady)).To(BeNil())
+				expectReadyStatus(current, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+				expectStatusCondition(current, "ClusterReady", metav1.ConditionTrue, "ClusterAvailable")
+				expectStatusCondition(current, "SecretsReady", metav1.ConditionTrue, "SecretsCreated")
+				expectStatusCondition(current, "ConfigMapsReady", metav1.ConditionTrue, "ConfigMapsCreated")
+				expectStatusCondition(current, "RolesReady", metav1.ConditionTrue, "UsersAvailable")
+				expectStatusCondition(current, "DatabasesReady", metav1.ConditionTrue, "DatabasesAvailable")
+				Expect(meta.FindStatusCondition(current.Status.Conditions, "PrivilegesReady")).To(BeNil())
 			})
 		})
 
@@ -501,6 +525,158 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				expectReconcileResult(result, err, 15*time.Second)
 				expectPoolerConfigMap(ctx, scenario)
 			})
+		})
+	})
+
+	When("owned resource drift occurs after the PostgresDatabase is ready", func() {
+		It("repairs configmap content drift", func() {
+			scenario := newReadyClusterScenario(namespace, "configmap-drift", "tenant-cluster", "tenant-cnpg", "appdb")
+			owner := reconcilePostgresDatabaseToReady(ctx, scenario, false)
+
+			configMap := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s-config", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, configMap)).To(Succeed())
+			configMap.Data["rw-host"] = "unexpected.example"
+			Expect(k8sClient.Update(ctx, configMap)).To(Succeed())
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectEmptyReconcileResult(result, err)
+
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, configMap)).To(Succeed())
+			Expect(configMap.Data).To(HaveKeyWithValue("rw-host", "tenant-rw."+scenario.namespace+".svc.cluster.local"))
+
+			current := fetchPostgresDatabase(ctx, scenario.requestName)
+			expectReadyStatus(current, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+			Expect(metav1.IsControlledBy(configMap, owner)).To(BeTrue())
+		})
+
+		It("recreates a deleted configmap", func() {
+			scenario := newReadyClusterScenario(namespace, "configmap-delete", "tenant-cluster", "tenant-cnpg", "appdb")
+			reconcilePostgresDatabaseToReady(ctx, scenario, false)
+
+			configMapName := fmt.Sprintf("%s-%s-config", scenario.resourceName, scenario.dbName)
+			Expect(k8sClient.Delete(ctx, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: scenario.namespace},
+			})).To(Succeed())
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectEmptyReconcileResult(result, err)
+
+			configMap := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: scenario.namespace}, configMap)).To(Succeed())
+			Expect(configMap.Data).To(HaveKeyWithValue("rw-host", "tenant-rw."+scenario.namespace+".svc.cluster.local"))
+		})
+
+		It("does not recreate a deleted managed user secret", func() {
+			scenario := newReadyClusterScenario(namespace, "secret-delete", "tenant-cluster", "tenant-cnpg", "appdb")
+			reconcilePostgresDatabaseToReady(ctx, scenario, false)
+
+			secretName := fmt.Sprintf("%s-%s-admin", scenario.resourceName, scenario.dbName)
+			Expect(k8sClient.Delete(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: scenario.namespace},
+			})).To(Succeed())
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+
+			current := fetchPostgresDatabase(ctx, scenario.requestName)
+			expectStatusPhase(current, "Provisioning")
+			expectStatusCondition(current, "SecretsReady", metav1.ConditionFalse, "SecretsDriftDetected")
+
+			missing := &corev1.Secret{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: scenario.namespace}, missing)
+			Expect(apierrors.IsNotFound(err)).To(BeTrue())
+		})
+
+		It("re-attaches ownership when a managed user secret loses its owner reference", func() {
+			scenario := newReadyClusterScenario(namespace, "secret-adopt", "tenant-cluster", "tenant-cnpg", "appdb")
+			owner := reconcilePostgresDatabaseToReady(ctx, scenario, false)
+
+			secret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s-admin", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, secret)).To(Succeed())
+			secret.OwnerReferences = nil
+			Expect(k8sClient.Update(ctx, secret)).To(Succeed())
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectEmptyReconcileResult(result, err)
+
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, secret)).To(Succeed())
+			Expect(metav1.IsControlledBy(secret, owner)).To(BeTrue())
+
+			current := fetchPostgresDatabase(ctx, scenario.requestName)
+			expectReadyStatus(current, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+		})
+
+		It("creates secrets and configmaps for a newly added database while preserving existing ones", func() {
+			scenario := newReadyClusterScenario(namespace, "new-database", "tenant-cluster", "tenant-cnpg", "appdb")
+			current := reconcilePostgresDatabaseToReady(ctx, scenario, false)
+
+			current.Spec.Databases = append(current.Spec.Databases, enterprisev4.DatabaseDefinition{Name: "analytics"})
+			Expect(k8sClient.Update(ctx, current)).To(Succeed())
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+
+			for _, secretName := range []string{
+				fmt.Sprintf("%s-analytics-admin", scenario.resourceName),
+				fmt.Sprintf("%s-analytics-rw", scenario.resourceName),
+			} {
+				secret := &corev1.Secret{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: scenario.namespace}, secret)).To(Succeed())
+			}
+
+			configMap := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-analytics-config", scenario.resourceName), Namespace: scenario.namespace}, configMap)).To(Succeed())
+			Expect(configMap.Data).To(HaveKeyWithValue("dbname", "analytics"))
+
+			existingSecret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s-admin", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, existingSecret)).To(Succeed())
+		})
+	})
+
+	When("postgresdatabase secondary-resource predicates run", func() {
+		It("treats cnpg database applied-state and delete changes as drift triggers", func() {
+			pred := postgresDatabaseCNPGDatabasePredicator()
+
+			oldApplied := true
+			newApplied := false
+			Expect(pred.Create(event.CreateEvent{})).To(BeFalse())
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: &cnpgv1.Database{Status: cnpgv1.DatabaseStatus{Applied: &oldApplied}},
+				ObjectNew: &cnpgv1.Database{Status: cnpgv1.DatabaseStatus{Applied: &newApplied}},
+			})).To(BeTrue())
+			Expect(pred.Delete(event.DeleteEvent{})).To(BeTrue())
+		})
+
+		It("ignores cnpg database updates that do not change readiness or ownership", func() {
+			pred := postgresDatabaseCNPGDatabasePredicator()
+
+			applied := true
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: &cnpgv1.Database{
+					ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "test"},
+					Status:     cnpgv1.DatabaseStatus{Applied: &applied},
+				},
+				ObjectNew: &cnpgv1.Database{
+					ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "test"},
+					Status:     cnpgv1.DatabaseStatus{Applied: &applied},
+				},
+			})).To(BeFalse())
+		})
+
+		It("treats secret updates and deletes as drift triggers but ignores creates", func() {
+			pred := postgresDatabaseSecretPredicator()
+
+			Expect(pred.Create(event.CreateEvent{})).To(BeFalse())
+			Expect(pred.Update(event.UpdateEvent{})).To(BeTrue())
+			Expect(pred.Delete(event.DeleteEvent{})).To(BeTrue())
+		})
+
+		It("treats configmap updates and deletes as drift triggers but ignores creates", func() {
+			pred := postgresDatabaseConfigMapPredicator()
+
+			Expect(pred.Create(event.CreateEvent{})).To(BeFalse())
+			Expect(pred.Update(event.UpdateEvent{})).To(BeTrue())
+			Expect(pred.Delete(event.DeleteEvent{})).To(BeTrue())
 		})
 	})
 

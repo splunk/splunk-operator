@@ -29,6 +29,7 @@ import (
 	sharedreconcile "github.com/splunk/splunk-operator/pkg/postgresql/shared/reconcile"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -111,6 +112,12 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				predicate.GenerationChangedPredicate{},
 				predicate.Funcs{
 					UpdateFunc: func(e event.UpdateEvent) bool {
+						if !equality.Semantic.DeepEqual(
+							e.ObjectOld.GetDeletionTimestamp(),
+							e.ObjectNew.GetDeletionTimestamp(),
+						) {
+							return true
+						}
 						return !reflect.DeepEqual(
 							e.ObjectOld.GetFinalizers(),
 							e.ObjectNew.GetFinalizers(),
@@ -119,18 +126,47 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			),
 		)).
-		Owns(&cnpgv1.Database{}, builder.WithPredicates(predicate.Funcs{
-			CreateFunc: func(event.CreateEvent) bool { return false },
-		})).
-		Owns(&corev1.Secret{}, builder.WithPredicates(predicate.Funcs{
-			CreateFunc: func(event.CreateEvent) bool { return false },
-		})).
-		Owns(&corev1.ConfigMap{}, builder.WithPredicates(predicate.Funcs{
-			CreateFunc: func(event.CreateEvent) bool { return false },
-		})).
+		Owns(&cnpgv1.Database{}, builder.WithPredicates(postgresDatabaseCNPGDatabasePredicator())).
+		Owns(&corev1.Secret{}, builder.WithPredicates(postgresDatabaseSecretPredicator())).
+		Owns(&corev1.ConfigMap{}, builder.WithPredicates(postgresDatabaseConfigMapPredicator())).
 		Named("postgresdatabase").
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: DatabaseTotalWorker,
 		}).
 		Complete(r)
+}
+
+func postgresDatabaseCNPGDatabasePredicator() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(event.CreateEvent) bool { return false },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldObj, okOld := e.ObjectOld.(*cnpgv1.Database)
+			newObj, okNew := e.ObjectNew.(*cnpgv1.Database)
+			if !okOld || !okNew {
+				return true
+			}
+			return !equality.Semantic.DeepEqual(oldObj.Status.Applied, newObj.Status.Applied) ||
+				!equality.Semantic.DeepEqual(oldObj.GetOwnerReferences(), newObj.GetOwnerReferences())
+		},
+		DeleteFunc:  func(event.DeleteEvent) bool { return true },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+	}
+}
+
+func postgresDatabaseSecretPredicator() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc:  func(event.CreateEvent) bool { return false },
+		UpdateFunc:  func(event.UpdateEvent) bool { return true },
+		DeleteFunc:  func(event.DeleteEvent) bool { return true },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+	}
+}
+
+func postgresDatabaseConfigMapPredicator() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc:  func(event.CreateEvent) bool { return false },
+		UpdateFunc:  func(event.UpdateEvent) bool { return true },
+		DeleteFunc:  func(event.DeleteEvent) bool { return true },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+	}
 }

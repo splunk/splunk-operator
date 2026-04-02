@@ -30,6 +30,15 @@ import (
 // Injected by the controller so the core never imports the pgx adapter directly.
 type NewDBRepoFunc func(ctx context.Context, host, dbName, password string) (DBRepo, error)
 
+type secretReconcileError struct {
+	message string
+	reason  conditionReasons
+}
+
+func (e *secretReconcileError) Error() string {
+	return e.message
+}
+
 // PostgresDatabaseService is the application service entry point called by the primary adapter (reconciler).
 // newDBRepo is injected to keep the core free of pgx imports.
 func PostgresDatabaseService(
@@ -42,6 +51,8 @@ func PostgresDatabaseService(
 	logger := log.FromContext(ctx).WithValues("postgresDatabase", postgresDB.Name)
 	ctx = log.IntoContext(ctx, logger)
 	logger.Info("Reconciling PostgresDatabase")
+	wasReady := postgresDB.Status.Phase != nil && *postgresDB.Status.Phase == string(readyDBPhase)
+	previouslyProvisionedDatabases := existingDatabaseStatus(postgresDB)
 
 	updateStatus := func(conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) error {
 		return persistStatus(ctx, c, rc.Metrics, postgresDB, conditionType, conditionStatus, reason, message, phase)
@@ -64,12 +75,6 @@ func PostgresDatabaseService(
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
 		logger.Info("Finalizer added")
-		return ctrl.Result{}, nil
-	}
-
-	// ObservedGeneration equality means all phases completed on the current spec — nothing to do.
-	if postgresDB.Status.ObservedGeneration != nil && *postgresDB.Status.ObservedGeneration == postgresDB.Generation {
-		logger.Info("Spec unchanged and all phases complete, skipping")
 		return ctrl.Result{}, nil
 	}
 
@@ -137,7 +142,16 @@ func PostgresDatabaseService(
 
 	// Phase: CredentialProvisioning — secrets must exist before roles are patched.
 	// CNPG rejects a PasswordSecretRef pointing at a missing secret.
-	if err := reconcileUserSecrets(ctx, c, rc.Scheme, postgresDB); err != nil {
+	if err := reconcileUserSecrets(ctx, c, rc.Scheme, postgresDB, previouslyProvisionedDatabases); err != nil {
+		var driftErr *secretReconcileError
+		if stderrors.As(err, &driftErr) {
+			rc.emitWarning(postgresDB, EventUserSecretsDriftDetected, driftErr.message)
+			if statusErr := updateStatus(secretsReady, metav1.ConditionFalse, driftErr.reason,
+				driftErr.message, provisioningDBPhase); statusErr != nil {
+				logger.Error(statusErr, "Failed to update status")
+			}
+			return ctrl.Result{RequeueAfter: retryDelay}, nil
+		}
 		rc.emitWarning(postgresDB, EventUserSecretsFailed, fmt.Sprintf("Failed to reconcile user secrets: %v", err))
 		if statusErr := updateStatus(secretsReady, metav1.ConditionFalse, reasonSecretsCreationFailed,
 			fmt.Sprintf("Failed to reconcile user secrets: %v", err), provisioningDBPhase); statusErr != nil {
@@ -220,6 +234,10 @@ func PostgresDatabaseService(
 	// Phase: DatabaseProvisioning
 	adopted, err := reconcileCNPGDatabases(ctx, c, rc.Scheme, postgresDB, cluster)
 	if err != nil {
+		if errors.IsConflict(err) {
+			logger.Info("Conflict while reconciling CNPG Databases, will requeue")
+			return ctrl.Result{Requeue: true}, nil
+		}
 		logger.Error(err, "Failed to reconcile CNPG Databases")
 		rc.emitWarning(postgresDB, EventDatabasesReconcileFailed, fmt.Sprintf("Failed to reconcile databases: %v", err))
 		if statusErr := updateStatus(databasesReady, metav1.ConditionFalse, reasonDatabaseReconcileFailed,
@@ -295,9 +313,10 @@ func PostgresDatabaseService(
 		}
 	}
 
-	rc.emitNormal(postgresDB, EventPostgresDatabaseReady, fmt.Sprintf("PostgresDatabase %s is ready", postgresDB.Name))
+	if !wasReady {
+		rc.emitNormal(postgresDB, EventPostgresDatabaseReady, fmt.Sprintf("PostgresDatabase %s is ready", postgresDB.Name))
+	}
 	postgresDB.Status.Databases = populateDatabaseStatus(postgresDB)
-	postgresDB.Status.ObservedGeneration = &postgresDB.Generation
 
 	if err := c.Status().Update(ctx, postgresDB); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to persist final status: %w", err)
@@ -356,6 +375,17 @@ func getDesiredUsers(postgresDB *enterprisev4.PostgresDatabase) []string {
 		users = append(users, adminRoleName(dbSpec.Name), rwRoleName(dbSpec.Name))
 	}
 	return users
+}
+
+func existingDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase) map[string]struct{} {
+	if postgresDB.Status.Phase == nil || *postgresDB.Status.Phase != string(readyDBPhase) {
+		return map[string]struct{}{}
+	}
+	existing := make(map[string]struct{}, len(postgresDB.Status.Databases))
+	for _, database := range postgresDB.Status.Databases {
+		existing[database.Name] = struct{}{}
+	}
+	return existing
 }
 
 func getUsersInClusterSpec(cluster *enterprisev4.PostgresCluster) []string {
@@ -485,6 +515,10 @@ func verifyDatabasesReady(ctx context.Context, c client.Client, postgresDB *ente
 		cnpgDBName := cnpgDatabaseName(postgresDB.Name, dbSpec.Name)
 		cnpgDB := &cnpgv1.Database{}
 		if err := c.Get(ctx, types.NamespacedName{Name: cnpgDBName, Namespace: postgresDB.Namespace}, cnpgDB); err != nil {
+			if errors.IsNotFound(err) {
+				notReady = append(notReady, dbSpec.Name)
+				continue
+			}
 			return nil, fmt.Errorf("getting CNPG Database %s: %w", cnpgDBName, err)
 		}
 		if cnpgDB.Status.Applied == nil || !*cnpgDB.Status.Applied {
@@ -843,19 +877,20 @@ func adoptResource(ctx context.Context, c client.Client, scheme *runtime.Scheme,
 	return c.Update(ctx, obj)
 }
 
-func reconcileUserSecrets(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase) error {
+func reconcileUserSecrets(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, existingDatabases map[string]struct{}) error {
 	for _, dbSpec := range postgresDB.Spec.Databases {
-		if err := ensureSecret(ctx, c, scheme, postgresDB, adminRoleName(dbSpec.Name), roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)); err != nil {
+		_, databaseAlreadyProvisioned := existingDatabases[dbSpec.Name]
+		if err := ensureSecret(ctx, c, scheme, postgresDB, adminRoleName(dbSpec.Name), roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin), databaseAlreadyProvisioned); err != nil {
 			return err
 		}
-		if err := ensureSecret(ctx, c, scheme, postgresDB, rwRoleName(dbSpec.Name), roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)); err != nil {
+		if err := ensureSecret(ctx, c, scheme, postgresDB, rwRoleName(dbSpec.Name), roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW), databaseAlreadyProvisioned); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func ensureSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, roleName, secretName string) error {
+func ensureSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, roleName, secretName string, databaseAlreadyProvisioned bool) error {
 	secret, err := getSecret(ctx, c, postgresDB.Namespace, secretName)
 	if err != nil {
 		return err
@@ -863,11 +898,60 @@ func ensureSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, 
 	logger := log.FromContext(ctx)
 	switch {
 	case secret == nil:
+		if databaseAlreadyProvisioned {
+			return &secretReconcileError{
+				message: fmt.Sprintf("Managed Secret %s is missing for previously provisioned role %s", secretName, roleName),
+				reason:  reasonSecretsDriftDetected,
+			}
+		}
 		logger.Info("User secret creation started", "name", secretName)
 		return createUserSecret(ctx, c, scheme, postgresDB, roleName, secretName)
 	case secret.Annotations[annotationRetainedFrom] == postgresDB.Name:
+		if err := validateManagedSecret(secret, roleName); err != nil {
+			return &secretReconcileError{
+				message: fmt.Sprintf("Managed Secret %s is invalid: %v", secretName, err),
+				reason:  reasonSecretsDriftDetected,
+			}
+		}
 		logger.Info("Orphaned secret re-adopted", "name", secretName)
 		return adoptResource(ctx, c, scheme, postgresDB, secret)
+	case metav1.IsControlledBy(secret, postgresDB):
+		if err := validateManagedSecret(secret, roleName); err != nil {
+			return &secretReconcileError{
+				message: fmt.Sprintf("Managed Secret %s is invalid: %v", secretName, err),
+				reason:  reasonSecretsDriftDetected,
+			}
+		}
+		return nil
+	case metav1.GetControllerOf(secret) == nil:
+		if err := validateManagedSecret(secret, roleName); err != nil {
+			return &secretReconcileError{
+				message: fmt.Sprintf("Managed Secret %s is invalid: %v", secretName, err),
+				reason:  reasonSecretsDriftDetected,
+			}
+		}
+		logger.Info("Existing secret linked to PostgresDatabase", "name", secretName)
+		return adoptResource(ctx, c, scheme, postgresDB, secret)
+	default:
+		owner := metav1.GetControllerOf(secret)
+		return &secretReconcileError{
+			message: fmt.Sprintf("Managed Secret %s is controlled by %s %s", secretName, owner.Kind, owner.Name),
+			reason:  reasonSecretsDriftDetected,
+		}
+	}
+}
+
+func validateManagedSecret(secret *corev1.Secret, roleName string) error {
+	username, ok := secret.Data["username"]
+	if !ok || len(username) == 0 {
+		return fmt.Errorf("missing username data")
+	}
+	if string(username) != roleName {
+		return fmt.Errorf("username %q does not match expected role %q", string(username), roleName)
+	}
+	password, ok := secret.Data[secretKeyPassword]
+	if !ok || len(password) == 0 {
+		return fmt.Errorf("missing password data")
 	}
 	return nil
 }
@@ -944,7 +1028,7 @@ func reconcileRoleConfigMaps(ctx context.Context, c client.Client, scheme *runti
 				logger.Info("Orphaned ConfigMap re-adopted", "name", cmName)
 				delete(cm.Annotations, annotationRetainedFrom)
 			}
-			if cm.CreationTimestamp.IsZero() || reAdopting {
+			if !metav1.IsControlledBy(cm, postgresDB) {
 				return controllerutil.SetControllerReference(postgresDB, cm, scheme)
 			}
 			return nil

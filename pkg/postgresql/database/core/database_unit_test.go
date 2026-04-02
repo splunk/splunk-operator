@@ -666,14 +666,14 @@ func TestVerifyDatabasesReady(t *testing.T) {
 			wantNotReady: []string{"payments", "analytics"},
 		},
 		{
-			name: "returns error when a database is missing",
+			name: "returns not ready when a database is missing",
 			objects: []client.Object{
 				&cnpgv1.Database{
 					ObjectMeta: metav1.ObjectMeta{Name: "primary-payments", Namespace: "dbs"},
 					Status:     cnpgv1.DatabaseStatus{Applied: boolPtr(true)},
 				},
 			},
-			wantErr: "getting CNPG Database primary-analytics",
+			wantNotReady: []string{"analytics"},
 		},
 	}
 
@@ -945,7 +945,7 @@ func TestEnsureSecret(t *testing.T) {
 		wantPasswordDigits := passwordDigits
 		c := testClient(t, scheme)
 
-		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName, false)
 
 		require.NoError(t, err)
 
@@ -985,7 +985,7 @@ func TestEnsureSecret(t *testing.T) {
 		}
 		c := testClient(t, scheme, retained)
 
-		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName, true)
 
 		require.NoError(t, err)
 
@@ -1021,7 +1021,14 @@ func TestEnsureSecret(t *testing.T) {
 					"keep": wantKeep,
 				},
 				OwnerReferences: []metav1.OwnerReference{
-					{UID: wantOwnerUID, Name: postgresDB.Name},
+					{
+						APIVersion:         enterprisev4.GroupVersion.String(),
+						Kind:               "PostgresDatabase",
+						Name:               postgresDB.Name,
+						UID:                wantOwnerUID,
+						Controller:         boolPtr(true),
+						BlockOwnerDeletion: boolPtr(true),
+					},
 				},
 			},
 			Data: map[string][]byte{
@@ -1031,7 +1038,7 @@ func TestEnsureSecret(t *testing.T) {
 		}
 		c := testClient(t, scheme, existing)
 
-		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName, true)
 
 		require.NoError(t, err)
 
@@ -1042,6 +1049,77 @@ func TestEnsureSecret(t *testing.T) {
 		assert.Equal(t, wantPassword, string(got.Data[secretKeyPassword]))
 		require.Len(t, got.OwnerReferences, 1)
 		assert.Equal(t, wantOwnerUID, got.OwnerReferences[0].UID)
+	})
+
+	t.Run("returns drift error when a previously provisioned secret is missing", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		c := testClient(t, scheme)
+
+		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName, true)
+
+		require.Error(t, err)
+		var driftErr *secretReconcileError
+		require.ErrorAs(t, err, &driftErr)
+		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+		assert.ErrorContains(t, err, secretName)
+	})
+
+	t.Run("re-attaches owner reference when ownership was manually stripped", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		existing := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: postgresDB.Namespace,
+				Labels: map[string]string{
+					labelManagedBy:  "splunk-operator",
+					labelCNPGReload: "true",
+				},
+				Annotations: map[string]string{"keep": "true"},
+			},
+			Data: map[string][]byte{
+				"username":        []byte(roleName),
+				secretKeyPassword: []byte("existing-password"),
+			},
+		}
+		c := testClient(t, scheme, existing)
+
+		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName, true)
+
+		require.NoError(t, err)
+
+		got := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, "true", got.Annotations["keep"])
+		require.Len(t, got.OwnerReferences, 1)
+		assert.Equal(t, postgresDB.UID, got.OwnerReferences[0].UID)
+	})
+
+	t.Run("returns drift error when an existing secret has invalid data", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		existing := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: postgresDB.Namespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{UID: postgresDB.UID, Name: postgresDB.Name},
+				},
+			},
+			Data: map[string][]byte{
+				"username": []byte("wrong_user"),
+			},
+		}
+		c := testClient(t, scheme, existing)
+
+		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName, true)
+
+		require.Error(t, err)
+		var driftErr *secretReconcileError
+		require.ErrorAs(t, err, &driftErr)
+		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+		assert.ErrorContains(t, err, "invalid")
 	})
 }
 
@@ -1078,7 +1156,7 @@ func TestReconcileUserSecrets(t *testing.T) {
 			{name: "primary-analytics-rw", username: "analytics_rw"},
 		}
 
-		err := reconcileUserSecrets(context.Background(), c, scheme, postgresDB)
+		err := reconcileUserSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB))
 
 		require.NoError(t, err)
 		for _, want := range wantSecrets {
@@ -1094,13 +1172,13 @@ func TestReconcileUserSecrets(t *testing.T) {
 	t.Run("is idempotent when secrets already exist", func(t *testing.T) {
 		c := testClient(t, scheme)
 
-		require.NoError(t, reconcileUserSecrets(context.Background(), c, scheme, postgresDB))
+		require.NoError(t, reconcileUserSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB)))
 
 		before := &corev1.Secret{}
 		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments-admin", Namespace: postgresDB.Namespace}, before))
 		beforePassword := append([]byte(nil), before.Data[secretKeyPassword]...)
 
-		err := reconcileUserSecrets(context.Background(), c, scheme, postgresDB)
+		err := reconcileUserSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB))
 
 		require.NoError(t, err)
 
@@ -1109,6 +1187,19 @@ func TestReconcileUserSecrets(t *testing.T) {
 		assert.Equal(t, beforePassword, after.Data[secretKeyPassword])
 		require.Len(t, after.OwnerReferences, 1)
 		assert.Equal(t, postgresDB.UID, after.OwnerReferences[0].UID)
+	})
+
+	t.Run("does not recreate missing secrets for previously provisioned databases", func(t *testing.T) {
+		postgresDB.Status.Phase = strPtr(string(readyDBPhase))
+		postgresDB.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
+		c := testClient(t, scheme)
+
+		err := reconcileUserSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB))
+
+		require.Error(t, err)
+		var driftErr *secretReconcileError
+		require.ErrorAs(t, err, &driftErr)
+		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
 	})
 }
 
@@ -1227,6 +1318,47 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 			Controller:         boolPtr(true),
 			BlockOwnerDeletion: boolPtr(true),
 		})
+	})
+
+	t.Run("re-attaches owner reference when configmap ownership was manually stripped", func(t *testing.T) {
+		postgresDB := &enterprisev4.PostgresDatabase{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: enterprisev4.GroupVersion.String(),
+				Kind:       "PostgresDatabase",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary",
+				Namespace: "dbs",
+				UID:       types.UID("postgresdb-uid"),
+			},
+			Spec: enterprisev4.PostgresDatabaseSpec{
+				Databases: []enterprisev4.DatabaseDefinition{
+					{Name: "payments"},
+				},
+			},
+		}
+		cmName := "primary-payments-config"
+		existing := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        cmName,
+				Namespace:   postgresDB.Namespace,
+				Labels:      map[string]string{labelManagedBy: "splunk-operator"},
+				Annotations: map[string]string{"keep": "true"},
+			},
+			Data: map[string]string{"dbname": "payments"},
+		}
+		c := testClient(t, scheme, existing)
+
+		err := reconcileRoleConfigMaps(context.Background(), c, scheme, postgresDB, endpoints)
+
+		require.NoError(t, err)
+
+		got := &corev1.ConfigMap{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: cmName, Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, "true", got.Annotations["keep"])
+		require.Len(t, got.OwnerReferences, 1)
+		assert.Equal(t, postgresDB.UID, got.OwnerReferences[0].UID)
+		assert.Equal(t, buildDatabaseConfigMapBody("payments", endpoints), got.Data)
 	})
 }
 
