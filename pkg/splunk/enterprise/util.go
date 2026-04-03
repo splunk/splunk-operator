@@ -345,6 +345,16 @@ func getStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 	}
 }
 
+// getIndexerExtraEnv returns extra environment variables for indexer cluster peers used by monitoring console
+func getIndexerExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  "SPLUNK_INDEXER_URL",
+			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SplunkIndexer, cr.GetName(), replicas, false),
+		},
+	}
+}
+
 // getLicenseManagerURL returns URL of license manager
 func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	if spec.LicenseManagerRef.Name != "" {

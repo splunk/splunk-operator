@@ -3245,6 +3245,29 @@ func TestGetSearchHeadEnv(t *testing.T) {
 	}
 }
 
+func TestGetIndexerExtraEnv(t *testing.T) {
+	cr := enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas: 3,
+		},
+	}
+	envVar := getIndexerExtraEnv(&cr, cr.Spec.Replicas)
+	if len(envVar) != 1 {
+		t.Errorf("Expected 1 env var, got %d", len(envVar))
+	}
+	if envVar[0].Name != "SPLUNK_INDEXER_URL" {
+		t.Errorf("Expected SPLUNK_INDEXER_URL, got %s", envVar[0].Name)
+	}
+	expectedURL := GetSplunkStatefulsetUrls("test", SplunkIndexer, "test", 3, false)
+	if envVar[0].Value != expectedURL {
+		t.Errorf("Expected %s, got %s", expectedURL, envVar[0].Value)
+	}
+}
+
 func TestGetLicenseMasterURL(t *testing.T) {
 	cr := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{

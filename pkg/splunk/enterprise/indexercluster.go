@@ -131,6 +131,14 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
+		cmMonitoringConsoleConfigRef, _ := RetrieveCMSpec(ctx, client, cr)
+		if cmMonitoringConsoleConfigRef != "" {
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cmMonitoringConsoleConfigRef, getIndexerExtraEnv(cr, cr.Spec.Replicas), false)
+			if err != nil {
+				return result, err
+			}
+		}
+
 		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIndexer)
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
@@ -287,6 +295,12 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			return result, err
 		}
 		if cmMonitoringConsoleConfigRef != "" {
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cmMonitoringConsoleConfigRef, getIndexerExtraEnv(cr, cr.Spec.Replicas), true)
+			if err != nil {
+				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map for indexer URLs failed %s", err.Error()))
+				return result, err
+			}
+
 			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cmMonitoringConsoleConfigRef)}
 			_, err := splctrl.GetStatefulSetByName(ctx, client, namespacedName)
 			//if MC pod already exists
@@ -425,6 +439,14 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
+		cmMonitoringConsoleConfigRef, _ := RetrieveCMSpec(ctx, client, cr)
+		if cmMonitoringConsoleConfigRef != "" {
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cmMonitoringConsoleConfigRef, getIndexerExtraEnv(cr, cr.Spec.Replicas), false)
+			if err != nil {
+				return result, err
+			}
+		}
+
 		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIndexer)
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
@@ -581,6 +603,12 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			return result, err
 		}
 		if cmMonitoringConsoleConfigRef != "" {
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cmMonitoringConsoleConfigRef, getIndexerExtraEnv(cr, cr.Spec.Replicas), true)
+			if err != nil {
+				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map for indexer URLs failed %s", err.Error()))
+				return result, err
+			}
+
 			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cmMonitoringConsoleConfigRef)}
 			_, err := splctrl.GetStatefulSetByName(ctx, client, namespacedName)
 			//if MC pod already exists
