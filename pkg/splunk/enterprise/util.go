@@ -553,6 +553,9 @@ func createAppDownloadDir(ctx context.Context, path string) error {
 			scopedLog.Error(errDir, "Unable to create directory at path")
 			return errDir
 		}
+	} else if err != nil {
+		scopedLog.Error(err, "Unable to access path")
+		return err
 	}
 	return nil
 }
