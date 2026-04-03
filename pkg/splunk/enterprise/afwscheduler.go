@@ -1727,17 +1727,6 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 			return false, nil
 		}
 
-		// If Splunk reports that a deployment job is already running, treat it as still
-		// in progress rather than resetting state to Pending and re-triggering. Resetting
-		// would schedule a second push while the first is still holding Splunk's deployment
-		// lock, producing another ConfDeploymentException and creating a retry storm.
-		// This can happen in FIPS mode (premature state reset caused by the FIPS banner) or
-		// after an operator restart mid-push.
-		if strings.Contains(stdOut, "ConfDeploymentException: Can't start deployment job as one is already running!") {
-			scopedLog.Info("SHC Bundle Push is already running; will recheck status on next reconcile", "statusFileOutput", stdOut)
-			return false, nil
-		}
-
 		// this means there was an error in bundle push command
 		err = fmt.Errorf("there was an error in applying SHC Bundle, err=\"%v\"", stdOut)
 		scopedLog.Error(err, "SHC Bundle push status file reported an error while applying bundle")
