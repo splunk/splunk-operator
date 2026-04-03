@@ -4782,7 +4782,7 @@ func TestSHCIsBundlePushComplete(t *testing.T) {
 		},
 		{
 			name:           "FIPS provider banner only - treated as still in progress",
-			catStdOut:      "FIPS provider enabled.",
+			catStdOut:      splunkFIPSProviderBannerStr,
 			catStdErr:      "",
 			catErr:         nil,
 			expectsRemoval: false,
@@ -4792,7 +4792,7 @@ func TestSHCIsBundlePushComplete(t *testing.T) {
 		},
 		{
 			name:           "FIPS banner and WARNING lines only - treated as still in progress",
-			catStdOut:      "FIPS provider enabled.\nWARNING: Server Certificate Validation Disabled\n",
+			catStdOut:      splunkFIPSProviderBannerStr + "\n" + splunkSSLCertWarnStr + " Validation Disabled\n",
 			catStdErr:      "",
 			catErr:         nil,
 			expectsRemoval: false,
@@ -4802,7 +4802,7 @@ func TestSHCIsBundlePushComplete(t *testing.T) {
 		},
 		{
 			name:           "FIPS banner and blank lines only - treated as still in progress",
-			catStdOut:      "\nFIPS provider enabled.\n\n",
+			catStdOut:      "\n" + splunkFIPSProviderBannerStr + "\n\n",
 			catStdErr:      "",
 			catErr:         nil,
 			expectsRemoval: false,
@@ -4812,7 +4812,7 @@ func TestSHCIsBundlePushComplete(t *testing.T) {
 		},
 		{
 			name:           "FIPS banner followed by real error content - treated as error",
-			catStdOut:      "FIPS provider enabled.\nError applying bundle: permission denied",
+			catStdOut:      splunkFIPSProviderBannerStr + "\nError applying bundle: permission denied",
 			catStdErr:      "",
 			catErr:         nil,
 			expectsRemoval: true,
@@ -4820,6 +4820,28 @@ func TestSHCIsBundlePushComplete(t *testing.T) {
 			expectedResult: false,
 			expectedError:  true,
 			description:    "Meaningful error content after FIPS banner should cause an error",
+		},
+		{
+			name:           "SSL WARNING only without FIPS banner - treated as error",
+			catStdOut:      splunkSSLCertWarnStr + " Hostname Validation is disabled.",
+			catStdErr:      "",
+			catErr:         nil,
+			expectsRemoval: true,
+			removalStdErr:  "",
+			expectedResult: false,
+			expectedError:  true,
+			description:    "SSL warning without FIPS banner means a silent failure on non-FIPS clusters; must not hang waiting for a push that already exited",
+		},
+		{
+			name:           "SSL WARNING only without FIPS banner (multiple lines) - treated as error",
+			catStdOut:      splunkSSLCertWarnStr + " Hostname Validation is disabled.\n" + splunkSSLCertWarnStr + " Validation Disabled\n",
+			catStdErr:      "",
+			catErr:         nil,
+			expectsRemoval: true,
+			removalStdErr:  "",
+			expectedResult: false,
+			expectedError:  true,
+			description:    "Multiple SSL warnings without FIPS banner must not suppress error detection on non-FIPS clusters",
 		},
 		{
 			name:           "meaningful error in stdOut - treated as error",
@@ -4867,7 +4889,7 @@ func TestSHCIsBundlePushComplete(t *testing.T) {
 		},
 		{
 			name:           "FIPS banner preceding success string - complete",
-			catStdOut:      "FIPS provider enabled.\n" + shcBundlePushCompleteStr,
+			catStdOut:      splunkFIPSProviderBannerStr + "\n" + shcBundlePushCompleteStr,
 			catStdErr:      "",
 			catErr:         nil,
 			expectsRemoval: true,
@@ -4888,7 +4910,7 @@ func TestSHCIsBundlePushComplete(t *testing.T) {
 		},
 		{
 			name:           "FIPS banner followed by ConfDeploymentException - treated as still in progress",
-			catStdOut:      "FIPS provider enabled.\nWARNING: Server Certificate Hostname Validation is disabled.\nConfDeploymentException: Can't start deployment job as one is already running!",
+			catStdOut:      splunkFIPSProviderBannerStr + "\n" + splunkSSLCertWarnStr + " Hostname Validation is disabled.\nConfDeploymentException: Can't start deployment job as one is already running!",
 			catStdErr:      "",
 			catErr:         nil,
 			expectsRemoval: false,
@@ -5004,7 +5026,7 @@ func TestHandleEsappPostinstallFipsAware(t *testing.T) {
 		{
 			name:          "success with FIPS stderr - no error",
 			stdOut:        "Successfully installed",
-			stdErr:        "FIPS provider enabled.",
+			stdErr:        splunkFIPSProviderBannerStr,
 			execErr:       nil,
 			expectedError: false,
 			description:   "Stderr content alone should not cause failure on FIPS-enabled clusters",
@@ -5012,7 +5034,7 @@ func TestHandleEsappPostinstallFipsAware(t *testing.T) {
 		{
 			name:          "success with WARNING stderr - no error",
 			stdOut:        "Successfully installed",
-			stdErr:        "WARNING: Server Certificate Validation Disabled",
+			stdErr:        splunkSSLCertWarnStr + " Validation Disabled",
 			execErr:       nil,
 			expectedError: false,
 			description:   "SSL warning in stderr alone should not cause failure",
@@ -5028,7 +5050,7 @@ func TestHandleEsappPostinstallFipsAware(t *testing.T) {
 		{
 			name:          "exec error with FIPS stderr - error",
 			stdOut:        "",
-			stdErr:        "FIPS provider enabled.",
+			stdErr:        splunkFIPSProviderBannerStr,
 			execErr:       fmt.Errorf("essinstall failed"),
 			expectedError: true,
 			description:   "Exec error takes precedence even when stderr carries only FIPS banner",

@@ -1704,12 +1704,19 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 		// redirect all output to the status file, these lines appear in the file before the
 		// actual push result. Treat such content as "still in progress" so we do not
 		// prematurely abort a running push and trigger a retry storm.
+		//
+		// IMPORTANT: SSL certificate warnings ("WARNING: Server Certificate ...") are only
+		// treated as informational when the FIPS provider banner is also present. On non-FIPS
+		// clusters the Splunk CLI can also emit SSL warnings (e.g. when hostname validation is
+		// disabled), but if those warnings are the only content in the status file it means the
+		// push failed silently — we must fall through to error/retry rather than waiting forever.
+		hasFIPSContent := strings.Contains(stdOut, splunkFIPSProviderBannerStr)
 		hasMeaningfulContent := false
 		for _, line := range strings.Split(stdOut, "\n") {
 			trimmed := strings.TrimSpace(line)
 			if trimmed == "" ||
-				strings.HasPrefix(trimmed, "FIPS provider enabled.") ||
-				strings.HasPrefix(trimmed, "WARNING: Server Certificate") {
+				strings.HasPrefix(trimmed, splunkFIPSProviderBannerStr) ||
+				(hasFIPSContent && strings.HasPrefix(trimmed, splunkSSLCertWarnStr)) {
 				continue
 			}
 			hasMeaningfulContent = true
