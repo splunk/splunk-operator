@@ -1,20 +1,9 @@
 package metrics
 
-import "time"
-
-// Reconcile result labels.
+// Result labels for counters that track success/error outcomes.
 const (
 	ResultSuccess = "success"
 	ResultError   = "error"
-	ResultRequeue = "requeue"
-)
-
-// Error class labels for IncReconcileError.
-const (
-	ErrorClassNotFound   = "not_found"
-	ErrorClassConflict   = "conflict"
-	ErrorClassValidation = "validation"
-	ErrorClassUnknown    = "unknown"
 )
 
 // Controller name labels.
@@ -60,17 +49,12 @@ const (
 // Recorder is the port for all PostgreSQL controller metrics.
 // Core service packages depend on this interface, never on Prometheus directly.
 // Adapters (PrometheusRecorder, NoopRecorder) live in this package.
+//
+// Reconcile-level metrics (total count, duration, error count) are handled
+// automatically by controller-runtime — see controller_runtime_reconcile_total,
+// controller_runtime_reconcile_time_seconds, controller_runtime_reconcile_errors_total.
+// This interface covers domain-specific metrics only.
 type Recorder interface {
-	// ObserveReconcile records a completed reconciliation attempt with its
-	// outcome and duration. Called by the controller shell after the service returns.
-	ObserveReconcile(controller string, result string, duration time.Duration)
-
-	// IncReconcileError increments the error counter with a stable error class.
-	IncReconcileError(controller string, errorClass string)
-
-	// IncRequeue increments the requeue counter with a reason.
-	IncRequeue(controller string, reason string)
-
 	// IncValidationFailure records a validation or configuration failure.
 	IncValidationFailure(controller string, reason string)
 

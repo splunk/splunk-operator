@@ -1,33 +1,10 @@
 package metrics
 
 import (
-	"time"
-
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (
-	reconcileTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "splunk_operator_postgres_reconcile_total",
-		Help: "Total reconcile attempts for PostgreSQL controllers.",
-	}, []string{"controller", "result"})
-
-	reconcileDurationSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "splunk_operator_postgres_reconcile_duration_seconds",
-		Help:    "End-to-end reconcile duration for PostgreSQL controllers.",
-		Buckets: []float64{0.1, 0.25, 0.5, 1, 2.5, 5, 10, 15, 30},
-	}, []string{"controller", "result"})
-
-	reconcileErrorsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "splunk_operator_postgres_reconcile_errors_total",
-		Help: "Reconcile failures grouped by stable error class.",
-	}, []string{"controller", "error_class"})
-
-	reconcileRequeuesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "splunk_operator_postgres_reconcile_requeues_total",
-		Help: "Requeues caused by waiting, conflicts, or dependency state.",
-	}, []string{"controller", "reason"})
-
 	validationFailuresTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "splunk_operator_postgres_validation_failures_total",
 		Help: "Validation and configuration failures.",
@@ -74,10 +51,6 @@ var (
 	}, []string{"controller", "resource_kind", "operation", "result"})
 
 	allCollectors = []prometheus.Collector{
-		reconcileTotal,
-		reconcileDurationSeconds,
-		reconcileErrorsTotal,
-		reconcileRequeuesTotal,
 		validationFailuresTotal,
 		clusters,
 		databases,
@@ -107,19 +80,6 @@ type PrometheusRecorder struct{}
 // NewPrometheusRecorder returns a new PrometheusRecorder.
 func NewPrometheusRecorder() *PrometheusRecorder {
 	return &PrometheusRecorder{}
-}
-
-func (p *PrometheusRecorder) ObserveReconcile(controller string, result string, duration time.Duration) {
-	reconcileTotal.WithLabelValues(controller, result).Inc()
-	reconcileDurationSeconds.WithLabelValues(controller, result).Observe(duration.Seconds())
-}
-
-func (p *PrometheusRecorder) IncReconcileError(controller string, errorClass string) {
-	reconcileErrorsTotal.WithLabelValues(controller, errorClass).Inc()
-}
-
-func (p *PrometheusRecorder) IncRequeue(controller string, reason string) {
-	reconcileRequeuesTotal.WithLabelValues(controller, reason).Inc()
 }
 
 func (p *PrometheusRecorder) IncValidationFailure(controller string, reason string) {

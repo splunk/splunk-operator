@@ -1,13 +1,8 @@
 package metrics
 
-import "time"
-
 // NoopRecorder is a no-op implementation of Recorder for use in tests.
 type NoopRecorder struct{}
 
-func (n *NoopRecorder) ObserveReconcile(string, string, time.Duration) {}
-func (n *NoopRecorder) IncReconcileError(string, string)              {}
-func (n *NoopRecorder) IncRequeue(string, string)                     {}
 func (n *NoopRecorder) IncValidationFailure(string, string)           {}
 func (n *NoopRecorder) SetClusterPhases(map[string]float64, float64)  {}
 func (n *NoopRecorder) SetDatabasePhases(map[string]float64)          {}

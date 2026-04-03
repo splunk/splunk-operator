@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"reflect"
-	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
@@ -65,7 +64,6 @@ const (
 //+kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	start := time.Now()
 	logger := log.FromContext(ctx)
 
 	postgresDB := &enterprisev4.PostgresDatabase{}
@@ -78,15 +76,6 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	rc := &dbcore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics}
 	result, err := dbcore.PostgresDatabaseService(ctx, rc, postgresDB, dbadapter.NewDBRepository)
-
-	resultLabel := pgmetrics.ResultSuccess
-	if err != nil {
-		resultLabel = pgmetrics.ResultError
-		r.Metrics.IncReconcileError(pgmetrics.ControllerDatabase, classifyError(err))
-	} else if result.RequeueAfter > 0 || result.Requeue {
-		resultLabel = pgmetrics.ResultRequeue
-	}
-	r.Metrics.ObserveReconcile(pgmetrics.ControllerDatabase, resultLabel, time.Since(start))
 	r.FleetCollector.CollectDatabaseMetrics(ctx, r.Client, r.Metrics)
 
 	return result, err
