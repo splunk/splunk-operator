@@ -22,40 +22,72 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("Licensemanager test", func() {
+// masterManagerLMConfigs defines the V3 (master) and V4 (manager) variants
+// for the license manager tests.
+var masterManagerLMConfigs = []struct {
+	NamePrefix string
+	Label      string
+	NewConfig  func() *testenv.LicenseTestConfig
+}{
+	{"master", "licensemaster", testenv.NewLicenseMasterConfig},
+	{"", "licensemanager", testenv.NewLicenseManagerConfig},
+}
+
+var _ = Describe("License Manager test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	var config *testenv.LicenseTestConfig
 	ctx := context.TODO()
 
-	BeforeEach(func() {
-		var err error
-		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
-		Expect(err).ToNot(HaveOccurred())
+	for _, tc := range masterManagerLMConfigs {
+		tc := tc
 
-		config = testenv.NewLicenseManagerConfig()
-	})
+		Context("Standalone deployment (S1) with "+tc.Label, func() {
+			BeforeEach(func() {
+				var err error
+				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				Expect(err).To(Succeed(), "Failed to setup test case environment")
+			})
 
-	AfterEach(func() {
-		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
-	})
+			AfterEach(func() {
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+			})
 
-	Context("Standalone deployment (S1) with License Manager", func() {
-		It("licensemanager, smoke, s1: Splunk Operator can configure License Manager with Standalone in S1 SVA", func() {
-			RunLMS1Test(ctx, deployment, testcaseEnvInst, config)
+			It(tc.Label+", smoke, s1: Splunk Operator can configure LM with Standalone in S1 SVA", func() {
+				RunLMS1Test(ctx, deployment, testcaseEnvInst, tc.NewConfig())
+			})
 		})
-	})
 
-	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster) with License Manager", func() {
-		It("licensemanager, integration, c3: Splunk Operator can configure License Manager with Indexers and Search Heads in C3 SVA", func() {
-			RunLMC3Test(ctx, deployment, testcaseEnvInst, config)
-		})
-	})
+		Context("Clustered deployment (C3) with "+tc.Label, func() {
+			BeforeEach(func() {
+				var err error
+				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				Expect(err).To(Succeed(), "Failed to setup test case environment")
+			})
 
-	Context("Multisite cluster deployment (M4 - Multisite Indexer Cluster, Search Head Cluster) with License Manager", func() {
-		It("licensemanager, integration, m4: Splunk Operator can configure License Manager with Indexers and Search Heads in M4 SVA", func() {
-			RunLMM4Test(ctx, deployment, testcaseEnvInst, config)
+			AfterEach(func() {
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+			})
+
+			It(tc.Label+", integration, c3: Splunk Operator can configure LM with Indexers and Search Heads in C3 SVA", func() {
+				RunLMC3Test(ctx, deployment, testcaseEnvInst, tc.NewConfig())
+			})
 		})
-	})
+
+		Context("Multisite cluster deployment (M4) with "+tc.Label, func() {
+			BeforeEach(func() {
+				var err error
+				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				Expect(err).To(Succeed(), "Failed to setup test case environment")
+			})
+
+			AfterEach(func() {
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+			})
+
+			It(tc.Label+", integration, m4: Splunk Operator can configure LM with Indexers and Search Heads in M4 SVA", func() {
+				RunLMM4Test(ctx, deployment, testcaseEnvInst, tc.NewConfig())
+			})
+		})
+	}
 })

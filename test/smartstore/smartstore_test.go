@@ -50,11 +50,11 @@ var _ = Describe("Smartstore test", func() {
 			BeforeEach(func() {
 				var err error
 				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(err).To(Succeed(), "Failed to setup test case environment")
 			})
 
 			AfterEach(func() {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
 			It(tc.Label+", integration: Can configure multiple indexes through app", func() {
@@ -70,11 +70,11 @@ var _ = Describe("Smartstore test", func() {
 			BeforeEach(func() {
 				var err error
 				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(err).To(Succeed(), "Failed to setup test case environment")
 			})
 
 			AfterEach(func() {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
 			It(tc.Label+", m4, integration: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
@@ -88,11 +88,11 @@ var _ = Describe("Smartstore test", func() {
 		BeforeEach(func() {
 			var err error
 			testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "master")
-			Expect(err).ToNot(HaveOccurred())
+			Expect(err).To(Succeed(), "Failed to setup test case environment")
 		})
 
 		AfterEach(func() {
-			Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
+			Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 		})
 
 		It("integration, s1, smartstore: can deploy a Standalone instance with Ephemeral Etc storage", func() {

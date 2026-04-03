@@ -103,39 +103,6 @@ func UpdateMonitoringConsoleRefAndVerify(ctx context.Context, deployment *Deploy
 	return nil
 }
 
-// VerifyMCConfigForC3Cluster verifies the standard MC configuration for a C3 cluster
-func (testcaseenv *TestCaseEnv) VerifyMCConfigForC3Cluster(ctx context.Context, deployment *Deployment, deploymentName string, mcName string, shReplicas int, indexerReplicas int, shouldExist bool) {
-	// Check Cluster Manager in MC Config Map
-	testcaseenv.VerifyPodsInMCConfigMap(ctx, deployment, []string{fmt.Sprintf(ClusterMasterServiceName, deploymentName)}, "SPLUNK_CLUSTER_MASTER_URL", mcName, shouldExist)
-
-	// Check Deployer in MC Config Map
-	testcaseenv.VerifyPodsInMCConfigMap(ctx, deployment, []string{fmt.Sprintf(DeployerServiceName, deploymentName)}, "SPLUNK_DEPLOYER_URL", mcName, shouldExist)
-
-	// Check Search Head pods in MC Config Map
-	shPods := GeneratePodNameSlice(SearchHeadPod, deploymentName, shReplicas, false, 0)
-	testcaseenv.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, shouldExist)
-
-	// Check Search Heads in MC Pod config string
-	testcaseenv.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcName, shouldExist, false)
-
-	// Check Indexers in MC Pod config string
-	indexerPods := GeneratePodNameSlice(IndexerPod, deploymentName, indexerReplicas, false, 0)
-	testcaseenv.VerifyPodsInMCConfigString(ctx, deployment, indexerPods, mcName, shouldExist, true)
-}
-
-// DeployAndVerifyC3WithMC deploys a C3 cluster with a given MC and verifies all components are ready
-func (testcaseenv *TestCaseEnv) DeployAndVerifyC3WithMC(ctx context.Context, deployment *Deployment, deploymentName string, indexerReplicas int, mcName string) error {
-	if err := deployment.DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx, deploymentName, indexerReplicas, true, mcName); err != nil {
-		return fmt.Errorf("unable to deploy Cluster Master: %w", err)
-	}
-
-	// Verify all components are ready
-	testcaseenv.VerifyClusterMasterReady(ctx, deployment)
-	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
-	testcaseenv.VerifySingleSiteIndexersReady(ctx, deployment)
-	return nil
-}
-
 // DeployStandaloneWithMCRef deploys a standalone instance with a MonitoringConsoleRef
 func (testcaseenv *TestCaseEnv) DeployStandaloneWithMCRef(ctx context.Context, deployment *Deployment, deploymentName string, mcName string) (*enterpriseApi.Standalone, error) {
 	spec := enterpriseApi.StandaloneSpec{

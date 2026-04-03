@@ -39,7 +39,7 @@ func RunM4MCReconfigTest(ctx context.Context, deployment *testenv.Deployment, te
 	Expect(err).To(Succeed(), "Unable to deploy multisite cluster")
 
 	// Ensure cluster coordinator and all M4 components are ready
-	cfg.VerifyCMReady(ctx, testcaseEnvInst, deployment)
+	cfg.VerifyCMReady(ctx, deployment, testcaseEnvInst)
 	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 
 	// Deploy and verify Monitoring Console
@@ -58,7 +58,7 @@ func RunM4MCReconfigTest(ctx context.Context, deployment *testenv.Deployment, te
 	cm := cfg.NewCMObject()
 	testenv.UpdateMonitoringConsoleRefAndVerify(ctx, deployment, testcaseEnvInst, cm, deployment.GetName(), mcTwoName)
 
-	cfg.VerifyCMReady(ctx, testcaseEnvInst, deployment)
+	cfg.VerifyCMReady(ctx, deployment, testcaseEnvInst)
 
 	// Deploy and verify Monitoring Console Two
 	testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcTwoName, "")
@@ -84,7 +84,7 @@ func RunC3MCReconfigTest(ctx context.Context, deployment *testenv.Deployment, te
 
 	// Ensure C3 cluster is ready
 	testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, func(ctx2 context.Context, d *testenv.Deployment) {
-		cfg.VerifyCMReady(ctx2, testcaseEnvInst, d)
+		cfg.VerifyCMReady(ctx2, d, testcaseEnvInst)
 	})
 
 	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
@@ -105,7 +105,7 @@ func RunC3MCReconfigTest(ctx context.Context, deployment *testenv.Deployment, te
 	cm := cfg.NewCMObject()
 	testenv.UpdateMonitoringConsoleRefAndVerify(ctx, deployment, testcaseEnvInst, cm, deployment.GetName(), mcTwoName)
 
-	cfg.VerifyCMReady(ctx, testcaseEnvInst, deployment)
+	cfg.VerifyCMReady(ctx, deployment, testcaseEnvInst)
 	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 	// Deploy and verify Monitoring Console Two
@@ -136,6 +136,71 @@ func RunC3MCReconfigTest(ctx context.Context, deployment *testenv.Deployment, te
 
 	// ############################  VERIFICATION FOR MONITORING CONSOLE ONE POST SHC RECONFIG ###############################
 	testenv.VerifyMCOneAfterSHCReconfig(ctx, deployment, testcaseEnvInst, cfg.MCReconfigParams, mcName, mc, shPods, cfg.SHCReconfigTimeout)
+}
+
+// RunC3MCScaleUpTest deploys a C3 cluster with a Monitoring Console, verifies MC
+// configuration, scales SHC and indexers, adds a standalone, and verifies the MC
+// is updated correctly after scale up. Works for both V3 (master) and V4 (manager).
+func RunC3MCScaleUpTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, cfg testenv.MCVersionConfig) {
+	defaultSHReplicas := 3
+	defaultIndexerReplicas := 3
+	mcName := deployment.GetName()
+
+	// Deploy and verify Monitoring Console
+	mc, resourceVersion, err := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), "")
+	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
+
+	// Deploy C3 cluster with MC
+	err = cfg.DeployC3WithMC(ctx, deployment, deployment.GetName(), defaultIndexerReplicas, true, mcName)
+	Expect(err).To(Succeed(), "Unable to deploy cluster")
+
+	// Ensure C3 cluster is ready
+	testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, func(ctx2 context.Context, d *testenv.Deployment) {
+		cfg.VerifyCMReady(ctx2, d, testcaseEnvInst)
+	})
+
+	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
+
+	// Verify MC configuration for C3 cluster
+	shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), defaultSHReplicas, false, 0)
+	indexerPods := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), defaultIndexerReplicas, false, 0)
+	testenv.VerifyMCConfigForCluster(ctx, deployment, testcaseEnvInst, cfg, mcName, shPods, indexerPods)
+
+	// Scale Search Head Cluster
+	scaledSHReplicas := defaultSHReplicas + 1
+	testcaseEnvInst.Log.Info("Scaling up Search Head Cluster", "Current Replicas", defaultSHReplicas, "New Replicas", scaledSHReplicas)
+	testcaseEnvInst.ScaleSearchHeadCluster(ctx, deployment, deployment.GetName(), scaledSHReplicas)
+
+	// Scale indexers
+	scaledIndexerReplicas := defaultIndexerReplicas + 1
+	testcaseEnvInst.Log.Info("Scaling up Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
+	testcaseEnvInst.ScaleIndexerCluster(ctx, deployment, deployment.GetName(), scaledIndexerReplicas)
+
+	// Get revision number of the resource
+	resourceVersion = testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
+
+	// Deploy Standalone with MC reference
+	testcaseEnvInst.DeployStandaloneWithMCRef(ctx, deployment, deployment.GetName(), mcName)
+
+	// Ensure Indexer Cluster goes to Ready phase
+	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+
+	// Ensure Search Head Cluster goes to Ready Phase
+	// Adding this check in the end as SHC take the longest time to scale up due recycle of SHC members
+	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+
+	// Wait for custom resource resource version to change and verify MC is ready
+	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
+
+	// Verify Standalone configured on Monitoring Console
+	testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC")
+	testcaseEnvInst.VerifyStandaloneInMC(ctx, deployment, deployment.GetName(), mcName, true)
+
+	// Verify MC configuration after scale up
+	testcaseEnvInst.Log.Info("Verify MC configuration after Scale Up")
+	shPods = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas, false, 0)
+	indexerPods = testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas, false, 0)
+	testenv.VerifyMCConfigForCluster(ctx, deployment, testcaseEnvInst, cfg, mcName, shPods, indexerPods)
 }
 
 // RunS1StandaloneAddDeleteMCTest deploys two standalone instances with a Monitoring Console,

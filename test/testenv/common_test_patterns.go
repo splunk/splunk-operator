@@ -24,12 +24,138 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// ClusterReadinessConfig holds v3/v4 API version callbacks for cluster and License Manager
-// readiness verification. Shared across test packages to avoid per-package duplication.
+// ClusterCoordinator abstracts the v3/v4 API differences for cluster
+// manager and license manager operations.
+type ClusterCoordinator interface {
+	LicenseManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv)
+	ClusterManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv)
+	DeployStandaloneWithLM(ctx context.Context, deployment *Deployment, name, mcRef string) (*enterpriseApi.Standalone, error)
+	DeployMultisiteCluster(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, mcRef string) error
+	DeployMultisiteClusterWithIndexes(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, secretName string, smartStoreSpec enterpriseApi.SmartStoreSpec) error
+	VerifyClusterManagerPhaseUpdating(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv)
+	DeleteClusterManager(ctx context.Context, deployment *Deployment) error
+	AppendSmartStoreIndex(ctx context.Context, deployment *Deployment, newIndex []enterpriseApi.IndexSpec) error
+	GetBundleHash(ctx context.Context, deployment *Deployment) string
+	ClusterManagerPVCType() string
+	GetAPIVersion() string
+}
+
+// clusterMasterCoordinator implements ClusterCoordinator for v3 (ClusterMaster/LicenseMaster).
+type clusterMasterCoordinator struct{}
+
+func (c *clusterMasterCoordinator) LicenseManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
+	testcaseEnv.VerifyLicenseMasterReady(ctx, deployment)
+}
+
+func (c *clusterMasterCoordinator) ClusterManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
+	testcaseEnv.VerifyClusterMasterReady(ctx, deployment)
+}
+
+func (c *clusterMasterCoordinator) DeployStandaloneWithLM(ctx context.Context, deployment *Deployment, name, mcRef string) (*enterpriseApi.Standalone, error) {
+	return deployment.DeployStandaloneWithLMaster(ctx, name, mcRef)
+}
+
+func (c *clusterMasterCoordinator) DeployMultisiteCluster(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, mcRef string) error {
+	return deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef)
+}
+
+func (c *clusterMasterCoordinator) DeployMultisiteClusterWithIndexes(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, secretName string, smartStoreSpec enterpriseApi.SmartStoreSpec) error {
+	return deployment.DeployMultisiteClusterMasterWithSearchHeadAndIndexes(ctx, name, indexerReplicas, siteCount, secretName, smartStoreSpec)
+}
+
+func (c *clusterMasterCoordinator) VerifyClusterManagerPhaseUpdating(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
+	testcaseEnv.VerifyClusterMasterPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
+}
+
+func (c *clusterMasterCoordinator) DeleteClusterManager(ctx context.Context, deployment *Deployment) error {
+	return GetAndDeleteCR(ctx, deployment, &enterpriseApiV3.ClusterMaster{}, deployment.GetName())
+}
+
+func (c *clusterMasterCoordinator) AppendSmartStoreIndex(ctx context.Context, deployment *Deployment, newIndex []enterpriseApi.IndexSpec) error {
+	name := deployment.GetName()
+	cm := &enterpriseApiV3.ClusterMaster{}
+	if err := deployment.GetInstance(ctx, name, cm); err != nil {
+		return fmt.Errorf("failed to get instance of Cluster Master: %w", err)
+	}
+	cm.Spec.SmartStore.IndexList = append(cm.Spec.SmartStore.IndexList, newIndex...)
+	if err := deployment.UpdateCR(ctx, cm); err != nil {
+		return fmt.Errorf("failed to add new index to Cluster Master: %w", err)
+	}
+	return nil
+}
+
+func (c *clusterMasterCoordinator) GetBundleHash(ctx context.Context, deployment *Deployment) string {
+	return GetClusterManagerBundleHash(ctx, deployment, "ClusterMaster")
+}
+
+func (c *clusterMasterCoordinator) ClusterManagerPVCType() string {
+	return "cluster-master"
+}
+
+func (c *clusterMasterCoordinator) GetAPIVersion() string {
+	return "v3"
+}
+
+// clusterManagerCoordinator implements ClusterCoordinator for v4 (ClusterManager/LicenseManager).
+type clusterManagerCoordinator struct{}
+
+func (c *clusterManagerCoordinator) LicenseManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
+	testcaseEnv.VerifyLicenseManagerReady(ctx, deployment)
+}
+
+func (c *clusterManagerCoordinator) ClusterManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
+	testcaseEnv.VerifyClusterManagerReady(ctx, deployment)
+}
+
+func (c *clusterManagerCoordinator) DeployStandaloneWithLM(ctx context.Context, deployment *Deployment, name, mcRef string) (*enterpriseApi.Standalone, error) {
+	return deployment.DeployStandaloneWithLM(ctx, name, mcRef)
+}
+
+func (c *clusterManagerCoordinator) DeployMultisiteCluster(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, mcRef string) error {
+	return deployment.DeployMultisiteClusterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef)
+}
+
+func (c *clusterManagerCoordinator) DeployMultisiteClusterWithIndexes(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, secretName string, smartStoreSpec enterpriseApi.SmartStoreSpec) error {
+	return deployment.DeployMultisiteClusterWithSearchHeadAndIndexes(ctx, name, indexerReplicas, siteCount, secretName, smartStoreSpec)
+}
+
+func (c *clusterManagerCoordinator) VerifyClusterManagerPhaseUpdating(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
+	testcaseEnv.VerifyClusterManagerPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
+}
+
+func (c *clusterManagerCoordinator) DeleteClusterManager(ctx context.Context, deployment *Deployment) error {
+	return GetAndDeleteCR(ctx, deployment, &enterpriseApi.ClusterManager{}, deployment.GetName())
+}
+
+func (c *clusterManagerCoordinator) AppendSmartStoreIndex(ctx context.Context, deployment *Deployment, newIndex []enterpriseApi.IndexSpec) error {
+	name := deployment.GetName()
+	cm := &enterpriseApi.ClusterManager{}
+	if err := deployment.GetInstance(ctx, name, cm); err != nil {
+		return fmt.Errorf("failed to get instance of Cluster Manager: %w", err)
+	}
+	cm.Spec.SmartStore.IndexList = append(cm.Spec.SmartStore.IndexList, newIndex...)
+	if err := deployment.UpdateCR(ctx, cm); err != nil {
+		return fmt.Errorf("failed to add new index to Cluster Manager: %w", err)
+	}
+	return nil
+}
+
+func (c *clusterManagerCoordinator) GetBundleHash(ctx context.Context, deployment *Deployment) string {
+	return GetClusterManagerBundleHash(ctx, deployment, "ClusterManager")
+}
+
+func (c *clusterManagerCoordinator) ClusterManagerPVCType() string {
+	return "cluster-manager"
+}
+
+func (c *clusterManagerCoordinator) GetAPIVersion() string {
+	return "v4"
+}
+
+// ClusterReadinessConfig embeds a ClusterCoordinator and provides composed
+// deployment and verification workflows shared across test packages.
 type ClusterReadinessConfig struct {
-	LicenseManagerReady func(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv)
-	ClusterManagerReady func(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv)
-	APIVersion          string
+	ClusterCoordinator
 }
 
 // MasterManagerTestConfig pairs a name prefix and test label with a factory
@@ -44,46 +170,12 @@ type MasterManagerTestConfig struct {
 
 // NewClusterReadinessConfigV3 creates a ClusterReadinessConfig for v3 API (LicenseMaster/ClusterMaster)
 func NewClusterReadinessConfigV3() *ClusterReadinessConfig {
-	return &ClusterReadinessConfig{
-		LicenseManagerReady: func(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
-			testcaseEnv.VerifyLicenseMasterReady(ctx, deployment)
-		},
-		ClusterManagerReady: func(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
-			testcaseEnv.VerifyClusterMasterReady(ctx, deployment)
-		},
-		APIVersion: "v3",
-	}
+	return &ClusterReadinessConfig{ClusterCoordinator: &clusterMasterCoordinator{}}
 }
 
 // NewClusterReadinessConfigV4 creates a ClusterReadinessConfig for v4 API (LicenseManager/ClusterManager)
 func NewClusterReadinessConfigV4() *ClusterReadinessConfig {
-	return &ClusterReadinessConfig{
-		LicenseManagerReady: func(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
-			testcaseEnv.VerifyLicenseManagerReady(ctx, deployment)
-		},
-		ClusterManagerReady: func(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
-			testcaseEnv.VerifyClusterManagerReady(ctx, deployment)
-		},
-		APIVersion: "v4",
-	}
-}
-
-// DeployStandaloneWithLM deploys a standalone with the appropriate License Manager type for
-// the API version: LicenseMaster (v3) or LicenseManager (v4).
-func (c *ClusterReadinessConfig) DeployStandaloneWithLM(ctx context.Context, deployment *Deployment, name, mcRef string) (*enterpriseApi.Standalone, error) {
-	if c.APIVersion == "v3" {
-		return deployment.DeployStandaloneWithLMaster(ctx, name, mcRef)
-	}
-	return deployment.DeployStandaloneWithLM(ctx, name, mcRef)
-}
-
-// DeployMultisiteCluster deploys a multisite cluster with the appropriate Cluster Manager type
-// for the API version: ClusterMaster (v3) or ClusterManager (v4).
-func (c *ClusterReadinessConfig) DeployMultisiteCluster(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, mcRef string) error {
-	if c.APIVersion == "v3" {
-		return deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef)
-	}
-	return deployment.DeployMultisiteClusterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef)
+	return &ClusterReadinessConfig{ClusterCoordinator: &clusterManagerCoordinator{}}
 }
 
 // VerifyC3ClusterReady verifies the C3 cluster is ready using the config's ClusterManagerReady callback.
@@ -91,77 +183,6 @@ func (c *ClusterReadinessConfig) VerifyC3ClusterReady(ctx context.Context, deplo
 	testcaseEnv.VerifyC3ClusterReady(ctx, deployment, func(ctx context.Context, d *Deployment) {
 		c.ClusterManagerReady(ctx, d, testcaseEnv)
 	})
-}
-
-// VerifyClusterManagerPhaseUpdating asserts the Cluster Manager (or ClusterMaster for v3)
-// has entered the Updating phase.
-func (c *ClusterReadinessConfig) VerifyClusterManagerPhaseUpdating(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
-	if c.APIVersion == "v3" {
-		testcaseEnv.VerifyClusterMasterPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
-	} else {
-		testcaseEnv.VerifyClusterManagerPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
-	}
-}
-
-// ClusterManagerPVCType returns the PVC label fragment for the Cluster Manager:
-// "cluster-master" for v3, "cluster-manager" for v4.
-func (c *ClusterReadinessConfig) ClusterManagerPVCType() string {
-	if c.APIVersion == "v3" {
-		return "cluster-master"
-	}
-	return "cluster-manager"
-}
-
-// DeleteClusterManager fetches and deletes the Cluster Manager CR for the appropriate API version.
-func (c *ClusterReadinessConfig) DeleteClusterManager(ctx context.Context, deployment *Deployment) error {
-	name := deployment.GetName()
-	if c.APIVersion == "v3" {
-		return GetAndDeleteCR(ctx, deployment, &enterpriseApiV3.ClusterMaster{}, name)
-	}
-	return GetAndDeleteCR(ctx, deployment, &enterpriseApi.ClusterManager{}, name)
-}
-
-// DeployMultisiteClusterWithIndexes deploys a multisite cluster with SmartStore indexes using
-// the appropriate Cluster Manager type for the API version.
-func (c *ClusterReadinessConfig) DeployMultisiteClusterWithIndexes(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, secretName string, smartStoreSpec enterpriseApi.SmartStoreSpec) error {
-	if c.APIVersion == "v3" {
-		return deployment.DeployMultisiteClusterMasterWithSearchHeadAndIndexes(ctx, name, indexerReplicas, siteCount, secretName, smartStoreSpec)
-	}
-	return deployment.DeployMultisiteClusterWithSearchHeadAndIndexes(ctx, name, indexerReplicas, siteCount, secretName, smartStoreSpec)
-}
-
-// GetBundleHash returns the current bundle hash for the Cluster Manager (or ClusterMaster for v3).
-func (c *ClusterReadinessConfig) GetBundleHash(ctx context.Context, deployment *Deployment) string {
-	if c.APIVersion == "v3" {
-		return GetClusterManagerBundleHash(ctx, deployment, "ClusterMaster")
-	}
-	return GetClusterManagerBundleHash(ctx, deployment, "ClusterManager")
-}
-
-// AppendSmartStoreIndex appends a new SmartStore index to the Cluster Manager CR
-// for the appropriate API version.
-func (c *ClusterReadinessConfig) AppendSmartStoreIndex(ctx context.Context, deployment *Deployment, newIndex []enterpriseApi.IndexSpec) error {
-	name := deployment.GetName()
-	if c.APIVersion == "v3" {
-		cm := &enterpriseApiV3.ClusterMaster{}
-		if err := deployment.GetInstance(ctx, name, cm); err != nil {
-			return fmt.Errorf("failed to get instance of Cluster Master: %w", err)
-		}
-		cm.Spec.SmartStore.IndexList = append(cm.Spec.SmartStore.IndexList, newIndex...)
-		if err := deployment.UpdateCR(ctx, cm); err != nil {
-			return fmt.Errorf("failed to add new index to Cluster Master: %w", err)
-		}
-		return nil
-	}
-	cm := &enterpriseApi.ClusterManager{}
-	if err := deployment.GetInstance(ctx, name, cm); err != nil {
-		return fmt.Errorf("failed to get instance of Cluster Manager: %w", err)
-	}
-	cm.Spec.SmartStore.IndexList = append(cm.Spec.SmartStore.IndexList, newIndex...)
-	if err := deployment.UpdateCR(ctx, cm); err != nil {
-		return fmt.Errorf("failed to add new index to Cluster Manager: %w", err)
-	}
-	return nil
 }
 
 // DeployMCAndGetVersion deploys and verifies a Monitoring Console, then returns both the MC
@@ -224,16 +245,9 @@ func (testcaseenv *TestCaseEnv) VerifyMCVersionChangedAndReady(ctx context.Conte
 	testcaseenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 }
 
-// VerifyClusterReadyAndRFSF is a common verification pattern that checks cluster is ready and RF/SF is met
+// VerifyClusterReadyAndRFSF is a V4-only verification pattern that checks C3 cluster is ready (using ClusterManager) and RF/SF is met
 func (testcaseenv *TestCaseEnv) VerifyClusterReadyAndRFSF(ctx context.Context, deployment *Deployment) {
 	testcaseenv.VerifyC3ClusterReady(ctx, deployment, testcaseenv.VerifyClusterManagerReady)
-	testcaseenv.VerifyRFSFMet(ctx, deployment)
-}
-
-// VerifyMultisiteClusterReadyAndRFSF is a common verification pattern for multisite clusters
-func (testcaseenv *TestCaseEnv) VerifyMultisiteClusterReadyAndRFSF(ctx context.Context, deployment *Deployment, siteCount int) {
-	testcaseenv.VerifyClusterManagerReady(ctx, deployment)
-	testcaseenv.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 	testcaseenv.VerifyRFSFMet(ctx, deployment)
 }
 
@@ -283,8 +297,8 @@ func VerifyLMConfiguredOnMC(ctx context.Context, deployment *Deployment) {
 	VerifyLMConfiguredOnPod(ctx, deployment, monitoringConsolePodName)
 }
 
-// StandardC3Verification performs the standard set of verifications for a C3 cluster
-// This includes cluster ready, RF/SF met, and monitoring console ready
+// StandardC3Verification performs the standard V4-only set of verifications for a C3 cluster.
+// This includes cluster ready (ClusterManager), RF/SF met, and monitoring console ready.
 func (testcaseenv *TestCaseEnv) StandardC3Verification(ctx context.Context, deployment *Deployment, mcName string, mc *enterpriseApi.MonitoringConsole) {
 	testcaseenv.VerifyClusterReadyAndRFSF(ctx, deployment)
 	testcaseenv.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)

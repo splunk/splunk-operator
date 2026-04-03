@@ -102,7 +102,7 @@ func TestBasic(t *testing.T) {
 var _ = BeforeSuite(func() {
 	var err error
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
-	Expect(err).ToNot(HaveOccurred())
+	Expect(err).To(Succeed(), "Failed to initialize test environment")
 
 	appListV1 = testenv.BasicApps
 	appFileList := testenv.GetAppFileList(appListV1)
@@ -114,7 +114,7 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	if testenvInstance != nil {
-		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
+		Expect(testenvInstance.Teardown()).To(Succeed(), "Failed to teardown test environment")
 	}
 
 	err := os.RemoveAll(downloadDirV1)

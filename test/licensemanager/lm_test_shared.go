@@ -109,15 +109,7 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 
 	// Create app framework spec
 	volumeName := "lm-test-volume-" + testenv.RandomDNSName(3)
-	var volumeSpec []enterpriseApi.VolumeSpec
-	switch testenv.ClusterProvider {
-	case "eks":
-		volumeSpec = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
-	case "azure":
-		volumeSpec = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpecAzure(volumeName, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "azure", "blob")}
-	case "gcp":
-		volumeSpec = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "gcp", "blob", testenv.GetDefaultS3Region())}
-	}
+	volumeSpec := testenv.GenerateVolumeSpecForProvider(ctx, volumeName, testcaseEnvInst)
 
 	// AppSourceDefaultSpec: Remote Storage volume name and scope of app deployment
 	appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{

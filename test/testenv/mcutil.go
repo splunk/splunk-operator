@@ -182,7 +182,7 @@ type MCVersionConfig struct {
 	NewCMObject func() interface{}
 
 	// VerifyCMReady asserts the cluster coordinator has reached Ready phase.
-	VerifyCMReady func(ctx context.Context, te *TestCaseEnv, d *Deployment)
+	VerifyCMReady func(ctx context.Context, d *Deployment, te *TestCaseEnv)
 
 	// SHCReconfigTimeout is the timeout used when verifying MC config strings
 	// after an SHC MC-ref reconfig (0 means use the synchronous check).

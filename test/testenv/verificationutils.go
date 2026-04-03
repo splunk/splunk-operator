@@ -271,12 +271,7 @@ func (testenv *TestCaseEnv) VerifyIndexerClusterMultisiteStatus(ctx context.Cont
 		siteIndexerMap[siteName] = []string{fmt.Sprintf("splunk-%s-indexer-0", instanceName)}
 	}
 	gomega.Eventually(func() map[string][]string {
-		var podName string
-		if strings.Contains(deployment.name, "master") {
-			podName = fmt.Sprintf(ClusterMasterPod, deployment.GetName())
-		} else {
-			podName = fmt.Sprintf(ClusterManagerPod, deployment.GetName())
-		}
+		podName := GetCMPodName(deployment)
 		stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/manager/sites?output_mode=json"
 		command := []string{"/bin/sh"}
 		stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
@@ -1077,10 +1072,11 @@ func (testenv *TestCaseEnv) VerifyPodsInMCConfigString(ctx context.Context, depl
 func (testenv *TestCaseEnv) VerifyClusterManagerBundlePush(ctx context.Context, deployment *Deployment, ns string, replicas int, previousBundleHash string) {
 	gomega.Eventually(func() bool {
 		// Get Bundle status and check that each pod has successfully deployed the latest bundle
-		clusterManagerBundleStatus := CMBundlePushstatus(ctx, deployment, previousBundleHash, "cmanager")
+		cmEndpoint := "cmanager"
 		if strings.Contains(deployment.GetName(), "master") {
-			clusterManagerBundleStatus = CMBundlePushstatus(ctx, deployment, previousBundleHash, "cmaster")
+			cmEndpoint = "cmaster"
 		}
+		clusterManagerBundleStatus := CMBundlePushstatus(ctx, deployment, previousBundleHash, cmEndpoint)
 		if len(clusterManagerBundleStatus) < replicas {
 			testenv.Log.Info("Bundle push on Pod not complete on all pods", "podWithBundlePush", clusterManagerBundleStatus)
 			return false

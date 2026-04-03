@@ -32,11 +32,11 @@ var _ = XDescribe("Example2", func() {
 	BeforeEach(func() {
 		var err error
 		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
-		Expect(err).ToNot(HaveOccurred())
+		Expect(err).To(Succeed(), "Failed to setup test case environment")
 	})
 
 	AfterEach(func() {
-		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
+		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 	})
 
 	// "It" spec

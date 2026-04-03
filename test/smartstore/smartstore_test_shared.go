@@ -202,7 +202,7 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	testenv.VerifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)
 
 	// Verify new bundle is pushed (only for v3)
-	if config.APIVersion == "v3" {
+	if config.GetAPIVersion() == "v3" {
 		testcaseEnvInst.VerifyClusterManagerBundlePush(ctx, deployment, testcaseEnvInst.GetName(), 1, oldBundleHash)
 	}
 

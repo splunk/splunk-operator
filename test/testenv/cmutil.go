@@ -73,13 +73,18 @@ type ClusterManagerHealthContent struct {
 	SiteSearchFactorMet      string `json:"site_search_factor_met"`
 }
 
+// GetCMPodName returns the cluster-manager or cluster-master pod name based on
+// whether the deployment name contains "master".
+func GetCMPodName(deployment *Deployment) string {
+	if strings.Contains(deployment.GetName(), "master") {
+		return fmt.Sprintf(ClusterMasterPod, deployment.GetName())
+	}
+	return fmt.Sprintf(ClusterManagerPod, deployment.GetName())
+}
+
 // CheckRFSF check if cluster has met replication factor and search factor
 func CheckRFSF(ctx context.Context, deployment *Deployment) bool {
-	//code to execute
-	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-manager")
-	if strings.Contains(deployment.GetName(), "master") {
-		podName = fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-master")
-	}
+	podName := GetCMPodName(deployment)
 	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/manager/health?output_mode=json"
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
@@ -132,11 +137,7 @@ func GetIndexersOrSearchHeadsOnCM(ctx context.Context, deployment *Deployment, e
 	} else {
 		url = "https://localhost:8089/services/cluster/manager/peers?output_mode=json"
 	}
-	//code to execute
-	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-manager")
-	if strings.Contains(deployment.name, "master") {
-		podName = fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-master")
-	}
+	podName := GetCMPodName(deployment)
 	stdin := fmt.Sprintf("curl -ks -u admin:$(cat /mnt/splunk-secrets/password) %s", url)
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
@@ -229,21 +230,8 @@ func ClusterManagerInfoResponse(ctx context.Context, deployment *Deployment, pod
 
 // CheckRollingRestartStatus checks if rolling restart is happening in cluster
 func CheckRollingRestartStatus(ctx context.Context, deployment *Deployment) bool {
-	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-manager")
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/manager/info?output_mode=json"
-	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
-	if err != nil {
-		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
-		return false
-	}
-	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
-	restResponse := ClusterManagerInfoEndpointResponse{}
-	err = json.Unmarshal([]byte(stdout), &restResponse)
-	if err != nil {
-		logf.Log.Error(err, "Failed to parse cluster searchheads")
-		return false
-	}
+	podName := GetCMPodName(deployment)
+	restResponse := ClusterManagerInfoResponse(ctx, deployment, podName)
 	rollingRestart := true
 	for _, entry := range restResponse.Entry {
 		rollingRestart = entry.Content.RollingRestartFlag

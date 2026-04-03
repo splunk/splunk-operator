@@ -22,28 +22,29 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("Licensemanager App Framework test", func() {
+var _ = Describe("License Manager App Framework test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	var config *testenv.LicenseTestConfig
 	ctx := context.TODO()
 
-	BeforeEach(func() {
-		var err error
-		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
-		Expect(err).ToNot(HaveOccurred())
+	for _, tc := range masterManagerLMConfigs {
+		tc := tc
 
-		config = testenv.NewLicenseManagerConfig()
-	})
+		Context("Clustered deployment (C3) with "+tc.Label+" App Framework", func() {
+			BeforeEach(func() {
+				var err error
+				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				Expect(err).To(Succeed(), "Failed to setup test case environment")
+			})
 
-	AfterEach(func() {
-		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
-	})
+			AfterEach(func() {
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+			})
 
-	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster) with License Manager", func() {
-		It("licensemanager, integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
-			RunLMC3AppFrameworkTest(ctx, deployment, testcaseEnvInst, testenvInstance, config)
+			It(tc.Label+", integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
+				RunLMC3AppFrameworkTest(ctx, deployment, testcaseEnvInst, testenvInstance, tc.NewConfig())
+			})
 		})
-	})
+	}
 })

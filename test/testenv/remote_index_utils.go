@@ -3,6 +3,7 @@ package testenv
 import (
 	"context"
 	"encoding/json"
+	"os"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
@@ -114,6 +115,27 @@ func GenerateIndexVolumeSpecAzureManagedID(volumeName string, endpoint string, p
 		Path:     azureIndexesContainer,
 		Provider: provider,
 		Type:     storageType,
+	}
+}
+
+// GenerateVolumeSpecForProvider returns a VolumeSpec slice appropriate for the
+// current ClusterProvider (eks, azure, gcp). For Azure it respects the
+// AZURE_MANAGED_ID_ENABLED environment variable.
+func GenerateVolumeSpecForProvider(ctx context.Context, volumeName string, testenvInstance *TestCaseEnv) []enterpriseApi.VolumeSpec {
+	secretName := testenvInstance.GetIndexSecretName()
+	switch ClusterProvider {
+	case "eks":
+		return []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), secretName, "aws", "s3", GetDefaultS3Region())}
+	case "azure":
+		if os.Getenv("AZURE_MANAGED_ID_ENABLED") == "false" {
+			return []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpecAzure(volumeName, GetAzureEndpoint(ctx), secretName, "azure", "blob")}
+		}
+		return []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpecAzureManagedID(volumeName, GetAzureEndpoint(ctx), "azure", "blob")}
+	case "gcp":
+		return []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetGCPEndpoint(), secretName, "gcp", "gcs", GetDefaultS3Region())}
+	default:
+		testenvInstance.Log.Info("Failed to identify provider: Should be 'eks' or 'azure' or 'gcp'")
+		return nil
 	}
 }
 

@@ -39,7 +39,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 	BeforeEach(func() {
 		var err error
 		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
-		Expect(err).ToNot(HaveOccurred())
+		Expect(err).To(Succeed(), "Failed to setup test case environment")
 
 		cmSpec = enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -52,7 +52,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 	})
 
 	AfterEach(func() {
-		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed())
+		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
