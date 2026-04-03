@@ -309,6 +309,15 @@ func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, cl
 	}
 }
 
+func expectManagedRoleExists(cluster *enterprisev4.PostgresCluster, roleName string, exists bool) {
+	rolesByName := make(map[string]enterprisev4.ManagedRole, len(cluster.Spec.ManagedRoles))
+	for _, r := range cluster.Spec.ManagedRoles {
+		rolesByName[r.Name] = r
+	}
+	Expect(rolesByName).To(HaveKey(roleName))
+	Expect(rolesByName[roleName].Exists).To(Equal(exists), "role %s: expected Exists=%v", roleName, exists)
+}
+
 func expectRetainedArtifact(ctx context.Context, name, namespace, resourceName string, obj client.Object) {
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, obj)).To(Succeed())
 	Expect(obj.GetAnnotations()).To(HaveKeyWithValue("enterprise.splunk.com/retained-from", resourceName))
@@ -344,7 +353,7 @@ func expectReadyStatus(current *enterprisev4.PostgresDatabase, generation int64,
 	Expect(current.Status.Databases[0].ConfigMapRef).NotTo(BeNil())
 }
 
-var _ = Describe("PostgresDatabase Controller", func() {
+var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 	var (
 		ctx       context.Context
 		namespace string
@@ -493,6 +502,59 @@ var _ = Describe("PostgresDatabase Controller", func() {
 		})
 	})
 
+	When("a database is removed from spec.databases while the CR stays alive", func() {
+		It("marks the removed database roles as absent in postgres cluster and keeps the retained roles present", func() {
+			resourceName := "live-db-removal"
+			clusterName := "live-db-removal-postgres"
+			cnpgClusterName := "live-db-removal-cnpg"
+			requestName := types.NamespacedName{Name: resourceName, Namespace: namespace}
+
+			postgresDB := createPostgresDatabaseResource(ctx, namespace, resourceName, clusterName, []enterprisev4.DatabaseDefinition{
+				{Name: "keepdb"},
+				{Name: "dropdb"},
+			}, postgresDatabaseFinalizer)
+			Expect(k8sClient.Get(ctx, requestName, postgresDB)).To(Succeed())
+
+			postgresCluster := createPostgresClusterResource(ctx, namespace, clusterName)
+			markPostgresClusterReady(ctx, postgresCluster, cnpgClusterName, namespace, false)
+			cnpgCluster := createCNPGClusterResource(ctx, namespace, cnpgClusterName)
+			markCNPGClusterReady(ctx, cnpgCluster, []string{"keepdb_admin", "keepdb_rw", "dropdb_admin", "dropdb_rw"}, "tenant-rw", "tenant-ro")
+
+			initialRolesPatch := &unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": enterprisev4.GroupVersion.String(),
+					"kind":       "PostgresCluster",
+					"metadata":   map[string]any{"name": clusterName, "namespace": namespace},
+					"spec": map[string]any{
+						"managedRoles": []map[string]any{
+							{"name": "keepdb_admin", "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-keepdb-admin", "key": "password"}},
+							{"name": "keepdb_rw", "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-keepdb-rw", "key": "password"}},
+							{"name": "dropdb_admin", "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-dropdb-admin", "key": "password"}},
+							{"name": "dropdb_rw", "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-dropdb-rw", "key": "password"}},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Patch(ctx, initialRolesPatch, client.Apply, client.FieldOwner("postgresdatabase-"+resourceName))).To(Succeed())
+
+			seedOwnedDatabaseArtifacts(ctx, namespace, resourceName, clusterName, postgresDB, "keepdb", "dropdb")
+
+			postgresDB.Spec.Databases = []enterprisev4.DatabaseDefinition{{Name: "keepdb"}}
+			Expect(k8sClient.Update(ctx, postgresDB)).To(Succeed())
+
+			result, err := reconcilePostgresDatabase(ctx, requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+
+			updatedCluster := &enterprisev4.PostgresCluster{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, updatedCluster)).To(Succeed())
+
+			expectManagedRoleExists(updatedCluster, "keepdb_admin", true)
+			expectManagedRoleExists(updatedCluster, "keepdb_rw", true)
+			expectManagedRoleExists(updatedCluster, "dropdb_admin", false)
+			expectManagedRoleExists(updatedCluster, "dropdb_rw", false)
+		})
+	})
+
 	When("the PostgresDatabase is being deleted", func() {
 		Context("with retained and deleted databases", func() {
 			It("orphans retained resources, removes deleted resources, and patches managed roles", func() {
@@ -547,7 +609,11 @@ var _ = Describe("PostgresDatabase Controller", func() {
 
 				updatedCluster := &enterprisev4.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, updatedCluster)).To(Succeed())
-				Expect(managedRoleNames(updatedCluster.Spec.ManagedRoles)).To(ConsistOf("keepdb_admin", "keepdb_rw"))
+
+				expectManagedRoleExists(updatedCluster, "keepdb_admin", true)
+				expectManagedRoleExists(updatedCluster, "keepdb_rw", true)
+				expectManagedRoleExists(updatedCluster, "dropdb_admin", false)
+				expectManagedRoleExists(updatedCluster, "dropdb_rw", false)
 
 				current := &enterprisev4.PostgresDatabase{}
 				err = k8sClient.Get(ctx, requestName, current)
