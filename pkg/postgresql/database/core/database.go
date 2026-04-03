@@ -46,10 +46,18 @@ func PostgresDatabaseService(
 	rc *ReconcileContext,
 	postgresDB *enterprisev4.PostgresDatabase,
 	newDBRepo NewDBRepoFunc,
-) (ctrl.Result, error) {
+) (result ctrl.Result, err error) {
 	c := rc.Client
 	logger := log.FromContext(ctx).WithValues("postgresDatabase", postgresDB.Name)
 	ctx = log.IntoContext(ctx, logger)
+	defer func() {
+		if !errors.IsConflict(err) {
+			return
+		}
+		logger.Info("Conflict during PostgresDatabase reconciliation, will requeue")
+		result = ctrl.Result{Requeue: true}
+		err = nil
+	}()
 	logger.Info("Reconciling PostgresDatabase")
 	wasReady := postgresDB.Status.Phase != nil && *postgresDB.Status.Phase == string(readyDBPhase)
 	previouslyProvisionedDatabases := existingDatabaseStatus(postgresDB)
@@ -234,10 +242,6 @@ func PostgresDatabaseService(
 	// Phase: DatabaseProvisioning
 	adopted, err := reconcileCNPGDatabases(ctx, c, rc.Scheme, postgresDB, cluster)
 	if err != nil {
-		if errors.IsConflict(err) {
-			logger.Info("Conflict while reconciling CNPG Databases, will requeue")
-			return ctrl.Result{Requeue: true}, nil
-		}
 		logger.Error(err, "Failed to reconcile CNPG Databases")
 		rc.emitWarning(postgresDB, EventDatabasesReconcileFailed, fmt.Sprintf("Failed to reconcile databases: %v", err))
 		if statusErr := updateStatus(databasesReady, metav1.ConditionFalse, reasonDatabaseReconcileFailed,

@@ -3,7 +3,6 @@ package core
 // The following functions are intentionally not tested directly here.
 // Their business logic is covered by narrower helper tests where practical,
 // and the remaining behavior is mostly controller-runtime orchestration:
-// - PostgresDatabaseService
 // - patchManagedRoles
 // - reconcileCNPGDatabases
 // - handleDeletion
@@ -27,9 +26,12 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -122,6 +124,92 @@ func testClient(t *testing.T, scheme *runtime.Scheme, objs ...client.Object) cli
 		WithObjects(objs...)
 
 	return builder.Build()
+}
+
+func postgresDatabaseConflict(name string) error {
+	return apierrors.NewConflict(
+		schema.GroupResource{
+			Group:    enterprisev4.GroupVersion.Group,
+			Resource: "postgresdatabases",
+		},
+		name,
+		errors.New("resource version conflict"),
+	)
+}
+
+func TestPostgresDatabaseServiceRequeuesOnConflict(t *testing.T) {
+	scheme := testScheme(t)
+
+	t.Run("when adding the finalizer", func(t *testing.T) {
+		existing := &enterprisev4.PostgresDatabase{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary",
+				Namespace: "dbs",
+			},
+		}
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+			WithObjects(existing).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Update: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.UpdateOption) error {
+					return postgresDatabaseConflict(obj.GetName())
+				},
+			}).
+			Build()
+
+		postgresDB := &enterprisev4.PostgresDatabase{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, postgresDB))
+
+		result, err := PostgresDatabaseService(
+			context.Background(),
+			&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)},
+			postgresDB,
+			nil,
+		)
+
+		require.NoError(t, err)
+		assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	})
+
+	t.Run("when persisting status", func(t *testing.T) {
+		existing := &enterprisev4.PostgresDatabase{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "primary",
+				Namespace:  "dbs",
+				Finalizers: []string{postgresDatabaseFinalizerName},
+			},
+			Spec: enterprisev4.PostgresDatabaseSpec{
+				ClusterRef: corev1.LocalObjectReference{Name: "missing-cluster"},
+			},
+		}
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+			WithObjects(existing).
+			WithInterceptorFuncs(interceptor.Funcs{
+				SubResourceUpdate: func(_ context.Context, _ client.Client, subResourceName string, obj client.Object, _ ...client.SubResourceUpdateOption) error {
+					if subResourceName != "status" {
+						return nil
+					}
+					return postgresDatabaseConflict(obj.GetName())
+				},
+			}).
+			Build()
+
+		postgresDB := &enterprisev4.PostgresDatabase{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, postgresDB))
+
+		result, err := PostgresDatabaseService(
+			context.Background(),
+			&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)},
+			postgresDB,
+			nil,
+		)
+
+		require.NoError(t, err)
+		assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	})
 }
 
 func TestGetDesiredUsers(t *testing.T) {

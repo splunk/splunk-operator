@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"reflect"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
@@ -107,28 +106,11 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterprisev4.PostgresDatabase{}, builder.WithPredicates(
-			predicate.Or(
-				predicate.GenerationChangedPredicate{},
-				predicate.Funcs{
-					UpdateFunc: func(e event.UpdateEvent) bool {
-						if !equality.Semantic.DeepEqual(
-							e.ObjectOld.GetDeletionTimestamp(),
-							e.ObjectNew.GetDeletionTimestamp(),
-						) {
-							return true
-						}
-						return !reflect.DeepEqual(
-							e.ObjectOld.GetFinalizers(),
-							e.ObjectNew.GetFinalizers(),
-						)
-					},
-				},
-			),
-		)).
+		WithEventFilter(predicate.Funcs{GenericFunc: func(event.GenericEvent) bool { return false }}).
+		For(&enterprisev4.PostgresDatabase{}, builder.WithPredicates(postgresDatabasePredicator())).
 		Owns(&cnpgv1.Database{}, builder.WithPredicates(postgresDatabaseCNPGDatabasePredicator())).
-		Owns(&corev1.Secret{}, builder.WithPredicates(postgresDatabaseSecretPredicator())).
-		Owns(&corev1.ConfigMap{}, builder.WithPredicates(postgresDatabaseConfigMapPredicator())).
+		Owns(&corev1.Secret{}, builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
+		Owns(&corev1.ConfigMap{}, builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
 		Named("postgresdatabase").
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: DatabaseTotalWorker,
@@ -136,37 +118,33 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func postgresDatabaseCNPGDatabasePredicator() predicate.Predicate {
-	return predicate.Funcs{
-		CreateFunc: func(event.CreateEvent) bool { return false },
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			oldObj, okOld := e.ObjectOld.(*cnpgv1.Database)
-			newObj, okNew := e.ObjectNew.(*cnpgv1.Database)
-			if !okOld || !okNew {
-				return true
-			}
-			return !equality.Semantic.DeepEqual(oldObj.Status.Applied, newObj.Status.Applied) ||
-				!equality.Semantic.DeepEqual(oldObj.GetOwnerReferences(), newObj.GetOwnerReferences())
+func postgresDatabasePredicator() predicate.Predicate {
+	return predicate.Or(
+		predicate.GenerationChangedPredicate{},
+		predicate.Funcs{
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				if !equality.Semantic.DeepEqual(e.ObjectOld.GetDeletionTimestamp(), e.ObjectNew.GetDeletionTimestamp()) {
+					return true
+				}
+				return !equality.Semantic.DeepEqual(e.ObjectOld.GetFinalizers(), e.ObjectNew.GetFinalizers())
+			},
 		},
-		DeleteFunc:  func(event.DeleteEvent) bool { return true },
-		GenericFunc: func(event.GenericEvent) bool { return false },
-	}
+	)
 }
 
-func postgresDatabaseSecretPredicator() predicate.Predicate {
-	return predicate.Funcs{
-		CreateFunc:  func(event.CreateEvent) bool { return false },
-		UpdateFunc:  func(event.UpdateEvent) bool { return true },
-		DeleteFunc:  func(event.DeleteEvent) bool { return true },
-		GenericFunc: func(event.GenericEvent) bool { return false },
-	}
-}
-
-func postgresDatabaseConfigMapPredicator() predicate.Predicate {
-	return predicate.Funcs{
-		CreateFunc:  func(event.CreateEvent) bool { return false },
-		UpdateFunc:  func(event.UpdateEvent) bool { return true },
-		DeleteFunc:  func(event.DeleteEvent) bool { return true },
-		GenericFunc: func(event.GenericEvent) bool { return false },
-	}
+func postgresDatabaseCNPGDatabasePredicator() predicate.Predicate {
+	return predicate.Or(
+		predicate.GenerationChangedPredicate{},
+		predicate.Funcs{
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				oldObj, okOld := e.ObjectOld.(*cnpgv1.Database)
+				newObj, okNew := e.ObjectNew.(*cnpgv1.Database)
+				if !okOld || !okNew {
+					return true
+				}
+				return !equality.Semantic.DeepEqual(oldObj.Status.Applied, newObj.Status.Applied) ||
+					ownerReferencesChanged(oldObj, newObj)
+			},
+		},
+	)
 }

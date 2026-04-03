@@ -37,6 +37,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -634,12 +635,12 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 	})
 
 	When("postgresdatabase secondary-resource predicates run", func() {
-		It("treats cnpg database applied-state and delete changes as drift triggers", func() {
+		It("treats cnpg database applied-state, create, and delete changes as drift triggers", func() {
 			pred := postgresDatabaseCNPGDatabasePredicator()
 
 			oldApplied := true
 			newApplied := false
-			Expect(pred.Create(event.CreateEvent{})).To(BeFalse())
+			Expect(pred.Create(event.CreateEvent{})).To(BeTrue())
 			Expect(pred.Update(event.UpdateEvent{
 				ObjectOld: &cnpgv1.Database{Status: cnpgv1.DatabaseStatus{Applied: &oldApplied}},
 				ObjectNew: &cnpgv1.Database{Status: cnpgv1.DatabaseStatus{Applied: &newApplied}},
@@ -663,19 +664,25 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			})).To(BeFalse())
 		})
 
-		It("treats secret updates and deletes as drift triggers but ignores creates", func() {
-			pred := postgresDatabaseSecretPredicator()
+		It("treats secret create, update, and delete events as drift triggers", func() {
+			pred := predicate.ResourceVersionChangedPredicate{}
 
-			Expect(pred.Create(event.CreateEvent{})).To(BeFalse())
-			Expect(pred.Update(event.UpdateEvent{})).To(BeTrue())
+			Expect(pred.Create(event.CreateEvent{})).To(BeTrue())
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret", Namespace: "test", ResourceVersion: "1"}},
+				ObjectNew: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret", Namespace: "test", ResourceVersion: "2"}},
+			})).To(BeTrue())
 			Expect(pred.Delete(event.DeleteEvent{})).To(BeTrue())
 		})
 
-		It("treats configmap updates and deletes as drift triggers but ignores creates", func() {
-			pred := postgresDatabaseConfigMapPredicator()
+		It("treats configmap create, update, and delete events as drift triggers", func() {
+			pred := predicate.ResourceVersionChangedPredicate{}
 
-			Expect(pred.Create(event.CreateEvent{})).To(BeFalse())
-			Expect(pred.Update(event.UpdateEvent{})).To(BeTrue())
+			Expect(pred.Create(event.CreateEvent{})).To(BeTrue())
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "config", Namespace: "test", ResourceVersion: "1"}},
+				ObjectNew: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "config", Namespace: "test", ResourceVersion: "2"}},
+			})).To(BeTrue())
 			Expect(pred.Delete(event.DeleteEvent{})).To(BeTrue())
 		})
 	})
