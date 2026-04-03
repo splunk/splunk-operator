@@ -110,7 +110,7 @@ func (d *Deployment) Teardown() error {
 
 	var err error
 	var output []byte
-	podName := GetOperatorPodName(d.testenv)
+	podName := d.testenv.GetOperatorPodName()
 	if d.testenv.clusterWideOperator != "true" {
 		output, err = exec.Command("kubectl", "logs", "-n", d.testenv.GetName(), podName).Output()
 	} else {

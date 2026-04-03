@@ -77,7 +77,7 @@ func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Dep
 	Expect(err).To(Succeed(), "Unable to delete secret Object")
 
 	// Ensure standalone is updating
-	Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseUpdating)).To(Succeed())
 
 	// Wait for Standalone to be in READY status
 	Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed())

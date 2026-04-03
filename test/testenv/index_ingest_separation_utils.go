@@ -39,7 +39,7 @@ func DeployQueueAndObjectStorage(ctx context.Context, deployment *Deployment, qS
 
 // SetupIngestorStack deploys the full Queue/ObjectStorage/IngestorCluster/ClusterManager/IndexerCluster stack
 // and verifies each component reaches the Ready phase.
-func SetupIngestorStack(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, qSpec enterpriseApi.QueueSpec, osSpec enterpriseApi.ObjectStorageSpec, cmSpec enterpriseApi.ClusterManagerSpec) error {
+func (testcaseEnvInst *TestCaseEnv) SetupIngestorStack(ctx context.Context, deployment *Deployment, qSpec enterpriseApi.QueueSpec, osSpec enterpriseApi.ObjectStorageSpec, cmSpec enterpriseApi.ClusterManagerSpec) error {
 	volumeSpec := []enterpriseApi.SQSVolumeSpec{GenerateQueueVolumeSpec(
 		"queue-secret-ref-volume",
 		testcaseEnvInst.GetIndexIngestSepSecretName(),

@@ -61,7 +61,7 @@ type SearchJobResponseResults struct {
 }
 
 // PerformSearchSync performs a syncronous search within splunk and returns the search results
-func PerformSearchSync(ctx context.Context, podName string, search string, deployment *Deployment) (string, error) {
+func PerformSearchSync(ctx context.Context, deployment *Deployment, podName string, search string) (string, error) {
 	// Build the search curl command and send it to an instance
 	curlCmd := "curl -ks -u"
 	username := "admin"
@@ -84,7 +84,7 @@ func PerformSearchSync(ctx context.Context, podName string, search string, deplo
 }
 
 // PerformSearchReq makes a search request for a search to be performed.  Returns a sid to be used to check for status and results
-func PerformSearchReq(ctx context.Context, podName string, search string, deployment *Deployment) (string, error) {
+func PerformSearchReq(ctx context.Context, deployment *Deployment, podName string, search string) (string, error) {
 	// Build the search curl command
 	curlCmd := "curl -ks -u"
 	url := "https://localhost:8089/services/search/jobs"
@@ -116,7 +116,7 @@ func PerformSearchReq(ctx context.Context, podName string, search string, deploy
 }
 
 // GetSearchStatus checks the search status for a given <sid>
-func GetSearchStatus(ctx context.Context, podName string, sid string, deployment *Deployment) (*SearchJobStatusResponse, error) {
+func GetSearchStatus(ctx context.Context, deployment *Deployment, podName string, sid string) (*SearchJobStatusResponse, error) {
 	// Build search status request curl command
 	curlCmd := "curl -ks -u"
 	url := "https://localhost:8089/services/search/jobs"
@@ -144,7 +144,7 @@ func GetSearchStatus(ctx context.Context, podName string, sid string, deployment
 }
 
 // GetSearchResults retrieve the results for a given <sid> once the search status isDone == true
-func GetSearchResults(ctx context.Context, podName string, sid string, deployment *Deployment) (string, error) {
+func GetSearchResults(ctx context.Context, deployment *Deployment, podName string, sid string) (string, error) {
 	// Build search results request curl command
 	curlCmd := "curl -ks -u"
 	url := "https://localhost:8089/services/search/jobs"

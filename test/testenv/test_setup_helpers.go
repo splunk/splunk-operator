@@ -91,7 +91,7 @@ func TeardownTestCaseEnv(testcaseEnvInst *TestCaseEnv, deployment *Deployment) e
 // if filePresentOnOperator is true.
 func CleanupOperatorFile(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, filePresentOnOperator bool) {
 	if filePresentOnOperator {
-		opPod := GetOperatorPodName(testcaseEnvInst)
+		opPod := testcaseEnvInst.GetOperatorPodName()
 		podDownloadPath := filepath.Join(AppDownloadVolume, "test_file.img")
 		DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
 	}

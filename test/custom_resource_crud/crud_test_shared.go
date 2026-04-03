@@ -29,7 +29,7 @@ import (
 // RunS1CPUUpdateTest runs the standard S1 CPU limit update test workflow
 func RunS1CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, defaultCPULimits string, newCPULimits string) {
 	// Deploy and verify Standalone
-	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), deployment.GetName(), "")
+	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), "")
 	Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
 
 	// Verify telemetry
@@ -52,10 +52,10 @@ func RunS1CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	Expect(err).To(Succeed(), "Unable to deploy standalone instance with updated CR ")
 
 	// Verify Standalone is updating
-	Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseUpdating)).To(Succeed())
 
 	// Verify Standalone goes to ready state
-	Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseReady)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseReady)).To(Succeed())
 
 	// Verify Monitoring Console is Ready and stays in ready state
 	Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed())
@@ -77,11 +77,11 @@ func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	// Deploy and verify Monitoring Console, RF/SF
 	mc, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
 	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-	Expect(testcaseEnvInst.StandardC3Verification(ctx, deployment, deployment.GetName(), mc)).To(Succeed())
+	Expect(testcaseEnvInst.StandardC3Verification(ctx, deployment, mc)).To(Succeed())
 
 	// Verify CPU limits on Indexers before updating the CR
 	indexerCount := 3
-	Expect(testcaseEnvInst.VerifyIndexerCPULimits(deployment, deployment.GetName(), indexerCount, defaultCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyIndexerCPULimits(deployment, indexerCount, defaultCPULimits)).To(Succeed())
 
 	// Change CPU limits to trigger CR update
 	idxc := &enterpriseApi.IndexerCluster{}
@@ -100,11 +100,11 @@ func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed())
 
 	// Verify CPU limits on Indexers after updating the CR
-	Expect(testcaseEnvInst.VerifyIndexerCPULimits(deployment, deployment.GetName(), indexerCount, newCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyIndexerCPULimits(deployment, indexerCount, newCPULimits)).To(Succeed())
 
 	// Verify CPU limits on Search Heads before updating the CR
 	searchHeadCount := 3
-	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, deployment.GetName(), searchHeadCount, defaultCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, searchHeadCount, defaultCPULimits)).To(Succeed())
 
 	// Change CPU limits to trigger CR update
 	shc := &enterpriseApi.SearchHeadCluster{}
@@ -126,7 +126,7 @@ func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed())
 
 	// Verify CPU limits on Search Heads after updating the CR
-	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, deployment.GetName(), searchHeadCount, newCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, searchHeadCount, newCPULimits)).To(Succeed())
 }
 
 // RunC3PVCDeletionTest runs the standard C3 PVC deletion test workflow
@@ -170,7 +170,7 @@ func RunSHCDeployerResourceSpecTest(ctx context.Context, deployment *testenv.Dep
 
 	// Verify CPU limits on Search Heads and deployer before updating CR
 	searchHeadCount := 3
-	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, deployment.GetName(), searchHeadCount, defaultCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, searchHeadCount, defaultCPULimits)).To(Succeed())
 
 	deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
 	Expect(testcaseEnvInst.VerifyCPULimits(deployment, deployerPodName, defaultCPULimits)).To(Succeed())
@@ -202,7 +202,7 @@ func RunSHCDeployerResourceSpecTest(ctx context.Context, deployment *testenv.Dep
 	Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed())
 
 	// Verify CPU limits on Search Heads - Should be same as before
-	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, deployment.GetName(), searchHeadCount, defaultCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, searchHeadCount, defaultCPULimits)).To(Succeed())
 
 	// Verify modified deployer spec
 	Expect(testcaseEnvInst.VerifyResourceConstraints(deployment, deployerPodName, depResSpec)).To(Succeed())
@@ -226,7 +226,7 @@ func RunM4CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed())
 
 	// Verify CPU limits on Indexers before updating the CR
-	Expect(testcaseEnvInst.VerifyCPULimitsOnAllSites(deployment, deployment.GetName(), siteCount, defaultCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyCPULimitsOnAllSites(deployment, siteCount, defaultCPULimits)).To(Succeed())
 
 	// Change CPU limits to trigger CR update
 	idxc := &enterpriseApi.IndexerCluster{}
@@ -254,5 +254,5 @@ func RunM4CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed())
 
 	// Verify CPU limits after updating the CR
-	Expect(testcaseEnvInst.VerifyCPULimitsOnAllSites(deployment, deployment.GetName(), siteCount, newCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyCPULimitsOnAllSites(deployment, siteCount, newCPULimits)).To(Succeed())
 }

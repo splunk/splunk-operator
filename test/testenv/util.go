@@ -867,7 +867,7 @@ func DumpGetTopPods(ns string) []string {
 }
 
 // GetOperatorPodName returns name of operator pod in the namespace
-func GetOperatorPodName(testcaseEnvInst *TestCaseEnv) string {
+func (testcaseEnvInst *TestCaseEnv) GetOperatorPodName() string {
 	var ns string
 	if testcaseEnvInst.clusterWideOperator != "true" {
 		ns = testcaseEnvInst.GetName()
@@ -1157,7 +1157,7 @@ func GetPodUIDs(ns string) map[string]string {
 }
 
 // DeleteOperatorPod Delete Operator Pod in the namespace
-func DeleteOperatorPod(testcaseEnvInst *TestCaseEnv) error {
+func (testcaseEnvInst *TestCaseEnv) DeleteOperatorPod() error {
 	var podName string
 	var ns string
 	if testcaseEnvInst.clusterWideOperator != "true" {
@@ -1165,7 +1165,7 @@ func DeleteOperatorPod(testcaseEnvInst *TestCaseEnv) error {
 	} else {
 		ns = "splunk-operator"
 	}
-	podName = GetOperatorPodName(testcaseEnvInst)
+	podName = testcaseEnvInst.GetOperatorPodName()
 
 	_, err := exec.Command("kubectl", "delete", "pod", "-n", ns, podName).Output()
 	if err != nil {

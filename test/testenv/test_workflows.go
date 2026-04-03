@@ -32,8 +32,8 @@ type WorkflowResult struct {
 }
 
 // RunStandaloneDeploymentWorkflow deploys a standalone instance and verifies it's ready
-func RunStandaloneDeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string) (*WorkflowResult, error) {
-	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, name, "", "")
+func (testcaseEnvInst *TestCaseEnv) RunStandaloneDeploymentWorkflow(ctx context.Context, deployment *Deployment) (*WorkflowResult, error) {
+	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -41,8 +41,8 @@ func RunStandaloneDeploymentWorkflow(ctx context.Context, deployment *Deployment
 }
 
 // RunC3DeploymentWorkflow deploys a C3 cluster (CM + IDXC + SHC) and verifies all components are ready
-func RunC3DeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int, mcRef string) (*WorkflowResult, error) {
-	if err := deployment.DeploySingleSiteCluster(ctx, name, indexerReplicas, true, mcRef); err != nil {
+func (testcaseEnvInst *TestCaseEnv) RunC3DeploymentWorkflow(ctx context.Context, deployment *Deployment, indexerReplicas int, mcRef string) (*WorkflowResult, error) {
+	if err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, true, mcRef); err != nil {
 		return nil, fmt.Errorf("unable to deploy C3 cluster: %w", err)
 	}
 
@@ -54,8 +54,8 @@ func RunC3DeploymentWorkflow(ctx context.Context, deployment *Deployment, testca
 }
 
 // RunM4DeploymentWorkflow deploys a M4 multisite cluster and verifies all components are ready
-func RunM4DeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int, siteCount int, mcRef string) (*WorkflowResult, error) {
-	if err := deployment.DeployMultisiteClusterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef); err != nil {
+func (testcaseEnvInst *TestCaseEnv) RunM4DeploymentWorkflow(ctx context.Context, deployment *Deployment, indexerReplicas int, siteCount int, mcRef string) (*WorkflowResult, error) {
+	if err := deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), indexerReplicas, siteCount, mcRef); err != nil {
 		return nil, fmt.Errorf("unable to deploy M4 cluster: %w", err)
 	}
 
@@ -70,8 +70,8 @@ func RunM4DeploymentWorkflow(ctx context.Context, deployment *Deployment, testca
 }
 
 // RunM1DeploymentWorkflow deploys a M1 multisite indexer cluster (no SHC) and verifies components
-func RunM1DeploymentWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int, siteCount int) (*WorkflowResult, error) {
-	if err := deployment.DeployMultisiteCluster(ctx, name, indexerReplicas, siteCount, ""); err != nil {
+func (testcaseEnvInst *TestCaseEnv) RunM1DeploymentWorkflow(ctx context.Context, deployment *Deployment, indexerReplicas int, siteCount int) (*WorkflowResult, error) {
+	if err := deployment.DeployMultisiteCluster(ctx, deployment.GetName(), indexerReplicas, siteCount, ""); err != nil {
 		return nil, fmt.Errorf("unable to deploy M1 cluster: %w", err)
 	}
 
@@ -86,9 +86,10 @@ func RunM1DeploymentWorkflow(ctx context.Context, deployment *Deployment, testca
 }
 
 // RunStandaloneWithServiceAccountWorkflow deploys standalone with a service account
-func RunStandaloneWithServiceAccountWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, serviceAccountName string) (*WorkflowResult, error) {
+func (testcaseEnvInst *TestCaseEnv) RunStandaloneWithServiceAccountWorkflow(ctx context.Context, deployment *Deployment, serviceAccountName string) (*WorkflowResult, error) {
 	testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
+	name := deployment.GetName()
 	spec := enterpriseApi.StandaloneSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
@@ -110,7 +111,7 @@ func RunStandaloneWithServiceAccountWorkflow(ctx context.Context, deployment *De
 	}
 
 	standalonePodName := fmt.Sprintf(StandalonePod, name, 0)
-	if err = testcaseEnvInst.VerifyServiceAccountConfiguredOnPod(deployment, testcaseEnvInst.GetName(), standalonePodName, serviceAccountName); err != nil {
+	if err = testcaseEnvInst.VerifyServiceAccountConfiguredOnPod(testcaseEnvInst.GetName(), standalonePodName, serviceAccountName); err != nil {
 		return nil, fmt.Errorf("service account not configured: %w", err)
 	}
 
@@ -118,8 +119,8 @@ func RunStandaloneWithServiceAccountWorkflow(ctx context.Context, deployment *De
 }
 
 // RunDeleteStandaloneWorkflow deploys and deletes a standalone instance
-func RunDeleteStandaloneWorkflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string) error {
-	result, err := RunStandaloneDeploymentWorkflow(ctx, deployment, testcaseEnvInst, name)
+func (testcaseEnvInst *TestCaseEnv) RunDeleteStandaloneWorkflow(ctx context.Context, deployment *Deployment) error {
+	result, err := testcaseEnvInst.RunStandaloneDeploymentWorkflow(ctx, deployment)
 	if err != nil {
 		return fmt.Errorf("unable to deploy standalone instance: %w", err)
 	}
@@ -131,11 +132,12 @@ func RunDeleteStandaloneWorkflow(ctx context.Context, deployment *Deployment, te
 }
 
 // RunDeleteC3Workflow deploys and deletes a C3 cluster
-func RunDeleteC3Workflow(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, name string, indexerReplicas int) error {
-	if _, err := RunC3DeploymentWorkflow(ctx, deployment, testcaseEnvInst, name, indexerReplicas, ""); err != nil {
+func (testcaseEnvInst *TestCaseEnv) RunDeleteC3Workflow(ctx context.Context, deployment *Deployment, indexerReplicas int) error {
+	if _, err := testcaseEnvInst.RunC3DeploymentWorkflow(ctx, deployment, indexerReplicas, ""); err != nil {
 		return err
 	}
 
+	name := deployment.GetName()
 	if err := GetAndDeleteCR(ctx, deployment, &enterpriseApi.IndexerCluster{}, name+"-idxc"); err != nil {
 		return fmt.Errorf("unable to delete Indexer Cluster: %w", err)
 	}

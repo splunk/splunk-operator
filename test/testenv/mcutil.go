@@ -53,29 +53,6 @@ func getMCSts(ns string) string {
 	return strings.Split(string(output), "\n")[1]
 }
 
-// CheckMCPodReady check if monitoring pod is ready. Checking status of MC pod and Stateful set.
-func CheckMCPodReady(ns string) bool {
-	// Check Status of monitoring console statefulset
-	stsLine := getMCSts(ns)
-	if len(stsLine) == 0 {
-		return false
-	}
-	stsSlice := strings.Fields(stsLine)
-	logf.Log.Info("MC statefulset found", "pod", stsSlice[0], "ready", stsSlice[1])
-	stsReady := strings.Contains(stsSlice[1], "1/1")
-
-	// Check Status of monitoring console pod
-	podLine := getMCPod(ns)
-	if len(podLine) == 0 {
-		return false
-	}
-	podSlice := strings.Fields(podLine)
-	logf.Log.Info("MC Pod Found", "pod", podSlice[0], "ready", podSlice[1])
-	podReady := strings.Contains(podSlice[1], "1/1") && strings.Contains(podSlice[2], "Running")
-
-	return stsReady && podReady
-}
-
 // GetConfiguredPeers get list of Peers Configured on Monitoring Console
 func GetConfiguredPeers(ns string, mcName string) []string {
 	podName := fmt.Sprintf(MonitoringConsolePod, mcName)

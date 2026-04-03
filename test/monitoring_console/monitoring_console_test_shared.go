@@ -56,7 +56,7 @@ func RunM4MCReconfigTest(ctx context.Context, deployment *testenv.Deployment, te
 	// ############ CLUSTER MANAGER MC RECONFIG #################################
 	mcTwoName := deployment.GetName() + "-two"
 	cm := cfg.NewCMObject()
-	Expect(testenv.UpdateMonitoringConsoleRefAndVerify(ctx, deployment, testcaseEnvInst, cm, deployment.GetName(), mcTwoName)).To(Succeed())
+	Expect(testcaseEnvInst.UpdateMonitoringConsoleRefAndVerify(ctx, deployment, cm, deployment.GetName(), mcTwoName)).To(Succeed())
 
 	Expect(cfg.VerifyCMReady(ctx, deployment, testcaseEnvInst)).To(Succeed())
 
@@ -103,7 +103,7 @@ func RunC3MCReconfigTest(ctx context.Context, deployment *testenv.Deployment, te
 
 	mcTwoName := deployment.GetName() + "-two"
 	cm := cfg.NewCMObject()
-	Expect(testenv.UpdateMonitoringConsoleRefAndVerify(ctx, deployment, testcaseEnvInst, cm, deployment.GetName(), mcTwoName)).To(Succeed())
+	Expect(testcaseEnvInst.UpdateMonitoringConsoleRefAndVerify(ctx, deployment, cm, deployment.GetName(), mcTwoName)).To(Succeed())
 
 	Expect(cfg.VerifyCMReady(ctx, deployment, testcaseEnvInst)).To(Succeed())
 	Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed())
@@ -122,7 +122,7 @@ func RunC3MCReconfigTest(ctx context.Context, deployment *testenv.Deployment, te
 
 	shc := &enterpriseApi.SearchHeadCluster{}
 	shcName := deployment.GetName() + "-shc"
-	Expect(testenv.UpdateMonitoringConsoleRefAndVerify(ctx, deployment, testcaseEnvInst, shc, shcName, mcTwoName)).To(Succeed())
+	Expect(testcaseEnvInst.UpdateMonitoringConsoleRefAndVerify(ctx, deployment, shc, shcName, mcTwoName)).To(Succeed())
 
 	// Ensure Search Head Cluster goes to Ready Phase
 	Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed())
@@ -169,12 +169,12 @@ func RunC3MCScaleUpTest(ctx context.Context, deployment *testenv.Deployment, tes
 	// Scale Search Head Cluster
 	scaledSHReplicas := defaultSHReplicas + 1
 	testcaseEnvInst.Log.Info("Scaling up Search Head Cluster", "Current Replicas", defaultSHReplicas, "New Replicas", scaledSHReplicas)
-	testcaseEnvInst.ScaleSearchHeadCluster(ctx, deployment, deployment.GetName(), scaledSHReplicas)
+	testcaseEnvInst.ScaleSearchHeadCluster(ctx, deployment, scaledSHReplicas)
 
 	// Scale indexers
 	scaledIndexerReplicas := defaultIndexerReplicas + 1
 	testcaseEnvInst.Log.Info("Scaling up Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
-	testcaseEnvInst.ScaleIndexerCluster(ctx, deployment, deployment.GetName(), scaledIndexerReplicas)
+	testcaseEnvInst.ScaleIndexerCluster(ctx, deployment, scaledIndexerReplicas)
 
 	// Get revision number of the resource
 	resourceVersion = testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)

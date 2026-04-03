@@ -105,12 +105,12 @@ func GetSecretFromServerConf(ctx context.Context, deployment *Deployment, podNam
 
 	secretList := strings.Split(confline, "=")
 	key := strings.TrimSpace(secretList[0])
-	value := DecryptSplunkEncodedSecret(ctx, deployment, podName, ns, strings.TrimSpace(secretList[1]))
+	value := DecryptSplunkEncodedSecret(ctx, deployment, podName, strings.TrimSpace(secretList[1]))
 	return key, value, nil
 }
 
 // DecryptSplunkEncodedSecret Decrypt Splunk Secret like pass4SymmKey On Given Pod
-func DecryptSplunkEncodedSecret(ctx context.Context, deployment *Deployment, podName string, ns string, secretValue string) string {
+func DecryptSplunkEncodedSecret(ctx context.Context, deployment *Deployment, podName string, secretValue string) string {
 	stdin := fmt.Sprintf("/opt/splunk/bin/splunk show-decrypted --value '%s'", secretValue)
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
@@ -194,7 +194,7 @@ func CheckSecretViaAPI(ctx context.Context, deployment *Deployment, podName stri
 }
 
 // GetSecretFromInputsConf gets give secret from server under given stanza
-func GetSecretFromInputsConf(deployment *Deployment, podName string, ns string, configName string, stanza string) (string, string, error) {
+func GetSecretFromInputsConf(podName string, ns string, configName string, stanza string) (string, string, error) {
 	filePath := "/opt/splunk/etc/apps/splunk_httpinput/local/inputs.conf"
 	confline, err := GetConfLineFromPod(podName, filePath, ns, configName, stanza, true)
 	if err != nil {

@@ -121,7 +121,7 @@ func GenerateIndexVolumeSpecAzureManagedID(volumeName string, endpoint string, p
 // GenerateVolumeSpecForProvider returns a VolumeSpec slice appropriate for the
 // current ClusterProvider (eks, azure, gcp). For Azure it respects the
 // AZURE_MANAGED_ID_ENABLED environment variable.
-func GenerateVolumeSpecForProvider(ctx context.Context, volumeName string, testenvInstance *TestCaseEnv) []enterpriseApi.VolumeSpec {
+func (testenvInstance *TestCaseEnv) GenerateVolumeSpecForProvider(ctx context.Context, volumeName string) []enterpriseApi.VolumeSpec {
 	secretName := testenvInstance.GetIndexSecretName()
 	switch ClusterProvider {
 	case "eks":

@@ -197,7 +197,8 @@ func (testcaseenv *TestCaseEnv) DeployMCAndGetVersion(ctx context.Context, deplo
 }
 
 // DeployAndVerifyStandalone deploys a standalone instance and verifies it reaches ready state
-func (testcaseenv *TestCaseEnv) DeployAndVerifyStandalone(ctx context.Context, deployment *Deployment, name string, mcRef string, licenseManagerRef string) (*enterpriseApi.Standalone, error) {
+func (testcaseenv *TestCaseEnv) DeployAndVerifyStandalone(ctx context.Context, deployment *Deployment, mcRef string, licenseManagerRef string) (*enterpriseApi.Standalone, error) {
+	name := deployment.GetName()
 	standalone, err := deployment.DeployStandalone(ctx, name, mcRef, licenseManagerRef)
 	if err != nil {
 		return nil, fmt.Errorf("unable to deploy Standalone instance: %w", err)
@@ -221,9 +222,9 @@ func (testcaseenv *TestCaseEnv) DeployAndVerifyMonitoringConsole(ctx context.Con
 }
 
 // VerifyIndexerCPULimits verifies CPU limits on all indexer pods in a single-site cluster
-func (testcaseenv *TestCaseEnv) VerifyIndexerCPULimits(deployment *Deployment, deploymentName string, indexerCount int, expectedCPULimit string) error {
+func (testcaseenv *TestCaseEnv) VerifyIndexerCPULimits(deployment *Deployment, indexerCount int, expectedCPULimit string) error {
 	for i := 0; i < indexerCount; i++ {
-		podName := fmt.Sprintf(IndexerPod, deploymentName, i)
+		podName := fmt.Sprintf(IndexerPod, deployment.GetName(), i)
 		if err := testcaseenv.VerifyCPULimits(deployment, podName, expectedCPULimit); err != nil {
 			return err
 		}
@@ -232,9 +233,9 @@ func (testcaseenv *TestCaseEnv) VerifyIndexerCPULimits(deployment *Deployment, d
 }
 
 // VerifySearchHeadCPULimits verifies CPU limits on all search head pods
-func (testcaseenv *TestCaseEnv) VerifySearchHeadCPULimits(deployment *Deployment, deploymentName string, searchHeadCount int, expectedCPULimit string) error {
+func (testcaseenv *TestCaseEnv) VerifySearchHeadCPULimits(deployment *Deployment, searchHeadCount int, expectedCPULimit string) error {
 	for i := 0; i < searchHeadCount; i++ {
-		podName := fmt.Sprintf(SearchHeadPod, deploymentName, i)
+		podName := fmt.Sprintf(SearchHeadPod, deployment.GetName(), i)
 		if err := testcaseenv.VerifyCPULimits(deployment, podName, expectedCPULimit); err != nil {
 			return err
 		}
@@ -316,11 +317,11 @@ func VerifyLMConfiguredOnMC(ctx context.Context, deployment *Deployment) error {
 
 // StandardC3Verification performs the standard V4-only set of verifications for a C3 cluster.
 // This includes cluster ready (ClusterManager), RF/SF met, and monitoring console ready.
-func (testcaseenv *TestCaseEnv) StandardC3Verification(ctx context.Context, deployment *Deployment, mcName string, mc *enterpriseApi.MonitoringConsole) error {
+func (testcaseenv *TestCaseEnv) StandardC3Verification(ctx context.Context, deployment *Deployment, mc *enterpriseApi.MonitoringConsole) error {
 	if err := testcaseenv.VerifyClusterReadyAndRFSF(ctx, deployment); err != nil {
 		return err
 	}
-	return testcaseenv.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
+	return testcaseenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 }
 
 // DeployAndVerifyC3 deploys a C3 single-site cluster and verifies it reaches the ready state.

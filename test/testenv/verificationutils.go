@@ -451,7 +451,7 @@ func VerifyLMConfiguredOnPod(ctx context.Context, deployment *Deployment, podNam
 }
 
 // VerifyServiceAccountConfiguredOnPod check if given service account is configured on given pod
-func (testenv *TestCaseEnv) VerifyServiceAccountConfiguredOnPod(deployment *Deployment, ns string, podName string, serviceAccount string) error {
+func (testenv *TestCaseEnv) VerifyServiceAccountConfiguredOnPod(ns string, podName string, serviceAccount string) error {
 	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
 		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
 		if err != nil {
@@ -514,7 +514,7 @@ func (testenv *TestCaseEnv) VerifyIndexExistsOnS3(ctx context.Context, deploymen
 }
 
 // VerifyConfOnPod Verify give conf and value on config file on pod
-func (testenv *TestCaseEnv) VerifyConfOnPod(deployment *Deployment, podName string, confFilePath string, config string, value string) error {
+func (testenv *TestCaseEnv) VerifyConfOnPod(podName string, confFilePath string, config string, value string) error {
 	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
 		confLine, err := GetConfLineFromPod(podName, confFilePath, testenv.GetName(), config, "", false)
 		if err != nil {
@@ -560,7 +560,7 @@ func (testenv *TestCaseEnv) VerifyIndexerClusterPhase(ctx context.Context, deplo
 }
 
 // VerifyStandalonePhase verify the phase of Standalone CR
-func (testenv *TestCaseEnv) VerifyStandalonePhase(ctx context.Context, deployment *Deployment, crName string, phase enterpriseApi.Phase) error {
+func (testenv *TestCaseEnv) VerifyStandalonePhase(ctx context.Context, deployment *Deployment, phase enterpriseApi.Phase) error {
 	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
 		standalone := &enterpriseApi.Standalone{}
 		err := deployment.GetInstance(ctx, deployment.GetName(), standalone)
@@ -858,14 +858,14 @@ func (testenv *TestCaseEnv) VerifySplunkServerConfSecrets(ctx context.Context, d
 
 // VerifySplunkInputConfSecrets Compare secret value on passed in map to value present on input.conf for given indexer or standalone pods
 // Set match to true or false to indicate desired +ve or -ve match
-func (testenv *TestCaseEnv) VerifySplunkInputConfSecrets(deployment *Deployment, verificationPods []string, data map[string][]byte, match bool) error {
+func (testenv *TestCaseEnv) VerifySplunkInputConfSecrets(verificationPods []string, data map[string][]byte, match bool) error {
 	secretName := "hec_token"
 	for _, podName := range verificationPods {
 		if strings.Contains(podName, "standalone") || strings.Contains(podName, "indexer") {
 			found := false
 			testenv.Log.Info("Key Verificaton", "podName", podName, "key", secretName)
 			stanza := SecretKeytoServerConfStanza[secretName]
-			_, value, err := GetSecretFromInputsConf(deployment, podName, testenv.GetName(), "token", stanza)
+			_, value, err := GetSecretFromInputsConf(podName, testenv.GetName(), "token", stanza)
 			if err != nil {
 				return fmt.Errorf("secret %s not found in input.conf on pod %s: %w", secretName, podName, err)
 			}
@@ -906,7 +906,7 @@ func (testenv *TestCaseEnv) VerifySplunkSecretViaAPI(ctx context.Context, deploy
 }
 
 // VerifyPVC verifies if PVC exists or not
-func (testenv *TestCaseEnv) VerifyPVC(deployment *Deployment, ns string, pvcName string, expectedToExist bool, verificationTimeout time.Duration) error {
+func (testenv *TestCaseEnv) VerifyPVC(pvcName string, expectedToExist bool, verificationTimeout time.Duration) error {
 	return wait.PollUntilContextTimeout(context.TODO(), PollInterval, verificationTimeout, true, func(ctx context.Context) (bool, error) {
 		pvcExists := false
 		pvcsList := DumpGetPvcs(testenv.GetName())
@@ -928,7 +928,7 @@ func (testenv *TestCaseEnv) VerifyPVCsPerDeployment(deployment *Deployment, depl
 	for i := 0; i < instances; i++ {
 		for _, pvcVolumeKind := range pvcKind {
 			PvcName := fmt.Sprintf(PVCString, pvcVolumeKind, deployment.GetName(), deploymentType, i)
-			if err := testenv.VerifyPVC(deployment, testenv.GetName(), PvcName, expectedtoExist, verificationTimeout); err != nil {
+			if err := testenv.VerifyPVC(PvcName, expectedtoExist, verificationTimeout); err != nil {
 				return err
 			}
 		}
@@ -1004,7 +1004,7 @@ func (testenv *TestCaseEnv) VerifyAppInstalled(ctx context.Context, deployment *
 }
 
 // VerifyAppsCopied verify that apps are copied to correct location based on POD. Set checkAppDirectory false to verify app is not copied.
-func (testenv *TestCaseEnv) VerifyAppsCopied(ctx context.Context, deployment *Deployment, ns string, pods []string, apps []string, checkAppDirectory bool, scope string) error {
+func (testenv *TestCaseEnv) VerifyAppsCopied(ctx context.Context, deployment *Deployment, pods []string, apps []string, checkAppDirectory bool, scope string) error {
 
 	for _, podName := range pods {
 		path := "etc/apps"
@@ -1018,7 +1018,7 @@ func (testenv *TestCaseEnv) VerifyAppsCopied(ctx context.Context, deployment *De
 				path = splcommon.PeerAppsLoc
 			}
 		}
-		if err := testenv.VerifyAppsInFolder(ctx, deployment, ns, podName, apps, path, checkAppDirectory); err != nil {
+		if err := testenv.VerifyAppsInFolder(ctx, deployment, podName, apps, path, checkAppDirectory); err != nil {
 			return err
 		}
 	}
@@ -1026,7 +1026,7 @@ func (testenv *TestCaseEnv) VerifyAppsCopied(ctx context.Context, deployment *De
 }
 
 // VerifyAppsInFolder verify that apps are present in folder. Set checkAppDirectory false to verify app is not copied.
-func (testenv *TestCaseEnv) VerifyAppsInFolder(ctx context.Context, deployment *Deployment, ns string, podName string, apps []string, path string, checkAppDirectory bool) error {
+func (testenv *TestCaseEnv) VerifyAppsInFolder(ctx context.Context, deployment *Deployment, podName string, apps []string, path string, checkAppDirectory bool) error {
 	return wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
 		// Using checkAppDirectory here to get all files in case of negative check.  GetDirsOrFilesInPath  will return files/directory when checkAppDirecotry is FALSE
 		appList, err := GetDirsOrFilesInPath(ctx, deployment, podName, path, checkAppDirectory)
@@ -1046,7 +1046,7 @@ func (testenv *TestCaseEnv) VerifyAppsInFolder(ctx context.Context, deployment *
 }
 
 // VerifyAppsDownloadedOnContainer verify that apps are downloaded by init container
-func (testenv *TestCaseEnv) VerifyAppsDownloadedOnContainer(ctx context.Context, deployment *Deployment, ns string, pods []string, apps []string, path string) error {
+func (testenv *TestCaseEnv) VerifyAppsDownloadedOnContainer(ctx context.Context, deployment *Deployment, pods []string, apps []string, path string) error {
 
 	for _, podName := range pods {
 		appList, err := GetDirsOrFilesInPath(ctx, deployment, podName, path, false)
@@ -1065,7 +1065,7 @@ func (testenv *TestCaseEnv) VerifyAppsDownloadedOnContainer(ctx context.Context,
 }
 
 // VerifyAppsPackageDeletedOnOperatorContainer verify that apps are deleted by container
-func (testenv *TestCaseEnv) VerifyAppsPackageDeletedOnOperatorContainer(ctx context.Context, deployment *Deployment, ns string, pods []string, apps []string, path string) error {
+func (testenv *TestCaseEnv) VerifyAppsPackageDeletedOnOperatorContainer(ctx context.Context, deployment *Deployment, pods []string, apps []string, path string) error {
 	for _, podName := range pods {
 		for _, app := range apps {
 			err := wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
@@ -1087,7 +1087,7 @@ func (testenv *TestCaseEnv) VerifyAppsPackageDeletedOnOperatorContainer(ctx cont
 }
 
 // VerifyAppsPackageDeletedOnContainer verify that apps are deleted by container
-func (testenv *TestCaseEnv) VerifyAppsPackageDeletedOnContainer(ctx context.Context, deployment *Deployment, ns string, pods []string, apps []string, path string) error {
+func (testenv *TestCaseEnv) VerifyAppsPackageDeletedOnContainer(ctx context.Context, deployment *Deployment, pods []string, apps []string, path string) error {
 	for _, podName := range pods {
 		for _, app := range apps {
 			err := wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
@@ -1114,7 +1114,7 @@ func (testenv *TestCaseEnv) VerifyAppListPhase(ctx context.Context, deployment *
 		for _, appName := range appList {
 			testenv.Log.Info(fmt.Sprintf("Check App Status for CR %s NAME %s APP NAME %s Expected Phase not to be %s", crKind, name, appName, phase))
 			err := wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
-				appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenv, name, crKind, appSourceName, appName)
+				appDeploymentInfo, err := testenv.GetAppDeploymentInfo(ctx, deployment, name, crKind, appSourceName, appName)
 				if err != nil {
 					testenv.Log.Error(err, "Failed to get app deployment info")
 					return false, nil // Continue polling
@@ -1134,7 +1134,7 @@ func (testenv *TestCaseEnv) VerifyAppListPhase(ctx context.Context, deployment *
 		for _, appName := range appList {
 			testenv.Log.Info(fmt.Sprintf("Check App Status for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase))
 			err := wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
-				appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenv, name, crKind, appSourceName, appName)
+				appDeploymentInfo, err := testenv.GetAppDeploymentInfo(ctx, deployment, name, crKind, appSourceName, appName)
 				if err != nil {
 					testenv.Log.Error(err, "Failed to get app deployment info")
 					return false, nil // Continue polling
@@ -1162,7 +1162,7 @@ func (testenv *TestCaseEnv) VerifyAppListPhase(ctx context.Context, deployment *
 func (testenv *TestCaseEnv) VerifyAppState(ctx context.Context, deployment *Deployment, name string, crKind string, appSourceName string, appList []string, appStateFinal enterpriseApi.AppPhaseStatusType, appStateInitial enterpriseApi.AppPhaseStatusType) error {
 	for _, appName := range appList {
 		err := wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
-			appDeploymentInfo, _ := GetAppDeploymentInfo(ctx, deployment, testenv, name, crKind, appSourceName, appName)
+			appDeploymentInfo, _ := testenv.GetAppDeploymentInfo(ctx, deployment, name, crKind, appSourceName, appName)
 			status := appDeploymentInfo.PhaseInfo.Status
 			// Check status value is approximately between appStateInitial and appStateFinal
 			diff := status - appStateFinal
@@ -1182,7 +1182,7 @@ func (testenv *TestCaseEnv) VerifyAppState(ctx context.Context, deployment *Depl
 func (testenv *TestCaseEnv) WaitForAppInstall(ctx context.Context, deployment *Deployment, name string, crKind string, appSourceName string, appList []string) error {
 	for _, appName := range appList {
 		err := wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
-			appDeploymentInfo, _ := GetAppDeploymentInfo(ctx, deployment, testenv, name, crKind, appSourceName, appName)
+			appDeploymentInfo, _ := testenv.GetAppDeploymentInfo(ctx, deployment, name, crKind, appSourceName, appName)
 			return appDeploymentInfo.PhaseInfo.Status == enterpriseApi.AppPkgInstallComplete, nil
 		})
 		if err != nil {
@@ -1210,7 +1210,7 @@ func (testenv *TestCaseEnv) VerifyPodsInMCConfigMap(ctx context.Context, deploym
 }
 
 // VerifyPodsInMCConfigString checks if given pod names are present in given KEY of given MC's Config Map
-func (testenv *TestCaseEnv) VerifyPodsInMCConfigString(ctx context.Context, deployment *Deployment, pods []string, mcName string, expected bool, checkPodIP bool) error {
+func (testenv *TestCaseEnv) VerifyPodsInMCConfigString(ctx context.Context, pods []string, mcName string, expected bool, checkPodIP bool) error {
 	for _, podName := range pods {
 		testenv.Log.Info("Checking pod configured in MC POD Peers String", "podName", podName)
 		var found bool
@@ -1228,7 +1228,7 @@ func (testenv *TestCaseEnv) VerifyPodsInMCConfigString(ctx context.Context, depl
 }
 
 // VerifyClusterManagerBundlePush verify that bundle push was pushed on all indexers
-func (testenv *TestCaseEnv) VerifyClusterManagerBundlePush(ctx context.Context, deployment *Deployment, ns string, replicas int, previousBundleHash string) error {
+func (testenv *TestCaseEnv) VerifyClusterManagerBundlePush(ctx context.Context, deployment *Deployment, replicas int, previousBundleHash string) error {
 	return wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
 		// Get Bundle status and check that each pod has successfully deployed the latest bundle
 		cmEndpoint := "cmanager"
@@ -1282,7 +1282,7 @@ func (testenv *TestCaseEnv) VerifyDeployerBundlePush(ctx context.Context, deploy
 }
 
 // VerifyNoPodResetByUID verify that no pod reset during App install by comparing pod UIDs
-func (testenv *TestCaseEnv) VerifyNoPodResetByUID(ctx context.Context, deployment *Deployment, podUIDMap map[string]string, podToSkip []string) error {
+func (testenv *TestCaseEnv) VerifyNoPodResetByUID(ctx context.Context, podUIDMap map[string]string, podToSkip []string) error {
 	if podUIDMap == nil {
 		testenv.Log.Info("podUIDMap is empty. Skipping validation")
 	} else {
@@ -1332,7 +1332,7 @@ func (testenv *TestCaseEnv) WaitforAppInstallState(ctx context.Context, deployme
 func (testenv *TestCaseEnv) VerifyAppRepoState(ctx context.Context, deployment *Deployment, name string, crKind string, appSourceName string, repoValue int, appName string) error {
 	testenv.Log.Info("Check for app repo state in CR")
 	return wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
-		appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenv, name, crKind, appSourceName, appName)
+		appDeploymentInfo, err := testenv.GetAppDeploymentInfo(ctx, deployment, name, crKind, appSourceName, appName)
 		if err != nil {
 			testenv.Log.Error(err, "Failed to get app deployment info")
 			return false, nil
@@ -1346,7 +1346,7 @@ func (testenv *TestCaseEnv) VerifyAppRepoState(ctx context.Context, deployment *
 func (testenv *TestCaseEnv) VerifyIsDeploymentInProgressFlagIsSet(ctx context.Context, deployment *Deployment, name string, crKind string) error {
 	testenv.Log.Info("Check IsDeploymentInProgress Flag is set", "crName", name, "crKind", crKind)
 	return wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
-		isDeploymentInProgress, err := GetIsDeploymentInProgressFlag(ctx, deployment, testenv, name, crKind)
+		isDeploymentInProgress, err := testenv.GetIsDeploymentInProgressFlag(ctx, deployment, name, crKind)
 		if err != nil {
 			testenv.Log.Error(err, "Failed to get isDeploymentInProgress Flag")
 			return false, nil
@@ -1520,7 +1520,7 @@ func (testenv *TestCaseEnv) WaitForPodsInMCConfigMap(ctx context.Context, deploy
 }
 
 // WaitForPodsInMCConfigString waits for pods to appear in MC config string
-func (testenv *TestCaseEnv) WaitForPodsInMCConfigString(ctx context.Context, deployment *Deployment, pods []string, mcName string, expected bool, checkPodIP bool, timeout time.Duration) error {
+func (testenv *TestCaseEnv) WaitForPodsInMCConfigString(ctx context.Context, pods []string, mcName string, expected bool, checkPodIP bool, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		for _, podName := range pods {
 			var found bool
@@ -1571,7 +1571,7 @@ func (testenv *TestCaseEnv) WaitForIndexerClusterPhase(ctx context.Context, depl
 // WaitForSearchResultsNonEmpty waits for search results to return a non-empty "result" field
 func WaitForSearchResultsNonEmpty(ctx context.Context, deployment *Deployment, podName string, searchString string, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		searchResultsResp, err := PerformSearchSync(ctx, podName, searchString, deployment)
+		searchResultsResp, err := PerformSearchSync(ctx, deployment, podName, searchString)
 		if err != nil {
 			return false, nil
 		}
@@ -1688,7 +1688,7 @@ func (testenv *TestCaseEnv) WaitForAppRepoStateChange(ctx context.Context, deplo
 				}
 			}
 
-			appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenv, crName, crKind, appSourceName, lookupAppName)
+			appDeploymentInfo, err := testenv.GetAppDeploymentInfo(ctx, deployment, crName, crKind, appSourceName, lookupAppName)
 			if err != nil {
 				testenv.Log.Info("Failed to get app deployment info while waiting for repo state change", "app", appName, "error", err)
 				return false, nil
@@ -1749,7 +1749,7 @@ func VerifyM4ClusterAndRFSF(ctx context.Context, deployment *Deployment, testcas
 // VerifyLMAppsOnPod verifies that apps are copied and installed on the License Manager pod.
 // The updated flag controls whether apps are expected to be updated versions.
 func VerifyLMAppsOnPod(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, testenvInstance *TestEnv, podName []string, appList []string, updated bool) error {
-	if err := testcaseEnvInst.VerifyAppsCopied(ctx, deployment, testenvInstance.GetName(), podName, appList, true, enterpriseApi.ScopeLocal); err != nil {
+	if err := testcaseEnvInst.VerifyAppsCopied(ctx, deployment, podName, appList, true, enterpriseApi.ScopeLocal); err != nil {
 		return err
 	}
 	return testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), podName, appList, updated, "enabled", updated, false)
@@ -1781,10 +1781,10 @@ func VerifyMCConfigForCluster(ctx context.Context, deployment *Deployment, testc
 	if err := testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true); err != nil {
 		return err
 	}
-	if err := testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcName, true, false); err != nil {
+	if err := testcaseEnvInst.VerifyPodsInMCConfigString(ctx, shPods, mcName, true, false); err != nil {
 		return err
 	}
-	return testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, indexerPods, mcName, true, true)
+	return testcaseEnvInst.VerifyPodsInMCConfigString(ctx, indexerPods, mcName, true, true)
 }
 
 // VerifyStandalonePodsInMC verifies that the given standalone pods are present (or absent) in the
@@ -1793,7 +1793,7 @@ func VerifyStandalonePodsInMC(ctx context.Context, deployment *Deployment, testc
 	if err := testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, pods, "SPLUNK_STANDALONE_URL", mcName, shouldExist); err != nil {
 		return err
 	}
-	return testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, pods, mcName, shouldExist, false)
+	return testcaseEnvInst.VerifyPodsInMCConfigString(ctx, pods, mcName, shouldExist, false)
 }
 
 // VerifyMCTwoAfterCMReconfig verifies that MC Two is correctly configured after the Cluster Manager
@@ -1809,7 +1809,7 @@ func VerifyMCTwoAfterCMReconfig(ctx context.Context, deployment *Deployment, tes
 	}
 
 	testcaseEnvInst.Log.Info("Verify Indexers in MC Two Config String after CM Reconfig")
-	if err := testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, indexerPods, mcTwoName, true, true); err != nil {
+	if err := testcaseEnvInst.VerifyPodsInMCConfigString(ctx, indexerPods, mcTwoName, true, true); err != nil {
 		return err
 	}
 
@@ -1827,7 +1827,7 @@ func VerifyMCTwoAfterCMReconfig(ctx context.Context, deployment *Deployment, tes
 	}
 
 	testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC Two Config String after CM Reconfig")
-	return testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcTwoName, false, false)
+	return testcaseEnvInst.VerifyPodsInMCConfigString(ctx, shPods, mcTwoName, false, false)
 }
 
 // VerifyMCOneAfterCMReconfig verifies that MC One is correctly configured after the Cluster Manager
@@ -1862,7 +1862,7 @@ func VerifyMCOneAfterCMReconfig(ctx context.Context, deployment *Deployment, tes
 	}
 
 	testcaseEnvInst.Log.Info("Verify SH Pods still in MC One Config String after CM Reconfig")
-	return testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcName, true, false)
+	return testcaseEnvInst.VerifyPodsInMCConfigString(ctx, shPods, mcName, true, false)
 }
 
 // VerifyMCTwoAfterSHCReconfig verifies that MC Two has all components (CM, deployer, SH, indexers)
@@ -1890,22 +1890,22 @@ func VerifyMCTwoAfterSHCReconfig(ctx context.Context, deployment *Deployment, te
 
 	if timeout > 0 {
 		testcaseEnvInst.Log.Info("Verify SH Pods in MC Two Config String after SHC Reconfig (with wait)")
-		if err := testcaseEnvInst.WaitForPodsInMCConfigString(ctx, deployment, shPods, mcTwoName, true, false, timeout); err != nil {
+		if err := testcaseEnvInst.WaitForPodsInMCConfigString(ctx, shPods, mcTwoName, true, false, timeout); err != nil {
 			return fmt.Errorf("timed out waiting for search heads in MC two config after SHC reconfig: %w", err)
 		}
 
 		testcaseEnvInst.Log.Info("Verify Indexers in MC Two Config String after SHC Reconfig (with wait)")
-		if err := testcaseEnvInst.WaitForPodsInMCConfigString(ctx, deployment, indexerPods, mcTwoName, true, true, timeout); err != nil {
+		if err := testcaseEnvInst.WaitForPodsInMCConfigString(ctx, indexerPods, mcTwoName, true, true, timeout); err != nil {
 			return fmt.Errorf("timed out waiting for indexers in MC two config after SHC reconfig: %w", err)
 		}
 	} else {
 		testcaseEnvInst.Log.Info("Verify SH Pods in MC Two Config String after SHC Reconfig")
-		if err := testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcTwoName, true, false); err != nil {
+		if err := testcaseEnvInst.VerifyPodsInMCConfigString(ctx, shPods, mcTwoName, true, false); err != nil {
 			return err
 		}
 
 		testcaseEnvInst.Log.Info("Verify Indexers in MC Two Config String after SHC Reconfig")
-		if err := testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, indexerPods, mcTwoName, true, true); err != nil {
+		if err := testcaseEnvInst.VerifyPodsInMCConfigString(ctx, indexerPods, mcTwoName, true, true); err != nil {
 			return err
 		}
 	}
@@ -1941,12 +1941,12 @@ func VerifyMCOneAfterSHCReconfig(ctx context.Context, deployment *Deployment, te
 
 	if timeout > 0 {
 		testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC One Config String after SHC Reconfig (with wait)")
-		if err := testcaseEnvInst.WaitForPodsInMCConfigString(ctx, deployment, shPods, mcName, false, false, timeout); err != nil {
+		if err := testcaseEnvInst.WaitForPodsInMCConfigString(ctx, shPods, mcName, false, false, timeout); err != nil {
 			return fmt.Errorf("timed out waiting for search heads to be removed from MC one config after SHC reconfig: %w", err)
 		}
 	} else {
 		testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC One Config String after SHC Reconfig")
-		if err := testcaseEnvInst.VerifyPodsInMCConfigString(ctx, deployment, shPods, mcName, false, false); err != nil {
+		if err := testcaseEnvInst.VerifyPodsInMCConfigString(ctx, shPods, mcName, false, false); err != nil {
 			return err
 		}
 	}
@@ -1980,7 +1980,7 @@ func VerifySecretsPropagated(ctx context.Context, deployment *Deployment, testca
 	}
 
 	// Verify Hec token on InputConf on Pod
-	if err := testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, secretData, updated); err != nil {
+	if err := testcaseEnvInst.VerifySplunkInputConfSecrets(verificationPods, secretData, updated); err != nil {
 		return err
 	}
 
@@ -2008,7 +2008,7 @@ func VerifyLMAndClusterManagerReady(ctx context.Context, deployment *Deployment,
 // has been applied to the S1 stack: standalone enters Updating phase, LM and
 // standalone return to Ready, MC version changes, and secrets are propagated.
 func VerifyS1SecretChangeApplied(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig, setup S1WithLMSetup, secretData map[string][]byte, updated bool) error {
-	if err := testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating); err != nil {
+	if err := testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseUpdating); err != nil {
 		return err
 	}
 	if err := VerifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, setup.Standalone); err != nil {

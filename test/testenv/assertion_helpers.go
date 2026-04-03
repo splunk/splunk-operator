@@ -24,8 +24,8 @@ import (
 )
 
 // ScaleSearchHeadCluster scales a Search Head Cluster to the specified replica count
-func (testcaseenv *TestCaseEnv) ScaleSearchHeadCluster(ctx context.Context, deployment *Deployment, deploymentName string, newReplicas int) error {
-	shcName := deploymentName + "-shc"
+func (testcaseenv *TestCaseEnv) ScaleSearchHeadCluster(ctx context.Context, deployment *Deployment, newReplicas int) error {
+	shcName := deployment.GetName() + "-shc"
 
 	// Get instance of current SHC CR with latest config
 	shc := &enterpriseApi.SearchHeadCluster{}
@@ -44,8 +44,8 @@ func (testcaseenv *TestCaseEnv) ScaleSearchHeadCluster(ctx context.Context, depl
 }
 
 // ScaleIndexerCluster scales an Indexer Cluster to the specified replica count
-func (testcaseenv *TestCaseEnv) ScaleIndexerCluster(ctx context.Context, deployment *Deployment, deploymentName string, newReplicas int) error {
-	idxcName := deploymentName + "-idxc"
+func (testcaseenv *TestCaseEnv) ScaleIndexerCluster(ctx context.Context, deployment *Deployment, newReplicas int) error {
+	idxcName := deployment.GetName() + "-idxc"
 
 	// Get instance of current Indexer CR with latest config
 	idxc := &enterpriseApi.IndexerCluster{}
@@ -64,7 +64,7 @@ func (testcaseenv *TestCaseEnv) ScaleIndexerCluster(ctx context.Context, deploym
 }
 
 // UpdateMonitoringConsoleRefAndVerify updates the MonitoringConsoleRef in a CR and waits for the change to apply
-func UpdateMonitoringConsoleRefAndVerify(ctx context.Context, deployment *Deployment, testcaseenv *TestCaseEnv, obj interface{}, instanceName string, newMCName string) error {
+func (testcaseenv *TestCaseEnv) UpdateMonitoringConsoleRefAndVerify(ctx context.Context, deployment *Deployment, obj interface{}, instanceName string, newMCName string) error {
 	// Get current resource version before update
 	resourceVersion := testcaseenv.GetResourceVersion(ctx, deployment, obj)
 
@@ -132,7 +132,7 @@ func (testcaseenv *TestCaseEnv) VerifyStandaloneInMC(ctx context.Context, deploy
 	if err := testcaseenv.VerifyPodsInMCConfigMap(ctx, deployment, []string{standalonePod}, "SPLUNK_STANDALONE_URL", mcName, shouldExist); err != nil {
 		return err
 	}
-	return testcaseenv.VerifyPodsInMCConfigString(ctx, deployment, []string{standalonePod}, mcName, shouldExist, false)
+	return testcaseenv.VerifyPodsInMCConfigString(ctx, []string{standalonePod}, mcName, shouldExist, false)
 }
 
 // VerifyLMConfiguredOnPods verifies License Manager is configured on all given pods
@@ -193,21 +193,21 @@ func (testcaseenv *TestCaseEnv) VerifyC3ClusterReady(ctx context.Context, deploy
 }
 
 // IngestDataOnIndexers ingests test data on all indexer pods
-func IngestDataOnIndexers(ctx context.Context, deployment *Deployment, deploymentName string, indexerCount int) {
+func IngestDataOnIndexers(ctx context.Context, deployment *Deployment, indexerCount int) {
 	for i := 0; i < indexerCount; i++ {
-		podName := fmt.Sprintf(IndexerPod, deploymentName, i)
+		podName := fmt.Sprintf(IndexerPod, deployment.GetName(), i)
 		logFile := fmt.Sprintf("test-log-%s.log", RandomDNSName(3))
 		CreateMockLogfile(logFile, LogLineCount)
-		IngestFileViaMonitor(ctx, logFile, DefaultIngestIndex, podName, deployment)
+		IngestFileViaMonitor(ctx, deployment, logFile, DefaultIngestIndex, podName)
 	}
 }
 
 // IngestDataOnMultisiteIndexers ingests test data on all multisite indexer pods
-func IngestDataOnMultisiteIndexers(ctx context.Context, deployment *Deployment, deploymentName string, siteCount int) {
+func IngestDataOnMultisiteIndexers(ctx context.Context, deployment *Deployment, siteCount int) {
 	for site := 1; site <= siteCount; site++ {
-		podName := fmt.Sprintf(MultiSiteIndexerPod, deploymentName, site, 0)
+		podName := fmt.Sprintf(MultiSiteIndexerPod, deployment.GetName(), site, 0)
 		logFile := fmt.Sprintf("test-log-%s.log", RandomDNSName(3))
 		CreateMockLogfile(logFile, LogLineCount)
-		IngestFileViaMonitor(ctx, logFile, DefaultIngestIndex, podName, deployment)
+		IngestFileViaMonitor(ctx, deployment, logFile, DefaultIngestIndex, podName)
 	}
 }

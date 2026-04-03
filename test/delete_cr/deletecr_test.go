@@ -40,13 +40,13 @@ var _ = Describe("Delete CR test", func() {
 
 	Context("Standalone deployment (S1)", func() {
 		It("integration, managerdeletecr: can deploy standalone and delete", func() {
-			testenv.RunDeleteStandaloneWorkflow(ctx, deployment, testcaseEnvInst, deployment.GetName())
+			testcaseEnvInst.RunDeleteStandaloneWorkflow(ctx, deployment)
 		})
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3)", func() {
 		It("integration, managerdeletecr: can deploy C3 and delete search head, clustermanager", func() {
-			testenv.RunDeleteC3Workflow(ctx, deployment, testcaseEnvInst, deployment.GetName(), 3)
+			testcaseEnvInst.RunDeleteC3Workflow(ctx, deployment, 3)
 		})
 	})
 })

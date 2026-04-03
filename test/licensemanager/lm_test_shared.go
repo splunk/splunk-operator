@@ -109,7 +109,7 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 
 	// Create app framework spec
 	volumeName := "lm-test-volume-" + testenv.RandomDNSName(3)
-	volumeSpec := testenv.GenerateVolumeSpecForProvider(ctx, volumeName, testcaseEnvInst)
+	volumeSpec := testcaseEnvInst.GenerateVolumeSpecForProvider(ctx, volumeName)
 
 	// AppSourceDefaultSpec: Remote Storage volume name and scope of app deployment
 	appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
@@ -164,7 +164,7 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 	uploadedApps = append(uploadedApps, uploadedFiles...)
 
 	// Wait for operator to detect V2 apps (any app leaves Install phase)
-	testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), config.CrKind, appSourceName, appFileList)
+	testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), config.CrKind, appSourceName, appFileList)
 
 	// Wait for License Manager/Master to finish processing V2 apps and become Ready
 	Expect(config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)).To(Succeed())

@@ -104,7 +104,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App Framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
 			appFrameworkSpecMC.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -136,7 +136,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -196,7 +196,7 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -275,7 +275,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App Framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -298,7 +298,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -360,7 +360,7 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -451,7 +451,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App Framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -481,7 +481,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -533,10 +533,10 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale up Standalone")
 
 			// Ensure Standalone is scaling up
-			testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseScalingUp)
+			testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseScalingUp)
 
 			// Wait for Standalone to be in READY status
-			testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseReady)
+			testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseReady)
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
@@ -557,10 +557,10 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale down Standalone")
 
 			// Ensure Standalone is scaling down
-			testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseScalingDown)
+			testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseScalingDown)
 
 			// Wait for Standalone to be in READY status
-			testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseReady)
+			testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseReady)
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
@@ -623,7 +623,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -667,7 +667,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale up Standalone")
 
 			// Ensure Standalone is scaling up
-			testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseScalingUp)
+			testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseScalingUp)
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -689,7 +689,7 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -740,7 +740,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopePremiumApps, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopePremiumApps, appSourceName, azTestDir, 60)
 			appFrameworkSpec.AppSources[0].PremiumAppsProps = enterpriseApi.PremiumAppsProps{
 				Type: enterpriseApi.PremiumAppsTypeEs,
 				EsDefaults: enterpriseApi.EsDefaults{
@@ -794,7 +794,7 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -852,7 +852,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -934,7 +934,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App Framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 0)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 0)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -962,7 +962,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 0)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 0)
 
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1018,7 +1018,7 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -1118,7 +1118,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1133,7 +1133,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App Framework Spec
 			appSourceNameStandalone2 := "appframework-2-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameStandalone2 := "appframework-test-volume-2-" + testenv.RandomDNSName(3)
-			appFrameworkSpecStandalone2 := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameStandalone2, enterpriseApi.ScopeLocal, appSourceNameStandalone2, azTestDirStandalone2, 60)
+			appFrameworkSpecStandalone2 := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameStandalone2, enterpriseApi.ScopeLocal, appSourceNameStandalone2, azTestDirStandalone2, 60)
 			specStandalone2 := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1204,7 +1204,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App Framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1243,7 +1243,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1322,7 +1322,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1343,7 +1343,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending)
 
 			// Delete Operator pod while Install in progress
-			testenv.DeleteOperatorPod(testcaseEnvInst)
+			testcaseEnvInst.DeleteOperatorPod()
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -1394,7 +1394,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1415,7 +1415,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending)
 
 			// Delete Operator pod while Install in progress
-			testenv.DeleteOperatorPod(testcaseEnvInst)
+			testcaseEnvInst.DeleteOperatorPod()
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -1469,7 +1469,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1511,7 +1511,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to disable apps on Azure")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileName)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileName)
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -1583,7 +1583,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1642,7 +1642,7 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Check no apps are updated as auth key is incorrect
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
@@ -1654,7 +1654,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -1708,7 +1708,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 120)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 120)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1748,7 +1748,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}, appListV1, false, "enabled", false, false)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
 			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -1785,7 +1785,7 @@ var _ = Describe("s1appfw test", func() {
 
 			//################## SETUP ####################
 			// Create a large file on Operator pod
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			opPod := testcaseEnvInst.GetOperatorPodName()
 			err := testenv.CreateDummyFileOnOperator(ctx, deployment, opPod, testenv.AppDownloadVolume, "1G", "test_file.img")
 			Expect(err).To(Succeed(), "Unable to create file on operator")
 			filePresentOnOperator = true
@@ -1803,7 +1803,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework Spec
 			appSourceName := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1869,7 +1869,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1890,7 +1890,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending)
 
 			//Delete apps from app-directory when app download is complete
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			opPod := testcaseEnvInst.GetOperatorPodName()
 			podDownloadPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), standalone.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceName, testenv.AppInfo[appList[0]]["filename"])
 			err = testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
 			Expect(err).To(Succeed(), "Unable to delete file on pod")
@@ -1942,7 +1942,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App Framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1979,7 +1979,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{

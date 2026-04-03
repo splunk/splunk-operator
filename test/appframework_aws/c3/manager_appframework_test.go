@@ -104,7 +104,7 @@ var _ = Describe("c3appfw test", func() {
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -145,8 +145,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// get revision number of the resource
 			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
@@ -197,7 +197,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
@@ -229,7 +229,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure C3 cluster is ready
 			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
@@ -257,7 +257,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 		})
 	})
@@ -344,7 +344,7 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//############### UPGRADE IMAGE ################
 
@@ -450,7 +450,7 @@ var _ = Describe("c3appfw test", func() {
 			// Create App Framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
 			// Monitoring Console AppFramework Spec
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
@@ -492,8 +492,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc := "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// get revision number of the resource
 			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
@@ -532,7 +532,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//############## DOWNGRADE APPS ###############
 			// Delete apps on S3
@@ -564,7 +564,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure C3 cluster is ready
 			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
@@ -592,7 +592,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 		})
 	})
 
@@ -657,8 +657,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc := "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -712,7 +712,7 @@ var _ = Describe("c3appfw test", func() {
 			}
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//Delete configMap Object
 			err = testenv.DeleteConfigMap(testcaseEnvInst.GetName(), ConfigMapName)
@@ -764,7 +764,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testenv.CheckIndexerOnCM(ctx, deployment, indexerName)).To(Equal(true))
 
 			// Ingest data on Indexers
-			testenv.IngestDataOnIndexers(ctx, deployment, deployment.GetName(), int(scaledIndexerReplicas))
+			testenv.IngestDataOnIndexers(ctx, deployment, int(scaledIndexerReplicas))
 
 			// Ensure Search Head Cluster go to Ready phase
 			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
@@ -775,7 +775,7 @@ var _ = Describe("c3appfw test", func() {
 			// Search for data on newly added indexer
 			searchPod := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas-1)
 			searchString := fmt.Sprintf("index=%s host=%s | stats count by host", "main", indexerName)
-			searchResultsResp, err := testenv.PerformSearchSync(ctx, searchPod, searchString, deployment)
+			searchResultsResp, err := testenv.PerformSearchSync(ctx, deployment, searchPod, searchString)
 			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", searchPod, searchString)
 
 			// Verify result
@@ -807,7 +807,7 @@ var _ = Describe("c3appfw test", func() {
 			// Verify no pods reset by checking the pod age
 			shcPodNames = []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			shcPodNames = append(shcPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, shcPodNames)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, shcPodNames)
 
 			//############### SCALING DOWN ################
 			// Get instance of current Search Head Cluster CR with latest config
@@ -857,7 +857,7 @@ var _ = Describe("c3appfw test", func() {
 			// Search for data from removed indexer
 			searchPod = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas-1)
 			searchString = fmt.Sprintf("index=%s host=%s | stats count by host", "main", indexerName)
-			searchResultsResp, err = testenv.PerformSearchSync(ctx, searchPod, searchString, deployment)
+			searchResultsResp, err = testenv.PerformSearchSync(ctx, deployment, searchPod, searchString)
 			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", searchPod, searchString)
 
 			// Verify result
@@ -878,7 +878,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, shcPodNames)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, shcPodNames)
 
 		})
 	})
@@ -932,8 +932,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			indexerReplicas := 3
@@ -965,7 +965,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
@@ -985,7 +985,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure C3 cluster is ready
 			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
@@ -1008,7 +1008,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 		})
 	})
 
@@ -1092,7 +1092,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create App Framework Spec for Cluster manager with scope local and append cluster scope
 
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 60)
 			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
@@ -1104,7 +1104,7 @@ var _ = Describe("c3appfw test", func() {
 			appFrameworkSpecIdxc.AppSources = append(appFrameworkSpecIdxc.AppSources, appSourceSpecCluster...)
 
 			// Create App Framework Spec for Search Head cluster with scope local and append cluster scope
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 60)
 			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
@@ -1146,7 +1146,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
@@ -1179,7 +1179,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
 			// Ensure C3 cluster is ready
 			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
@@ -1208,7 +1208,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 		})
 	})
@@ -1290,7 +1290,7 @@ var _ = Describe("c3appfw test", func() {
 			appSourceVolumeNameShcCluster := "appframework-test-volume-shc-cluster-" + testenv.RandomDNSName(3)
 
 			// Create App Framework Spec for Cluster manager with scope local and append cluster scope
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 60)
 			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
@@ -1301,7 +1301,7 @@ var _ = Describe("c3appfw test", func() {
 			appFrameworkSpecIdxc.AppSources = append(appFrameworkSpecIdxc.AppSources, appSourceSpecCluster...)
 
 			// Create App Framework Spec for Search Head cluster with scope local and append cluster scope
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 60)
 			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
@@ -1359,7 +1359,7 @@ var _ = Describe("c3appfw test", func() {
 			}
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//############# DOWNGRADE APPS ################
 			// Delete apps on S3
@@ -1392,7 +1392,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
 			// Ensure C3 cluster is ready
 			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
@@ -1421,7 +1421,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 		})
 	})
@@ -1476,8 +1476,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Create Single site Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
 			testcaseEnvInst.Log.Info("Create Single Site Indexer Cluster and Search Head Cluster")
@@ -1509,7 +1509,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 		})
 	})
 
@@ -1560,7 +1560,7 @@ var _ = Describe("c3appfw test", func() {
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1599,8 +1599,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 0)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 0)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 0)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 0)
 
 			// Create Single site Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
 			indexerReplicas := 3
@@ -1636,7 +1636,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			// ############### UPGRADE APPS ################
 			// Delete V1 apps on S3
@@ -1664,7 +1664,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure C3 cluster is ready
 			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
@@ -1744,7 +1744,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 		})
 	})
 
@@ -1801,8 +1801,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 0)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 0)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 0)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 0)
 
 			// Deploy C3 CRD
 			indexerReplicas := 3
@@ -1833,7 +1833,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
@@ -1853,7 +1853,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure C3 cluster is ready
 			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
@@ -1918,7 +1918,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 		})
 	})
 
@@ -1999,7 +1999,7 @@ var _ = Describe("c3appfw test", func() {
 			appSourceVolumeNameShcCluster := "appframework-test-volume-shc-cluster-" + testenv.RandomDNSName(3)
 
 			// Create App Framework Spec for Cluster manager with scope local and append cluster scope
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 0)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 0)
 			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
@@ -2010,7 +2010,7 @@ var _ = Describe("c3appfw test", func() {
 			appFrameworkSpecIdxc.AppSources = append(appFrameworkSpecIdxc.AppSources, appSourceSpecCluster...)
 
 			// Create App Framework Spec for Search Head cluster with scope local and append cluster scope
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 0)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 0)
 			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
@@ -2051,7 +2051,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
@@ -2096,7 +2096,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
 			// Ensure C3 cluster is ready
 			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
@@ -2132,7 +2132,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 		})
 	})
 
@@ -2167,7 +2167,7 @@ var _ = Describe("c3appfw test", func() {
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -2216,8 +2216,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2296,7 +2296,7 @@ var _ = Describe("c3appfw test", func() {
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -2345,8 +2345,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2447,8 +2447,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2461,7 +2461,7 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending)
 
 			// Delete Operator pod while Install in progress
-			testenv.DeleteOperatorPod(testcaseEnvInst)
+			testcaseEnvInst.DeleteOperatorPod()
 
 			// Ensure C3 cluster is ready
 			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
@@ -2485,7 +2485,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 		})
 	})
@@ -2536,8 +2536,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2550,7 +2550,7 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending)
 
 			// Delete Operator pod while Install in progress
-			testenv.DeleteOperatorPod(testcaseEnvInst)
+			testcaseEnvInst.DeleteOperatorPod()
 
 			// Ensure C3 cluster is ready
 			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
@@ -2574,7 +2574,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 		})
 	})
@@ -2622,8 +2622,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2662,7 +2662,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to disable apps on S3")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
 
 			// Ensure Cluster Manager goes to Ready phase
 			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
@@ -2738,8 +2738,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 120)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 120)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 120)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 120)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2775,7 +2775,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			appFileList = testenv.GetAppFileList(appListV2)
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure C3 cluster is ready
 			testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)
@@ -2819,7 +2819,7 @@ var _ = Describe("c3appfw test", func() {
 
 			//################## SETUP ####################
 			// Create a large file on Operator pod
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			opPod := testcaseEnvInst.GetOperatorPodName()
 			err := testenv.CreateDummyFileOnOperator(ctx, deployment, opPod, testenv.AppDownloadVolume, "1G", "test_file.img")
 			Expect(err).To(Succeed(), "Unable to create file on operator")
 			filePresentOnOperator = true
@@ -2853,9 +2853,9 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc := "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
 			appFrameworkSpecIdxc.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 			appFrameworkSpecShc.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 
 			// Deploy C3 CRD
@@ -2935,8 +2935,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2949,7 +2949,7 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending)
 
 			//Delete apps from app directory when app download is complete
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			opPod := testcaseEnvInst.GetOperatorPodName()
 			podDownloadPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc, testenv.AppInfo[appList[0]]["filename"])
 			err = testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
 			Expect(err).To(Succeed(), "Unable to delete file on pod")
@@ -2976,7 +2976,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 		})
 	})
@@ -3016,8 +3016,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -3100,7 +3100,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testenv.CheckSearchHeadOnCM(ctx, deployment, standalonePodName)).To(Equal(true))
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 		})
 	})
 
@@ -3156,7 +3156,7 @@ var _ = Describe("c3appfw test", func() {
 			// Create App Framework Spec for SHC
 			appSourceNameShc = "appframework-shc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopePremiumApps, appSourceNameShc, s3TestDirShc, 180)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopePremiumApps, appSourceNameShc, s3TestDirShc, 180)
 			appFrameworkSpecShc.AppSources[0].PremiumAppsProps = enterpriseApi.PremiumAppsProps{
 				Type: enterpriseApi.PremiumAppsTypeEs,
 				EsDefaults: enterpriseApi.EsDefaults{
@@ -3167,7 +3167,7 @@ var _ = Describe("c3appfw test", func() {
 			// Create App Framework Spec for Indexer Cluster
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 180)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 180)
 
 			// Deploy C3 SVA
 			// Deploy the Cluster Manager
@@ -3248,7 +3248,7 @@ var _ = Describe("c3appfw test", func() {
 			// uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// // Check for changes in App phase to determine if next poll has been triggered
-			// testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
+			// testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
 
 			// // Ensure that the Cluster Manager goes to Ready phase
 			// testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)

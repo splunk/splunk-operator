@@ -224,7 +224,7 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 			Expect(err).To(Succeed(), "Failed to scale Standalone")
 
 			// Ensure standalone is scaling up
-			Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseScalingUp)).To(Succeed())
+			Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseScalingUp)).To(Succeed())
 
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed())

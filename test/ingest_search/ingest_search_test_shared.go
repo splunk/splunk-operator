@@ -32,14 +32,14 @@ import (
 // RunS1InternalLogSearchTest deploys a Standalone instance and verifies internal log searches
 // using both synchronous and asynchronous search APIs.
 func RunS1InternalLogSearchTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv) {
-	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), "", "")
+	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, "", "")
 	Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
 
 	Eventually(func() enterpriseApi.Phase {
 		podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 
 		searchString := "index=_internal | stats count by host"
-		searchResultsResp, err := testenv.PerformSearchSync(ctx, podName, searchString, deployment)
+		searchResultsResp, err := testenv.PerformSearchSync(ctx, deployment, podName, searchString)
 		if err != nil {
 			testcaseEnvInst.Log.Error(err, "Failed to execute search on pod", "pod", podName, "searchString", searchString)
 			return enterpriseApi.PhaseError
@@ -66,21 +66,21 @@ func RunS1InternalLogSearchTest(ctx context.Context, deployment *testenv.Deploym
 		podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 		searchString := "index=_internal GUID component=ServerConfig"
 
-		sid, reqErr := testenv.PerformSearchReq(ctx, podName, searchString, deployment)
+		sid, reqErr := testenv.PerformSearchReq(ctx, deployment, podName, searchString)
 		if reqErr != nil {
 			testcaseEnvInst.Log.Error(reqErr, "Failed to execute search on pod", "pod", podName, "searchString", searchString)
 			return enterpriseApi.PhaseError
 		}
 		testcaseEnvInst.Log.Info("Got a search with sid", "sid", sid)
 
-		searchStatusResult, statusErr := testenv.GetSearchStatus(ctx, podName, sid, deployment)
+		searchStatusResult, statusErr := testenv.GetSearchStatus(ctx, deployment, podName, sid)
 		if statusErr != nil {
 			testcaseEnvInst.Log.Error(statusErr, "Failed to get search status on pod", "pod", podName, "sid", sid)
 			return enterpriseApi.PhaseError
 		}
 		testcaseEnvInst.Log.Info("Search status:", "searchStatusResult", searchStatusResult)
 
-		searchResultsResp, resErr := testenv.GetSearchResults(ctx, podName, sid, deployment)
+		searchResultsResp, resErr := testenv.GetSearchResults(ctx, deployment, podName, sid)
 		if resErr != nil {
 			testcaseEnvInst.Log.Error(resErr, "Failed to get search results on pod", "pod", podName, "sid", sid)
 			return enterpriseApi.PhaseError
@@ -100,7 +100,7 @@ func RunS1InternalLogSearchTest(ctx context.Context, deployment *testenv.Deploym
 // RunS1IngestAndSearchTest deploys a Standalone instance, ingests a custom log file into a new
 // index, and verifies the ingested data is searchable via both sync and async search APIs.
 func RunS1IngestAndSearchTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv) {
-	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, deployment.GetName(), "", "")
+	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, "", "")
 	Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
 
 	Eventually(func() enterpriseApi.Phase {
@@ -131,14 +131,14 @@ func RunS1IngestAndSearchTest(ctx context.Context, deployment *testenv.Deploymen
 	podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 	indexName := "myTestIndex"
 
-	err = testenv.CreateAnIndexStandalone(ctx, indexName, podName, deployment)
+	err = testenv.CreateAnIndexStandalone(ctx, deployment, indexName, podName)
 	Expect(err).To(Succeed(), "Failed response to add index to splunk")
 
 	logFile := "/tmp/test.log"
 	err = testenv.CreateMockLogfile(logFile, 1)
 	Expect(err).To(Succeed(), "Failed response to add index to splunk logfile %s", logFile)
 
-	err = testenv.IngestFileViaOneshot(ctx, logFile, indexName, podName, deployment)
+	err = testenv.IngestFileViaOneshot(ctx, deployment, logFile, indexName, podName)
 	Expect(err).To(Succeed(), "Failed to ingest logfile %s on pod %s", logFile, podName)
 
 	file, openErr := os.Open(logFile)
@@ -159,7 +159,7 @@ func RunS1IngestAndSearchTest(ctx context.Context, deployment *testenv.Deploymen
 	err = testenv.WaitForSearchResultsNonEmpty(ctx, deployment, podName, searchString, 2*time.Second)
 	Expect(err).To(Succeed(), "Timed out waiting for search results")
 
-	searchResultsResp, err := testenv.PerformSearchSync(ctx, podName, searchString, deployment)
+	searchResultsResp, err := testenv.PerformSearchSync(ctx, deployment, podName, searchString)
 	Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", podName, searchString)
 
 	var searchResults map[string]interface{}
@@ -177,15 +177,15 @@ func RunS1IngestAndSearchTest(ctx context.Context, deployment *testenv.Deploymen
 	Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", podName, hostCount["host"].(string))
 
 	searchString2 := fmt.Sprintf("index=%s %s", indexName, searchToken)
-	sid, reqErr := testenv.PerformSearchReq(ctx, podName, searchString2, deployment)
+	sid, reqErr := testenv.PerformSearchReq(ctx, deployment, podName, searchString2)
 	Expect(reqErr).To(Succeed(), "Failed to execute search '%s' on pod %s", searchString, podName)
 	testcaseEnvInst.Log.Info("Got a search with sid", "sid", sid)
 
-	searchStatusResult, statusErr := testenv.GetSearchStatus(ctx, podName, sid, deployment)
+	searchStatusResult, statusErr := testenv.GetSearchStatus(ctx, deployment, podName, sid)
 	Expect(statusErr).To(Succeed(), "Failed to get search status on pod %s for sid %s", podName, sid)
 	testcaseEnvInst.Log.Info("Search status:", "searchStatusResult", searchStatusResult)
 
-	searchResultsResp, resErr := testenv.GetSearchResults(ctx, podName, sid, deployment)
+	searchResultsResp, resErr := testenv.GetSearchResults(ctx, deployment, podName, sid)
 	Expect(resErr).To(Succeed(), "Failed to get search results on pod %s for sid %s", podName, sid)
 
 	testcaseEnvInst.Log.Info("Raw Search results:", "searchResultsResp", searchResultsResp)

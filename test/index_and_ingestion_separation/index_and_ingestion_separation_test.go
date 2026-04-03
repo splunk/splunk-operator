@@ -62,7 +62,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			// testcaseEnvInst.Log.Info("Create Service Account")
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
-			Expect(testenv.SetupIngestorStack(ctx, deployment, testcaseEnvInst, queue, objectStorage, cmSpec)).To(Succeed(), "Unable to setup ingestor stack")
+			Expect(testcaseEnvInst.SetupIngestorStack(ctx, deployment, queue, objectStorage, cmSpec)).To(Succeed(), "Unable to setup ingestor stack")
 
 			Expect(testenv.DeleteIngestorStack(ctx, deployment)).To(Succeed(), "Unable to delete ingestor stack")
 		})
@@ -86,7 +86,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 
 			// Deploy Ingestor Cluster with additional configurations (similar to standalone app framework test)
 			appSourceName := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(5)
 			ic := &enterpriseApi.IngestorCluster{
 				ObjectMeta: metav1.ObjectMeta{
@@ -172,7 +172,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			// testcaseEnvInst.Log.Info("Create Service Account")
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
-			Expect(testenv.SetupIngestorStack(ctx, deployment, testcaseEnvInst, queue, objectStorage, cmSpec)).To(Succeed(), "Unable to setup ingestor stack")
+			Expect(testcaseEnvInst.SetupIngestorStack(ctx, deployment, queue, objectStorage, cmSpec)).To(Succeed(), "Unable to setup ingestor stack")
 
 			// Get instance of current Ingestor Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Ingestor Cluster CR with latest config")

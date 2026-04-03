@@ -110,7 +110,7 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -146,8 +146,8 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// get revision number of the resource
 			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
@@ -200,7 +200,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//############# UPGRADE APPS ################
 			// Delete apps on S3
@@ -232,7 +232,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure M4 cluster is ready
 			testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)
@@ -264,7 +264,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 		})
 	})
@@ -313,7 +313,7 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -349,8 +349,8 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -388,7 +388,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//############# DOWNGRADE APPS ################
 			// Delete V2 apps on S3
@@ -418,7 +418,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure M4 cluster is ready
 			testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)
@@ -447,7 +447,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 		})
 	})
@@ -510,8 +510,8 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -536,7 +536,7 @@ var _ = Describe("m4appfw test", func() {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
 				logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
 				testenv.CreateMockLogfile(logFile, 2000)
-				testenv.IngestFileViaMonitor(ctx, logFile, "main", podName, deployment)
+				testenv.IngestFileViaMonitor(ctx, deployment, logFile, "main", podName)
 			}
 
 			// ############ Verify livenessProbe and readinessProbe config object and scripts############
@@ -558,7 +558,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//Delete configMap Object
 			err = testenv.DeleteConfigMap(testcaseEnvInst.GetName(), ConfigMapName)
@@ -604,7 +604,7 @@ var _ = Describe("m4appfw test", func() {
 			podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 1)
 			logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
 			testenv.CreateMockLogfile(logFile, 2000)
-			testenv.IngestFileViaMonitor(ctx, logFile, "main", podName, deployment)
+			testenv.IngestFileViaMonitor(ctx, deployment, logFile, "main", podName)
 
 			// Ensure Search Head Cluster go to Ready phase
 			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
@@ -616,7 +616,7 @@ var _ = Describe("m4appfw test", func() {
 			searchPod := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 0)
 			indexerName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 1)
 			searchString := fmt.Sprintf("index=%s host=%s | stats count by host", "main", indexerName)
-			searchResultsResp, err := testenv.PerformSearchSync(ctx, searchPod, searchString, deployment)
+			searchResultsResp, err := testenv.PerformSearchSync(ctx, deployment, searchPod, searchString)
 			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", searchPod, searchString)
 
 			// Verify result.
@@ -650,7 +650,7 @@ var _ = Describe("m4appfw test", func() {
 			shcPodNames = append(shcPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, shcPodNames)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, shcPodNames)
 
 			//############### SCALING DOWN ##############
 			// Get instance of current Search Head Cluster CR with latest config
@@ -691,7 +691,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Search for data from removed indexer
 			searchString = fmt.Sprintf("index=%s host=%s | stats count by host", "main", indexerName)
-			searchResultsResp, err = testenv.PerformSearchSync(ctx, searchPod, searchString, deployment)
+			searchResultsResp, err = testenv.PerformSearchSync(ctx, deployment, searchPod, searchString)
 			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", searchPod, searchString)
 
 			// Verify result.
@@ -712,7 +712,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, shcPodNames)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, shcPodNames)
 		})
 	})
 
@@ -761,8 +761,8 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy Multisite Cluster and Search Head Cluster, with App Framework enabled on Cluster Master and Deployer
 			siteCount := 3
@@ -792,7 +792,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
@@ -815,7 +815,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure M4 indexers and SHC are ready
 			testcaseEnvInst.VerifyM4IndexersAndSHCReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)
@@ -835,7 +835,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 		})
 	})
 
@@ -887,7 +887,7 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -923,8 +923,8 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 0)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 0)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 0)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 0)
 
 			siteCount := 3
 			shReplicas := 3
@@ -960,7 +960,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete V2 apps on S3
@@ -990,7 +990,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure M4 cluster is ready
 			testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)
@@ -1083,7 +1083,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 		})
 	})
 
@@ -1136,8 +1136,8 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 0)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 0)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 0)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 0)
 
 			// Deploy Multisite Cluster and Search Head Cluster, with App Framework enabled on Cluster Master and Deployer
 			siteCount := 3
@@ -1166,7 +1166,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
@@ -1189,7 +1189,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure M4 indexers and SHC are ready
 			testcaseEnvInst.VerifyM4IndexersAndSHCReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)
@@ -1257,7 +1257,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 		})
 	})
 
@@ -1339,7 +1339,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Create App Framework Spec for Cluster Master with scope local and append cluster scope
 
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 0)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 0)
 			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
@@ -1350,7 +1350,7 @@ var _ = Describe("m4appfw test", func() {
 			appFrameworkSpecIdxc.AppSources = append(appFrameworkSpecIdxc.AppSources, appSourceSpecCluster...)
 
 			// Create App Framework Spec for Search Head cluster with scope local and append cluster scope
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 0)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 0)
 			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
@@ -1393,7 +1393,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
@@ -1439,7 +1439,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
 			// Ensure M4 cluster is ready
 			testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)
@@ -1472,7 +1472,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 		})
 	})
 
@@ -1506,7 +1506,7 @@ var _ = Describe("m4appfw test", func() {
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1555,8 +1555,8 @@ var _ = Describe("m4appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -1643,7 +1643,7 @@ var _ = Describe("m4appfw test", func() {
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1692,8 +1692,8 @@ var _ = Describe("m4appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -1791,8 +1791,8 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -1806,7 +1806,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending)
 
 			// Delete Operator pod while Install in progress
-			testenv.DeleteOperatorPod(testcaseEnvInst)
+			testcaseEnvInst.DeleteOperatorPod()
 
 			// Ensure M4 cluster is ready
 			testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)
@@ -1830,7 +1830,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 		})
 	})
 
@@ -1875,8 +1875,8 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -1890,7 +1890,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending)
 
 			// Delete Operator pod while Install in progress
-			testenv.DeleteOperatorPod(testcaseEnvInst)
+			testcaseEnvInst.DeleteOperatorPod()
 
 			// Ensure M4 cluster is ready
 			testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)
@@ -1914,7 +1914,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 		})
 	})
 
@@ -1957,8 +1957,8 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -1998,7 +1998,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to disable apps on S3")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
 
 			// Ensure Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
@@ -2067,8 +2067,8 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 0)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 0)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 0)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 0)
 
 			// Deploy Multisite Cluster and Search Head Cluster, with App Framework enabled on Cluster Master and Deployer
 			siteCount := 3
@@ -2097,7 +2097,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 
 			// Verify status is 'OFF' in config map for Cluster Master and Search Head Cluster
 			testcaseEnvInst.Log.Info("Verify status is 'OFF' in config map for Cluster Master and Search Head Cluster")
@@ -2198,7 +2198,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 		})
 	})
 
@@ -2252,8 +2252,8 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 120)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 120)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 120)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 120)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -2290,7 +2290,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			appFileList = testenv.GetAppFileList(appListV2)
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Master goes to Ready phase
 			testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)
@@ -2342,7 +2342,7 @@ var _ = Describe("m4appfw test", func() {
 
 			//################## SETUP ####################
 			// Create a large file on Operator pod
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			opPod := testcaseEnvInst.GetOperatorPodName()
 			err := testenv.CreateDummyFileOnOperator(ctx, deployment, opPod, testenv.AppDownloadVolume, "1G", "test_file.img")
 			Expect(err).To(Succeed(), "Unable to create file on operator")
 			filePresentOnOperator = true
@@ -2376,9 +2376,9 @@ var _ = Describe("m4appfw test", func() {
 			appSourceNameShc := "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
 			appFrameworkSpecIdxc.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 			appFrameworkSpecShc.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 
 			// Deploy Multisite Cluster and Search Head Cluster, with App Framework enabled on Cluster Master and Deployer
@@ -2450,8 +2450,8 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -2465,7 +2465,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending)
 
 			//Delete apps from app directory when app download is complete
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			opPod := testcaseEnvInst.GetOperatorPodName()
 			podDownloadPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc, testenv.AppInfo[appList[0]]["filename"])
 			err = testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
 			Expect(err).To(Succeed(), "Unable to delete file on pod")
@@ -2492,7 +2492,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)
 		})
 	})
 
@@ -2526,8 +2526,8 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
