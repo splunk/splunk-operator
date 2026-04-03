@@ -472,3 +472,52 @@ build-installer: manifests generate kustomize
 	mkdir -p dist
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
+
+# Temporary goal for the App Deployment team: not to break existing logic based on the Behavior Contract.
+AFW_BC_TESTS_LIST := \
+	TestHandleAppRepoChanges \
+	TestInitAndCheckAppInfoStatus \
+	TestInitAndCheckAppInfoStatusShouldFail \
+	TestHasAppRepoCheckTimerExpired \
+	TestShouldCheckAppRepoStatus \
+	TestUpdateManualAppUpdateConfigMapLocked \
+	TestSetLastAppInfoCheckTime \
+	TestCheckIfAnAppIsActiveOnRemoteStore \
+	TestGetCleanObjectDigest \
+	TestChangePhaseInfo \
+	TestSetPhaseStatusToPending \
+	TestIsPhaseStatusComplete \
+	TestValidatePhaseInfo \
+	TestIsPhaseMaxRetriesReached \
+	TestIsPhaseInfoEligibleForSchedulerEntry \
+	TestCheckIfWorkerIsEligibleForRun \
+	TestTransitionWorkerPhase \
+	TestMarkWorkerPhaseInstallationComplete \
+	TestIsFanOutApplicableToCR \
+	TestCheckIfBundlePushIsDone \
+	TestNeedToUseAuxPhaseInfo \
+	TestSetInstallSetForClusterScopedApps \
+	TestCanAppScopeHaveInstallWorker \
+	TestBundlePushStateAsStr \
+	TestGetSetBundlePushStatusString \
+	TestAppPhaseStatusAsStr \
+	TestValidateAppFramework \
+	TestRemoveStaleEntriesFromAuxPhaseInfo \
+	TestCheckAndMigrateAppDeployStatus \
+	TestAppFrameworkApplyStandaloneShouldNotFail \
+	TestAppFrameworkApplyStandaloneScalingUpShouldNotFail \
+	TestAppFrameworkApplyClusterManagerShouldNotFail \
+	TestAppFrameworkSearchHeadClusterShouldNotFail \
+	TestPerformCmBundlePush \
+	TestPushManagerAppsBundle \
+	TestStandaloneWitAppFramework
+AFW_BC_TESTS := $(subst $(space),|,$(strip $(AFW_BC_TESTS_LIST)))
+
+.PHONY: test-afw-bc
+test-afw-bc: ## Run App Framework Behavioral Contract regression tests (no cluster needed).
+	@go test \
+		./pkg/splunk/enterprise/... \
+		./pkg/splunk/enterprise/validation/... \
+		-run '$(AFW_BC_TESTS)' \
+		-v \
+		-count=1
