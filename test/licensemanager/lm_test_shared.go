@@ -38,10 +38,10 @@ func RunLMS1Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 	Expect(err).To(Succeed(), "Unable to deploy Standalone instance with LM")
 
 	// Wait for License Manager/Master to be in READY status
-	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+	Expect(config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)).To(Succeed())
 
 	// Wait for Standalone to be in READY status
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+	Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed())
 
 	// Deploy and verify Monitoring Console
 	_, err = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
@@ -52,10 +52,10 @@ func RunLMS1Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 
 	// Verify License Manager/Master is configured on Standalone instance
 	standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-	testenv.VerifyLMConfiguredOnPod(ctx, deployment, standalonePodName)
+	Expect(testenv.VerifyLMConfiguredOnPod(ctx, deployment, standalonePodName)).To(Succeed())
 
 	// Verify License Manager/Master is configured on Monitoring Console
-	testenv.VerifyLMConfiguredOnMC(ctx, deployment)
+	Expect(testenv.VerifyLMConfiguredOnMC(ctx, deployment)).To(Succeed())
 }
 
 // RunLMC3Test deploys a C3 cluster with License Manager and Monitoring Console,
@@ -69,7 +69,7 @@ func RunLMC3Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 
 	// Verify License Manager/Master is configured on indexers, search heads, and MC
 	indexerPods := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), 3, false, 0)
-	testenv.VerifyLMConfiguredOnCluster(ctx, deployment, indexerPods)
+	Expect(testenv.VerifyLMConfiguredOnCluster(ctx, deployment, indexerPods)).To(Succeed())
 }
 
 // RunLMC3AppFrameworkTest deploys a License Manager with App Framework, verifies V1 apps
@@ -136,7 +136,7 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 	Expect(err).To(Succeed(), "Unable to deploy LM with App Framework")
 
 	// Wait for License Manager/Master to be in READY status
-	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+	Expect(config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)).To(Succeed())
 
 	// Wait for V1 apps to reach Install phase on License Manager/Master
 	err = testcaseEnvInst.WaitForAllAppsPhase(ctx, deployment, deployment.GetName(), config.CrKind, appSourceName, appListV1, enterpriseApi.PhaseInstall, 2*time.Minute)
@@ -144,7 +144,7 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 
 	// Verify apps are copied and installed on License Manager/Master
 	podName := []string{fmt.Sprintf(config.LicenseManagerPodName, deployment.GetName(), 0)}
-	testenv.VerifyLMAppsOnPod(ctx, deployment, testcaseEnvInst, testenvInstance, podName, appListV1, false)
+	Expect(testenv.VerifyLMAppsOnPod(ctx, deployment, testcaseEnvInst, testenvInstance, podName, appListV1, false)).To(Succeed())
 
 	// Delete files uploaded
 	testenv.DeleteUploadedFiles(ctx, testS3Bucket, uploadedApps)
@@ -167,14 +167,14 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 	testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), config.CrKind, appSourceName, appFileList)
 
 	// Wait for License Manager/Master to finish processing V2 apps and become Ready
-	config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+	Expect(config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)).To(Succeed())
 
 	// Wait for V2 apps to reach Install phase on License Manager/Master
 	err = testcaseEnvInst.WaitForAllAppsPhase(ctx, deployment, deployment.GetName(), config.CrKind, appSourceName, appListV2, enterpriseApi.PhaseInstall, 2*time.Minute)
 	Expect(err).To(Succeed(), "Timed out waiting for V2 apps to reach Install phase on LicenseManager")
 
 	// Verify apps are copied and installed on License Manager/Master
-	testenv.VerifyLMAppsOnPod(ctx, deployment, testcaseEnvInst, testenvInstance, podName, appListV2, true)
+	Expect(testenv.VerifyLMAppsOnPod(ctx, deployment, testcaseEnvInst, testenvInstance, podName, appListV2, true)).To(Succeed())
 
 	// Delete files uploaded
 	testenv.DeleteUploadedFiles(ctx, testS3Bucket, uploadedApps)
@@ -196,5 +196,5 @@ func RunLMM4Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 
 	// Verify License Manager/Master is configured on indexers, search heads, and MC
 	indexerPods := testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)
-	testenv.VerifyLMConfiguredOnCluster(ctx, deployment, indexerPods)
+	Expect(testenv.VerifyLMConfiguredOnCluster(ctx, deployment, indexerPods)).To(Succeed())
 }

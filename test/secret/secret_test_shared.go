@@ -33,7 +33,7 @@ func RunS1SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	updatedSecretData, err := testenv.GenerateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, setup.NamespaceScopedSecretName)
 	Expect(err).To(Succeed(), "Unable to generate and apply secret update")
 
-	testenv.VerifyS1SecretChangeApplied(ctx, deployment, testcaseEnvInst, config, setup, updatedSecretData, true)
+	Expect(testenv.VerifyS1SecretChangeApplied(ctx, deployment, testcaseEnvInst, config, setup, updatedSecretData, true)).To(Succeed())
 }
 
 // RunS1SecretDeleteTest runs the standard S1 secret delete test workflow
@@ -49,7 +49,7 @@ func RunS1SecretDeleteTest(ctx context.Context, deployment *testenv.Deployment, 
 	err = testenv.DeleteSecretObject(ctx, deployment, testcaseEnvInst.GetName(), setup.NamespaceScopedSecretName)
 	Expect(err).To(Succeed(), "Unable to delete secret Object")
 
-	testenv.VerifyS1SecretChangeApplied(ctx, deployment, testcaseEnvInst, config, setup, secretStruct.Data, false)
+	Expect(testenv.VerifyS1SecretChangeApplied(ctx, deployment, testcaseEnvInst, config, setup, secretStruct.Data, false)).To(Succeed())
 }
 
 // RunS1SecretDeleteWithMCRefTest runs the S1 secret delete test with MC reference workflow
@@ -77,42 +77,43 @@ func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Dep
 	Expect(err).To(Succeed(), "Unable to delete secret Object")
 
 	// Ensure standalone is updating
-	testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating)
+	Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseUpdating)).To(Succeed())
 
 	// Wait for Standalone to be in READY status
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+	Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed())
 
-	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
+	Expect(testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)).To(Succeed())
 
-	testenv.VerifySecretsPropagated(ctx, deployment, testcaseEnvInst, secretStruct.Data, false)
+	Expect(testenv.VerifySecretsPropagated(ctx, deployment, testcaseEnvInst, secretStruct.Data, false)).To(Succeed())
 }
 
 // RunC3SecretUpdateTest runs the standard C3 secret update test workflow
 func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
 	mcRef := deployment.GetName()
-	config.DeployC3WithLicense(ctx, deployment, testcaseEnvInst, 3, true, mcRef)
+	Expect(config.DeployC3WithLicense(ctx, deployment, testcaseEnvInst, 3, true, mcRef)).To(Succeed())
 
-	mc, resourceVersion, updatedSecretData := testenv.ApplySecretUpdateAndVerifyCMUpdating(ctx, deployment, testcaseEnvInst, config)
+	mc, resourceVersion, updatedSecretData, err := testenv.ApplySecretUpdateAndVerifyCMUpdating(ctx, deployment, testcaseEnvInst, config)
+	Expect(err).To(Succeed(), "Unable to apply secret update and verify CM updating")
 
-	testenv.VerifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
+	Expect(testenv.VerifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)).To(Succeed())
 
 	// Ensure Search Head Cluster goes to Ready phase
-	testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+	Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed())
 
 	// Wait for PasswordSyncCompleted event on SearchHeadCluster
 	shcName := deployment.GetName() + "-shc"
-	err := testcaseEnvInst.WaitForPasswordSyncCompleted(ctx, deployment, testcaseEnvInst.GetName(), shcName, 2*time.Minute)
+	err = testcaseEnvInst.WaitForPasswordSyncCompleted(ctx, deployment, testcaseEnvInst.GetName(), shcName, 2*time.Minute)
 	Expect(err).To(Succeed(), "Timed out waiting for PasswordSyncCompleted event on SearchHeadCluster")
 
 	// Ensure Indexers go to Ready phase
-	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+	Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed())
 
 	// Wait for PasswordSyncCompleted event on IndexerCluster
 	idxcName := deployment.GetName() + "-idxc"
 	err = testcaseEnvInst.WaitForPasswordSyncCompleted(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
 	Expect(err).To(Succeed(), "Timed out waiting for PasswordSyncCompleted event on IndexerCluster")
 
-	testenv.VerifyPostSecretChangeCluster(ctx, deployment, testcaseEnvInst, mc, resourceVersion, updatedSecretData)
+	Expect(testenv.VerifyPostSecretChangeCluster(ctx, deployment, testcaseEnvInst, mc, resourceVersion, updatedSecretData)).To(Succeed())
 }
 
 // RunM4SecretUpdateTest runs the standard M4 secret update test workflow
@@ -120,12 +121,13 @@ func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	siteCount := 3
 	mcName := deployment.GetName()
 
-	config.DeployM4WithLicense(ctx, deployment, testcaseEnvInst, 1, siteCount, mcName)
+	Expect(config.DeployM4WithLicense(ctx, deployment, testcaseEnvInst, 1, siteCount, mcName)).To(Succeed())
 
-	mc, resourceVersion, updatedSecretData := testenv.ApplySecretUpdateAndVerifyCMUpdating(ctx, deployment, testcaseEnvInst, config)
+	mc, resourceVersion, updatedSecretData, err := testenv.ApplySecretUpdateAndVerifyCMUpdating(ctx, deployment, testcaseEnvInst, config)
+	Expect(err).To(Succeed(), "Unable to apply secret update and verify CM updating")
 
-	testenv.VerifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)
-	testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)
+	Expect(testenv.VerifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)).To(Succeed())
 
-	testenv.VerifyPostSecretChangeCluster(ctx, deployment, testcaseEnvInst, mc, resourceVersion, updatedSecretData)
+	Expect(testenv.VerifyPostSecretChangeCluster(ctx, deployment, testcaseEnvInst, mc, resourceVersion, updatedSecretData)).To(Succeed())
 }

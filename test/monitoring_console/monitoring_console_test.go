@@ -40,8 +40,8 @@ var masterManagerMCConfigs = []testenv.MCVersionConfig{
 			return d.DeployMultisiteClusterMasterWithMonitoringConsole(ctx, name, replicas, siteCount, mcRef, shc)
 		},
 		NewCMObject: func() interface{} { return &enterpriseApiV3.ClusterMaster{} },
-		VerifyCMReady: func(ctx context.Context, d *testenv.Deployment, te *testenv.TestCaseEnv) {
-			te.VerifyClusterMasterReady(ctx, d)
+		VerifyCMReady: func(ctx context.Context, d *testenv.Deployment, te *testenv.TestCaseEnv) error {
+			return te.VerifyClusterMasterReady(ctx, d)
 		},
 		SHCReconfigTimeout:       0,
 		VerifyMCTwoReadyAfterSHC: true,
@@ -57,8 +57,8 @@ var masterManagerMCConfigs = []testenv.MCVersionConfig{
 			return d.DeployMultisiteClusterWithMonitoringConsole(ctx, name, replicas, siteCount, mcRef, shc)
 		},
 		NewCMObject: func() interface{} { return &enterpriseApi.ClusterManager{} },
-		VerifyCMReady: func(ctx context.Context, d *testenv.Deployment, te *testenv.TestCaseEnv) {
-			te.VerifyClusterManagerReady(ctx, d)
+		VerifyCMReady: func(ctx context.Context, d *testenv.Deployment, te *testenv.TestCaseEnv) error {
+			return te.VerifyClusterManagerReady(ctx, d)
 		},
 		SHCReconfigTimeout:       5 * time.Minute,
 		VerifyMCTwoReadyAfterSHC: false,
@@ -138,17 +138,17 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Standalone with MC reference")
 
 			// wait for custom resource resource version to change and verify MC is ready
-			testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
+			Expect(testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)).To(Succeed())
 
 			// Check Standalone is configured in MC
 			testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC")
-			testcaseEnvInst.VerifyStandaloneInMC(ctx, deployment, standaloneOneName, mcName, true)
+			Expect(testcaseEnvInst.VerifyStandaloneInMC(ctx, deployment, standaloneOneName, mcName, true)).To(Succeed())
 
 			// #########################  RECONFIGURE STANDALONE WITH SECOND MC #######################################
 
 			// Reconfig S1 with 2nd Monitoring Console Name
 			mcTwoName := deployment.GetName() + "-two"
-			testenv.GetInstanceWithExpect(ctx, deployment, standaloneOne, standaloneOneName, "Unable to get instance of Standalone")
+			Expect(testenv.GetInstanceWithExpect(ctx, deployment, standaloneOne, standaloneOneName, "Unable to get instance of Standalone")).To(Succeed())
 			standaloneOne.Spec.MonitoringConsoleRef.Name = mcTwoName
 
 			// Update Standalone with 2nd MC
@@ -161,14 +161,14 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 
 			// Check Standalone is configured in MC Two
 			testcaseEnvInst.Log.Info("Checking for Standalone on SECOND MC after Standalone RECONFIG")
-			testcaseEnvInst.VerifyStandaloneInMC(ctx, deployment, standaloneOneName, mcTwoName, true)
+			Expect(testcaseEnvInst.VerifyStandaloneInMC(ctx, deployment, standaloneOneName, mcTwoName, true)).To(Succeed())
 
 			// Verify Monitoring Console One is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed())
 
 			// Check Standalone is NOT configured in MC One
 			testcaseEnvInst.Log.Info("Checking for Standalone NOT ON FIRST MC after Standalone RECONFIG")
-			testcaseEnvInst.VerifyStandaloneInMC(ctx, deployment, standaloneOneName, mcName, false)
+			Expect(testcaseEnvInst.VerifyStandaloneInMC(ctx, deployment, standaloneOneName, mcName, false)).To(Succeed())
 
 		})
 	})
@@ -207,7 +207,7 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 
 			// Check Standalone is configured in MC
 			testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC")
-			testcaseEnvInst.VerifyStandaloneInMC(ctx, deployment, standaloneName, mcName, true)
+			Expect(testcaseEnvInst.VerifyStandaloneInMC(ctx, deployment, standaloneName, mcName, true)).To(Succeed())
 
 			// get revision number of the resource
 			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
@@ -216,7 +216,7 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 			testcaseEnvInst.Log.Info("Scaling Standalone CR")
 			scaledReplicaCount := 2
 			standalone = &enterpriseApi.Standalone{}
-			testenv.GetInstanceWithExpect(ctx, deployment, standalone, deployment.GetName(), "Failed to get instance of Standalone")
+			Expect(testenv.GetInstanceWithExpect(ctx, deployment, standalone, deployment.GetName(), "Failed to get instance of Standalone")).To(Succeed())
 
 			standalone.Spec.Replicas = int32(scaledReplicaCount)
 
@@ -224,19 +224,19 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 			Expect(err).To(Succeed(), "Failed to scale Standalone")
 
 			// Ensure standalone is scaling up
-			testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseScalingUp)
+			Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, deployment.GetName(), enterpriseApi.PhaseScalingUp)).To(Succeed())
 
 			// Wait for Standalone to be in READY status
-			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed())
 
 			// wait for custom resource resource version to change and verify MC is ready
-			testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
+			Expect(testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)).To(Succeed())
 
 			standalonePods := testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneName, 2, false, 0)
 
 			// Check both Standalone pods are configured in MC after scale up
 			testcaseEnvInst.Log.Info("Checking for Standalone Pods on MC after scale up")
-			testenv.VerifyStandalonePodsInMC(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true)
+			Expect(testenv.VerifyStandalonePodsInMC(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true)).To(Succeed())
 		})
 	})
 

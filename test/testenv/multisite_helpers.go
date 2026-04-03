@@ -20,11 +20,14 @@ import (
 )
 
 // VerifyIndexOnAllSites verifies that an index exists on all indexer pods across all sites
-func (testcaseenv *TestCaseEnv) VerifyIndexOnAllSites(ctx context.Context, deployment *Deployment, deploymentName string, siteCount int, indexName string) {
+func (testcaseenv *TestCaseEnv) VerifyIndexOnAllSites(ctx context.Context, deployment *Deployment, deploymentName string, siteCount int, indexName string) error {
 	for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 		podName := fmt.Sprintf(MultiSiteIndexerPod, deploymentName, siteNumber, 0)
-		testcaseenv.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName)
+		if err := testcaseenv.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // IngestDataOnAllSites ingests data to an index on all indexer pods across all sites
@@ -46,26 +49,34 @@ func RollHotToWarmOnAllSites(ctx context.Context, deployment *Deployment, deploy
 }
 
 // VerifyIndexOnS3AllSites verifies that an index exists on S3 for all indexer pods across all sites
-func (testcaseenv *TestCaseEnv) VerifyIndexOnS3AllSites(ctx context.Context, deployment *Deployment, deploymentName string, siteCount int, indexName string) {
+func (testcaseenv *TestCaseEnv) VerifyIndexOnS3AllSites(ctx context.Context, deployment *Deployment, deploymentName string, siteCount int, indexName string) error {
 	for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 		podName := fmt.Sprintf(MultiSiteIndexerPod, deploymentName, siteNumber, 0)
-		testcaseenv.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
+		if err := testcaseenv.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // VerifyCPULimitsOnAllSites verifies CPU limits on all indexer pods across all sites
-func (testcaseenv *TestCaseEnv) VerifyCPULimitsOnAllSites(deployment *Deployment, deploymentName string, siteCount int, expectedCPULimit string) {
+func (testcaseenv *TestCaseEnv) VerifyCPULimitsOnAllSites(deployment *Deployment, deploymentName string, siteCount int, expectedCPULimit string) error {
 	for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 		podName := fmt.Sprintf(MultiSiteIndexerPod, deploymentName, siteNumber, 0)
-		testcaseenv.VerifyCPULimits(deployment, podName, expectedCPULimit)
+		if err := testcaseenv.VerifyCPULimits(deployment, podName, expectedCPULimit); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // MultisiteIndexerWorkflow encapsulates the common workflow for multisite indexer operations:
 // verify index, ingest data, roll to warm, verify on S3
-func (testcaseenv *TestCaseEnv) MultisiteIndexerWorkflow(ctx context.Context, deployment *Deployment, deploymentName string, siteCount int, indexName string) {
+func (testcaseenv *TestCaseEnv) MultisiteIndexerWorkflow(ctx context.Context, deployment *Deployment, deploymentName string, siteCount int, indexName string) error {
 	// Verify index exists on all sites
-	testcaseenv.VerifyIndexOnAllSites(ctx, deployment, deploymentName, siteCount, indexName)
+	if err := testcaseenv.VerifyIndexOnAllSites(ctx, deployment, deploymentName, siteCount, indexName); err != nil {
+		return err
+	}
 
 	// Ingest data on all sites
 	IngestDataOnAllSites(ctx, deployment, deploymentName, siteCount, indexName)
@@ -74,5 +85,5 @@ func (testcaseenv *TestCaseEnv) MultisiteIndexerWorkflow(ctx context.Context, de
 	RollHotToWarmOnAllSites(ctx, deployment, deploymentName, siteCount, indexName)
 
 	// Verify index on S3 for all sites
-	testcaseenv.VerifyIndexOnS3AllSites(ctx, deployment, deploymentName, siteCount, indexName)
+	return testcaseenv.VerifyIndexOnS3AllSites(ctx, deployment, deploymentName, siteCount, indexName)
 }

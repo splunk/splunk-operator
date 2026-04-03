@@ -27,12 +27,12 @@ import (
 // ClusterCoordinator abstracts the v3/v4 API differences for cluster
 // manager and license manager operations.
 type ClusterCoordinator interface {
-	LicenseManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv)
-	ClusterManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv)
+	LicenseManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) error
+	ClusterManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) error
 	DeployStandaloneWithLM(ctx context.Context, deployment *Deployment, name, mcRef string) (*enterpriseApi.Standalone, error)
 	DeployMultisiteCluster(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, mcRef string) error
 	DeployMultisiteClusterWithIndexes(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, secretName string, smartStoreSpec enterpriseApi.SmartStoreSpec) error
-	VerifyClusterManagerPhaseUpdating(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv)
+	VerifyClusterManagerPhaseUpdating(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) error
 	DeleteClusterManager(ctx context.Context, deployment *Deployment) error
 	AppendSmartStoreIndex(ctx context.Context, deployment *Deployment, newIndex []enterpriseApi.IndexSpec) error
 	GetBundleHash(ctx context.Context, deployment *Deployment) string
@@ -43,12 +43,12 @@ type ClusterCoordinator interface {
 // clusterMasterCoordinator implements ClusterCoordinator for v3 (ClusterMaster/LicenseMaster).
 type clusterMasterCoordinator struct{}
 
-func (c *clusterMasterCoordinator) LicenseManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
-	testcaseEnv.VerifyLicenseMasterReady(ctx, deployment)
+func (c *clusterMasterCoordinator) LicenseManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) error {
+	return testcaseEnv.VerifyLicenseMasterReady(ctx, deployment)
 }
 
-func (c *clusterMasterCoordinator) ClusterManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
-	testcaseEnv.VerifyClusterMasterReady(ctx, deployment)
+func (c *clusterMasterCoordinator) ClusterManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) error {
+	return testcaseEnv.VerifyClusterMasterReady(ctx, deployment)
 }
 
 func (c *clusterMasterCoordinator) DeployStandaloneWithLM(ctx context.Context, deployment *Deployment, name, mcRef string) (*enterpriseApi.Standalone, error) {
@@ -63,8 +63,8 @@ func (c *clusterMasterCoordinator) DeployMultisiteClusterWithIndexes(ctx context
 	return deployment.DeployMultisiteClusterMasterWithSearchHeadAndIndexes(ctx, name, indexerReplicas, siteCount, secretName, smartStoreSpec)
 }
 
-func (c *clusterMasterCoordinator) VerifyClusterManagerPhaseUpdating(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
-	testcaseEnv.VerifyClusterMasterPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
+func (c *clusterMasterCoordinator) VerifyClusterManagerPhaseUpdating(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) error {
+	return testcaseEnv.VerifyClusterMasterPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
 }
 
 func (c *clusterMasterCoordinator) DeleteClusterManager(ctx context.Context, deployment *Deployment) error {
@@ -99,12 +99,12 @@ func (c *clusterMasterCoordinator) GetAPIVersion() string {
 // clusterManagerCoordinator implements ClusterCoordinator for v4 (ClusterManager/LicenseManager).
 type clusterManagerCoordinator struct{}
 
-func (c *clusterManagerCoordinator) LicenseManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
-	testcaseEnv.VerifyLicenseManagerReady(ctx, deployment)
+func (c *clusterManagerCoordinator) LicenseManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) error {
+	return testcaseEnv.VerifyLicenseManagerReady(ctx, deployment)
 }
 
-func (c *clusterManagerCoordinator) ClusterManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
-	testcaseEnv.VerifyClusterManagerReady(ctx, deployment)
+func (c *clusterManagerCoordinator) ClusterManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) error {
+	return testcaseEnv.VerifyClusterManagerReady(ctx, deployment)
 }
 
 func (c *clusterManagerCoordinator) DeployStandaloneWithLM(ctx context.Context, deployment *Deployment, name, mcRef string) (*enterpriseApi.Standalone, error) {
@@ -119,8 +119,8 @@ func (c *clusterManagerCoordinator) DeployMultisiteClusterWithIndexes(ctx contex
 	return deployment.DeployMultisiteClusterWithSearchHeadAndIndexes(ctx, name, indexerReplicas, siteCount, secretName, smartStoreSpec)
 }
 
-func (c *clusterManagerCoordinator) VerifyClusterManagerPhaseUpdating(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
-	testcaseEnv.VerifyClusterManagerPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
+func (c *clusterManagerCoordinator) VerifyClusterManagerPhaseUpdating(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) error {
+	return testcaseEnv.VerifyClusterManagerPhase(ctx, deployment, enterpriseApi.PhaseUpdating)
 }
 
 func (c *clusterManagerCoordinator) DeleteClusterManager(ctx context.Context, deployment *Deployment) error {
@@ -179,9 +179,9 @@ func NewClusterReadinessConfigV4() *ClusterReadinessConfig {
 }
 
 // VerifyC3ClusterReady verifies the C3 cluster is ready using the config's ClusterManagerReady callback.
-func (c *ClusterReadinessConfig) VerifyC3ClusterReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) {
-	testcaseEnv.VerifyC3ClusterReady(ctx, deployment, func(ctx context.Context, d *Deployment) {
-		c.ClusterManagerReady(ctx, d, testcaseEnv)
+func (c *ClusterReadinessConfig) VerifyC3ClusterReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) error {
+	return testcaseEnv.VerifyC3ClusterReady(ctx, deployment, func(ctx context.Context, d *Deployment) error {
+		return c.ClusterManagerReady(ctx, d, testcaseEnv)
 	})
 }
 
@@ -202,7 +202,9 @@ func (testcaseenv *TestCaseEnv) DeployAndVerifyStandalone(ctx context.Context, d
 	if err != nil {
 		return nil, fmt.Errorf("unable to deploy Standalone instance: %w", err)
 	}
-	testcaseenv.VerifyStandaloneReady(ctx, deployment, name, standalone)
+	if err := testcaseenv.VerifyStandaloneReady(ctx, deployment, name, standalone); err != nil {
+		return nil, fmt.Errorf("standalone not ready: %w", err)
+	}
 	return standalone, nil
 }
 
@@ -212,49 +214,65 @@ func (testcaseenv *TestCaseEnv) DeployAndVerifyMonitoringConsole(ctx context.Con
 	if err != nil {
 		return nil, fmt.Errorf("unable to deploy Monitoring Console instance: %w", err)
 	}
-	testcaseenv.VerifyMonitoringConsoleReady(ctx, deployment, name, mc)
+	if err := testcaseenv.VerifyMonitoringConsoleReady(ctx, deployment, name, mc); err != nil {
+		return nil, fmt.Errorf("monitoring console not ready: %w", err)
+	}
 	return mc, nil
 }
 
 // VerifyIndexerCPULimits verifies CPU limits on all indexer pods in a single-site cluster
-func (testcaseenv *TestCaseEnv) VerifyIndexerCPULimits(deployment *Deployment, deploymentName string, indexerCount int, expectedCPULimit string) {
+func (testcaseenv *TestCaseEnv) VerifyIndexerCPULimits(deployment *Deployment, deploymentName string, indexerCount int, expectedCPULimit string) error {
 	for i := 0; i < indexerCount; i++ {
 		podName := fmt.Sprintf(IndexerPod, deploymentName, i)
-		testcaseenv.VerifyCPULimits(deployment, podName, expectedCPULimit)
+		if err := testcaseenv.VerifyCPULimits(deployment, podName, expectedCPULimit); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // VerifySearchHeadCPULimits verifies CPU limits on all search head pods
-func (testcaseenv *TestCaseEnv) VerifySearchHeadCPULimits(deployment *Deployment, deploymentName string, searchHeadCount int, expectedCPULimit string) {
+func (testcaseenv *TestCaseEnv) VerifySearchHeadCPULimits(deployment *Deployment, deploymentName string, searchHeadCount int, expectedCPULimit string) error {
 	for i := 0; i < searchHeadCount; i++ {
 		podName := fmt.Sprintf(SearchHeadPod, deploymentName, i)
-		testcaseenv.VerifyCPULimits(deployment, podName, expectedCPULimit)
+		if err := testcaseenv.VerifyCPULimits(deployment, podName, expectedCPULimit); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // VerifyM4ComponentsReady verifies multisite indexers, multisite status, and SHC are ready (without CM check or RFSF).
-func (testcaseenv *TestCaseEnv) VerifyM4ComponentsReady(ctx context.Context, deployment *Deployment, siteCount int) {
-	testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount)
-	testcaseenv.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
+func (testcaseenv *TestCaseEnv) VerifyM4ComponentsReady(ctx context.Context, deployment *Deployment, siteCount int) error {
+	if err := testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount); err != nil {
+		return err
+	}
+	if err := testcaseenv.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount); err != nil {
+		return err
+	}
+	return testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
 }
 
 // VerifyMCVersionChangedAndReady waits for the MC resource version to change then verifies MC is ready.
-func (testcaseenv *TestCaseEnv) VerifyMCVersionChangedAndReady(ctx context.Context, deployment *Deployment, mc *enterpriseApi.MonitoringConsole, resourceVersion string) {
-	testcaseenv.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-	testcaseenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+func (testcaseenv *TestCaseEnv) VerifyMCVersionChangedAndReady(ctx context.Context, deployment *Deployment, mc *enterpriseApi.MonitoringConsole, resourceVersion string) error {
+	if err := testcaseenv.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion); err != nil {
+		return err
+	}
+	return testcaseenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 }
 
 // VerifyClusterReadyAndRFSF is a V4-only verification pattern that checks C3 cluster is ready (using ClusterManager) and RF/SF is met
-func (testcaseenv *TestCaseEnv) VerifyClusterReadyAndRFSF(ctx context.Context, deployment *Deployment) {
-	testcaseenv.VerifyC3ClusterReady(ctx, deployment, testcaseenv.VerifyClusterManagerReady)
-	testcaseenv.VerifyRFSFMet(ctx, deployment)
+func (testcaseenv *TestCaseEnv) VerifyClusterReadyAndRFSF(ctx context.Context, deployment *Deployment) error {
+	if err := testcaseenv.VerifyC3ClusterReady(ctx, deployment, testcaseenv.VerifyClusterManagerReady); err != nil {
+		return err
+	}
+	return testcaseenv.VerifyRFSFMet(ctx, deployment)
 }
 
 // TriggerAndVerifyTelemetry is a common pattern for telemetry verification
-func (testcaseenv *TestCaseEnv) TriggerAndVerifyTelemetry(ctx context.Context, deployment *Deployment, prevSubmissionTime string) {
+func (testcaseenv *TestCaseEnv) TriggerAndVerifyTelemetry(ctx context.Context, deployment *Deployment, prevSubmissionTime string) error {
 	testcaseenv.TriggerTelemetrySubmission(ctx, deployment)
-	testcaseenv.VerifyTelemetry(ctx, deployment, prevSubmissionTime)
+	return testcaseenv.VerifyTelemetry(ctx, deployment, prevSubmissionTime)
 }
 
 // VerifyProbeConfigAndScripts verifies probe config map exists and probe scripts are present on all pods.
@@ -271,8 +289,7 @@ func (testcaseenv *TestCaseEnv) VerifyProbeConfigAndScripts(ctx context.Context,
 		scriptsNames = append(scriptsNames, enterprise.GetStartupScriptName())
 	}
 	allPods := DumpGetPods(testcaseenv.GetName())
-	testcaseenv.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
-	return nil
+	return testcaseenv.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
 }
 
 // NewStandaloneSpecWithMCRef creates a StandaloneSpec with a MonitoringConsoleRef set to the given MC name.
@@ -292,16 +309,18 @@ func NewStandaloneSpecWithMCRef(image string, mcName string) enterpriseApi.Stand
 }
 
 // VerifyLMConfiguredOnMC verifies that the License Manager is configured on the Monitoring Console pod.
-func VerifyLMConfiguredOnMC(ctx context.Context, deployment *Deployment) {
+func VerifyLMConfiguredOnMC(ctx context.Context, deployment *Deployment) error {
 	monitoringConsolePodName := fmt.Sprintf(MonitoringConsolePod, deployment.GetName())
-	VerifyLMConfiguredOnPod(ctx, deployment, monitoringConsolePodName)
+	return VerifyLMConfiguredOnPod(ctx, deployment, monitoringConsolePodName)
 }
 
 // StandardC3Verification performs the standard V4-only set of verifications for a C3 cluster.
 // This includes cluster ready (ClusterManager), RF/SF met, and monitoring console ready.
-func (testcaseenv *TestCaseEnv) StandardC3Verification(ctx context.Context, deployment *Deployment, mcName string, mc *enterpriseApi.MonitoringConsole) {
-	testcaseenv.VerifyClusterReadyAndRFSF(ctx, deployment)
-	testcaseenv.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
+func (testcaseenv *TestCaseEnv) StandardC3Verification(ctx context.Context, deployment *Deployment, mcName string, mc *enterpriseApi.MonitoringConsole) error {
+	if err := testcaseenv.VerifyClusterReadyAndRFSF(ctx, deployment); err != nil {
+		return err
+	}
+	return testcaseenv.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc)
 }
 
 // DeployAndVerifyC3 deploys a C3 single-site cluster and verifies it reaches the ready state.
@@ -309,8 +328,7 @@ func (c *ClusterReadinessConfig) DeployAndVerifyC3(ctx context.Context, deployme
 	if err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), replicas, shc, mcRef); err != nil {
 		return fmt.Errorf("unable to deploy C3 cluster: %w", err)
 	}
-	c.VerifyC3ClusterReady(ctx, deployment, testcaseEnv)
-	return nil
+	return c.VerifyC3ClusterReady(ctx, deployment, testcaseEnv)
 }
 
 // DeployAndVerifyM4 deploys an M4 multisite cluster and verifies the Cluster Manager
@@ -319,9 +337,10 @@ func (c *ClusterReadinessConfig) DeployAndVerifyM4(ctx context.Context, deployme
 	if err := c.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), indexerReplicas, siteCount, mcRef); err != nil {
 		return fmt.Errorf("unable to deploy M4 cluster: %w", err)
 	}
-	c.ClusterManagerReady(ctx, deployment, testcaseEnv)
-	testcaseEnv.VerifyM4ComponentsReady(ctx, deployment, siteCount)
-	return nil
+	if err := c.ClusterManagerReady(ctx, deployment, testcaseEnv); err != nil {
+		return err
+	}
+	return testcaseEnv.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 }
 
 // DeployC3WithLicense sets up the license config map, deploys a C3 cluster,
@@ -333,8 +352,7 @@ func (c *ClusterReadinessConfig) DeployC3WithLicense(ctx context.Context, deploy
 	if err := c.DeployAndVerifyC3(ctx, deployment, testcaseEnv, replicas, shc, mcRef); err != nil {
 		return err
 	}
-	c.LicenseManagerReady(ctx, deployment, testcaseEnv)
-	return nil
+	return c.LicenseManagerReady(ctx, deployment, testcaseEnv)
 }
 
 // DeployM4WithLicense sets up the license config map, deploys an M4 multisite cluster,
@@ -346,7 +364,11 @@ func (c *ClusterReadinessConfig) DeployM4WithLicense(ctx context.Context, deploy
 	if err := c.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), indexerReplicas, siteCount, mcRef); err != nil {
 		return fmt.Errorf("unable to deploy M4 cluster: %w", err)
 	}
-	VerifyLMAndClusterManagerReady(ctx, deployment, testcaseEnv, c)
-	testcaseEnv.VerifyM4ComponentsReady(ctx, deployment, siteCount)
-	return nil
+	if err := c.LicenseManagerReady(ctx, deployment, testcaseEnv); err != nil {
+		return err
+	}
+	if err := c.ClusterManagerReady(ctx, deployment, testcaseEnv); err != nil {
+		return err
+	}
+	return testcaseEnv.VerifyM4ComponentsReady(ctx, deployment, siteCount)
 }

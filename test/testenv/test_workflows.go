@@ -46,7 +46,9 @@ func RunC3DeploymentWorkflow(ctx context.Context, deployment *Deployment, testca
 		return nil, fmt.Errorf("unable to deploy C3 cluster: %w", err)
 	}
 
-	testcaseEnvInst.VerifyClusterReadyAndRFSF(ctx, deployment)
+	if err := testcaseEnvInst.VerifyClusterReadyAndRFSF(ctx, deployment); err != nil {
+		return nil, fmt.Errorf("cluster not ready: %w", err)
+	}
 
 	return &WorkflowResult{}, nil
 }
@@ -57,8 +59,12 @@ func RunM4DeploymentWorkflow(ctx context.Context, deployment *Deployment, testca
 		return nil, fmt.Errorf("unable to deploy M4 cluster: %w", err)
 	}
 
-	testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+	if err := testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady); err != nil {
+		return nil, fmt.Errorf("M4 cluster not ready: %w", err)
+	}
+	if err := testcaseEnvInst.VerifyRFSFMet(ctx, deployment); err != nil {
+		return nil, fmt.Errorf("RF/SF not met: %w", err)
+	}
 
 	return &WorkflowResult{}, nil
 }
@@ -69,8 +75,12 @@ func RunM1DeploymentWorkflow(ctx context.Context, deployment *Deployment, testca
 		return nil, fmt.Errorf("unable to deploy M1 cluster: %w", err)
 	}
 
-	testcaseEnvInst.VerifyM1ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+	if err := testcaseEnvInst.VerifyM1ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady); err != nil {
+		return nil, fmt.Errorf("M1 cluster not ready: %w", err)
+	}
+	if err := testcaseEnvInst.VerifyRFSFMet(ctx, deployment); err != nil {
+		return nil, fmt.Errorf("RF/SF not met: %w", err)
+	}
 
 	return &WorkflowResult{}, nil
 }
@@ -95,10 +105,14 @@ func RunStandaloneWithServiceAccountWorkflow(ctx context.Context, deployment *De
 		return nil, fmt.Errorf("unable to deploy standalone with service account: %w", err)
 	}
 
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, name, standalone)
+	if err = testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, name, standalone); err != nil {
+		return nil, fmt.Errorf("standalone not ready: %w", err)
+	}
 
 	standalonePodName := fmt.Sprintf(StandalonePod, name, 0)
-	testcaseEnvInst.VerifyServiceAccountConfiguredOnPod(deployment, testcaseEnvInst.GetName(), standalonePodName, serviceAccountName)
+	if err = testcaseEnvInst.VerifyServiceAccountConfiguredOnPod(deployment, testcaseEnvInst.GetName(), standalonePodName, serviceAccountName); err != nil {
+		return nil, fmt.Errorf("service account not configured: %w", err)
+	}
 
 	return &WorkflowResult{Standalone: standalone}, nil
 }

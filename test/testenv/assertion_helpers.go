@@ -40,8 +40,7 @@ func (testcaseenv *TestCaseEnv) ScaleSearchHeadCluster(ctx context.Context, depl
 	}
 
 	// Verify Search Head Cluster scales up and goes to ScalingUp phase
-	testcaseenv.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp)
-	return nil
+	return testcaseenv.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp)
 }
 
 // ScaleIndexerCluster scales an Indexer Cluster to the specified replica count
@@ -61,8 +60,7 @@ func (testcaseenv *TestCaseEnv) ScaleIndexerCluster(ctx context.Context, deploym
 	}
 
 	// Verify Indexer Cluster scales up and goes to ScalingUp phase
-	testcaseenv.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp, idxcName)
-	return nil
+	return testcaseenv.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp, idxcName)
 }
 
 // UpdateMonitoringConsoleRefAndVerify updates the MonitoringConsoleRef in a CR and waits for the change to apply
@@ -99,8 +97,7 @@ func UpdateMonitoringConsoleRefAndVerify(ctx context.Context, deployment *Deploy
 	}
 
 	// Wait for custom resource version to change
-	testcaseenv.VerifyCustomResourceVersionChanged(ctx, deployment, obj, resourceVersion)
-	return nil
+	return testcaseenv.VerifyCustomResourceVersionChanged(ctx, deployment, obj, resourceVersion)
 }
 
 // DeployStandaloneWithMCRef deploys a standalone instance with a MonitoringConsoleRef
@@ -122,23 +119,77 @@ func (testcaseenv *TestCaseEnv) DeployStandaloneWithMCRef(ctx context.Context, d
 	}
 
 	// Wait for Standalone to be in READY status
-	testcaseenv.VerifyStandaloneReady(ctx, deployment, deploymentName, standalone)
+	if err = testcaseenv.VerifyStandaloneReady(ctx, deployment, deploymentName, standalone); err != nil {
+		return nil, fmt.Errorf("standalone not ready: %w", err)
+	}
 
 	return standalone, nil
 }
 
 // VerifyStandaloneInMC verifies that a standalone instance is configured in the MC
-func (testcaseenv *TestCaseEnv) VerifyStandaloneInMC(ctx context.Context, deployment *Deployment, deploymentName string, mcName string, shouldExist bool) {
+func (testcaseenv *TestCaseEnv) VerifyStandaloneInMC(ctx context.Context, deployment *Deployment, deploymentName string, mcName string, shouldExist bool) error {
 	standalonePod := fmt.Sprintf(StandalonePod, deploymentName, 0)
-	testcaseenv.VerifyPodsInMCConfigMap(ctx, deployment, []string{standalonePod}, "SPLUNK_STANDALONE_URL", mcName, shouldExist)
-	testcaseenv.VerifyPodsInMCConfigString(ctx, deployment, []string{standalonePod}, mcName, shouldExist, false)
+	if err := testcaseenv.VerifyPodsInMCConfigMap(ctx, deployment, []string{standalonePod}, "SPLUNK_STANDALONE_URL", mcName, shouldExist); err != nil {
+		return err
+	}
+	return testcaseenv.VerifyPodsInMCConfigString(ctx, deployment, []string{standalonePod}, mcName, shouldExist, false)
 }
 
 // VerifyLMConfiguredOnPods verifies License Manager is configured on all given pods
-func VerifyLMConfiguredOnPods(ctx context.Context, deployment *Deployment, podNames []string) {
+func VerifyLMConfiguredOnPods(ctx context.Context, deployment *Deployment, podNames []string) error {
 	for _, podName := range podNames {
-		VerifyLMConfiguredOnPod(ctx, deployment, podName)
+		if err := VerifyLMConfiguredOnPod(ctx, deployment, podName); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+// VerifyM1ClusterReady verifies the cluster coordinator, indexers, and multisite status are ready (no SHC).
+func (testcaseenv *TestCaseEnv) VerifyM1ClusterReady(ctx context.Context, deployment *Deployment, siteCount int, verifyCoordinator func(context.Context, *Deployment) error) error {
+	if err := verifyCoordinator(ctx, deployment); err != nil {
+		return err
+	}
+	if err := testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount); err != nil {
+		return err
+	}
+	return testcaseenv.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+}
+
+// VerifyM4ClusterReady verifies the cluster coordinator, indexers, multisite status, and SHC are ready.
+func (testcaseenv *TestCaseEnv) VerifyM4ClusterReady(ctx context.Context, deployment *Deployment, siteCount int, verifyCoordinator func(context.Context, *Deployment) error) error {
+	if err := verifyCoordinator(ctx, deployment); err != nil {
+		return err
+	}
+	if err := testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount); err != nil {
+		return err
+	}
+	if err := testcaseenv.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount); err != nil {
+		return err
+	}
+	return testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
+}
+
+// VerifyM4IndexersAndSHCReady verifies the cluster coordinator, indexers, and SHC are ready (without multisite check).
+func (testcaseenv *TestCaseEnv) VerifyM4IndexersAndSHCReady(ctx context.Context, deployment *Deployment, siteCount int, verifyCoordinator func(context.Context, *Deployment) error) error {
+	if err := verifyCoordinator(ctx, deployment); err != nil {
+		return err
+	}
+	if err := testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount); err != nil {
+		return err
+	}
+	return testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
+}
+
+// VerifyC3ClusterReady verifies the cluster coordinator, SHC, and single-site indexers are ready.
+func (testcaseenv *TestCaseEnv) VerifyC3ClusterReady(ctx context.Context, deployment *Deployment, verifyCoordinator func(context.Context, *Deployment) error) error {
+	if err := verifyCoordinator(ctx, deployment); err != nil {
+		return err
+	}
+	if err := testcaseenv.VerifySearchHeadClusterReady(ctx, deployment); err != nil {
+		return err
+	}
+	return testcaseenv.VerifySingleSiteIndexersReady(ctx, deployment)
 }
 
 // IngestDataOnIndexers ingests test data on all indexer pods
@@ -149,35 +200,6 @@ func IngestDataOnIndexers(ctx context.Context, deployment *Deployment, deploymen
 		CreateMockLogfile(logFile, LogLineCount)
 		IngestFileViaMonitor(ctx, logFile, DefaultIngestIndex, podName, deployment)
 	}
-}
-
-// VerifyM1ClusterReady verifies the cluster coordinator, indexers, and multisite status are ready (no SHC).
-func (testcaseenv *TestCaseEnv) VerifyM1ClusterReady(ctx context.Context, deployment *Deployment, siteCount int, verifyCoordinator func(context.Context, *Deployment)) {
-	verifyCoordinator(ctx, deployment)
-	testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount)
-	testcaseenv.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-}
-
-// VerifyM4ClusterReady verifies the cluster coordinator, indexers, multisite status, and SHC are ready.
-func (testcaseenv *TestCaseEnv) VerifyM4ClusterReady(ctx context.Context, deployment *Deployment, siteCount int, verifyCoordinator func(context.Context, *Deployment)) {
-	verifyCoordinator(ctx, deployment)
-	testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount)
-	testcaseenv.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
-	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
-}
-
-// VerifyM4IndexersAndSHCReady verifies the cluster coordinator, indexers, and SHC are ready (without multisite check).
-func (testcaseenv *TestCaseEnv) VerifyM4IndexersAndSHCReady(ctx context.Context, deployment *Deployment, siteCount int, verifyCoordinator func(context.Context, *Deployment)) {
-	verifyCoordinator(ctx, deployment)
-	testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount)
-	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
-}
-
-// VerifyC3ClusterReady verifies the cluster coordinator, SHC, and single-site indexers are ready.
-func (testcaseenv *TestCaseEnv) VerifyC3ClusterReady(ctx context.Context, deployment *Deployment, verifyCoordinator func(context.Context, *Deployment)) {
-	verifyCoordinator(ctx, deployment)
-	testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
-	testcaseenv.VerifySingleSiteIndexersReady(ctx, deployment)
 }
 
 // IngestDataOnMultisiteIndexers ingests test data on all multisite indexer pods

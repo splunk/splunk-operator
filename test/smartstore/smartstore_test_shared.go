@@ -57,12 +57,12 @@ func RunS1MultipleIndexesTest(ctx context.Context, deployment *testenv.Deploymen
 	Expect(err).To(Succeed(), "Timed out waiting for Standalone to reach Ready phase")
 
 	// Verify standalone goes to ready state and stays ready
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+	Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed())
 
 	// Check index on pod
 	podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 	for indexName := range indexVolumeMap {
-		testcaseEnvInst.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName)
+		Expect(testcaseEnvInst.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName)).To(Succeed())
 	}
 
 	// Ingest data to the index
@@ -75,7 +75,7 @@ func RunS1MultipleIndexesTest(ctx context.Context, deployment *testenv.Deploymen
 	// Roll Hot Buckets on the test index by restarting splunk and check for index on S3
 	for indexName := range indexVolumeMap {
 		testenv.RollHotToWarm(ctx, deployment, podName, indexName)
-		testcaseEnvInst.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
+		Expect(testcaseEnvInst.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)).To(Succeed())
 	}
 }
 
@@ -104,14 +104,14 @@ func RunS1DefaultVolumesTest(ctx context.Context, deployment *testenv.Deployment
 	Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 	// Verify standalone goes to ready state
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+	Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed())
 
 	// Check index on pod
 	podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-	testcaseEnvInst.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName)
+	Expect(testcaseEnvInst.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName)).To(Succeed())
 
 	// Check special index configs
-	testcaseEnvInst.VerifyIndexConfigsMatch(ctx, deployment, podName, indexName, specialConfig["MaxGlobalDataSizeMB"], specialConfig["MaxGlobalRawDataSizeMB"])
+	Expect(testcaseEnvInst.VerifyIndexConfigsMatch(ctx, deployment, podName, indexName, specialConfig["MaxGlobalDataSizeMB"], specialConfig["MaxGlobalRawDataSizeMB"])).To(Succeed())
 
 	// Ingest data to the index
 	logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
@@ -122,25 +122,25 @@ func RunS1DefaultVolumesTest(ctx context.Context, deployment *testenv.Deployment
 	testenv.RollHotToWarm(ctx, deployment, podName, indexName)
 
 	// Check for indexes on S3
-	testcaseEnvInst.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
+	Expect(testcaseEnvInst.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)).To(Succeed())
 
 	// Verify Cachemanager Values
 	serverConfPath := "/opt/splunk/etc/apps/splunk-operator/local/server.conf"
 
 	// Validate MaxCacheSizeMB
-	testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "max_cache_size", fmt.Sprint(cacheManagerSmartStoreSpec.MaxCacheSizeMB))
+	Expect(testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "max_cache_size", fmt.Sprint(cacheManagerSmartStoreSpec.MaxCacheSizeMB))).To(Succeed())
 
 	// Validate EvictionPaddingSizeMB
-	testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "eviction_padding", fmt.Sprint(cacheManagerSmartStoreSpec.EvictionPaddingSizeMB))
+	Expect(testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "eviction_padding", fmt.Sprint(cacheManagerSmartStoreSpec.EvictionPaddingSizeMB))).To(Succeed())
 
 	// Validate MaxConcurrentDownloads
-	testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "max_concurrent_downloads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentDownloads))
+	Expect(testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "max_concurrent_downloads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentDownloads))).To(Succeed())
 
 	// Validate MaxConcurrentUploads
-	testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "max_concurrent_uploads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentUploads))
+	Expect(testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "max_concurrent_uploads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentUploads))).To(Succeed())
 
 	// Validate EvictionPolicy
-	testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "eviction_policy", cacheManagerSmartStoreSpec.EvictionPolicy)
+	Expect(testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "eviction_policy", cacheManagerSmartStoreSpec.EvictionPolicy)).To(Succeed())
 }
 
 // RunS1EphemeralStorageTest deploys a Standalone with one ephemeral storage volume configured and verifies it is ready.
@@ -164,7 +164,7 @@ func RunS1EphemeralStorageTest(ctx context.Context, deployment *testenv.Deployme
 	standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
 	Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
-	testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+	Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed())
 }
 
 // RunM4MultisiteSmartStoreTest runs the standard M4 multisite SmartStore test workflow
@@ -183,10 +183,10 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	err := config.DeployMultisiteClusterWithIndexes(ctx, deployment, deployment.GetName(), 1, siteCount, testcaseEnvInst.GetIndexSecretName(), smartStoreSpec)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-	testenv.VerifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)
+	Expect(testenv.VerifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)).To(Succeed())
 
 	// Use multisite workflow helper to verify index, ingest data, roll to warm, and verify on S3
-	testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, deployment.GetName(), siteCount, indexName)
+	Expect(testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, deployment.GetName(), siteCount, indexName)).To(Succeed())
 
 	// Get old bundle hash before adding new index
 	oldBundleHash := config.GetBundleHash(ctx, deployment)
@@ -199,22 +199,22 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	// Update CR with new index based on API version
 	Expect(config.AppendSmartStoreIndex(ctx, deployment, newIndex)).To(Succeed(), "Unable to append SmartStore index")
 
-	testenv.VerifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)
+	Expect(testenv.VerifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)).To(Succeed())
 
 	// Verify new bundle is pushed (only for v3)
 	if config.GetAPIVersion() == "v3" {
-		testcaseEnvInst.VerifyClusterManagerBundlePush(ctx, deployment, testcaseEnvInst.GetName(), 1, oldBundleHash)
+		Expect(testcaseEnvInst.VerifyClusterManagerBundlePush(ctx, deployment, testcaseEnvInst.GetName(), 1, oldBundleHash)).To(Succeed())
 	}
 
 	// Verify both indexes on all sites
 	for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 		podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
 		for _, index := range indexList {
-			testcaseEnvInst.VerifyIndexFoundOnPod(ctx, deployment, podName, index)
+			Expect(testcaseEnvInst.VerifyIndexFoundOnPod(ctx, deployment, podName, index)).To(Succeed())
 		}
 	}
 
 	// Use multisite workflow helper for the new index
 	testcaseEnvInst.Log.Info("Ingesting data on index", "Index Name", indexNameTwo)
-	testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, deployment.GetName(), siteCount, indexNameTwo)
+	Expect(testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, deployment.GetName(), siteCount, indexNameTwo)).To(Succeed())
 }
