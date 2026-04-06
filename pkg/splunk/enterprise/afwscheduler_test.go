@@ -3021,6 +3021,13 @@ func TestSHCRunPlaybook(t *testing.T) {
 
 func TestRunLocalScopedPlaybook(t *testing.T) {
 	ctx := context.TODO()
+
+	savedGetSpecificSecretTokenFromPod := splutil.GetSpecificSecretTokenFromPod
+	defer func() { splutil.GetSpecificSecretTokenFromPod = savedGetSpecificSecretTokenFromPod }()
+	splutil.GetSpecificSecretTokenFromPod = func(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, secretToken string) (string, error) {
+		return "changeme", nil
+	}
+
 	// Test for each phase can send the worker to down stream
 	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
@@ -3255,6 +3262,13 @@ func TestCanAppScopeHaveInstallWorker(t *testing.T) {
 
 func TestPremiumAppScopedPlaybook(t *testing.T) {
 	ctx := context.TODO()
+
+	savedGetSpecificSecretTokenFromPod := splutil.GetSpecificSecretTokenFromPod
+	defer func() { splutil.GetSpecificSecretTokenFromPod = savedGetSpecificSecretTokenFromPod }()
+	splutil.GetSpecificSecretTokenFromPod = func(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, secretToken string) (string, error) {
+		return "changeme", nil
+	}
+
 	// Test for each phase can send the worker to down stream
 	cr := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
