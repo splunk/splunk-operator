@@ -10,6 +10,8 @@ This guide documents a validated SVA-C3 setup path where a LOCAL SearchHeadClust
 
 If you are not on Azure, use the manual deployment path or adapt the App Framework configuration to your object store. If you are not using Ingress NGINX, translate the ingress example and annotations to the equivalent configuration for your controller.
 
+This guide covers standard mode federated search only. It does not cover transparent mode or mixed VM/Kubernetes federated-search topologies.
+
 ## Table of Contents
 1. [Architecture Overview](#architecture-overview)
 2. [Prerequisites](#prerequisites)
