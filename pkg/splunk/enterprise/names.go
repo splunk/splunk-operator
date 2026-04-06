@@ -106,15 +106,15 @@ const (
 
 	manualAppUpdateCMStr = "splunk-%s-manual-app-update"
 
-	applySHCBundleCmdStr = "/opt/splunk/bin/splunk apply shcluster-bundle -target https://%s:8089 -auth admin:`cat /mnt/splunk-secrets/password` --answer-yes -push-default-apps true &> %s &"
+	applySHCBundleCmdStr = "/opt/splunk/bin/splunk apply shcluster-bundle -target https://%s:8089 -auth admin:%s --answer-yes -push-default-apps true &> %s &"
 
 	shcBundlePushCompleteStr = "Bundle has been pushed successfully to all the cluster members.\n"
 
 	shcBundlePushStatusCheckFile = "/operator-staging/appframework/.shcluster_bundle_status.txt"
 
-	applyIdxcBundleCmdStr = "/opt/splunk/bin/splunk apply cluster-bundle -auth admin:`cat /mnt/splunk-secrets/password` --skip-validation --answer-yes"
+	applyIdxcBundleCmdStr = "/opt/splunk/bin/splunk apply cluster-bundle -auth admin:%s --skip-validation --answer-yes"
 
-	idxcShowClusterBundleStatusStr = "/opt/splunk/bin/splunk show cluster-bundle-status -auth admin:`cat /mnt/splunk-secrets/password`"
+	idxcShowClusterBundleStatusStr = "/opt/splunk/bin/splunk show cluster-bundle-status -auth admin:%s"
 
 	idxcBundleAlreadyPresentStr = "No new bundle will be pushed. The cluster manager and peers already have this bundle"
 
@@ -207,7 +207,7 @@ access = read : [ * ], write : [ admin ]
 	createTelAppShcString = "mkdir -p %s/app_tel_for_sok/default/; mkdir -p %s/app_tel_for_sok/metadata/; printf '%%s' \"%s\" > %s/app_tel_for_sok/default/app.conf; printf '%%s' \"%s\" > %s/app_tel_for_sok/metadata/default.meta"
 
 	// Command to reload app configuration
-	telAppReloadString = "curl -k -u admin:`cat /mnt/splunk-secrets/password` https://localhost:8089/services/apps/local/_reload"
+	telAppReloadString = "curl -k -u admin:%s https://localhost:8089/services/apps/local/_reload"
 
 	// Name of the telemetry configmap: <namePrefix>-manager-telemetry
 	telConfigMapTemplateStr = "%smanager-telemetry"

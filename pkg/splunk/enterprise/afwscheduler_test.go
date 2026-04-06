@@ -2488,6 +2488,12 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 
 func TestIDXCRunPlaybook(t *testing.T) {
 	ctx := context.TODO()
+
+	savedGetSpecificSecretTokenFromPod := splutil.GetSpecificSecretTokenFromPod
+	defer func() { splutil.GetSpecificSecretTokenFromPod = savedGetSpecificSecretTokenFromPod }()
+	splutil.GetSpecificSecretTokenFromPod = func(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, secretToken string) (string, error) {
+		return "changeme", nil
+	}
 	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterManager",
@@ -2542,8 +2548,8 @@ func TestIDXCRunPlaybook(t *testing.T) {
 	// now replace the pod exec client with our mock client
 	podExecCommands := []string{
 		fmt.Sprintf(cmdSetFilePermissionsToRW, idxcAppsLocationOnClusterManager),
-		applyIdxcBundleCmdStr,
-		idxcShowClusterBundleStatusStr,
+		fmt.Sprintf(applyIdxcBundleCmdStr, "changeme"),
+		fmt.Sprintf(idxcShowClusterBundleStatusStr, "changeme"),
 	}
 	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
 		{
@@ -2839,6 +2845,12 @@ func TestSetLivenessProbeLevelForIDXC(t *testing.T) {
 
 func TestSHCRunPlaybook(t *testing.T) {
 	ctx := context.TODO()
+
+	savedGetSpecificSecretTokenFromPod := splutil.GetSpecificSecretTokenFromPod
+	defer func() { splutil.GetSpecificSecretTokenFromPod = savedGetSpecificSecretTokenFromPod }()
+	splutil.GetSpecificSecretTokenFromPod = func(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, secretToken string) (string, error) {
+		return "changeme", nil
+	}
 	cr := &enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -4387,6 +4399,12 @@ func TestGetTelAppNameExtension(t *testing.T) {
 func TestAddTelAppCMaster(t *testing.T) {
 	ctx := context.TODO()
 
+	savedGetSpecificSecretTokenFromPod := splutil.GetSpecificSecretTokenFromPod
+	defer func() { splutil.GetSpecificSecretTokenFromPod = savedGetSpecificSecretTokenFromPod }()
+	splutil.GetSpecificSecretTokenFromPod = func(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, secretToken string) (string, error) {
+		return "changeme", nil
+	}
+
 	// Define CRs
 	cmCr := &enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -4403,7 +4421,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 	// Define mock podexec context
 	podExecCommands := []string{
 		fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString),
-		telAppReloadString,
+		fmt.Sprintf(telAppReloadString, "changeme"),
 	}
 
 	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
@@ -4427,7 +4445,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 	// Test shc
 	podExecCommands = []string{
 		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer),
-		fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(shcCr.GetNamespace(), SplunkSearchHead, shcCr.GetName(), 0, false), "/tmp/status.txt"),
+		fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(shcCr.GetNamespace(), SplunkSearchHead, shcCr.GetName(), 0, false), "changeme", "/tmp/status.txt"),
 	}
 
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
@@ -4500,6 +4518,12 @@ func TestAddTelAppCMaster(t *testing.T) {
 func TestAddTelAppCManager(t *testing.T) {
 	ctx := context.TODO()
 
+	savedGetSpecificSecretTokenFromPod := splutil.GetSpecificSecretTokenFromPod
+	defer func() { splutil.GetSpecificSecretTokenFromPod = savedGetSpecificSecretTokenFromPod }()
+	splutil.GetSpecificSecretTokenFromPod = func(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, secretToken string) (string, error) {
+		return "changeme", nil
+	}
+
 	// Define CRs
 	cmCr := &enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
@@ -4516,7 +4540,7 @@ func TestAddTelAppCManager(t *testing.T) {
 	// Define mock podexec context
 	podExecCommands := []string{
 		fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString),
-		telAppReloadString,
+		fmt.Sprintf(telAppReloadString, "changeme"),
 	}
 
 	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
@@ -4540,7 +4564,7 @@ func TestAddTelAppCManager(t *testing.T) {
 	// Test shc
 	podExecCommands = []string{
 		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer),
-		fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(shcCr.GetNamespace(), SplunkSearchHead, shcCr.GetName(), 0, false), "/tmp/status.txt"),
+		fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(shcCr.GetNamespace(), SplunkSearchHead, shcCr.GetName(), 0, false), "changeme", "/tmp/status.txt"),
 	}
 
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
@@ -4696,6 +4720,12 @@ func TestIsAppAlreadyInstalled(t *testing.T) {
 		},
 	}
 
+	savedGetSpecificSecretTokenFromPod := splutil.GetSpecificSecretTokenFromPod
+	defer func() { splutil.GetSpecificSecretTokenFromPod = savedGetSpecificSecretTokenFromPod }()
+	splutil.GetSpecificSecretTokenFromPod = func(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, secretToken string) (string, error) {
+		return "changeme", nil
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a test CR
@@ -4718,7 +4748,7 @@ func TestIsAppAlreadyInstalled(t *testing.T) {
 			}
 
 			// Add the mock command and return context - use the exact command pattern
-			command := "/opt/splunk/bin/splunk list app testapp -auth admin:`cat /mnt/splunk-secrets/password`| grep ENABLED"
+			command := "/opt/splunk/bin/splunk list app testapp -auth admin:changeme| grep ENABLED"
 			mockPodExecClient.AddMockPodExecReturnContexts(ctx, []string{command}, mockReturnContext)
 
 			// Call the function

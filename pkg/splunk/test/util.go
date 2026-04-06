@@ -179,3 +179,8 @@ func (client *MockPodExecClient) SetTargetPodName(ctx context.Context, targetPod
 func (client *MockPodExecClient) GetTargetPodName() string {
 	return client.TargetPodName
 }
+
+// GetClient returns the ControllerClient from MockPodExecClient
+func (client *MockPodExecClient) GetClient() splcommon.ControllerClient {
+	return client.Client
+}
