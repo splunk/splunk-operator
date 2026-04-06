@@ -1,6 +1,14 @@
+---
+title: Federated Search Setup
+parent: Deploy & Configure
+nav_order: 7
+---
+
 # Federated Search Setup Guide: LOCAL to REMOTE
 
-This guide provides step-by-step instructions for setting up Splunk federated search where a LOCAL SearchHeadCluster can search data from a REMOTE SearchHeadCluster's indexes.
+This guide documents a validated SVA-C3 setup path where a LOCAL SearchHeadCluster searches indexes on a REMOTE SearchHeadCluster. The concrete examples in this document assume Azure Blob Storage for App Framework distribution and Ingress NGINX for the management path between clusters.
+
+If you are not on Azure, use the manual deployment path or adapt the App Framework configuration to your object store. If you are not using Ingress NGINX, translate the ingress example and annotations to the equivalent configuration for your controller.
 
 ## Table of Contents
 1. [Architecture Overview](#architecture-overview)
@@ -79,56 +87,64 @@ This guide provides step-by-step instructions for setting up Splunk federated se
 - Kubernetes cluster with Splunk Operator deployed
 - Two separate SearchHeadClusters (LOCAL and REMOTE)
 - IndexerClusters connected to both SHCs
-- Azure Storage Account (for AppFramework)
-- Azure Managed Identity with Storage Blob Data Contributor role
+- Azure Blob Storage plus the required identity or secret configuration if you use the App Framework path
+- Direct access to the LOCAL SHC pods if you use the manual deployment path
 
 ### Network Requirements
-- NGINX Ingress Controller installed
-- Kubernetes service for remote management endpoint
 - HTTPS connectivity between LOCAL and REMOTE SHCs
+- A Kubernetes service that exposes the REMOTE management endpoint inside the cluster
+- Ingress NGINX if you want to use the ingress manifests below without modification
 
 ### Splunk Requirements
-- Splunk Enterprise 10.0.0 
+- A Splunk Enterprise version supported by your Splunk Operator release
 - Federated search enabled on both clusters
-- Admin access to both clusters
+- Administrative access to both clusters
 
 ---
 
 ## REMOTE Cluster Setup
 
 The REMOTE cluster is the data source. We need to:
-1. Create a service account for federated search
+1. Select a target SHC pod and admin credentials
 2. Create a role with appropriate index permissions
-3. Expose the management API endpoint
-4. Deploy the remote configuration app
+3. Create a service account for federated search
+4. Expose the management API endpoint
 
-### Step 1: Create Federated Search Role
+### Step 1: Select a REMOTE SHC Pod and Credentials
+
+Do not assume `search-head-0` is the captain. Captainship is dynamic and can change over time, so select a healthy pod at runtime instead of hardcoding an ordinal.
+
+```bash
+NAMESPACE="stos-auto"
+REMOTE_POD=$(kubectl -n $NAMESPACE get pods \
+  -l app.kubernetes.io/instance=splunk-remote-shc-search-head \
+  -o jsonpath='{.items[0].metadata.name}')
+REMOTE_ADMIN=$(kubectl -n $NAMESPACE get secret splunk-remote-shc-search-head-secret-v1 \
+  -o jsonpath='{.data.password}' | base64 -d)
+```
+
+Replace `stos-auto` and `remote-shc` with the namespace and CR name from your environment before running the remaining commands.
+
+### Step 2: Create Federated Search Role
 
 Create a role with access to the indexes you want to share:
 
 ```bash
-# Connect to REMOTE SHC pod
-REMOTE_POD="splunk-remote-shc-search-head-0"
-NAMESPACE="stos-auto"
-REMOTE_ADMIN=$(kubectl -n $NAMESPACE get secret splunk-remote-shc-search-head-secret-v1 \
-  -o jsonpath='{.data.password}' | base64 -d)
-
-# Create fsh_user role with index permissions
+# Create fsh_user role with access to every remote index you want to expose
 kubectl -n $NAMESPACE exec $REMOTE_POD -c splunk -- curl -sk \
   -u "admin:$REMOTE_ADMIN" \
   -X POST "https://localhost:8089/services/authorization/roles/fsh_user" \
-  -d "srchIndexesAllowed=_audit" \
-  -d "srchIndexesAllowed=demo" \
+  -d "srchIndexesAllowed=_audit,demo" \
   -d "srchIndexesDefault=_audit" \
   -d "imported_roles=user"
 ```
 
 **Important Index Permissions:**
-- `srchIndexesAllowed`: List of indexes the federated user can access
+- `srchIndexesAllowed`: Set this to the full comma-separated list of remote indexes the federated user can access
 - `srchIndexesDefault`: Default index for searches
-- Add all indexes you want to make available via federated search
+- When you update `srchIndexesAllowed` later, include the complete desired list again
 
-### Step 2: Create Service Account
+### Step 3: Create Service Account
 
 Create a dedicated service account for federated authentication:
 
@@ -146,17 +162,6 @@ kubectl -n $NAMESPACE exec $REMOTE_POD -c splunk -- \
 - Store credentials securely (consider using Kubernetes secrets)
 - Rotate credentials regularly
 - Grant minimum required permissions
-
-### Step 3: Enable Search Capability on Admin Role
-
-Fix the permission issue by adding the `search` capability:
-
-```bash
-kubectl -n $NAMESPACE exec $REMOTE_POD -c splunk -- curl -sk \
-  -u "admin:$REMOTE_ADMIN" \
-  -X POST "https://localhost:8089/services/authorization/roles/admin" \
-  -d "capabilities=search"
-```
 
 ### Step 4: Create Management API Service
 
@@ -249,7 +254,8 @@ kubectl -n $NAMESPACE exec $REMOTE_POD -c splunk -- curl -sk \
 The LOCAL cluster is where searches are executed. We need to:
 1. Create the federated provider configuration
 2. Create federated index mappings
-3. Deploy the configuration via AppFramework
+3. Select a target SHC pod and credentials
+4. Deploy the configuration via AppFramework or manually
 
 ### Step 1: Create Federated Search App Structure
 
@@ -342,22 +348,23 @@ export = system
 EOF
 ```
 
-### Step 6: Enable Search Capability on Admin Role
+### Step 6: Set LOCAL Pod and Credentials
 
 ```bash
-LOCAL_POD="splunk-local-shc-search-head-0"
+LOCAL_POD=$(kubectl -n $NAMESPACE get pods \
+  -l app.kubernetes.io/instance=splunk-local-shc-search-head \
+  -o jsonpath='{.items[0].metadata.name}')
 LOCAL_ADMIN=$(kubectl -n $NAMESPACE get secret splunk-local-shc-search-head-secret-v1 \
   -o jsonpath='{.data.password}' | base64 -d)
-
-kubectl -n $NAMESPACE exec $LOCAL_POD -c splunk -- curl -sk \
-  -u "admin:$LOCAL_ADMIN" \
-  -X POST "https://localhost:8089/services/authorization/roles/admin" \
-  -d "capabilities=search"
 ```
+
+The built-in `admin` role already includes the `search` capability. If you validate with a custom local role, verify that it has `search` plus access to the federated indexes defined in this app.
 
 ### Step 7: Package and Deploy App
 
-#### Option A: AppFramework (Recommended)
+#### Option A: AppFramework on Azure (Validated path)
+
+This is the Azure-specific path used for the validated SVA-C3 flow. If you use S3 or GCS instead, adapt the `appRepo` storage settings as described in [App Framework](AppFramework.html). If you do not want to use a remote app repository, use Option B.
 
 Package the app and upload to Azure Storage:
 
@@ -417,8 +424,11 @@ kubectl apply -f local-shc-appframework.yaml
 Copy the app directly to all LOCAL SHC pods:
 
 ```bash
-for pod in splunk-local-shc-search-head-{0..2}; do
-  kubectl -n $NAMESPACE cp federated-search-app $pod:/opt/splunk/etc/apps/
+for pod in $(kubectl -n $NAMESPACE get pods \
+  -l app.kubernetes.io/instance=splunk-local-shc-search-head \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do
+  kubectl -n $NAMESPACE cp -c splunk federated-search-app \
+    "$pod:/opt/splunk/etc/apps/"
 done
 
 # Restart Splunk on all pods
@@ -540,15 +550,23 @@ kubectl -n $NAMESPACE get secret splunk-local-shc-search-head-secret-v1 \
 
 **Symptom:** Search queries return permission errors
 
-**Cause:** Missing `search` capability on admin role
+**Cause:** The federated service account role or the local user role is missing required search or index permissions. The built-in `admin` role already includes the `search` capability, so avoid editing the default admin role just to enable federated search.
 
 **Solution:**
 ```bash
-# On BOTH LOCAL and REMOTE clusters
-kubectl -n $NAMESPACE exec <pod-name> -c splunk -- curl -sk \
-  -u "admin:<password>" \
-  -X POST "https://localhost:8089/services/authorization/roles/admin" \
-  -d "capabilities=search"
+# Check the remote service-account role
+kubectl -n $NAMESPACE exec $REMOTE_POD -c splunk -- curl -sk \
+  -u "admin:$REMOTE_ADMIN" \
+  "https://localhost:8089/services/authorization/roles/fsh_user?output_mode=json" | \
+  grep -E '"imported_roles"|"srchIndexesAllowed"'
+
+# If you need to update remote index permissions, send the full allowed-index list
+kubectl -n $NAMESPACE exec $REMOTE_POD -c splunk -- curl -sk \
+  -u "admin:$REMOTE_ADMIN" \
+  -X POST "https://localhost:8089/services/authorization/roles/fsh_user" \
+  -d "srchIndexesAllowed=_audit,demo" \
+  -d "srchIndexesDefault=_audit" \
+  -d "imported_roles=user"
 ```
 
 ### Issue 2: Federated Provider Not Found
@@ -759,11 +777,11 @@ kubectl -n $NAMESPACE exec $REMOTE_POD -c splunk -- \
 ### Adding New Federated Indexes
 
 ```bash
-# 1. Grant permission on REMOTE
+# 1. Update permissions on REMOTE with the full allowed-index list
 kubectl -n $NAMESPACE exec $REMOTE_POD -c splunk -- curl -sk \
   -u "admin:<password>" \
   "https://localhost:8089/services/authorization/roles/fsh_user" \
-  -d "srchIndexesAllowed=new_index"
+  -d "srchIndexesAllowed=_audit,demo,new_index"
 
 # 2. Add to indexes.conf on LOCAL
 cat >> federated-search-app/default/indexes.conf << 'EOF'
@@ -776,47 +794,59 @@ EOF
 # 3. Re-deploy the app
 ```
 
+Include every remote index that the service account should keep, not just the new one.
+
 ---
 
 ## Quick Reference Commands
 
+### Set Helper Variables
+```bash
+NAMESPACE="stos-auto"
+LOCAL_POD=$(kubectl -n $NAMESPACE get pods \
+  -l app.kubernetes.io/instance=splunk-local-shc-search-head \
+  -o jsonpath='{.items[0].metadata.name}')
+```
+
 ### Get Admin Password
 ```bash
-kubectl -n stos-auto get secret splunk-local-shc-search-head-secret-v1 \
+kubectl -n $NAMESPACE get secret splunk-local-shc-search-head-secret-v1 \
   -o jsonpath='{.data.password}' | base64 -d
 ```
 
 ### Test Federated Search
 ```bash
-kubectl -n stos-auto exec splunk-local-shc-search-head-0 -c splunk -- curl -sk \
+kubectl -n $NAMESPACE exec $LOCAL_POD -c splunk -- curl -sk \
   -u admin:<password> -X POST "https://localhost:8089/services/search/jobs?output_mode=json" \
   -d "search=search index=federated:r_audit | stats count" -d "exec_mode=oneshot"
 ```
 
 ### Check Provider Config
 ```bash
-kubectl -n stos-auto exec splunk-local-shc-search-head-0 -c splunk -- \
+kubectl -n $NAMESPACE exec $LOCAL_POD -c splunk -- \
   /opt/splunk/bin/splunk btool federated list
 ```
 
 ### Check Index Config
 ```bash
-kubectl -n stos-auto exec splunk-local-shc-search-head-0 -c splunk -- \
+kubectl -n $NAMESPACE exec $LOCAL_POD -c splunk -- \
   /opt/splunk/bin/splunk btool indexes list | grep federated
 ```
 
 ### Restart SHC Pods
 ```bash
-kubectl -n stos-auto delete pod -l app.kubernetes.io/instance=splunk-local-shc-search-head
+kubectl -n $NAMESPACE delete pod -l app.kubernetes.io/instance=splunk-local-shc-search-head
 ```
 
 ---
 
 ## Additional Resources
 
-- [Splunk Federated Search Documentation](https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/Setupfederatedsearch)
-- [AppFramework Documentation](https://github.com/splunk/splunk-operator/blob/main/docs/AppFramework.md)
-- [Splunk Operator Documentation](https://github.com/splunk/splunk-operator)
+- [About Federated Search for Splunk](https://help.splunk.com/?resourceId=Splunk_FederatedSearch_fss2sAbout)
+- [Define a Splunk platform federated provider](https://help.splunk.com/?resourceId=Splunk_FederatedSearch_fss2sDefineProvider)
+- [Define roles on the Splunk platform with capabilities](https://help.splunk.com/en/splunk-enterprise/administer/manage-users-and-security/10.2/manage-splunk-platform-users-and-roles/define-roles-on-the-splunk-platform-with-capabilities)
+- [App Framework](AppFramework.html)
+- [Ingress](Ingress.html)
 - [Azure Workload Identity](https://azure.github.io/azure-workload-identity/)
 
 ---
