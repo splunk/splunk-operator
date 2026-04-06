@@ -22,54 +22,9 @@ If you are not on Azure, use the manual deployment path or adapt the App Framewo
 
 ## Architecture Overview
 
-```
-┌─────────────────────────────────────┐
-│       LOCAL SearchHeadCluster       │
-│  (Where searches are executed)      │
-│                                     │
-│  ┌──────────────────────────────┐  │
-│  │ federated-search-app         │  │
-│  │                              │  │
-│  │ federated.conf:              │  │
-│  │   provider://remote_thru_nginx│ │
-│  │                              │  │
-│  │ indexes.conf:                │  │
-│  │   [federated:r_audit]        │  │
-│  │   federated.provider =       │  │
-│  │     remote_thru_nginx        │  │
-│  └──────────────────────────────┘  │
-└─────────────────────────────────────┘
-              │
-              │ HTTPS (443)
-              ▼
-┌─────────────────────────────────────┐
-│     NGINX Ingress / Service         │
-│   remote-mgmt.namespace.svc         │
-└─────────────────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────┐
-│      REMOTE SearchHeadCluster       │
-│  (Source of federated data)         │
-│                                     │
-│  ┌──────────────────────────────┐  │
-│  │ remote-federated-config      │  │
-│  │                              │  │
-│  │ authorize.conf:              │  │
-│  │   [role_fsh_user]            │  │
-│  │   srchIndexesAllowed = _audit│  │
-│  │                              │  │
-│  │ Service Account:             │  │
-│  │   fsh_svc / SvcP@ssw0rd      │  │
-│  └──────────────────────────────┘  │
-└─────────────────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────┐
-│     REMOTE IndexerCluster           │
-│   (Stores the actual data)          │
-└─────────────────────────────────────┘
-```
+![Federated Search setup architecture](pictures/federated-search-setup-architecture.png)
+
+Diagram source: [pictures/federated-search-setup-architecture.puml](pictures/federated-search-setup-architecture.puml)
 
 ### Key Concepts
 
