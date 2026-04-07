@@ -23,7 +23,7 @@ const (
 	EventClusterNotReady               = "ClusterNotReady"
 	EventRoleConflict                  = "RoleConflict"
 	EventUserSecretsFailed             = "UserSecretsFailed"
-	EventUserSecretsDriftDetected      = "UserSecretsDriftDetected"
+	EventRolesSecretsDriftDetected     = "RolesSecretsDriftDetected"
 	EventAccessConfigFailed            = "AccessConfigFailed"
 	EventManagedRolesPatchFailed       = "ManagedRolesPatchFailed"
 	EventRoleFailed                    = "RoleFailed"

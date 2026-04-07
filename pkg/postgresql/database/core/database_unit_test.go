@@ -139,77 +139,144 @@ func postgresDatabaseConflict(name string) error {
 
 func TestPostgresDatabaseServiceRequeuesOnConflict(t *testing.T) {
 	scheme := testScheme(t)
-
-	t.Run("when adding the finalizer", func(t *testing.T) {
-		existing := &enterprisev4.PostgresDatabase{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "primary",
-				Namespace: "dbs",
-			},
-		}
-		c := fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
-			WithObjects(existing).
-			WithInterceptorFuncs(interceptor.Funcs{
-				Update: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.UpdateOption) error {
-					return postgresDatabaseConflict(obj.GetName())
+	tests := []struct {
+		name     string
+		existing *enterprisev4.PostgresDatabase
+		build    func(*enterprisev4.PostgresDatabase) client.Client
+	}{
+		{
+			name: "when adding the finalizer",
+			existing: &enterprisev4.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "primary",
+					Namespace: "dbs",
 				},
-			}).
-			Build()
-
-		postgresDB := &enterprisev4.PostgresDatabase{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, postgresDB))
-
-		result, err := PostgresDatabaseService(
-			context.Background(),
-			&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)},
-			postgresDB,
-			nil,
-		)
-
-		require.NoError(t, err)
-		assert.Equal(t, ctrl.Result{Requeue: true}, result)
-	})
-
-	t.Run("when persisting status", func(t *testing.T) {
-		existing := &enterprisev4.PostgresDatabase{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:       "primary",
-				Namespace:  "dbs",
-				Finalizers: []string{postgresDatabaseFinalizerName},
 			},
-			Spec: enterprisev4.PostgresDatabaseSpec{
-				ClusterRef: corev1.LocalObjectReference{Name: "missing-cluster"},
+			build: func(existing *enterprisev4.PostgresDatabase) client.Client {
+				return fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+					WithObjects(existing).
+					WithInterceptorFuncs(interceptor.Funcs{
+						Update: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.UpdateOption) error {
+							return postgresDatabaseConflict(obj.GetName())
+						},
+					}).
+					Build()
 			},
-		}
-		c := fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
-			WithObjects(existing).
-			WithInterceptorFuncs(interceptor.Funcs{
-				SubResourceUpdate: func(_ context.Context, _ client.Client, subResourceName string, obj client.Object, _ ...client.SubResourceUpdateOption) error {
-					if subResourceName != "status" {
-						return nil
-					}
-					return postgresDatabaseConflict(obj.GetName())
+		},
+		{
+			name: "when persisting status",
+			existing: &enterprisev4.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "primary",
+					Namespace:  "dbs",
+					Finalizers: []string{postgresDatabaseFinalizerName},
 				},
-			}).
-			Build()
+				Spec: enterprisev4.PostgresDatabaseSpec{
+					ClusterRef: corev1.LocalObjectReference{Name: "missing-cluster"},
+				},
+			},
+			build: func(existing *enterprisev4.PostgresDatabase) client.Client {
+				return fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+					WithObjects(existing).
+					WithInterceptorFuncs(interceptor.Funcs{
+						SubResourceUpdate: func(_ context.Context, _ client.Client, subResourceName string, obj client.Object, _ ...client.SubResourceUpdateOption) error {
+							if subResourceName != "status" {
+								return nil
+							}
+							return postgresDatabaseConflict(obj.GetName())
+						},
+					}).
+					Build()
+			},
+		},
+		{
+			name: "when status update conflicts while handling another error",
+			existing: &enterprisev4.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "primary",
+					Namespace:  "dbs",
+					Finalizers: []string{postgresDatabaseFinalizerName},
+				},
+				Spec: enterprisev4.PostgresDatabaseSpec{
+					ClusterRef: corev1.LocalObjectReference{Name: "primary"},
+				},
+			},
+			build: func(existing *enterprisev4.PostgresDatabase) client.Client {
+				return fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+					WithObjects(existing).
+					WithInterceptorFuncs(interceptor.Funcs{
+						Get: func(ctx context.Context, client client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+							if _, ok := obj.(*enterprisev4.PostgresCluster); ok {
+								return errors.New("temporary get failure")
+							}
+							return client.Get(ctx, key, obj, opts...)
+						},
+						SubResourceUpdate: func(_ context.Context, _ client.Client, subResourceName string, obj client.Object, _ ...client.SubResourceUpdateOption) error {
+							if subResourceName != "status" {
+								return nil
+							}
+							return postgresDatabaseConflict(obj.GetName())
+						},
+					}).
+					Build()
+			},
+		},
+	}
 
-		postgresDB := &enterprisev4.PostgresDatabase{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, postgresDB))
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			c := tst.build(tst.existing)
 
-		result, err := PostgresDatabaseService(
-			context.Background(),
-			&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)},
-			postgresDB,
-			nil,
-		)
+			postgresDB := &enterprisev4.PostgresDatabase{}
+			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: tst.existing.Name, Namespace: tst.existing.Namespace}, postgresDB))
 
-		require.NoError(t, err)
-		assert.Equal(t, ctrl.Result{Requeue: true}, result)
-	})
+			result, err := PostgresDatabaseService(
+				context.Background(),
+				&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)},
+				postgresDB,
+				nil,
+			)
+
+			require.NoError(t, err)
+			assert.Equal(t, ctrl.Result{Requeue: true}, result)
+		})
+	}
+}
+
+func TestSecretMissingPolicyForDB(t *testing.T) {
+	tests := []struct {
+		name        string
+		dbName      string
+		existingDBs map[string]struct{}
+		want        secretMissingPolicy
+	}{
+		{
+			name:        "creates secrets for new databases",
+			dbName:      "payments",
+			existingDBs: map[string]struct{}{},
+			want:        createSecretIfMissing,
+		},
+		{
+			name:   "reports drift for previously provisioned databases",
+			dbName: "payments",
+			existingDBs: map[string]struct{}{
+				"payments": {},
+			},
+			want: reportSecretDriftIfMissing,
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			assert.Equal(t, tst.want, secretMissingPolicyForDB(tst.dbName, tst.existingDBs))
+		})
+	}
 }
 
 func TestGetDesiredUsers(t *testing.T) {
@@ -1033,7 +1100,7 @@ func TestEnsureSecret(t *testing.T) {
 		wantPasswordDigits := passwordDigits
 		c := testClient(t, scheme)
 
-		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName, false)
+		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
 
 		require.NoError(t, err)
 
@@ -1073,7 +1140,7 @@ func TestEnsureSecret(t *testing.T) {
 		}
 		c := testClient(t, scheme, retained)
 
-		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName, true)
+		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
 
 		require.NoError(t, err)
 
@@ -1126,7 +1193,7 @@ func TestEnsureSecret(t *testing.T) {
 		}
 		c := testClient(t, scheme, existing)
 
-		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName, true)
+		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
 
 		require.NoError(t, err)
 
@@ -1144,7 +1211,7 @@ func TestEnsureSecret(t *testing.T) {
 		secretName := "primary-payments-admin"
 		c := testClient(t, scheme)
 
-		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName, true)
+		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
 
 		require.Error(t, err)
 		var driftErr *secretReconcileError
@@ -1173,7 +1240,7 @@ func TestEnsureSecret(t *testing.T) {
 		}
 		c := testClient(t, scheme, existing)
 
-		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName, true)
+		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
 
 		require.NoError(t, err)
 
@@ -1201,7 +1268,7 @@ func TestEnsureSecret(t *testing.T) {
 		}
 		c := testClient(t, scheme, existing)
 
-		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName, true)
+		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
 
 		require.Error(t, err)
 		var driftErr *secretReconcileError

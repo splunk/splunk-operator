@@ -392,7 +392,7 @@ func expectStatusCondition(current *enterprisev4.PostgresDatabase, conditionType
 	Expect(condition.Reason).To(Equal(expectedReason), "unexpected reason for %s", conditionType)
 }
 
-func expectReadyStatus(current *enterprisev4.PostgresDatabase, expectedDatabase enterprisev4.DatabaseInfo) {
+func expectReadyStatus(current *enterprisev4.PostgresDatabase, generation int64, expectedDatabase enterprisev4.DatabaseInfo) {
 	expectStatusPhase(current, "Ready")
 	Expect(current.Status.Databases).To(HaveLen(1))
 	Expect(current.Status.Databases[0].Name).To(Equal(expectedDatabase.Name))
@@ -400,6 +400,8 @@ func expectReadyStatus(current *enterprisev4.PostgresDatabase, expectedDatabase 
 	Expect(current.Status.Databases[0].AdminUserSecretRef).NotTo(BeNil())
 	Expect(current.Status.Databases[0].RWUserSecretRef).NotTo(BeNil())
 	Expect(current.Status.Databases[0].ConfigMapRef).NotTo(BeNil())
+	Expect(current.Status.ObservedGeneration).NotTo(BeNil())
+	Expect(*current.Status.ObservedGeneration).To(Equal(generation))
 }
 
 func reconcilePostgresDatabaseToReady(ctx context.Context, scenario readyClusterScenario, poolerEnabled bool) *enterprisev4.PostgresDatabase {
@@ -425,7 +427,7 @@ func reconcilePostgresDatabaseToReady(ctx context.Context, scenario readyCluster
 	expectEmptyReconcileResult(result, err)
 
 	current = fetchPostgresDatabase(ctx, scenario.requestName)
-	expectReadyStatus(current, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+	expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
 	return current
 }
 
@@ -501,7 +503,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				expectEmptyReconcileResult(result, err)
 
 				current = fetchPostgresDatabase(ctx, scenario.requestName)
-				expectReadyStatus(current, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+				expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
 				expectStatusCondition(current, "ClusterReady", metav1.ConditionTrue, "ClusterAvailable")
 				expectStatusCondition(current, "SecretsReady", metav1.ConditionTrue, "SecretsCreated")
 				expectStatusCondition(current, "ConfigMapsReady", metav1.ConditionTrue, "ConfigMapsCreated")
@@ -546,7 +548,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			Expect(configMap.Data).To(HaveKeyWithValue("rw-host", "tenant-rw."+scenario.namespace+".svc.cluster.local"))
 
 			current := fetchPostgresDatabase(ctx, scenario.requestName)
-			expectReadyStatus(current, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+			expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
 			Expect(metav1.IsControlledBy(configMap, owner)).To(BeTrue())
 		})
 
@@ -604,7 +606,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			Expect(metav1.IsControlledBy(secret, owner)).To(BeTrue())
 
 			current := fetchPostgresDatabase(ctx, scenario.requestName)
-			expectReadyStatus(current, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+			expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
 		})
 
 		It("creates secrets and configmaps for a newly added database while preserving existing ones", func() {
