@@ -253,6 +253,17 @@ func GetSplunkServiceName(instanceType InstanceType, identifier string, isHeadle
 	return result
 }
 
+// GetSplunkAppRuntimeServiceName uses a template to name the headless Kubernetes Service for Splunk App Runtime instances.
+func GetSplunkAppRuntimeServiceName(instanceType InstanceType, identifier string) string {
+	appRuntimeInstanceType := fmt.Sprintf("%s-appruntime", instanceType)
+	return fmt.Sprintf(serviceTemplateStr, identifier, appRuntimeInstanceType, "headless")
+}
+
+// GetSplunkAppRuntimeServiceFQDN returns the fully qualified domain name for the headless Kubernetes service for Splunk App Runtime instances.
+func GetSplunkAppRuntimeServiceFQDN(namespace string, instanceType InstanceType, identifier string) string {
+	return splcommon.GetServiceFQDN(namespace, GetSplunkAppRuntimeServiceName(instanceType, identifier))
+}
+
 // GetSplunkDefaultsName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
 func GetSplunkDefaultsName(identifier string, instanceType InstanceType) string {
 	return fmt.Sprintf(defaultsTemplateStr, identifier, instanceType.ToKind())

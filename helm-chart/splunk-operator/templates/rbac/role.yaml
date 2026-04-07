@@ -147,6 +147,32 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
+  - appruntimes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - appruntimes/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - appruntimes/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
   - clustermasters
   verbs:
   - create

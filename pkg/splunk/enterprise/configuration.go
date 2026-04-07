@@ -951,6 +951,10 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
 		{Name: "SPLUNK_GENERAL_TERMS", Value: os.Getenv("SPLUNK_GENERAL_TERMS")},
 		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
+		{
+			Name:  "SPLUNK_APPRUNTIME_HEADLESS_SERVICE_FQDN",
+			Value: GetSplunkAppRuntimeServiceFQDN(cr.GetNamespace(), instanceType, cr.GetName()),
+		},
 	}
 
 	// update variables for licensing, if configured
