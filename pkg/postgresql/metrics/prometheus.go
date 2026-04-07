@@ -5,10 +5,10 @@ import (
 )
 
 var (
-	validationFailuresTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "splunk_operator_postgres_validation_failures_total",
-		Help: "Validation and configuration failures.",
-	}, []string{"controller", "reason"})
+	statusTransitionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "splunk_operator_postgres_status_transitions_total",
+		Help: "Status condition transitions by controller, condition type, status, and reason.",
+	}, []string{"controller", "condition", "status", "reason"})
 
 	clusters = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "splunk_operator_postgres_clusters",
@@ -25,11 +25,6 @@ var (
 		Help: "Current counts of managed users by state.",
 	}, []string{"controller", "state"})
 
-	userActionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "splunk_operator_postgres_user_actions_total",
-		Help: "User-management actions such as secret reconcile, role patch, privilege grant.",
-	}, []string{"action", "result"})
-
 	poolers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "splunk_operator_postgres_poolers",
 		Help: "Current number of PgBouncer poolers by type and readiness state.",
@@ -40,26 +35,13 @@ var (
 		Help: "Current observed pooler instance count.",
 	}, []string{"type"})
 
-	finalizerOperationsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "splunk_operator_postgres_finalizer_operations_total",
-		Help: "Finalizer success and cleanup failures.",
-	}, []string{"controller", "result"})
-
-	ownedResourceOperationsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "splunk_operator_postgres_owned_resource_operations_total",
-		Help: "Create/update/delete outcomes for owned resources.",
-	}, []string{"controller", "resource_kind", "operation", "result"})
-
 	allCollectors = []prometheus.Collector{
-		validationFailuresTotal,
+		statusTransitionsTotal,
 		clusters,
 		databases,
 		managedUsers,
-		userActionsTotal,
 		poolers,
 		poolerInstances,
-		finalizerOperationsTotal,
-		ownedResourceOperationsTotal,
 	}
 )
 
@@ -82,17 +64,15 @@ func NewPrometheusRecorder() *PrometheusRecorder {
 	return &PrometheusRecorder{}
 }
 
-func (p *PrometheusRecorder) IncValidationFailure(controller string, reason string) {
-	validationFailuresTotal.WithLabelValues(controller, reason).Inc()
+func (p *PrometheusRecorder) IncStatusTransition(controller, condition, status, reason string) {
+	statusTransitionsTotal.WithLabelValues(controller, condition, status, reason).Inc()
 }
 
 func (p *PrometheusRecorder) SetClusterPhases(phases map[string]float64, poolerEnabledCount float64) {
-	// Reset all phase gauges before setting new values to avoid stale entries.
 	clusters.Reset()
 	for phase, count := range phases {
 		clusters.WithLabelValues(phase, "false").Set(count)
 	}
-	// pooler_enabled count is tracked separately — it's a cross-cutting dimension.
 	if poolerEnabledCount > 0 {
 		clusters.WithLabelValues("", "true").Set(poolerEnabledCount)
 	}
@@ -111,24 +91,12 @@ func (p *PrometheusRecorder) SetManagedUsers(controller string, states map[strin
 	}
 }
 
-func (p *PrometheusRecorder) IncUserAction(action string, result string) {
-	userActionsTotal.WithLabelValues(action, result).Inc()
-}
-
 func (p *PrometheusRecorder) SetPoolers(poolerType string, state string, count float64) {
 	poolers.WithLabelValues(poolerType, state).Set(count)
 }
 
 func (p *PrometheusRecorder) SetPoolerInstances(poolerType string, count float64) {
 	poolerInstances.WithLabelValues(poolerType).Set(count)
-}
-
-func (p *PrometheusRecorder) IncFinalizerOp(controller string, result string) {
-	finalizerOperationsTotal.WithLabelValues(controller, result).Inc()
-}
-
-func (p *PrometheusRecorder) IncOwnedResourceOp(controller string, resourceKind string, operation string, result string) {
-	ownedResourceOperationsTotal.WithLabelValues(controller, resourceKind, operation, result).Inc()
 }
 
 // Compile-time interface check.
