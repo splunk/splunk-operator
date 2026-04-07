@@ -22,9 +22,10 @@ import (
 	"fmt"
 	"math/rand"
 	"os/exec"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	gomega "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -916,7 +917,7 @@ func VerifyAppInstalled(ctx context.Context, deployment *Deployment, testenvInst
 
 			if versionCheck {
 				// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
-				if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, "-cluster-manager-") || strings.Contains(podName, splcommon.TestClusterManagerDashed))) {
+				if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, "-cluster-manager-") || strings.Contains(podName, "-"+splcommon.ClusterManager+"-"))) {
 					var expectedVersion string
 					if checkupdated {
 						expectedVersion = AppInfo[appName]["V2"]

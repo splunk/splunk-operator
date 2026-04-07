@@ -581,7 +581,7 @@ func TestUpdateStatusInvalidResponse(t *testing.T) {
 		t.Errorf("mgr.updateStatus() should have returned an error here")
 	}
 
-	mockHandlers[1].Body = splcommon.TestUpdateStatusInvalidResponse1
+	mockHandlers[1].Body = loadFixture(t, "update_status_invalid_response1.json")
 
 	// We would like to call mgr.updateStatus() here twice just to mimic calling reconcile twice,
 	// so that the first call fill the field `mgr.cr.Status.Peers` and the next call can use that.
@@ -623,14 +623,14 @@ func TestInvalidPeerStatusInScaleDown(t *testing.T) {
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestInvalidPeerStatusInScaleDownInfo,
+			Body:   loadFixture(t, "invalid_peer_status_in_scale_down_info.json"),
 		},
 		{
 			Method: "GET",
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestInvalidPeerStatusInScaleDownPeer,
+			Body:   loadFixture(t, "invalid_peer_status_in_scale_down_peer.json"),
 		},
 	}
 
@@ -685,14 +685,14 @@ func TestInvalidPeerInFinishRecycle(t *testing.T) {
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestInvalidPeerInFinishRecycleInfo,
+			Body:   loadFixture(t, "invalid_peer_in_finish_recycle_info.json"),
 		},
 		{
 			Method: "GET",
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestInvalidPeerInFinishRecyclePeer,
+			Body:   loadFixture(t, "invalid_peer_in_finish_recycle_peer.json"),
 		},
 	}
 
@@ -780,14 +780,14 @@ func TestIndexerClusterPodManager(t *testing.T) {
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestIndexerClusterPodManagerInfo,
+			Body:   loadFixture(t, "indexer_cluster_pod_manager_info.json"),
 		},
 		{
 			Method: "GET",
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestIndexerClusterPodManagerPeer,
+			Body:   loadFixture(t, "indexer_cluster_pod_manager_peer.json"),
 		},
 	}
 	pod := &corev1.Pod{
@@ -2932,14 +2932,14 @@ func TestClusterQuorumRestoredClusterInitialized(t *testing.T) {
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestIndexerClusterPodManagerInfo,
+			Body:   loadFixture(t, "indexer_cluster_pod_manager_info.json"),
 		},
 		{
 			Method: "GET",
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestIndexerClusterPodManagerPeer,
+			Body:   loadFixture(t, "indexer_cluster_pod_manager_peer.json"),
 		},
 	}
 
@@ -3051,13 +3051,13 @@ func TestClusterQuorumLostEvent(t *testing.T) {
 			Method: "GET",
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json",
 			Status: 200,
-			Body:   splcommon.TestIndexerClusterPodManagerInfo,
+			Body:   loadFixture(t, "indexer_cluster_pod_manager_info.json"),
 		},
 		{
 			Method: "GET",
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json",
 			Status: 200,
-			Body:   splcommon.TestIndexerClusterPodManagerPeer,
+			Body:   loadFixture(t, "indexer_cluster_pod_manager_peer.json"),
 		},
 	}
 	mockSplunkClient := &spltest.MockHTTPClient{}
@@ -3088,7 +3088,7 @@ func TestClusterQuorumLostEvent(t *testing.T) {
 	quorumLostInfo := loadFixture(t, "quorum_lost_info.json")
 	quorumLostHandlers := []spltest.MockHTTPHandler{
 		{Method: "GET", URL: "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json", Status: 200, Body: quorumLostInfo},
-		{Method: "GET", URL: "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json", Status: 200, Body: splcommon.TestIndexerClusterPodManagerPeer},
+		{Method: "GET", URL: "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json", Status: 200, Body: loadFixture(t, "indexer_cluster_pod_manager_peer.json")},
 	}
 	mockSplunkClient2 := &spltest.MockHTTPClient{}
 	mockSplunkClient2.AddHandlers(quorumLostHandlers...)

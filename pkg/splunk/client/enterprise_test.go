@@ -311,7 +311,7 @@ func TestGetclusterManagerInfo(t *testing.T) {
 		}
 		return nil
 	}
-	body = splcommon.TestGetCMInfoEmpty
+	body = loadFixture(t, "get_cm_info_empty.json")
 	splunkClientTester(t, "TestGetclusterManagerInfo", 200, body, wantRequest, test)
 
 	// test error code
@@ -331,7 +331,7 @@ func TestGetIndexerClusterPeerInfo(t *testing.T) {
 		}
 		return nil
 	}
-	body := splcommon.TestGetIndexerClusterPeerInfo
+	body := loadFixture(t, "get_indexer_cluster_peer_info.json")
 	splunkClientTester(t, "TestGetIndexerClusterPeerInfo", 200, body, wantRequest, test)
 
 	// test body with no entries
@@ -342,7 +342,7 @@ func TestGetIndexerClusterPeerInfo(t *testing.T) {
 		}
 		return nil
 	}
-	body = splcommon.TestGetIndexerClusterPeerInfoEmpty
+	body = loadFixture(t, "get_indexer_cluster_peer_info_empty.json")
 	splunkClientTester(t, "TestGetIndexerClusterPeerInfo", 200, body, wantRequest, test)
 
 	// test error code
@@ -383,7 +383,7 @@ func TestGetClusterManagerPeers(t *testing.T) {
 		}
 		return nil
 	}
-	body := splcommon.TestGetCMPeers
+	body := loadFixture(t, "get_cm_peers.json")
 	splunkClientTester(t, "TestGetClusterManagerPeers", 200, body, wantRequest, test)
 
 	// test error response
@@ -434,7 +434,7 @@ func TestAutomateMCApplyChanges(t *testing.T) {
 	wantRequests = []*http.Request(append(wantRequests, request1, request2, request3, request4, request5, request6, request7, request8, request9, request10))
 	body := []string{
 		`{"links":{},"origin":"https://localhost:8089/services/server/info","updated":"2020-09-24T06:38:53+00:00","generator":{"build":"a1a6394cc5ae","version":"8.0.5"},"entry":[{"name":"server-info","id":"https://localhost:8089/services/server/info/server-info","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/server/info/server-info","list":"/services/server/info/server-info"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["*"],"write":[]},"removable":false,"sharing":"system"},"fields":{"required":[],"optional":[],"wildcard":[]},"content":{"activeLicenseGroup":"Trial","activeLicenseSubgroup":"Production","build":"a1a6394cc5ae","cluster_label":["idxc_label"],"cpu_arch":"x86_64","eai:acl":null,"fips_mode":false,"guid":"0F93F33C-4BDA-4A74-AD9F-3FCE26C6AFF0","health_info":"green","health_version":1,"host":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","host_fqdn":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","host_resolved":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","isForwarding":true,"isFree":false,"isTrial":true,"kvStoreStatus":"ready","licenseKeys":["5C52DA5145AD67B8188604C49962D12F2C3B2CF1B82A6878E46F68CA2812807B"],"licenseSignature":"139bf73ec92c84121c79a9b8307a6724","licenseState":"OK","license_labels":["Splunk Enterprise   Splunk Analytics for Hadoop Download Trial"],"master_guid":"0F93F33C-4BDA-4A74-AD9F-3FCE26C6AFF0","master_uri":"self","max_users":4294967295,"mode":"normal","numberOfCores":1,"numberOfVirtualCores":2,"os_build":"#1 SMP Thu Sep 3 19:04:44 UTC 2020","os_name":"Linux","os_name_extended":"Linux","os_version":"4.14.193-149.317.amzn2.x86_64","physicalMemoryMB":7764,"product_type":"enterprise","rtsearch_enabled":true,"serverName":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","server_roles":["license_master","cluster_search_head","search_head"],"startup_time":1600928786,"staticAssetId":"CFE3D41EE2CCD1465E8C8453F83E4ECFFF540780B4490E84458DD4A3694CE4D1","version":"8.0.5"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`,
-		splcommon.TestMCApplyChanges,
+		loadFixture(t, "mc_apply_changes.json"),
 		"",
 		"",
 		"",
@@ -464,7 +464,7 @@ func TestGetMonitoringconsoleServerRoles(t *testing.T) {
 		}
 		return nil
 	}
-	body := splcommon.TestGetClusterInfo
+	body := loadFixture(t, "get_cluster_info.json")
 	splunkClientTester(t, "TestGetMonitoringconsoleServerRoles", 200, body, wantRequest, test)
 
 	// Test negative conditions
@@ -510,7 +510,7 @@ func TestGetMonitoringconsoleAssetTable(t *testing.T) {
 		}
 		return nil
 	}
-	body := splcommon.TestGetMCAssetTable
+	body := loadFixture(t, "get_mc_asset_table.json")
 	splunkClientTester(t, "TestGetMonitoringconsoleAssetTable", 200, body, wantRequest, test)
 
 	// Test negative conditions
@@ -615,7 +615,7 @@ func TestGetClusterInfo(t *testing.T) {
 		}
 		return nil
 	}
-	body := splcommon.TestGetClusterInfo
+	body := loadFixture(t, "get_cluster_info.json")
 	splunkClientTester(t, "TestGetClusterInfo", 200, body, wantRequest, test)
 
 	// Test negative conditions
