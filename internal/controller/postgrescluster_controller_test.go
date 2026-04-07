@@ -51,7 +51,7 @@ import (
 * PC-09 ignores no-op updates
  */
 
-var _ = Describe("PostgresCluster Controller", func() {
+var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 	const (
 		postgresVersion    = "15.10"
