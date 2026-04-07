@@ -32,6 +32,7 @@ jobs:
             indingsep,
           ]
     runs-on: ubuntu-latest
+    timeout-minutes: 240
     env:
       CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
@@ -148,9 +149,7 @@ jobs:
           mkdir -p ./bin
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run Integration test
-        timeout-minutes: 240
         env:
-          TEST_TIMEOUT: 225m
           TEST_S3_ACCESS_KEY_ID: ${{ vars.TEST_S3_ACCESS_KEY_ID }}
           TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.TEST_S3_SECRET_ACCESS_KEY }}
         run: |

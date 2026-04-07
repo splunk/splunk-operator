@@ -65,7 +65,7 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
-		It("managercrcrud, integration, m4: can deploy can deploy multisite indexer and search head clusters, change their CR, update the instances", func() {
+		It("managercrcrud, integration, m4: can deploy can deploy multisite indexer and search head clusters, change their CR, update the instances", NodeTimeout(testenv.LongTimeout), func() {
 
 			// Deploy Multisite Cluster and Search Head Clusters
 			mcRef := deployment.GetName()

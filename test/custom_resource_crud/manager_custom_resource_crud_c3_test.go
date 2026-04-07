@@ -71,7 +71,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("managercrcrud, integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", func() {
+		It("managercrcrud, integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", NodeTimeout(testenv.LongTimeout), func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
@@ -166,7 +166,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 	Context("Search Head Cluster", func() {
 		// CSPL-3256 - Adding the SHC only test case under c3 as IDXC is irrelevant for this test case
-		It("managercrcrud, integration, shc: can deploy Search Head Cluster with Deployer resource spec configured", func() {
+		It("managercrcrud, integration, shc: can deploy Search Head Cluster with Deployer resource spec configured", NodeTimeout(testenv.MediumTimeout), func() {
 			shcName := fmt.Sprintf("%s-shc", deployment.GetName())
 			_, err := deployment.DeploySearchHeadCluster(ctx, shcName, "", "", "", "")
 			if err != nil {
@@ -224,7 +224,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("managercrcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", func() {
+		It("managercrcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", NodeTimeout(testenv.LongTimeout), func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()

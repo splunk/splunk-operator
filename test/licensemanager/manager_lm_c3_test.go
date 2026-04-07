@@ -63,13 +63,13 @@ var _ = Describe("Licensemanager test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)  with License Manager", func() {
-		It("licensemanager, integration, c3: Splunk Operator can configure License Manager with Indexers and Search Heads in C3 SVA", func() {
+		It("licensemanager, integration, c3: Splunk Operator can configure License Manager with Indexers and Search Heads in C3 SVA", NodeTimeout(testenv.MediumTimeout), func() {
 			RunLMC3Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)  with License Manager", func() {
-		It("licensemanager, integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
+		It("licensemanager, integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", NodeTimeout(testenv.MediumTimeout), func() {
 			RunLMC3AppFrameworkTest(ctx, deployment, testcaseEnvInst, testenvInstance, config)
 		})
 	})

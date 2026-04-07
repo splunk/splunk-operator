@@ -61,7 +61,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1) with LM and MC", func() {
-		It("mastersecret, integration, s1: Secret update on a standalone instance with LM and MC", func() {
+		It("mastersecret, integration, s1: Secret update on a standalone instance with LM and MC", NodeTimeout(testenv.MediumTimeout), func() {
 
 			//  Test Scenario
 			// 1. Update Secrets Data
@@ -168,7 +168,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1) with LM amd MC", func() {
-		It("mastersecret, integration, s1: Secret Object is recreated on delete and new secrets are applied to Splunk Pods", func() {
+		It("mastersecret, integration, s1: Secret Object is recreated on delete and new secrets are applied to Splunk Pods", NodeTimeout(testenv.MediumTimeout), func() {
 
 			// Test Scenario
 			//1. Delete Secret Object
@@ -270,7 +270,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("mastersecret, smoke, s1: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", func() {
+		It("mastersecret, smoke, s1: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", NodeTimeout(testenv.MediumTimeout), func() {
 
 			// Test Scenario
 			// 1. Delete Secret Passing Empty Data Map to secret Object

@@ -70,7 +70,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("mastercrcrud, integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", func() {
+		It("mastercrcrud, integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", NodeTimeout(testenv.LongTimeout), func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
@@ -169,7 +169,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("mastercrcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", func() {
+		It("mastercrcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", NodeTimeout(testenv.LongTimeout), func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
