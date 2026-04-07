@@ -2,24 +2,14 @@ package metrics
 
 import (
 	"context"
-	"sync"
-	"time"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const fleetCollectInterval = 2 * time.Second
-
 // FleetCollector recomputes fleet-state gauges from the K8s API (informer cache).
-// It is rate-limited to avoid redundant work during burst reconciles.
-// Each resource type has its own timestamp so they don't starve each other.
-type FleetCollector struct {
-	mu               sync.Mutex
-	lastClusterCollect  time.Time
-	lastDatabaseCollect time.Time
-}
+type FleetCollector struct{}
 
 // NewFleetCollector returns a new FleetCollector.
 func NewFleetCollector() *FleetCollector {
@@ -30,10 +20,6 @@ func NewFleetCollector() *FleetCollector {
 // gauges, pooler gauges, and managed-user gauges. Skips if called within 2s
 // of the last collection.
 func (fc *FleetCollector) CollectClusterMetrics(ctx context.Context, c client.Client, recorder Recorder) {
-	if !fc.shouldCollectCluster() {
-		return
-	}
-
 	logger := log.FromContext(ctx)
 
 	var list enterprisev4.PostgresClusterList
@@ -82,10 +68,6 @@ func (fc *FleetCollector) CollectClusterMetrics(ctx context.Context, c client.Cl
 // CollectDatabaseMetrics lists all PostgresDatabase resources and updates
 // phase gauges. Skips if called within 2s of the last collection.
 func (fc *FleetCollector) CollectDatabaseMetrics(ctx context.Context, c client.Client, recorder Recorder) {
-	if !fc.shouldCollectDatabase() {
-		return
-	}
-
 	logger := log.FromContext(ctx)
 
 	var list enterprisev4.PostgresDatabaseList
@@ -107,24 +89,3 @@ func (fc *FleetCollector) CollectDatabaseMetrics(ctx context.Context, c client.C
 	recorder.SetDatabasePhases(phases)
 }
 
-func (fc *FleetCollector) shouldCollectCluster() bool {
-	fc.mu.Lock()
-	defer fc.mu.Unlock()
-	now := time.Now()
-	if now.Sub(fc.lastClusterCollect) < fleetCollectInterval {
-		return false
-	}
-	fc.lastClusterCollect = now
-	return true
-}
-
-func (fc *FleetCollector) shouldCollectDatabase() bool {
-	fc.mu.Lock()
-	defer fc.mu.Unlock()
-	now := time.Now()
-	if now.Sub(fc.lastDatabaseCollect) < fleetCollectInterval {
-		return false
-	}
-	fc.lastDatabaseCollect = now
-	return true
-}
