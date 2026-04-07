@@ -281,7 +281,7 @@ func (r *AppRuntimeReconciler) createHeadlessService(ctx context.Context, ar *en
 func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterpriseApi.AppRuntime, nn types.NamespacedName, splunkStsName string, ordinal int32) error {
 	etcPvcName := fmt.Sprintf("pvc-etc-%s-%d", splunkStsName, ordinal)
 	varPvcName := fmt.Sprintf("pvc-var-%s-%d", splunkStsName, ordinal)
-
+	privileged := true
 	pod := &corev1.Pod{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      nn.Name,
@@ -311,10 +311,11 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 			},
 			Containers: []corev1.Container{
 				{
-					Image: appRuntime.Spec.Image,
-					Name:  "appruntime",
+					Image:           appRuntime.Spec.Image,
+					Name:            "appruntime",
+					ImagePullPolicy: corev1.PullAlways,
 					Command: []string{
-						"/usr/bin/splunk-eps",
+						"/usr/local/bin/entrypoint.sh",
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						{
@@ -325,7 +326,20 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 							Name:      "pvc-var",
 							MountPath: "/opt/splunk/var",
 						},
+						{
+							Name:      "containerd-data",
+							MountPath: "/var/lib/containerd-nested",
+						},
+						{
+							Name:      "containerd-run",
+							MountPath: "/run/containerd-nested",
+						},
 					},
+					Ports: []corev1.ContainerPort{
+						{ContainerPort: int32(9000)},
+						{ContainerPort: int32(9001)},
+					},
+					SecurityContext: &corev1.SecurityContext{Privileged: &privileged},
 				},
 			},
 			Volumes: []corev1.Volume{
@@ -344,6 +358,12 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 							ClaimName: varPvcName,
 						},
 					},
+				},
+				{
+					Name: "containerd-data",
+				},
+				{
+					Name: "containerd-run",
 				},
 			},
 		},
@@ -369,7 +389,7 @@ func (r *AppRuntimeReconciler) updateStatus(ctx context.Context, appRuntime *ent
 func getImageFromEnv() string {
 	image, ok := os.LookupEnv("RELATED_IMAGE_APP_RUNTIME")
 	if !ok {
-		image = "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/supervisor:v3.1.0-mb-1"
+		image = "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/supervisor:v3.1.0-appruntime"
 	}
 	return image
 }
