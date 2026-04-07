@@ -36,7 +36,6 @@ type ManagedRole struct {
 
 	// Exists controls whether the role should be present (true) or absent (false) in PostgreSQL.
 	// +kubebuilder:default=true
-	// +optional
 	Exists bool `json:"exists"`
 }
 
