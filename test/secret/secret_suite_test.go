@@ -27,8 +27,8 @@ var (
 	testSuiteName   = "secret-" + testenv.RandomDNSName(3)
 )
 
-// TestBasic is the main entry point
-func TestBasic(t *testing.T) {
+// TestSecret is the main entry point
+func TestSecret(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Running "+testSuiteName)

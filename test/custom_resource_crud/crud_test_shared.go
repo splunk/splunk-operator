@@ -34,99 +34,96 @@ func RunS1CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 
 	// Verify telemetry
 	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
-	Expect(testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)).To(Succeed())
+	Expect(testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)).To(Succeed(), "Telemetry verification failed")
 
 	// Deploy and verify Monitoring Console
-	mc, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
+	mcRef := deployment.GetName()
+	mc, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, "")
 	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
-	// Verify CPU limits before updating the CR
+	// Verify CPU limits on Standalone before updating the CR
 	standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-	Expect(testcaseEnvInst.VerifyCPULimits(deployment, standalonePodName, defaultCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyCPULimits(deployment, standalonePodName, defaultCPULimits)).To(Succeed(), "Standalone CPU limits mismatch before CR update")
 
 	// Change CPU limits to trigger CR update
 	standalone.Spec.Resources.Limits = corev1.ResourceList{
 		"cpu": resource.MustParse(newCPULimits),
 	}
 	err = deployment.UpdateCR(ctx, standalone)
-	Expect(err).To(Succeed(), "Unable to deploy standalone instance with updated CR ")
+	Expect(err).To(Succeed(), "Unable to update Standalone CR")
 
-	// Verify Standalone is updating
-	Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseUpdating)).To(Succeed())
-
-	// Verify Standalone goes to ready state
-	Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseReady)).To(Succeed())
+	// Verify Standalone reaches Updating phase and returns to Ready
+	Expect(testcaseEnvInst.VerifyStandalonePhaseAndReady(ctx, deployment, enterpriseApi.PhaseUpdating, standalone)).To(Succeed(), "Standalone did not reach Updating phase or return to Ready")
 
 	// Verify Monitoring Console is Ready and stays in ready state
-	Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, mcRef, mc)).To(Succeed(), "Monitoring Console not ready")
 
-	// Verify CPU limits after updating the CR
-	Expect(testcaseEnvInst.VerifyCPULimits(deployment, standalonePodName, newCPULimits)).To(Succeed())
+	// Verify CPU limits on Standalone after updating the CR
+	Expect(testcaseEnvInst.VerifyCPULimits(deployment, standalonePodName, newCPULimits)).To(Succeed(), "Standalone CPU limits mismatch after CR update")
 }
 
 // RunC3CPUUpdateTest runs the standard C3 CPU limit update test workflow
 func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig, defaultCPULimits string, newCPULimits string) {
 	// Deploy Single site Cluster and Search Head Clusters
 	mcRef := deployment.GetName()
-	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
 	Expect(config.DeployAndVerifyC3(ctx, deployment, testcaseEnvInst, 3, true /*shc*/, mcRef)).To(Succeed(), "Unable to deploy C3 cluster")
 
 	// Verify telemetry
-	Expect(testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)).To(Succeed())
+	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
+	Expect(testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)).To(Succeed(), "Telemetry verification failed")
 
 	// Deploy and verify Monitoring Console, RF/SF
 	mc, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, deployment.GetName(), "")
 	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-	Expect(testcaseEnvInst.StandardC3Verification(ctx, deployment, mc)).To(Succeed())
+	Expect(testcaseEnvInst.StandardC3Verification(ctx, deployment, mc)).To(Succeed(), "Standard C3 verification failed")
 
 	// Verify CPU limits on Indexers before updating the CR
 	indexerCount := 3
-	Expect(testcaseEnvInst.VerifyIndexerCPULimits(deployment, indexerCount, defaultCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyIndexerCPULimits(deployment, indexerCount, defaultCPULimits)).To(Succeed(), "Indexer CPU limits mismatch before CR update")
 
 	// Change CPU limits to trigger CR update
 	idxc := &enterpriseApi.IndexerCluster{}
 	instanceName := fmt.Sprintf("%s-idxc", deployment.GetName())
-	Expect(testenv.GetInstanceWithExpect(ctx, deployment, idxc, instanceName, "Unable to get instance of Indexer Cluster")).To(Succeed())
+	Expect(deployment.GetInstance(ctx, instanceName, idxc)).To(Succeed(), "Unable to get Indexer Cluster instance")
 	idxc.Spec.Resources.Limits = corev1.ResourceList{
 		"cpu": resource.MustParse(newCPULimits),
 	}
-	Expect(testenv.UpdateCRWithExpect(ctx, deployment, idxc, "Unable to deploy Indexer Cluster with updated CR")).To(Succeed())
+	Expect(deployment.UpdateCR(ctx, idxc)).To(Succeed(), "Unable to update Indexer Cluster CR")
 
 	// Verify Indexer Cluster is updating
-	idxcName := deployment.GetName() + "-idxc"
-	Expect(testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseUpdating, idxcName)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseUpdating, instanceName)).To(Succeed(), "Indexer Cluster did not reach Updating phase")
 
 	// Verify Indexers go to ready state
-	Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed())
+	Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready after CR update")
 
 	// Verify CPU limits on Indexers after updating the CR
-	Expect(testcaseEnvInst.VerifyIndexerCPULimits(deployment, indexerCount, newCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyIndexerCPULimits(deployment, indexerCount, newCPULimits)).To(Succeed(), "Indexer CPU limits mismatch after CR update")
 
 	// Verify CPU limits on Search Heads before updating the CR
 	searchHeadCount := 3
-	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, searchHeadCount, defaultCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, searchHeadCount, defaultCPULimits)).To(Succeed(), "Search Head CPU limits mismatch before CR update")
 
 	// Change CPU limits to trigger CR update
 	shc := &enterpriseApi.SearchHeadCluster{}
 	instanceName = fmt.Sprintf("%s-shc", deployment.GetName())
-	Expect(testenv.GetInstanceWithExpect(ctx, deployment, shc, instanceName, "Unable to fetch Search Head Cluster deployment")).To(Succeed())
+	Expect(deployment.GetInstance(ctx, instanceName, shc)).To(Succeed(), "Unable to get Search Head Cluster instance")
 
 	shc.Spec.Resources.Limits = corev1.ResourceList{
 		"cpu": resource.MustParse(newCPULimits),
 	}
-	Expect(testenv.UpdateCRWithExpect(ctx, deployment, shc, "Unable to deploy Search Head Cluster with updated CR")).To(Succeed())
+	Expect(deployment.UpdateCR(ctx, shc)).To(Succeed(), "Unable to update Search Head Cluster CR")
 
 	// Verify Search Head Cluster is updating
-	Expect(testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseUpdating)).To(Succeed())
+	Expect(testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseUpdating)).To(Succeed(), "Search Head Cluster did not reach Updating phase")
 
-	// Verify Search Head go to ready state
-	Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed())
+	// Verify Search Heads go to ready state
+	Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready after CR update")
 
 	// Verify Monitoring Console is Ready and stays in ready state
-	Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, mcRef, mc)).To(Succeed(), "Monitoring Console not ready")
 
 	// Verify CPU limits on Search Heads after updating the CR
-	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, searchHeadCount, newCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, searchHeadCount, newCPULimits)).To(Succeed(), "Search Head CPU limits mismatch after CR update")
 }
 
 // RunC3PVCDeletionTest runs the standard C3 PVC deletion test workflow
@@ -134,14 +131,14 @@ func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, t
 	// Deploy Single site Cluster and Search Head Clusters
 	mcRef := deployment.GetName()
 	Expect(config.DeployAndVerifyC3(ctx, deployment, testcaseEnvInst, 3, true /*shc*/, mcRef)).To(Succeed(), "Unable to deploy C3 cluster")
-	Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 	// Deploy and verify Monitoring Console
 	mc, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, "")
 	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 	clusterManagerType := config.ClusterManagerPVCType()
-	Expect(testenv.VerifyC3ClusterPVCs(testcaseEnvInst, deployment, clusterManagerType, true, verificationTimeout)).To(Succeed())
+	Expect(testenv.VerifyC3ClusterPVCs(testcaseEnvInst, deployment, clusterManagerType, true, verificationTimeout)).To(Succeed(), "C3 cluster PVCs not present")
 
 	// Delete the Search Head Cluster
 	Expect(testenv.GetAndDeleteCR(ctx, deployment, &enterpriseApi.SearchHeadCluster{}, deployment.GetName()+"-shc")).To(Succeed(), "Unable to delete SHC instance")
@@ -154,11 +151,10 @@ func RunC3PVCDeletionTest(ctx context.Context, deployment *testenv.Deployment, t
 
 	// Delete Monitoring Console
 	Expect(testenv.GetAndDeleteCR(ctx, deployment, mc, mcRef)).To(Succeed(), "Unable to delete Monitoring Console instance")
-
-	Expect(testenv.VerifyC3ClusterPVCs(testcaseEnvInst, deployment, clusterManagerType, false, verificationTimeout)).To(Succeed())
+	Expect(testenv.VerifyC3ClusterPVCs(testcaseEnvInst, deployment, clusterManagerType, false, verificationTimeout)).To(Succeed(), "C3 cluster PVCs not deleted")
 
 	// Verify Monitoring Console PVCs (etc and var) have been deleted
-	Expect(testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "monitoring-console", 1, false, verificationTimeout)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "monitoring-console", 1, false, verificationTimeout)).To(Succeed(), "Monitoring Console PVCs not deleted")
 }
 
 // RunSHCDeployerResourceSpecTest deploys a Search Head Cluster, verifies default CPU limits,
@@ -170,13 +166,13 @@ func RunSHCDeployerResourceSpecTest(ctx context.Context, deployment *testenv.Dep
 
 	// Verify CPU limits on Search Heads and deployer before updating CR
 	searchHeadCount := 3
-	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, searchHeadCount, defaultCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, searchHeadCount, defaultCPULimits)).To(Succeed(), "Search Head CPU limits mismatch before CR update")
 
 	deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
-	Expect(testcaseEnvInst.VerifyCPULimits(deployment, deployerPodName, defaultCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyCPULimits(deployment, deployerPodName, defaultCPULimits)).To(Succeed(), "Deployer CPU limits mismatch before CR update")
 
 	shc := &enterpriseApi.SearchHeadCluster{}
-	Expect(testenv.GetInstanceWithExpect(ctx, deployment, shc, shcName, "Unable to fetch Search Head Cluster deployment")).To(Succeed())
+	Expect(deployment.GetInstance(ctx, shcName, shc)).To(Succeed(), "Unable to get Search Head Cluster instance")
 
 	// Assign new resources for deployer pod only
 	newCPULimits := "4"
@@ -195,64 +191,63 @@ func RunSHCDeployerResourceSpecTest(ctx context.Context, deployment *testenv.Dep
 		},
 	}
 	shc.Spec.DeployerResourceSpec = depResSpec
+	Expect(deployment.UpdateCR(ctx, shc)).To(Succeed(), "Unable to update Search Head Cluster CR")
 
-	Expect(testenv.UpdateCRWithExpect(ctx, deployment, shc, "Unable to deploy Search Head Cluster with updated CR")).To(Succeed())
-
-	// Verify Search Head go to ready state
-	Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed())
+	// Verify Search Heads go to ready state
+	Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready after deployer spec update")
 
 	// Verify CPU limits on Search Heads - Should be same as before
-	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, searchHeadCount, defaultCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, searchHeadCount, defaultCPULimits)).To(Succeed(), "Search Head CPU limits changed unexpectedly")
 
 	// Verify modified deployer spec
-	Expect(testcaseEnvInst.VerifyResourceConstraints(deployment, deployerPodName, depResSpec)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyResourceConstraints(deployment, deployerPodName, depResSpec)).To(Succeed(), "Deployer resource constraints mismatch")
 }
 
 // RunM4CPUUpdateTest runs the standard M4 CPU limit update test workflow
 func RunM4CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig, defaultCPULimits string, newCPULimits string) {
 	// Deploy Multisite Cluster and Search Head Clusters
 	mcRef := deployment.GetName()
-	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
 	siteCount := 3
 	Expect(config.DeployAndVerifyM4(ctx, deployment, testcaseEnvInst, 1, siteCount, mcRef)).To(Succeed(), "Unable to deploy M4 cluster")
 
-	Expect(testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)).To(Succeed())
+	prevTelemetrySubmissionTime := testcaseEnvInst.GetTelemetryLastSubmissionTime(ctx, deployment)
+	Expect(testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)).To(Succeed(), "Telemetry verification failed")
 
 	// Deploy and verify Monitoring Console
 	mc, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, "")
 	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 	// Verify RF SF is met
-	Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 	// Verify CPU limits on Indexers before updating the CR
-	Expect(testcaseEnvInst.VerifyCPULimitsOnAllSites(deployment, siteCount, defaultCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyCPULimitsOnAllSites(deployment, siteCount, defaultCPULimits)).To(Succeed(), "Multisite Indexer CPU limits mismatch before CR update")
 
 	// Change CPU limits to trigger CR update
 	idxc := &enterpriseApi.IndexerCluster{}
 	for i := 1; i <= siteCount; i++ {
 		siteName := fmt.Sprintf("site%d", i)
 		instanceName := fmt.Sprintf("%s-%s", deployment.GetName(), siteName)
-		Expect(testenv.GetInstanceWithExpect(ctx, deployment, idxc, instanceName, "Unable to fetch Indexer Cluster deployment")).To(Succeed())
+		Expect(deployment.GetInstance(ctx, instanceName, idxc)).To(Succeed(), "Unable to get Indexer Cluster instance")
 		idxc.Spec.Resources.Limits = corev1.ResourceList{
 			"cpu": resource.MustParse(newCPULimits),
 		}
-		Expect(testenv.UpdateCRWithExpect(ctx, deployment, idxc, "Unable to deploy Indexer Cluster with updated CR")).To(Succeed())
+		Expect(deployment.UpdateCR(ctx, idxc)).To(Succeed(), "Unable to update Indexer Cluster CR")
 	}
 
 	// Verify Indexer Cluster is updating
 	idxcName := deployment.GetName() + "-site1"
-	Expect(testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseUpdating, idxcName)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseUpdating, idxcName)).To(Succeed(), "Indexer Cluster did not reach Updating phase")
 
 	// Verify Indexers go to ready state
-	Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Multisite Indexers not ready after CR update")
 
 	// Verify Monitoring Console is Ready and stays in ready state
-	Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 	// Verify RF SF is met
-	Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met after CR update")
 
 	// Verify CPU limits after updating the CR
-	Expect(testcaseEnvInst.VerifyCPULimitsOnAllSites(deployment, siteCount, newCPULimits)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyCPULimitsOnAllSites(deployment, siteCount, newCPULimits)).To(Succeed(), "Multisite Indexer CPU limits mismatch after CR update")
 }

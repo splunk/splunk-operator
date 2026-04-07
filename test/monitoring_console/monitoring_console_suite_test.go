@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package monitoringconsoletest
+package monitoringconsole
 
 import (
 	"testing"
@@ -27,8 +27,8 @@ var (
 	testSuiteName   = "mc-" + testenv.RandomDNSName(3)
 )
 
-// TestBasic is the main entry point
-func TestBasic(t *testing.T) {
+// TestMonitoringConsole is the main entry point
+func TestMonitoringConsole(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Running "+testSuiteName)

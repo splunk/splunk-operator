@@ -27,8 +27,8 @@ var (
 	testSuiteName   = "smoke-" + testenv.RandomDNSName(3)
 )
 
-// TestBasic is the main entry point
-func TestBasic(t *testing.T) {
+// TestSmoke is the main entry point
+func TestSmoke(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Running "+testSuiteName)

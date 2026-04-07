@@ -54,7 +54,7 @@ var _ = Describe("Custom Resource CRUD test", func() {
 			Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 		})
 
-		It("managercrcrud, integration, s1: can deploy a standalone instance, change its CR, update the instance", func() {
+		It("managercrcrud, integration, s1: can deploy a Standalone instance, change its CR, update the instance", func() {
 			RunS1CPUUpdateTest(ctx, deployment, testcaseEnvInst, defaultCPULimits, newCPULimits)
 		})
 	})

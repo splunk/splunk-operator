@@ -243,8 +243,11 @@ func (testcaseenv *TestCaseEnv) VerifySearchHeadCPULimits(deployment *Deployment
 	return nil
 }
 
-// VerifyM4ComponentsReady verifies multisite indexers, multisite status, and SHC are ready (without CM check or RFSF).
-func (testcaseenv *TestCaseEnv) VerifyM4ComponentsReady(ctx context.Context, deployment *Deployment, siteCount int) error {
+// VerifyM4ComponentsReady verifies the Cluster Manager, multisite indexers, multisite status, and SHC are ready.
+func (testcaseenv *TestCaseEnv) VerifyM4ComponentsReady(ctx context.Context, deployment *Deployment, siteCount int, cmReadyFn func() error) error {
+	if err := cmReadyFn(); err != nil {
+		return err
+	}
 	if err := testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount); err != nil {
 		return err
 	}
@@ -295,11 +298,18 @@ func (testcaseenv *TestCaseEnv) VerifyProbeConfigAndScripts(ctx context.Context,
 
 // NewStandaloneSpecWithMCRef creates a StandaloneSpec with a MonitoringConsoleRef set to the given MC name.
 func NewStandaloneSpecWithMCRef(image string, mcName string) enterpriseApi.StandaloneSpec {
+	return NewStandaloneSpecWithMCRefAndResources(image, mcName, corev1.ResourceRequirements{})
+}
+
+// NewStandaloneSpecWithMCRefAndResources creates a StandaloneSpec with a MonitoringConsoleRef
+// and custom resource requirements.
+func NewStandaloneSpecWithMCRefAndResources(image string, mcName string, resources corev1.ResourceRequirements) enterpriseApi.StandaloneSpec {
 	return enterpriseApi.StandaloneSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "IfNotPresent",
 				Image:           image,
+				Resources:       resources,
 			},
 			Volumes: []corev1.Volume{},
 			MonitoringConsoleRef: corev1.ObjectReference{
@@ -338,10 +348,9 @@ func (c *ClusterReadinessConfig) DeployAndVerifyM4(ctx context.Context, deployme
 	if err := c.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), indexerReplicas, siteCount, mcRef); err != nil {
 		return fmt.Errorf("unable to deploy M4 cluster: %w", err)
 	}
-	if err := c.ClusterManagerReady(ctx, deployment, testcaseEnv); err != nil {
-		return err
-	}
-	return testcaseEnv.VerifyM4ComponentsReady(ctx, deployment, siteCount)
+	return testcaseEnv.VerifyM4ComponentsReady(ctx, deployment, siteCount, func() error {
+		return c.ClusterManagerReady(ctx, deployment, testcaseEnv)
+	})
 }
 
 // DeployC3WithLicense sets up the license config map, deploys a C3 cluster,
@@ -368,8 +377,7 @@ func (c *ClusterReadinessConfig) DeployM4WithLicense(ctx context.Context, deploy
 	if err := c.LicenseManagerReady(ctx, deployment, testcaseEnv); err != nil {
 		return err
 	}
-	if err := c.ClusterManagerReady(ctx, deployment, testcaseEnv); err != nil {
-		return err
-	}
-	return testcaseEnv.VerifyM4ComponentsReady(ctx, deployment, siteCount)
+	return testcaseEnv.VerifyM4ComponentsReady(ctx, deployment, siteCount, func() error {
+		return c.ClusterManagerReady(ctx, deployment, testcaseEnv)
+	})
 }

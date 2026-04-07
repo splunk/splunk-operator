@@ -27,8 +27,8 @@ var (
 	testSuiteName   = "lmanager-" + testenv.RandomDNSName(3)
 )
 
-// TestBasic is the main entry point
-func TestBasic(t *testing.T) {
+// TestLicenseManager is the main entry point
+func TestLicenseManager(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Running "+testSuiteName)

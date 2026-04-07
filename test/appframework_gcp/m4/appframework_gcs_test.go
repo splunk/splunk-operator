@@ -566,7 +566,7 @@ var _ = Describe("m4appfw test", func() {
 
 			//############### SCALING UP ################
 			// Get instance of current Search Head Cluster CR with latest config
-			testenv.GetInstanceWithExpect(ctx, deployment, shc, deployment.GetName()+"-shc", "Failed to get instance of Search Head Cluster")
+			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Scale up Search Head Cluster
 			defaultSHReplicas := shc.Spec.Replicas
@@ -584,7 +584,7 @@ var _ = Describe("m4appfw test", func() {
 			// Get instance of current Indexer CR with latest config
 			idxcName := deployment.GetName() + "-" + "site1"
 			idxc := &enterpriseApi.IndexerCluster{}
-			testenv.GetInstanceWithExpect(ctx, deployment, idxc, idxcName, "Failed to get instance of Indexer Cluster")
+			Expect(deployment.GetInstance(ctx, idxcName, idxc)).To(Succeed(), "Failed to get instance of Indexer Cluster")
 			defaultIndexerReplicas := idxc.Spec.Replicas
 			scaledIndexerReplicas := defaultIndexerReplicas + 1
 			testcaseEnvInst.Log.Info("Scale up Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
@@ -654,7 +654,7 @@ var _ = Describe("m4appfw test", func() {
 
 			//############### SCALING DOWN ##############
 			// Get instance of current Search Head Cluster CR with latest config
-			testenv.GetInstanceWithExpect(ctx, deployment, shc, deployment.GetName()+"-shc", "Failed to get instance of Search Head Cluster")
+			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Scale down Search Head Cluster
 			defaultSHReplicas = shc.Spec.Replicas
@@ -670,7 +670,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown)
 
 			// Get instance of current Indexer CR with latest config
-			testenv.GetInstanceWithExpect(ctx, deployment, idxc, idxcName, "Failed to get instance of Indexer Cluster")
+			Expect(deployment.GetInstance(ctx, idxcName, idxc)).To(Succeed(), "Failed to get instance of Indexer Cluster")
 			defaultIndexerReplicas = idxc.Spec.Replicas
 			scaledIndexerReplicas = defaultIndexerReplicas - 1
 			testcaseEnvInst.Log.Info("Scaling down Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
@@ -2104,7 +2104,7 @@ var _ = Describe("m4appfw test", func() {
 			//######### SWITCH FROM MANUAL TO PERIODIC POLLING ############
 			// Get instance of current Cluster Master CR with latest config
 			cm = &enterpriseApiV3.ClusterMaster{}
-			testenv.GetInstanceWithExpect(ctx, deployment, cm, deployment.GetName(), "Failed to edit Cluster Master")
+			Expect(deployment.GetInstance(ctx, deployment.GetName(), cm)).To(Succeed(), "Failed to get instance of Cluster Master")
 
 			// Set AppsRepoPollInterval for Cluster Master to 180 seconds
 			testcaseEnvInst.Log.Info("Set AppsRepoPollInterval for Cluster Master to 180 seconds")
@@ -2114,7 +2114,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Get instance of current Search Head Cluster CR with latest config
 			shc = &enterpriseApi.SearchHeadCluster{}
-			testenv.GetInstanceWithExpect(ctx, deployment, shc, deployment.GetName()+"-shc", "Failed to edit Search Head Cluster")
+			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Set AppsRepoPollInterval for Search Head Cluster to 180 seconds
 			testcaseEnvInst.Log.Info("Set AppsRepoPollInterval for Search Head Cluster to 180 seconds")

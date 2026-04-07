@@ -17,12 +17,12 @@ package testenv
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
 	"time"
 
+	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	corev1 "k8s.io/api/core/v1"
 
@@ -100,19 +100,12 @@ func CheckPodNameOnMC(ns string, mcName string, podName string) bool {
 
 // GetPodIP returns IP address of a POD as a string
 func GetPodIP(ns string, podName string) string {
-	output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+	podDetails, err := getPodDetails(ns, podName)
 	if err != nil {
-		cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
-		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		logf.Log.Error(err, "Failed to get pod details", "pod", podName)
 		return ""
 	}
-	restResponse := PodDetailsStruct{}
-	err = json.Unmarshal([]byte(output), &restResponse)
-	if err != nil {
-		logf.Log.Error(err, "Failed to parse cluster searchheads")
-		return ""
-	}
-	return restResponse.Status.PodIP
+	return podDetails.Status.PodIP
 }
 
 // GetMCConfigMap gets config map for give Monitoring Console Name
@@ -170,12 +163,29 @@ type MCVersionConfig struct {
 	VerifyMCTwoReadyAfterSHC bool
 }
 
+// ReconfigCMWithNewMC updates the Cluster Manager's MC ref to a new Monitoring Console,
+// verifies the CM is ready, and deploys the new MC.
+func ReconfigCMWithNewMC(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, cfg MCVersionConfig) (string, *enterprisev4.MonitoringConsole, error) {
+	mcTwoName := deployment.GetName() + "-two"
+	cm := cfg.NewCMObject()
+	if err := testcaseEnvInst.UpdateMonitoringConsoleRefAndVerify(ctx, deployment, cm, deployment.GetName(), mcTwoName); err != nil {
+		return "", nil, fmt.Errorf("unable to update CM MC ref: %w", err)
+	}
+	if err := cfg.VerifyCMReady(ctx, deployment, testcaseEnvInst); err != nil {
+		return "", nil, fmt.Errorf("cluster manager not ready after MC reconfig: %w", err)
+	}
+	mcTwo, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcTwoName, "")
+	if err != nil {
+		return "", nil, fmt.Errorf("unable to deploy Monitoring Console Two: %w", err)
+	}
+	return mcTwoName, mcTwo, nil
+}
+
 // DeployMCAndVerifyRFSF deploys a Monitoring Console and verifies RF/SF is met.
 func DeployMCAndVerifyRFSF(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, mcRef string) error {
 	_, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
 	if err != nil {
 		return err
 	}
-	testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
-	return nil
+	return testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 }

@@ -27,8 +27,8 @@ var (
 	testSuiteName   = "smartstore-" + testenv.RandomDNSName(3)
 )
 
-// TestBasic is the main entry point
-func TestBasic(t *testing.T) {
+// TestSmartStore is the main entry point
+func TestSmartStore(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Running "+testSuiteName)

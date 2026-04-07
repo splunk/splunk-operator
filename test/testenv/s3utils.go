@@ -48,7 +48,7 @@ func CheckPrefixExistsOnS3(prefix string) bool {
 
 	resp := GetFileListOnS3(dataBucket, prefix)
 	for _, key := range resp {
-		logf.Log.Info("CHECKING KEY ", "key", *key.Key)
+		logf.Log.Info("Checking key", "key", *key.Key)
 		if strings.Contains(*key.Key, prefix) {
 			logf.Log.Info("Prefix found on bucket", "prefix", prefix, "key", *key.Key)
 			return true
@@ -186,7 +186,7 @@ func GetFilesInPathOnS3(bucket string, path string) []string {
 	resp := GetFileListOnS3(bucket, path)
 	var files []string
 	for _, key := range resp {
-		logf.Log.Info("CHECKING KEY ", "key", *key.Key)
+		logf.Log.Info("Checking key", "key", *key.Key)
 		if strings.Contains(*key.Key, path) {
 			filename := strings.Replace(*key.Key, path, "", -1)
 			// This condition filters out directories as GetFileListOnS3 returns files and directories with their absolute path's

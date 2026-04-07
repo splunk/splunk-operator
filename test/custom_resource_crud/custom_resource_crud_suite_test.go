@@ -37,8 +37,8 @@ var (
 	testSuiteName   = "crcrud-" + testenv.RandomDNSName(3)
 )
 
-// TestBasic is the main entry point
-func TestBasic(t *testing.T) {
+// TestCRCRUD is the main entry point
+func TestCRCRUD(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Running "+testSuiteName)

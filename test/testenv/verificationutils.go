@@ -76,6 +76,19 @@ type PodDetailsStruct struct {
 	} `json:"status"`
 }
 
+// getPodDetails fetches and unmarshals the JSON details for a single pod.
+func getPodDetails(ns, podName string) (*PodDetailsStruct, error) {
+	output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+	if err != nil {
+		return nil, fmt.Errorf("kubectl get pod %s in ns %s: %w", podName, ns, err)
+	}
+	var details PodDetailsStruct
+	if err := json.Unmarshal(output, &details); err != nil {
+		return nil, fmt.Errorf("unmarshal pod %s details: %w", podName, err)
+	}
+	return &details, nil
+}
+
 // PollConsistently verifies a condition holds for the entire duration.
 // condFn should return nil if the condition holds, or an error if it fails.
 func PollConsistently(duration, interval time.Duration, condFn func() error) error {
@@ -140,6 +153,15 @@ func (testenv *TestCaseEnv) VerifyStandaloneReady(ctx context.Context, deploymen
 		}
 		return nil
 	})
+}
+
+// VerifyStandalonePhaseAndReady verifies the Standalone reaches the given transitional phase
+// (e.g. ScalingUp, Updating) and then returns to Ready without flip-flopping.
+func (testenv *TestCaseEnv) VerifyStandalonePhaseAndReady(ctx context.Context, deployment *Deployment, phase enterpriseApi.Phase, standalone *enterpriseApi.Standalone) error {
+	if err := testenv.VerifyStandalonePhase(ctx, deployment, phase); err != nil {
+		return err
+	}
+	return testenv.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 }
 
 // VerifySearchHeadClusterReady verify SHC is in READY status and does not flip-flop
@@ -453,21 +475,14 @@ func VerifyLMConfiguredOnPod(ctx context.Context, deployment *Deployment, podNam
 // VerifyServiceAccountConfiguredOnPod check if given service account is configured on given pod
 func (testenv *TestCaseEnv) VerifyServiceAccountConfiguredOnPod(ns string, podName string, serviceAccount string) error {
 	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
-		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+		podDetails, err := getPodDetails(ns, podName)
 		if err != nil {
-			cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
-			testenv.Log.Error(err, "Failed to execute command", "command", cmd)
-			return fmt.Errorf("failed to get pod %s: %w", podName, err)
+			testenv.Log.Error(err, "Failed to get pod details", "pod", podName)
+			return err
 		}
-		restResponse := PodDetailsStruct{}
-		err = json.Unmarshal([]byte(output), &restResponse)
-		if err != nil {
-			testenv.Log.Error(err, "Failed to parse cluster Search Heads")
-			return fmt.Errorf("failed to parse pod details: %w", err)
-		}
-		testenv.Log.Info("Service Account on Pod", "found", restResponse.Spec.ServiceAccount, "expected", serviceAccount)
-		if !strings.Contains(serviceAccount, restResponse.Spec.ServiceAccount) {
-			return fmt.Errorf("service account mismatch on pod %s: expected %s, found %s", podName, serviceAccount, restResponse.Spec.ServiceAccount)
+		testenv.Log.Info("Service Account on Pod", "found", podDetails.Spec.ServiceAccount, "expected", serviceAccount)
+		if !strings.Contains(serviceAccount, podDetails.Spec.ServiceAccount) {
+			return fmt.Errorf("service account mismatch on pod %s: expected %s, found %s", podName, serviceAccount, podDetails.Spec.ServiceAccount)
 		}
 		return nil
 	})
@@ -675,7 +690,7 @@ func (testenv *TestCaseEnv) VerifyCustomResourceVersionChanged(ctx context.Conte
 		if err != nil {
 			return false, nil
 		}
-		testenv.Log.Info("Waiting for ", kind, " CR status", "instance", name, "notExpected", resourceVersion, "actualResourceVersion", newResourceVersion)
+		testenv.Log.Info("Waiting for CR status change", "kind", kind, "instance", name, "notExpected", resourceVersion, "actualResourceVersion", newResourceVersion)
 		DumpGetPods(testenv.GetName())
 		return newResourceVersion != resourceVersion, nil
 	})
@@ -684,68 +699,50 @@ func (testenv *TestCaseEnv) VerifyCustomResourceVersionChanged(ctx context.Conte
 // VerifyCPULimits verifies value of CPU limits is as expected
 func (testenv *TestCaseEnv) VerifyCPULimits(deployment *Deployment, podName string, expectedCPULimits string) error {
 	return wait.PollUntilContextTimeout(context.TODO(), PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
-		ns := testenv.GetName()
-		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+		podDetails, err := getPodDetails(testenv.GetName(), podName)
 		if err != nil {
-			cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
-			testenv.Log.Error(err, "Failed to execute command", "command", cmd)
+			testenv.Log.Error(err, "Failed to get pod details", "pod", podName)
 			return false, nil
 		}
-		restResponse := PodDetailsStruct{}
-		err = json.Unmarshal([]byte(output), &restResponse)
-		if err != nil {
-			testenv.Log.Error(err, "Failed to parse JSON")
-			return false, nil
-		}
-		result := false
-
-		for i := 0; i < len(restResponse.Spec.Containers); i++ {
-			if strings.Contains(restResponse.Spec.Containers[0].Resources.Limits.CPU, expectedCPULimits) {
-				result = true
-				testenv.Log.Info("Verifying CPU limits: ", "pod", podName, "found", restResponse.Spec.Containers[0].Resources.Limits.CPU, "expected", expectedCPULimits)
+		for i := 0; i < len(podDetails.Spec.Containers); i++ {
+			if strings.Contains(podDetails.Spec.Containers[i].Resources.Limits.CPU, expectedCPULimits) {
+				testenv.Log.Info("Verifying CPU limits", "pod", podName, "found", podDetails.Spec.Containers[i].Resources.Limits.CPU, "expected", expectedCPULimits)
+				return true, nil
 			}
 		}
-		return result, nil
+		return false, nil
 	})
 }
 
 // VerifyResourceConstraints verifies value of CPU limits is as expected
 func (testenv *TestCaseEnv) VerifyResourceConstraints(deployment *Deployment, podName string, res corev1.ResourceRequirements) error {
 	return wait.PollUntilContextTimeout(context.TODO(), PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
-		ns := testenv.GetName()
-		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+		podDetails, err := getPodDetails(testenv.GetName(), podName)
 		if err != nil {
-			cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
-			testenv.Log.Error(err, "Failed to execute command", "command", cmd)
-			return false, nil
-		}
-		restResponse := PodDetailsStruct{}
-		err = json.Unmarshal([]byte(output), &restResponse)
-		if err != nil {
-			testenv.Log.Error(err, "Failed to parse JSON")
+			testenv.Log.Error(err, "Failed to get pod details", "pod", podName)
 			return false, nil
 		}
 		result := false
 
-		for i := 0; i < len(restResponse.Spec.Containers); i++ {
-			if strings.Contains(restResponse.Spec.Containers[i].Resources.Limits.CPU, res.Limits.Cpu().String()) {
+		for i := 0; i < len(podDetails.Spec.Containers); i++ {
+			if strings.Contains(podDetails.Spec.Containers[i].Resources.Limits.CPU, res.Limits.Cpu().String()) {
 				result = true
-				testenv.Log.Info("Verifying CPU limits: ", "pod", podName, "found", restResponse.Spec.Containers[0].Resources.Limits.CPU, "expected", res.Limits.Cpu().String())
+				testenv.Log.Info("Verifying CPU limits", "pod", podName, "found", podDetails.Spec.Containers[i].Resources.Limits.CPU, "expected", res.Limits.Cpu().String())
 			}
 
-			if strings.Contains(restResponse.Spec.Containers[i].Resources.Limits.Memory, res.Limits.Memory().String()) {
+			if strings.Contains(podDetails.Spec.Containers[i].Resources.Limits.Memory, res.Limits.Memory().String()) {
 				result = true
-				testenv.Log.Info("Verifying Memory limits: ", "pod", podName, "found", restResponse.Spec.Containers[i].Resources.Limits.Memory, "expected", res.Limits.Memory().String())
+				testenv.Log.Info("Verifying Memory limits", "pod", podName, "found", podDetails.Spec.Containers[i].Resources.Limits.Memory, "expected", res.Limits.Memory().String())
 			}
 
-			if strings.Contains(restResponse.Spec.Containers[i].Resources.Requests.CPU, res.Requests.Cpu().String()) {
+			if strings.Contains(podDetails.Spec.Containers[i].Resources.Requests.CPU, res.Requests.Cpu().String()) {
 				result = true
-				testenv.Log.Info("Verifying CPU limits: ", "pod", podName, "found", restResponse.Spec.Containers[i].Resources.Requests.CPU, "expected", res.Requests.Cpu().String())
+				testenv.Log.Info("Verifying CPU requests", "pod", podName, "found", podDetails.Spec.Containers[i].Resources.Requests.CPU, "expected", res.Requests.Cpu().String())
 			}
 
-			if strings.Contains(restResponse.Spec.Containers[i].Resources.Requests.Memory, res.Requests.Memory().String()) {
+			if strings.Contains(podDetails.Spec.Containers[i].Resources.Requests.Memory, res.Requests.Memory().String()) {
 				result = true
-				testenv.Log.Info("Verifying CPU limits: ", "pod", podName, "found", restResponse.Spec.Containers[i].Resources.Requests.Memory, "expected", res.Requests.Memory().String())
+				testenv.Log.Info("Verifying Memory requests", "pod", podName, "found", podDetails.Spec.Containers[i].Resources.Requests.Memory, "expected", res.Requests.Memory().String())
 			}
 		}
 		return result, nil
@@ -2039,24 +2036,6 @@ func VerifyConfFileContent(pod, confPath, deploymentName string, expectedContent
 		return fmt.Errorf("%s: %w", errorMsg, err)
 	}
 	return ValidateContent(conf, expectedContent, true)
-}
-
-// GetInstanceWithExpect retrieves a CR instance and returns error on failure
-func GetInstanceWithExpect(ctx context.Context, deployment *Deployment, instance client.Object, name string, message string) error {
-	err := deployment.GetInstance(ctx, name, instance)
-	if err != nil {
-		return fmt.Errorf("%s: %w", message, err)
-	}
-	return nil
-}
-
-// UpdateCRWithExpect updates a CR and returns error on failure
-func UpdateCRWithExpect(ctx context.Context, deployment *Deployment, cr client.Object, message string) error {
-	err := deployment.UpdateCR(ctx, cr)
-	if err != nil {
-		return fmt.Errorf("%s: %w", message, err)
-	}
-	return nil
 }
 
 // ApplySecretUpdateAndVerifyCMUpdating deploys MC, verifies RF/SF and initial secret state,

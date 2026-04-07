@@ -27,8 +27,8 @@ var (
 	testSuiteName   = "deletecr-" + testenv.RandomDNSName(3)
 )
 
-// TestBasic is the main entry point
-func TestBasic(t *testing.T) {
+// TestDeleteCR is the main entry point
+func TestDeleteCR(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Running "+testSuiteName)

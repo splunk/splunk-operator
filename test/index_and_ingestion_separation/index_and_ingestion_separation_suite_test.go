@@ -92,8 +92,8 @@ var (
 	appListV1           = testenv.BasicApps
 )
 
-// TestBasic is the main entry point
-func TestBasic(t *testing.T) {
+// TestIndexIngestionSeparation is the main entry point
+func TestIndexIngestionSeparation(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Running "+testSuiteName)

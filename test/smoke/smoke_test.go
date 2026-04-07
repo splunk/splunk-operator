@@ -47,26 +47,30 @@ var _ = Describe("Smoke test", func() {
 
 	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 		It("smoke, basic, c3: can deploy indexers and search head cluster", func() {
-			testcaseEnvInst.RunC3DeploymentWorkflow(ctx, deployment, 3, "")
+			_, err := testcaseEnvInst.RunC3DeploymentWorkflow(ctx, deployment, 3, "")
+			Expect(err).To(Succeed(), "Unable to deploy C3 cluster")
 		})
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite Indexer Cluster, Search Head Cluster)", func() {
 		It("smoke, basic, m4: can deploy indexers and search head cluster", func() {
-			testcaseEnvInst.RunM4DeploymentWorkflow(ctx, deployment, 1, 3, "")
+			_, err := testcaseEnvInst.RunM4DeploymentWorkflow(ctx, deployment, 1, 3, "")
+			Expect(err).To(Succeed(), "Unable to deploy M4 cluster")
 		})
 	})
 
 	Context("Multisite cluster deployment (M1 - Multisite Indexer Cluster)", func() {
 		It("smoke, basic: can deploy multisite indexers cluster", func() {
-			testcaseEnvInst.RunM1DeploymentWorkflow(ctx, deployment, 1, 3)
+			_, err := testcaseEnvInst.RunM1DeploymentWorkflow(ctx, deployment, 1, 3)
+			Expect(err).To(Succeed(), "Unable to deploy M1 cluster")
 		})
 	})
 
 	Context("Standalone deployment (S1) with Service Account", func() {
 		It("smoke, basic, s1: can deploy a standalone instance attached to a service account", func() {
 			serviceAccountName := "smoke-service-account"
-			testcaseEnvInst.RunStandaloneWithServiceAccountWorkflow(ctx, deployment, serviceAccountName)
+			_, err := testcaseEnvInst.RunStandaloneWithServiceAccountWorkflow(ctx, deployment, serviceAccountName)
+			Expect(err).To(Succeed(), "Unable to deploy standalone with service account")
 		})
 	})
 })

@@ -72,6 +72,15 @@ type LicenseTestConfig struct {
 	CrKind                            string
 }
 
+// MasterManagerLMTestConfig pairs a name prefix and test label with a factory
+// function that returns the appropriate LicenseTestConfig.
+// This is the license-manager equivalent of MasterManagerTestConfig.
+type MasterManagerLMTestConfig struct {
+	NamePrefix string
+	Label      string
+	NewConfig  func() *LicenseTestConfig
+}
+
 // NewLicenseCommonSplunkSpec returns a CommonSplunkSpec pre-configured with the
 // license config map volume and license URL.
 func NewLicenseCommonSplunkSpec(testcaseEnvInst *TestCaseEnv) enterpriseApi.CommonSplunkSpec {
@@ -154,13 +163,13 @@ func UploadAppFiles(ctx context.Context, testcaseEnvInst *TestCaseEnv, testS3Buc
 
 	switch ClusterProvider {
 	case "eks":
-		testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3", version))
+		testcaseEnvInst.Log.Info("Uploading apps to S3", "version", version)
 		uploadedFiles, err = UploadFilesToS3(testS3Bucket, testDir, appFileList, downloadDir)
 	case "azure":
-		testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure", version))
+		testcaseEnvInst.Log.Info("Uploading apps to Azure", "version", version)
 		uploadedFiles, err = UploadFilesToAzure(ctx, StorageAccount, StorageAccountKey, downloadDir, testDir, appFileList)
 	case "gcp":
-		testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP", version))
+		testcaseEnvInst.Log.Info("Uploading apps to GCP", "version", version)
 		uploadedFiles, err = UploadFilesToGCP(testS3Bucket, testDir, appFileList, downloadDir)
 	}
 

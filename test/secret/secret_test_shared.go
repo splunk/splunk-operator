@@ -33,7 +33,7 @@ func RunS1SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	updatedSecretData, err := testenv.GenerateAndApplySecretUpdate(ctx, deployment, testcaseEnvInst, setup.NamespaceScopedSecretName)
 	Expect(err).To(Succeed(), "Unable to generate and apply secret update")
 
-	Expect(testenv.VerifyS1SecretChangeApplied(ctx, deployment, testcaseEnvInst, config, setup, updatedSecretData, true)).To(Succeed())
+	Expect(testenv.VerifyS1SecretChangeApplied(ctx, deployment, testcaseEnvInst, config, setup, updatedSecretData, true)).To(Succeed(), "S1 secret change not applied")
 }
 
 // RunS1SecretDeleteTest runs the standard S1 secret delete test workflow
@@ -49,14 +49,14 @@ func RunS1SecretDeleteTest(ctx context.Context, deployment *testenv.Deployment, 
 	err = testenv.DeleteSecretObject(ctx, deployment, testcaseEnvInst.GetName(), setup.NamespaceScopedSecretName)
 	Expect(err).To(Succeed(), "Unable to delete secret Object")
 
-	Expect(testenv.VerifyS1SecretChangeApplied(ctx, deployment, testcaseEnvInst, config, setup, secretStruct.Data, false)).To(Succeed())
+	Expect(testenv.VerifyS1SecretChangeApplied(ctx, deployment, testcaseEnvInst, config, setup, secretStruct.Data, false)).To(Succeed(), "S1 secret delete not applied")
 }
 
 // RunS1SecretDeleteWithMCRefTest runs the S1 secret delete test with MC reference workflow
 func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
 	// Create standalone Deployment with MonitoringConsoleRef
-	mcName := deployment.GetName()
-	standalone, err := testcaseEnvInst.DeployStandaloneWithMCRef(ctx, deployment, deployment.GetName(), mcName)
+	mcRef := deployment.GetName()
+	standalone, err := testcaseEnvInst.DeployStandaloneWithMCRef(ctx, deployment, deployment.GetName(), mcRef)
 	Expect(err).To(Succeed(), "Unable to deploy Standalone with MC reference")
 
 	// Deploy and verify Monitoring Console
@@ -76,29 +76,26 @@ func RunS1SecretDeleteWithMCRefTest(ctx context.Context, deployment *testenv.Dep
 	err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, map[string][]byte{})
 	Expect(err).To(Succeed(), "Unable to delete secret Object")
 
-	// Ensure standalone is updating
-	Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseUpdating)).To(Succeed())
+	// Ensure standalone reaches Updating phase and returns to Ready
+	Expect(testcaseEnvInst.VerifyStandalonePhaseAndReady(ctx, deployment, enterpriseApi.PhaseUpdating, standalone)).To(Succeed(), "Standalone did not reach Updating phase or not ready after secret delete")
 
-	// Wait for Standalone to be in READY status
-	Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed())
+	Expect(testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)).To(Succeed(), "MC version not changed or not ready")
 
-	Expect(testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)).To(Succeed())
-
-	Expect(testenv.VerifySecretsPropagated(ctx, deployment, testcaseEnvInst, secretStruct.Data, false)).To(Succeed())
+	Expect(testenv.VerifySecretsPropagated(ctx, deployment, testcaseEnvInst, secretStruct.Data, false)).To(Succeed(), "Secrets not propagated after delete")
 }
 
 // RunC3SecretUpdateTest runs the standard C3 secret update test workflow
 func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
 	mcRef := deployment.GetName()
-	Expect(config.DeployC3WithLicense(ctx, deployment, testcaseEnvInst, 3, true, mcRef)).To(Succeed())
+	Expect(config.DeployC3WithLicense(ctx, deployment, testcaseEnvInst, 3, true, mcRef)).To(Succeed(), "Unable to deploy C3 with license")
 
 	mc, resourceVersion, updatedSecretData, err := testenv.ApplySecretUpdateAndVerifyCMUpdating(ctx, deployment, testcaseEnvInst, config)
 	Expect(err).To(Succeed(), "Unable to apply secret update and verify CM updating")
 
-	Expect(testenv.VerifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)).To(Succeed())
+	Expect(testenv.VerifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)).To(Succeed(), "LM and Cluster Manager not ready")
 
 	// Ensure Search Head Cluster goes to Ready phase
-	Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed())
+	Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 	// Wait for PasswordSyncCompleted event on SearchHeadCluster
 	shcName := deployment.GetName() + "-shc"
@@ -106,28 +103,30 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 	Expect(err).To(Succeed(), "Timed out waiting for PasswordSyncCompleted event on SearchHeadCluster")
 
 	// Ensure Indexers go to Ready phase
-	Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed())
+	Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
 
 	// Wait for PasswordSyncCompleted event on IndexerCluster
 	idxcName := deployment.GetName() + "-idxc"
 	err = testcaseEnvInst.WaitForPasswordSyncCompleted(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
 	Expect(err).To(Succeed(), "Timed out waiting for PasswordSyncCompleted event on IndexerCluster")
 
-	Expect(testenv.VerifyPostSecretChangeCluster(ctx, deployment, testcaseEnvInst, mc, resourceVersion, updatedSecretData)).To(Succeed())
+	Expect(testenv.VerifyPostSecretChangeCluster(ctx, deployment, testcaseEnvInst, mc, resourceVersion, updatedSecretData)).To(Succeed(), "Post secret change cluster verification failed")
 }
 
 // RunM4SecretUpdateTest runs the standard M4 secret update test workflow
 func RunM4SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.ClusterReadinessConfig) {
 	siteCount := 3
-	mcName := deployment.GetName()
+	mcRef := deployment.GetName()
 
-	Expect(config.DeployM4WithLicense(ctx, deployment, testcaseEnvInst, 1, siteCount, mcName)).To(Succeed())
+	Expect(config.DeployM4WithLicense(ctx, deployment, testcaseEnvInst, 1, siteCount, mcRef)).To(Succeed(), "Unable to deploy M4 with license")
 
 	mc, resourceVersion, updatedSecretData, err := testenv.ApplySecretUpdateAndVerifyCMUpdating(ctx, deployment, testcaseEnvInst, config)
 	Expect(err).To(Succeed(), "Unable to apply secret update and verify CM updating")
 
-	Expect(testenv.VerifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)).To(Succeed())
-	Expect(testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount)).To(Succeed())
+	Expect(config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)).To(Succeed(), "License Manager not ready")
+	Expect(testcaseEnvInst.VerifyM4ComponentsReady(ctx, deployment, siteCount, func() error {
+		return config.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+	})).To(Succeed(), "M4 components not ready")
 
-	Expect(testenv.VerifyPostSecretChangeCluster(ctx, deployment, testcaseEnvInst, mc, resourceVersion, updatedSecretData)).To(Succeed())
+	Expect(testenv.VerifyPostSecretChangeCluster(ctx, deployment, testcaseEnvInst, mc, resourceVersion, updatedSecretData)).To(Succeed(), "Post secret change cluster verification failed")
 }

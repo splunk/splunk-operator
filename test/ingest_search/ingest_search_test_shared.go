@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package ingestsearchtest
+package ingestsearch
 
 import (
 	"bufio"
@@ -25,128 +25,97 @@ import (
 
 	. "github.com/onsi/gomega"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
 // RunS1InternalLogSearchTest deploys a Standalone instance and verifies internal log searches
 // using both synchronous and asynchronous search APIs.
 func RunS1InternalLogSearchTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv) {
-	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, "", "")
+	_, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, "", "")
 	Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
 
-	Eventually(func() enterpriseApi.Phase {
-		podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
+	podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 
-		searchString := "index=_internal | stats count by host"
-		searchResultsResp, err := testenv.PerformSearchSync(ctx, deployment, podName, searchString)
+	// Verify sync search on _internal index
+	syncSearchString := "index=_internal | stats count by host"
+	Eventually(func() error {
+		searchResultsResp, err := testenv.PerformSearchSync(ctx, deployment, podName, syncSearchString)
 		if err != nil {
-			testcaseEnvInst.Log.Error(err, "Failed to execute search on pod", "pod", podName, "searchString", searchString)
-			return enterpriseApi.PhaseError
+			return fmt.Errorf("failed to execute sync search: %w", err)
 		}
-		testcaseEnvInst.Log.Info("Performed a search", "searchString", searchString)
 
 		var searchResults map[string]interface{}
-		unmarshalErr := json.Unmarshal([]byte(searchResultsResp), &searchResults)
-		if unmarshalErr != nil {
-			testcaseEnvInst.Log.Error(unmarshalErr, "Failed to unmarshal JSON response")
+		if err := json.Unmarshal([]byte(searchResultsResp), &searchResults); err != nil {
+			return fmt.Errorf("failed to unmarshal JSON response: %w", err)
 		}
 
-		prettyResults, jsonErr := json.MarshalIndent(searchResults, "", "    ")
-		if jsonErr != nil {
-			testcaseEnvInst.Log.Error(jsonErr, "Failed to generate pretty json")
+		prettyResults, err := json.MarshalIndent(searchResults, "", "    ")
+		if err != nil {
+			testcaseEnvInst.Log.Error(err, "Failed to generate pretty JSON")
 		} else {
-			testcaseEnvInst.Log.Info("Sync Search results:", "prettyResults", string(prettyResults))
+			testcaseEnvInst.Log.Info("Sync search results", "prettyResults", string(prettyResults))
 		}
 
-		return standalone.Status.Phase
-	}, deployment.GetTimeout(), testenv.PollInterval).Should(Equal(enterpriseApi.PhaseReady))
+		return nil
+	}, deployment.GetTimeout(), testenv.PollInterval).Should(Succeed(), "Sync search on _internal index failed")
 
-	Eventually(func() enterpriseApi.Phase {
-		podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-		searchString := "index=_internal GUID component=ServerConfig"
-
-		sid, reqErr := testenv.PerformSearchReq(ctx, deployment, podName, searchString)
-		if reqErr != nil {
-			testcaseEnvInst.Log.Error(reqErr, "Failed to execute search on pod", "pod", podName, "searchString", searchString)
-			return enterpriseApi.PhaseError
+	// Verify async search on _internal index
+	asyncSearchString := "index=_internal GUID component=ServerConfig"
+	Eventually(func() error {
+		sid, err := testenv.PerformSearchReq(ctx, deployment, podName, asyncSearchString)
+		if err != nil {
+			return fmt.Errorf("failed to execute async search: %w", err)
 		}
-		testcaseEnvInst.Log.Info("Got a search with sid", "sid", sid)
+		testcaseEnvInst.Log.Info("Got a search with SID", "sid", sid)
 
-		searchStatusResult, statusErr := testenv.GetSearchStatus(ctx, deployment, podName, sid)
-		if statusErr != nil {
-			testcaseEnvInst.Log.Error(statusErr, "Failed to get search status on pod", "pod", podName, "sid", sid)
-			return enterpriseApi.PhaseError
+		searchStatusResult, err := testenv.GetSearchStatus(ctx, deployment, podName, sid)
+		if err != nil {
+			return fmt.Errorf("failed to get search status: %w", err)
 		}
-		testcaseEnvInst.Log.Info("Search status:", "searchStatusResult", searchStatusResult)
+		testcaseEnvInst.Log.Info("Search status", "searchStatusResult", searchStatusResult)
 
-		searchResultsResp, resErr := testenv.GetSearchResults(ctx, deployment, podName, sid)
-		if resErr != nil {
-			testcaseEnvInst.Log.Error(resErr, "Failed to get search results on pod", "pod", podName, "sid", sid)
-			return enterpriseApi.PhaseError
+		searchResultsResp, err := testenv.GetSearchResults(ctx, deployment, podName, sid)
+		if err != nil {
+			return fmt.Errorf("failed to get search results: %w", err)
 		}
 
-		prettyResults, jsonErr := json.MarshalIndent(searchResultsResp, "", "    ")
-		if jsonErr != nil {
-			testcaseEnvInst.Log.Error(jsonErr, "Failed to generate pretty json")
+		prettyResults, err := json.MarshalIndent(searchResultsResp, "", "    ")
+		if err != nil {
+			testcaseEnvInst.Log.Error(err, "Failed to generate pretty JSON")
 		} else {
-			testcaseEnvInst.Log.Info("Search results:", "prettyResults", string(prettyResults))
+			testcaseEnvInst.Log.Info("Async search results", "prettyResults", string(prettyResults))
 		}
 
-		return standalone.Status.Phase
-	}, deployment.GetTimeout(), testenv.PollInterval).Should(Equal(enterpriseApi.PhaseReady))
+		return nil
+	}, deployment.GetTimeout(), testenv.PollInterval).Should(Succeed(), "Async search on _internal index failed")
 }
 
 // RunS1IngestAndSearchTest deploys a Standalone instance, ingests a custom log file into a new
 // index, and verifies the ingested data is searchable via both sync and async search APIs.
 func RunS1IngestAndSearchTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv) {
-	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, "", "")
+	_, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, "", "")
 	Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
-
-	Eventually(func() enterpriseApi.Phase {
-		podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-
-		splunkBin := "/opt/splunk/bin/splunk"
-		username := "admin"
-		password := "$(cat /mnt/splunk-secrets/password)"
-		splunkCmd := "status"
-
-		statusCmd := fmt.Sprintf("%s %s -auth %s:%s", splunkBin, splunkCmd, username, password)
-		command := []string{"/bin/bash"}
-		statusCmdResp, stderr, err := deployment.PodExecCommand(ctx, podName, command, statusCmd, false)
-		if err != nil {
-			testcaseEnvInst.Log.Error(err, "Failed to execute command on pod", "pod", podName, "statusCmd", statusCmd, "statusCmdResp", statusCmdResp, "stderr", stderr)
-			return enterpriseApi.PhaseError
-		}
-
-		if !strings.Contains(strings.ToLower(statusCmdResp), strings.ToLower("splunkd is running")) {
-			testcaseEnvInst.Log.Error(err, "Failed to find splunkd running", "pod", podName, "statusCmdResp", statusCmdResp)
-			return enterpriseApi.PhaseError
-		}
-
-		testcaseEnvInst.Log.Info("Waiting for standalone splunkd status to be ready", "instance", standalone.ObjectMeta.Name, "phase", standalone.Status.Phase)
-		return standalone.Status.Phase
-	}, deployment.GetTimeout(), testenv.PollInterval).Should(Equal(enterpriseApi.PhaseReady))
 
 	podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 	indexName := "myTestIndex"
 
 	err = testenv.CreateAnIndexStandalone(ctx, deployment, indexName, podName)
-	Expect(err).To(Succeed(), "Failed response to add index to splunk")
+	Expect(err).To(Succeed(), "Failed to add index to Standalone")
 
 	logFile := "/tmp/test.log"
 	err = testenv.CreateMockLogfile(logFile, 1)
-	Expect(err).To(Succeed(), "Failed response to add index to splunk logfile %s", logFile)
+	Expect(err).To(Succeed(), "Failed to create mock logfile %s", logFile)
 
 	err = testenv.IngestFileViaOneshot(ctx, deployment, logFile, indexName, podName)
 	Expect(err).To(Succeed(), "Failed to ingest logfile %s on pod %s", logFile, podName)
 
 	file, openErr := os.Open(logFile)
-	Expect(openErr).To(Succeed(), "Failed to open newly created logfile %s on pod %s", logFile, podName)
+	Expect(openErr).To(Succeed(), "Failed to open logfile %s", logFile)
+	defer file.Close()
 
 	reader := bufio.NewReader(file)
 	firstLine, readErr := reader.ReadString('\n')
-	Expect(readErr).Should(Or(BeNil(), Equal(io.EOF)), "Failed to read first line of logfile %s on pod ", logFile, podName)
+	Expect(readErr).Should(Or(BeNil(), Equal(io.EOF)), "Failed to read first line of logfile %s on pod %s", logFile, podName)
 
 	tokens := strings.Fields(firstLine)
 	Expect(len(tokens)).To(BeNumerically(">=", 2), "Incorrect tokens (%s) in first logline %s for logfile %s", tokens, firstLine, logFile)
@@ -160,47 +129,45 @@ func RunS1IngestAndSearchTest(ctx context.Context, deployment *testenv.Deploymen
 	Expect(err).To(Succeed(), "Timed out waiting for search results")
 
 	searchResultsResp, err := testenv.PerformSearchSync(ctx, deployment, podName, searchString)
-	Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", podName, searchString)
+	Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", searchString, podName)
 
 	var searchResults map[string]interface{}
 	jsonErr := json.Unmarshal([]byte(searchResultsResp), &searchResults)
-	Expect(jsonErr).To(Succeed(), "Failed to unmarshal JSON Search Results from response '%s'", searchResultsResp)
+	Expect(jsonErr).To(Succeed(), "Failed to unmarshal JSON search results from response '%s'", searchResultsResp)
 
-	testcaseEnvInst.Log.Info("Search results :", "searchResults", searchResults["result"])
+	testcaseEnvInst.Log.Info("Search results", "searchResults", searchResults["result"])
 	Expect(searchResults["result"]).ShouldNot(BeNil(), "No results in search response '%s' on pod %s", searchResults, podName)
 
 	hostCount := searchResults["result"].(map[string]interface{})
-	testcaseEnvInst.Log.Info("Sync Search results host count:", "count", hostCount["count"].(string), "host", hostCount["host"].(string))
-	testHostCnt := strings.Compare(hostCount["count"].(string), "1")
-	testHostname := strings.Compare(hostCount["host"].(string), podName)
-	Expect(testHostCnt).To(Equal(0), "Incorrect search results for count. Expect: 1 Got: %d", hostCount["count"].(string))
-	Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", podName, hostCount["host"].(string))
+	testcaseEnvInst.Log.Info("Sync search results host count", "count", hostCount["count"].(string), "host", hostCount["host"].(string))
+	Expect(hostCount["count"].(string)).To(Equal("1"), "Incorrect search results for count. Expected: 1 Got: %s", hostCount["count"].(string))
+	Expect(hostCount["host"].(string)).To(Equal(podName), "Incorrect search result hostname. Expected: %s Got: %s", podName, hostCount["host"].(string))
 
 	searchString2 := fmt.Sprintf("index=%s %s", indexName, searchToken)
 	sid, reqErr := testenv.PerformSearchReq(ctx, deployment, podName, searchString2)
-	Expect(reqErr).To(Succeed(), "Failed to execute search '%s' on pod %s", searchString, podName)
-	testcaseEnvInst.Log.Info("Got a search with sid", "sid", sid)
+	Expect(reqErr).To(Succeed(), "Failed to execute search '%s' on pod %s", searchString2, podName)
+	testcaseEnvInst.Log.Info("Got a search with SID", "sid", sid)
 
 	searchStatusResult, statusErr := testenv.GetSearchStatus(ctx, deployment, podName, sid)
-	Expect(statusErr).To(Succeed(), "Failed to get search status on pod %s for sid %s", podName, sid)
-	testcaseEnvInst.Log.Info("Search status:", "searchStatusResult", searchStatusResult)
+	Expect(statusErr).To(Succeed(), "Failed to get search status on pod %s for SID %s", podName, sid)
+	testcaseEnvInst.Log.Info("Search status", "searchStatusResult", searchStatusResult)
 
 	searchResultsResp, resErr := testenv.GetSearchResults(ctx, deployment, podName, sid)
-	Expect(resErr).To(Succeed(), "Failed to get search results on pod %s for sid %s", podName, sid)
+	Expect(resErr).To(Succeed(), "Failed to get search results on pod %s for SID %s", podName, sid)
 
-	testcaseEnvInst.Log.Info("Raw Search results:", "searchResultsResp", searchResultsResp)
+	testcaseEnvInst.Log.Info("Raw search results", "searchResultsResp", searchResultsResp)
 	var searchResults2 testenv.SearchJobResultsResponse
 	jsonErr = json.Unmarshal([]byte(searchResultsResp), &searchResults2)
-	Expect(jsonErr).To(Succeed(), "Failed to unmarshal JSON Search Results from response '%s'", searchResultsResp)
+	Expect(jsonErr).To(Succeed(), "Failed to unmarshal JSON search results from response '%s'", searchResultsResp)
 
+	trimFirstLine := strings.TrimSuffix(firstLine, "\n")
 	found := false
 	for key, elem := range searchResults2.Results {
-		testcaseEnvInst.Log.Info("Search results _raw and host:", "_raw", elem.Raw, "host", elem.SplunkServer, "firstLine", firstLine)
-		trimFirstLine := strings.TrimSuffix(firstLine, "\n")
-		if strings.Compare(elem.Raw, trimFirstLine) == 0 {
-			testcaseEnvInst.Log.Info("Found search results in  _raw and splunk_server", "key", key, "podName", podName, "elem", elem)
+		testcaseEnvInst.Log.Info("Search results _raw and host", "_raw", elem.Raw, "host", elem.SplunkServer, "firstLine", firstLine)
+		if elem.Raw == trimFirstLine {
+			testcaseEnvInst.Log.Info("Found search results in _raw and splunk_server", "key", key, "podName", podName, "elem", elem)
 			found = true
 		}
 	}
-	Expect(found).To(Equal(true), "Incorrect search results %s", searchResults)
+	Expect(found).To(BeTrue(), "Incorrect search results %s", searchResults)
 }

@@ -60,107 +60,64 @@ type SearchJobResponseResults struct {
 	SplunkServer string `json:"splunk_server"`
 }
 
-// PerformSearchSync performs a syncronous search within splunk and returns the search results
-func PerformSearchSync(ctx context.Context, deployment *Deployment, podName string, search string) (string, error) {
-	// Build the search curl command and send it to an instance
-	curlCmd := "curl -ks -u"
-	username := "admin"
-	password := "$(cat /mnt/splunk-secrets/password)"
-	url := "https://localhost:8089/services/search/jobs/export"
-
-	searchReq := fmt.Sprintf("%s %s:%s %s -d output_mode=json -d search=\"search %s\"", curlCmd, username, password, url, search)
-	command := []string{"/bin/sh"}
-	searchReqResp, stderr, err := deployment.PodExecCommand(ctx, podName, command, searchReq, false)
-	_ = stderr
+// splunkdCurlExec builds and executes a curl command against the local splunkd REST API on the given pod.
+func splunkdCurlExec(ctx context.Context, deployment *Deployment, podName string, curlArgs string) (string, error) {
+	stdin := fmt.Sprintf("curl -ks -u admin:$(cat /mnt/splunk-secrets/password) %s", curlArgs)
+	stdout, _, err := deployment.PodExecCommand(ctx, podName, []string{"/bin/sh"}, stdin, false)
 	if err != nil {
-		logf.Log.Error(err, "Failed to execute cmd on pod", "pod", podName, "command", command)
+		logf.Log.Error(err, "Failed to execute curl on pod", "pod", podName)
 		return "", err
 	}
+	return stdout, nil
+}
 
-	logf.Log.Info("Output of search Query", "search", search, "output", searchReqResp)
-
-	// Since results can have multiple formats depending on the search SPL, leave this response as a string
-	return searchReqResp, err
+// PerformSearchSync performs a syncronous search within splunk and returns the search results
+func PerformSearchSync(ctx context.Context, deployment *Deployment, podName string, search string) (string, error) {
+	curlArgs := fmt.Sprintf("https://localhost:8089/services/search/jobs/export -d output_mode=json -d search=\"search %s\"", search)
+	resp, err := splunkdCurlExec(ctx, deployment, podName, curlArgs)
+	if err != nil {
+		return "", err
+	}
+	logf.Log.Info("Output of search Query", "search", search, "output", resp)
+	return resp, nil
 }
 
 // PerformSearchReq makes a search request for a search to be performed.  Returns a sid to be used to check for status and results
 func PerformSearchReq(ctx context.Context, deployment *Deployment, podName string, search string) (string, error) {
-	// Build the search curl command
-	curlCmd := "curl -ks -u"
-	url := "https://localhost:8089/services/search/jobs"
-	username := "admin"
-	password := "$(cat /mnt/splunk-secrets/password)"
-
-	searchReq := fmt.Sprintf("%s %s:%s %s -d output_mode=json -d search=\"search %s\"", curlCmd, username, password, url, search)
-
-	// Send search request to instance
-	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, searchReq, false)
-	_ = stderr
+	curlArgs := fmt.Sprintf("https://localhost:8089/services/search/jobs -d output_mode=json -d search=\"search %s\"", search)
+	stdout, err := splunkdCurlExec(ctx, deployment, podName, curlArgs)
 	if err != nil {
-		logf.Log.Error(err, "Failed to execute cmd on pod", "pod", podName, "command", command)
 		return "", err
 	}
-
 	logf.Log.Info("Output of search Query", "search", search, "output", stdout)
 
-	// Get SID
 	var searchReqResult map[string]interface{}
-	jsonErr := json.Unmarshal([]byte(stdout), &searchReqResult)
-	if jsonErr != nil {
-		logf.Log.Error(jsonErr, "Failed to unmarshal JSON Search Request Response to get SID")
-		return "", jsonErr
+	if err := json.Unmarshal([]byte(stdout), &searchReqResult); err != nil {
+		logf.Log.Error(err, "Failed to unmarshal JSON search request response")
+		return "", err
 	}
 	sid := searchReqResult["sid"].(string)
-	return sid, err
+	return sid, nil
 }
 
 // GetSearchStatus checks the search status for a given <sid>
 func GetSearchStatus(ctx context.Context, deployment *Deployment, podName string, sid string) (*SearchJobStatusResponse, error) {
-	// Build search status request curl command
-	curlCmd := "curl -ks -u"
-	url := "https://localhost:8089/services/search/jobs"
-	username := "admin"
-	password := "$(cat /mnt/splunk-secrets/password)"
-
-	searchStatusReq := fmt.Sprintf("%s %s:%s %s/%s -d output_mode=json", curlCmd, username, password, url, sid)
-
-	// Send search status request to instance
-	command := []string{"/bin/sh"}
-	searchStatusResp, stderr, err := deployment.PodExecCommand(ctx, podName, command, searchStatusReq, false)
+	curlArgs := fmt.Sprintf("https://localhost:8089/services/search/jobs/%s -d output_mode=json", sid)
+	resp, err := splunkdCurlExec(ctx, deployment, podName, curlArgs)
 	if err != nil {
-		logf.Log.Error(err, "Failed to execute cmd on pod", "pod", podName, "command", command, "stderr", stderr)
 		return nil, err
 	}
 
-	// Parse resulting JSON
-	searchStatusResult := SearchJobStatusResponse{}
-	jsonErr := json.Unmarshal([]byte(searchStatusResp), &searchStatusResult)
-	if jsonErr != nil {
-		logf.Log.Error(jsonErr, "Failed to unmarshal JSON Search Status Response to get SID")
-		return nil, jsonErr
+	var result SearchJobStatusResponse
+	if err := json.Unmarshal([]byte(resp), &result); err != nil {
+		logf.Log.Error(err, "Failed to unmarshal JSON search status response")
+		return nil, err
 	}
-	return &searchStatusResult, err
+	return &result, nil
 }
 
 // GetSearchResults retrieve the results for a given <sid> once the search status isDone == true
 func GetSearchResults(ctx context.Context, deployment *Deployment, podName string, sid string) (string, error) {
-	// Build search results request curl command
-	curlCmd := "curl -ks -u"
-	url := "https://localhost:8089/services/search/jobs"
-	username := "admin"
-	password := "$(cat /mnt/splunk-secrets/password)"
-
-	searchResultsReq := fmt.Sprintf("%s %s:%s %s/%s/results/ --get -d output_mode=json", curlCmd, username, password, url, sid)
-
-	// Send search results request to instance
-	command := []string{"/bin/sh"}
-	searchResultsResp, stderr, err := deployment.PodExecCommand(ctx, podName, command, searchResultsReq, false)
-	if err != nil {
-		logf.Log.Error(err, "Failed to execute cmd on pod", "pod", podName, "command", command, "stderr", stderr)
-		return "", err
-	}
-
-	// Since results can have multiple formats depending on the search SPL (transforming vs. non-transforming, etc.), leave this response as a string
-	return searchResultsResp, err
+	curlArgs := fmt.Sprintf("https://localhost:8089/services/search/jobs/%s/results/ --get -d output_mode=json", sid)
+	return splunkdCurlExec(ctx, deployment, podName, curlArgs)
 }

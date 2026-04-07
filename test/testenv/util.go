@@ -17,7 +17,6 @@ package testenv
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
@@ -808,64 +807,6 @@ func DumpGetPods(ns string) []string {
 	return splunkPods
 }
 
-// DumpDescribePods prints and returns list of pods in the namespace
-func DumpDescribePods(ns string) []string {
-	output, err := exec.Command("kubectl", "describe", "pods", "-n", ns).Output()
-	var splunkPods []string
-	if err != nil {
-		//cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
-		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
-		return nil
-	}
-	for _, line := range strings.Split(string(output), "\n") {
-		logf.Log.Info(line)
-		if strings.HasPrefix(line, "splunk") && !strings.HasPrefix(line, "splunk-op") {
-			splunkPods = append(splunkPods, strings.Fields(line)[0])
-		}
-	}
-	return splunkPods
-}
-
-// DumpGetTopNodes prints and returns Node load information
-func DumpGetTopNodes() []string {
-	output, err := exec.Command("kubectl", "top", "nodes").Output()
-	var splunkNodes []string
-	if err != nil {
-		//cmd := "kubectl top nodes"
-		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
-		return nil
-	}
-	if len(output) > 0 {
-		for _, line := range strings.Split(string(output), "\n") {
-			if len(line) > 0 {
-				logf.Log.Info(line)
-				splunkNodes = append(splunkNodes, strings.Fields(line)[0])
-			}
-		}
-	}
-	return splunkNodes
-}
-
-// DumpGetTopPods prints and returns Node load information
-func DumpGetTopPods(ns string) []string {
-	output, err := exec.Command("kubectl", "top", "pods", "-n", ns).Output()
-	var splunkPods []string
-	if err != nil {
-		//cmd := fmt.Sprintf("kubectl top pods -n %s", ns)
-		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
-		return nil
-	}
-	if len(output) > 0 {
-		for _, line := range strings.Split(string(output), "\n") {
-			if len(line) > 0 {
-				logf.Log.Info(line)
-				splunkPods = append(splunkPods, strings.Fields(line)[0])
-			}
-		}
-	}
-	return splunkPods
-}
-
 // GetOperatorPodName returns name of operator pod in the namespace
 func (testcaseEnvInst *TestCaseEnv) GetOperatorPodName() string {
 	var ns string
@@ -891,7 +832,7 @@ func (testcaseEnvInst *TestCaseEnv) GetOperatorPodName() string {
 			return splunkPods
 		}
 	}
-	logf.Log.Info("Operator pod is set to ", "operatorPod", splunkPods)
+	logf.Log.Info("Operator pod is set to", "operatorPod", splunkPods)
 	return splunkPods
 }
 
@@ -916,11 +857,8 @@ func DumpGetPvcs(ns string) []string {
 // GetConfLineFromPod gets given config from file on POD
 func GetConfLineFromPod(podName string, filePath string, ns string, configName string, stanza string, checkStanza bool) (string, error) {
 	var config string
-	var err error
-	output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "cat", filePath).Output()
+	fileContent, err := GetConfFile(podName, filePath, ns)
 	if err != nil {
-		cmd := fmt.Sprintf("kubectl exec -n %s %s -- cat %s", ns, podName, filePath)
-		logf.Log.Error(err, "Failed to execute command", "command", cmd)
 		return config, err
 	}
 
@@ -930,7 +868,7 @@ func GetConfLineFromPod(podName string, filePath string, ns string, configName s
 		stanzaFound = false
 		stanzaString = fmt.Sprintf("[%s]", stanza)
 	}
-	for _, line := range strings.Split(string(output), "\n") {
+	for _, line := range strings.Split(fileContent, "\n") {
 		// Check for empty lines to prevent an error in logic below
 		if len(line) == 0 {
 			continue
@@ -942,7 +880,7 @@ func GetConfLineFromPod(podName string, filePath string, ns string, configName s
 			}
 			continue
 		} else if strings.HasPrefix(line, configName) {
-			logf.Log.Info(fmt.Sprintf("Configuration %s found at line %s", configName, line))
+			logf.Log.Info("Configuration found", "configName", configName, "line", line)
 			config = line
 			break
 		}
@@ -1145,13 +1083,12 @@ func GetPodUIDs(ns string) map[string]string {
 	splunkPods := DumpGetPods(ns)
 
 	for _, podName := range splunkPods {
-		output, _ := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
-		restResponse := PodDetailsStruct{}
-		err := json.Unmarshal([]byte(output), &restResponse)
+		podDetails, err := getPodDetails(ns, podName)
 		if err != nil {
-			logf.Log.Error(err, "Failed to parse splunk pods")
+			logf.Log.Error(err, "Failed to get pod details", "pod", podName)
+			continue
 		}
-		splunkPodUIDs[podName] = restResponse.Metadata.UID
+		splunkPodUIDs[podName] = podDetails.Metadata.UID
 	}
 	return splunkPodUIDs
 }

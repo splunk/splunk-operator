@@ -525,7 +525,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info("Scale up Standalone")
 
 			standalone = &enterpriseApi.Standalone{}
-			testenv.GetInstanceWithExpect(ctx, deployment, standalone, deployment.GetName(), "Failed to get instance of Standalone")
+			Expect(deployment.GetInstance(ctx, deployment.GetName(), standalone)).To(Succeed(), "Failed to get instance of Standalone")
 
 			standalone.Spec.Replicas = int32(scaledReplicaCount)
 
@@ -550,7 +550,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info("Scale down Standalone")
 			scaledReplicaCount = 1
 			standalone = &enterpriseApi.Standalone{}
-			testenv.GetInstanceWithExpect(ctx, deployment, standalone, deployment.GetName(), "Failed to get instance of Standalone after scaling down")
+			Expect(deployment.GetInstance(ctx, deployment.GetName(), standalone)).To(Succeed(), "Failed to get instance of Standalone")
 
 			standalone.Spec.Replicas = int32(scaledReplicaCount)
 			err = deployment.UpdateCR(ctx, standalone)
@@ -659,7 +659,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info("Scale up Standalone")
 
 			standalone = &enterpriseApi.Standalone{}
-			testenv.GetInstanceWithExpect(ctx, deployment, standalone, deployment.GetName(), "Failed to get instance of Standalone")
+			Expect(deployment.GetInstance(ctx, deployment.GetName(), standalone)).To(Succeed(), "Failed to get instance of Standalone")
 
 			standalone.Spec.Replicas = int32(scaledReplicaCount)
 

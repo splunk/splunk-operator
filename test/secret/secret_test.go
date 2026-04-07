@@ -35,38 +35,33 @@ var _ = Describe("Secret test", func() {
 	var deployment *testenv.Deployment
 	ctx := context.TODO()
 
-	// S1 tests — both label variants use identical V4 config
-	s1SecretLabels := []string{"mastersecret", "managersecret"}
-
-	for _, label := range s1SecretLabels {
-		label := label
-		Context("Standalone deployment (S1) with LM and MC", func() {
-			BeforeEach(func() {
-				var err error
-				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
-				Expect(err).To(Succeed(), "Failed to setup test case environment")
-			})
-
-			AfterEach(func() {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
-			})
-
-			It(label+", integration, s1: Secret update on a standalone instance with LM and MC", func() {
-				config := testenv.NewClusterReadinessConfigV4()
-				RunS1SecretUpdateTest(ctx, deployment, testcaseEnvInst, config)
-			})
-
-			It(label+", integration, s1: Secret Object is recreated on delete and new secrets are applied to Splunk Pods", func() {
-				config := testenv.NewClusterReadinessConfigV4()
-				RunS1SecretDeleteTest(ctx, deployment, testcaseEnvInst, config)
-			})
-
-			It(label+", smoke, s1: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", func() {
-				config := testenv.NewClusterReadinessConfigV4()
-				RunS1SecretDeleteWithMCRefTest(ctx, deployment, testcaseEnvInst, config)
-			})
+	// S1 tests — V3/V4 distinction is irrelevant for standalone secret tests (always V4)
+	Context("Standalone deployment (S1) with LM and MC", func() {
+		BeforeEach(func() {
+			var err error
+			testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+			Expect(err).To(Succeed(), "Failed to setup test case environment")
 		})
-	}
+
+		AfterEach(func() {
+			Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+		})
+
+		It("managersecret, integration, s1: Secret update on a standalone instance with LM and MC", func() {
+			config := testenv.NewClusterReadinessConfigV4()
+			RunS1SecretUpdateTest(ctx, deployment, testcaseEnvInst, config)
+		})
+
+		It("managersecret, integration, s1: Secret Object is recreated on delete and new secrets are applied to Splunk Pods", func() {
+			config := testenv.NewClusterReadinessConfigV4()
+			RunS1SecretDeleteTest(ctx, deployment, testcaseEnvInst, config)
+		})
+
+		It("managersecret, smoke, s1: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", func() {
+			config := testenv.NewClusterReadinessConfigV4()
+			RunS1SecretDeleteWithMCRefTest(ctx, deployment, testcaseEnvInst, config)
+		})
+	})
 
 	// C3 tests — V3 (master) and V4 (manager) variants
 	for _, tc := range masterManagerConfigs {

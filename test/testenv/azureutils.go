@@ -338,7 +338,7 @@ func (client *AzureBlobClient) DownloadFileFromAzure(ctx context.Context, downlo
 		return "", err
 	}
 
-	logf.Log.Info("Download from Azure successful:", "file", downloadRequest.RemoteFile)
+	logf.Log.Info("Download from Azure successful", "file", downloadRequest.RemoteFile)
 
 	return localFile.Name(), err
 }

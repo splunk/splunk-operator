@@ -122,11 +122,11 @@ func (testcaseEnvInst *TestCaseEnv) RunStandaloneWithServiceAccountWorkflow(ctx 
 func (testcaseEnvInst *TestCaseEnv) RunDeleteStandaloneWorkflow(ctx context.Context, deployment *Deployment) error {
 	result, err := testcaseEnvInst.RunStandaloneDeploymentWorkflow(ctx, deployment)
 	if err != nil {
-		return fmt.Errorf("unable to deploy standalone instance: %w", err)
+		return fmt.Errorf("unable to deploy Standalone instance: %w", err)
 	}
 
 	if err := deployment.DeleteCR(ctx, result.Standalone); err != nil {
-		return fmt.Errorf("unable to delete standalone instance: %w", err)
+		return fmt.Errorf("unable to delete Standalone instance: %w", err)
 	}
 	return nil
 }

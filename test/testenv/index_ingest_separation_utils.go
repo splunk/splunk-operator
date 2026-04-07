@@ -69,6 +69,17 @@ func (testcaseEnvInst *TestCaseEnv) SetupIngestorStack(ctx context.Context, depl
 	return nil
 }
 
+// VerifyCredentialSecretVersion checks that a credential secret version is set and valid (not empty or "0").
+func VerifyCredentialSecretVersion(version string, label string) error {
+	if version == "" {
+		return fmt.Errorf("%s queue status credential access secret version is empty", label)
+	}
+	if version == "0" {
+		return fmt.Errorf("%s queue status credential access secret version is 0", label)
+	}
+	return nil
+}
+
 // DeleteIngestorStack tears down the full Queue/ObjectStorage/IngestorCluster/IndexerCluster stack.
 func DeleteIngestorStack(ctx context.Context, deployment *Deployment) error {
 	// Delete the Indexer Cluster

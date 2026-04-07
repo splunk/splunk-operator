@@ -135,7 +135,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 
 			// Ensure that Ingestor Cluster is in Ready phase
 			testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster is in Ready phase")
-			testcaseEnvInst.VerifyIngestorReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyIngestorReady(ctx, deployment)).To(Succeed(), "Ingestor Cluster not ready")
 
 			// Upload apps to S3
 			testcaseEnvInst.Log.Info("Upload apps to S3")
@@ -177,22 +177,20 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			// Get instance of current Ingestor Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Ingestor Cluster CR with latest config")
 			ingest := &enterpriseApi.IngestorCluster{}
-			testenv.GetInstanceWithExpect(ctx, deployment, ingest, deployment.GetName()+"-ingest", "Failed to get instance of Ingestor Cluster")
+			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-ingest", ingest)).To(Succeed(), "Failed to get instance of Ingestor Cluster")
 
 			// Verify Ingestor Cluster Status
 			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
-			Expect(ingest.Status.CredentialSecretVersion).To(Not(Equal("")), "Ingestor queue status credential access secret version is empty")
-			Expect(ingest.Status.CredentialSecretVersion).To(Not(Equal("0")), "Ingestor queue status credential access secret version is 0")
+			Expect(testenv.VerifyCredentialSecretVersion(ingest.Status.CredentialSecretVersion, "Ingestor")).To(Succeed(), "Ingestor credential secret version invalid")
 
 			// Get instance of current Indexer Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
 			index := &enterpriseApi.IndexerCluster{}
-			testenv.GetInstanceWithExpect(ctx, deployment, index, deployment.GetName()+"-idxc", "Failed to get instance of Indexer Cluster")
+			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-idxc", index)).To(Succeed(), "Failed to get instance of Indexer Cluster")
 
 			// Verify Indexer Cluster Status
 			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
-			Expect(index.Status.CredentialSecretVersion).To(Not(Equal("")), "Indexer queue status credential access secret version is empty")
-			Expect(index.Status.CredentialSecretVersion).To(Not(Equal("0")), "Indexer queue status credential access secret version is 0")
+			Expect(testenv.VerifyCredentialSecretVersion(index.Status.CredentialSecretVersion, "Indexer")).To(Succeed(), "Indexer credential secret version invalid")
 
 			// Verify conf files
 			testcaseEnvInst.Log.Info("Verify conf files")
@@ -202,25 +200,25 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 
 				if strings.Contains(pod, "ingest") || strings.Contains(pod, "idxc") {
 					// Verify outputs.conf
-					testenv.VerifyConfFileContent(pod, "opt/splunk/etc/system/local/outputs.conf", deployment.GetName(), outputs, "Failed to get outputs.conf from Ingestor Cluster pod")
+					Expect(testenv.VerifyConfFileContent(pod, "opt/splunk/etc/system/local/outputs.conf", deployment.GetName(), outputs, "Failed to get outputs.conf from Ingestor Cluster pod")).To(Succeed(), "outputs.conf verification failed")
 
 					// Verify default-mode.conf
-					testenv.VerifyConfFileContent(pod, "opt/splunk/etc/system/local/default-mode.conf", deployment.GetName(), defaultsAll, "Failed to get default-mode.conf from Ingestor Cluster pod")
+					Expect(testenv.VerifyConfFileContent(pod, "opt/splunk/etc/system/local/default-mode.conf", deployment.GetName(), defaultsAll, "Failed to get default-mode.conf from Ingestor Cluster pod")).To(Succeed(), "default-mode.conf verification failed")
 
 					// Verify AWS env variables
 					testcaseEnvInst.Log.Info("Verify AWS env variables")
 					envVars, err := testenv.GetAWSEnv(pod, deployment.GetName())
 					Expect(err).To(Succeed(), "Failed to get AWS env variables from Ingestor Cluster pod")
-					testenv.ValidateContent(envVars, awsEnvVars, true)
+					Expect(testenv.ValidateContent(envVars, awsEnvVars, true)).To(Succeed(), "AWS env variable validation failed")
 				}
 
 				if strings.Contains(pod, "ingest") {
 					// Verify default-mode.conf
 					testcaseEnvInst.Log.Info("Verify default-mode.conf")
-					testenv.ValidateContent(defaultsConf, defaultsIngest, true)
+					Expect(testenv.ValidateContent(defaultsConf, defaultsIngest, true)).To(Succeed(), "default-mode.conf validation failed")
 				} else if strings.Contains(pod, "idxc") {
 					// Verify inputs.conf
-					testenv.VerifyConfFileContent(pod, "opt/splunk/etc/system/local/inputs.conf", deployment.GetName(), inputs, "Failed to get inputs.conf from Indexer Cluster pod")
+					Expect(testenv.VerifyConfFileContent(pod, "opt/splunk/etc/system/local/inputs.conf", deployment.GetName(), inputs, "Failed to get inputs.conf from Indexer Cluster pod")).To(Succeed(), "inputs.conf verification failed")
 				}
 			}
 		})

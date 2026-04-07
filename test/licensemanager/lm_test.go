@@ -24,13 +24,9 @@ import (
 
 // masterManagerLMConfigs defines the V3 (master) and V4 (manager) variants
 // for the license manager tests.
-var masterManagerLMConfigs = []struct {
-	NamePrefix string
-	Label      string
-	NewConfig  func() *testenv.LicenseTestConfig
-}{
-	{"master", "licensemaster", testenv.NewLicenseMasterConfig},
-	{"", "licensemanager", testenv.NewLicenseManagerConfig},
+var masterManagerLMConfigs = []testenv.MasterManagerLMTestConfig{
+	{NamePrefix: "master", Label: "licensemaster", NewConfig: testenv.NewLicenseMasterConfig},
+	{NamePrefix: "", Label: "licensemanager", NewConfig: testenv.NewLicenseManagerConfig},
 }
 
 var _ = Describe("License Manager test", func() {
@@ -87,6 +83,22 @@ var _ = Describe("License Manager test", func() {
 
 			It(tc.Label+", integration, m4: Splunk Operator can configure LM with Indexers and Search Heads in M4 SVA", func() {
 				RunLMM4Test(ctx, deployment, testcaseEnvInst, tc.NewConfig())
+			})
+		})
+
+		Context("Clustered deployment (C3) with "+tc.Label+" App Framework", func() {
+			BeforeEach(func() {
+				var err error
+				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+				Expect(err).To(Succeed(), "Failed to setup test case environment")
+			})
+
+			AfterEach(func() {
+				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+			})
+
+			It(tc.Label+", integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
+				RunLMC3AppFrameworkTest(ctx, deployment, testcaseEnvInst, testenvInstance, tc.NewConfig())
 			})
 		})
 	}
