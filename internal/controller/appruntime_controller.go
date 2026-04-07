@@ -332,6 +332,11 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 							ContainerPort: 9000,
 							Protocol:      corev1.ProtocolTCP,
 						},
+						{
+							Name:          "appruntime2",
+							ContainerPort: 9001,
+							Protocol:      corev1.ProtocolTCP,
+						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						{
@@ -350,10 +355,6 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 							Name:      "containerd-run",
 							MountPath: "/run/containerd-nested",
 						},
-					},
-					Ports: []corev1.ContainerPort{
-						{ContainerPort: int32(9000)},
-						{ContainerPort: int32(9001)},
 					},
 					SecurityContext: &corev1.SecurityContext{Privileged: &privileged},
 				},
