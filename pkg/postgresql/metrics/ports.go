@@ -30,10 +30,4 @@ type Recorder interface {
 
 	// SetManagedUsers sets the gauge for managed user states.
 	SetManagedUsers(controller string, states map[string]float64)
-
-	// SetPoolers sets pooler gauge values by type and state.
-	SetPoolers(poolerType string, state string, count float64)
-
-	// SetPoolerInstances sets pooler instance gauge by type.
-	SetPoolerInstances(poolerType string, count float64)
 }

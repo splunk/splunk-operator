@@ -25,23 +25,11 @@ var (
 		Help: "Current counts of managed users by state.",
 	}, []string{"controller", "state"})
 
-	poolers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "splunk_operator_postgres_poolers",
-		Help: "Current number of PgBouncer poolers by type and readiness state.",
-	}, []string{"type", "state"})
-
-	poolerInstances = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "splunk_operator_postgres_pooler_instances",
-		Help: "Current observed pooler instance count.",
-	}, []string{"type"})
-
 	allCollectors = []prometheus.Collector{
 		statusTransitionsTotal,
 		clusters,
 		databases,
 		managedUsers,
-		poolers,
-		poolerInstances,
 	}
 )
 
@@ -89,14 +77,6 @@ func (p *PrometheusRecorder) SetManagedUsers(controller string, states map[strin
 	for state, count := range states {
 		managedUsers.WithLabelValues(controller, state).Set(count)
 	}
-}
-
-func (p *PrometheusRecorder) SetPoolers(poolerType string, state string, count float64) {
-	poolers.WithLabelValues(poolerType, state).Set(count)
-}
-
-func (p *PrometheusRecorder) SetPoolerInstances(poolerType string, count float64) {
-	poolerInstances.WithLabelValues(poolerType).Set(count)
 }
 
 // Compile-time interface check.
