@@ -799,7 +799,7 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Check DEPLOYER Not in Monitoring Console One Config Map
 			testcaseEnvInst.Log.Info("Verify DEPLOYER NOT in Monitoring Console One Config Map after SHC Reconfig")
-			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterManagerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, false)
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, false)
 
 			// Verify all Search Head Members are Not configured on Monitoring Console One
 			testcaseEnvInst.Log.Info("Verify Search Head Pods NOT on Monitoring Console ONE Config Map after SHC Reconfig")

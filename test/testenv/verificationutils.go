@@ -1108,15 +1108,21 @@ func VerifyPodsInMCConfigString(ctx context.Context, deployment *Deployment, tes
 		gomega.Eventually(func() error {
 			testenvInstance.Log.Info("Checking pod configured in MC POD peers string", "Pod Name", podName, "EXPECTED", expected)
 
-			var found bool
+			var (
+				found bool
+				err   error
+			)
 			if checkPodIP {
 				podIP := GetPodIP(testenvInstance.GetName(), podName)
 				if podIP == "" {
 					return fmt.Errorf("empty pod IP for pod %s", podName)
 				}
-				found = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podIP)
+				found, err = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podIP)
 			} else {
-				found = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podName)
+				found, err = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podName)
+			}
+			if err != nil {
+				return err
 			}
 
 			if found != expected {
