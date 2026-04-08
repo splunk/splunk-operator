@@ -1168,16 +1168,34 @@ func GetPodsStartTime(ns string) map[string]time.Time {
 	splunkPods := DumpGetPods(ns)
 
 	for _, podName := range splunkPods {
-		output, _ := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
-		restResponse := PodDetailsStruct{}
-		err := json.Unmarshal([]byte(output), &restResponse)
-		if err != nil {
-			logf.Log.Error(err, "Failed to parse splunk pods")
-		}
-		podStartTime, _ := time.Parse("2006-01-02T15:04:05Z", restResponse.Status.StartTime)
-		splunkPodsStartTime[podName] = podStartTime
+		splunkPodsStartTime[podName] = GetPodStartTime(ns, podName)
 	}
 	return splunkPodsStartTime
+}
+
+// GetPodStartTime returns start time of a single pod.
+func GetPodStartTime(ns string, podName string) time.Time {
+	output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return time.Time{}
+	}
+
+	restResponse := PodDetailsStruct{}
+	err = json.Unmarshal([]byte(output), &restResponse)
+	if err != nil {
+		logf.Log.Error(err, "Failed to parse splunk pod")
+		return time.Time{}
+	}
+
+	podStartTime, err := time.Parse(time.RFC3339Nano, restResponse.Status.StartTime)
+	if err != nil {
+		logf.Log.Error(err, "Failed to parse pod start time", "podName", podName, "startTime", restResponse.Status.StartTime)
+		return time.Time{}
+	}
+
+	return podStartTime
 }
 
 // DeletePod Delete pod in the namespace

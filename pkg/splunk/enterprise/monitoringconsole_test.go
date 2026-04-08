@@ -17,6 +17,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime/debug"
 	"testing"
 	"time"
@@ -135,6 +136,34 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
 }
+
+func TestGetMonitoringConsoleDesiredPeers(t *testing.T) {
+	configMap := &corev1.ConfigMap{
+		Data: map[string]string{
+			"SPLUNK_SEARCH_HEAD_URL":         "splunk-sh-1,splunk-sh-0",
+			"SPLUNK_SEARCH_HEAD_CAPTAIN_URL": "splunk-sh-0",
+			"SPLUNK_STANDALONE_URL":          "splunk-standalone-0",
+			splcommon.ClusterManagerURL:      "splunk-cluster-manager-service",
+			splcommon.LicenseManagerURL:      "splunk-license-manager-service",
+			"SPLUNK_DEPLOYER_URL":            "splunk-deployer-service",
+		},
+	}
+
+	got := getMonitoringConsoleDesiredPeers(configMap)
+	want := []string{
+		"splunk-cluster-manager-service",
+		"splunk-deployer-service",
+		"splunk-license-manager-service",
+		"splunk-sh-0",
+		"splunk-sh-1",
+		"splunk-standalone-0",
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("getMonitoringConsoleDesiredPeers()=%v; want %v", got, want)
+	}
+}
+
 func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()

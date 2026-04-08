@@ -16,7 +16,6 @@ package monitoringconsoletest
 import (
 	"context"
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	"github.com/onsi/ginkgo/v2/types"
@@ -85,6 +84,8 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName)
+			mcPodStartTime := testenv.GetPodStartTime(testcaseEnvInst.GetName(), mcPodName)
 
 			// get revision number of the resource
 			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
@@ -107,8 +108,6 @@ var _ = Describe("Monitoring Console test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			time.Sleep(60 * time.Second)
-
 			// Check Cluster Master in Monitoring Console Config Map
 			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true)
 
@@ -124,6 +123,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Check Monitoring console is configured with all Indexer in Name Space
 			indexerPods := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), defaultIndexerReplicas, false, 0)
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcName, true, true)
+			testenv.VerifyPodDidNotReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), mcPodName, mcPodStartTime)
 
 			// Scale Search Head Cluster
 			scaledSHReplicas := defaultSHReplicas + 1
@@ -221,6 +221,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testcaseEnvInst.Log.Info("Checking for Indexer Pod on MC after Scale Up")
 			indexerPods = testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas, false, 0)
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcName, true, true)
+			testenv.VerifyPodDidNotReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), mcPodName, mcPodStartTime)
 		})
 	})
 

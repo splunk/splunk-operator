@@ -16,7 +16,6 @@ package monitoringconsoletest
 import (
 	"context"
 	"fmt"
-	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -446,6 +445,8 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName)
+			mcPodStartTime := testenv.GetPodStartTime(testcaseEnvInst.GetName(), mcPodName)
 
 			// get revision number of the resource
 			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
@@ -468,8 +469,6 @@ var _ = Describe("Monitoring Console test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			time.Sleep(60 * time.Second)
-
 			// Check Cluster Manager in Monitoring Console Config Map
 			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterManagerServiceName, deployment.GetName())}, splcommon.ClusterManagerURL, mcName, true)
 
@@ -480,15 +479,13 @@ var _ = Describe("Monitoring Console test", func() {
 			shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), defaultSHReplicas, false, 0)
 			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
 
-			// Add a sleep here in case MC pod restarts to add peers
-			time.Sleep(300 * time.Second)
-
 			// Check Monitoring console Pod is configured with all search head
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, true, false)
 
 			// Check Monitoring console is configured with all Indexer in Name Space
 			indexerPods := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), defaultIndexerReplicas, false, 0)
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcName, true, true)
+			testenv.VerifyPodDidNotReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), mcPodName, mcPodStartTime)
 
 			// Scale Search Head Cluster
 			scaledSHReplicas := defaultSHReplicas + 1
@@ -586,6 +583,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testcaseEnvInst.Log.Info("Checking for Indexer Pod on MC after Scale Up")
 			indexerPods = testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas, false, 0)
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcName, true, true)
+			testenv.VerifyPodDidNotReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), mcPodName, mcPodStartTime)
 		})
 	})
 
@@ -626,6 +624,8 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName)
+			mcPodStartTime := testenv.GetPodStartTime(testcaseEnvInst.GetName(), mcPodName)
 
 			// get revision number of the resource
 			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
@@ -661,15 +661,13 @@ var _ = Describe("Monitoring Console test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Adding a sleep, in case MC restarts to update peers list
-			time.Sleep(300 * time.Second)
-
 			// Check Monitoring console Pod is configured with all search head
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, true, false)
 
 			// Check Monitoring console is configured with all Indexer in Name Space
 			indexerPods := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), defaultIndexerReplicas, false, 0)
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcName, true, true)
+			testenv.VerifyPodDidNotReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), mcPodName, mcPodStartTime)
 
 			// #################  Update Monitoring Console In Cluster Manager CR ##################################
 
@@ -704,6 +702,8 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Verify Monitoring Console TWO is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, mcTwoName, mcTwo, testcaseEnvInst)
+			mcTwoPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcTwoName)
+			mcTwoPodStartTime := testenv.GetPodStartTime(testcaseEnvInst.GetName(), mcTwoPodName)
 
 			// ###########   VERIFY MONITORING CONSOLE TWO AFTER CLUSTER MANAGER RECONFIG  ###################################
 
@@ -786,6 +786,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Check Monitoring console Two is configured with all Indexer in Name Space
 			testcaseEnvInst.Log.Info("Checking for Indexer Pod on MC TWO after SHC Reconfig")
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcTwoName, true, true)
+			testenv.VerifyPodDidNotReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), mcTwoPodName, mcTwoPodStartTime)
 
 			// ############################  VERIFICATION FOR MONITORING CONSOLE ONE POST SHC RECONFIG ###############################
 
@@ -806,6 +807,7 @@ var _ = Describe("Monitoring Console test", func() {
 
 			testcaseEnvInst.Log.Info("Verify Search Head Pods NOT on Monitoring Console ONE Pod after Search Head Reconfig")
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, false, false)
+			testenv.VerifyPodDidNotReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), mcPodName, mcPodStartTime)
 
 			// Check Monitoring console One is Not configured with all Indexer in Name Space
 			// CSPL-619
