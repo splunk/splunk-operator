@@ -42,6 +42,7 @@ type MergedConfig struct {
 type reconcileClusterPhases string
 type conditionTypes string
 type conditionReasons string
+type statusMessage = string
 type objectKind string
 
 const (
@@ -53,6 +54,14 @@ const (
 	defaultDatabaseName string = "postgres"
 	superUsername       string = "postgres"
 	defaultPort         string = "5432"
+	configKeyClusterRWEndpoint   string = "CLUSTER_RW_ENDPOINT"
+	configKeyClusterROEndpoint   string = "CLUSTER_RO_ENDPOINT"
+	configKeyClusterREndpoint    string = "CLUSTER_R_ENDPOINT"
+	configKeyDefaultClusterPort  string = "DEFAULT_CLUSTER_PORT"
+	configKeySuperUserName       string = "SUPER_USER_NAME"
+	configKeySuperUserSecretRef  string = "SUPER_USER_SECRET_REF"
+	configKeyPoolerRWEndpoint    string = "CLUSTER_POOLER_RW_ENDPOINT"
+	configKeyPoolerROEndpoint    string = "CLUSTER_POOLER_RO_ENDPOINT"
 
 	secretKeyPassword      string = "password"
 	defaultSecretSuffix    string = "-secret"
@@ -111,4 +120,39 @@ const (
 	reasonCNPGProvisioningFailed conditionReasons = "CNPGProvisioningFailed"
 	reasonCNPGPluginError        conditionReasons = "CNPGPluginError"
 	reasonCNPGImageError         conditionReasons = "CNPGImageError"
+
+	// status messages — provisioner health check
+	msgProvisionerHealthy            statusMessage = "Provisioner cluster is healthy"
+	msgCNPGPendingCreation           statusMessage = "CNPG cluster is pending creation"
+	msgFmtCNPGProvisioning           statusMessage = "CNPG cluster provisioning: %s"
+	msgCNPGSwitchover                statusMessage = "Cluster changing primary node"
+	msgCNPGFailingOver               statusMessage = "Pod missing, need to change primary"
+	msgFmtCNPGRestarting             statusMessage = "CNPG cluster restarting: %s"
+	msgFmtCNPGUpgrading              statusMessage = "CNPG cluster upgrading: %s"
+	msgCNPGApplyingConfiguration     statusMessage = "Configuration change is being applied"
+	msgCNPGPromoting                 statusMessage = "Replica is being promoted to primary"
+	msgCNPGWaitingForUser            statusMessage = "Action from the user is required"
+	msgCNPGUnrecoverable             statusMessage = "Cluster failed, needs manual intervention"
+	msgCNPGCannotCreateObjects       statusMessage = "Cluster resources cannot be created"
+	msgFmtCNPGPluginError            statusMessage = "CNPG plugin error: %s"
+	msgFmtCNPGImageError             statusMessage = "CNPG image error: %s"
+	msgFmtCNPGClusterPhase           statusMessage = "CNPG cluster phase: %s"
+
+	// status messages — aggregate and component readiness checks
+	msgAllComponentsReady            statusMessage = "All components are ready"
+	msgPoolerDisabled                statusMessage = "Connection pooler disabled"
+	msgPoolerConfigMissing           statusMessage = "Connection pooler enabled but configuration is missing"
+	msgPoolersProvisioning           statusMessage = "Connection poolers are being provisioned"
+	msgWaitRWPoolerObject            statusMessage = "Waiting for RW pooler object"
+	msgWaitROPoolerObject            statusMessage = "Waiting for RO pooler object"
+	msgPoolersNotReady               statusMessage = "Connection poolers are not ready yet"
+	msgPoolersReady                  statusMessage = "Connection poolers are ready"
+	msgConfigMapRefNotPublished      statusMessage = "ConfigMap reference not published yet"
+	msgConfigMapNotFoundYet          statusMessage = "ConfigMap not found yet"
+	msgFmtConfigMapMissingRequiredKey statusMessage = "ConfigMap missing required key %q"
+	msgAccessConfigMapReady          statusMessage = "Access ConfigMap is ready"
+	msgSecretRefNotPublished         statusMessage = "Superuser secret reference not published yet"
+	msgSecretNotFoundYet             statusMessage = "Superuser secret not found yet"
+	msgFmtSecretMissingKey           statusMessage = "Superuser secret missing key %q"
+	msgSuperuserSecretReady          statusMessage = "Superuser secret is ready"
 )
