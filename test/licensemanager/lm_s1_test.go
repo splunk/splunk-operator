@@ -63,7 +63,7 @@ var _ = Describe("Licensemanager test", func() {
 	})
 
 	Context("Standalone deployment (S1) with License Manager", func() {
-		It("licensemanager, smoke, s1: Splunk Operator can configure License Manager with Standalone in S1 SVA", NodeTimeout(testenv.ShortTimeout), func() {
+		It("licensemanager, smoke, s1: Splunk Operator can configure License Manager with Standalone in S1 SVA", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			RunLMS1Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})

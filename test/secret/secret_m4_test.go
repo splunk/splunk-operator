@@ -62,7 +62,7 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
-		It("mastersecret, integration, m4: secret update on multisite indexers and search head cluster", NodeTimeout(testenv.LongTimeout), func() {
+		It("mastersecret, integration, m4: secret update on multisite indexers and search head cluster", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			// Test Scenario
 			// 1. Update Secrets Data

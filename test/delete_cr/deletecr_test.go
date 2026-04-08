@@ -61,7 +61,7 @@ var _ = Describe("DeleteCR test", func() {
 	})
 
 	Context("Standalone deployment (S1 - Standalone Pod)", func() {
-		It("integration, managerdeletecr: can deploy standalone and delete", NodeTimeout(testenv.ShortTimeout), func() {
+		It("integration, managerdeletecr: can deploy standalone and delete", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -89,7 +89,7 @@ var _ = Describe("DeleteCR test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3)", func() {
-		It("integration, managerdeletecr: can deploy C3 and delete search head, clustermanager", NodeTimeout(testenv.MediumTimeout), func() {
+		It("integration, managerdeletecr: can deploy C3 and delete search head, clustermanager", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			// Deploy C3
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
