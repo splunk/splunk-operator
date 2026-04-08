@@ -124,30 +124,39 @@ func (testenv *TestCaseEnv) IsOperatorInstalledClusterWide() string {
 }
 
 func (testenv *TestCaseEnv) setup() error {
-	testenv.Log.Info("testenv initializing.\n")
+	testenv.Log.Info("[DEBUG] testenv setup starting", "namespace", testenv.namespace, "clusterProvider", ClusterProvider, "clusterWide", installOperatorClusterWide)
 
 	var err error
+	testenv.Log.Info("[DEBUG] Creating namespace...")
 	err = testenv.createNamespace()
 	if err != nil {
+		testenv.Log.Info("[DEBUG] Failed to create namespace", "error", err)
 		return err
 	}
+	testenv.Log.Info("[DEBUG] Namespace created")
 
+	testenv.Log.Info("[DEBUG] Creating service account...")
 	err = testenv.createSA()
 	if err != nil {
+		testenv.Log.Info("[DEBUG] Failed to create service account", "error", err)
 		return err
 	}
+	testenv.Log.Info("[DEBUG] Service account created")
 
 	if installOperatorClusterWide != "true" {
+		testenv.Log.Info("[DEBUG] Creating role...")
 		err = testenv.createRole()
 		if err != nil {
 			return err
 		}
 
+		testenv.Log.Info("[DEBUG] Creating role binding...")
 		err = testenv.createRoleBinding()
 		if err != nil {
 			return err
 		}
 
+		testenv.Log.Info("[DEBUG] Creating operator...")
 		err = testenv.createOperator()
 		if err != nil {
 			return err
@@ -155,6 +164,7 @@ func (testenv *TestCaseEnv) setup() error {
 	}
 
 	// Create secret object for index test
+	testenv.Log.Info("[DEBUG] Creating index secret", "provider", ClusterProvider)
 	switch ClusterProvider {
 	case "eks":
 		testenv.createIndexSecret()
@@ -166,15 +176,21 @@ func (testenv *TestCaseEnv) setup() error {
 	default:
 		testenv.Log.Info("Failed to create secret object")
 	}
+	testenv.Log.Info("[DEBUG] Index secret created")
 
 	if testenv.licenseFilePath != "" {
+		testenv.Log.Info("[DEBUG] Creating license config map", "path", testenv.licenseFilePath)
 		err = testenv.createLicenseConfigMap()
 		if err != nil {
+			testenv.Log.Info("[DEBUG] Failed to create license config map", "error", err)
 			return err
 		}
+		testenv.Log.Info("[DEBUG] License config map created")
+	} else {
+		testenv.Log.Info("[DEBUG] No license file path set, skipping license config map")
 	}
 	testenv.initialized = true
-	testenv.Log.Info("testenv initialized.\n", "namespace", testenv.namespace)
+	testenv.Log.Info("[DEBUG] testenv setup complete", "namespace", testenv.namespace)
 	return nil
 }
 

@@ -100,12 +100,12 @@ case ${CLUSTER_PROVIDER} in
         fi
         ;;
     "gcp")
-        if [[ -z "${GCP_ENTERPRISE_LICENSE_LOCATION}" ]]; then
-          echo "License path not set. Changing to default"
+        if [[ -z "${ENTERPRISE_LICENSE_LOCATION}" ]]; then
+          echo "License path not set. Changing to GCP default"
           export ENTERPRISE_LICENSE_LOCATION="${GCP_ENTERPRISE_LICENSE_LOCATION}"
         fi
         if [[ -z "${ENTERPRISE_LICENSE_LOCATION}" ]]; then
-          echo "License path not set. Changing to default"
+          echo "License path not set. Falling back to S3 path"
           export ENTERPRISE_LICENSE_LOCATION="${ENTERPRISE_LICENSE_S3_PATH}"
         fi
 
@@ -117,11 +117,6 @@ case ${CLUSTER_PROVIDER} in
         if [[ -z "${TEST_INDEXES_S3_BUCKET}" ]]; then
           echo "Test bucket not set. Changing to default"
           export TEST_INDEXES_S3_BUCKET="${INDEXES_S3_BUCKET}"
-        fi
-
-        if [[ -z "${S3_REGION}" ]]; then
-          echo "S3 Region not set. Changing to default"
-          export S3_REGION="${AWS_S3_REGION}"
         fi
         ;;
 esac

@@ -401,7 +401,7 @@ func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv,
 			volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpecAzureManagedID(volumeName, GetAzureEndpoint(ctx), "azure", "blob")}
 		}
 	case "gcp":
-		volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetGCPEndpoint(), testenvInstance.GetIndexSecretName(), "gcp", "gcs", GetDefaultS3Region())}
+		volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetGCPEndpoint(), testenvInstance.GetIndexSecretName(), "gcp", "gcs", GetDefaultGCPRegion())}
 
 	default:
 		testenvInstance.Log.Info("Failed to identify cluster provider name: Should be 'eks' or 'azure' or 'gcp' ")
@@ -425,6 +425,26 @@ func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv,
 	}
 
 	return appFrameworkSpec
+}
+
+// GenerateAppFrameworkVolumeSpec returns a VolumeSpec appropriate for the current ClusterProvider.
+// Use this instead of calling GenerateIndexVolumeSpec directly with hardcoded provider values.
+func GenerateAppFrameworkVolumeSpec(ctx context.Context, testenvInstance *TestCaseEnv, volumeName string) enterpriseApi.VolumeSpec {
+	switch ClusterProvider {
+	case "eks":
+		return GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", GetDefaultS3Region())
+	case "azure":
+		managedID := os.Getenv("AZURE_MANAGED_ID_ENABLED")
+		if managedID == "false" {
+			return GenerateIndexVolumeSpecAzure(volumeName, GetAzureEndpoint(ctx), testenvInstance.GetIndexSecretName(), "azure", "blob")
+		}
+		return GenerateIndexVolumeSpecAzureManagedID(volumeName, GetAzureEndpoint(ctx), "azure", "blob")
+	case "gcp":
+		return GenerateIndexVolumeSpec(volumeName, GetGCPEndpoint(), testenvInstance.GetIndexSecretName(), "gcp", "gcs", GetDefaultGCPRegion())
+	default:
+		testenvInstance.Log.Info("Failed to identify cluster provider name: Should be 'eks' or 'azure' or 'gcp' ")
+		return enterpriseApi.VolumeSpec{}
+	}
 }
 
 // WaitforPhaseChange Wait for 2 mins or when phase change on is seen on a CR for any particular app

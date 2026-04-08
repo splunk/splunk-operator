@@ -152,9 +152,7 @@ Test coverage includes:
 - `test/smoke/` - Basic smoke tests
 - `test/licensemanager/` - License manager tests
 - `test/monitoring_console/` - Monitoring console tests
-- `test/appframework_aws/` - App Framework with AWS S3
-- `test/appframework_az/` - App Framework with Azure Blob
-- `test/appframework_gcp/` - App Framework with GCP Storage
+- `test/appframework/` - App Framework tests (provider-agnostic, runs on AWS/Azure/GCP)
 - `test/smartstore/` - SmartStore functionality
 - `test/secret/` - Secret management
 - `test/custom_resource_crud/` - CR CRUD operations

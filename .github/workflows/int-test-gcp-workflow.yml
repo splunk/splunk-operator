@@ -9,6 +9,7 @@ on:
     branches:
       - develop
       - main
+      - CSPL-4601
     paths-ignore:
       - 'docs/**'
       - '*.md'
@@ -70,21 +71,20 @@ jobs:
     strategy:
       matrix:
         test_focus:
-          - { order: 1, name: "c3_gcp_sanity" }
-          - { order: 2, name: "c3_mgr_gcp_sanity" }
-          - { order: 3, name: "m4_gcp_sanity" }
-          - { order: 4, name: "m4_mgr_gcp_sanity" }
-          - { order: 5, name: "s1_gcp_sanity" }
+          - { order: 1, name: "masterappframeworkc3" }
+          - { order: 2, name: "managerappframeworkc3" }
+          - { order: 3, name: "masterappframeworkm4" }
+          - { order: 4, name: "managerappframeworkm4" }
+          - { order: 5, name: "appframeworksS1" }
     runs-on: ubuntu-latest
     needs: build-operator-image
     env:
       CLUSTER_WORKERS: 5
-      TEST_CLUSTER_PLATFORM: gcp
       CLUSTER_PROVIDER: gcp
       ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GCP_REGION: ${{ secrets.GCP_REGION }}
-      AWS_S3_REGION: ${{ secrets.GCP_REGION }}
+      GCP_STORAGE_REGION: ${{ secrets.GCP_REGION }}
       GCP_ZONE: ${{ secrets.GCP_ZONE }}
       GCP_NETWORK: default  # Adjust if using a custom network
       GCP_SUBNETWORK: default  # Adjust if using a custom subnetwork
@@ -112,7 +112,7 @@ jobs:
       GCP_TEST_CONTAINER: ${{ secrets.GCP_TEST_CONTAINER}}
       GCP_INDEXES_CONTAINER: ${{ secrets.GCP_INDEXES_CONTAINER}}
       ECR_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
-      GCP_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
+      GCP_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
     steps:
       - name: Set Test Cluster Name
         run: |
@@ -136,11 +136,12 @@ jobs:
         uses: google-github-actions/setup-gcloud@v1
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
-          install_components: 'kubectl'
+          install_components: 'kubectl,gke-gcloud-auth-plugin'
 
       - name: Set GCP Project
         run: |
           gcloud config set project ${{ env.GCP_PROJECT_ID }}
+          echo "USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> $GITHUB_ENV
 
       - name: Create GKE Cluster
         run: |
@@ -148,33 +149,14 @@ jobs:
           export GKE_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
           make cluster-up
 
-      - name: Get Kubernetes Credentials
-        run: |
-          gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.GCP_ZONE }} --project ${{ env.GCP_PROJECT_ID }}
-
       - name: Allow Pulling from Artifact Registry
         run: |
           gcloud auth configure-docker ${{ secrets.GCP_ARTIFACT_REGISTRY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          install_components: 'kubectl'
 
       - name: Change Splunk Enterprise Image on Main Branches
         if: github.ref == 'refs/heads/main'
         run: |
           echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v1
-        with:
-          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-
-      - name: Set GCP Project
-        run: |
-          gcloud config set project ${{ env.GCP_PROJECT_ID }}
 
       - name: Install Kubectl
         uses: azure/setup-kubectl@v3
@@ -224,16 +206,6 @@ jobs:
           docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
           docker push ${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
 
-      - name: Get Kubernetes Credentials
-        run: |
-          gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.GCP_ZONE }} --project ${{ env.GCP_PROJECT_ID }}
-
-      - name: Get GKE Credentials
-        uses: google-github-actions/get-gke-credentials@v1
-        with:
-          cluster_name: ${{ env.CLUSTER_NAME }}
-          location: ${{ env.GCP_ZONE }}
-
       - name: Install Metrics Server
         run: |
           curl -LO https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
@@ -245,7 +217,7 @@ jobs:
 
       - name: Setup Kustomize
         run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"  | bash
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- 5.4.3
           sudo mv kustomize /usr/local/bin/
 
       - name: Verify kubectl Configuration
