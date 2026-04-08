@@ -48,7 +48,7 @@ var _ = Describe("Smartstore test", func() {
 	})
 
 	Context("Standalone Deployment (S1)", func() {
-		It("mastersmartstore, integration: Can configure multiple indexes through app", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("mastersmartstore, integration: Can configure multiple indexes through app", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexVolumeMap := map[string]string{"test-index-" + testenv.RandomDNSName(3): volName,
 				"test-index-" + testenv.RandomDNSName(3): volName,
@@ -102,7 +102,7 @@ var _ = Describe("Smartstore test", func() {
 	})
 
 	Context("Standalone Deployment (S1)", func() {
-		It("mastersmartstore, integration: Can configure indexes which use default volumes through app", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("mastersmartstore, integration: Can configure indexes which use default volumes through app", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexName := "test-index-" + testenv.RandomDNSName(3)
 
@@ -168,7 +168,7 @@ var _ = Describe("Smartstore test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4)", func() {
-		It("mastersmartstore, m4, integration: Can configure indexes and volumes on Multisite Indexer Cluster through app", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("mastersmartstore, m4, integration: Can configure indexes and volumes on Multisite Indexer Cluster through app", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexName := "test-index-" + testenv.RandomDNSName(3)

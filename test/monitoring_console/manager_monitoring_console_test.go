@@ -64,7 +64,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Deploy Monitoring Console", func() {
-		It("smoke, monitoringconsole: can deploy MC CR and can be configured standalone", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("smoke, monitoringconsole: can deploy MC CR and can be configured standalone", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			/*
 				Test Steps
 				1. Deploy Monitoring Console
@@ -170,7 +170,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managermc1, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("managermc1, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			/*
 				Test Steps
 				1.  Deploy Standalone
@@ -327,7 +327,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment with Scale up", func() {
-		It("managermc1, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("managermc1, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			/*
 				Test Steps
 				1.  Deploy Standalone
@@ -815,7 +815,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Multisite Clustered deployment (M4 - 3 Site clustered indexer, search head cluster)", func() {
-		It("managermc2, integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("managermc2, integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			/*
 				Test Steps
 				1. Deploy Multisite Indexer Cluster
@@ -952,7 +952,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managermc2, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("managermc2, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			/*
 				Test Steps
 				1.  Deploy Standalone with name "search-head-adhoc"

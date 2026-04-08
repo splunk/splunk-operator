@@ -224,7 +224,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("managercrcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("managercrcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()

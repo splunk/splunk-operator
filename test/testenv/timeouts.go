@@ -15,44 +15,41 @@ package testenv
 
 import "time"
 
-// Per-test-case NodeTimeout tiers derived from historic JUnit duration data.
-// Each value is approximately 2x the observed p95 duration for that tier,
-// rounded to a convenient value.
+// Per-test-case NodeTimeout tiers derived from observed JUnit durations.
+// Each value is ≈1.5× the observed p95 maximum for that tier.
 //
 // Usage in test specs:
 //
-//	It("test name", NodeTimeout(testenv.LongTimeout), func() { ... })
+//	It("test name", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) { ... })
 const (
-	// ShortTimeout for quick tests: smoke S1, smartstore, indingsep, deletecr.
-	// Observed p95: ≤15 min.
-	ShortTimeout = 30 * time.Minute
+	// ShortTimeout for quick tests (observed max ≤10 min):
+	// smartstore (4m), indingsep (8m), s1 appfw (9m), deletecr s1 (3m),
+	// crcrud s1 (8m), lmanager s1 (6m), smoke s1 (est).
+	ShortTimeout = 15 * time.Minute
 
-	// MediumTimeout for moderate tests: smoke C3/M4/M1, licensemanager, crcrud, s1 appfw, s1 secret.
-	// Observed p95: 15–60 min.
-	MediumTimeout = 90 * time.Minute
+	// MediumTimeout for moderate tests (observed max 10–30 min):
+	// mc s1/m4 (10–28m), crcrud shc/PVC (11–20m), lmanager c3 (20m),
+	// secret s1 (18m), deletecr c3 (11m), most c3/m4 appfw (11–28m),
+	// smoke c3/m4 (est).
+	MediumTimeout = 45 * time.Minute
 
-	// LongTimeout for heavy tests: c3/m4 appfw, C3/M4 secret, monitoring console.
-	// Observed p95: 60–100 min.
-	LongTimeout = 150 * time.Minute
-
-	// ExtraLongTimeout for the heaviest tests: c3 appfw downgrade, azure big-volume.
-	// Observed p95: 100+ min.
-	ExtraLongTimeout = 210 * time.Minute
+	// LongTimeout for heavy tests (observed max 30–88 min):
+	// secret m4 (88m), c3appfw max (54m), m4appfw max (52m),
+	// crcrud c3 (49m), mc c3 (46m), crcrud m4 (39m), lmanager m4 (31m).
+	LongTimeout = 135 * time.Minute
 )
 
 // Suite-level timeouts. Applied via GinkgoConfiguration().Timeout in suite files.
+// Each value equals max(NodeTimeout used in that suite) + 15 min buffer for
+// BeforeSuite / AfterEach teardown.  Tests run in parallel via ginkgo -nodes,
+// so the suite wall-clock time ≈ longest single test, not the sum.
 const (
-	// ShortSuiteTimeout for suites with only short tests (smartstore, deletecr, indingsep).
+	// ShortSuiteTimeout for suites whose max NodeTimeout is ShortTimeout.
 	ShortSuiteTimeout = 30 * time.Minute
 
-	// MediumSuiteTimeout for suites with moderate tests (smoke, licensemanager).
-	MediumSuiteTimeout = 120 * time.Minute
+	// MediumSuiteTimeout for suites whose max NodeTimeout is MediumTimeout.
+	MediumSuiteTimeout = 60 * time.Minute
 
-	// LongSuiteTimeout for suites with heavy tests (crcrud, mc, secret, s1appfw).
-	// Set to max(NodeTimeout) + buffer; tests run in parallel via ginkgo -nodes.
-	LongSuiteTimeout = 165 * time.Minute
-
-	// ExtraLongSuiteTimeout for appframework c3/m4 suites.
-	// Set to max(NodeTimeout) + buffer; tests run in parallel via ginkgo -nodes.
-	ExtraLongSuiteTimeout = 225 * time.Minute
+	// LongSuiteTimeout for suites whose max NodeTimeout is LongTimeout.
+	LongSuiteTimeout = 150 * time.Minute
 )

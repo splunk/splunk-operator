@@ -57,7 +57,7 @@ func TestBasic(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	sc, _ := GinkgoConfiguration()
-	sc.Timeout = testenv.ExtraLongSuiteTimeout
+	sc.Timeout = testenv.LongSuiteTimeout
 
 	RunSpecs(t, "Running "+testSuiteName, sc)
 }

@@ -66,7 +66,7 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managercrcrud, integration, s1: can deploy a standalone instance, change its CR, update the instance", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("managercrcrud, integration, s1: can deploy a standalone instance, change its CR, update the instance", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			// Deploy Standalone
 			mcRef := deployment.GetName()
