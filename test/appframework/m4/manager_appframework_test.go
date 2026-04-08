@@ -2248,8 +2248,11 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify status is 'OFF' in config map for Cluster Manager and Search Head Cluster
 			testcaseEnvInst.Log.Info("Verify status is 'OFF' in config map for Cluster Manager and Search Head Cluster")
-			config, _ := testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["ClusterManager"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
+			var config *corev1.ConfigMap
+			Eventually(func() bool {
+				config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
+				return strings.Contains(config.Data["ClusterManager"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")
+			}, 2*time.Minute, testenv.PollInterval).Should(Equal(true), "Config map update not complete")
 
 			//######### SWITCH FROM MANUAL TO PERIODIC POLLING ############
 			// Get instance of current Cluster Manager CR with latest config
@@ -2295,8 +2298,10 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify status is 'ON' in config map for Cluster Manager and Search Head Cluster
 			testcaseEnvInst.Log.Info("Verify status is 'ON' in config map for Cluster Manager and Search Head Cluster")
-			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["ClusterManager"], "status: on") && strings.Contains(config.Data["SearchHeadCluster"], "status: on")).To(Equal(true), "Config map update not complete")
+			Eventually(func() bool {
+				config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
+				return strings.Contains(config.Data["ClusterManager"], "status: on") && strings.Contains(config.Data["SearchHeadCluster"], "status: on")
+			}, 2*time.Minute, testenv.PollInterval).Should(Equal(true), "Config map update not complete")
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3

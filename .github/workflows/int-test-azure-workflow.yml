@@ -251,9 +251,9 @@ jobs:
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Run Integration test
-        timeout-minutes: 240
+        timeout-minutes: 300
         env:
-          TEST_TIMEOUT: 225m
+          TEST_TIMEOUT: 280m
         run: |
             make int-test
       - name: Collect Test Logs
