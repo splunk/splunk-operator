@@ -208,8 +208,9 @@ jobs:
           docker push ${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
 
       - name: Install Metrics Server
+        continue-on-error: true
         run: |
-          curl -LO https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+          curl -LO https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.7.2/components.yaml
           kubectl replace --force -f components.yaml || kubectl apply -f components.yaml
 
       - name: Install Kubernetes Dashboard
