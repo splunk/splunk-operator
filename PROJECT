@@ -150,4 +150,13 @@ resources:
   kind: AppSource
   path: github.com/splunk/splunk-operator/api/apps/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: splunk.com
+  group: apps
+  kind: App
+  path: github.com/splunk/splunk-operator/api/apps/v1alpha1
+  version: v1alpha1
 version: "3"

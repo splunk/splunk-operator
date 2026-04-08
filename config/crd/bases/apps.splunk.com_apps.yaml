@@ -1,0 +1,402 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: apps.apps.splunk.com
+spec:
+  group: apps.splunk.com
+  names:
+    kind: App
+    listKind: AppList
+    plural: apps
+    singular: app
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Status of app
+      jsonPath: .status.phase
+      name: Phase
+      type: string
+    - description: Age of app resource
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - description: Auxillary message describing CR status
+      jsonPath: .status.message
+      name: Message
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: App is the Schema for the apps API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AppSpec defines the desired state of App.
+            properties:
+              appID:
+                minLength: 1
+                type: string
+              package:
+                description: AppPackageSpec defines the package location within the
+                  source.
+                properties:
+                  path:
+                    minLength: 1
+                    type: string
+                required:
+                - path
+                type: object
+              scope:
+                minLength: 1
+                type: string
+              sourceRef:
+                description: AppSource is the Schema for the appsources API.
+                properties:
+                  apiVersion:
+                    description: |-
+                      APIVersion defines the versioned schema of this representation of an object.
+                      Servers should convert recognized schemas to the latest internal value, and
+                      may reject unrecognized values.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+                    type: string
+                  kind:
+                    description: |-
+                      Kind is a string value representing the REST resource this object represents.
+                      Servers may infer this from the endpoint the client submits requests to.
+                      Cannot be updated.
+                      In CamelCase.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  metadata:
+                    type: object
+                  spec:
+                    description: AppSourceSpec defines the desired state of AppSource.
+                    properties:
+                      auth:
+                        description: Authentication configuration
+                        properties:
+                          secretRef:
+                            description: |-
+                              LocalObjectReference contains enough information to let you locate the
+                              referenced object inside the same namespace.
+                            properties:
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        required:
+                        - secretRef
+                        type: object
+                      git:
+                        description: Git specific configuration
+                        properties:
+                          ref:
+                            default: main
+                            type: string
+                          repo:
+                            type: string
+                        required:
+                        - repo
+                        type: object
+                      pollIntervalSeconds:
+                        default: 60
+                        description: PollIntervalSeconds is the interval in seconds
+                          to poll remote repository
+                        format: int32
+                        type: integer
+                      s3:
+                        description: S3 specific configuration
+                        properties:
+                          bucket:
+                            type: string
+                          endpoint:
+                            type: string
+                          path:
+                            type: string
+                          region:
+                            type: string
+                        required:
+                        - endpoint
+                        type: object
+                      type:
+                        description: |-
+                          Type of the App Source
+                          Valid values are "git", "s3", "gcp", "azure"
+                        enum:
+                        - git
+                        - s3
+                        - gcp
+                        - azure
+                        type: string
+                    required:
+                    - auth
+                    - type
+                    type: object
+                    x-kubernetes-validations:
+                    - message: s3 configuration is required when type is s3
+                      rule: self.type != 's3' || has(self.s3)
+                    - message: git configuration is required when type is git
+                      rule: self.type != 'git' || has(self.git)
+                    - message: exactly one of s3 or git must be specified
+                      rule: '[has(self.s3), has(self.git)].filter(x, x == true).size()
+                        == 1'
+                  status:
+                    description: AppSourceStatus defines the observed state of AppSource.
+                    properties:
+                      conditions:
+                        description: Conditions represent the current state of the
+                          AppSource
+                        items:
+                          description: Condition contains details for one aspect of
+                            the current state of this API Resource.
+                          properties:
+                            lastTransitionTime:
+                              description: |-
+                                lastTransitionTime is the last time the condition transitioned from one status to another.
+                                This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                              format: date-time
+                              type: string
+                            message:
+                              description: |-
+                                message is a human readable message indicating details about the transition.
+                                This may be an empty string.
+                              maxLength: 32768
+                              type: string
+                            observedGeneration:
+                              description: |-
+                                observedGeneration represents the .metadata.generation that the condition was set based upon.
+                                For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                                with respect to the current state of the instance.
+                              format: int64
+                              minimum: 0
+                              type: integer
+                            reason:
+                              description: |-
+                                reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                                Producers of specific condition types may define expected values and meanings for this field,
+                                and whether the values are considered a guaranteed API.
+                                The value should be a CamelCase string.
+                                This field may not be empty.
+                              maxLength: 1024
+                              minLength: 1
+                              pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                              type: string
+                            status:
+                              description: status of the condition, one of True, False,
+                                Unknown.
+                              enum:
+                              - "True"
+                              - "False"
+                              - Unknown
+                              type: string
+                            type:
+                              description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                              maxLength: 316
+                              pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                              type: string
+                          required:
+                          - lastTransitionTime
+                          - message
+                          - reason
+                          - status
+                          - type
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - type
+                        x-kubernetes-list-type: map
+                      discoveredApps:
+                        description: DiscoveredApps is the list of discovered apps
+                        items:
+                          properties:
+                            checksum:
+                              description: Checksum is the checksum of the App (might
+                                differ between s3, git, gcp, and azure)
+                              type: string
+                            lastModified:
+                              description: LastModified is the last modified time
+                                of the App
+                              format: date-time
+                              type: string
+                            name:
+                              description: Name is the name of the App with extension
+                              type: string
+                            path:
+                              description: Path is the path to the App in the remote
+                                repository
+                              type: string
+                            size:
+                              description: Size is the size of the App in bytes
+                              format: int64
+                              type: integer
+                          required:
+                          - checksum
+                          - lastModified
+                          - name
+                          - path
+                          - size
+                          type: object
+                        type: array
+                      lastPolledTime:
+                        description: LastPolledTime represents the last time the AppSource
+                          was polled
+                        format: date-time
+                        type: string
+                      observedGeneration:
+                        description: |-
+                          ObservedGeneration represents the most recent generation observed for this AppSource
+                          This will be used to determine if the AppSource needs to be reconciled
+                        format: int64
+                        type: integer
+                    type: object
+                type: object
+              targetRef:
+                description: AppTargetRef defines the target environment the app should
+                  bind to.
+                properties:
+                  kind:
+                    minLength: 1
+                    type: string
+                  name:
+                    minLength: 1
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
+              version:
+                minLength: 1
+                type: string
+            required:
+            - appID
+            - package
+            - scope
+            - sourceRef
+            - targetRef
+            - version
+            type: object
+          status:
+            description: AppStatus defines the observed state of App.
+            properties:
+              artifact:
+                description: Artifact tracks the resolved app package details
+                properties:
+                  etag:
+                    description: Etag is the artifact hash or ETag used for change
+                      detection
+                    type: string
+                  lastFetchedTime:
+                    description: LastFetchedTime is the last time the artifact was
+                      fetched
+                    format: date-time
+                    type: string
+                  resolvedPath:
+                    description: ResolvedPath is the resolved artifact path within
+                      the source
+                    type: string
+                type: object
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the app
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              installedVersion:
+                description: InstalledVersion is the app version installed on target
+                type: string
+              message:
+                description: Auxillary message describing CR status
+                type: string
+              observedGeneration:
+                description: ObservedGeneration tracks the latest reconciled generation
+                format: int64
+                type: integer
+              phase:
+                description: Phase of the app resource
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

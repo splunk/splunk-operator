@@ -14,6 +14,7 @@ resources:
 - bases/enterprise.splunk.com_queues.yaml
 - bases/enterprise.splunk.com_objectstorages.yaml
 - bases/apps.splunk.com_appsources.yaml
+- bases/apps.splunk.com_apps.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 

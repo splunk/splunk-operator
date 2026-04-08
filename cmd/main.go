@@ -326,6 +326,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "AppSource")
 		os.Exit(1)
 	}
+	if err := (&appscontroller.AppReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "App")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	// Register certificate watchers with the manager
