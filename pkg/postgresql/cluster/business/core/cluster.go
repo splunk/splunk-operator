@@ -502,6 +502,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	return ctrl.Result{RequeueAfter: retryDelay}, nil
 }
 
+// Free to place in specific dir/place along with the p&a work.
 type StateInformationDto struct {
 	State     pgcConstants.State
 	Condition conditionTypes
@@ -511,6 +512,7 @@ type StateInformationDto struct {
 	Result    ctrl.Result
 }
 
+// a unit of work in a way, extractable.
 type clusterReadynessCheck interface {
 	Condition(ctx context.Context) (StateInformationDto, error)
 }
@@ -685,6 +687,7 @@ func (p *poolerHealthCheck) Condition(ctx context.Context) (StateInformationDto,
 		}, fmt.Errorf("pooler config missing")
 	}
 
+	// TODO: Port material.
 	rwExists, err := poolerExists(ctx, p.client, p.cluster, readWriteEndpoint)
 	if err != nil {
 		return StateInformationDto{

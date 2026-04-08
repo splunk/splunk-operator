@@ -35,7 +35,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
-	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
+	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/business/core"
 )
 
 /*

@@ -6,6 +6,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/business/core/types/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -13,10 +14,22 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+type configMapNotFoundClient struct {
+	client.Client
+}
+
+func (c configMapNotFoundClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if _, ok := obj.(*corev1.ConfigMap); ok {
+		return apierrors.NewNotFound(schema.GroupResource{Resource: "configmaps"}, key.Name)
+	}
+	return c.Client.Get(ctx, key, obj, opts...)
+}
 
 func TestPoolerResourceName(t *testing.T) {
 	tests := []struct {
@@ -1135,4 +1148,126 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-ro", Namespace: "default"}, ro))
 		assert.Equal(t, int32(1), *ro.Spec.Instances)
 	})
+}
+
+func TestComponentStateTriggerConditions(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	exampleCm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pg1-config",
+			Namespace: "default",
+		},
+		Data: map[string]string{
+			"CLUSTER_RW_ENDPOINT":   "pg1-rw.default",
+			"CLUSTER_RO_ENDPOINT":   "pg1-ro.default",
+			"DEFAULT_CLUSTER_PORT":  "5432",
+			"SUPER_USER_SECRET_REF": "pg1-secret",
+		},
+	}
+	examplePgCluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pg1",
+			Namespace: "default",
+		},
+		Status: enterprisev4.PostgresClusterStatus{
+			Resources: &enterprisev4.PostgresClusterResources{
+				ConfigMapRef: &corev1.LocalObjectReference{Name: "pg1-config"},
+				SuperUserSecretRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "pg1-secret"},
+					Key:                  "password",
+				},
+			},
+		},
+	}
+	exampleSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pg1-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"password": []byte("s3cr3t"),
+		},
+	}
+
+	// TODO: as soon as coupling is addressed, remove this monster of a test.
+	combinations := []struct {
+		name            string
+		componentChecks []clusterReadynessCheck
+		requeue         []bool
+		expectedResult  bool
+		message         string
+	}{
+		{
+			name: "Provisioner ready, pooler pending, sync not successful",
+			componentChecks: []clusterReadynessCheck{
+				newProvisionerHealthCheck(examplePgCluster.DeepCopy(), &cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy}}),
+				newPoolerHealthCheck(nil, nil, true, false),
+			},
+			requeue:        []bool{false, false},
+			expectedResult: false,
+			message:        "Provisioner is ready but pooler is pending, don't fire",
+		},
+		{
+			name: "Provisioner ready, pooler ready, configMap failed, sync not successful",
+			componentChecks: []clusterReadynessCheck{
+				newProvisionerHealthCheck(examplePgCluster, &cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy}}),
+				newPoolerHealthCheck(nil, nil, false, false),
+				newConfigMapHealthCheck(
+					configMapNotFoundClient{
+						Client: fake.NewClientBuilder().
+							WithScheme(scheme).
+							Build(),
+					},
+					examplePgCluster.DeepCopy(),
+				),
+			},
+			requeue:        []bool{false, false, true},
+			expectedResult: false,
+			message:        "Provisioner and pooler ready are not enough when ConfigMap check returns NotFound/pending",
+		},
+		{
+			name: "Sync successful, all components ready.",
+			componentChecks: []clusterReadynessCheck{
+				newProvisionerHealthCheck(examplePgCluster, &cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy}}),
+				newPoolerHealthCheck(nil, nil, false, false),
+				newConfigMapHealthCheck(
+					fake.NewClientBuilder().
+						WithScheme(scheme).
+						WithObjects(exampleCm).
+						Build(),
+					examplePgCluster.DeepCopy(),
+				),
+				newSecretHealthCheck(
+					fake.NewClientBuilder().
+						WithScheme(scheme).
+						WithObjects(exampleSecret).
+						Build(),
+					examplePgCluster.DeepCopy(),
+				),
+			},
+			requeue:        []bool{false, false, false, false},
+			expectedResult: true,
+			message:        "",
+		},
+	}
+
+	for _, tt := range combinations {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			state := pgcConstants.EmptyState
+			for i, check := range tt.componentChecks {
+				info, _ := check.Condition(ctx)
+				state |= info.State
+				assert.Equal(t, tt.requeue[i], info.Result.RequeueAfter > 0)
+			}
+			assert.Equal(t, tt.expectedResult, state&pgcConstants.ComponentsReady == pgcConstants.ComponentsReady,
+				tt.message)
+		})
+	}
 }
