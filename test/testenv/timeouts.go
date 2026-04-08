@@ -39,6 +39,10 @@ const (
 	LongTimeout = 135 * time.Minute
 )
 
+// TeardownTimeout limits AfterEach teardown (namespace/resource cleanup).
+// Prevents hung teardowns from consuming the entire suite timeout.
+const TeardownTimeout = 10 * time.Minute
+
 // Suite-level timeouts. Applied via GinkgoConfiguration().Timeout in suite files.
 // Each value equals max(NodeTimeout used in that suite) + 15 min buffer for
 // BeforeSuite / AfterEach teardown.  Tests run in parallel via ginkgo -nodes,

@@ -14,7 +14,6 @@
 package indingsep
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -38,9 +37,7 @@ var _ = Describe("indingsep test", func() {
 
 	var cmSpec enterpriseApi.ClusterManagerSpec
 
-	ctx := context.TODO()
-
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
 		var err error
 
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
@@ -64,7 +61,7 @@ var _ = Describe("indingsep test", func() {
 		}
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
 		}

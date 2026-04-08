@@ -14,7 +14,6 @@
 package crcrud
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -37,9 +36,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	var newCPULimits string
 	var verificationTimeout time.Duration
 
-	ctx := context.TODO()
-
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
@@ -56,7 +53,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 		verificationTimeout = 150 * time.Second
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
