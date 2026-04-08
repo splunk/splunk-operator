@@ -955,6 +955,22 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			Name:  "SPLUNK_APPRUNTIME_HEADLESS_SERVICE_FQDN",
 			Value: GetSplunkAppRuntimeServiceFQDN(cr.GetNamespace(), instanceType, cr.GetName()),
 		},
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		{
+			Name: "POD_NAMESPACE",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.namespace",
+				},
+			},
+		},
 	}
 
 	// update variables for licensing, if configured
