@@ -31,7 +31,8 @@ const (
 	readWriteEndpoint string = "rw"
 
 	deletionPolicyRetain string = "Retain"
-
+	deletionPolicyDelete string = "Delete"
+	
 	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"
 	annotationRetainedFrom        string = "enterprise.splunk.com/retained-from"
 

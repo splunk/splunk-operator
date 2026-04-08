@@ -40,6 +40,44 @@ import (
 
 const postgresDatabaseFinalizer = "postgresdatabases.enterprise.splunk.com/finalizer"
 
+// condition types
+const (
+	condClusterReady    = "ClusterReady"
+	condSecretsReady    = "SecretsReady"
+	condConfigMapsReady = "ConfigMapsReady"
+	condRolesReady      = "RolesReady"
+	condDatabasesReady  = "DatabasesReady"
+	condPrivilegesReady = "PrivilegesReady"
+)
+
+// condition reasons
+const (
+	reasonClusterNotFound    = "ClusterNotFound"
+	reasonClusterAvailable   = "ClusterAvailable"
+	reasonSecretsCreated     = "SecretsCreated"
+	reasonConfigMapsCreated  = "ConfigMapsCreated"
+	reasonUsersAvailable     = "UsersAvailable"
+	reasonDatabasesAvailable = "DatabasesAvailable"
+	reasonRoleConflict       = "RoleConflict"
+)
+
+// phases
+const (
+	phasePending = "Pending"
+	phaseReady   = "Ready"
+	phaseFailed  = "Failed"
+)
+
+// annotations
+const retainedFromAnnotation = "enterprise.splunk.com/retained-from"
+
+// database names used across tests
+const (
+	dbAppdb  = "appdb"
+	dbKeepdb = "payments"
+	dbDropdb = "analytics"
+)
+
 func reconcilePostgresDatabase(ctx context.Context, nn types.NamespacedName) (ctrl.Result, error) {
 	reconciler := &PostgresDatabaseReconciler{
 		Client:   k8sClient,
@@ -57,12 +95,20 @@ func managedRoleNames(roles []enterprisev4.ManagedRole) []string {
 	return names
 }
 
-func adminRoleNameForTest(dbName string) string {
-	return dbName + "_admin"
-}
+func adminRoleNameForTest(dbName string) string { return dbName + "_admin" }
+func rwRoleNameForTest(dbName string) string    { return dbName + "_rw" }
 
-func rwRoleNameForTest(dbName string) string {
-	return dbName + "_rw"
+func adminSecretNameForTest(resourceName, dbName string) string {
+	return fmt.Sprintf("%s-%s-admin", resourceName, dbName)
+}
+func rwSecretNameForTest(resourceName, dbName string) string {
+	return fmt.Sprintf("%s-%s-rw", resourceName, dbName)
+}
+func configMapNameForTest(resourceName, dbName string) string {
+	return fmt.Sprintf("%s-%s-config", resourceName, dbName)
+}
+func cnpgDatabaseNameForTest(resourceName, dbName string) string {
+	return fmt.Sprintf("%s-%s", resourceName, dbName)
 }
 
 func ownedByPostgresDatabase(postgresDB *enterprisev4.PostgresDatabase) []metav1.OwnerReference {
@@ -208,17 +254,17 @@ func seedExistingDatabaseStatus(ctx context.Context, current *enterprisev4.Postg
 
 func expectProvisionedArtifacts(ctx context.Context, scenario readyClusterScenario, owner *enterprisev4.PostgresDatabase) {
 	adminSecret := &corev1.Secret{}
-	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s-admin", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, adminSecret)).To(Succeed())
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: adminSecretNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, adminSecret)).To(Succeed())
 	Expect(adminSecret.Data).To(HaveKey("password"))
 	Expect(metav1.IsControlledBy(adminSecret, owner)).To(BeTrue())
 
 	rwSecret := &corev1.Secret{}
-	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s-rw", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, rwSecret)).To(Succeed())
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: rwSecretNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, rwSecret)).To(Succeed())
 	Expect(rwSecret.Data).To(HaveKey("password"))
 	Expect(metav1.IsControlledBy(rwSecret, owner)).To(BeTrue())
 
 	configMap := &corev1.ConfigMap{}
-	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s-config", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, configMap)).To(Succeed())
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMapNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, configMap)).To(Succeed())
 	Expect(configMap.Data).To(HaveKeyWithValue("rw-host", "tenant-rw."+scenario.namespace+".svc.cluster.local"))
 	Expect(configMap.Data).To(HaveKeyWithValue("ro-host", "tenant-ro."+scenario.namespace+".svc.cluster.local"))
 	Expect(configMap.Data).To(HaveKeyWithValue("admin-user", adminRoleNameForTest(scenario.dbName)))
@@ -234,7 +280,7 @@ func expectManagedRolesPatched(ctx context.Context, scenario readyClusterScenari
 
 func expectCNPGDatabaseCreated(ctx context.Context, scenario readyClusterScenario, owner *enterprisev4.PostgresDatabase) *cnpgv1.Database {
 	cnpgDatabase := &cnpgv1.Database{}
-	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
 	Expect(cnpgDatabase.Spec.Name).To(Equal(scenario.dbName))
 	Expect(cnpgDatabase.Spec.Owner).To(Equal(adminRoleNameForTest(scenario.dbName)))
 	Expect(cnpgDatabase.Spec.ClusterRef.Name).To(Equal(scenario.cnpgClusterName))
@@ -250,18 +296,18 @@ func markCNPGDatabaseApplied(ctx context.Context, cnpgDatabase *cnpgv1.Database)
 
 func expectPoolerConfigMap(ctx context.Context, scenario readyClusterScenario) {
 	configMap := &corev1.ConfigMap{}
-	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s-config", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, configMap)).To(Succeed())
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMapNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, configMap)).To(Succeed())
 	Expect(configMap.Data).To(HaveKeyWithValue("pooler-rw-host", scenario.cnpgClusterName+"-pooler-rw."+scenario.namespace+".svc.cluster.local"))
 	Expect(configMap.Data).To(HaveKeyWithValue("pooler-ro-host", scenario.cnpgClusterName+"-pooler-ro."+scenario.namespace+".svc.cluster.local"))
 }
 
 func seedMissingClusterScenario(ctx context.Context, namespace, resourceName string, finalizers ...string) types.NamespacedName {
-	createPostgresDatabaseResource(ctx, namespace, resourceName, "absent-cluster", []enterprisev4.DatabaseDefinition{{Name: "appdb"}}, finalizers...)
+	createPostgresDatabaseResource(ctx, namespace, resourceName, "absent-cluster", []enterprisev4.DatabaseDefinition{{Name: dbAppdb}}, finalizers...)
 	return types.NamespacedName{Name: resourceName, Namespace: namespace}
 }
 
 func seedConflictScenario(ctx context.Context, namespace, resourceName, clusterName string) types.NamespacedName {
-	createPostgresDatabaseResource(ctx, namespace, resourceName, clusterName, []enterprisev4.DatabaseDefinition{{Name: "appdb"}}, postgresDatabaseFinalizer)
+	createPostgresDatabaseResource(ctx, namespace, resourceName, clusterName, []enterprisev4.DatabaseDefinition{{Name: dbAppdb}}, postgresDatabaseFinalizer)
 	postgresCluster := createPostgresClusterResource(ctx, namespace, clusterName)
 	markPostgresClusterReady(ctx, postgresCluster, "unused-cnpg", namespace, false)
 	return types.NamespacedName{Name: resourceName, Namespace: namespace}
@@ -272,7 +318,7 @@ func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, cl
 	for _, dbName := range dbNames {
 		Expect(k8sClient.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            fmt.Sprintf("%s-%s-admin", resourceName, dbName),
+				Name:            adminSecretNameForTest(resourceName, dbName),
 				Namespace:       namespace,
 				OwnerReferences: ownerReferences,
 			},
@@ -280,7 +326,7 @@ func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, cl
 
 		Expect(k8sClient.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            fmt.Sprintf("%s-%s-rw", resourceName, dbName),
+				Name:            rwSecretNameForTest(resourceName, dbName),
 				Namespace:       namespace,
 				OwnerReferences: ownerReferences,
 			},
@@ -288,7 +334,7 @@ func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, cl
 
 		Expect(k8sClient.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            fmt.Sprintf("%s-%s-config", resourceName, dbName),
+				Name:            configMapNameForTest(resourceName, dbName),
 				Namespace:       namespace,
 				OwnerReferences: ownerReferences,
 			},
@@ -296,7 +342,7 @@ func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, cl
 
 		Expect(k8sClient.Create(ctx, &cnpgv1.Database{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            fmt.Sprintf("%s-%s", resourceName, dbName),
+				Name:            cnpgDatabaseNameForTest(resourceName, dbName),
 				Namespace:       namespace,
 				OwnerReferences: ownerReferences,
 			},
@@ -309,9 +355,18 @@ func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, cl
 	}
 }
 
+func expectManagedRoleExists(cluster *enterprisev4.PostgresCluster, roleName string, exists bool) {
+	rolesByName := make(map[string]enterprisev4.ManagedRole, len(cluster.Spec.ManagedRoles))
+	for _, r := range cluster.Spec.ManagedRoles {
+		rolesByName[r.Name] = r
+	}
+	Expect(rolesByName).To(HaveKey(roleName))
+	Expect(rolesByName[roleName].Exists).To(Equal(exists), "role %s: expected Exists=%v", roleName, exists)
+}
+
 func expectRetainedArtifact(ctx context.Context, name, namespace, resourceName string, obj client.Object) {
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, obj)).To(Succeed())
-	Expect(obj.GetAnnotations()).To(HaveKeyWithValue("enterprise.splunk.com/retained-from", resourceName))
+	Expect(obj.GetAnnotations()).To(HaveKeyWithValue(retainedFromAnnotation, resourceName))
 	Expect(obj.GetOwnerReferences()).To(BeEmpty())
 }
 
@@ -333,7 +388,7 @@ func expectStatusCondition(current *enterprisev4.PostgresDatabase, conditionType
 }
 
 func expectReadyStatus(current *enterprisev4.PostgresDatabase, generation int64, expectedDatabase enterprisev4.DatabaseInfo) {
-	expectStatusPhase(current, "Ready")
+	expectStatusPhase(current, phaseReady)
 	Expect(current.Status.ObservedGeneration).NotTo(BeNil())
 	Expect(*current.Status.ObservedGeneration).To(Equal(generation))
 	Expect(current.Status.Databases).To(HaveLen(1))
@@ -344,7 +399,7 @@ func expectReadyStatus(current *enterprisev4.PostgresDatabase, generation int64,
 	Expect(current.Status.Databases[0].ConfigMapRef).NotTo(BeNil())
 }
 
-var _ = Describe("PostgresDatabase Controller", func() {
+var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 	var (
 		ctx       context.Context
 		namespace string
@@ -384,9 +439,9 @@ var _ = Describe("PostgresDatabase Controller", func() {
 				expectReconcileResult(result, err, 30*time.Second)
 
 				current := fetchPostgresDatabase(ctx, requestName)
-				expectStatusPhase(current, "Pending")
-				expectStatusCondition(current, "ClusterReady", metav1.ConditionFalse, "ClusterNotFound")
-				clusterReady := meta.FindStatusCondition(current.Status.Conditions, "ClusterReady")
+				expectStatusPhase(current, phasePending)
+				expectStatusCondition(current, condClusterReady, metav1.ConditionFalse, reasonClusterNotFound)
+				clusterReady := meta.FindStatusCondition(current.Status.Conditions, condClusterReady)
 				Expect(clusterReady.ObservedGeneration).To(Equal(current.Generation))
 			})
 		})
@@ -395,7 +450,7 @@ var _ = Describe("PostgresDatabase Controller", func() {
 	When("the referenced PostgresCluster is ready", func() {
 		Context("and live grants are not invoked", func() {
 			It("reconciles secrets, configmaps, roles, and CNPG databases", func() {
-				scenario := newReadyClusterScenario(namespace, "ready-cluster", "tenant-cluster", "tenant-cnpg", "appdb")
+				scenario := newReadyClusterScenario(namespace, "ready-cluster", "tenant-cluster", "tenant-cnpg", dbAppdb)
 				seedReadyClusterScenario(ctx, scenario, false)
 
 				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
@@ -419,18 +474,18 @@ var _ = Describe("PostgresDatabase Controller", func() {
 
 				current = fetchPostgresDatabase(ctx, scenario.requestName)
 				expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
-				expectStatusCondition(current, "ClusterReady", metav1.ConditionTrue, "ClusterAvailable")
-				expectStatusCondition(current, "SecretsReady", metav1.ConditionTrue, "SecretsCreated")
-				expectStatusCondition(current, "ConfigMapsReady", metav1.ConditionTrue, "ConfigMapsCreated")
-				expectStatusCondition(current, "RolesReady", metav1.ConditionTrue, "UsersAvailable")
-				expectStatusCondition(current, "DatabasesReady", metav1.ConditionTrue, "DatabasesAvailable")
-				Expect(meta.FindStatusCondition(current.Status.Conditions, "PrivilegesReady")).To(BeNil())
+				expectStatusCondition(current, condClusterReady, metav1.ConditionTrue, reasonClusterAvailable)
+				expectStatusCondition(current, condSecretsReady, metav1.ConditionTrue, reasonSecretsCreated)
+				expectStatusCondition(current, condConfigMapsReady, metav1.ConditionTrue, reasonConfigMapsCreated)
+				expectStatusCondition(current, condRolesReady, metav1.ConditionTrue, reasonUsersAvailable)
+				expectStatusCondition(current, condDatabasesReady, metav1.ConditionTrue, reasonDatabasesAvailable)
+				Expect(meta.FindStatusCondition(current.Status.Conditions, condPrivilegesReady)).To(BeNil())
 			})
 		})
 
 		Context("and connection pooling is enabled", func() {
 			It("adds pooler endpoints to the generated ConfigMap", func() {
-				scenario := newReadyClusterScenario(namespace, "pooler-cluster", "pooler-postgres", "pooler-cnpg", "appdb")
+				scenario := newReadyClusterScenario(namespace, "pooler-cluster", "pooler-postgres", "pooler-cnpg", dbAppdb)
 				seedReadyClusterScenario(ctx, scenario, true)
 
 				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
@@ -462,8 +517,8 @@ var _ = Describe("PostgresDatabase Controller", func() {
 					},
 					"spec": map[string]any{
 						"managedRoles": []map[string]any{
-							{"name": "appdb_admin", "exists": true},
-							{"name": "appdb_rw", "exists": true},
+							{"name": adminRoleNameForTest(dbAppdb), "exists": true},
+							{"name": rwRoleNameForTest(dbAppdb), "exists": true},
 						},
 					},
 				},
@@ -476,20 +531,76 @@ var _ = Describe("PostgresDatabase Controller", func() {
 			Expect(result).To(Equal(ctrl.Result{}))
 
 			current := fetchPostgresDatabase(ctx, requestName)
-			expectStatusPhase(current, "Failed")
-			expectStatusCondition(current, "RolesReady", metav1.ConditionFalse, "RoleConflict")
+			expectStatusPhase(current, phaseFailed)
+			expectStatusCondition(current, condRolesReady, metav1.ConditionFalse, reasonRoleConflict)
 
-			rolesReady := meta.FindStatusCondition(current.Status.Conditions, "RolesReady")
-			Expect(rolesReady.Message).To(ContainSubstring("appdb_admin"))
+			rolesReady := meta.FindStatusCondition(current.Status.Conditions, condRolesReady)
+			Expect(rolesReady.Message).To(ContainSubstring(adminRoleNameForTest(dbAppdb)))
 			Expect(rolesReady.Message).To(ContainSubstring("postgresdatabase-legacy"))
 
 			configMap := &corev1.ConfigMap{}
-			err = k8sClient.Get(ctx, types.NamespacedName{Name: "conflict-cluster-appdb-config", Namespace: namespace}, configMap)
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: configMapNameForTest("conflict-cluster", dbAppdb), Namespace: namespace}, configMap)
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
 
 			cnpgDatabase := &cnpgv1.Database{}
-			err = k8sClient.Get(ctx, types.NamespacedName{Name: "conflict-cluster-appdb", Namespace: namespace}, cnpgDatabase)
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest("conflict-cluster", dbAppdb), Namespace: namespace}, cnpgDatabase)
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
+		})
+	})
+
+	When("a database is removed from spec.databases while the CR stays alive", func() {
+		It("marks the removed database roles as absent in postgres cluster and keeps the retained roles present", func() {
+			resourceName := "live-db-removal"
+			clusterName := "live-db-removal-postgres"
+			cnpgClusterName := "live-db-removal-cnpg"
+			requestName := types.NamespacedName{Name: resourceName, Namespace: namespace}
+
+			postgresDB := createPostgresDatabaseResource(ctx, namespace, resourceName, clusterName, []enterprisev4.DatabaseDefinition{
+				{Name: dbKeepdb},
+				{Name: dbDropdb},
+			}, postgresDatabaseFinalizer)
+			Expect(k8sClient.Get(ctx, requestName, postgresDB)).To(Succeed())
+
+			postgresCluster := createPostgresClusterResource(ctx, namespace, clusterName)
+			markPostgresClusterReady(ctx, postgresCluster, cnpgClusterName, namespace, false)
+			cnpgCluster := createCNPGClusterResource(ctx, namespace, cnpgClusterName)
+			markCNPGClusterReady(ctx, cnpgCluster, []string{
+				adminRoleNameForTest(dbKeepdb), rwRoleNameForTest(dbKeepdb),
+				adminRoleNameForTest(dbDropdb), rwRoleNameForTest(dbDropdb),
+			}, "tenant-rw", "tenant-ro")
+
+			initialRolesPatch := &unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": enterprisev4.GroupVersion.String(),
+					"kind":       "PostgresCluster",
+					"metadata":   map[string]any{"name": clusterName, "namespace": namespace},
+					"spec": map[string]any{
+						"managedRoles": []map[string]any{
+							{"name": adminRoleNameForTest(dbKeepdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbKeepdb + "-admin", "key": "password"}},
+							{"name": rwRoleNameForTest(dbKeepdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbKeepdb + "-rw", "key": "password"}},
+							{"name": adminRoleNameForTest(dbDropdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbDropdb + "-admin", "key": "password"}},
+							{"name": rwRoleNameForTest(dbDropdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbDropdb + "-rw", "key": "password"}},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Patch(ctx, initialRolesPatch, client.Apply, client.FieldOwner("postgresdatabase-"+resourceName))).To(Succeed())
+
+			seedOwnedDatabaseArtifacts(ctx, namespace, resourceName, clusterName, postgresDB, dbKeepdb, dbDropdb)
+
+			postgresDB.Spec.Databases = []enterprisev4.DatabaseDefinition{{Name: dbKeepdb}}
+			Expect(k8sClient.Update(ctx, postgresDB)).To(Succeed())
+
+			result, err := reconcilePostgresDatabase(ctx, requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+
+			updatedCluster := &enterprisev4.PostgresCluster{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, updatedCluster)).To(Succeed())
+
+			expectManagedRoleExists(updatedCluster, adminRoleNameForTest(dbKeepdb), true)
+			expectManagedRoleExists(updatedCluster, rwRoleNameForTest(dbKeepdb), true)
+			expectManagedRoleExists(updatedCluster, adminRoleNameForTest(dbDropdb), false)
+			expectManagedRoleExists(updatedCluster, rwRoleNameForTest(dbDropdb), false)
 		})
 	})
 
@@ -501,8 +612,8 @@ var _ = Describe("PostgresDatabase Controller", func() {
 				requestName := types.NamespacedName{Name: resourceName, Namespace: namespace}
 
 				postgresDB := createPostgresDatabaseResource(ctx, namespace, resourceName, clusterName, []enterprisev4.DatabaseDefinition{
-					{Name: "keepdb", DeletionPolicy: "Retain"},
-					{Name: "dropdb"},
+					{Name: dbKeepdb, DeletionPolicy: "Retain"},
+					{Name: dbDropdb},
 				}, postgresDatabaseFinalizer)
 				Expect(k8sClient.Get(ctx, requestName, postgresDB)).To(Succeed())
 
@@ -518,36 +629,40 @@ var _ = Describe("PostgresDatabase Controller", func() {
 						},
 						"spec": map[string]any{
 							"managedRoles": []map[string]any{
-								{"name": "keepdb_admin", "exists": true, "passwordSecretRef": map[string]any{"name": "delete-cluster-keepdb-admin", "key": "password"}},
-								{"name": "keepdb_rw", "exists": true, "passwordSecretRef": map[string]any{"name": "delete-cluster-keepdb-rw", "key": "password"}},
-								{"name": "dropdb_admin", "exists": true, "passwordSecretRef": map[string]any{"name": "delete-cluster-dropdb-admin", "key": "password"}},
-								{"name": "dropdb_rw", "exists": true, "passwordSecretRef": map[string]any{"name": "delete-cluster-dropdb-rw", "key": "password"}},
+								{"name": adminRoleNameForTest(dbKeepdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbKeepdb + "-admin", "key": "password"}},
+								{"name": rwRoleNameForTest(dbKeepdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbKeepdb + "-rw", "key": "password"}},
+								{"name": adminRoleNameForTest(dbDropdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbDropdb + "-admin", "key": "password"}},
+								{"name": rwRoleNameForTest(dbDropdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbDropdb + "-rw", "key": "password"}},
 							},
 						},
 					},
 				}
-				Expect(k8sClient.Patch(ctx, initialRolesPatch, client.Apply, client.FieldOwner("postgresdatabase-delete-cluster"))).To(Succeed())
+				Expect(k8sClient.Patch(ctx, initialRolesPatch, client.Apply, client.FieldOwner("postgresdatabase-"+resourceName))).To(Succeed())
 
-				seedOwnedDatabaseArtifacts(ctx, namespace, resourceName, clusterName, postgresDB, "keepdb", "dropdb")
+				seedOwnedDatabaseArtifacts(ctx, namespace, resourceName, clusterName, postgresDB, dbKeepdb, dbDropdb)
 
 				Expect(k8sClient.Delete(ctx, postgresDB)).To(Succeed())
 
 				result, err := reconcilePostgresDatabase(ctx, requestName)
 				expectEmptyReconcileResult(result, err)
 
-				expectRetainedArtifact(ctx, "delete-cluster-keepdb-config", namespace, resourceName, &corev1.ConfigMap{})
-				expectRetainedArtifact(ctx, "delete-cluster-keepdb-admin", namespace, resourceName, &corev1.Secret{})
-				expectRetainedArtifact(ctx, "delete-cluster-keepdb-rw", namespace, resourceName, &corev1.Secret{})
-				expectRetainedArtifact(ctx, "delete-cluster-keepdb", namespace, resourceName, &cnpgv1.Database{})
+				expectRetainedArtifact(ctx, configMapNameForTest(resourceName, dbKeepdb), namespace, resourceName, &corev1.ConfigMap{})
+				expectRetainedArtifact(ctx, adminSecretNameForTest(resourceName, dbKeepdb), namespace, resourceName, &corev1.Secret{})
+				expectRetainedArtifact(ctx, rwSecretNameForTest(resourceName, dbKeepdb), namespace, resourceName, &corev1.Secret{})
+				expectRetainedArtifact(ctx, cnpgDatabaseNameForTest(resourceName, dbKeepdb), namespace, resourceName, &cnpgv1.Database{})
 
-				expectDeletedArtifact(ctx, "delete-cluster-dropdb-config", namespace, &corev1.ConfigMap{})
-				expectDeletedArtifact(ctx, "delete-cluster-dropdb-admin", namespace, &corev1.Secret{})
-				expectDeletedArtifact(ctx, "delete-cluster-dropdb-rw", namespace, &corev1.Secret{})
-				expectDeletedArtifact(ctx, "delete-cluster-dropdb", namespace, &cnpgv1.Database{})
+				expectDeletedArtifact(ctx, configMapNameForTest(resourceName, dbDropdb), namespace, &corev1.ConfigMap{})
+				expectDeletedArtifact(ctx, adminSecretNameForTest(resourceName, dbDropdb), namespace, &corev1.Secret{})
+				expectDeletedArtifact(ctx, rwSecretNameForTest(resourceName, dbDropdb), namespace, &corev1.Secret{})
+				expectDeletedArtifact(ctx, cnpgDatabaseNameForTest(resourceName, dbDropdb), namespace, &cnpgv1.Database{})
 
 				updatedCluster := &enterprisev4.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, updatedCluster)).To(Succeed())
-				Expect(managedRoleNames(updatedCluster.Spec.ManagedRoles)).To(ConsistOf("keepdb_admin", "keepdb_rw"))
+
+				expectManagedRoleExists(updatedCluster, adminRoleNameForTest(dbKeepdb), true)
+				expectManagedRoleExists(updatedCluster, rwRoleNameForTest(dbKeepdb), true)
+				expectManagedRoleExists(updatedCluster, adminRoleNameForTest(dbDropdb), false)
+				expectManagedRoleExists(updatedCluster, rwRoleNameForTest(dbDropdb), false)
 
 				current := &enterprisev4.PostgresDatabase{}
 				err = k8sClient.Get(ctx, requestName, current)

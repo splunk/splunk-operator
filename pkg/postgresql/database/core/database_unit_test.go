@@ -306,7 +306,7 @@ func TestVerifyRolesReady(t *testing.T) {
 					},
 				},
 			},
-			wantErr: "user main_db_rw reconciliation failed: [reserved role]",
+			wantErr: "reconciling user main_db_rw: [reserved role]",
 		},
 		{
 			name:          "returns missing roles that are not reconciled yet",
@@ -1283,7 +1283,7 @@ func TestBuildManagedRoles(t *testing.T) {
 		},
 	}
 
-	got := buildManagedRoles("primary", databases)
+	got := buildDesiredRoles("primary", databases)
 
 	assert.Equal(t, want, got)
 }
@@ -1300,7 +1300,7 @@ func TestBuildManagedRolesPatch(t *testing.T) {
 			Namespace: "dbs",
 		},
 	}
-	roles := buildManagedRoles("primary", []enterprisev4.DatabaseDefinition{{Name: "payments"}})
+	roles := buildDesiredRoles("primary", []enterprisev4.DatabaseDefinition{{Name: "payments"}})
 	c := testClient(t, scheme, cluster)
 
 	got, err := buildManagedRolesPatch(cluster, roles, c.Scheme())
@@ -1312,36 +1312,151 @@ func TestBuildManagedRolesPatch(t *testing.T) {
 	assert.Equal(t, map[string]any{"managedRoles": roles}, got.Object["spec"])
 }
 
-func TestPatchManagedRolesOnDeletion(t *testing.T) {
-	scheme := testScheme(t)
-	postgresDB := &enterprisev4.PostgresDatabase{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "primary",
-			Namespace: "dbs",
+func TestFindAddedRoleNames(t *testing.T) {
+	desired := buildDesiredRoles("primary", []enterprisev4.DatabaseDefinition{{Name: "payments"}, {Name: "api"}})
+
+	tests := []struct {
+		name    string
+		current []enterprisev4.ManagedRole
+		want    []string
+	}{
+		{
+			name:    "all missing from cluster",
+			current: nil,
+			want:    []string{"payments_admin", "payments_rw", "api_admin", "api_rw"},
+		},
+		{
+			name: "some already present",
+			current: []enterprisev4.ManagedRole{
+				{Name: "payments_admin", Exists: true},
+				{Name: "payments_rw", Exists: true},
+			},
+			want: []string{"api_admin", "api_rw"},
+		},
+		{
+			name: "role present but marked absent — should be re-added",
+			current: []enterprisev4.ManagedRole{
+				{Name: "payments_admin", Exists: false},
+				{Name: "payments_rw", Exists: true},
+			},
+			want: []string{"payments_admin", "api_admin", "api_rw"},
+		},
+		{
+			name: "all already present",
+			current: []enterprisev4.ManagedRole{
+				{Name: "payments_admin", Exists: true},
+				{Name: "payments_rw", Exists: true},
+				{Name: "api_admin", Exists: true},
+				{Name: "api_rw", Exists: true},
+			},
+			want: nil,
 		},
 	}
-	cluster := &enterprisev4.PostgresCluster{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: enterprisev4.GroupVersion.String(),
-			Kind:       "PostgresCluster",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "primary",
-			Namespace: "dbs",
-		},
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cluster := &enterprisev4.PostgresCluster{
+				Spec: enterprisev4.PostgresClusterSpec{ManagedRoles: tc.current},
+			}
+			got := findAddedRoleNames(cluster, desired)
+			assert.ElementsMatch(t, tc.want, got)
+		})
 	}
-	retained := []enterprisev4.DatabaseDefinition{{Name: "payments"}}
-	want := buildManagedRoles(postgresDB.Name, retained)
-	c := testClient(t, scheme, cluster)
-
-	err := patchManagedRolesOnDeletion(context.Background(), c, postgresDB, cluster, retained)
-
-	require.NoError(t, err)
-
-	got := &enterprisev4.PostgresCluster{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, got))
-	assert.Equal(t, want, got.Spec.ManagedRoles)
 }
+
+type roleFieldOwner struct {
+	manager string
+	roles   []string
+}
+
+func TestFindRemovedRoleNames(t *testing.T) {
+	manager := "splunk-operator-primary"
+	desired := buildDesiredRoles("primary", []enterprisev4.DatabaseDefinition{{Name: "payments"}})
+
+	tests := []struct {
+		name        string
+		fieldOwners []roleFieldOwner
+		want        []string
+	}{
+		{
+			name:        "no roles owned by any manager",
+			fieldOwners: nil,
+			want:        nil,
+		},
+		{
+			name:        "owned roles still in desired — nothing to remove",
+			fieldOwners: []roleFieldOwner{{manager: manager, roles: []string{"payments_admin", "payments_rw"}}},
+			want:        nil,
+		},
+		{
+			name:        "owned role no longer in desired — should be removed",
+			fieldOwners: []roleFieldOwner{{manager: manager, roles: []string{"payments_admin", "payments_rw", "api_admin", "api_rw"}}},
+			want:        []string{"api_admin", "api_rw"},
+		},
+		{
+			name:        "role owned by different manager — ignored",
+			fieldOwners: []roleFieldOwner{{manager: "other-manager", roles: []string{"api_admin", "api_rw"}}},
+			want:        nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var managedFields []metav1.ManagedFieldsEntry
+			for _, fo := range tc.fieldOwners {
+				keys := make([]string, len(fo.roles))
+				for i, r := range fo.roles {
+					keys[i] = `k:{"name":"` + r + `"}`
+				}
+				managedFields = append(managedFields, metav1.ManagedFieldsEntry{
+					Manager:   fo.manager,
+					FieldsV1:  &metav1.FieldsV1{Raw: managedRolesFieldsRaw(t, keys...)},
+					Operation: metav1.ManagedFieldsOperationApply,
+				})
+			}
+			cluster := &enterprisev4.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{ManagedFields: managedFields},
+			}
+			got := findRemovedRoleNames(cluster, manager, desired)
+			assert.ElementsMatch(t, tc.want, got)
+		})
+	}
+}
+
+
+func TestBuildRolesToRemove(t *testing.T) {
+	tests := []struct {
+		name     string
+		deleted  []enterprisev4.DatabaseDefinition
+		want     []enterprisev4.ManagedRole
+	}{
+		{
+			name:    "nothing to remove",
+			deleted: nil,
+			want:    []enterprisev4.ManagedRole{},
+		},
+		{
+			name:    "single database removed",
+			deleted: []enterprisev4.DatabaseDefinition{{Name: "api"}},
+			want:    []enterprisev4.ManagedRole{{Name: "api_admin", Exists: false}, {Name: "api_rw", Exists: false}},
+		},
+		{
+			name:    "multiple databases removed",
+			deleted: []enterprisev4.DatabaseDefinition{{Name: "api"}, {Name: "payments"}},
+			want: []enterprisev4.ManagedRole{
+				{Name: "api_admin", Exists: false}, {Name: "api_rw", Exists: false},
+				{Name: "payments_admin", Exists: false}, {Name: "payments_rw", Exists: false},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, buildRolesToRemove(tc.deleted))
+		})
+	}
+}
+
 
 func TestStripOwnerReference(t *testing.T) {
 	obj := &corev1.ConfigMap{

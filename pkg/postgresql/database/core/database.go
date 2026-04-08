@@ -172,31 +172,29 @@ func PostgresDatabaseService(
 	}
 
 	// Phase: RoleProvisioning
-	desiredUsers := getDesiredUsers(postgresDB)
-	actualRoles := getUsersInClusterSpec(cluster)
-	var missing []string
-	for _, role := range desiredUsers {
-		if !slices.Contains(actualRoles, role) {
-			missing = append(missing, role)
-		}
-	}
+	fieldManager := fieldManagerName(postgresDB.Name)
+	desired := buildDesiredRoles(postgresDB.Name, postgresDB.Spec.Databases)
+	rolesToAdd := findAddedRoleNames(cluster, desired)
+	rolesToRemove := absentRolesByName(findRemovedRoleNames(cluster, fieldManager, desired))
+	allRoles := append(desired, rolesToRemove...)
 
-	if len(missing) > 0 {
-		logger.Info("CNPG Cluster patch started, missing roles detected", "missing", missing)
-		if err := patchManagedRoles(ctx, c, postgresDB, cluster); err != nil {
+	if len(rolesToAdd) > 0 || len(rolesToRemove) > 0 {
+		logger.Info("CNPG Cluster patch started, role drift detected", "toAdd", len(rolesToAdd), "toRemove", len(rolesToRemove))
+		if err := patchManagedRoles(ctx, c, fieldManager, cluster, allRoles); err != nil {
 			logger.Error(err, "Failed to patch users in CNPG Cluster")
 			rc.emitWarning(postgresDB, EventManagedRolesPatchFailed, fmt.Sprintf("Failed to patch managed roles: %v", err))
 			return ctrl.Result{}, err
 		}
-		rc.emitNormal(postgresDB, EventRoleReconciliationStarted, fmt.Sprintf("Patched managed roles, waiting for %d roles to reconcile", len(desiredUsers)))
+		rc.emitNormal(postgresDB, EventRoleReconciliationStarted, fmt.Sprintf("Patched managed roles: %d to add, %d to remove", len(rolesToAdd), len(rolesToRemove)))
 		if err := updateStatus(rolesReady, metav1.ConditionFalse, reasonWaitingForCNPG,
-			fmt.Sprintf("Waiting for %d roles to be reconciled", len(desiredUsers)), provisioningDBPhase); err != nil {
+			fmt.Sprintf("Waiting for roles to be reconciled: %d to add, %d to remove", len(rolesToAdd), len(rolesToRemove)), provisioningDBPhase); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	}
 
-	notReadyRoles, err := verifyRolesReady(ctx, desiredUsers, cnpgCluster)
+	roleNames := getDesiredUsers(postgresDB)
+	notReadyRoles, err := verifyRolesReady(ctx, roleNames, cnpgCluster)
 	if err != nil {
 		rc.emitWarning(postgresDB, EventRoleFailed, fmt.Sprintf("Role reconciliation failed: %v", err))
 		if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonUsersCreationFailed,
@@ -212,9 +210,9 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	}
-	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, rolesReady, EventRolesReady, fmt.Sprintf("All %d roles reconciled", len(desiredUsers)))
+	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, rolesReady, EventRolesReady, fmt.Sprintf("Roles reconciled: %d active, %d removed", len(rolesToAdd), len(rolesToRemove)))
 	if err := updateStatus(rolesReady, metav1.ConditionTrue, reasonUsersAvailable,
-		fmt.Sprintf("All %d users in PostgreSQL", len(desiredUsers)), provisioningDBPhase); err != nil {
+		fmt.Sprintf("Roles reconciled: %d active, %d removed", len(rolesToAdd), len(rolesToRemove)), provisioningDBPhase); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -366,6 +364,9 @@ func getUsersInClusterSpec(cluster *enterprisev4.PostgresCluster) []string {
 	return users
 }
 
+// rolesMatchClusterSpec returns true if desired and actual contain the same roles
+// (by name and Exists state), regardless of order.
+
 func getRoleConflicts(postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) []string {
 	myManager := fieldManagerName(postgresDB.Name)
 	desired := make(map[string]struct{}, len(postgresDB.Spec.Databases)*2)
@@ -413,18 +414,16 @@ func parseRoleNames(raw []byte) []string {
 	return names
 }
 
-func patchManagedRoles(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) error {
+func patchManagedRoles(ctx context.Context, c client.Client, fieldManager string, cluster *enterprisev4.PostgresCluster, roles []enterprisev4.ManagedRole) error {
 	logger := log.FromContext(ctx)
-	allRoles := buildManagedRoles(postgresDB.Name, postgresDB.Spec.Databases)
-	rolePatch, err := buildManagedRolesPatch(cluster, allRoles, c.Scheme())
+	rolePatch, err := buildManagedRolesPatch(cluster, roles, c.Scheme())
 	if err != nil {
-		return fmt.Errorf("building managed roles patch for PostgresDatabase %s: %w", postgresDB.Name, err)
+		return fmt.Errorf("building managed roles patch: %w", err)
 	}
-	fieldManager := fieldManagerName(postgresDB.Name)
 	if err := c.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManager)); err != nil {
-		return fmt.Errorf("patching managed roles for PostgresDatabase %s: %w", postgresDB.Name, err)
+		return fmt.Errorf("patching managed roles: %w", err)
 	}
-	logger.Info("Users added to PostgresCluster via SSA", "roleCount", len(allRoles))
+	logger.Info("Managed roles patched", "count", len(roles))
 	return nil
 }
 
@@ -580,7 +579,15 @@ func cleanupManagedRoles(ctx context.Context, c client.Client, postgresDB *enter
 		logger.Info("PostgresCluster already deleted, skipping role cleanup")
 		return nil
 	}
-	return patchManagedRolesOnDeletion(ctx, c, postgresDB, cluster, plan.retained)
+	fieldManager := fieldManagerName(postgresDB.Name)
+	retainedRoles := buildDesiredRoles(postgresDB.Name, plan.retained)
+	rolesToRemove := buildRolesToRemove(plan.deleted)
+	allRoles := append(retainedRoles, rolesToRemove...)
+	if err := patchManagedRoles(ctx, c, fieldManager, cluster, allRoles); err != nil {
+		return err
+	}
+	logger.Info("Managed roles patched on deletion", "retained", len(retainedRoles), "removed", len(rolesToRemove))
+	return nil
 }
 
 func orphanCNPGDatabases(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, databases []enterprisev4.DatabaseDefinition) error {
@@ -716,7 +723,67 @@ func deleteSecrets(ctx context.Context, c client.Client, postgresDB *enterprisev
 	return nil
 }
 
-func buildManagedRoles(postgresDBName string, databases []enterprisev4.DatabaseDefinition) []enterprisev4.ManagedRole {
+// buildRolesToRemove produces Exists:false entries for the given databases so CNPG drops their roles.
+func buildRolesToRemove(databases []enterprisev4.DatabaseDefinition) []enterprisev4.ManagedRole {
+	roles := make([]enterprisev4.ManagedRole, 0, len(databases)*2)
+	for _, dbSpec := range databases {
+		roles = append(roles,
+			enterprisev4.ManagedRole{Name: adminRoleName(dbSpec.Name), Exists: false},
+			enterprisev4.ManagedRole{Name: rwRoleName(dbSpec.Name), Exists: false},
+		)
+	}
+	return roles
+}
+
+// absentRolesByName produces Exists:false entries from a list of raw role names.
+// Used by the normal reconcile path where names come from SSA field manager parsing.
+func absentRolesByName(names []string) []enterprisev4.ManagedRole {
+	roles := make([]enterprisev4.ManagedRole, 0, len(names))
+	for _, name := range names {
+		roles = append(roles, enterprisev4.ManagedRole{Name: name, Exists: false})
+	}
+	return roles
+}
+
+// findAddedRoleNames returns role names from the desired list that are missing
+// from the cluster spec or currently marked absent.
+func findAddedRoleNames(cluster *enterprisev4.PostgresCluster, desired []enterprisev4.ManagedRole) []string {
+	current := make(map[string]bool, len(cluster.Spec.ManagedRoles))
+	for _, r := range cluster.Spec.ManagedRoles {
+		current[r.Name] = r.Exists
+	}
+	var toAdd []string
+	for _, r := range desired {
+		exists, found := current[r.Name]
+		if !found || !exists {
+			toAdd = append(toAdd, r.Name)
+		}
+	}
+	return toAdd
+}
+
+// findRemovedRoleNames returns role names currently owned by this field manager
+// in the cluster spec that are absent from the desired list.
+func findRemovedRoleNames(cluster *enterprisev4.PostgresCluster, manager string, desired []enterprisev4.ManagedRole) []string {
+	desiredSet := make(map[string]struct{}, len(desired))
+	for _, r := range desired {
+		desiredSet[r.Name] = struct{}{}
+	}
+	owners := managedRoleOwners(cluster.ManagedFields)
+	var toRemove []string
+	for name, owner := range owners {
+		if owner == manager {
+			if _, ok := desiredSet[name]; !ok {
+				toRemove = append(toRemove, name)
+			}
+		}
+	}
+	return toRemove
+}
+
+// buildDesiredRoles builds the full set of roles that should be present for the given databases.
+// This is the input to findAddedRoleNames and findRemovedRoleNames.
+func buildDesiredRoles(postgresDBName string, databases []enterprisev4.DatabaseDefinition) []enterprisev4.ManagedRole {
 	roles := make([]enterprisev4.ManagedRole, 0, len(databases)*2)
 	for _, dbSpec := range databases {
 		roles = append(roles,
@@ -750,20 +817,6 @@ func buildManagedRolesPatch(cluster *enterprisev4.PostgresCluster, roles []enter
 			"spec":       map[string]any{"managedRoles": roles},
 		},
 	}, nil
-}
-
-func patchManagedRolesOnDeletion(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster, retained []enterprisev4.DatabaseDefinition) error {
-	logger := log.FromContext(ctx)
-	roles := buildManagedRoles(postgresDB.Name, retained)
-	rolePatch, err := buildManagedRolesPatch(cluster, roles, c.Scheme())
-	if err != nil {
-		return fmt.Errorf("building managed roles patch: %w", err)
-	}
-	if err := c.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManagerName(postgresDB.Name))); err != nil {
-		return fmt.Errorf("patching managed roles on deletion: %w", err)
-	}
-	logger.Info("Managed roles patched on deletion", "retainedRoles", len(roles))
-	return nil
 }
 
 func stripOwnerReference(obj metav1.Object, ownerUID types.UID) {

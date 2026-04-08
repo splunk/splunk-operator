@@ -1040,7 +1040,6 @@ func reconcileManagedRoles(ctx context.Context, c client.Client, cluster *enterp
 			Name:   role.Name,
 			Ensure: cnpgv1.EnsureAbsent,
 		}
-		// Exists bool replaces the old Ensure string enum ("present"/"absent").
 		if role.Exists {
 			r.Ensure = cnpgv1.EnsurePresent
 			r.Login = true

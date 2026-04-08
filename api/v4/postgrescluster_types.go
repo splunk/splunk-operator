@@ -36,8 +36,7 @@ type ManagedRole struct {
 
 	// Exists controls whether the role should be present (true) or absent (false) in PostgreSQL.
 	// +kubebuilder:default=true
-	// +optional
-	Exists bool `json:"exists,omitempty"`
+	Exists bool `json:"exists"`
 }
 
 // PostgresClusterSpec defines the desired state of PostgresCluster.
