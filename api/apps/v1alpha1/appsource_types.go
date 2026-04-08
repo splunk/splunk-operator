@@ -75,7 +75,6 @@ type AppSourceSpec struct {
 	Git *AppSourceGitSpec `json:"git,omitempty"`
 
 	// GCP and Azure specific configuration
-	// +optional
 	// TODO: Add GCP and Azure specific configuration
 
 	// +required
@@ -92,7 +91,20 @@ type AppSourceSpec struct {
 type AppSourceStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// Conditions represent the current state of the AppSource
+	// +optional
+    // +listType=map
+    // +listMapKey=type
+	Conditions []metav1.Condition `json:"condition,omitempty"`
 }
+
+const (
+	TypeAppSourceConditionPending = "Pending"
+	TypeAppSourceConditionSyncing = "Syncing"
+	TypeAppSourceConditionReady   = "Ready"
+	TypeAppSourceConditionFailed  = "Failed"
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
