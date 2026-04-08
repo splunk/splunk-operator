@@ -23,15 +23,63 @@ The validation webhook is **disabled by default** and must be explicitly enabled
 
 ### Prerequisites
 
-Before enabling the webhook, ensure you have:
+Before enabling the webhook, you need TLS certificates for the webhook server. You have two options:
 
-1. **cert-manager** installed in your cluster (required for TLS certificate management)
+#### Option A: Use cert-manager (Recommended)
+
+Install cert-manager to automatically manage TLS certificates:
 
 ```bash
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.0/cert-manager.yaml
 kubectl wait --for=condition=Available --timeout=300s deployment/cert-manager -n cert-manager
 kubectl wait --for=condition=Available --timeout=300s deployment/cert-manager-webhook -n cert-manager
 ```
+
+#### Option B: Use Your Own Certificates
+
+If you prefer not to use cert-manager, you can provide your own TLS certificates:
+
+1. **Generate certificates** for the webhook service. The certificate must have:
+   - **Common Name (CN):** `splunk-operator-webhook-service.splunk-operator.svc`
+   - **Subject Alternative Names (SANs):**
+     - `splunk-operator-webhook-service.splunk-operator.svc`
+     - `splunk-operator-webhook-service.splunk-operator.svc.cluster.local`
+
+   Example using OpenSSL:
+   ```bash
+   # Generate CA
+   openssl genrsa -out ca.key 2048
+   openssl req -x509 -new -nodes -key ca.key -days 365 -out ca.crt -subj "/CN=splunk-webhook-ca"
+
+   # Generate server key and CSR
+   openssl genrsa -out tls.key 2048
+   openssl req -new -key tls.key -out server.csr -subj "/CN=splunk-operator-webhook-service.splunk-operator.svc" \
+     -config <(cat /etc/ssl/openssl.cnf <(printf "\n[SAN]\nsubjectAltName=DNS:splunk-operator-webhook-service.splunk-operator.svc,DNS:splunk-operator-webhook-service.splunk-operator.svc.cluster.local"))
+
+   # Sign the certificate
+   openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out tls.crt -days 365 \
+     -extensions SAN -extfile <(cat /etc/ssl/openssl.cnf <(printf "\n[SAN]\nsubjectAltName=DNS:splunk-operator-webhook-service.splunk-operator.svc,DNS:splunk-operator-webhook-service.splunk-operator.svc.cluster.local"))
+   ```
+
+2. **Create the webhook certificate Secret:**
+   ```bash
+   kubectl create secret tls webhook-server-cert \
+     --cert=tls.crt \
+     --key=tls.key \
+     -n splunk-operator
+   ```
+
+3. **Inject the CA bundle** into the ValidatingWebhookConfiguration:
+   ```bash
+   # Get base64-encoded CA certificate
+   CA_BUNDLE=$(cat ca.crt | base64 | tr -d '\n')
+
+   # Patch the webhook configuration
+   kubectl patch validatingwebhookconfiguration splunk-operator-validating-webhook-configuration \
+     --type='json' -p="[{'op': 'replace', 'path': '/webhooks/0/clientConfig/caBundle', 'value': '${CA_BUNDLE}'}]"
+   ```
+
+4. **Deploy without cert-manager:** Use the `config/default-with-webhook` overlay but skip the certmanager components, or manually deploy the webhook components.
 
 ### Deployment Options
 
@@ -270,6 +318,8 @@ kubectl logs -n splunk-operator deployment/splunk-operator-controller-manager | 
 
 ### Certificate Issues
 
+#### If using cert-manager:
+
 1. Check cert-manager logs:
    ```bash
    kubectl logs -n cert-manager deployment/cert-manager
@@ -283,6 +333,29 @@ kubectl logs -n splunk-operator deployment/splunk-operator-controller-manager | 
 3. Check issuer:
    ```bash
    kubectl get issuer -n splunk-operator
+   ```
+
+#### If using custom certificates:
+
+1. Verify the Secret exists and contains valid data:
+   ```bash
+   kubectl get secret webhook-server-cert -n splunk-operator -o yaml
+   ```
+
+2. Verify the certificate is valid and not expired:
+   ```bash
+   kubectl get secret webhook-server-cert -n splunk-operator -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -text -noout
+   ```
+
+3. Verify the CA bundle in the webhook configuration matches your CA:
+   ```bash
+   kubectl get validatingwebhookconfiguration splunk-operator-validating-webhook-configuration \
+     -o jsonpath='{.webhooks[0].clientConfig.caBundle}' | base64 -d | openssl x509 -text -noout
+   ```
+
+4. Ensure the certificate SANs include the webhook service DNS name:
+   ```
+   splunk-operator-webhook-service.splunk-operator.svc
    ```
 
 ### Webhook Disabled
@@ -301,7 +374,7 @@ The validation webhook consists of:
 | **Webhook Server** | HTTP server listening on port 9443 with TLS |
 | **Validator Registry** | Maps CRD types to their validation functions |
 | **ValidatingWebhookConfiguration** | Kubernetes resource that registers the webhook |
-| **Certificate** | TLS certificate managed by cert-manager |
+| **Certificate** | TLS certificate (managed by cert-manager or provided manually) |
 | **Service** | Kubernetes service exposing the webhook endpoint |
 
 ### Request Flow
