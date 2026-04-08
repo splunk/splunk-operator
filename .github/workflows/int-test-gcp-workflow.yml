@@ -69,6 +69,7 @@ jobs:
 
   create-cluster-and-run-tests:
     strategy:
+      fail-fast: false
       matrix:
         test_focus:
           - { order: 1, name: "masterappframeworkc3" }

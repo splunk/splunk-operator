@@ -284,13 +284,24 @@ jobs:
       - name: Cleanup Test Case artifacts
         if: ${{ always() }}
         run: |
-          tools/cleanup.sh
-          make cleanup
           make clean
+  cleanup-aks-cluster:
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs: [setup-aks-cluster, int-tests-appframeworkazure]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Dotenv Action
+        id: dotenv
+        uses: falti/dotenv-action@v1
+      - name: 'Login via Azure CLI'
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Delete AKS Cluster
-        if: ${{ always() }}
         uses: azure/CLI@v1
         with:
           azcliversion: ${{ steps.dotenv.outputs.AZ_CLI_VERSION }}
           inlineScript: |
-            az aks delete --name  ${{ env.TEST_CLUSTER_NAME }}  --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} -y
+            az aks delete --name az${{ github.run_id }} --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} -y
