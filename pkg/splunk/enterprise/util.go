@@ -2261,10 +2261,11 @@ func isAppFrameworkMigrationNeeded(afwStatusContext *enterpriseApi.AppDeployment
 func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, origCR splcommon.MetaObject, crError *error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("updateCRStatus").WithValues("original cr version", origCR.GetResourceVersion())
+	liveReader := splcommon.ResolveAPIReader(client)
 
 	var tryCnt int
 	for tryCnt = 0; tryCnt < maxRetryCountForCRStatusUpdate; tryCnt++ {
-		latestCR, err := fetchCurrentCRWithStatusUpdate(ctx, client, origCR, crError)
+		latestCR, err := fetchCurrentCRWithStatusUpdate(ctx, liveReader, origCR, crError)
 		if err != nil {
 			if origCR.GetDeletionTimestamp() == nil {
 				scopedLog.Error(err, "Unable to Read the latest CR from the K8s")
@@ -2315,14 +2316,14 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 // fetchCurrentCRWithStatusUpdate returns a CR (fresh Read) with latest status copied
 // Use this API to update the CR status message with an error if any. This aviods multiple
 // hops of CR specific logic to determine CR type.
-func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.ControllerClient, origCR splcommon.MetaObject, crError *error) (splcommon.MetaObject, error) {
+func fetchCurrentCRWithStatusUpdate(ctx context.Context, reader client.Reader, origCR splcommon.MetaObject, crError *error) (splcommon.MetaObject, error) {
 	namespacedName := types.NamespacedName{Name: origCR.GetName(), Namespace: origCR.GetNamespace()}
 
 	var err error
 	switch origCR.GetObjectKind().GroupVersionKind().Kind {
 	case "Standalone":
 		latestStdlnCR := &enterpriseApi.Standalone{}
-		err = client.Get(ctx, namespacedName, latestStdlnCR)
+		err = reader.Get(ctx, namespacedName, latestStdlnCR)
 		if err != nil {
 			return nil, err
 		}
@@ -2337,7 +2338,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 
 	case "IngestorCluster":
 		latestIngCR := &enterpriseApi.IngestorCluster{}
-		err = client.Get(ctx, namespacedName, latestIngCR)
+		err = reader.Get(ctx, namespacedName, latestIngCR)
 		if err != nil {
 			return nil, err
 		}
@@ -2351,7 +2352,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 
 	case "Queue":
 		latestQueueCR := &enterpriseApi.Queue{}
-		err = client.Get(ctx, namespacedName, latestQueueCR)
+		err = reader.Get(ctx, namespacedName, latestQueueCR)
 		if err != nil {
 			return nil, err
 		}
@@ -2365,7 +2366,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 
 	case "ObjectStorage":
 		latestOsCR := &enterpriseApi.ObjectStorage{}
-		err = client.Get(ctx, namespacedName, latestOsCR)
+		err = reader.Get(ctx, namespacedName, latestOsCR)
 		if err != nil {
 			return nil, err
 		}
@@ -2379,7 +2380,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 
 	case "LicenseMaster":
 		latestLmCR := &enterpriseApiV3.LicenseMaster{}
-		err = client.Get(ctx, namespacedName, latestLmCR)
+		err = reader.Get(ctx, namespacedName, latestLmCR)
 		if err != nil {
 			return nil, err
 		}
@@ -2388,7 +2389,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 
 	case "LicenseManager":
 		latestLmCR := &enterpriseApi.LicenseManager{}
-		err = client.Get(ctx, namespacedName, latestLmCR)
+		err = reader.Get(ctx, namespacedName, latestLmCR)
 		if err != nil {
 			return nil, err
 		}
@@ -2403,7 +2404,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 
 	case "SearchHeadCluster":
 		latestShcCR := &enterpriseApi.SearchHeadCluster{}
-		err = client.Get(ctx, namespacedName, latestShcCR)
+		err = reader.Get(ctx, namespacedName, latestShcCR)
 		if err != nil {
 			return nil, err
 		}
@@ -2418,7 +2419,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 
 	case "IndexerCluster":
 		latestIdxcCR := &enterpriseApi.IndexerCluster{}
-		err = client.Get(ctx, namespacedName, latestIdxcCR)
+		err = reader.Get(ctx, namespacedName, latestIdxcCR)
 		if err != nil {
 			return nil, err
 		}
@@ -2433,7 +2434,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 
 	case "ClusterMaster":
 		latestCmCR := &enterpriseApiV3.ClusterMaster{}
-		err = client.Get(ctx, namespacedName, latestCmCR)
+		err = reader.Get(ctx, namespacedName, latestCmCR)
 		if err != nil {
 			return nil, err
 		}
@@ -2442,7 +2443,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 
 	case "ClusterManager":
 		latestCmCR := &enterpriseApi.ClusterManager{}
-		err = client.Get(ctx, namespacedName, latestCmCR)
+		err = reader.Get(ctx, namespacedName, latestCmCR)
 		if err != nil {
 			return nil, err
 		}
@@ -2457,7 +2458,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 
 	case "MonitoringConsole":
 		latestMcCR := &enterpriseApi.MonitoringConsole{}
-		err = client.Get(ctx, namespacedName, latestMcCR)
+		err = reader.Get(ctx, namespacedName, latestMcCR)
 		if err != nil {
 			return nil, err
 		}
