@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 )
@@ -42,6 +43,13 @@ func init() {
 // Validate performs validation on an AdmissionReview request
 // Returns warnings (even on success) and an error if validation fails
 func Validate(ar *admissionv1.AdmissionReview, validators map[schema.GroupVersionResource]Validator) ([]string, error) {
+	return ValidateWithClient(ar, validators, nil)
+}
+
+// ValidateWithClient performs validation on an AdmissionReview request with a Kubernetes client
+// The client enables resource existence checks (e.g., verifying secrets exist)
+// Returns warnings (even on success) and an error if validation fails
+func ValidateWithClient(ar *admissionv1.AdmissionReview, validators map[schema.GroupVersionResource]Validator, k8sClient client.Client) ([]string, error) {
 	if ar == nil || ar.Request == nil {
 		return nil, fmt.Errorf("admission review or request is nil")
 	}
@@ -76,17 +84,31 @@ func Validate(ar *admissionv1.AdmissionReview, validators map[schema.GroupVersio
 		}
 	}
 
+	// Create validation context if client is available
+	var vc *ValidationContext
+	if k8sClient != nil {
+		vc = NewValidationContext(k8sClient, req.Namespace)
+	}
+
 	var fieldErrs field.ErrorList
 	var warnings []string
 
 	// Perform validation based on operation
 	switch req.Operation {
 	case admissionv1.Create:
-		fieldErrs = validator.ValidateCreate(obj)
+		if vc != nil {
+			fieldErrs = validator.ValidateCreateWithContext(obj, vc)
+		} else {
+			fieldErrs = validator.ValidateCreate(obj)
+		}
 		warnings = validator.GetWarningsOnCreate(obj)
 
 	case admissionv1.Update:
-		fieldErrs = validator.ValidateUpdate(obj, oldObj)
+		if vc != nil {
+			fieldErrs = validator.ValidateUpdateWithContext(obj, oldObj, vc)
+		} else {
+			fieldErrs = validator.ValidateUpdate(obj, oldObj)
+		}
 		warnings = validator.GetWarningsOnUpdate(obj, oldObj)
 
 	default:

@@ -89,9 +89,9 @@ func GetMountedKey(ctx context.Context, deployment *Deployment, podName string, 
 	return stdout
 }
 
-// GetRandomHECToken generates a random HEC token
-func GetRandomHECToken() string {
-	return fmt.Sprintf("%s-%s-%s-%s-%s", strings.ToUpper(RandomDNSName(8)), strings.ToUpper(RandomDNSName(4)), strings.ToUpper(RandomDNSName(4)), strings.ToUpper(RandomDNSName(4)), strings.ToUpper(RandomDNSName(12)))
+// GetRandomeHECToken generates a random HEC token
+func GetRandomeHECToken() string {
+	return fmt.Sprintf("%s-%s-%s-%s-%s", RandomHex(8), RandomHex(4), RandomHex(4), RandomHex(4), RandomHex(12))
 }
 
 // GetSecretFromServerConf gets give secret from server under given stanza
@@ -210,7 +210,7 @@ func GetSecretFromInputsConf(podName string, ns string, configName string, stanz
 // GenerateAndApplySecretUpdate creates randomized secret data and applies it to the namespace-scoped
 // secret object, returning the updated data map for subsequent verification.
 func GenerateAndApplySecretUpdate(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, namespaceScopedSecretName string) (map[string][]byte, error) {
-	modifiedHecToken := GetRandomHECToken()
+	modifiedHecToken := GetRandomeHECToken()
 	modifiedValue := RandomDNSName(10)
 	updatedSecretData := GetSecretDataMap(modifiedHecToken, modifiedValue, modifiedValue, modifiedValue, modifiedValue)
 	if err := ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, updatedSecretData); err != nil {

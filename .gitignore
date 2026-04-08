@@ -93,6 +93,7 @@ release-*
 deploy/olm-certified
 report-junit*.xml
 unit_test*.xml
+junit-reports/
 # Bias Language Linter
 .biaslanguage/
 bin/

@@ -19,6 +19,7 @@ This document is the single source of truth on contributing towards this codebas
       - [Fixing issues](#fixing-issues)
       - [Pull requests](#pull-requests)
       - [Maintainer Workflow for External Contributions](#maintainer-workflow-for-external-contributions)
+      - [Rebasing your branch](#rebasing-your-branch)
       - [Code Review](#code-review)
       - [Testing](#testing)
       - [Documentation](#documentation)
@@ -97,7 +98,7 @@ When a pull request is submitted from a forked repository (external contributor)
    - **Resource safety**: No code that could damage or overload internal infrastructure
    - **Code quality**: Adherence to project standards and coding conventions
    - **Overall approach**: Changes align with project goals and architecture
-   
+
    **Only proceed to the next step if you are confident the changes are safe to run on internal infrastructure.**
 
 2. **Pull and Push to Internal Branch**: Once the initial review is satisfactory and you want to run the full test suite:
@@ -139,6 +140,14 @@ When a pull request is submitted from a forked repository (external contributor)
 - The internal test branch is temporary and should be deleted after the PR is merged or closed
 - This workflow ensures external contributions receive the same level of testing as internal changes
 - Never merge the internal test branch directly; always merge the original PR from the fork
+#### Rebasing your branch
+Keep your branch up to date with `develop` using rebase (not merge) to maintain a linear history:
+```
+$ git fetch origin
+$ git rebase origin/develop
+$ git push --force-with-lease
+```
+If you hit conflicts, resolve them, `git add` the files, and `git rebase --continue` (or `--abort` to start over). Always use `--force-with-lease` instead of `--force` to avoid overwriting others' work. Squashing is not required, but before merging ensure the branch contains only meaningful commits — either use GitHub's "Squash and merge" option or clean up locally with `git rebase -i HEAD~N`.
 
 #### Code Review
 There are two aspects of code review: giving and receiving.
