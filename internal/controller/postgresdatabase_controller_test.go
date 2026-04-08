@@ -319,13 +319,19 @@ func seedConflictScenario(ctx context.Context, namespace, resourceName, clusterN
 }
 
 func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, clusterName string, postgresDB *enterprisev4.PostgresDatabase, dbNames ...string) {
+
 	ownerReferences := ownedByPostgresDatabase(postgresDB)
+
 	for _, dbName := range dbNames {
 		Expect(k8sClient.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            adminSecretNameForTest(resourceName, dbName),
 				Namespace:       namespace,
 				OwnerReferences: ownerReferences,
+			},
+			Data: map[string][]byte{
+				"username": []byte(adminRoleNameForTest(dbName)),
+				"password": []byte("test-password"),
 			},
 		})).To(Succeed())
 
@@ -334,6 +340,10 @@ func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, cl
 				Name:            rwSecretNameForTest(resourceName, dbName),
 				Namespace:       namespace,
 				OwnerReferences: ownerReferences,
+			},
+			Data: map[string][]byte{
+				"username": []byte(rwRoleNameForTest(dbName)), 
+				"password": []byte("test-password"),
 			},
 		})).To(Succeed())
 
@@ -393,7 +403,7 @@ func expectStatusCondition(current *enterprisev4.PostgresDatabase, conditionType
 }
 
 func expectReadyStatus(current *enterprisev4.PostgresDatabase, generation int64, expectedDatabase enterprisev4.DatabaseInfo) {
-	expectStatusPhase(current, "Ready")
+	expectStatusPhase(current, phaseReady)
 	Expect(current.Status.Databases).To(HaveLen(1))
 	Expect(current.Status.Databases[0].Name).To(Equal(expectedDatabase.Name))
 	Expect(current.Status.Databases[0].Ready).To(Equal(expectedDatabase.Ready))
@@ -471,8 +481,10 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				expectReconcileResult(result, err, 30*time.Second)
 
 				current := fetchPostgresDatabase(ctx, requestName)
-				expectStatusPhase(current, "Pending")
-				expectStatusCondition(current, "ClusterReady", metav1.ConditionFalse, "ClusterNotFound")
+				expectStatusPhase(current, phasePending)
+				expectStatusCondition(current, condClusterReady, metav1.ConditionFalse, reasonClusterNotFound)
+				clusterReady := meta.FindStatusCondition(current.Status.Conditions, condClusterReady)
+				Expect(clusterReady.ObservedGeneration).To(Equal(current.Generation))
 			})
 		})
 	})
@@ -504,12 +516,12 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 				current = fetchPostgresDatabase(ctx, scenario.requestName)
 				expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
-				expectStatusCondition(current, "ClusterReady", metav1.ConditionTrue, "ClusterAvailable")
-				expectStatusCondition(current, "SecretsReady", metav1.ConditionTrue, "SecretsCreated")
-				expectStatusCondition(current, "ConfigMapsReady", metav1.ConditionTrue, "ConfigMapsCreated")
-				expectStatusCondition(current, "RolesReady", metav1.ConditionTrue, "UsersAvailable")
-				expectStatusCondition(current, "DatabasesReady", metav1.ConditionTrue, "DatabasesAvailable")
-				Expect(meta.FindStatusCondition(current.Status.Conditions, "PrivilegesReady")).To(BeNil())
+				expectStatusCondition(current, condClusterReady, metav1.ConditionTrue, reasonClusterAvailable)
+				expectStatusCondition(current, condSecretsReady, metav1.ConditionTrue, reasonSecretsCreated)
+				expectStatusCondition(current, condConfigMapsReady, metav1.ConditionTrue, reasonConfigMapsCreated)
+				expectStatusCondition(current, condRolesReady, metav1.ConditionTrue, reasonUsersAvailable)
+				expectStatusCondition(current, condDatabasesReady, metav1.ConditionTrue, reasonDatabasesAvailable)
+				Expect(meta.FindStatusCondition(current.Status.Conditions, condPrivilegesReady)).To(BeNil())
 			})
 		})
 
