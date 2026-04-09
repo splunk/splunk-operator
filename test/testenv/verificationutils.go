@@ -87,7 +87,7 @@ func (testenv *TestCaseEnv) VerifyMonitoringConsoleReady(ctx context.Context, de
 		DumpGetPods(testenv.GetName())
 
 		return monitoringConsole.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
@@ -250,7 +250,7 @@ func (testenv *TestCaseEnv) VerifyIndexersReady(ctx context.Context, deployment 
 			DumpGetPods(testenv.GetName())
 
 			return idc.Status.Phase
-		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+		}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
 		// In a steady state, we should stay in Ready and not flip-flop around
 		gomega.Consistently(func() enterpriseApi.Phase {
@@ -295,7 +295,7 @@ func (testenv *TestCaseEnv) VerifyIndexerClusterMultisiteStatus(ctx context.Cont
 			}
 		}
 		return siteIndexerStatus
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(siteIndexerMap))
+	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(siteIndexerMap))
 }
 
 // VerifyRFSFMet verify RF SF is met on cluster manager
@@ -304,7 +304,7 @@ func (testenv *TestCaseEnv) VerifyRFSFMet(ctx context.Context, deployment *Deplo
 		rfSfStatus := CheckRFSF(ctx, deployment)
 		testenv.Log.Info("Verifying RF SF is met", "Status", rfSfStatus)
 		return rfSfStatus
-	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(true))
+	}, deployment.GetTimeout(), ShortPollInterval).WithContext(ctx).Should(gomega.Equal(true))
 }
 
 // VerifyNoDisconnectedSHPresentOnCM is present on cluster manager
@@ -340,7 +340,7 @@ func (testenv *TestCaseEnv) VerifyLicenseManagerReady(ctx context.Context, deplo
 		DumpGetPods(testenv.GetName())
 
 		return LicenseManager.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
@@ -364,7 +364,7 @@ func (testenv *TestCaseEnv) VerifyLicenseMasterReady(ctx context.Context, deploy
 		DumpGetPods(testenv.GetName())
 
 		return LicenseMaster.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
@@ -407,7 +407,7 @@ func (testenv *TestCaseEnv) VerifyIndexFoundOnPod(ctx context.Context, deploymen
 		indexFound, _ := GetIndexOnPod(ctx, deployment, podName, indexName)
 		testenv.Log.Info("Checking status of index on pod", "podName", podName, "indexName", indexName, "status", indexFound)
 		return indexFound
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(true))
 }
 
 // VerifyIndexConfigsMatch verify index specific config
@@ -436,7 +436,7 @@ func (testenv *TestCaseEnv) VerifyIndexExistsOnS3(ctx context.Context, deploymen
 			RollHotToWarm(ctx, deployment, podName, indexName)
 		}
 		return indexFound
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(true))
 }
 
 // VerifyRollingRestartFinished verify no rolling restart is active
@@ -445,7 +445,7 @@ func (testenv *TestCaseEnv) VerifyRollingRestartFinished(ctx context.Context, de
 		rollingRestartStatus := CheckRollingRestartStatus(ctx, deployment)
 		testenv.Log.Info("Rolling Restart Status", "active", rollingRestartStatus)
 		return rollingRestartStatus
-	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(true))
+	}, deployment.GetTimeout(), ShortPollInterval).WithContext(ctx).Should(gomega.Equal(true))
 }
 
 // VerifyConfOnPod Verify give conf and value on config file on pod
@@ -478,7 +478,7 @@ func (testenv *TestCaseEnv) VerifySearchHeadClusterPhase(ctx context.Context, de
 		DumpGetPods(testenv.GetName())
 
 		return shc.Status.Phase
-	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(enterpriseApi.PhaseScalingUp))
+	}, deployment.GetTimeout(), ShortPollInterval).WithContext(ctx).Should(gomega.Equal(enterpriseApi.PhaseScalingUp))
 }
 
 // VerifyIndexerClusterPhase verify the phase of idxc matches the given phase
@@ -493,7 +493,7 @@ func (testenv *TestCaseEnv) VerifyIndexerClusterPhase(ctx context.Context, deplo
 		DumpGetPods(testenv.GetName())
 
 		return idxc.Status.Phase
-	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(phase))
+	}, deployment.GetTimeout(), ShortPollInterval).WithContext(ctx).Should(gomega.Equal(phase))
 }
 
 // VerifyStandalonePhase verify the phase of Standalone CR
@@ -508,7 +508,7 @@ func (testenv *TestCaseEnv) VerifyStandalonePhase(ctx context.Context, deploymen
 		DumpGetPods(testenv.GetName())
 
 		return standalone.Status.Phase
-	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(phase))
+	}, deployment.GetTimeout(), ShortPollInterval).WithContext(ctx).Should(gomega.Equal(phase))
 }
 
 // VerifyMonitoringConsolePhase verify the phase of Monitoring Console CR
@@ -523,7 +523,7 @@ func (testenv *TestCaseEnv) VerifyMonitoringConsolePhase(ctx context.Context, de
 		DumpGetPods(testenv.GetName())
 
 		return mc.Status.Phase
-	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(phase))
+	}, deployment.GetTimeout(), ShortPollInterval).WithContext(ctx).Should(gomega.Equal(phase))
 }
 
 // GetResourceVersion get resource version id
@@ -618,7 +618,7 @@ func (testenv *TestCaseEnv) VerifyCustomResourceVersionChanged(ctx context.Conte
 		DumpGetPods(testenv.GetName())
 
 		return newResourceVersion
-	}, deployment.GetTimeout(), ShortPollInterval).ShouldNot(gomega.Equal(resourceVersion))
+	}, deployment.GetTimeout(), ShortPollInterval).WithContext(ctx).ShouldNot(gomega.Equal(resourceVersion))
 }
 
 // VerifyCPULimits verifies value of CPU limits is as expected
@@ -705,7 +705,7 @@ func (testenv *TestCaseEnv) VerifyClusterManagerPhase(ctx context.Context, deplo
 
 		// Test ClusterManager Phase to see if its ready
 		return cm.Status.Phase
-	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(phase))
+	}, deployment.GetTimeout(), ShortPollInterval).WithContext(ctx).Should(gomega.Equal(phase))
 }
 
 // VerifyClusterMasterPhase verify phase of cluster manager
@@ -721,7 +721,7 @@ func (testenv *TestCaseEnv) VerifyClusterMasterPhase(ctx context.Context, deploy
 
 		// Test ClusterManager Phase to see if its ready
 		return cm.Status.Phase
-	}, deployment.GetTimeout(), ShortPollInterval).Should(gomega.Equal(phase))
+	}, deployment.GetTimeout(), ShortPollInterval).WithContext(ctx).Should(gomega.Equal(phase))
 }
 
 // VerifySecretsOnPods Check whether the secret object info is mounted on given pods
@@ -948,7 +948,7 @@ func (testenv *TestCaseEnv) VerifyAppsInFolder(ctx context.Context, deployment *
 			}
 		}
 		return true
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(true))
 }
 
 // VerifyAppsDownloadedOnContainer verify that apps are downloaded by init container
@@ -978,7 +978,7 @@ func (testenv *TestCaseEnv) VerifyAppsPackageDeletedOnOperatorContainer(ctx cont
 				found := CheckStringInSlice(appList, app+"_")
 				testenv.Log.Info(fmt.Sprintf("Check App package deleted on the pod %s. App Name %s. Directory %s, Status %t", podName, app, path, found))
 				return found
-			}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(false))
+			}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(false))
 		}
 	}
 }
@@ -996,7 +996,7 @@ func (testenv *TestCaseEnv) VerifyAppsPackageDeletedOnContainer(ctx context.Cont
 				found := CheckStringInSlice(appList, app+"_")
 				testenv.Log.Info(fmt.Sprintf("Check App package deleted on the pod %s. App Name %s. Directory %s, Status %t", podName, app, path, found))
 				return found
-			}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(false))
+			}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(false))
 		}
 	}
 }
@@ -1018,7 +1018,7 @@ func (testenv *TestCaseEnv) VerifyAppListPhase(ctx context.Context, deployment *
 				}
 				testenv.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase should not be %s", crKind, name, appName, phase), "Actual Phase", appDeploymentInfo.PhaseInfo.Phase, "App State", appDeploymentInfo)
 				return appDeploymentInfo.PhaseInfo.Phase
-			}, deployment.GetTimeout(), PollInterval).ShouldNot(gomega.Equal(phase))
+			}, deployment.GetTimeout(), PollInterval).WithContext(ctx).ShouldNot(gomega.Equal(phase))
 		}
 	} else {
 		for _, appName := range appList {
@@ -1039,7 +1039,7 @@ func (testenv *TestCaseEnv) VerifyAppListPhase(ctx context.Context, deployment *
 					return enterpriseApi.PhaseDownload
 				}
 				return appDeploymentInfo.PhaseInfo.Phase
-			}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
+			}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(phase))
 		}
 	}
 }
@@ -1050,7 +1050,7 @@ func (testenv *TestCaseEnv) VerifyAppState(ctx context.Context, deployment *Depl
 		gomega.Eventually(func() enterpriseApi.AppPhaseStatusType {
 			appDeploymentInfo, _ := GetAppDeploymentInfo(ctx, deployment, testenv, name, crKind, appSourceName, appName)
 			return appDeploymentInfo.PhaseInfo.Status
-		}, deployment.GetTimeout(), PollInterval).Should(gomega.BeNumerically("~", appStateFinal, appStateInitial)) //Check status value is between appStateInitial and appStateFinal
+		}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.BeNumerically("~", appStateFinal, appStateInitial)) //Check status value is between appStateInitial and appStateFinal
 	}
 }
 
@@ -1060,7 +1060,7 @@ func (testenv *TestCaseEnv) WaitForAppInstall(ctx context.Context, deployment *D
 		gomega.Eventually(func() enterpriseApi.AppPhaseStatusType {
 			appDeploymentInfo, _ := GetAppDeploymentInfo(ctx, deployment, testenv, name, crKind, appSourceName, appName)
 			return appDeploymentInfo.PhaseInfo.Status
-		}, deployment.GetTimeout(), PollInterval).Should(gomega.BeEquivalentTo(enterpriseApi.AppPkgInstallComplete))
+		}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.BeEquivalentTo(enterpriseApi.AppPkgInstallComplete))
 	}
 
 }
@@ -1119,7 +1119,7 @@ func (testenv *TestCaseEnv) VerifyClusterManagerBundlePush(ctx context.Context, 
 			}
 		}
 		return true
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(true))
 }
 
 // VerifyDeployerBundlePush verify that bundle push was pushed on all search heads
@@ -1141,7 +1141,7 @@ func (testenv *TestCaseEnv) VerifyDeployerBundlePush(ctx context.Context, deploy
 			}
 		}
 		return true
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(true))
 }
 
 // VerifyNoPodResetByUID verify that no pod reset during App install by comparing pod UIDs
@@ -1169,7 +1169,7 @@ func (testenv *TestCaseEnv) WaitForSplunkPodCleanup(ctx context.Context, deploym
 	gomega.Eventually(func() int {
 		testenv.Log.Info("Waiting for Splunk Pods to be deleted before running test")
 		return len(DumpGetPods(testenv.GetName()))
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(0))
+	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(0))
 }
 
 // WaitforAppInstallState Wait for App to reach state specified in conf file
@@ -1180,7 +1180,7 @@ func (testenv *TestCaseEnv) WaitforAppInstallState(ctx context.Context, deployme
 			status, _, err := GetPodAppStatus(ctx, deployment, podName, ns, appName, clusterWideInstall)
 			testenv.Log.Info("App details", "app", appName, "status", status, "error", err, "podName", podName)
 			return status
-		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(strings.ToUpper(newState)))
+		}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(strings.ToUpper(newState)))
 	}
 }
 
@@ -1195,7 +1195,7 @@ func (testenv *TestCaseEnv) VerifyAppRepoState(ctx context.Context, deployment *
 		}
 		testenv.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected repo value %d", crKind, name, appName, repoValue), "Actual Value", appDeploymentInfo.RepoState, "App State", appDeploymentInfo)
 		return int(appDeploymentInfo.RepoState)
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(repoValue))
+	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(repoValue))
 }
 
 // VerifyIsDeploymentInProgressFlagIsSet verify IsDeploymentInProgress flag is set to true
@@ -1209,7 +1209,7 @@ func (testenv *TestCaseEnv) VerifyIsDeploymentInProgressFlagIsSet(ctx context.Co
 		}
 		testenv.Log.Info("IsDeploymentInProgress Flag status found", "CR NAME", name, "CR Kind", crKind, "IsDeploymentInProgress", isDeploymentInProgress)
 		return isDeploymentInProgress
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(true))
 }
 
 // VerifyFilesInDirectoryOnPod verify that files are present in folder.
@@ -1227,7 +1227,7 @@ func (testenv *TestCaseEnv) VerifyFilesInDirectoryOnPod(ctx context.Context, dep
 				}
 			}
 			return true
-		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+		}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(true))
 	}
 }
 
@@ -1272,7 +1272,7 @@ func (testenv *TestCaseEnv) VerifyTelemetry(ctx context.Context, deployment *Dep
 			return true
 		}
 		return false
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(true))
 }
 
 // TriggerTelemetrySubmission updates or adds the 'test_submission' key in the telemetry ConfigMap with a JSON value containing a random number.
