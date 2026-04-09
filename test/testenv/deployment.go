@@ -534,11 +534,13 @@ func (d *Deployment) deployCR(ctx context.Context, name string, cr client.Object
 	// Push the clean up func to delete the cr when done
 	d.pushCleanupFunc(func() error {
 		d.testenv.Log.Info("Deleting cr", "name", name)
-		err := d.testenv.GetKubeClient().Delete(ctx, cr)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), TeardownTimeout-2*time.Minute)
+		defer cleanupCancel()
+		err := d.testenv.GetKubeClient().Delete(cleanupCtx, cr)
 		if err != nil {
 			return err
 		}
-		if err = wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
+		if err = wait.PollUntilContextCancel(cleanupCtx, PollInterval, true, func(ctx context.Context) (bool, error) {
 			key := client.ObjectKey{Name: name, Namespace: d.testenv.namespace}
 			err := d.testenv.GetKubeClient().Get(ctx, key, cr)
 

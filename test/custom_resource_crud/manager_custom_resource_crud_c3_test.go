@@ -14,7 +14,6 @@
 package crcrud
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -37,8 +36,6 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	var defaultCPULimits string
 	var newCPULimits string
 	var verificationTimeout time.Duration
-
-	ctx := context.TODO()
 
 	BeforeEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
 		var err error
