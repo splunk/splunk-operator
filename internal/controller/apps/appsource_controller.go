@@ -56,22 +56,22 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	appSourceInstance := &appsv1alpha1.AppSource{}
 
 	if err := r.Get(ctx, req.NamespacedName, appSourceInstance); err != nil {
-        if apierrors.IsNotFound(err) {
-            // If the custom resource is not found then it usually means that it was deleted or not created
-            logger.Info("AppSource resource not found. Ignoring since object must be deleted")
-            return ctrl.Result{}, nil
-        }
-        // Error reading the object - requeue the request
-        logger.Error(err, "Failed to get AppSource")
-        return ctrl.Result{}, err
-    }
+		if apierrors.IsNotFound(err) {
+			// If the custom resource is not found then it usually means that it was deleted or not created
+			logger.Info("AppSource resource not found. Ignoring since object must be deleted")
+			return ctrl.Result{}, nil
+		}
+		// Error reading the object - requeue the request
+		logger.Error(err, "Failed to get AppSource")
+		return ctrl.Result{}, err
+	}
 
 	// initialize conditions if needed
 	if len(appSourceInstance.Status.Conditions) == 0 {
 		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
-			Type:   appsv1alpha1.TypeAppSourceConditionPending,
-			Status: metav1.ConditionTrue,
-			Reason: "AppSourceInitialized",
+			Type:    appsv1alpha1.TypeAppSourceConditionPending,
+			Status:  metav1.ConditionTrue,
+			Reason:  "AppSourceInitialized",
 			Message: "AppSource resource has been initialized",
 		})
 
@@ -81,6 +81,7 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 
 		// Requeue to process the AppSource after conditions are initialized
+		logger.Info("Reconciling AppSource", "namespacedName", req.NamespacedName, "name", req.Name, "secretName", appSourceInstance.Spec.Auth.SecretRef.Name)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -98,7 +99,6 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// at this point we know it needs to reconcile
-
 
 	return ctrl.Result{}, nil
 }
