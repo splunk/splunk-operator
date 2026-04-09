@@ -132,6 +132,57 @@ func TestGetSplunkDefaults(t *testing.T) {
 	test(loadFixture(t, "splunk_defaults.json"))
 }
 
+func TestUpdateSplunkPodTemplateWithConfigAddsAppRuntimeIdentityEnv(t *testing.T) {
+	ctx := context.TODO()
+	client := spltest.NewMockClient()
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "single",
+			Namespace: "test",
+		},
+	}
+	podTemplateSpec := corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "splunk"},
+			},
+		},
+	}
+
+	updateSplunkPodTemplateWithConfig(ctx, client, &podTemplateSpec, &cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, nil, "test-secret")
+
+	require.Len(t, podTemplateSpec.Spec.Containers, 1)
+	envVars := podTemplateSpec.Spec.Containers[0].Env
+
+	getEnv := func(name string) *corev1.EnvVar {
+		for idx := range envVars {
+			if envVars[idx].Name == name {
+				return &envVars[idx]
+			}
+		}
+		return nil
+	}
+
+	headlessEnv := getEnv("SPLUNK_APPRUNTIME_HEADLESS_SERVICE_FQDN")
+	require.NotNil(t, headlessEnv)
+	require.Equal(t, GetSplunkAppRuntimeServiceFQDN(cr.GetNamespace(), SplunkStandalone, cr.GetName()), headlessEnv.Value)
+
+	podNameEnv := getEnv("POD_NAME")
+	require.NotNil(t, podNameEnv)
+	require.NotNil(t, podNameEnv.ValueFrom)
+	require.NotNil(t, podNameEnv.ValueFrom.FieldRef)
+	require.Equal(t, "metadata.name", podNameEnv.ValueFrom.FieldRef.FieldPath)
+
+	podNamespaceEnv := getEnv("POD_NAMESPACE")
+	require.NotNil(t, podNamespaceEnv)
+	require.NotNil(t, podNamespaceEnv.ValueFrom)
+	require.NotNil(t, podNamespaceEnv.ValueFrom.FieldRef)
+	require.Equal(t, "metadata.namespace", podNamespaceEnv.ValueFrom.FieldRef.FieldPath)
+}
+
 func TestGetService(t *testing.T) {
 
 	ctx := context.TODO()
