@@ -18,7 +18,11 @@ package apps
 
 import (
 	"context"
+	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,9 +51,54 @@ type AppSourceReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	logger := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	appSourceInstance := &appsv1alpha1.AppSource{}
+
+	if err := r.Get(ctx, req.NamespacedName, appSourceInstance); err != nil {
+        if apierrors.IsNotFound(err) {
+            // If the custom resource is not found then it usually means that it was deleted or not created
+            logger.Info("AppSource resource not found. Ignoring since object must be deleted")
+            return ctrl.Result{}, nil
+        }
+        // Error reading the object - requeue the request
+        logger.Error(err, "Failed to get AppSource")
+        return ctrl.Result{}, err
+    }
+
+	// initialize conditions if needed
+	if len(appSourceInstance.Status.Conditions) == 0 {
+		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+			Type:   appsv1alpha1.TypeAppSourceConditionPending,
+			Status: metav1.ConditionTrue,
+			Reason: "AppSourceInitialized",
+			Message: "AppSource resource has been initialized",
+		})
+
+		if err := r.Status().Update(ctx, appSourceInstance); err != nil {
+			logger.Error(err, "Failed to update AppSource conditions")
+			return ctrl.Result{}, err
+		}
+
+		// Requeue to process the AppSource after conditions are initialized
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// check if we need to reconcile based on the observed generation changes or the periodic poll
+	needsToReconcile := appSourceInstance.Generation != appSourceInstance.Status.ObservedGeneration
+	// if the generation changed, we need to reconcile asap; we shouldnt enter this block
+	// if the generation has not changed, check if we need to reconcile based on the periodic poll
+	if !needsToReconcile && appSourceInstance.Status.LastSyncTime != nil {
+		// calculate the next poll time; we get the last sync time and add the poll interval
+		nextPoll := appSourceInstance.Status.LastSyncTime.Add(time.Duration(*appSourceInstance.Spec.Polling) * time.Second)
+		// check if the current time is earlier than polling time
+		if time.Now().Before(nextPoll) {
+			return ctrl.Result{RequeueAfter: time.Until(nextPoll)}, nil
+		}
+	}
+
+	// at this point we know it needs to reconcile
+
 
 	return ctrl.Result{}, nil
 }
