@@ -4,7 +4,7 @@ This file provides a reference Grafana dashboard for the PostgreSQL observabilit
 
 The dashboard JSON lives at:
 
-- [PostgreSQLObservabilityDashboard.json](/Users/dpishchenkov/splunk-operator/docs/PostgreSQLObservabilityDashboard.json)
+- [PostgreSQLObservabilityDashboard.json](./PostgreSQLObservabilityDashboard.json)
 
 ## Purpose
 
