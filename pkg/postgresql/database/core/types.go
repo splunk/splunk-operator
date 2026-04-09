@@ -22,6 +22,7 @@ type reconcileDBPhases string
 type conditionTypes string
 type conditionReasons string
 type clusterReadyStatus string
+type reconcileConflictCategory string
 
 const (
 	retryDelay                = time.Second * 15
@@ -91,6 +92,22 @@ const (
 	ClusterNotReady         clusterReadyStatus = "NotReady"
 	ClusterNoProvisionerRef clusterReadyStatus = "NoProvisionerRef"
 	ClusterReady            clusterReadyStatus = "Ready"
+
+	conflictDeletion               reconcileConflictCategory = "deletion"
+	conflictFinalizer              reconcileConflictCategory = "finalizer"
+	conflictClusterStatus          reconcileConflictCategory = "cluster_status"
+	conflictRoleConflictStatus     reconcileConflictCategory = "role_conflict_status"
+	conflictCNPGClusterFetch       reconcileConflictCategory = "cnpg_cluster_fetch"
+	conflictSecretsReconcile       reconcileConflictCategory = "secrets_reconcile"
+	conflictSecretsStatus          reconcileConflictCategory = "secrets_status"
+	conflictConfigMapsReconcile    reconcileConflictCategory = "configmaps_reconcile"
+	conflictConfigMapsStatus       reconcileConflictCategory = "configmaps_status"
+	conflictManagedRolesPatch      reconcileConflictCategory = "managed_roles_patch"
+	conflictRolesStatus            reconcileConflictCategory = "roles_status"
+	conflictCNPGDatabasesReconcile reconcileConflictCategory = "cnpg_databases_reconcile"
+	conflictDatabasesStatus        reconcileConflictCategory = "databases_status"
+	conflictPrivilegesStatus       reconcileConflictCategory = "privileges_status"
+	conflictFinalStatus            reconcileConflictCategory = "final_status"
 )
 
 // clusterEndpoints holds fully-resolved connection hostnames for a cluster.

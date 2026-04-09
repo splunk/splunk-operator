@@ -46,6 +46,20 @@ func (e *secretReconcileError) Error() string {
 	return e.message
 }
 
+func requeueOnConflict(ctx context.Context, err error, category reconcileConflictCategory, action string) (ctrl.Result, error, bool) {
+	if !errors.IsConflict(err) {
+		return ctrl.Result{}, err, false
+	}
+
+	// Keep the category stable so future metrics or events can aggregate conflict sources.
+	log.FromContext(ctx).Info(
+		"Conflict during PostgresDatabase reconciliation, will requeue",
+		"category", category,
+		"action", action,
+	)
+	return ctrl.Result{Requeue: true}, nil, true
+}
+
 // PostgresDatabaseService is the application service entry point called by the primary adapter (reconciler).
 // newDBRepo is injected to keep the core free of pgx imports.
 func PostgresDatabaseService(
@@ -64,18 +78,11 @@ func PostgresDatabaseService(
 	updateStatus := func(conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) error {
 		return persistStatus(ctx, c, rc.Metrics, postgresDB, conditionType, conditionStatus, reason, message, phase)
 	}
-	requeueOnConflict := func(err error, action string) (ctrl.Result, error, bool) {
-		if !errors.IsConflict(err) {
-			return ctrl.Result{}, err, false
-		}
-		logger.Info("Conflict during PostgresDatabase reconciliation, will requeue", "action", action)
-		return ctrl.Result{Requeue: true}, nil, true
-	}
 
 	// Finalizer: cleanup on deletion, register on creation.
 	if postgresDB.GetDeletionTimestamp() != nil {
 		if err := handleDeletion(ctx, rc, postgresDB); err != nil {
-			if result, conflictErr, ok := requeueOnConflict(err, "handling deletion"); ok {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDeletion, "handling deletion"); ok {
 				return result, conflictErr
 			}
 			logger.Error(err, "Failed to clean up PostgresDatabase")
@@ -88,7 +95,7 @@ func PostgresDatabaseService(
 	if !controllerutil.ContainsFinalizer(postgresDB, postgresDatabaseFinalizerName) {
 		controllerutil.AddFinalizer(postgresDB, postgresDatabaseFinalizerName)
 		if err := c.Update(ctx, postgresDB); err != nil {
-			if result, conflictErr, ok := requeueOnConflict(err, "adding finalizer"); ok {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictFinalizer, "adding finalizer"); ok {
 				return result, conflictErr
 			}
 			logger.Error(err, "Failed to add finalizer to PostgresDatabase")
@@ -104,7 +111,7 @@ func PostgresDatabaseService(
 		if errors.IsNotFound(err) {
 			rc.emitWarning(postgresDB, EventClusterNotFound, fmt.Sprintf("PostgresCluster %s not found", postgresDB.Spec.ClusterRef.Name))
 			if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterNotFound, "Cluster CR not found", pendingDBPhase); err != nil {
-				if result, conflictErr, ok := requeueOnConflict(err, "persisting cluster not found status"); ok {
+				if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictClusterStatus, "persisting cluster not found status"); ok {
 					return result, conflictErr
 				}
 				return ctrl.Result{}, err
@@ -113,7 +120,7 @@ func PostgresDatabaseService(
 		}
 		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterInfoFetchFailed,
 			"Can't reach Cluster CR due to transient errors", pendingDBPhase); statusErr != nil {
-			if result, conflictErr, ok := requeueOnConflict(statusErr, "persisting cluster fetch failure status"); ok {
+			if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictClusterStatus, "persisting cluster fetch failure status"); ok {
 				return result, conflictErr
 			}
 			logger.Error(statusErr, "Failed to update status")
@@ -127,7 +134,7 @@ func PostgresDatabaseService(
 	case ClusterNotReady, ClusterNoProvisionerRef:
 		rc.emitWarning(postgresDB, EventClusterNotReady, "Referenced PostgresCluster is not ready yet")
 		if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterProvisioning, "Cluster is not in ready state yet", pendingDBPhase); err != nil {
-			if result, conflictErr, ok := requeueOnConflict(err, "persisting cluster provisioning status"); ok {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictClusterStatus, "persisting cluster provisioning status"); ok {
 				return result, conflictErr
 			}
 			return ctrl.Result{}, err
@@ -137,7 +144,7 @@ func PostgresDatabaseService(
 	case ClusterReady:
 		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, clusterReady, EventClusterValidated, "Referenced PostgresCluster is ready")
 		if err := updateStatus(clusterReady, metav1.ConditionTrue, reasonClusterAvailable, "Cluster is operational", provisioningDBPhase); err != nil {
-			if result, conflictErr, ok := requeueOnConflict(err, "persisting cluster ready status"); ok {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictClusterStatus, "persisting cluster ready status"); ok {
 				return result, conflictErr
 			}
 			return ctrl.Result{}, err
@@ -155,7 +162,7 @@ func PostgresDatabaseService(
 		rc.emitWarning(postgresDB, EventRoleConflict, conflictMsg)
 		errs := []error{conflictErr}
 		if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonRoleConflict, conflictMsg, failedDBPhase); statusErr != nil {
-			if result, conflictErr, ok := requeueOnConflict(statusErr, "persisting role conflict status"); ok {
+			if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictRoleConflictStatus, "persisting role conflict status"); ok {
 				return result, conflictErr
 			}
 			logger.Error(statusErr, "Failed to update status")
@@ -171,7 +178,7 @@ func PostgresDatabaseService(
 		Name:      cluster.Status.ProvisionerRef.Name,
 		Namespace: cluster.Status.ProvisionerRef.Namespace,
 	}, cnpgCluster); err != nil {
-		if result, conflictErr, ok := requeueOnConflict(err, "fetching CNPG cluster"); ok {
+		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictCNPGClusterFetch, "fetching CNPG cluster"); ok {
 			return result, conflictErr
 		}
 		logger.Error(err, "Failed to fetch CNPG Cluster")
@@ -181,15 +188,15 @@ func PostgresDatabaseService(
 	// Phase: CredentialProvisioning — secrets must exist before roles are patched.
 	// CNPG rejects a PasswordSecretRef pointing at a missing secret.
 	if err := reconcileUserSecrets(ctx, c, rc.Scheme, postgresDB, previouslyProvisionedDatabases); err != nil {
-		if result, conflictErr, ok := requeueOnConflict(err, "reconciling user secrets"); ok {
+		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictSecretsReconcile, "reconciling user secrets"); ok {
 			return result, conflictErr
 		}
-		var driftErr *secretReconcileError
-		if stderrors.As(err, &driftErr) {
-			rc.emitWarning(postgresDB, EventRolesSecretsDriftDetected, driftErr.message)
-			if statusErr := updateStatus(secretsReady, metav1.ConditionFalse, driftErr.reason,
-				driftErr.message, provisioningDBPhase); statusErr != nil {
-				if result, conflictErr, ok := requeueOnConflict(statusErr, "persisting secret drift status"); ok {
+		var secretErr *secretReconcileError
+		if stderrors.As(err, &secretErr) {
+			rc.emitWarning(postgresDB, EventRolesSecretsDriftDetected, secretErr.message)
+			if statusErr := updateStatus(secretsReady, metav1.ConditionFalse, secretErr.reason,
+				secretErr.message, provisioningDBPhase); statusErr != nil {
+				if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictSecretsStatus, "persisting secret drift status"); ok {
 					return result, conflictErr
 				}
 				logger.Error(statusErr, "Failed to update status")
@@ -199,7 +206,7 @@ func PostgresDatabaseService(
 		rc.emitWarning(postgresDB, EventUserSecretsFailed, fmt.Sprintf("Failed to reconcile user secrets: %v", err))
 		if statusErr := updateStatus(secretsReady, metav1.ConditionFalse, reasonSecretsCreationFailed,
 			fmt.Sprintf("Failed to reconcile user secrets: %v", err), provisioningDBPhase); statusErr != nil {
-			if result, conflictErr, ok := requeueOnConflict(statusErr, "persisting secret failure status"); ok {
+			if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictSecretsStatus, "persisting secret failure status"); ok {
 				return result, conflictErr
 			}
 			logger.Error(statusErr, "Failed to update status")
@@ -209,7 +216,7 @@ func PostgresDatabaseService(
 	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, secretsReady, EventSecretsReady, fmt.Sprintf("All secrets provisioned for %d databases", len(postgresDB.Spec.Databases)))
 	if err := updateStatus(secretsReady, metav1.ConditionTrue, reasonSecretsCreated,
 		fmt.Sprintf("All secrets provisioned for %d databases", len(postgresDB.Spec.Databases)), provisioningDBPhase); err != nil {
-		if result, conflictErr, ok := requeueOnConflict(err, "persisting secrets ready status"); ok {
+		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictSecretsStatus, "persisting secrets ready status"); ok {
 			return result, conflictErr
 		}
 		return ctrl.Result{}, err
@@ -219,13 +226,13 @@ func PostgresDatabaseService(
 	// as databases are ready, so they are created alongside secrets.
 	endpoints := resolveClusterEndpoints(cluster, cnpgCluster, postgresDB.Namespace)
 	if err := reconcileRoleConfigMaps(ctx, c, rc.Scheme, postgresDB, endpoints); err != nil {
-		if result, conflictErr, ok := requeueOnConflict(err, "reconciling configmaps"); ok {
+		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictConfigMapsReconcile, "reconciling configmaps"); ok {
 			return result, conflictErr
 		}
 		rc.emitWarning(postgresDB, EventAccessConfigFailed, fmt.Sprintf("Failed to reconcile ConfigMaps: %v", err))
 		if statusErr := updateStatus(configMapsReady, metav1.ConditionFalse, reasonConfigMapsCreationFailed,
 			fmt.Sprintf("Failed to reconcile ConfigMaps: %v", err), provisioningDBPhase); statusErr != nil {
-			if result, conflictErr, ok := requeueOnConflict(statusErr, "persisting configmaps failure status"); ok {
+			if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictConfigMapsStatus, "persisting configmaps failure status"); ok {
 				return result, conflictErr
 			}
 			logger.Error(statusErr, "Failed to update status")
@@ -235,7 +242,7 @@ func PostgresDatabaseService(
 	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, configMapsReady, EventConfigMapsReady, fmt.Sprintf("All ConfigMaps provisioned for %d databases", len(postgresDB.Spec.Databases)))
 	if err := updateStatus(configMapsReady, metav1.ConditionTrue, reasonConfigMapsCreated,
 		fmt.Sprintf("All ConfigMaps provisioned for %d databases", len(postgresDB.Spec.Databases)), provisioningDBPhase); err != nil {
-		if result, conflictErr, ok := requeueOnConflict(err, "persisting configmaps ready status"); ok {
+		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictConfigMapsStatus, "persisting configmaps ready status"); ok {
 			return result, conflictErr
 		}
 		return ctrl.Result{}, err
@@ -251,7 +258,7 @@ func PostgresDatabaseService(
 	if len(rolesToAdd) > 0 || len(rolesToRemove) > 0 {
 		logger.Info("CNPG Cluster patch started, role drift detected", "toAdd", len(rolesToAdd), "toRemove", len(rolesToRemove))
 		if err := patchManagedRoles(ctx, c, fieldManager, cluster, allRoles); err != nil {
-			if result, conflictErr, ok := requeueOnConflict(err, "patching managed roles"); ok {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictManagedRolesPatch, "patching managed roles"); ok {
 				return result, conflictErr
 			}
 			logger.Error(err, "Failed to patch users in CNPG Cluster")
@@ -265,7 +272,7 @@ func PostgresDatabaseService(
 		rc.emitNormal(postgresDB, EventRoleReconciliationStarted, fmt.Sprintf("Patched managed roles: %d to add, %d to remove", len(rolesToAdd), len(rolesToRemove)))
 		if err := updateStatus(rolesReady, metav1.ConditionFalse, reasonWaitingForCNPG,
 			fmt.Sprintf("Waiting for roles to be reconciled: %d to add, %d to remove", len(rolesToAdd), len(rolesToRemove)), provisioningDBPhase); err != nil {
-			if result, conflictErr, ok := requeueOnConflict(err, "persisting roles waiting status"); ok {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictRolesStatus, "persisting roles waiting status"); ok {
 				return result, conflictErr
 			}
 			return ctrl.Result{}, err
@@ -279,7 +286,7 @@ func PostgresDatabaseService(
 		rc.emitWarning(postgresDB, EventRoleFailed, fmt.Sprintf("Role reconciliation failed: %v", err))
 		if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonUsersCreationFailed,
 			fmt.Sprintf("Role creation failed: %v", err), failedDBPhase); statusErr != nil {
-			if result, conflictErr, ok := requeueOnConflict(statusErr, "persisting role failure status"); ok {
+			if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictRolesStatus, "persisting role failure status"); ok {
 				return result, conflictErr
 			}
 			logger.Error(statusErr, "Failed to update status")
@@ -289,7 +296,7 @@ func PostgresDatabaseService(
 	if len(notReadyRoles) > 0 {
 		if err := updateStatus(rolesReady, metav1.ConditionFalse, reasonWaitingForCNPG,
 			fmt.Sprintf("Waiting for roles to be reconciled: %v", notReadyRoles), provisioningDBPhase); err != nil {
-			if result, conflictErr, ok := requeueOnConflict(err, "persisting roles pending status"); ok {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictRolesStatus, "persisting roles pending status"); ok {
 				return result, conflictErr
 			}
 			return ctrl.Result{}, err
@@ -299,7 +306,7 @@ func PostgresDatabaseService(
 	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, rolesReady, EventRolesReady, fmt.Sprintf("Roles reconciled: %d active, %d removed", len(rolesToAdd), len(rolesToRemove)))
 	if err := updateStatus(rolesReady, metav1.ConditionTrue, reasonUsersAvailable,
 		fmt.Sprintf("Roles reconciled: %d active, %d removed", len(rolesToAdd), len(rolesToRemove)), provisioningDBPhase); err != nil {
-		if result, conflictErr, ok := requeueOnConflict(err, "persisting roles ready status"); ok {
+		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictRolesStatus, "persisting roles ready status"); ok {
 			return result, conflictErr
 		}
 		return ctrl.Result{}, err
@@ -308,7 +315,7 @@ func PostgresDatabaseService(
 	// Phase: DatabaseProvisioning
 	adopted, err := reconcileCNPGDatabases(ctx, c, rc.Scheme, postgresDB, cluster)
 	if err != nil {
-		if result, conflictErr, ok := requeueOnConflict(err, "reconciling CNPG databases"); ok {
+		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictCNPGDatabasesReconcile, "reconciling CNPG databases"); ok {
 			return result, conflictErr
 		}
 		logger.Error(err, "Failed to reconcile CNPG Databases")
@@ -332,7 +339,7 @@ func PostgresDatabaseService(
 		rc.emitOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, databasesReady, EventDatabaseReconciliationStarted, fmt.Sprintf("Reconciling %d databases, waiting for readiness", len(postgresDB.Spec.Databases)))
 		if err := updateStatus(databasesReady, metav1.ConditionFalse, reasonWaitingForCNPG,
 			fmt.Sprintf("Waiting for databases to be ready: %v", notReadyDBs), provisioningDBPhase); err != nil {
-			if result, conflictErr, ok := requeueOnConflict(err, "persisting databases pending status"); ok {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDatabasesStatus, "persisting databases pending status"); ok {
 				return result, conflictErr
 			}
 			return ctrl.Result{}, err
@@ -342,7 +349,7 @@ func PostgresDatabaseService(
 	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, databasesReady, EventDatabasesReady, fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)))
 	if err := updateStatus(databasesReady, metav1.ConditionTrue, reasonDatabasesAvailable,
 		fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)), readyDBPhase); err != nil {
-		if result, conflictErr, ok := requeueOnConflict(err, "persisting databases ready status"); ok {
+		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDatabasesStatus, "persisting databases ready status"); ok {
 			return result, conflictErr
 		}
 		return ctrl.Result{}, err
@@ -381,7 +388,7 @@ func PostgresDatabaseService(
 			rc.emitWarning(postgresDB, EventPrivilegesGrantFailed, fmt.Sprintf("Failed to grant RW role privileges: %v", err))
 			if statusErr := updateStatus(privilegesReady, metav1.ConditionFalse, reasonPrivilegesGrantFailed,
 				fmt.Sprintf("Failed to grant RW role privileges: %v", err), provisioningDBPhase); statusErr != nil {
-				if result, conflictErr, ok := requeueOnConflict(statusErr, "persisting privileges failure status"); ok {
+				if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictPrivilegesStatus, "persisting privileges failure status"); ok {
 					return result, conflictErr
 				}
 				logger.Error(statusErr, "Failed to update status")
@@ -391,7 +398,7 @@ func PostgresDatabaseService(
 		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, privilegesReady, EventPrivilegesReady, fmt.Sprintf("RW role privileges granted for all %d databases", len(postgresDB.Spec.Databases)))
 		if err := updateStatus(privilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted,
 			fmt.Sprintf("RW role privileges granted for all %d databases", len(postgresDB.Spec.Databases)), readyDBPhase); err != nil {
-			if result, conflictErr, ok := requeueOnConflict(err, "persisting privileges ready status"); ok {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictPrivilegesStatus, "persisting privileges ready status"); ok {
 				return result, conflictErr
 			}
 			return ctrl.Result{}, err
@@ -405,7 +412,7 @@ func PostgresDatabaseService(
 	postgresDB.Status.ObservedGeneration = &postgresDB.Generation
 
 	if err := c.Status().Update(ctx, postgresDB); err != nil {
-		if result, conflictErr, ok := requeueOnConflict(err, "persisting final status"); ok {
+		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictFinalStatus, "persisting final status"); ok {
 			return result, conflictErr
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to persist final status: %w", err)
