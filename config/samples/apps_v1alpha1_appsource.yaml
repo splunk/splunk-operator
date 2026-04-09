@@ -12,8 +12,9 @@ spec:
     bucket: "my-bucket"
     basePath: "my-path"
   auth:
-    secretName: "my-secret"
-  polling: 60
+    secretRef:
+      name: "my-secret"
+  pollIntervalSeconds: 60
 
 ---
 apiVersion: apps.splunk.com/v1alpha1
@@ -29,5 +30,6 @@ spec:
     repo: "https://github.com/splunk/splunk-operator.git"
     ref: "main"
   auth:
-    secretName: "my-secret"
-  polling: 120
+    secretRef:
+      name: "my-secret"
+  pollIntervalSeconds: 120
