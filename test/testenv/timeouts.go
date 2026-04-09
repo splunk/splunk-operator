@@ -44,16 +44,15 @@ const (
 const TeardownTimeout = 10 * time.Minute
 
 // Suite-level timeouts. Applied via GinkgoConfiguration().Timeout in suite files.
-// Each value equals max(NodeTimeout used in that suite) + 15 min buffer for
-// BeforeSuite / AfterEach teardown.  Tests run in parallel via ginkgo -nodes,
-// so the suite wall-clock time ≈ longest single test, not the sum.
+// Sized for sequential spec execution (no ginkgo -nodes parallelism).
+// Each value must accommodate multiple specs running back-to-back.
 const (
-	// ShortSuiteTimeout for suites whose max NodeTimeout is ShortTimeout.
-	ShortSuiteTimeout = 30 * time.Minute
+	// ShortSuiteTimeout for lightweight suites (≤~20 specs, ≤15 min each).
+	ShortSuiteTimeout = 60 * time.Minute
 
-	// MediumSuiteTimeout for suites whose max NodeTimeout is MediumTimeout.
-	MediumSuiteTimeout = 60 * time.Minute
+	// MediumSuiteTimeout for moderate suites (≤~20 specs, ≤45 min each).
+	MediumSuiteTimeout = 120 * time.Minute
 
-	// LongSuiteTimeout for suites whose max NodeTimeout is LongTimeout.
-	LongSuiteTimeout = 150 * time.Minute
+	// LongSuiteTimeout for heavy suites (c3/m4 appfw, crcrud, secret — many specs at ≤50 min each).
+	LongSuiteTimeout = 240 * time.Minute
 )
