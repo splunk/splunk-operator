@@ -111,6 +111,7 @@ jobs:
   int-tests-appframeworkazure:
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         test:
           [
