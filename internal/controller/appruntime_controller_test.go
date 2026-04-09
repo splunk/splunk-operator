@@ -79,6 +79,6 @@ var _ = Describe("AppRuntime Controller", func() {
 		Expect(pod.Spec.Containers[0].Ports).To(HaveLen(1))
 		Expect(pod.Spec.Containers[0].Ports[0].Name).To(Equal("appruntime"))
 		Expect(pod.Spec.Containers[0].Ports[0].ContainerPort).To(Equal(int32(9000)))
-		Expect(pod.Spec.Containers[0].ImagePullPolicy).To(Equal(corev1.PullIfNotPresent))
+		Expect(pod.Spec.Containers[0].ImagePullPolicy).To(Equal(corev1.PullAlways))
 	})
 })

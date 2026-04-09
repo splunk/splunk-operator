@@ -322,7 +322,7 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 				{
 					Image:           appRuntime.Spec.Image,
 					Name:            "appruntime",
-					ImagePullPolicy: corev1.PullIfNotPresent,
+					ImagePullPolicy: corev1.PullAlways,
 					Command: []string{
 						"/usr/local/bin/entrypoint.sh",
 					},
