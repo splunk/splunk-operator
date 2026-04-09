@@ -33,7 +33,7 @@ type ClusterManagerSitesResponse struct {
 	Entries []ClusterManagerSitesEntry `json:"entry"`
 }
 
-// ClusterManagerSitesEntry represents a site of an indexer cluster with its metadata
+// ClusterManagerSitesEntry represents a site of an Indexer Cluster with its metadata
 type ClusterManagerSitesEntry struct {
 	Name    string                     `json:"name"`
 	Content ClusterManagerSitesContent `json:"content"`
@@ -55,7 +55,7 @@ type ClusterManagerHealthResponse struct {
 	Entries []ClusterManagerHealthEntry `json:"entry"`
 }
 
-// ClusterManagerHealthEntry represents a site of an indexer cluster with its metadata
+// ClusterManagerHealthEntry represents a site of an Indexer Cluster with its metadata
 type ClusterManagerHealthEntry struct {
 	Name    string                      `json:"name"`
 	Content ClusterManagerHealthContent `json:"content"`
@@ -129,7 +129,7 @@ type ClusterManagerPeersAndSearchHeadResponse struct {
 	} `json:"entry"`
 }
 
-// GetIndexersOrSearchHeadsOnCM get indexers or search head on Cluster Manager
+// GetIndexersOrSearchHeadsOnCM gets Indexers or Search Heads on Cluster Manager
 func GetIndexersOrSearchHeadsOnCM(ctx context.Context, deployment *Deployment, endpoint string) ClusterManagerPeersAndSearchHeadResponse {
 	url := ""
 	if endpoint == "sh" {
@@ -154,7 +154,7 @@ func GetIndexersOrSearchHeadsOnCM(ctx context.Context, deployment *Deployment, e
 	return restResponse
 }
 
-// CheckIndexerOnCM check given Indexer on cluster manager
+// CheckIndexerOnCM checks given Indexer on Cluster Manager
 func CheckIndexerOnCM(ctx context.Context, deployment *Deployment, indexerName string) bool {
 	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, "peer")
 	found := false
@@ -168,7 +168,7 @@ func CheckIndexerOnCM(ctx context.Context, deployment *Deployment, indexerName s
 	return found
 }
 
-// CheckSearchHeadOnCM check given search head on cluster manager
+// CheckSearchHeadOnCM checks given Search Head on Cluster Manager
 func CheckSearchHeadOnCM(ctx context.Context, deployment *Deployment, searchHeadName string) bool {
 	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, "sh")
 	found := false
@@ -182,7 +182,7 @@ func CheckSearchHeadOnCM(ctx context.Context, deployment *Deployment, searchHead
 	return found
 }
 
-// CheckSearchHeadRemoved check if search head is removed from Indexer Cluster
+// CheckSearchHeadRemoved checks if Search Head is removed from Indexer Cluster
 func CheckSearchHeadRemoved(ctx context.Context, deployment *Deployment) bool {
 	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, "sh")
 	searchHeadRemoved := true

@@ -64,6 +64,11 @@ func CheckLicenseManagerConfigured(ctx context.Context, deployment *Deployment, 
 
 // LicenseTestConfig holds the version-specific (V3/V4) deployment and verification
 // callbacks used by the license manager test functions.
+//
+// The spec parameters use interface{} because V3 (LicenseMasterSpec) and V4
+// (LicenseManagerSpec) are distinct types with no shared interface. Callers
+// must pass the correct concrete type for the API version in use; a mismatch
+// will cause a runtime panic on the type assertion inside the callback.
 type LicenseTestConfig struct {
 	*ClusterReadinessConfig
 	DeployLicenseManagerWithGivenSpec func(ctx context.Context, deployment *Deployment, name string, spec interface{}) (interface{}, error)
@@ -74,7 +79,9 @@ type LicenseTestConfig struct {
 
 // MasterManagerLMTestConfig pairs a name prefix and test label with a factory
 // function that returns the appropriate LicenseTestConfig.
-// This is the license-manager equivalent of MasterManagerTestConfig.
+// It mirrors MasterManagerTestConfig (in common_test_patterns.go) but returns
+// *LicenseTestConfig instead of *ClusterReadinessConfig because license-manager
+// tests need the extra deployment callbacks that LicenseTestConfig provides.
 type MasterManagerLMTestConfig struct {
 	NamePrefix string
 	Label      string

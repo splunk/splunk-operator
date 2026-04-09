@@ -42,7 +42,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 )
 
-// Deployment simply represents the deployment (standalone, clustered,...etc) we create on the testenv
+// Deployment simply represents the deployment (Standalone, clustered, etc.) we create on the testenv
 type Deployment struct {
 	name         string
 	testenv      *TestCaseEnv
@@ -148,7 +148,7 @@ func (d *Deployment) Teardown() error {
 	return cleanupErr
 }
 
-// DeployStandalone deploys a standalone splunk enterprise instance on the specified testenv
+// DeployStandalone deploys a Standalone Splunk Enterprise instance on the specified testenv
 func (d *Deployment) DeployStandalone(ctx context.Context, name string, mcRef string, LicenseManager string) (*enterpriseApi.Standalone, error) {
 	standalone := newStandalone(name, d.testenv.namespace, d.testenv.splunkImage)
 
@@ -196,7 +196,7 @@ func (d *Deployment) DeployMonitoringConsoleWithGivenSpec(ctx context.Context, n
 	return deployed.(*enterpriseApi.MonitoringConsole), err
 }
 
-// GetInstance retrieves the standalone, indexer, searchhead, LicenseManager instance
+// GetInstance retrieves the Standalone, Indexer, Search Head, or License Manager instance
 func (d *Deployment) GetInstance(ctx context.Context, name string, instance client.Object) error {
 	key := client.ObjectKey{Name: name, Namespace: d.testenv.namespace}
 
@@ -1019,7 +1019,7 @@ func (d *Deployment) DeployStandaloneWithLM(ctx context.Context, name string, mc
 	return deployed.(*enterpriseApi.Standalone), err
 }
 
-// DeployStandaloneWithGivenSpec deploys a standalone with given spec
+// DeployStandaloneWithGivenSpec deploys a Standalone with the given spec
 func (d *Deployment) DeployStandaloneWithGivenSpec(ctx context.Context, name string, spec enterpriseApi.StandaloneSpec) (*enterpriseApi.Standalone, error) {
 	standalone := newStandaloneWithGivenSpec(name, d.testenv.namespace, spec)
 	deployed, err := d.deployCR(ctx, name, standalone)
@@ -1029,7 +1029,7 @@ func (d *Deployment) DeployStandaloneWithGivenSpec(ctx context.Context, name str
 	return deployed.(*enterpriseApi.Standalone), err
 }
 
-// DeployStandaloneWithGivenSmartStoreSpec deploys a standalone give smartstore spec
+// DeployStandaloneWithGivenSmartStoreSpec deploys a Standalone with the given SmartStore spec
 func (d *Deployment) DeployStandaloneWithGivenSmartStoreSpec(ctx context.Context, name string, smartStoreSpec enterpriseApi.SmartStoreSpec) (*enterpriseApi.Standalone, error) {
 
 	spec := enterpriseApi.StandaloneSpec{
@@ -1721,7 +1721,7 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx
 	return nil
 }
 
-// DeployMultisiteClusterWithMonitoringConsole deploys cluster-manager, indexers in multiple sites (SHC LM Optional) with monitoring console
+// DeployMultisiteClusterWithMonitoringConsole deploys Cluster Manager, Indexers in multiple sites (SHC LM Optional) with Monitoring Console
 func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Context, name string, indexerReplicas int, siteCount int, monitoringConsoleName string, shc bool) error {
 
 	licenseManager := ""
@@ -1821,7 +1821,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 	return nil
 }
 
-// DeployMultisiteClusterMasterWithMonitoringConsole deploys cluster-master, indexers in multiple sites (SHC LM Optional) with monitoring console
+// DeployMultisiteClusterMasterWithMonitoringConsole deploys Cluster Master, Indexers in multiple sites (SHC LM Optional) with Monitoring Console
 func (d *Deployment) DeployMultisiteClusterMasterWithMonitoringConsole(ctx context.Context, name string, indexerReplicas int, siteCount int, monitoringConsoleName string, shc bool) error {
 
 	licenseMaster := ""
@@ -1931,45 +1931,13 @@ func (d *Deployment) GetConfigMap(ctx context.Context, name string) (*corev1.Con
 	return cm, nil
 }
 
-// S1WithLMSetup holds the resources created by SetupS1WithLMAndMC so that
-// individual test functions can operate on them without repeating the setup.
-type S1WithLMSetup struct {
-	Standalone                *enterpriseApi.Standalone
-	Mc                        *enterpriseApi.MonitoringConsole
-	ResourceVersion           string
-	NamespaceScopedSecretName string
-}
-
-// SetupS1WithLMAndMC performs the common S1 setup shared by the secret-update
-// and secret-delete tests: license config map, standalone with LM, MC, and
-// initial secret verification.
-func SetupS1WithLMAndMC(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig) (S1WithLMSetup, error) {
-	if err := SetupLicenseConfigMap(ctx, testcaseEnvInst); err != nil {
-		return S1WithLMSetup{}, err
+// GetAndDeleteCR fetches a CR by name and deletes it, returning any error encountered.
+func GetAndDeleteCR(ctx context.Context, deployment *Deployment, obj client.Object, instanceName string) error {
+	if err := deployment.GetInstance(ctx, instanceName, obj); err != nil {
+		return fmt.Errorf("unable to get instance %s: %w", instanceName, err)
 	}
-
-	mcRef := deployment.GetName()
-	standalone, err := config.DeployStandaloneWithLM(ctx, deployment, deployment.GetName(), mcRef)
-	if err != nil {
-		return S1WithLMSetup{}, fmt.Errorf("unable to deploy standalone instance with LM: %w", err)
+	if err := deployment.DeleteCR(ctx, obj); err != nil {
+		return fmt.Errorf("unable to delete instance %s: %w", instanceName, err)
 	}
-
-	VerifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, standalone)
-
-	mc, resourceVersion, err := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
-	if err != nil {
-		return S1WithLMSetup{}, fmt.Errorf("unable to deploy Monitoring Console: %w", err)
-	}
-
-	namespaceScopedSecretName := fmt.Sprintf(NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
-	if _, err = GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName); err != nil {
-		return S1WithLMSetup{}, fmt.Errorf("unable to get secret struct: %w", err)
-	}
-
-	return S1WithLMSetup{
-		Standalone:                standalone,
-		Mc:                        mc,
-		ResourceVersion:           resourceVersion,
-		NamespaceScopedSecretName: namespaceScopedSecretName,
-	}, nil
+	return nil
 }

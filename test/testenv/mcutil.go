@@ -25,6 +25,7 @@ import (
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -149,7 +150,7 @@ type MCVersionConfig struct {
 
 	// NewCMObject returns a new, empty cluster-coordinator CR
 	// (*ClusterMaster for V3, *ClusterManager for V4).
-	NewCMObject func() interface{}
+	NewCMObject func() client.Object
 
 	// VerifyCMReady asserts the cluster coordinator has reached Ready phase.
 	VerifyCMReady func(ctx context.Context, d *Deployment, te *TestCaseEnv) error

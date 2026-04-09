@@ -21,17 +21,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// WorkflowResult contains the result of a workflow execution
+// WorkflowResult contains the result of a workflow execution.
+// Only fields that are actually populated by the workflow are kept here;
+// extend the struct when a new workflow needs to return additional CRs.
 type WorkflowResult struct {
-	Standalone        *enterpriseApi.Standalone
-	ClusterManager    *enterpriseApi.ClusterManager
-	IndexerCluster    *enterpriseApi.IndexerCluster
-	SearchHeadCluster *enterpriseApi.SearchHeadCluster
-	MonitoringConsole *enterpriseApi.MonitoringConsole
-	LicenseManager    *enterpriseApi.LicenseManager
+	Standalone *enterpriseApi.Standalone
 }
 
-// RunStandaloneDeploymentWorkflow deploys a standalone instance and verifies it's ready
+// RunStandaloneDeploymentWorkflow deploys a Standalone instance and verifies it's ready
 func (testcaseEnvInst *TestCaseEnv) RunStandaloneDeploymentWorkflow(ctx context.Context, deployment *Deployment) (*WorkflowResult, error) {
 	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, "", "")
 	if err != nil {
@@ -69,7 +66,7 @@ func (testcaseEnvInst *TestCaseEnv) RunM4DeploymentWorkflow(ctx context.Context,
 	return &WorkflowResult{}, nil
 }
 
-// RunM1DeploymentWorkflow deploys a M1 multisite indexer cluster (no SHC) and verifies components
+// RunM1DeploymentWorkflow deploys an M1 multisite Indexer Cluster (no SHC) and verifies components
 func (testcaseEnvInst *TestCaseEnv) RunM1DeploymentWorkflow(ctx context.Context, deployment *Deployment, indexerReplicas int, siteCount int) (*WorkflowResult, error) {
 	if err := deployment.DeployMultisiteCluster(ctx, deployment.GetName(), indexerReplicas, siteCount, ""); err != nil {
 		return nil, fmt.Errorf("unable to deploy M1 cluster: %w", err)
@@ -85,9 +82,11 @@ func (testcaseEnvInst *TestCaseEnv) RunM1DeploymentWorkflow(ctx context.Context,
 	return &WorkflowResult{}, nil
 }
 
-// RunStandaloneWithServiceAccountWorkflow deploys standalone with a service account
+// RunStandaloneWithServiceAccountWorkflow deploys a Standalone with a service account
 func (testcaseEnvInst *TestCaseEnv) RunStandaloneWithServiceAccountWorkflow(ctx context.Context, deployment *Deployment, serviceAccountName string) (*WorkflowResult, error) {
-	testcaseEnvInst.CreateServiceAccount(serviceAccountName)
+	if err := testcaseEnvInst.CreateServiceAccount(serviceAccountName); err != nil {
+		return nil, fmt.Errorf("unable to create service account: %w", err)
+	}
 
 	name := deployment.GetName()
 	spec := enterpriseApi.StandaloneSpec{
@@ -111,7 +110,7 @@ func (testcaseEnvInst *TestCaseEnv) RunStandaloneWithServiceAccountWorkflow(ctx 
 	}
 
 	standalonePodName := fmt.Sprintf(StandalonePod, name, 0)
-	if err = testcaseEnvInst.VerifyServiceAccountConfiguredOnPod(testcaseEnvInst.GetName(), standalonePodName, serviceAccountName); err != nil {
+	if err = testcaseEnvInst.VerifyServiceAccountConfiguredOnPod(ctx, testcaseEnvInst.GetName(), standalonePodName, serviceAccountName); err != nil {
 		return nil, fmt.Errorf("service account not configured: %w", err)
 	}
 

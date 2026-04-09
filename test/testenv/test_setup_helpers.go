@@ -290,6 +290,8 @@ func SetupLicenseConfigMap(ctx context.Context, testcaseEnvInst *TestCaseEnv) er
 		return fmt.Errorf("unable to download license file: %w", err)
 	}
 
-	testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+	if err := testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath); err != nil {
+		return fmt.Errorf("unable to create license config map: %w", err)
+	}
 	return nil
 }

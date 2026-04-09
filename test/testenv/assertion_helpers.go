@@ -21,6 +21,7 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // ScaleSearchHeadCluster scales a Search Head Cluster to the specified replica count
@@ -64,7 +65,7 @@ func (testcaseenv *TestCaseEnv) ScaleIndexerCluster(ctx context.Context, deploym
 }
 
 // UpdateMonitoringConsoleRefAndVerify updates the MonitoringConsoleRef in a CR and waits for the change to apply
-func (testcaseenv *TestCaseEnv) UpdateMonitoringConsoleRefAndVerify(ctx context.Context, deployment *Deployment, obj interface{}, instanceName string, newMCName string) error {
+func (testcaseenv *TestCaseEnv) UpdateMonitoringConsoleRefAndVerify(ctx context.Context, deployment *Deployment, obj client.Object, instanceName string, newMCName string) error {
 	// Get current resource version before update
 	resourceVersion := testcaseenv.GetResourceVersion(ctx, deployment, obj)
 
@@ -157,17 +158,11 @@ func (testcaseenv *TestCaseEnv) VerifyM1ClusterReady(ctx context.Context, deploy
 }
 
 // VerifyM4ClusterReady verifies the cluster coordinator, indexers, multisite status, and SHC are ready.
+// It delegates to VerifyM4ComponentsReady, adapting the callback signature.
 func (testcaseenv *TestCaseEnv) VerifyM4ClusterReady(ctx context.Context, deployment *Deployment, siteCount int, verifyCoordinator func(context.Context, *Deployment) error) error {
-	if err := verifyCoordinator(ctx, deployment); err != nil {
-		return err
-	}
-	if err := testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount); err != nil {
-		return err
-	}
-	if err := testcaseenv.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount); err != nil {
-		return err
-	}
-	return testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
+	return testcaseenv.VerifyM4ComponentsReady(ctx, deployment, siteCount, func() error {
+		return verifyCoordinator(ctx, deployment)
+	})
 }
 
 // VerifyM4IndexersAndSHCReady verifies the cluster coordinator, indexers, and SHC are ready (without multisite check).

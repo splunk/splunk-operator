@@ -28,6 +28,7 @@ import (
 // RunS1MultipleIndexesTest runs the standard S1 multiple indexes SmartStore test workflow
 func RunS1MultipleIndexesTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, waitTimeout time.Duration) {
 	volName := "test-volume-" + testenv.RandomDNSName(3)
+	// Each key is unique at runtime because RandomDNSName generates distinct suffixes.
 	indexVolumeMap := map[string]string{
 		"test-index-" + testenv.RandomDNSName(3): volName,
 		"test-index-" + testenv.RandomDNSName(3): volName,
@@ -128,19 +129,19 @@ func RunS1DefaultVolumesTest(ctx context.Context, deployment *testenv.Deployment
 	serverConfPath := "/opt/splunk/etc/apps/splunk-operator/local/server.conf"
 
 	// Validate MaxCacheSizeMB
-	Expect(testcaseEnvInst.VerifyConfOnPod(podName, serverConfPath, "max_cache_size", fmt.Sprint(cacheManagerSmartStoreSpec.MaxCacheSizeMB))).To(Succeed(), "MaxCacheSizeMB mismatch")
+	Expect(testcaseEnvInst.VerifyConfOnPod(ctx, podName, serverConfPath, "max_cache_size", fmt.Sprint(cacheManagerSmartStoreSpec.MaxCacheSizeMB))).To(Succeed(), "MaxCacheSizeMB mismatch")
 
 	// Validate EvictionPaddingSizeMB
-	Expect(testcaseEnvInst.VerifyConfOnPod(podName, serverConfPath, "eviction_padding", fmt.Sprint(cacheManagerSmartStoreSpec.EvictionPaddingSizeMB))).To(Succeed(), "EvictionPaddingSizeMB mismatch")
+	Expect(testcaseEnvInst.VerifyConfOnPod(ctx, podName, serverConfPath, "eviction_padding", fmt.Sprint(cacheManagerSmartStoreSpec.EvictionPaddingSizeMB))).To(Succeed(), "EvictionPaddingSizeMB mismatch")
 
 	// Validate MaxConcurrentDownloads
-	Expect(testcaseEnvInst.VerifyConfOnPod(podName, serverConfPath, "max_concurrent_downloads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentDownloads))).To(Succeed(), "MaxConcurrentDownloads mismatch")
+	Expect(testcaseEnvInst.VerifyConfOnPod(ctx, podName, serverConfPath, "max_concurrent_downloads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentDownloads))).To(Succeed(), "MaxConcurrentDownloads mismatch")
 
 	// Validate MaxConcurrentUploads
-	Expect(testcaseEnvInst.VerifyConfOnPod(podName, serverConfPath, "max_concurrent_uploads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentUploads))).To(Succeed(), "MaxConcurrentUploads mismatch")
+	Expect(testcaseEnvInst.VerifyConfOnPod(ctx, podName, serverConfPath, "max_concurrent_uploads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentUploads))).To(Succeed(), "MaxConcurrentUploads mismatch")
 
 	// Validate EvictionPolicy
-	Expect(testcaseEnvInst.VerifyConfOnPod(podName, serverConfPath, "eviction_policy", cacheManagerSmartStoreSpec.EvictionPolicy)).To(Succeed(), "EvictionPolicy mismatch")
+	Expect(testcaseEnvInst.VerifyConfOnPod(ctx, podName, serverConfPath, "eviction_policy", cacheManagerSmartStoreSpec.EvictionPolicy)).To(Succeed(), "EvictionPolicy mismatch")
 }
 
 // RunS1EphemeralStorageTest deploys a Standalone with one ephemeral storage volume configured and verifies it is ready.

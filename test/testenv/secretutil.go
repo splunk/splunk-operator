@@ -89,8 +89,8 @@ func GetMountedKey(ctx context.Context, deployment *Deployment, podName string, 
 	return stdout
 }
 
-// GetRandomeHECToken generates a random HEC token
-func GetRandomeHECToken() string {
+// GetRandomHECToken generates a random HEC token
+func GetRandomHECToken() string {
 	return fmt.Sprintf("%s-%s-%s-%s-%s", RandomHex(8), RandomHex(4), RandomHex(4), RandomHex(4), RandomHex(12))
 }
 
@@ -210,8 +210,8 @@ func GetSecretFromInputsConf(podName string, ns string, configName string, stanz
 // GenerateAndApplySecretUpdate creates randomized secret data and applies it to the namespace-scoped
 // secret object, returning the updated data map for subsequent verification.
 func GenerateAndApplySecretUpdate(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, namespaceScopedSecretName string) (map[string][]byte, error) {
-	modifiedHecToken := GetRandomeHECToken()
-	modifiedValue := RandomDNSName(10)
+	modifiedHecToken := GetRandomHECToken()
+	modifiedValue := RandomDNSName(24)
 	updatedSecretData := GetSecretDataMap(modifiedHecToken, modifiedValue, modifiedValue, modifiedValue, modifiedValue)
 	if err := ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, updatedSecretData); err != nil {
 		return nil, fmt.Errorf("unable to update secret object: %w", err)

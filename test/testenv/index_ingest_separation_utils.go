@@ -63,9 +63,15 @@ func (testcaseEnvInst *TestCaseEnv) SetupIngestorStack(ctx context.Context, depl
 		return fmt.Errorf("unable to deploy Indexer Cluster: %w", err)
 	}
 
-	testcaseEnvInst.VerifyIngestorReady(ctx, deployment)
-	testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-	testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+	if err := testcaseEnvInst.VerifyIngestorReady(ctx, deployment); err != nil {
+		return fmt.Errorf("ingestor not ready: %w", err)
+	}
+	if err := testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment); err != nil {
+		return fmt.Errorf("cluster manager not ready: %w", err)
+	}
+	if err := testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment); err != nil {
+		return fmt.Errorf("indexers not ready: %w", err)
+	}
 	return nil
 }
 

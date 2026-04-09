@@ -1404,7 +1404,10 @@ var _ = Describe("s1appfw test", func() {
 
 			// ############ Verify livenessProbe and readinessProbe config object and scripts############
 			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
-			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+			err = wait.PollUntilContextTimeout(ctx, testenv.PollInterval, 5*time.Minute, true, func(ctx context.Context) (bool, error) {
+				_, getErr := testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+				return getErr == nil, nil
+			})
 			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
 			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
 			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())

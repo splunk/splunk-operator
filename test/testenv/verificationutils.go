@@ -91,9 +91,15 @@ func getPodDetails(ns, podName string) (*PodDetailsStruct, error) {
 
 // PollConsistently verifies a condition holds for the entire duration.
 // condFn should return nil if the condition holds, or an error if it fails.
-func PollConsistently(duration, interval time.Duration, condFn func() error) error {
+// The check is abandoned early if ctx is cancelled.
+func PollConsistently(ctx context.Context, duration, interval time.Duration, condFn func() error) error {
 	deadline := time.Now().Add(duration)
 	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		if err := condFn(); err != nil {
 			return fmt.Errorf("consistency check failed: %w", err)
 		}
@@ -118,8 +124,10 @@ func (testenv *TestCaseEnv) VerifyMonitoringConsoleReady(ctx context.Context, de
 	}
 
 	// In a steady state, we should stay in Ready and not flip-flop around
-	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
-		_ = deployment.GetInstance(ctx, mcName, monitoringConsole)
+	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+		if err := deployment.GetInstance(ctx, mcName, monitoringConsole); err != nil {
+			testenv.Log.Info("Transient error refreshing MonitoringConsole during consistency check", "error", err)
+		}
 		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "monitoring-console")
 		if monitoringConsole.Status.Phase != enterpriseApi.PhaseReady {
 			return fmt.Errorf("monitoring console phase flipped to %s", monitoringConsole.Status.Phase)
@@ -145,8 +153,10 @@ func (testenv *TestCaseEnv) VerifyStandaloneReady(ctx context.Context, deploymen
 	DumpGetPods(testenv.GetName())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
-	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
-		_ = deployment.GetInstance(ctx, standalone.Name, standalone)
+	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+		if err := deployment.GetInstance(ctx, standalone.Name, standalone); err != nil {
+			testenv.Log.Info("Transient error refreshing Standalone during consistency check", "error", err)
+		}
 		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "standalone")
 		if standalone.Status.Phase != enterpriseApi.PhaseReady {
 			return fmt.Errorf("standalone phase flipped to %s", standalone.Status.Phase)
@@ -183,8 +193,10 @@ func (testenv *TestCaseEnv) VerifySearchHeadClusterReady(ctx context.Context, de
 	DumpGetPods(testenv.GetName())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
-	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), shc)
+	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+		if err := deployment.GetInstance(ctx, instanceName, shc); err != nil {
+			testenv.Log.Info("Transient error refreshing SearchHeadCluster during consistency check", "error", err)
+		}
 		testenv.Log.Info("Check for Consistency Search Head Cluster phase to be ready", "instance", shc.ObjectMeta.Name, "phase", shc.Status.Phase)
 		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-shc-")
 		if shc.Status.Phase != enterpriseApi.PhaseReady {
@@ -213,8 +225,10 @@ func (testenv *TestCaseEnv) VerifySingleSiteIndexersReady(ctx context.Context, d
 	DumpGetPods(testenv.GetName())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
-	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
-		_ = deployment.GetInstance(ctx, instanceName, idc)
+	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+		if err := deployment.GetInstance(ctx, instanceName, idc); err != nil {
+			testenv.Log.Info("Transient error refreshing IndexerCluster during consistency check", "error", err)
+		}
 		testenv.Log.Info("Check for Consistency indexer instance's phase to be ready", "instance", instanceName, "phase", idc.Status.Phase)
 		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-idxc-indexer-")
 		if idc.Status.Phase != enterpriseApi.PhaseReady {
@@ -243,8 +257,10 @@ func (testenv *TestCaseEnv) VerifyIngestorReady(ctx context.Context, deployment 
 	DumpGetPods(testenv.GetName())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
-	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
-		_ = deployment.GetInstance(ctx, instanceName, ingest)
+	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+		if err := deployment.GetInstance(ctx, instanceName, ingest); err != nil {
+			testenv.Log.Info("Transient error refreshing IngestorCluster during consistency check", "error", err)
+		}
 		testenv.Log.Info("Check for Consistency ingestor instance's phase to be ready", "instance", instanceName, "phase", ingest.Status.Phase)
 		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-ingest-")
 		if ingest.Status.Phase != enterpriseApi.PhaseReady {
@@ -272,8 +288,10 @@ func (testenv *TestCaseEnv) VerifyClusterManagerReady(ctx context.Context, deplo
 	DumpGetPods(testenv.GetName())
 
 	// In a steady state, cluster-manager should stay in Ready and not flip-flop around
-	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), cm)
+	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+		if err := deployment.GetInstance(ctx, deployment.GetName(), cm); err != nil {
+			testenv.Log.Info("Transient error refreshing ClusterManager during consistency check", "error", err)
+		}
 		testenv.Log.Info("Check for Consistency "+splcommon.ClusterManager+" phase to be ready", "instance", cm.ObjectMeta.Name, "phase", cm.Status.Phase)
 		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "cluster-manager")
 		testenv.Log.Info("Check for Consistency cluster-manager phase to be ready", "instance", cm.ObjectMeta.Name, "phase", cm.Status.Phase)
@@ -302,8 +320,10 @@ func (testenv *TestCaseEnv) VerifyClusterMasterReady(ctx context.Context, deploy
 	DumpGetPods(testenv.GetName())
 
 	// In a steady state, cluster-master should stay in Ready and not flip-flop around
-	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), cm)
+	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+		if err := deployment.GetInstance(ctx, deployment.GetName(), cm); err != nil {
+			testenv.Log.Info("Transient error refreshing ClusterMaster during consistency check", "error", err)
+		}
 		testenv.Log.Info("Check for Consistency cluster-master phase to be ready", "instance", cm.ObjectMeta.Name, "phase", cm.Status.Phase)
 		if cm.Status.Phase != enterpriseApi.PhaseReady {
 			return fmt.Errorf("cluster master phase flipped to %s", cm.Status.Phase)
@@ -335,8 +355,10 @@ func (testenv *TestCaseEnv) VerifyIndexersReady(ctx context.Context, deployment 
 		}
 
 		// In a steady state, we should stay in Ready and not flip-flop around
-		err = PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
-			_ = deployment.GetInstance(ctx, instanceName, idc)
+		err = PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+			if err := deployment.GetInstance(ctx, instanceName, idc); err != nil {
+				testenv.Log.Info("Transient error refreshing IndexerCluster site during consistency check", "error", err)
+			}
 			testenv.Log.Info("Check for Consistency indexer site instance phase to be ready", "instance", instanceName, "phase", idc.Status.Phase)
 			DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-idxc-indexer-")
 			if idc.Status.Phase != enterpriseApi.PhaseReady {
@@ -393,7 +415,7 @@ func (testenv *TestCaseEnv) VerifyRFSFMet(ctx context.Context, deployment *Deplo
 
 // VerifyNoDisconnectedSHPresentOnCM verifies no disconnected SH is present on Cluster Manager
 func (testenv *TestCaseEnv) VerifyNoDisconnectedSHPresentOnCM(ctx context.Context, deployment *Deployment) error {
-	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
+	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
 		shStatus := CheckSearchHeadRemoved(ctx, deployment)
 		testenv.Log.Info("Verifying no Search Head in DISCONNECTED state present on Cluster Manager", "status", shStatus)
 		if !shStatus {
@@ -423,8 +445,10 @@ func (testenv *TestCaseEnv) VerifyLicenseManagerReady(ctx context.Context, deplo
 	}
 
 	// In a steady state, we should stay in Ready and not flip-flop around
-	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
+	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+		if err := deployment.GetInstance(ctx, deployment.GetName(), LicenseManager); err != nil {
+			testenv.Log.Info("Transient error refreshing LicenseManager during consistency check", "error", err)
+		}
 		if LicenseManager.Status.Phase != enterpriseApi.PhaseReady {
 			return fmt.Errorf("license manager phase flipped to %s", LicenseManager.Status.Phase)
 		}
@@ -452,8 +476,10 @@ func (testenv *TestCaseEnv) VerifyLicenseMasterReady(ctx context.Context, deploy
 	}
 
 	// In a steady state, we should stay in Ready and not flip-flop around
-	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseMaster)
+	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+		if err := deployment.GetInstance(ctx, deployment.GetName(), LicenseMaster); err != nil {
+			testenv.Log.Info("Transient error refreshing LicenseMaster during consistency check", "error", err)
+		}
 		if LicenseMaster.Status.Phase != enterpriseApi.PhaseReady {
 			return fmt.Errorf("license master phase flipped to %s", LicenseMaster.Status.Phase)
 		}
@@ -463,7 +489,7 @@ func (testenv *TestCaseEnv) VerifyLicenseMasterReady(ctx context.Context, deploy
 
 // VerifyLMConfiguredOnPod verify LM is configured on given POD
 func VerifyLMConfiguredOnPod(ctx context.Context, deployment *Deployment, podName string) error {
-	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
+	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
 		lmConfigured := CheckLicenseManagerConfigured(ctx, deployment, podName)
 		if !lmConfigured {
 			return fmt.Errorf("license manager not configured on pod %s", podName)
@@ -473,8 +499,8 @@ func VerifyLMConfiguredOnPod(ctx context.Context, deployment *Deployment, podNam
 }
 
 // VerifyServiceAccountConfiguredOnPod check if given service account is configured on given pod
-func (testenv *TestCaseEnv) VerifyServiceAccountConfiguredOnPod(ns string, podName string, serviceAccount string) error {
-	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
+func (testenv *TestCaseEnv) VerifyServiceAccountConfiguredOnPod(ctx context.Context, ns string, podName string, serviceAccount string) error {
+	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
 		podDetails, err := getPodDetails(ns, podName)
 		if err != nil {
 			testenv.Log.Error(err, "Failed to get pod details", "pod", podName)
@@ -499,7 +525,7 @@ func (testenv *TestCaseEnv) VerifyIndexFoundOnPod(ctx context.Context, deploymen
 
 // VerifyIndexConfigsMatch verify index specific config
 func (testenv *TestCaseEnv) VerifyIndexConfigsMatch(ctx context.Context, deployment *Deployment, podName string, indexName string, maxGlobalDataSizeMB int, maxGlobalRawDataSizeMB int) error {
-	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
+	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
 		indexFound, data := GetIndexOnPod(ctx, deployment, podName, indexName)
 		testenv.Log.Info("Checking status of index on pod", "podName", podName, "indexName", indexName, "status", indexFound)
 		if !indexFound {
@@ -529,8 +555,8 @@ func (testenv *TestCaseEnv) VerifyIndexExistsOnS3(ctx context.Context, deploymen
 }
 
 // VerifyConfOnPod Verify give conf and value on config file on pod
-func (testenv *TestCaseEnv) VerifyConfOnPod(podName string, confFilePath string, config string, value string) error {
-	return PollConsistently(ConsistentDuration, ConsistentPollInterval, func() error {
+func (testenv *TestCaseEnv) VerifyConfOnPod(ctx context.Context, podName string, confFilePath string, config string, value string) error {
+	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
 		confLine, err := GetConfLineFromPod(podName, confFilePath, testenv.GetName(), config, "", false)
 		if err != nil {
 			testenv.Log.Error(err, "Failed to get config on pod")
@@ -603,94 +629,21 @@ func (testenv *TestCaseEnv) VerifyMonitoringConsolePhase(ctx context.Context, de
 }
 
 // GetResourceVersion get resource version id
-func (testenv *TestCaseEnv) GetResourceVersion(ctx context.Context, deployment *Deployment, instance interface{}) string {
-	var newResourceVersion string
-	var err error
-
-	switch cr := instance.(type) {
-	case *enterpriseApi.Standalone:
-		err = deployment.GetInstance(ctx, cr.Name, cr)
-		newResourceVersion = cr.ResourceVersion
-	case *enterpriseApi.LicenseManager:
-		err = deployment.GetInstance(ctx, cr.Name, cr)
-		newResourceVersion = cr.ResourceVersion
-	case *enterpriseApi.IndexerCluster:
-		err = deployment.GetInstance(ctx, cr.Name, cr)
-		newResourceVersion = cr.ResourceVersion
-	case *enterpriseApi.ClusterManager:
-		err = deployment.GetInstance(ctx, cr.Name, cr)
-		newResourceVersion = cr.ResourceVersion
-	case *enterpriseApi.MonitoringConsole:
-		err = deployment.GetInstance(ctx, cr.Name, cr)
-		newResourceVersion = cr.ResourceVersion
-	case *enterpriseApi.SearchHeadCluster:
-		err = deployment.GetInstance(ctx, cr.Name, cr)
-		newResourceVersion = cr.ResourceVersion
-	default:
+func (testenv *TestCaseEnv) GetResourceVersion(ctx context.Context, deployment *Deployment, obj client.Object) string {
+	if err := deployment.GetInstance(ctx, obj.GetName(), obj); err != nil {
 		return "-1"
 	}
-	if err != nil {
-		return "-1"
-	}
-	return newResourceVersion
+	return obj.GetResourceVersion()
 }
 
 // VerifyCustomResourceVersionChanged verify the version id
-func (testenv *TestCaseEnv) VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deployment, instance interface{}, resourceVersion string) error {
+func (testenv *TestCaseEnv) VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deployment, obj client.Object, resourceVersion string) error {
 	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
-		var kind string
-		var newResourceVersion string
-		var name string
-		var err error
-
-		switch cr := instance.(type) {
-		case *enterpriseApi.Standalone:
-			err = deployment.GetInstance(ctx, cr.Name, cr)
-			kind = cr.Kind
-			newResourceVersion = cr.ResourceVersion
-			name = cr.Name
-		case *enterpriseApi.LicenseManager:
-			err = deployment.GetInstance(ctx, cr.Name, cr)
-			kind = cr.Kind
-			newResourceVersion = cr.ResourceVersion
-			name = cr.Name
-		case *enterpriseApiV3.LicenseMaster:
-			err = deployment.GetInstance(ctx, cr.Name, cr)
-			kind = cr.Kind
-			newResourceVersion = cr.ResourceVersion
-			name = cr.Name
-		case *enterpriseApi.IndexerCluster:
-			err = deployment.GetInstance(ctx, cr.Name, cr)
-			kind = cr.Kind
-			newResourceVersion = cr.ResourceVersion
-			name = cr.Name
-		case *enterpriseApi.ClusterManager:
-			err = deployment.GetInstance(ctx, cr.Name, cr)
-			kind = cr.Kind
-			newResourceVersion = cr.ResourceVersion
-			name = cr.Name
-		case *enterpriseApiV3.ClusterMaster:
-			err = deployment.GetInstance(ctx, cr.Name, cr)
-			kind = cr.Kind
-			newResourceVersion = cr.ResourceVersion
-			name = cr.Name
-		case *enterpriseApi.MonitoringConsole:
-			err = deployment.GetInstance(ctx, cr.Name, cr)
-			kind = cr.Kind
-			newResourceVersion = cr.ResourceVersion
-			name = cr.Name
-		case *enterpriseApi.SearchHeadCluster:
-			err = deployment.GetInstance(ctx, cr.Name, cr)
-			newResourceVersion = cr.ResourceVersion
-			kind = cr.Kind
-			name = cr.Name
-		default:
-			return false, fmt.Errorf("unsupported CR type")
-		}
-		if err != nil {
+		if err := deployment.GetInstance(ctx, obj.GetName(), obj); err != nil {
 			return false, nil
 		}
-		testenv.Log.Info("Waiting for CR status change", "kind", kind, "instance", name, "notExpected", resourceVersion, "actualResourceVersion", newResourceVersion)
+		newResourceVersion := obj.GetResourceVersion()
+		testenv.Log.Info("Waiting for CR status change", "type", fmt.Sprintf("%T", obj), "instance", obj.GetName(), "notExpected", resourceVersion, "actualResourceVersion", newResourceVersion)
 		DumpGetPods(testenv.GetName())
 		return newResourceVersion != resourceVersion, nil
 	})
@@ -714,7 +667,7 @@ func (testenv *TestCaseEnv) VerifyCPULimits(deployment *Deployment, podName stri
 	})
 }
 
-// VerifyResourceConstraints verifies value of CPU limits is as expected
+// VerifyResourceConstraints verifies that all resource constraints (CPU/memory limits and requests) match on at least one container.
 func (testenv *TestCaseEnv) VerifyResourceConstraints(deployment *Deployment, podName string, res corev1.ResourceRequirements) error {
 	return wait.PollUntilContextTimeout(context.TODO(), PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
 		podDetails, err := getPodDetails(testenv.GetName(), podName)
@@ -722,30 +675,22 @@ func (testenv *TestCaseEnv) VerifyResourceConstraints(deployment *Deployment, po
 			testenv.Log.Error(err, "Failed to get pod details", "pod", podName)
 			return false, nil
 		}
-		result := false
 
 		for i := 0; i < len(podDetails.Spec.Containers); i++ {
-			if strings.Contains(podDetails.Spec.Containers[i].Resources.Limits.CPU, res.Limits.Cpu().String()) {
-				result = true
-				testenv.Log.Info("Verifying CPU limits", "pod", podName, "found", podDetails.Spec.Containers[i].Resources.Limits.CPU, "expected", res.Limits.Cpu().String())
-			}
+			c := podDetails.Spec.Containers[i]
+			cpuLimits := strings.Contains(c.Resources.Limits.CPU, res.Limits.Cpu().String())
+			memLimits := strings.Contains(c.Resources.Limits.Memory, res.Limits.Memory().String())
+			cpuRequests := strings.Contains(c.Resources.Requests.CPU, res.Requests.Cpu().String())
+			memRequests := strings.Contains(c.Resources.Requests.Memory, res.Requests.Memory().String())
 
-			if strings.Contains(podDetails.Spec.Containers[i].Resources.Limits.Memory, res.Limits.Memory().String()) {
-				result = true
-				testenv.Log.Info("Verifying Memory limits", "pod", podName, "found", podDetails.Spec.Containers[i].Resources.Limits.Memory, "expected", res.Limits.Memory().String())
-			}
-
-			if strings.Contains(podDetails.Spec.Containers[i].Resources.Requests.CPU, res.Requests.Cpu().String()) {
-				result = true
-				testenv.Log.Info("Verifying CPU requests", "pod", podName, "found", podDetails.Spec.Containers[i].Resources.Requests.CPU, "expected", res.Requests.Cpu().String())
-			}
-
-			if strings.Contains(podDetails.Spec.Containers[i].Resources.Requests.Memory, res.Requests.Memory().String()) {
-				result = true
-				testenv.Log.Info("Verifying Memory requests", "pod", podName, "found", podDetails.Spec.Containers[i].Resources.Requests.Memory, "expected", res.Requests.Memory().String())
+			if cpuLimits && memLimits && cpuRequests && memRequests {
+				testenv.Log.Info("All resource constraints match", "pod", podName,
+					"cpuLimits", c.Resources.Limits.CPU, "memLimits", c.Resources.Limits.Memory,
+					"cpuRequests", c.Resources.Requests.CPU, "memRequests", c.Resources.Requests.Memory)
+				return true, nil
 			}
 		}
-		return result, nil
+		return false, nil
 	})
 }
 
@@ -853,7 +798,7 @@ func (testenv *TestCaseEnv) VerifySplunkServerConfSecrets(ctx context.Context, d
 	return nil
 }
 
-// VerifySplunkInputConfSecrets Compare secret value on passed in map to value present on input.conf for given indexer or standalone pods
+// VerifySplunkInputConfSecrets compares secret values on passed-in map to values present in input.conf for given Indexer or Standalone pods
 // Set match to true or false to indicate desired +ve or -ve match
 func (testenv *TestCaseEnv) VerifySplunkInputConfSecrets(verificationPods []string, data map[string][]byte, match bool) error {
 	secretName := "hec_token"
@@ -1712,7 +1657,7 @@ func (testenv *TestCaseEnv) WaitForAppRepoStateChange(ctx context.Context, deplo
 	})
 }
 
-// VerifyC3ClusterPVCs verifies that PVCs for SHC, deployer, indexers, and cluster manager exist or are deleted.
+// VerifyC3ClusterPVCs verifies that PVCs for SHC, Deployer, Indexers, and Cluster Manager exist or are deleted.
 func VerifyC3ClusterPVCs(testcaseEnvInst *TestCaseEnv, deployment *Deployment, clusterManagerType string, exists bool, timeout time.Duration) error {
 	if err := testcaseEnvInst.VerifyPVCsPerDeployment(deployment, "shc-search-head", 3, exists, timeout); err != nil {
 		return err
@@ -1726,7 +1671,7 @@ func VerifyC3ClusterPVCs(testcaseEnvInst *TestCaseEnv, deployment *Deployment, c
 	return testcaseEnvInst.VerifyPVCsPerDeployment(deployment, clusterManagerType, 1, exists, timeout)
 }
 
-// VerifyM4ClusterAndRFSF verifies cluster manager and multisite cluster are ready and RF/SF is met.
+// VerifyM4ClusterAndRFSF verifies Cluster Manager and multisite cluster are ready and RF/SF is met.
 func VerifyM4ClusterAndRFSF(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig, siteCount int) error {
 	if err := config.ClusterManagerReady(ctx, deployment, testcaseEnvInst); err != nil {
 		return err
@@ -1985,6 +1930,51 @@ func VerifySecretsPropagated(ctx context.Context, deployment *Deployment, testca
 	return testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, secretData, updated)
 }
 
+// S1WithLMSetup holds the resources created by SetupS1WithLMAndMC so that
+// individual test functions can operate on them without repeating the setup.
+type S1WithLMSetup struct {
+	Standalone                *enterpriseApi.Standalone
+	Mc                        *enterpriseApi.MonitoringConsole
+	ResourceVersion           string
+	NamespaceScopedSecretName string
+}
+
+// SetupS1WithLMAndMC performs the common S1 setup shared by the secret-update
+// and secret-delete tests: license config map, standalone with LM, MC, and
+// initial secret verification.
+func SetupS1WithLMAndMC(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig) (S1WithLMSetup, error) {
+	if err := SetupLicenseConfigMap(ctx, testcaseEnvInst); err != nil {
+		return S1WithLMSetup{}, err
+	}
+
+	mcRef := deployment.GetName()
+	standalone, err := config.DeployStandaloneWithLM(ctx, deployment, deployment.GetName(), mcRef)
+	if err != nil {
+		return S1WithLMSetup{}, fmt.Errorf("unable to deploy standalone instance with LM: %w", err)
+	}
+
+	if err := VerifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, standalone); err != nil {
+		return S1WithLMSetup{}, fmt.Errorf("LM or standalone not ready: %w", err)
+	}
+
+	mc, resourceVersion, err := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), deployment.GetName())
+	if err != nil {
+		return S1WithLMSetup{}, fmt.Errorf("unable to deploy Monitoring Console: %w", err)
+	}
+
+	namespaceScopedSecretName := fmt.Sprintf(NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
+	if _, err = GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName); err != nil {
+		return S1WithLMSetup{}, fmt.Errorf("unable to get secret struct: %w", err)
+	}
+
+	return S1WithLMSetup{
+		Standalone:                standalone,
+		Mc:                        mc,
+		ResourceVersion:           resourceVersion,
+		NamespaceScopedSecretName: namespaceScopedSecretName,
+	}, nil
+}
+
 // VerifyLMAndStandaloneReady waits for License Manager then Standalone to reach READY status.
 func VerifyLMAndStandaloneReady(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig, standalone *enterpriseApi.Standalone) error {
 	if err := config.LicenseManagerReady(ctx, deployment, testcaseEnvInst); err != nil {
@@ -2011,7 +2001,9 @@ func VerifyS1SecretChangeApplied(ctx context.Context, deployment *Deployment, te
 	if err := VerifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config, setup.Standalone); err != nil {
 		return err
 	}
-	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, setup.Mc, setup.ResourceVersion)
+	if err := testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, setup.Mc, setup.ResourceVersion); err != nil {
+		return err
+	}
 	return VerifySecretsPropagated(ctx, deployment, testcaseEnvInst, secretData, updated)
 }
 
@@ -2019,7 +2011,9 @@ func VerifyS1SecretChangeApplied(ctx context.Context, deployment *Deployment, te
 // secret change on a clustered deployment: MC version changed, RF/SF met, and
 // secrets propagated to all pods.
 func VerifyPostSecretChangeCluster(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, mc *enterpriseApi.MonitoringConsole, resourceVersion string, updatedSecretData map[string][]byte) error {
-	testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)
+	if err := testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion); err != nil {
+		return err
+	}
 
 	testcaseEnvInst.Log.Info("Checking RF SF after secret change")
 	if err := testcaseEnvInst.VerifyRFSFMet(ctx, deployment); err != nil {

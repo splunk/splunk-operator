@@ -162,6 +162,8 @@ type ClusterReadinessConfig struct {
 // function that returns the appropriate ClusterReadinessConfig.
 // This is the standard config type shared by test packages that loop over
 // V3 (master) and V4 (manager) variants.
+// See also MasterManagerLMTestConfig (in lmutil.go) for the license-manager
+// equivalent that returns *LicenseTestConfig instead.
 type MasterManagerTestConfig struct {
 	NamePrefix string
 	Label      string

@@ -490,7 +490,9 @@ func (testenv *TestCaseEnv) VerifyAppFrameworkState(ctx context.Context, deploym
 				verifyCtx, cancel := context.WithTimeout(ctx, deployment.GetTimeout())
 				defer cancel()
 
-				testenv.VerifyAppListPhase(verifyCtx, deployment, as.CrName, as.CrKind, as.CrAppSourceName, p, as.CrAppFileList)
+				if err := testenv.VerifyAppListPhase(verifyCtx, deployment, as.CrName, as.CrKind, as.CrAppSourceName, p, as.CrAppFileList); err != nil {
+					errChan <- fmt.Errorf("phase %v verification failed for CR %s/%s: %w", p, as.CrKind, as.CrName, err)
+				}
 			}(appSourceItem, phase)
 		}
 	}
@@ -515,7 +517,9 @@ func (testenv *TestCaseEnv) VerifyAppFrameworkState(ctx context.Context, deploym
 	for _, appSource := range appSource {
 		testenv.Log.Info(fmt.Sprintf("Verify apps %s packages are deleted from the operator pod for CR %v with name %v", appSource.CrAppVersion, appSource.CrKind, appSource.CrName))
 		opPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenv.GetName(), appSource.CrKind, deployment.GetName(), appSource.CrAppScope, appSource.CrAppSourceName)
-		testenv.VerifyAppsPackageDeletedOnOperatorContainer(ctx, deployment, []string{opPod}, appSource.CrAppFileList, opPath)
+		if err := testenv.VerifyAppsPackageDeletedOnOperatorContainer(ctx, deployment, []string{opPod}, appSource.CrAppFileList, opPath); err != nil {
+			return "", fmt.Errorf("apps packages not deleted from operator pod for CR %s/%s: %w", appSource.CrKind, appSource.CrName, err)
+		}
 	}
 
 	// Verify apps 'install' state for all CRs IN PARALLEL
@@ -537,7 +541,9 @@ func (testenv *TestCaseEnv) VerifyAppFrameworkState(ctx context.Context, deploym
 			verifyCtx, cancel := context.WithTimeout(ctx, deployment.GetTimeout())
 			defer cancel()
 
-			testenv.VerifyAppListPhase(verifyCtx, deployment, as.CrName, as.CrKind, as.CrAppSourceName, enterpriseApi.PhaseInstall, as.CrAppFileList)
+			if err := testenv.VerifyAppListPhase(verifyCtx, deployment, as.CrName, as.CrKind, as.CrAppSourceName, enterpriseApi.PhaseInstall, as.CrAppFileList); err != nil {
+				errChan <- fmt.Errorf("install phase verification failed for CR %s/%s: %w", as.CrKind, as.CrName, err)
+			}
 		}(appSourceItem)
 	}
 
@@ -561,21 +567,27 @@ func (testenv *TestCaseEnv) VerifyAppFrameworkState(ctx context.Context, deploym
 		podDownloadPath := AppStagingLocOnPod + appSource.CrAppSourceVolumeName
 		pod := appSource.CrPod
 		testenv.Log.Info(fmt.Sprintf("Verify %s apps packages are deleted on pod %s", appSource.CrAppVersion, pod))
-		testenv.VerifyAppsPackageDeletedOnContainer(ctx, deployment, pod, appSource.CrAppFileList, podDownloadPath)
+		if err := testenv.VerifyAppsPackageDeletedOnContainer(ctx, deployment, pod, appSource.CrAppFileList, podDownloadPath); err != nil {
+			return "", fmt.Errorf("apps packages not deleted on pod %s for CR %s/%s: %w", pod, appSource.CrKind, appSource.CrName, err)
+		}
 	}
 
 	// Verify bundle push status
 	for _, appSource := range appSource {
 		if (appSource.CrKind == "ClusterManager" || appSource.CrKind == "ClusterMaster") && appSource.CrAppScope == enterpriseApi.ScopeCluster {
 			testenv.Log.Info(fmt.Sprintf("Verify Cluster Manager bundle push status (%s apps) and compare bundle hash with previous bundle hash", appSource.CrAppVersion))
-			testenv.VerifyClusterManagerBundlePush(ctx, deployment, appSource.CrReplicas, clusterManagerBundleHash)
+			if err := testenv.VerifyClusterManagerBundlePush(ctx, deployment, appSource.CrReplicas, clusterManagerBundleHash); err != nil {
+				return "", fmt.Errorf("cluster manager bundle push verification failed: %w", err)
+			}
 			if clusterManagerBundleHash == "" {
 				clusterManagerBundleHash = GetClusterManagerBundleHash(ctx, deployment, appSource.CrKind)
 			}
 		}
 		if appSource.CrKind == "SearchHeadCluster" && appSource.CrAppScope == enterpriseApi.ScopeCluster {
 			testenv.Log.Info(fmt.Sprintf("Verify Deployer bundle push status (%s apps)", appSource.CrAppVersion))
-			testenv.VerifyDeployerBundlePush(ctx, deployment, testenv.GetName(), appSource.CrReplicas)
+			if err := testenv.VerifyDeployerBundlePush(ctx, deployment, testenv.GetName(), appSource.CrReplicas); err != nil {
+				return "", fmt.Errorf("deployer bundle push verification failed: %w", err)
+			}
 		}
 	}
 
@@ -583,12 +595,18 @@ func (testenv *TestCaseEnv) VerifyAppFrameworkState(ctx context.Context, deploym
 	for _, appSource := range appSource {
 		if appSource.CrAppScope == enterpriseApi.ScopeLocal {
 			testenv.Log.Info(fmt.Sprintf("Verify %s apps with 'local' scope are copied to /etc/apps/ for CR %s with name %s", appSource.CrAppVersion, appSource.CrKind, appSource.CrName))
-			testenv.VerifyAppsCopied(ctx, deployment, appSource.CrPod, appSource.CrAppList, true, appSource.CrAppScope)
+			if err := testenv.VerifyAppsCopied(ctx, deployment, appSource.CrPod, appSource.CrAppList, true, appSource.CrAppScope); err != nil {
+				return "", fmt.Errorf("local apps not copied for CR %s/%s: %w", appSource.CrKind, appSource.CrName, err)
+			}
 		} else {
 			testenv.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are NOT copied to /etc/apps/ on %v pod", appSource.CrAppVersion, appSource.CrPod))
-			testenv.VerifyAppsCopied(ctx, deployment, appSource.CrPod, appSource.CrAppList, false, appSource.CrAppScope)
+			if err := testenv.VerifyAppsCopied(ctx, deployment, appSource.CrPod, appSource.CrAppList, false, appSource.CrAppScope); err != nil {
+				return "", fmt.Errorf("cluster apps unexpectedly copied to CR pod for %s/%s: %w", appSource.CrKind, appSource.CrName, err)
+			}
 			testenv.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are copied on %v pods", appSource.CrAppVersion, appSource.CrClusterPods))
-			testenv.VerifyAppsCopied(ctx, deployment, appSource.CrClusterPods, appSource.CrAppList, true, appSource.CrAppScope)
+			if err := testenv.VerifyAppsCopied(ctx, deployment, appSource.CrClusterPods, appSource.CrAppList, true, appSource.CrAppScope); err != nil {
+				return "", fmt.Errorf("cluster apps not copied to cluster pods for %s/%s: %w", appSource.CrKind, appSource.CrName, err)
+			}
 		}
 	}
 
@@ -598,11 +616,15 @@ func (testenv *TestCaseEnv) VerifyAppFrameworkState(ctx context.Context, deploym
 		checkUpdated := appSource.CrAppVersion == "V2"
 		if appSource.CrAppScope == "local" {
 			testenv.Log.Info(fmt.Sprintf("Verify %s apps with 'local' scope for CR %s with name %s are installed on pod %s", appSource.CrAppVersion, appSource.CrKind, appSource.CrName, allPodNames))
-			testenv.VerifyAppInstalled(ctx, deployment, testenv.GetName(), allPodNames, appSource.CrAppList, true, "enabled", checkUpdated, false)
+			if err := testenv.VerifyAppInstalled(ctx, deployment, testenv.GetName(), allPodNames, appSource.CrAppList, true, "enabled", checkUpdated, false); err != nil {
+				return "", fmt.Errorf("local apps not installed for CR %s/%s: %w", appSource.CrKind, appSource.CrName, err)
+			}
 		} else {
 			allPodNames = appSource.CrClusterPods
 			testenv.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope for CR %s with name %s are installed on pods %s", appSource.CrAppVersion, appSource.CrKind, appSource.CrName, allPodNames))
-			testenv.VerifyAppInstalled(ctx, deployment, testenv.GetName(), allPodNames, appSource.CrAppList, true, "enabled", checkUpdated, true)
+			if err := testenv.VerifyAppInstalled(ctx, deployment, testenv.GetName(), allPodNames, appSource.CrAppList, true, "enabled", checkUpdated, true); err != nil {
+				return "", fmt.Errorf("cluster apps not installed for CR %s/%s: %w", appSource.CrKind, appSource.CrName, err)
+			}
 		}
 	}
 	return clusterManagerBundleHash, nil

@@ -19,6 +19,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -39,7 +40,7 @@ var masterManagerMCConfigs = []testenv.MCVersionConfig{
 		DeployM4WithMC: func(ctx context.Context, d *testenv.Deployment, name string, replicas int, siteCount int, mcRef string, shc bool) error {
 			return d.DeployMultisiteClusterMasterWithMonitoringConsole(ctx, name, replicas, siteCount, mcRef, shc)
 		},
-		NewCMObject: func() interface{} { return &enterpriseApiV3.ClusterMaster{} },
+		NewCMObject: func() client.Object { return &enterpriseApiV3.ClusterMaster{} },
 		VerifyCMReady: func(ctx context.Context, d *testenv.Deployment, te *testenv.TestCaseEnv) error {
 			return te.VerifyClusterMasterReady(ctx, d)
 		},
@@ -56,7 +57,7 @@ var masterManagerMCConfigs = []testenv.MCVersionConfig{
 		DeployM4WithMC: func(ctx context.Context, d *testenv.Deployment, name string, replicas int, siteCount int, mcRef string, shc bool) error {
 			return d.DeployMultisiteClusterWithMonitoringConsole(ctx, name, replicas, siteCount, mcRef, shc)
 		},
-		NewCMObject: func() interface{} { return &enterpriseApi.ClusterManager{} },
+		NewCMObject: func() client.Object { return &enterpriseApi.ClusterManager{} },
 		VerifyCMReady: func(ctx context.Context, d *testenv.Deployment, te *testenv.TestCaseEnv) error {
 			return te.VerifyClusterManagerReady(ctx, d)
 		},
