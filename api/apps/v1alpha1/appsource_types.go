@@ -60,10 +60,10 @@ type AppSourceSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 
-	// +kubebuilder:validation:Enum="git";"s3";"gcp";"azure"
-	// +required
 	// Type of the App Source
 	// Valid values are "git", "s3", "gcp", "azure"
+	// +kubebuilder:validation:Enum="git";"s3";"gcp";"azure"
+	// +required
 	Type string `json:"type"`
 
 	// S3 specific configuration
@@ -77,14 +77,14 @@ type AppSourceSpec struct {
 	// GCP and Azure specific configuration
 	// TODO: Add GCP and Azure specific configuration
 
-	// +required
 	// Authentication configuration
+	// +required
 	Auth AppSourceAuth `json:"auth"`
 
+	// PollIntervalSeconds is the interval in seconds to poll remote repository
 	// +kubebuilder:default=60
 	// +optional
-	// Polling interval in seconds
-	Polling *int32 `json:"polling,omitempty"`
+	PollIntervalSeconds *int32 `json:"pollIntervalSeconds,omitempty"`
 }
 
 // AppSourceStatus defines the observed state of AppSource.
@@ -103,9 +103,9 @@ type AppSourceStatus struct {
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	// LastSyncTime represents the last time the AppSource was synced
+	// LastPolledTime represents the last time the AppSource was polled
 	// +optional
-	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
+	LastPolledTime *metav1.Time `json:"lastPolledTime,omitempty"`
 }
 
 const (
