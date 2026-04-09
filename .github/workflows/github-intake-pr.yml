@@ -36,4 +36,4 @@ jobs:
           GITLAB_PROJECT_PATH: ${{ vars.GITLAB_PROJECT_PATH }}
           GITLAB_API_TOKEN: ${{ secrets.GITLAB_INTAKE_TOKEN }}
           GITLAB_INTAKE_LABEL: ${{ vars.GITLAB_INTAKE_LABEL || 'github-intake,github-intake::pr' }}
-        run: bash hack/github-intake/pr-intake.sh
+        run: bash tools/github-intake/pr-intake.sh
