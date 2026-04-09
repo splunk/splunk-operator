@@ -88,9 +88,9 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	needsToReconcile := appSourceInstance.Generation != appSourceInstance.Status.ObservedGeneration
 	// if the generation changed, we need to reconcile asap; we shouldnt enter this block
 	// if the generation has not changed, check if we need to reconcile based on the periodic poll
-	if !needsToReconcile && appSourceInstance.Status.LastSyncTime != nil {
+	if !needsToReconcile && appSourceInstance.Status.LastPolledTime != nil {
 		// calculate the next poll time; we get the last sync time and add the poll interval
-		nextPoll := appSourceInstance.Status.LastSyncTime.Add(time.Duration(*appSourceInstance.Spec.Polling) * time.Second)
+		nextPoll := appSourceInstance.Status.LastPolledTime.Add(time.Duration(*appSourceInstance.Spec.PollIntervalSeconds) * time.Second)
 		// check if the current time is earlier than polling time
 		if time.Now().Before(nextPoll) {
 			return ctrl.Result{RequeueAfter: time.Until(nextPoll)}, nil
