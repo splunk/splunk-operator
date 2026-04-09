@@ -45,6 +45,52 @@ Located alongside source files in `pkg/`, `internal/`, and `api/` directories. R
 
 ---
 
+## What to Test (and What Not To)
+
+Integration tests should focus on **operator mechanics** — proving that the controller reconciles CRs into the correct Kubernetes state. They should not re-validate Splunk Enterprise behavior that is already tested upstream.
+
+### In scope: Operator mechanics
+
+Test behaviors the operator owns. If they break, it's an operator bug:
+
+- CR lifecycle and phase transitions (`Pending → Updating → Ready`)
+- Spec-driven workload changes — resource limits, image, replicas trigger correct rolling updates
+- PVC management — claims created, retained, or deleted per reclaim policy
+- RBAC and service accounts on pods
+- Cleanup and finalizers — deleting a CR tears down child resources correctly
+- Multi-CR coordination — CM + IndexerCluster + SHC all reach `Ready` together
+- App Framework staging — operator downloads and stages packages (the _delivery_, not Splunk's app install)
+
+### Out of scope: Splunk Enterprise features
+
+Don't test behaviors that belong to Splunk itself — it couples CI to Splunk internals and duplicates upstream coverage:
+
+- Search correctness and indexing pipeline internals
+- RF/SF replication health (reported by splunkd, not implemented by the operator)
+- App enablement and versioning inside Splunk
+- License enforcement and splunkd authentication
+
+### Gray zone
+
+Some existing tests use a Splunk-side signal as a proxy for operator correctness (e.g., `VerifyRFSFMet` after deploying an indexer cluster). This is acceptable when:
+
+1. No Kubernetes-native signal exists for the same thing
+2. The check is lightweight — a single REST call, not a multi-step search pipeline
+3. The primary assertion is still operator-level (CR phase, pod count), and the Splunk check is secondary
+
+When adding new tests, prefer asserting against `Status.Phase`, pod specs, and K8s objects over Splunk REST calls. If a test _only_ asserts Splunk-internal state with no operator-level assertion, it belongs in Splunk's test suite, not here.
+
+### Practical checklist for new tests
+
+| Question | If yes | If no |
+|----------|--------|-------|
+| Does the test break if only operator code changes? | In scope | Probably out of scope |
+| Can the assertion be made against CR status or Kubernetes objects? | Prefer that | Consider if a Splunk-side check is truly needed |
+| Would this test still be meaningful with a different backing application (not Splunk)? | Strong signal it's operator mechanics | Likely Splunk-specific |
+| Does the test exercise a code path in `pkg/splunk/` or `internal/controller/`? | In scope | Out of scope |
+
+---
+
 ## Test Architecture
 
 ### Framework Overview
