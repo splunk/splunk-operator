@@ -102,6 +102,10 @@ type AppSourceStatus struct {
 	// This will be used to determine if the AppSource needs to be reconciled
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// LastSyncTime represents the last time the AppSource was synced
+	// +optional
+	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
 }
 
 const (
