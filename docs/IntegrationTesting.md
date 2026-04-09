@@ -8,7 +8,7 @@ nav_order: 6
 
 This guide helps newcomers understand the Splunk Operator integration test framework, write new tests, execute them, and debug failures.
 
-> **Assumed:** You have a Kubernetes cluster with the Splunk Operator deployed cluster-wide (the default). If you set `--cluster-wide=false`, the test framework will deploy a namespace-scoped operator per test case instead.
+> **Assumed:** You have a Kubernetes cluster with the Splunk Operator deployed cluster-wide
 
 ---
 
@@ -99,7 +99,7 @@ The integration tests use [Ginkgo v2](https://onsi.github.io/ginkgo/) with [Gome
 
 ```mermaid
 graph TD
-  OP["Pre-deployed cluster-wide Operator (splunk-operator namespace)"]
+  OP["Pre-deployed Operator (splunk-operator namespace)"]
   subgraph TestEnv [TestEnv — per suite]
     A[controller-runtime manager + cached client]
     subgraph TestCaseEnv [TestCaseEnv — per spec]
@@ -118,12 +118,11 @@ graph TD
 - Created once per suite in `BeforeSuite`
 - Builds a controller-runtime manager with a cached Kubernetes client
 - Configures the client to work with Splunk CRD types (v3 and v4)
-- Does **not** create namespaces or deploy the operator — that happens per-spec
+- Does **not** create namespaces — that happens per-spec in `TestCaseEnv`
 
 **TestCaseEnv** (`test/testenv/testcaseenv.go`)
 - Created per `It` block via `testenv.NewDefaultTestCaseEnv(kubeClient, name)` followed by `testcaseEnvInst.NewDeployment(name)`
 - Creates a unique namespace and sets up all required resources:
-  - Namespace-scoped operator with RBAC (only when `--cluster-wide=false`; the default is `true`, which expects a pre-deployed cluster-wide operator)
   - Cloud provider index secrets (EKS/Azure/GCP), created from environment variables
   - License ConfigMap (only when `--license-file` is provided; without it, Splunk instances use trial license)
 - Torn down manually: `deployment.Teardown()` then `testcaseEnvInst.Teardown()`
@@ -147,17 +146,15 @@ sequenceDiagram
     loop For each It spec
         Suite->>TestCaseEnv: NewDefaultTestCaseEnv(kubeClient, name)
         TestCaseEnv->>Cluster: Create namespace
-        opt --cluster-wide=false
-            TestCaseEnv->>Cluster: Deploy operator with RBAC
-        end
         TestCaseEnv->>Cluster: Create cloud secrets / license
         TestCaseEnv->>Cluster: Validate prerequisites
         Suite->>Deployment: testcaseEnvInst.NewDeployment(name)
 
-        Note over Deployment,Cluster: It: your test logic
-        Deployment->>Cluster: Deploy CRs (Standalone, C3, M4, etc.)
-        Deployment->>Cluster: Verify readiness (Eventually/Consistently)
-        Deployment->>Cluster: Modify CRs, verify updates
+        critical It: your test logic
+            Deployment->>Cluster: Deploy CRs (Standalone, C3, M4, etc.)
+            Deployment->>Cluster: Verify readiness (Eventually/Consistently)
+            Deployment->>Cluster: Modify CRs, verify updates
+        end
 
         Suite->>Deployment: deployment.Teardown()
         Deployment->>Deployment: Capture pod logs
@@ -178,7 +175,7 @@ sequenceDiagram
 The simplest approach — add a new `It` block to an existing test file:
 
 ```go
-It("smoke, basic, s1: can deploy standalone with custom ports", func() {
+It("<mysuite>, <mytag>, <topology>: <human description>", func() {
     // 1. Deploy a CR
     standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
     Expect(err).To(Succeed(), "Unable to deploy standalone")
@@ -286,7 +283,7 @@ var _ = Describe("My Feature", func() {
     })
 
     Context("Standalone deployment (S1)", func() {
-        It("myfeature, integration, s1: can do something new", func() {
+        It("<mysuite>, <mytag>, <topology>: <human description>", func() {
             standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
             Expect(err).To(Succeed(), "Unable to deploy standalone")
 
@@ -303,13 +300,12 @@ var _ = Describe("My Feature", func() {
 Test names follow a tag-based convention used for `--focus` / `--skip` filtering:
 
 ```
-"<tags>, <topology>: <human description>"
+"<mysuite>, <mytag>, <topology>: <human description>"
 ```
 
 Examples:
 - `"smoke, basic, s1: can deploy a standalone instance"`
 - `"managercrcrud, integration, c3: can deploy Indexer and Search Head Cluster"`
-- `"myfeature, integration, s1: can do something new"`
 
 Tags used in CI filtering:
 - `smoke` — basic deployment checks (run on PRs)
@@ -420,7 +416,7 @@ testenv.VerifyServiceAccountConfiguredOnPod(deployment, testcaseEnvInst.GetName(
 - A Kubernetes cluster with `kubectl` configured
 - Ginkgo v2 CLI — `make setup/ginkgo`
 - Operator and Splunk Enterprise images pushed to a registry your cluster can pull from (see below)
-- Operator deployed cluster-wide — `make deploy IMG=<image> NAMESPACE=splunk-operator`. With `--cluster-wide=false`, the framework deploys a namespace-scoped operator per test case using the `--operator-image` flag instead
+- Operator deployed cluster-wide — `make deploy IMG=<image> NAMESPACE=splunk-operator`
 - _(Optional)_ Splunk Enterprise license file via `--license-file=<path>` — without it, instances use trial license
 
 > **Splunk employees:** For internal instructions on provisioning test clusters and obtaining Enterprise license files, see [go/sok-test-setup](http://go/sok-test-setup).
@@ -428,12 +424,11 @@ testenv.VerifyServiceAccountConfiguredOnPod(deployment, testcaseEnvInst.GetName(
 **Build and push the operator image:**
 
 ```bash
-# Single-platform build
-make docker-build IMG=<registry>/splunk-operator:latest
-make docker-push  IMG=<registry>/splunk-operator:latest
-
-# Multi-platform build (linux/amd64 + linux/arm64, pushes automatically)
+# Multi-platform build (linux/amd64 + linux/arm64 by default, pushes automatically)
 make docker-buildx IMG=<registry>/splunk-operator:latest
+
+# Single-platform build
+make docker-buildx IMG=<registry>/splunk-operator:latest PLATFORMS=linux/amd64
 ```
 
 **Quick setup using `make` targets:**
@@ -442,8 +437,10 @@ make docker-buildx IMG=<registry>/splunk-operator:latest
 
 ```bash
 make setup/ginkgo                    # Install Ginkgo v2 CLI + Gomega
-make deploy IMG=<registry>/splunk-operator:latest NAMESPACE=splunk-operator  # Deploy the operator
+make deploy IMG=<registry>/splunk-operator:latest NAMESPACE=splunk-operator SPLUNK_GENERAL_TERMS=<value>
 ```
+
+> See [Splunk General Terms Acceptance](README.md#splunk-general-terms-acceptance) for the required `SPLUNK_GENERAL_TERMS` value
 
 ### Run All Integration Tests via Makefile
 
@@ -501,7 +498,6 @@ The `test/trigger-tests.sh` script wraps Ginkgo with environment variable suppor
 
 ```bash
 export TEST_FOCUS="smoke"
-export CLUSTER_WIDE="false"
 export TEST_TIMEOUT="120m"
 ./test/trigger-tests.sh <operator-image> <enterprise-image>
 ```
@@ -599,7 +595,7 @@ ginkgo -v --timeout=300m \
 | `context deadline exceeded` | CR never reached `PhaseReady` | Check operator logs, node resources, image pull errors |
 | `namespace not found` | Previous test cleanup failed | Manually delete leftover namespaces |
 | `image pull backoff` | Registry not accessible from cluster | Verify `PRIVATE_REGISTRY` and image push |
-| `prerequisites validation failed` | Cluster-wide operator not running | Deploy operator to `splunk-operator` namespace or set `--cluster-wide=false` |
+| `prerequisites validation failed` | Operator not running | Deploy operator to `splunk-operator` namespace |
 | Test hangs indefinitely | `Eventually` polling a condition that never becomes true | Check operator logs for reconciliation errors |
 
 ---
@@ -614,7 +610,6 @@ ginkgo -v --timeout=300m \
 | `SPLUNK_ENTERPRISE_IMAGE` | `splunk/splunk:latest` | Splunk Enterprise image |
 | `CLUSTER_PROVIDER` | `eks` | Cluster type: `kind`, `eks`, `azure`, `gcp` |
 | `PRIVATE_REGISTRY` | `localhost:5000` (kind) | Registry the cluster pulls images from |
-| `CLUSTER_WIDE` | `true` | If `true` (default), use pre-deployed cluster-wide operator; if `false`, deploy operator per test namespace |
 | `DEPLOYMENT_TYPE` | `manifest` | `manifest` or `helm` |
 
 ### Test Selection
@@ -668,6 +663,6 @@ Cloud provider variables below are used to create Kubernetes Secrets in each tes
 4. Write your spec using `BeforeEach` (with `NewDefaultTestCaseEnv` + `NewDeployment`) and `AfterEach` (with `deployment.Teardown()` + `testcaseEnvInst.Teardown()`)
 5. Use `deployment.Deploy*` methods to create CRs
 6. Use `testenv.*Ready` functions (e.g., `testenv.StandaloneReady`, `testenv.ClusterManagerReady`) to assert readiness
-7. Name your `It` blocks with tags for CI filtering: `"mytag, integration, s1: description"`
+7. Name your `It` blocks with tags for CI filtering: `"<mysuite>, <mytag>, <topology>: <human description>"`
 8. Run locally: `cd test/your_feature && ginkgo -v --operator-image=... --splunk-image=...`
 9. Verify in CI: push your branch and check GitHub Actions
