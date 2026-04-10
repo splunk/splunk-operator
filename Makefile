@@ -1,7 +1,5 @@
 # Default environment is default
-ENVIRONMENT ?= ${1}
-${ENVIRONMENT}:
-	ENVIRONMENT = default
+ENVIRONMENT ?= default
 
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
@@ -122,7 +120,7 @@ help: ## Display this help.
 
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-	rm config/crd/bases/_.yaml
+	rm -f config/crd/bases/_.yaml
 
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
@@ -182,7 +180,7 @@ docker-buildx:
             echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
             exit 1; \
         fi; \
-        	docker buildx create --name project-v3-builder --use || true; \
+        	docker buildx inspect project-v3-builder >/dev/null 2>&1 || docker buildx create --name project-v3-builder; \
         	docker buildx use project-v3-builder; \
         if echo "${BASE_IMAGE}" | grep -q "distroless"; then \
             DOCKERFILE="Dockerfile.distroless"; \
@@ -192,8 +190,7 @@ docker-buildx:
         docker buildx build --push --platform="${PLATFORMS}" \
             --build-arg BASE_IMAGE="${BASE_IMAGE}" \
             --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
-            --tag "${IMG}" -f "$$DOCKERFILE" .; \
-        - docker buildx rm project-v3-builder || true
+            --tag "${IMG}" -f "$$DOCKERFILE" .
 
 
 
