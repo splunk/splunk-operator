@@ -11,6 +11,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/sethvargo/go-password/password"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -43,7 +44,7 @@ func PostgresDatabaseService(
 	logger.Info("Reconciling PostgresDatabase")
 
 	updateStatus := func(conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) error {
-		return persistStatus(ctx, c, postgresDB, conditionType, conditionStatus, reason, message, phase)
+		return persistStatus(ctx, c, rc.Metrics, postgresDB, conditionType, conditionStatus, reason, message, phase)
 	}
 
 	// Finalizer: cleanup on deletion, register on creation.
@@ -183,6 +184,10 @@ func PostgresDatabaseService(
 		if err := patchManagedRoles(ctx, c, fieldManager, cluster, allRoles); err != nil {
 			logger.Error(err, "Failed to patch users in CNPG Cluster")
 			rc.emitWarning(postgresDB, EventManagedRolesPatchFailed, fmt.Sprintf("Failed to patch managed roles: %v", err))
+			if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonUsersCreationFailed,
+				fmt.Sprintf("Failed to patch managed roles: %v", err), failedDBPhase); statusErr != nil {
+				logger.Error(statusErr, "Failed to update status")
+			}
 			return ctrl.Result{}, err
 		}
 		rc.emitNormal(postgresDB, EventRoleReconciliationStarted, fmt.Sprintf("Patched managed roles: %d to add, %d to remove", len(rolesToAdd), len(rolesToRemove)))
@@ -221,6 +226,10 @@ func PostgresDatabaseService(
 	if err != nil {
 		logger.Error(err, "Failed to reconcile CNPG Databases")
 		rc.emitWarning(postgresDB, EventDatabasesReconcileFailed, fmt.Sprintf("Failed to reconcile databases: %v", err))
+		if statusErr := updateStatus(databasesReady, metav1.ConditionFalse, reasonDatabaseReconcileFailed,
+			fmt.Sprintf("Failed to reconcile databases: %v", err), failedDBPhase); statusErr != nil {
+			logger.Error(statusErr, "Failed to update status")
+		}
 		return ctrl.Result{}, err
 	}
 	if len(adopted) > 0 {
@@ -492,8 +501,9 @@ func verifyDatabasesReady(ctx context.Context, c client.Client, postgresDB *ente
 	return notReady, nil
 }
 
-func persistStatus(ctx context.Context, c client.Client, db *enterprisev4.PostgresDatabase, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) error {
+func persistStatus(ctx context.Context, c client.Client, metrics ports.Recorder, db *enterprisev4.PostgresDatabase, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) error {
 	applyStatus(db, conditionType, conditionStatus, reason, message, phase)
+	metrics.IncStatusTransition(ports.ControllerDatabase, string(conditionType), string(conditionStatus), string(reason))
 	return c.Status().Update(ctx, db)
 }
 

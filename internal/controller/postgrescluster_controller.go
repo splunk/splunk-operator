@@ -22,6 +22,8 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,8 +44,10 @@ const (
 // PostgresClusterReconciler reconciles PostgresCluster resources.
 type PostgresClusterReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme         *runtime.Scheme
+	Recorder       record.EventRecorder
+	Metrics        ports.Recorder
+	FleetCollector *pgprometheus.FleetCollector
 }
 
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters,verbs=get;list;watch;create;update;patch;delete
@@ -57,8 +61,10 @@ type PostgresClusterReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder}
-	return clustercore.PostgresClusterService(ctx, rc, req)
+	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics}
+	result, err := clustercore.PostgresClusterService(ctx, rc, req)
+	r.FleetCollector.CollectClusterMetrics(ctx, r.Client, r.Metrics)
+	return result, err
 }
 
 // SetupWithManager registers the controller and owned resource watches.

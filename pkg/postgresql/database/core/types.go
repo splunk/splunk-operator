@@ -4,16 +4,18 @@ import (
 	"time"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// ReconcileContext bundles infrastructure dependencies injected by the controller
+// ReconcileContext bundles infrastructure dependencies injected by the controller.
 type ReconcileContext struct {
 	Client   client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	Metrics  ports.Recorder
 }
 
 type reconcileDBPhases string
@@ -77,9 +79,10 @@ const (
 	reasonUsersAvailable           conditionReasons = "UsersAvailable"
 	reasonRoleConflict             conditionReasons = "RoleConflict"
 	reasonConfigMapsCreationFailed conditionReasons = "ConfigMapsCreationFailed"
-	reasonConfigMapsCreated        conditionReasons = "ConfigMapsCreated"
-	reasonPrivilegesGranted        conditionReasons = "PrivilegesGranted"
-	reasonPrivilegesGrantFailed    conditionReasons = "PrivilegesGrantFailed"
+	reasonConfigMapsCreated         conditionReasons = "ConfigMapsCreated"
+	reasonDatabaseReconcileFailed   conditionReasons = "DatabaseReconcileFailed"
+	reasonPrivilegesGranted         conditionReasons = "PrivilegesGranted"
+	reasonPrivilegesGrantFailed     conditionReasons = "PrivilegesGrantFailed"
 
 	// ClusterReady sentinel values returned by ensureClusterReady.
 	// Exported so the controller adapter can switch on them if needed.
