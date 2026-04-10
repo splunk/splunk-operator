@@ -20,10 +20,12 @@ import (
 	"context"
 	"time"
 
+	corev1
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -81,7 +83,6 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 
 		// Requeue to process the AppSource after conditions are initialized
-		logger.Info("Reconciling AppSource", "namespacedName", req.NamespacedName, "name", req.Name, "secretName", appSourceInstance.Spec.Auth.SecretRef.Name)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -99,6 +100,16 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// at this point we know it needs to reconcile
+	logger.Info("Reconciling AppSource", "namespacedName", req.NamespacedName, "name", req.Name, "secretName", appSourceInstance.Spec.Auth.SecretRef.Name)
+	secret := &corev1.Secret{}
+		secretKey := types.NamespacedName{
+			Name:      appSourceInstance.Spec.Auth.SecretRef.Name,
+			Namespace: appSourceInstance.Namespace,
+		}
+		if err := r.Get(ctx, secretKey, secret); err != nil {
+			logger.Error(err, "Failed to get secret")
+			return ctrl.Result{}, err
+		}
 
 	return ctrl.Result{}, nil
 }
