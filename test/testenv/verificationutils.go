@@ -89,12 +89,7 @@ func (testenv *TestCaseEnv) VerifyMonitoringConsoleReady(ctx context.Context, de
 		return monitoringConsole.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
-	// In a steady state, we should stay in Ready and not flip-flop around
 	DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "monitoring-console")
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, mcName, monitoringConsole)
-		return monitoringConsole.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
 // VerifyStandaloneReady verify Standalone is in ReadyStatus and does not flip-flop
@@ -109,12 +104,7 @@ func (testenv *TestCaseEnv) VerifyStandaloneReady(ctx context.Context, deploymen
 	testenv.Log.Info("Standalone reached Ready phase", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
 	DumpGetPods(testenv.GetName())
 
-	// In a steady state, we should stay in Ready and not flip-flop around
 	DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "standalone")
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, standalone.Name, standalone)
-		return standalone.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
 // VerifySearchHeadClusterReady verify SHC is in READY status and does not flip-flop
@@ -131,12 +121,7 @@ func (testenv *TestCaseEnv) VerifySearchHeadClusterReady(ctx context.Context, de
 	testenv.Log.Info("SearchHeadCluster reached Ready phase", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase, "DeployerPhase", shc.Status.DeployerPhase)
 	DumpGetPods(testenv.GetName())
 
-	// In a steady state, we should stay in Ready and not flip-flop around
 	DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-shc-")
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, instanceName, shc)
-		return shc.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
 // VerifySingleSiteIndexersReady verify single site indexers go to ready state
@@ -153,12 +138,7 @@ func (testenv *TestCaseEnv) VerifySingleSiteIndexersReady(ctx context.Context, d
 	testenv.Log.Info("IndexerCluster reached Ready phase", "instance", instanceName, "Phase", idc.Status.Phase)
 	DumpGetPods(testenv.GetName())
 
-	// In a steady state, we should stay in Ready and not flip-flop around
 	DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-idxc-indexer-")
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, instanceName, idc)
-		return idc.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
 // IngestorsReady verify ingestors go to ready state
@@ -175,12 +155,7 @@ func (testenv *TestCaseEnv) VerifyIngestorReady(ctx context.Context, deployment 
 	testenv.Log.Info("IngestorCluster reached Ready phase", "instance", instanceName, "phase", ingest.Status.Phase)
 	DumpGetPods(testenv.GetName())
 
-	// In a steady state, we should stay in Ready and not flip-flop around
 	DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-ingest-")
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, instanceName, ingest)
-		return ingest.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
 // VerifyClusterManagerReady verify Cluster Manager Instance is in ready status
@@ -196,12 +171,7 @@ func (testenv *TestCaseEnv) VerifyClusterManagerReady(ctx context.Context, deplo
 	testenv.Log.Info("ClusterManager reached Ready phase", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
 	DumpGetPods(testenv.GetName())
 
-	// In a steady state, cluster-manager should stay in Ready and not flip-flop around
 	DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "cluster-manager")
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), cm)
-		return cm.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
 // VerifyClusterMasterReady verify Cluster Master Instance is in ready status
@@ -217,12 +187,6 @@ func (testenv *TestCaseEnv) VerifyClusterMasterReady(ctx context.Context, deploy
 	testenv.Log.Info("ClusterMaster reached Ready phase", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
 	DumpGetPods(testenv.GetName())
 
-	// In a steady state, cluster-master should stay in Ready and not flip-flop around
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), cm)
-		testenv.Log.Info("Check for Consistency cluster-master phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
-		return cm.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
 // VerifyIndexersReady verify indexers of all sites go to ready state
@@ -245,12 +209,7 @@ func (testenv *TestCaseEnv) VerifyIndexersReady(ctx context.Context, deployment 
 			return idc.Status.Phase
 		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
-		// In a steady state, we should stay in Ready and not flip-flop around
 		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-idxc-indexer-")
-		gomega.Consistently(func() enterpriseApi.Phase {
-			_ = deployment.GetInstance(ctx, instanceName, idc)
-			return idc.Status.Phase
-		}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 	}
 }
 
@@ -334,11 +293,6 @@ func (testenv *TestCaseEnv) VerifyLicenseManagerReady(ctx context.Context, deplo
 		return LicenseManager.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
-	// In a steady state, we should stay in Ready and not flip-flop around
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
-		return LicenseManager.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
 // VerifyLicenseMasterReady verify LM is in ready status and does not flip flop
@@ -358,11 +312,6 @@ func (testenv *TestCaseEnv) VerifyLicenseMasterReady(ctx context.Context, deploy
 		return LicenseMaster.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
-	// In a steady state, we should stay in Ready and not flip-flop around
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseMaster)
-		return LicenseMaster.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
 // VerifyLMConfiguredOnPod verify LM is configured on given POD

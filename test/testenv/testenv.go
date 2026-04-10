@@ -58,10 +58,10 @@ const (
 	ShortPollInterval = 2 * time.Second
 
 	// ConsistentPollInterval is the interval to use to consistently check a state is stable
-	ConsistentPollInterval = 200 * time.Millisecond
+	ConsistentPollInterval = 1 * time.Second
 
 	// ConsistentDuration is use to check a state is stable
-	ConsistentDuration = 2000 * time.Millisecond
+	ConsistentDuration = 5 * time.Second
 
 	// DefaultTimeout is the max timeout before we failed.
 	DefaultTimeout = 2000 * time.Minute
