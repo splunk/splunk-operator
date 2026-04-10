@@ -22,8 +22,8 @@ import (
 	"reflect"
 	"testing"
 
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"

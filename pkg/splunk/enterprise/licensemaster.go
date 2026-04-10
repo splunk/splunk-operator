@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"

@@ -25,7 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
-	"github.com/splunk/splunk-operator/test/licensemanager"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 

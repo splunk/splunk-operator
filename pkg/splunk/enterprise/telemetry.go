@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"

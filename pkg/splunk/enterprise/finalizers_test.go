@@ -29,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"

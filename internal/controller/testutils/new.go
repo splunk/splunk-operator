@@ -1,7 +1,7 @@
 package testutils
 
 import (
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	corev1 "k8s.io/api/core/v1"
 
 	//"k8s.io/apimachinery/pkg/api/resource"

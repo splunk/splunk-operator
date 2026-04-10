@@ -24,7 +24,7 @@ import (
 	"github.com/splunk/splunk-operator/internal/controller/common"
 
 	"github.com/pkg/errors"
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
