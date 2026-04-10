@@ -82,7 +82,7 @@ func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string,
 	testenv := &TestCaseEnv{
 		kubeClient:           kubeClient,
 		name:                 name,
-		namespace:            "sok-test-" + name,
+		namespace:            name,
 		serviceAccountName:   name,
 		roleName:             name,
 		roleBindingName:      name,

@@ -589,14 +589,15 @@ On teardown, the `Deployment` object automatically captures pod logs to files. A
 ### Inspect the Cluster During/After a Test
 
 ```bash
-# List namespaces created by tests (all share the sok-test- prefix)
-kubectl get ns | grep sok-test-
+# Find namespaces that contain Splunk CRs (these are test namespaces)
+kubectl get standalone,searchheadcluster,indexercluster,clustermanager,clustermaster,\
+monitoringconsole,licensemanager,licensemaster --all-namespaces
 
-# Check operator pod in the test namespace
+# Check pods in a test namespace
 kubectl get pods -n <test-namespace>
 
-# Check operator logs
-kubectl logs -n <test-namespace> deployment/splunk-op-<test-namespace>
+# Check operator logs (cluster-wide operator runs in splunk-operator namespace)
+kubectl logs -n splunk-operator deployment/splunk-operator-controller-manager
 
 # Describe a failing CR
 kubectl describe standalone -n <test-namespace>
@@ -608,9 +609,6 @@ kubectl get events -n <test-namespace> --sort-by='.lastTimestamp'
 ### Check for Leftovers After Tests
 
 ```bash
-# All test namespaces share the sok-test- prefix
-kubectl get ns | grep sok-test-
-
 # Find any Splunk CRs still running across all namespaces
 kubectl get standalone,searchheadcluster,indexercluster,clustermanager,clustermaster,\
 monitoringconsole,licensemanager,licensemaster --all-namespaces
@@ -618,8 +616,18 @@ monitoringconsole,licensemanager,licensemaster --all-namespaces
 # Find PVCs left behind
 kubectl get pvc --all-namespaces | grep -E 'splunk-|pvc-'
 
+# Find test namespaces (test names include random suffixes like smoke-abc-xyz-def)
+kubectl get ns --no-headers -o custom-columns=':metadata.name' | \
+  grep -vE '^(default|kube-|splunk-operator)'
+
 # Clean up a specific test namespace (deletes all resources in it)
 kubectl delete ns <test-namespace>
+
+# Automated cleanup: remove all Splunk CRs, patch finalizers, and delete test namespaces
+./tools/cleanup.sh
+
+# Undeploy the operator when done testing (cleans up the splunk-operator namespace)
+make undeploy
 ```
 
 If a namespace is stuck in `Terminating`, check for resources with finalizers (see [Common Failure Patterns](#common-failure-patterns) below).
@@ -685,10 +693,11 @@ kubectl patch pvc <name> -n <namespace> \
   --type=merge -p '{"metadata":{"finalizers":null}}'
 ```
 
-All test namespaces share the `sok-test-` prefix (e.g. `sok-test-smoke-abc`, `sok-test-s1appfw-xyz`). To find leftover test namespaces:
+Test namespaces use the suite name with random suffixes (e.g. `smoke-abc-xyz-def`, `s1appfw-abc-xyz-def`). To find leftover test namespaces:
 
 ```bash
-kubectl get ns | grep sok-test-
+kubectl get ns --no-headers -o custom-columns=':metadata.name' | \
+  grep -vE '^(default|kube-|splunk-operator)'
 ```
 
 To find resources with finalizers across all namespaces:
