@@ -1,0 +1,39 @@
+name: GitHub PR Intake
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: github-intake-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  intake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout trusted base-repository automation only
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Sync PR metadata into GitLab intake record
+        env:
+          GITHUB_BACKLINK_MODE: ${{ vars.INTAKE_BACKLINK_MODE || 'none' }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLAB_BASE_URL: ${{ vars.GITLAB_BASE_URL }}
+          GITLAB_PROJECT_PATH: ${{ vars.GITLAB_PROJECT_PATH }}
+          GITLAB_API_TOKEN: ${{ secrets.GITLAB_INTAKE_TOKEN }}
+          GITLAB_INTAKE_LABEL: ${{ vars.GITLAB_INTAKE_LABEL || 'github-intake,github-intake::pr' }}
+        run: bash tools/github-intake/pr-intake.sh
