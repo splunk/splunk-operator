@@ -12,18 +12,7 @@ spec:
     kind: Standalone
     name: standalone-sample
   sourceRef:
-    kind: AppSource
-    apiVersion: apps.splunk.com/v1alpha1
-    spec:
-      type: s3
-      s3:
-        endpoint: "https://s3.amazonaws.com"
-        bucket: "my-bucket"
-        basePath: "my-path"
-      auth:
-        secretRef:
-          name: "my-secret"
-      polling: 60
+      name: appsource-sample-s3
   package:
     path: apps/sample-app.tgz
   scope: local

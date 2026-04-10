@@ -42,6 +42,12 @@ type AppPackageSpec struct {
 	Path string `json:"path"`
 }
 
+// AppSourceSpec defines the app source details.
+type AppSourceRef struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+}
+
 // AppSpec defines the desired state of App.
 type AppSpec struct {
 	// +kubebuilder:validation:Required
@@ -56,7 +62,7 @@ type AppSpec struct {
 	TargetRef AppTargetRef `json:"targetRef"`
 
 	// +kubebuilder:validation:Required
-	SourceRef AppSource `json:"sourceRef"`
+	SourceRef AppSourceRef `json:"sourceRef"`
 
 	// +kubebuilder:validation:Required
 	Package AppPackageSpec `json:"package"`
