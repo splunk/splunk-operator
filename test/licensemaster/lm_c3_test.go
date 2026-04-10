@@ -14,7 +14,6 @@
 package licensemaster
 
 import (
-	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -29,7 +28,6 @@ var _ = Describe("licensemaster test", func() {
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	var config *licensemanager.LicenseTestConfig
-	ctx := context.TODO()
 
 	BeforeEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
 		var err error
@@ -64,13 +62,13 @@ var _ = Describe("licensemaster test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster) with License Master", func() {
-		It("licensemaster, integration, c3: Splunk Operator can configure License Master with Indexers and Search Heads in C3 SVA", func() {
+		It("licensemaster, integration, c3: Splunk Operator can configure License Master with Indexers and Search Heads in C3 SVA", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			licensemanager.RunLMC3Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster) with License Master", func() {
-		It("licensemaster, integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
+		It("licensemaster, integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			licensemanager.RunLMC3AppFrameworkTest(ctx, deployment, testcaseEnvInst, testenvInstance, config)
 		})
 	})

@@ -23,6 +23,7 @@ Options:
     --sort-by FIELD      Sort by: max, p95, mean, median, count (default: p95)
     --max-duration SECS  Exclude observations longer than SECS (filters CI timeout hits)
     --exclude-timeout    Auto-detect and exclude CI timeout-ceiling observations
+    --only-passed        Only include test cases with status="passed" (exclude failed/error)
 
 Requires only the Python standard library (xml.etree, statistics, csv, json).
 """
@@ -199,6 +200,8 @@ def main():
                         help="Exclude observations longer than this many seconds")
     parser.add_argument("--exclude-timeout", action="store_true",
                         help="Auto-detect and exclude CI timeout-ceiling observations")
+    parser.add_argument("--only-passed", action="store_true",
+                        help="Only include test cases with status='passed'")
     args = parser.parse_args()
 
     # ── Collect data ──────────────────────────────────────────────
@@ -218,10 +221,14 @@ def main():
     # First pass: collect all durations (needed for --exclude-timeout auto-detection)
     raw_records = []
     pre_filter_test_durs = defaultdict(list)  # for auto-detection
+    status_filtered = 0
     for run_id, suite_name, name, classname, status, duration in parse_junit_xmls(args.junit_dir):
         total += 1
         if status == "skipped" or duration == 0.0:
             skipped += 1
+            continue
+        if args.only_passed and status != "passed":
+            status_filtered += 1
             continue
         raw_records.append((run_id, suite_name, name, classname, duration))
         all_durations.append(duration)
@@ -252,7 +259,8 @@ def main():
     for (run_id, suite_name), total_dur in suite_run_totals.items():
         suite_durations[suite_name].append(total_dur)
 
-    print(f"Parsed {total} test cases ({skipped} skipped, {filtered} filtered as timeout-hits) from {args.junit_dir}")
+    status_msg = f", {status_filtered} non-passed" if status_filtered else ""
+    print(f"Parsed {total} test cases ({skipped} skipped{status_msg}, {filtered} filtered as timeout-hits) from {args.junit_dir}")
     print(f"Unique test cases with results: {len(test_durations)}")
     print(f"Unique suites: {len(suite_durations)}")
     print(f"Unique runs: {len(run_durations)}")

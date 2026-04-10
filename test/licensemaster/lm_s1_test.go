@@ -14,7 +14,6 @@
 package licensemaster
 
 import (
-	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -30,7 +29,6 @@ var _ = Describe("Licensemaster test", func() {
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	var config *licensemanager.LicenseTestConfig
-	ctx := context.TODO()
 
 	BeforeEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
 		var err error
@@ -63,7 +61,7 @@ var _ = Describe("Licensemaster test", func() {
 	})
 
 	Context("Standalone deployment (S1) with License Master", func() {
-		It("licensemaster, smoke, s1: Splunk Operator can configure License Master with Standalone in S1 SVA", func() {
+		It("licensemaster, smoke, s1: Splunk Operator can configure License Master with Standalone in S1 SVA", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			licensemanager.RunLMS1Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})

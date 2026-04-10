@@ -14,7 +14,6 @@
 package licensemaster
 
 import (
-	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -30,7 +29,6 @@ var _ = Describe("Licensemaster test", func() {
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	var config *licensemanager.LicenseTestConfig
-	ctx := context.TODO()
 
 	BeforeEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
 		var err error
@@ -65,7 +63,7 @@ var _ = Describe("Licensemaster test", func() {
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster) with License Master", func() {
-		It("licensemaster, integration, m4: Splunk Operator can configure License Master with indexers and search head in M4 SVA", func() {
+		It("licensemaster, integration, m4: Splunk Operator can configure License Master with indexers and search head in M4 SVA", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			licensemanager.RunLMM4Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})

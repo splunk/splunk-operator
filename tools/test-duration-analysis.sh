@@ -25,6 +25,7 @@
 #   --min-samples N        Minimum observations to include (default: 1)
 #   --exclude-timeout      Auto-detect and exclude CI timeout-ceiling observations
 #   --max-duration SECS    Exclude observations longer than SECS seconds
+#   --only-passed          Only include test cases with status="passed"
 #
 # Examples:
 #   # Analyze existing XMLs

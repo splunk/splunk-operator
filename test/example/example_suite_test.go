@@ -37,7 +37,10 @@ func TestExampleSuite(t *testing.T) {
 
 	RegisterFailHandler(Fail)
 
-	RunSpecs(t, "Running "+testSuiteName)
+	sc, _ := GinkgoConfiguration()
+	sc.Timeout = testenv.ShortSuiteTimeout
+
+	RunSpecs(t, "Running "+testSuiteName, sc)
 }
 
 var _ = BeforeSuite(func() {

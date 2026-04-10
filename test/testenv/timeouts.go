@@ -36,7 +36,7 @@ const (
 	// LongTimeout for heavy tests (observed max 30–88 min):
 	// secret m4 (88m), c3appfw max (54m), m4appfw max (52m),
 	// crcrud c3 (49m), mc c3 (46m), crcrud m4 (39m), lmanager m4 (31m).
-	LongTimeout = 135 * time.Minute
+	LongTimeout = 100 * time.Minute
 )
 
 // TeardownTimeout limits AfterEach teardown (namespace/resource cleanup).
@@ -47,12 +47,16 @@ const TeardownTimeout = 10 * time.Minute
 // Sized for sequential spec execution (no ginkgo -nodes parallelism).
 // Each value must accommodate multiple specs running back-to-back.
 const (
-	// ShortSuiteTimeout for lightweight suites (≤~20 specs, ≤15 min each).
-	ShortSuiteTimeout = 60 * time.Minute
+	// ShortSuiteTimeout for lightweight suites:
+	// smartstore (7m), indingsep (12m), deletecr (14m).
+	ShortSuiteTimeout = 30 * time.Minute
 
-	// MediumSuiteTimeout for moderate suites (≤~20 specs, ≤45 min each).
-	MediumSuiteTimeout = 120 * time.Minute
+	// MediumSuiteTimeout for moderate suites:
+	// smoke (41m), s1appfw (1h00m), lmanager (1h00m).
+	MediumSuiteTimeout = 90 * time.Minute
 
-	// LongSuiteTimeout for heavy suites (c3/m4 appfw, crcrud, secret — many specs at ≤50 min each).
-	LongSuiteTimeout = 240 * time.Minute
+	// LongSuiteTimeout for heavy suites:
+	// mc (1h53m), secret (2h02m), crcrud (2h22m),
+	// m4appfw (5h29m), c3appfw (6h01m).
+	LongSuiteTimeout = 200 * time.Minute
 )
