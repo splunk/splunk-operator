@@ -113,6 +113,15 @@ spec:
             - targetRef
             - version
             type: object
+            x-kubernetes-validations:
+            - message: appID is immutable once created
+              rule: self.appID == oldSelf.appID
+            - message: targetRef is immutable once created
+              rule: self.targetRef == oldSelf.targetRef
+            - message: sourceRef is immutable once created
+              rule: self.sourceRef == oldSelf.sourceRef
+            - message: scope is immutable once created
+              rule: self.scope == oldSelf.scope
           status:
             description: AppStatus defines the observed state of App.
             properties:
