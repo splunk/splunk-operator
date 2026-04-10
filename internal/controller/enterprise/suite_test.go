@@ -36,8 +36,8 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	//+kubebuilder:scaffold:imports
 )
 

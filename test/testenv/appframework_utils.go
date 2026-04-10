@@ -15,8 +15,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	wait "k8s.io/apimachinery/pkg/util/wait"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 

@@ -2,10 +2,11 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
