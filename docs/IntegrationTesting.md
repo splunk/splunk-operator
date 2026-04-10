@@ -70,15 +70,17 @@ Don't test behaviors that belong to Splunk itself — it couples CI to Splunk in
 - App enablement and versioning inside Splunk
 - License enforcement and splunkd authentication
 
-### Gray zone
+### Splunk-side status checks
 
-Some existing tests use a Splunk-side signal as a proxy for operator correctness (e.g., `VerifyRFSFMet` after deploying an indexer cluster). This is acceptable when:
+Lightweight Splunk-side status checks are fine as a **secondary** check — for example, a single REST call like `VerifyRFSFMet` to confirm an indexer cluster is healthy after the operator finishes reconciling. Every such check must be paired with a primary operator-level assertion (CR phase, pod count, StatefulSet readiness).
 
-1. No Kubernetes-native signal exists for the same thing
-2. The check is lightweight — a single REST call, not a multi-step search pipeline
-3. The primary assertion is still operator-level (CR phase, pod count), and the Splunk check is secondary
+Guidelines for Splunk-side checks:
 
-When adding new tests, prefer asserting against `Status.Phase`, pod specs, and K8s objects over Splunk REST calls. If a test _only_ asserts Splunk-internal state with no operator-level assertion, it belongs in Splunk's test suite, not here.
+1. Keep them lightweight — a single REST call, not a multi-step search pipeline
+2. Always pair with an operator-level assertion; a Splunk-side check must never be the sole assertion in a test
+3. Prefer them when no Kubernetes-native signal exists for the same thing
+
+If a test _only_ asserts Splunk-internal state with no operator-level assertion, it belongs in Splunk's test suite, not here.
 
 ### Practical checklist for new tests
 
