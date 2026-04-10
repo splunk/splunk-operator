@@ -72,6 +72,7 @@ spec:
                 description: AppSourceSpec defines the app source details.
                 properties:
                   name:
+                    minLength: 1
                     type: string
                 required:
                 - name

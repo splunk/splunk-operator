@@ -45,6 +45,7 @@ type AppPackageSpec struct {
 // AppSourceSpec defines the app source details.
 type AppSourceRef struct {
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 }
 
