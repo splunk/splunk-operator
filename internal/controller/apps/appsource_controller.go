@@ -110,6 +110,9 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		logger.Error(err, "Failed to get secret")
 		return ctrl.Result{}, err
 	}
+	// TODO: check remote storage is accessible using the secret. we need to gothrough
+	// the custom client code to validate how to use or if we should just use gocloud.dev pacakge
+
 
 	return ctrl.Result{}, nil
 }
