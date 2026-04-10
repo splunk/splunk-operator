@@ -205,6 +205,10 @@ func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int
 		mgr.log.Info("Releasing search head cluster member from detention", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
 		return false, c.SetSearchHeadDetention(false)
+
+	case "":
+		mgr.log.Info("Member has empty Status, waiting for pod to rejoin cluster", "memberName", memberName)
+		return false, nil
 	}
 
 	// unhandled status
