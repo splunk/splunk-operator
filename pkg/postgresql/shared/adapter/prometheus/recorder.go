@@ -1,7 +1,8 @@
-package metrics
+package prometheus
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 )
 
 var (
@@ -13,7 +14,12 @@ var (
 	clusters = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "splunk_operator_postgres_clusters",
 		Help: "Current number of PostgresCluster resources by status phase.",
-	}, []string{"phase", "pooler_enabled"})
+	}, []string{"phase"})
+
+	poolerEnabledClusters = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "splunk_operator_postgres_clusters_pooler_enabled",
+		Help: "Current number of PostgresCluster resources with connection pooling enabled.",
+	})
 
 	databases = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "splunk_operator_postgres_databases",
@@ -28,6 +34,7 @@ var (
 	allCollectors = []prometheus.Collector{
 		statusTransitionsTotal,
 		clusters,
+		poolerEnabledClusters,
 		databases,
 		managedUsers,
 	}
@@ -44,7 +51,7 @@ func Register(registerer prometheus.Registerer) error {
 	return nil
 }
 
-// PrometheusRecorder implements Recorder using Prometheus client_golang.
+// PrometheusRecorder implements shared.Recorder using Prometheus client_golang.
 type PrometheusRecorder struct{}
 
 // NewPrometheusRecorder returns a new PrometheusRecorder.
@@ -56,28 +63,30 @@ func (p *PrometheusRecorder) IncStatusTransition(controller, condition, status, 
 	statusTransitionsTotal.WithLabelValues(controller, condition, status, reason).Inc()
 }
 
-func (p *PrometheusRecorder) SetClusterPhases(phases map[string]float64, poolerEnabledCount float64) {
-	clusters.Reset()
+func (p *PrometheusRecorder) SetClusterPhases(phases map[string]float64) {
+	clusters.Reset() // drop stale label combinations before re-populating
 	for phase, count := range phases {
-		clusters.WithLabelValues(phase, "false").Set(count)
-	}
-	if poolerEnabledCount > 0 {
-		clusters.WithLabelValues("", "true").Set(poolerEnabledCount)
+		clusters.WithLabelValues(phase).Set(count)
 	}
 }
 
+func (p *PrometheusRecorder) SetPoolerEnabledClusters(count float64) {
+	poolerEnabledClusters.Set(count)
+}
+
 func (p *PrometheusRecorder) SetDatabasePhases(phases map[string]float64) {
-	databases.Reset()
+	databases.Reset() // drop stale label combinations before re-populating
 	for phase, count := range phases {
 		databases.WithLabelValues(phase).Set(count)
 	}
 }
 
 func (p *PrometheusRecorder) SetManagedUsers(controller string, states map[string]float64) {
+	managedUsers.Reset() // drop stale label combinations before re-populating
 	for state, count := range states {
 		managedUsers.WithLabelValues(controller, state).Set(count)
 	}
 }
 
 // Compile-time interface check.
-var _ Recorder = (*PrometheusRecorder)(nil)
+var _ ports.Recorder = (*PrometheusRecorder)(nil)

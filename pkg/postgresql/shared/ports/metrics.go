@@ -1,4 +1,4 @@
-package metrics
+package ports
 
 // Controller name labels.
 const (
@@ -8,7 +8,6 @@ const (
 
 // Recorder is the port for all PostgreSQL controller metrics.
 // Core service packages depend on this interface, never on Prometheus directly.
-// Adapters (PrometheusRecorder, NoopRecorder) live in this package.
 //
 // Reconcile-level metrics (total count, duration, error count) are handled
 // automatically by controller-runtime — see controller_runtime_reconcile_total,
@@ -23,7 +22,10 @@ type Recorder interface {
 	IncStatusTransition(controller, condition, status, reason string)
 
 	// SetClusterPhases sets gauge values for cluster counts by phase.
-	SetClusterPhases(phases map[string]float64, poolerEnabledCount float64)
+	SetClusterPhases(phases map[string]float64)
+
+	// SetPoolerEnabledClusters sets the gauge for clusters with connection pooling enabled.
+	SetPoolerEnabledClusters(count float64)
 
 	// SetDatabasePhases sets gauge values for database counts by phase.
 	SetDatabasePhases(phases map[string]float64)

@@ -4,7 +4,7 @@ import (
 	"time"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
-	pgmetrics "github.com/splunk/splunk-operator/pkg/postgresql/metrics"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -18,7 +18,7 @@ type ReconcileContext struct {
 	Client   client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
-	Metrics  pgmetrics.Recorder
+	Metrics  ports.Recorder
 }
 
 // normalizedCNPGClusterSpec is a subset of cnpgv1.ClusterSpec fields used for drift detection.

@@ -20,7 +20,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
-	pgmetrics "github.com/splunk/splunk-operator/pkg/postgresql/metrics"
+	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -592,7 +592,7 @@ func TestSetStatus(t *testing.T) {
 	err := persistStatus(
 		context.Background(),
 		c,
-		&pgmetrics.NoopRecorder{},
+		&pgprometheus.NoopRecorder{},
 		postgresDB,
 		clusterReady,
 		metav1.ConditionTrue,

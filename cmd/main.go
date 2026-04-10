@@ -56,7 +56,7 @@ import (
 	"github.com/splunk/splunk-operator/internal/controller"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	pgmetrics "github.com/splunk/splunk-operator/pkg/postgresql/metrics"
+	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	//+kubebuilder:scaffold:imports
 	//extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
@@ -284,19 +284,19 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Telemetry")
 		os.Exit(1)
 	}
-	pgRecorder := pgmetrics.NewPrometheusRecorder()
-	if err := pgmetrics.Register(crmetrics.Registry); err != nil {
+	pgMetricsRecorder := pgprometheus.NewPrometheusRecorder()
+	if err := pgprometheus.Register(crmetrics.Registry); err != nil {
 		setupLog.Error(err, "unable to register PostgreSQL metrics")
 		os.Exit(1)
 	}
-	pgFleetCollector := pgmetrics.NewFleetCollector()
+	pgFleetMetricsCollector := pgprometheus.NewFleetCollector()
 
 	if err := (&controller.PostgresDatabaseReconciler{
 		Client:         mgr.GetClient(),
 		Scheme:         mgr.GetScheme(),
 		Recorder:       mgr.GetEventRecorderFor("postgresdatabase-controller"),
-		Metrics:        pgRecorder,
-		FleetCollector: pgFleetCollector,
+		Metrics:        pgMetricsRecorder,
+		FleetCollector: pgFleetMetricsCollector,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PostgresDatabase")
 		os.Exit(1)
@@ -305,8 +305,8 @@ func main() {
 		Client:         mgr.GetClient(),
 		Scheme:         mgr.GetScheme(),
 		Recorder:       mgr.GetEventRecorderFor("postgrescluster-controller"),
-		Metrics:        pgRecorder,
-		FleetCollector: pgFleetCollector,
+		Metrics:        pgMetricsRecorder,
+		FleetCollector: pgFleetMetricsCollector,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PostgresCluster")
 		os.Exit(1)

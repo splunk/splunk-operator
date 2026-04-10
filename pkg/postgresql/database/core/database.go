@@ -11,7 +11,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/sethvargo/go-password/password"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
-	pgmetrics "github.com/splunk/splunk-operator/pkg/postgresql/metrics"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -502,9 +502,9 @@ func verifyDatabasesReady(ctx context.Context, c client.Client, postgresDB *ente
 	return notReady, nil
 }
 
-func persistStatus(ctx context.Context, c client.Client, metrics pgmetrics.Recorder, db *enterprisev4.PostgresDatabase, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) error {
+func persistStatus(ctx context.Context, c client.Client, metrics ports.Recorder, db *enterprisev4.PostgresDatabase, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) error {
 	applyStatus(db, conditionType, conditionStatus, reason, message, phase)
-	metrics.IncStatusTransition(pgmetrics.ControllerDatabase, string(conditionType), string(conditionStatus), string(reason))
+	metrics.IncStatusTransition(ports.ControllerDatabase, string(conditionType), string(conditionStatus), string(reason))
 	return c.Status().Update(ctx, db)
 }
 

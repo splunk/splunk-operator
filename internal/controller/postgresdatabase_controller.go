@@ -24,7 +24,8 @@ import (
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	dbadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter"
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
-	pgmetrics "github.com/splunk/splunk-operator/pkg/postgresql/metrics"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -45,8 +46,8 @@ type PostgresDatabaseReconciler struct {
 	client.Client
 	Scheme         *runtime.Scheme
 	Recorder       record.EventRecorder
-	Metrics        pgmetrics.Recorder
-	FleetCollector *pgmetrics.FleetCollector
+	Metrics        ports.Recorder
+	FleetCollector *pgprometheus.FleetCollector
 }
 
 const (

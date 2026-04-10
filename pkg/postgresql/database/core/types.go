@@ -4,7 +4,7 @@ import (
 	"time"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
-	pgmetrics "github.com/splunk/splunk-operator/pkg/postgresql/metrics"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -15,7 +15,7 @@ type ReconcileContext struct {
 	Client   client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
-	Metrics  pgmetrics.Recorder
+	Metrics  ports.Recorder
 }
 
 type reconcileDBPhases string

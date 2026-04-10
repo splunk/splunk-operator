@@ -1,9 +1,10 @@
-package metrics
+package prometheus
 
 import (
 	"context"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -17,9 +18,8 @@ func NewFleetCollector() *FleetCollector {
 }
 
 // CollectClusterMetrics lists all PostgresCluster resources and updates phase
-// gauges, pooler gauges, and managed-user gauges. Skips if called within 2s
-// of the last collection.
-func (fc *FleetCollector) CollectClusterMetrics(ctx context.Context, c client.Client, recorder Recorder) {
+// gauges, pooler gauges, and managed-user gauges.
+func (fc *FleetCollector) CollectClusterMetrics(ctx context.Context, c client.Client, recorder ports.Recorder) {
 	logger := log.FromContext(ctx)
 
 	var list enterprisev4.PostgresClusterList
@@ -61,13 +61,14 @@ func (fc *FleetCollector) CollectClusterMetrics(ctx context.Context, c client.Cl
 		}
 	}
 
-	recorder.SetClusterPhases(phases, poolerEnabledCount)
-	recorder.SetManagedUsers(ControllerCluster, managedUserStates)
+	recorder.SetClusterPhases(phases)
+	recorder.SetPoolerEnabledClusters(poolerEnabledCount)
+	recorder.SetManagedUsers(ports.ControllerCluster, managedUserStates)
 }
 
 // CollectDatabaseMetrics lists all PostgresDatabase resources and updates
-// phase gauges. Skips if called within 2s of the last collection.
-func (fc *FleetCollector) CollectDatabaseMetrics(ctx context.Context, c client.Client, recorder Recorder) {
+// phase gauges.
+func (fc *FleetCollector) CollectDatabaseMetrics(ctx context.Context, c client.Client, recorder ports.Recorder) {
 	logger := log.FromContext(ctx)
 
 	var list enterprisev4.PostgresDatabaseList
@@ -88,4 +89,3 @@ func (fc *FleetCollector) CollectDatabaseMetrics(ctx context.Context, c client.C
 
 	recorder.SetDatabasePhases(phases)
 }
-

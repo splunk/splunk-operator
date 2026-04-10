@@ -22,7 +22,8 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
-	pgmetrics "github.com/splunk/splunk-operator/pkg/postgresql/metrics"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -45,8 +46,8 @@ type PostgresClusterReconciler struct {
 	client.Client
 	Scheme         *runtime.Scheme
 	Recorder       record.EventRecorder
-	Metrics        pgmetrics.Recorder
-	FleetCollector *pgmetrics.FleetCollector
+	Metrics        ports.Recorder
+	FleetCollector *pgprometheus.FleetCollector
 }
 
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters,verbs=get;list;watch;create;update;patch;delete

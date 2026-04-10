@@ -24,7 +24,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	password "github.com/sethvargo/go-password/password"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
-	pgmetrics "github.com/splunk/splunk-operator/pkg/postgresql/metrics"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -757,7 +757,7 @@ func deleteConnectionPoolers(ctx context.Context, c client.Client, cluster *ente
 }
 
 // syncPoolerStatus populates ConnectionPoolerStatus and the PoolerReady condition.
-func syncPoolerStatus(ctx context.Context, c client.Client, metrics pgmetrics.Recorder, cluster *enterprisev4.PostgresCluster) error {
+func syncPoolerStatus(ctx context.Context, c client.Client, metrics ports.Recorder, cluster *enterprisev4.PostgresCluster) error {
 	rwPooler := &cnpgv1.Pooler{}
 	if err := c.Get(ctx, types.NamespacedName{
 		Name:      poolerResourceName(cluster.Name, readWriteEndpoint),
@@ -784,7 +784,7 @@ func syncPoolerStatus(ctx context.Context, c client.Client, metrics pgmetrics.Re
 }
 
 // syncStatus maps CNPG Cluster state to PostgresCluster status.
-func syncStatus(ctx context.Context, c client.Client, metrics pgmetrics.Recorder, cluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster) error {
+func syncStatus(ctx context.Context, c client.Client, metrics ports.Recorder, cluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster) error {
 	cluster.Status.ProvisionerRef = &corev1.ObjectReference{
 		APIVersion: "postgresql.cnpg.io/v1",
 		Kind:       "Cluster",
@@ -843,7 +843,7 @@ func syncStatus(ctx context.Context, c client.Client, metrics pgmetrics.Recorder
 // setStatus sets the phase, condition and persists the status.
 // It skips the API write when the resulting status is identical to the current
 // state, avoiding unnecessary etcd churn and ResourceVersion bumps on stable clusters.
-func setStatus(ctx context.Context, c client.Client, metrics pgmetrics.Recorder, cluster *enterprisev4.PostgresCluster, condType conditionTypes, status metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileClusterPhases) error {
+func setStatus(ctx context.Context, c client.Client, metrics ports.Recorder, cluster *enterprisev4.PostgresCluster, condType conditionTypes, status metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileClusterPhases) error {
 	before := cluster.Status.DeepCopy()
 
 	p := string(phase)
@@ -860,7 +860,7 @@ func setStatus(ctx context.Context, c client.Client, metrics pgmetrics.Recorder,
 		return nil
 	}
 
-	metrics.IncStatusTransition(pgmetrics.ControllerCluster, string(condType), string(status), string(reason))
+	metrics.IncStatusTransition(ports.ControllerCluster, string(condType), string(status), string(reason))
 
 	if err := c.Status().Update(ctx, cluster); err != nil {
 		return fmt.Errorf("failed to update PostgresCluster status: %w", err)
