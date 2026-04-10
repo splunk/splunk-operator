@@ -309,7 +309,7 @@ Examples:
 
 Tags used in CI filtering:
 - `smoke` — basic deployment checks (run on PRs)
-- `integration` — full integration tests (run on push to develop/main)
+- `integration` — full integration tests (run on push to develop/main and on PRs from `feature*` branches)
 - Topology: `s1` (standalone), `c3` (clustered indexer + SHC), `m4` (multisite + SHC), `m1` (multisite indexer only)
 
 ### Common Test Patterns
@@ -410,39 +410,93 @@ testenv.VerifyServiceAccountConfiguredOnPod(deployment, testcaseEnvInst.GetName(
 
 ## How to Execute Tests
 
-### Prerequisites
+### Setup
 
-- Go installed (see `GO_VERSION` in `.env`)
-- A Kubernetes cluster with `kubectl` configured
-- Ginkgo v2 CLI — `make setup/ginkgo`
-- Operator and Splunk Enterprise images pushed to a registry your cluster can pull from (see below)
-- Operator deployed cluster-wide — `make deploy IMG=<image> NAMESPACE=splunk-operator`
-- _(Optional)_ Splunk Enterprise license file via `--license-file=<path>` — without it, instances use trial license
+Follow these steps in order to prepare your environment for running integration tests.
 
-> **Splunk employees:** For internal instructions on provisioning test clusters and obtaining Enterprise license files, see [go/sok-test-setup](http://go/sok-test-setup).
+**1. Install Go**
 
-**Build and push the operator image:**
+Install the version specified by `GO_VERSION` in `.env`.
+
+**2. Set up a Kubernetes cluster**
+
+You need a cluster with `kubectl` configured and a default StorageClass backed by a CSI driver for dynamic PVC provisioning (Splunk CRs create StatefulSets with PVCs).
+
+**Splunk employees:** see [go/sok-test-setup](http://go/sok-test-setup) for internal instructions on provisioning test clusters.
+
+**3. Install the Ginkgo CLI**
+
+```bash
+make setup/ginkgo
+```
+
+**4. Set your image variables**
+
+Export these once. All subsequent commands reference them.
+
+```bash
+export REGISTRY=<your-registry>   # e.g. 123456789.dkr.ecr.us-west-2.amazonaws.com
+export OPERATOR_IMG=$REGISTRY/splunk-operator:latest
+export SPLUNK_IMG=$REGISTRY/splunk/splunk:latest
+```
+
+If your cluster can pull from Docker Hub directly, you can use the public image instead:
+
+```bash
+export SPLUNK_IMG=splunk/splunk:latest
+```
+
+**5. Build and push the operator image**
 
 ```bash
 # Multi-platform build (linux/amd64 + linux/arm64 by default, pushes automatically)
-make docker-buildx IMG=<registry>/splunk-operator:latest
+make docker-buildx IMG=$OPERATOR_IMG
 
 # Single-platform build
-make docker-buildx IMG=<registry>/splunk-operator:latest PLATFORMS=linux/amd64
+make docker-buildx IMG=$OPERATOR_IMG PLATFORMS=linux/amd64
 ```
 
-**Quick setup using `make` targets:**
+**6. Make the Splunk Enterprise image available**
+
+Tests deploy Splunk Enterprise pods using the image passed via `-splunk-image`. The public image on Docker Hub is `splunk/splunk` (see `SPLUNK_ENTERPRISE_RELEASE_IMAGE` in `.env` for the version used in CI). If your cluster can pull from Docker Hub directly, no action is needed — you already set `SPLUNK_IMG` to the public image in step 4.
+
+If your cluster uses a private registry (common for EKS, air-gapped environments), pull and push it:
+
+```bash
+docker pull splunk/splunk:latest
+docker tag splunk/splunk:latest $SPLUNK_IMG
+docker push $SPLUNK_IMG
+```
+
+**7. Deploy the operator cluster-wide**
 
 > Deploys to the cluster/context in your active kubeconfig (`~/.kube/config`).
 
+See [Splunk General Terms Acceptance](README.md#splunk-general-terms-acceptance) for the required `SPLUNK_GENERAL_TERMS` value.
+
 ```bash
-make setup/ginkgo                    # Install Ginkgo v2 CLI + Gomega
-make deploy IMG=<registry>/splunk-operator:latest NAMESPACE=splunk-operator SPLUNK_GENERAL_TERMS=<value>
+make deploy IMG=$OPERATOR_IMG NAMESPACE=splunk-operator SPLUNK_GENERAL_TERMS=<value>
 ```
 
-> See [Splunk General Terms Acceptance](README.md#splunk-general-terms-acceptance) for the required `SPLUNK_GENERAL_TERMS` value
+**8. _(Optional)_ Provide a Splunk Enterprise license file**
+
+Pass `--license-file=<path>` when running tests. Without it, instances use a trial license. **Required** for License Manager / License Master test suites.
+
+**Splunk employees:** see [go/sok-test-setup](http://go/sok-test-setup) for obtaining Enterprise license files.
+
+**9. _(App Framework / SmartStore tests only)_ Configure cloud storage**
+
+These tests require pre-populated cloud storage buckets with Splunk app tarballs and valid provider credentials. The bucket names and app paths are currently hardcoded to SOK-team–owned resources, so **only contributors with access to the SOK team's cloud accounts can run these suites**.
+
+Environment variables are defined in `test/env.sh`.
+
+**10. _(Index/ingestion separation tests only)_ Provision AWS resources**
+
+These tests require dedicated SQS queues and an S3 bucket in `us-west-2`. Resource names are hardcoded in the test suite file and the S3 bucket name is globally unique, so these tests can only be run by the SOK team against the team's AWS account.
 
 ### Run All Integration Tests via Makefile
+
+> **Warning:** Running the full integration suite takes several hours. Tests are not all parallelized, and many suites deploy resource-heavy topologies (multi-site clusters, SHC). Running all suites on a single small cluster can exhaust its resources. In CI, different suites are distributed across separate clusters. For local development, prefer running a specific suite or test with `--focus` instead.
 
 ```bash
 make int-test
@@ -452,44 +506,46 @@ This runs `test/run-tests.sh`, which deploys the operator and invokes Ginkgo wit
 
 ### Run a Specific Suite Directly
 
+Pass the suite directory as an argument to ginkgo. The `smoke` suite is a good starting point — it only requires a running operator and does not need cloud storage credentials or a license file.
+
 ```bash
-cd test/smoke
-ginkgo -v \
-  --operator-image=<registry>/splunk/splunk-operator:latest \
-  --splunk-image=<registry>/splunk/splunk:latest
+ginkgo -v ./test/smoke -- \
+  -operator-image=$OPERATOR_IMG \
+  -splunk-image=$SPLUNK_IMG
 ```
+
+Suites under `test/appframework_*`, `test/smartstore/`, and `test/index_and_ingestion_separation/` require cloud storage setup (steps 9–10 above).
 
 ### Run a Specific Test by Name
 
-Use `--focus` with a regex matching the `It` label:
+Use `--focus` with a regex matching the `It` label. Always target a **specific suite directory** — using `-r ./test/` recurses into all suites, which triggers their `BeforeSuite` blocks (including cloud setup) even when focus filters out their tests.
 
 ```bash
-ginkgo -v -r \
-  --focus="smoke, basic, s1" \
-  --operator-image=<registry>/splunk/splunk-operator:latest \
-  --splunk-image=<registry>/splunk/splunk:latest \
-  ./test/
+ginkgo -v \
+  --focus="can deploy a standalone instance$" \
+  ./test/smoke -- \
+  -operator-image=$OPERATOR_IMG \
+  -splunk-image=$SPLUNK_IMG
 ```
+
+Tags in `It` labels (e.g. `smoke, basic, s1: can deploy ...`) also work as focus patterns — `--focus="smoke, basic, s1"` matches all tests tagged with those labels.
 
 ### Skip Specific Tests
 
 ```bash
-ginkgo -v -r \
-  --focus="smoke" \
+ginkgo -v \
   --skip="m4" \
-  --operator-image=<registry>/splunk/splunk-operator:latest \
-  --splunk-image=<registry>/splunk/splunk:latest \
-  ./test/
+  ./test/smoke -- \
+  -operator-image=$OPERATOR_IMG \
+  -splunk-image=$SPLUNK_IMG
 ```
 
 ### Run Tests in Parallel
 
 ```bash
-ginkgo -v -r -nodes=3 \
-  --focus="smoke" \
-  --operator-image=<registry>/splunk/splunk-operator:latest \
-  --splunk-image=<registry>/splunk/splunk:latest \
-  ./test/
+ginkgo -v -nodes=3 ./test/smoke -- \
+  -operator-image=$OPERATOR_IMG \
+  -splunk-image=$SPLUNK_IMG
 ```
 
 ### Using the Script Directly
@@ -510,7 +566,7 @@ Tests run automatically on:
 - **Weekly schedule:** Nightly integration suite (`nightly-int-test-workflow.yml`)
 - **Manual trigger:** `manual-int-test-workflow.yml` with `workflow_dispatch`
 
-CI provisions an EKS cluster, builds and pushes operator images to ECR, then runs `make int-test`.
+For integration test workflows, CI provisions an EKS cluster, builds and pushes operator images to ECR, then runs `make int-test`. Smoke tests run on the existing CI infrastructure without provisioning a dedicated cluster.
 
 ---
 
@@ -533,8 +589,8 @@ On teardown, the `Deployment` object automatically captures pod logs to files. A
 ### Inspect the Cluster During/After a Test
 
 ```bash
-# List namespaces created by tests (names contain the suite name + random suffix)
-kubectl get ns | grep smoke
+# List namespaces created by tests (all share the sok-test- prefix)
+kubectl get ns | grep sok-test-
 
 # Check operator pod in the test namespace
 kubectl get pods -n <test-namespace>
@@ -549,13 +605,32 @@ kubectl describe standalone -n <test-namespace>
 kubectl get events -n <test-namespace> --sort-by='.lastTimestamp'
 ```
 
+### Check for Leftovers After Tests
+
+```bash
+# All test namespaces share the sok-test- prefix
+kubectl get ns | grep sok-test-
+
+# Find any Splunk CRs still running across all namespaces
+kubectl get standalone,searchheadcluster,indexercluster,clustermanager,clustermaster,\
+monitoringconsole,licensemanager,licensemaster --all-namespaces
+
+# Find PVCs left behind
+kubectl get pvc --all-namespaces | grep -E 'splunk-|pvc-'
+
+# Clean up a specific test namespace (deletes all resources in it)
+kubectl delete ns <test-namespace>
+```
+
+If a namespace is stuck in `Terminating`, check for resources with finalizers (see [Common Failure Patterns](#common-failure-patterns) below).
+
 ### Run a Single Failing Test in Isolation
 
 ```bash
-cd test/smoke
-ginkgo -v --focus="can deploy a standalone instance" \
-  --operator-image=<registry>/splunk/splunk-operator:latest \
-  --splunk-image=<registry>/splunk/splunk:latest
+ginkgo -v --focus="smoke, basic, s1: can deploy a standalone instance$" \
+  ./test/smoke -- \
+  -operator-image=$OPERATOR_IMG \
+  -splunk-image=$SPLUNK_IMG
 ```
 
 ### Use Ginkgo's Built-in Debugging
@@ -566,15 +641,12 @@ ginkgo -v --focus="can deploy a standalone instance" \
 ginkgo -v --trace -r --focus="my test" ./test/
 ```
 
-**Use `GinkgoWriter` for debug output in tests:**
+**Add debug output to your test code:**
+
+Use `GinkgoWriter` or the testenv logger inside `It`/`BeforeEach` blocks — output appears in the ginkgo console when running with `-v`:
 
 ```go
 GinkgoWriter.Printf("Current CR status: %+v\n", standalone.Status)
-```
-
-**Use the testenv logger:**
-
-```go
 testcaseEnvInst.Log.Info("Debug info", "key", value)
 ```
 
@@ -584,8 +656,8 @@ If tests fail due to timeouts on slow clusters:
 
 ```bash
 ginkgo -v --timeout=300m \
-  --operator-image=... --splunk-image=... \
-  ./test/
+  ./test/ -- \
+  -operator-image=... -splunk-image=...
 ```
 
 ### Common Failure Patterns
@@ -597,6 +669,34 @@ ginkgo -v --timeout=300m \
 | `image pull backoff` | Registry not accessible from cluster | Verify `PRIVATE_REGISTRY` and image push |
 | `prerequisites validation failed` | Operator not running | Deploy operator to `splunk-operator` namespace |
 | Test hangs indefinitely | `Eventually` polling a condition that never becomes true | Check operator logs for reconciliation errors |
+| CR or namespace stuck in `Terminating` | Finalizer on a resource that can't be reconciled (e.g. CR in `Error` phase with no PVC) | Remove the finalizer manually (see below) |
+
+**Removing a stuck finalizer:**
+
+When a CR (e.g. MonitoringConsole) or PVC is stuck in `Terminating` because the operator can't reconcile the finalizer, patch it out:
+
+```bash
+# Remove finalizer from a CR
+kubectl patch monitoringconsole <name> -n <namespace> \
+  --type=merge -p '{"metadata":{"finalizers":null}}'
+
+# Remove finalizer from a PVC
+kubectl patch pvc <name> -n <namespace> \
+  --type=merge -p '{"metadata":{"finalizers":null}}'
+```
+
+All test namespaces share the `sok-test-` prefix (e.g. `sok-test-smoke-abc`, `sok-test-s1appfw-xyz`). To find leftover test namespaces:
+
+```bash
+kubectl get ns | grep sok-test-
+```
+
+To find resources with finalizers across all namespaces:
+
+```bash
+kubectl get all,pvc --all-namespaces -o json | \
+  jq '.items[] | select(.metadata.finalizers != null) | {namespace: .metadata.namespace, kind: .kind, name: .metadata.name, finalizers: .metadata.finalizers}'
+```
 
 ---
 
@@ -625,6 +725,8 @@ ginkgo -v --timeout=300m \
 ### Cloud Provider Credentials
 
 Cloud provider variables below are used to create Kubernetes Secrets in each test namespace for SmartStore, App Framework, and index tests. In CI, these are populated from GitHub Actions secrets. For local runs, export them in your shell or source them from a `.env` file. If you're only running smoke tests without cloud storage features, these can be left unset.
+
+> **Caution:** If you modify `test/env.sh` with local values or secrets, do **not** commit or push it. Changes to `env.sh` affect CI runs for all contributors and risk disclosing confidential data such as credentials and access keys. Consider using a local `.env` file (which is `.gitignore`d) or exporting variables in your shell session instead.
 
 ### AWS/EKS
 
@@ -664,5 +766,5 @@ Cloud provider variables below are used to create Kubernetes Secrets in each tes
 5. Use `deployment.Deploy*` methods to create CRs
 6. Use `testenv.*Ready` functions (e.g., `testenv.StandaloneReady`, `testenv.ClusterManagerReady`) to assert readiness
 7. Name your `It` blocks with tags for CI filtering: `"<mysuite>, <mytag>, <topology>: <human description>"`
-8. Run locally: `cd test/your_feature && ginkgo -v --operator-image=... --splunk-image=...`
+8. Run locally: `ginkgo -v ./test/your_feature -- -operator-image=... -splunk-image=...`
 9. Verify in CI: push your branch and check GitHub Actions

@@ -232,7 +232,7 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 
 	testenv := &TestEnv{
 		name:                 envName,
-		namespace:            envName,
+		namespace:            "sok-test-" + envName,
 		serviceAccountName:   envName,
 		roleName:             envName,
 		roleBindingName:      envName,
