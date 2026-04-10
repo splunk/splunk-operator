@@ -27,8 +27,8 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 
-	intController "github.com/splunk/splunk-operator/internal/controller/enterprise"
 	"github.com/splunk/splunk-operator/internal/controller/debug"
+	intController "github.com/splunk/splunk-operator/internal/controller/enterprise"
 	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise/validation"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
@@ -50,8 +50,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/internal/controller/enterprise"
 	//+kubebuilder:scaffold:imports
 	//extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
