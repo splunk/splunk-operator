@@ -21,7 +21,7 @@ import (
 const (
 	// AppPausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	AppPausedAnnotation = "app.enterprise.splunk.com/paused"
+	AppPausedAnnotation = "apps.splunk.com/paused"
 )
 
 // AppTargetRef defines the target environment the app should bind to.
