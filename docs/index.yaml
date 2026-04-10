@@ -64,7 +64,7 @@ entries:
       repository: file://splunk-operator/helm-chart/splunk-operator
       version: 3.0.0
     description: A Helm chart for Splunk Enterprise managed by the Splunk Operator
-    digest: db5890e3bcc95f9ca7298873cc08b4a5d1ee86ccb4ad4e5334a0ab5d7a5fdb5e
+    digest: ae82f6c8edee4d827817fe6c9c6447c422a03c59595a0f6e779cef847a83b611
     maintainers:
     - email: vivekr@splunk.com
       name: Vivek Reddy
@@ -413,7 +413,7 @@ entries:
     appVersion: 3.0.0
     created: "2026-04-08T03:35:00Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
-    digest: db5890e3bcc95f9ca7298873cc08b4a5d1ee86ccb4ad4e5334a0ab5d7a5fdb5e
+    digest: bd318b1f4022421a3fd429b186ca344c61d04a3c2bbdd5cc535d960773558e44
     maintainers:
     - email: vivekr@splunk.com
       name: Vivek Reddy
