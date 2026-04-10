@@ -82,7 +82,6 @@ func (p *PrometheusRecorder) SetDatabasePhases(phases map[string]float64) {
 }
 
 func (p *PrometheusRecorder) SetManagedUsers(controller string, states map[string]float64) {
-	managedUsers.Reset() // drop stale label combinations before re-populating
 	for state, count := range states {
 		managedUsers.WithLabelValues(controller, state).Set(count)
 	}
