@@ -186,14 +186,8 @@ func newValidApp(name string) *appsv1alpha1.App {
 				Kind: "Standalone",
 				Name: "standalone-sample",
 			},
-			SourceRef: appsv1alpha1.AppSource{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: appsv1alpha1.GroupVersion.String(),
-					Kind:       "AppSource",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "source-one",
-				},
+			SourceRef: appsv1alpha1.AppSourceRef{
+				Name: "source-one",
 			},
 			Package: appsv1alpha1.AppPackageSpec{
 				Path: "apps/sample-app.tgz",

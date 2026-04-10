@@ -145,7 +145,7 @@ func validateApp(ctx context.Context, k8sClient client.Client, app *appsv1alpha1
 func validateAppSourceRef(ctx context.Context, k8sClient client.Client, app *appsv1alpha1.App) field.ErrorList {
 	var allErrs field.ErrorList
 
-	sourceRefPath := field.NewPath("spec").Child("sourceRef").Child("metadata").Child("name")
+	sourceRefPath := field.NewPath("spec").Child("sourceRef").Child("name")
 	key := client.ObjectKey{Name: app.Spec.SourceRef.Name, Namespace: app.Namespace}
 
 	var source appsv1alpha1.AppSource
