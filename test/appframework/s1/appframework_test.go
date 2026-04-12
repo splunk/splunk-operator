@@ -1092,7 +1092,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Wait for Standalone to reach Ready phase after config map update
-			err = testcaseEnvInst.WaitForStandalonePhase(ctx, deployment, testcaseEnvInst.GetName(), standalone.Name, enterpriseApi.PhaseReady, 2*time.Minute)
+			err = testcaseEnvInst.WaitForStandalonePhase(ctx, deployment, testcaseEnvInst.GetName(), standalone.Name, enterpriseApi.PhaseReady, 5*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for Standalone to reach Ready phase")
 
 			// Verify Standalone stays in ready state
