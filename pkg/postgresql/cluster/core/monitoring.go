@@ -37,48 +37,32 @@ const (
 )
 
 func isPostgreSQLMetricsEnabled(cluster *enterprisev4.PostgresCluster, class *enterprisev4.PostgresClusterClass) bool {
-	if class == nil || class.Spec.Config == nil || class.Spec.Config.Observability == nil {
+	if class == nil || class.Spec.Config == nil || class.Spec.Config.Monitoring == nil {
 		return false
 	}
-	classCfg := class.Spec.Config.Observability.PostgreSQL
+	classCfg := class.Spec.Config.Monitoring.PostgreSQLMetrics
 	if classCfg == nil || classCfg.Enabled == nil || !*classCfg.Enabled {
 		return false
 	}
-	if cluster == nil || cluster.Spec.Observability == nil || cluster.Spec.Observability.PostgreSQL == nil {
+	if cluster == nil || cluster.Spec.Monitoring == nil || cluster.Spec.Monitoring.PostgreSQLMetrics == nil {
 		return true
 	}
-	override := cluster.Spec.Observability.PostgreSQL.Disabled
+	override := cluster.Spec.Monitoring.PostgreSQLMetrics.Disabled
 	return override == nil || !*override
 }
 
-func isConnectionPoolerEnabled(cluster *enterprisev4.PostgresCluster, class *enterprisev4.PostgresClusterClass) bool {
-	if class == nil || class.Spec.Config == nil || class.Spec.Config.ConnectionPoolerEnabled == nil {
-		return false
-	}
-	if !*class.Spec.Config.ConnectionPoolerEnabled {
-		return false
-	}
-	if cluster == nil || cluster.Spec.ConnectionPoolerEnabled == nil {
-		return true
-	}
-	return *cluster.Spec.ConnectionPoolerEnabled
-}
-
 func isConnectionPoolerMetricsEnabled(cluster *enterprisev4.PostgresCluster, class *enterprisev4.PostgresClusterClass) bool {
-	if !isConnectionPoolerEnabled(cluster, class) {
+	if class == nil || class.Spec.Config == nil || class.Spec.Config.Monitoring == nil {
 		return false
 	}
-	if class == nil || class.Spec.Config == nil || class.Spec.Config.Observability == nil {
-		return false
-	}
-	classCfg := class.Spec.Config.Observability.PgBouncer
+	classCfg := class.Spec.Config.Monitoring.ConnectionPoolerMetrics
 	if classCfg == nil || classCfg.Enabled == nil || !*classCfg.Enabled {
 		return false
 	}
-	if cluster == nil || cluster.Spec.Observability == nil || cluster.Spec.Observability.PgBouncer == nil {
+	if cluster == nil || cluster.Spec.Monitoring == nil || cluster.Spec.Monitoring.ConnectionPoolerMetrics == nil {
 		return true
 	}
-	override := cluster.Spec.Observability.PgBouncer.Disabled
+	override := cluster.Spec.Monitoring.ConnectionPoolerMetrics.Disabled
 	return override == nil || !*override
 }
 

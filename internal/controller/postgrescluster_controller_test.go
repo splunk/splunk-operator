@@ -28,15 +28,17 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
-	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
+	corev1 "k8s.io/api/core/v1"
 )
 
 /*
@@ -84,6 +86,28 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			_, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
 		}
+	}
+
+	recreateClassWithMonitoring := func(postgresMetricsEnabled bool) {
+		Expect(k8sClient.Delete(ctx, pgClusterClass)).To(Succeed())
+
+		pgClusterClass = &enterprisev4.PostgresClusterClass{
+			ObjectMeta: metav1.ObjectMeta{Name: className},
+			Spec: enterprisev4.PostgresClusterClassSpec{
+				Provisioner: provisioner,
+				Config: &enterprisev4.PostgresClusterClassConfig{
+					Instances:               &[]int32{clusterMemberCount}[0],
+					Storage:                 &[]resource.Quantity{resource.MustParse(storageAmount)}[0],
+					PostgresVersion:         &[]string{postgresVersion}[0],
+					ConnectionPoolerEnabled: &[]bool{poolerEnabled}[0],
+					Monitoring: &enterprisev4.PostgresMonitoringClassConfig{
+						PostgreSQLMetrics: &enterprisev4.MetricsClassConfig{Enabled: ptr.To(postgresMetricsEnabled)},
+					},
+				},
+			},
+		}
+
+		Expect(k8sClient.Create(ctx, pgClusterClass)).To(Succeed())
 	}
 
 	BeforeEach(func() {
@@ -240,6 +264,65 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				cond := meta.FindStatusCondition(pc.Status.Conditions, "ClusterReady")
 				Expect(cond).NotTo(BeNil())
 				Expect(cond.ObservedGeneration).To(Equal(pc.Generation))
+			})
+
+			It("creates monitoring resources and sets MonitoringReady when monitoring is enabled", func() {
+				recreateClassWithMonitoring(true)
+
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(3)
+
+				pc := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				cond := meta.FindStatusCondition(pc.Status.Conditions, "MonitoringReady")
+				Expect(cond).NotTo(BeNil())
+				Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+				Expect(cond.Reason).To(Equal("ObservabilityResourcesReady"))
+
+				metricsService := &corev1.Service{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      clusterName + "-postgres-metrics",
+					Namespace: namespace,
+				}, metricsService)).To(Succeed())
+
+				serviceMonitor := &monitoringv1.ServiceMonitor{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      clusterName + "-postgres-metrics-monitor",
+					Namespace: namespace,
+				}, serviceMonitor)).To(Succeed())
+			})
+
+			It("removes monitoring resources and MonitoringReady when monitoring is disabled by cluster override", func() {
+				recreateClassWithMonitoring(true)
+
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(3)
+
+				current := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+				current.Spec.Monitoring = &enterprisev4.PostgresClusterMonitoring{
+					PostgreSQLMetrics: &enterprisev4.FeatureDisableOverride{Disabled: ptr.To(true)},
+				}
+				Expect(k8sClient.Update(ctx, current)).To(Succeed())
+
+				reconcileNTimes(1)
+
+				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+				Expect(meta.FindStatusCondition(current.Status.Conditions, "MonitoringReady")).To(BeNil())
+
+				metricsService := &corev1.Service{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      clusterName + "-postgres-metrics",
+					Namespace: namespace,
+				}, metricsService)
+				Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+				serviceMonitor := &monitoringv1.ServiceMonitor{}
+				err = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      clusterName + "-postgres-metrics-monitor",
+					Namespace: namespace,
+				}, serviceMonitor)
+				Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			})
 		})
 	})

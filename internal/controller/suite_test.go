@@ -78,6 +78,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "config", "crd", "bases"),
 			filepath.Join(cnpgModuleDir, "config", "crd", "bases"),
+			filepath.Join("testdata", "crds"),
 		},
 		ErrorIfCRDPathMissing: true,
 	}

@@ -21,7 +21,7 @@ func TestIsPostgreSQLMetricsEnabled(t *testing.T) {
 		want    bool
 	}{
 		{
-			name: "disabled when class observability is absent",
+			name: "disabled when class monitoring is absent",
 			class: &enterprisev4.PostgresClusterClass{
 				Spec: enterprisev4.PostgresClusterClassSpec{
 					Config: &enterprisev4.PostgresClusterClassConfig{},
@@ -32,7 +32,7 @@ func TestIsPostgreSQLMetricsEnabled(t *testing.T) {
 		{
 			name:    "enabled when class enables and cluster override is unset",
 			cluster: &enterprisev4.PostgresCluster{},
-			class: newClassWithObservability(
+			class: newClassWithMonitoring(
 				ptr.To(true),
 				nil,
 				nil,
@@ -43,12 +43,12 @@ func TestIsPostgreSQLMetricsEnabled(t *testing.T) {
 			name: "disabled when cluster override disables",
 			cluster: &enterprisev4.PostgresCluster{
 				Spec: enterprisev4.PostgresClusterSpec{
-					Observability: &enterprisev4.PostgresObservabilityOverride{
-						PostgreSQL: &enterprisev4.FeatureDisableOverride{Disabled: ptr.To(true)},
+					Monitoring: &enterprisev4.PostgresClusterMonitoring{
+						PostgreSQLMetrics: &enterprisev4.FeatureDisableOverride{Disabled: ptr.To(true)},
 					},
 				},
 			},
-			class: newClassWithObservability(
+			class: newClassWithMonitoring(
 				ptr.To(true),
 				nil,
 				nil,
@@ -59,12 +59,12 @@ func TestIsPostgreSQLMetricsEnabled(t *testing.T) {
 			name: "disabled when class disables even if cluster has override struct",
 			cluster: &enterprisev4.PostgresCluster{
 				Spec: enterprisev4.PostgresClusterSpec{
-					Observability: &enterprisev4.PostgresObservabilityOverride{
-						PostgreSQL: &enterprisev4.FeatureDisableOverride{Disabled: ptr.To(false)},
+					Monitoring: &enterprisev4.PostgresClusterMonitoring{
+						PostgreSQLMetrics: &enterprisev4.FeatureDisableOverride{Disabled: ptr.To(false)},
 					},
 				},
 			},
-			class: newClassWithObservability(
+			class: newClassWithMonitoring(
 				ptr.To(false),
 				nil,
 				nil,
@@ -81,72 +81,6 @@ func TestIsPostgreSQLMetricsEnabled(t *testing.T) {
 	}
 }
 
-func TestIsConnectionPoolerEnabled(t *testing.T) {
-	tests := []struct {
-		name    string
-		cluster *enterprisev4.PostgresCluster
-		class   *enterprisev4.PostgresClusterClass
-		want    bool
-	}{
-		{
-			name:  "disabled when class config is absent",
-			class: &enterprisev4.PostgresClusterClass{},
-			want:  false,
-		},
-		{
-			name:    "inherits enabled class setting when cluster override is unset",
-			cluster: &enterprisev4.PostgresCluster{},
-			class: &enterprisev4.PostgresClusterClass{
-				Spec: enterprisev4.PostgresClusterClassSpec{
-					Config: &enterprisev4.PostgresClusterClassConfig{
-						ConnectionPoolerEnabled: ptr.To(true),
-					},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "cluster can disable class enabled pooler",
-			cluster: &enterprisev4.PostgresCluster{
-				Spec: enterprisev4.PostgresClusterSpec{
-					ConnectionPoolerEnabled: ptr.To(false),
-				},
-			},
-			class: &enterprisev4.PostgresClusterClass{
-				Spec: enterprisev4.PostgresClusterClassSpec{
-					Config: &enterprisev4.PostgresClusterClassConfig{
-						ConnectionPoolerEnabled: ptr.To(true),
-					},
-				},
-			},
-			want: false,
-		},
-		{
-			name: "class disabled wins",
-			cluster: &enterprisev4.PostgresCluster{
-				Spec: enterprisev4.PostgresClusterSpec{
-					ConnectionPoolerEnabled: ptr.To(true),
-				},
-			},
-			class: &enterprisev4.PostgresClusterClass{
-				Spec: enterprisev4.PostgresClusterClassSpec{
-					Config: &enterprisev4.PostgresClusterClassConfig{
-						ConnectionPoolerEnabled: ptr.To(false),
-					},
-				},
-			},
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isConnectionPoolerEnabled(tt.cluster, tt.class)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
 func TestIsConnectionPoolerMetricsEnabled(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -155,19 +89,33 @@ func TestIsConnectionPoolerMetricsEnabled(t *testing.T) {
 		want    bool
 	}{
 		{
-			name:    "disabled when pooler itself is disabled",
+			name:    "disabled when class monitoring is absent",
 			cluster: &enterprisev4.PostgresCluster{},
-			class: newClassWithObservability(
-				nil,
-				ptr.To(true),
-				nil,
-			),
+			class: &enterprisev4.PostgresClusterClass{
+				Spec: enterprisev4.PostgresClusterClassSpec{
+					Config: &enterprisev4.PostgresClusterClassConfig{},
+				},
+			},
 			want: false,
 		},
 		{
-			name:    "enabled when pooler and pgbouncer metrics are enabled",
+			name:    "enabled when class enables and cluster override is unset",
 			cluster: &enterprisev4.PostgresCluster{},
-			class: newClassWithObservability(
+			class: newClassWithMonitoring(
+				nil,
+				ptr.To(true),
+				ptr.To(true),
+			),
+			want: true,
+		},
+		{
+			name: "enabled even when cluster explicitly disables the pooler",
+			cluster: &enterprisev4.PostgresCluster{
+				Spec: enterprisev4.PostgresClusterSpec{
+					ConnectionPoolerEnabled: ptr.To(false),
+				},
+			},
+			class: newClassWithMonitoring(
 				nil,
 				ptr.To(true),
 				ptr.To(true),
@@ -178,12 +126,12 @@ func TestIsConnectionPoolerMetricsEnabled(t *testing.T) {
 			name: "disabled when cluster override disables pgbouncer metrics",
 			cluster: &enterprisev4.PostgresCluster{
 				Spec: enterprisev4.PostgresClusterSpec{
-					Observability: &enterprisev4.PostgresObservabilityOverride{
-						PgBouncer: &enterprisev4.FeatureDisableOverride{Disabled: ptr.To(true)},
+					Monitoring: &enterprisev4.PostgresClusterMonitoring{
+						ConnectionPoolerMetrics: &enterprisev4.FeatureDisableOverride{Disabled: ptr.To(true)},
 					},
 				},
 			},
-			class: newClassWithObservability(
+			class: newClassWithMonitoring(
 				nil,
 				ptr.To(true),
 				ptr.To(true),
@@ -193,7 +141,7 @@ func TestIsConnectionPoolerMetricsEnabled(t *testing.T) {
 		{
 			name:    "disabled when class disables pgbouncer metrics",
 			cluster: &enterprisev4.PostgresCluster{},
-			class: newClassWithObservability(
+			class: newClassWithMonitoring(
 				nil,
 				ptr.To(true),
 				ptr.To(false),
@@ -308,18 +256,18 @@ func newTestMonitoringCluster() *enterprisev4.PostgresCluster {
 	}
 }
 
-func newClassWithObservability(
+func newClassWithMonitoring(
 	postgresEnabled *bool,
 	poolerEnabled *bool,
-	pgBouncerMetricsEnabled *bool,
+	connectionPoolerMetricsEnabled *bool,
 ) *enterprisev4.PostgresClusterClass {
 	return &enterprisev4.PostgresClusterClass{
 		Spec: enterprisev4.PostgresClusterClassSpec{
 			Config: &enterprisev4.PostgresClusterClassConfig{
 				ConnectionPoolerEnabled: poolerEnabled,
-				Observability: &enterprisev4.PostgresObservabilityClassConfig{
-					PostgreSQL: &enterprisev4.MetricsClassConfig{Enabled: postgresEnabled},
-					PgBouncer:  &enterprisev4.MetricsClassConfig{Enabled: pgBouncerMetricsEnabled},
+				Monitoring: &enterprisev4.PostgresMonitoringClassConfig{
+					PostgreSQLMetrics:       &enterprisev4.MetricsClassConfig{Enabled: postgresEnabled},
+					ConnectionPoolerMetrics: &enterprisev4.MetricsClassConfig{Enabled: connectionPoolerMetricsEnabled},
 				},
 			},
 		},

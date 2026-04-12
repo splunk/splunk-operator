@@ -108,23 +108,23 @@ type PostgresClusterSpec struct {
 	// +optional
 	ClusterDeletionPolicy *string `json:"clusterDeletionPolicy,omitempty"`
 
-	// Observability contains configuration for metrics exposure features.
+	// Monitoring contains configuration for metrics exposure features.
 	// +optional
-	Observability *PostgresObservabilityOverride `json:"observability,omitempty"`
+	Monitoring *PostgresClusterMonitoring `json:"monitoring,omitempty"`
 }
 
-// PostgresObservabilityOverride overrides observability configuration options for PostgresClusterClass.
-type PostgresObservabilityOverride struct {
+// PostgresClusterMonitoring overrides monitoring configuration options for PostgresClusterClass.
+type PostgresClusterMonitoring struct {
 
 	// +optional
-	PostgreSQL *FeatureDisableOverride `json:"postgresql,omitempty"`
+	PostgreSQLMetrics *FeatureDisableOverride `json:"postgresqlMetrics,omitempty"`
 
 	// +optional
-	PgBouncer *FeatureDisableOverride `json:"pgbouncer,omitempty"`
+	ConnectionPoolerMetrics *FeatureDisableOverride `json:"connectionPoolerMetrics,omitempty"`
 }
 
 type FeatureDisableOverride struct {
-	// Disable set to true will disable the feature even if it's enabled in the class.
+	// Disabled set to true will disable the feature even if it's enabled in the class.
 	// +kubebuilder:default=false
 	// +optional
 	Disabled *bool `json:"disabled,omitempty"`

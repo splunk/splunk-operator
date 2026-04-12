@@ -10,25 +10,28 @@ import (
 )
 
 const (
-	EventSecretReady              = "SecretReady"
-	EventConfigMapReady           = "ConfigMapReady"
-	EventClusterAdopted           = "ClusterAdopted"
-	EventClusterCreationStarted   = "ClusterCreationStarted"
-	EventClusterUpdateStarted     = "ClusterUpdateStarted"
-	EventClusterReady             = "ClusterReady"
-	EventPoolerCreationStarted    = "PoolerCreationStarted"
-	EventPoolerReady              = "PoolerReady"
-	EventCleanupComplete          = "CleanupComplete"
-	EventClusterClassNotFound     = "ClusterClassNotFound"
-	EventConfigMergeFailed        = "ConfigMergeFailed"
-	EventSecretReconcileFailed    = "SecretReconcileFailed"
-	EventClusterCreateFailed      = "ClusterCreateFailed"
-	EventClusterUpdateFailed      = "ClusterUpdateFailed"
-	EventManagedRolesFailed       = "ManagedRolesFailed"
-	EventPoolerReconcileFailed    = "PoolerReconcileFailed"
-	EventConfigMapReconcileFailed = "ConfigMapReconcileFailed"
-	EventClusterDegraded          = "ClusterDegraded"
-	EventCleanupFailed            = "CleanupFailed"
+	EventSecretReady                   = "SecretReady"
+	EventConfigMapReady                = "ConfigMapReady"
+	EventClusterAdopted                = "ClusterAdopted"
+	EventClusterCreationStarted        = "ClusterCreationStarted"
+	EventClusterUpdateStarted          = "ClusterUpdateStarted"
+	EventClusterReady                  = "ClusterReady"
+	EventPoolerCreationStarted         = "PoolerCreationStarted"
+	EventPoolerReady                   = "PoolerReady"
+	EventCleanupComplete               = "CleanupComplete"
+	EventClusterClassNotFound          = "ClusterClassNotFound"
+	EventConfigMergeFailed             = "ConfigMergeFailed"
+	EventSecretReconcileFailed         = "SecretReconcileFailed"
+	EventClusterCreateFailed           = "ClusterCreateFailed"
+	EventClusterUpdateFailed           = "ClusterUpdateFailed"
+	EventManagedRolesFailed            = "ManagedRolesFailed"
+	EventPoolerReconcileFailed         = "PoolerReconcileFailed"
+	EventConfigMapReconcileFailed      = "ConfigMapReconcileFailed"
+	EventClusterDegraded               = "ClusterDegraded"
+	EventCleanupFailed                 = "CleanupFailed"
+	EventMonitoringReady               = "MonitoringReady"
+	EventMetricsServiceReconcileFailed = "MetricsServiceReconcileFailed"
+	EventServiceMonitorReconcileFailed = "ServiceMonitorReconcileFailed"
 )
 
 func (rc *ReconcileContext) emitNormal(obj client.Object, reason, message string) {
@@ -58,5 +61,13 @@ func (rc *ReconcileContext) emitClusterPhaseTransition(obj client.Object, oldPha
 func (rc *ReconcileContext) emitPoolerReadyTransition(obj client.Object, conditions []metav1.Condition) {
 	if !meta.IsStatusConditionTrue(conditions, string(poolerReady)) {
 		rc.emitNormal(obj, EventPoolerReady, "Connection poolers are ready")
+	}
+}
+
+// emitMonitoringReadyTransition emits MonitoringReady only when the condition was not
+// previously True — prevents re-emission on every reconcile while already ready.
+func (rc *ReconcileContext) emitMonitoringReadyTransition(obj client.Object, conditions []metav1.Condition) {
+	if !meta.IsStatusConditionTrue(conditions, string(monitoringReady)) {
+		rc.emitNormal(obj, EventMonitoringReady, "Monitoring resources are ready")
 	}
 }

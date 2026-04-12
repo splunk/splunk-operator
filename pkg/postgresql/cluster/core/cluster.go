@@ -344,35 +344,54 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		rc.emitPoolerReadyTransition(postgresCluster, oldConditions)
 	}
 
-	if err := reconcilePostgreSQLMetricsService(ctx, c, rc.Scheme, postgresCluster, isPostgreSQLMetricsEnabled(postgresCluster, clusterClass)); err != nil {
-		return ctrl.Result{}, err
+	postgresMetricsEnabled := isPostgreSQLMetricsEnabled(postgresCluster, clusterClass)
+	poolerMetricsEnabled := isConnectionPoolerMetricsEnabled(postgresCluster, clusterClass)
+	rwPoolerMetricsEnabled := poolerMetricsEnabled && poolerEnabled && rwPoolerExists
+	roPoolerMetricsEnabled := poolerMetricsEnabled && poolerEnabled && roPoolerExists
+	monitoringEnabled := postgresMetricsEnabled || (poolerMetricsEnabled && poolerEnabled)
+
+	monitoringFailure := func(reason conditionReasons, eventReason, message string, err error) (ctrl.Result, error) {
+		return ctrl.Result{}, handleMonitoringFailure(ctx, c, rc, postgresCluster, reason, eventReason, message, err)
 	}
 
-	poolerMetricsEnabled := isConnectionPoolerMetricsEnabled(postgresCluster, clusterClass)
-	rwPoolerMetricsEnabled := poolerMetricsEnabled && rwPoolerExists
-	roPoolerMetricsEnabled := poolerMetricsEnabled && roPoolerExists
+	oldConditions := make([]metav1.Condition, len(postgresCluster.Status.Conditions))
+	copy(oldConditions, postgresCluster.Status.Conditions)
+
+	if err := reconcilePostgreSQLMetricsService(ctx, c, rc.Scheme, postgresCluster, postgresMetricsEnabled); err != nil {
+		return monitoringFailure(reasonPostgresMetricsServiceFailed, EventMetricsServiceReconcileFailed, fmt.Sprintf("Failed to reconcile PostgreSQL metrics Service: %v", err), err)
+	}
 	if err := reconcileConnectionPoolerMetricsService(ctx, c, rc.Scheme, postgresCluster, readWriteEndpoint, rwPoolerMetricsEnabled); err != nil {
-		return ctrl.Result{}, err
+		return monitoringFailure(reasonPoolerMetricsServiceFailed, EventMetricsServiceReconcileFailed, fmt.Sprintf("Failed to reconcile RW pooler metrics Service: %v", err), err)
 	}
 	if err := reconcileConnectionPoolerMetricsService(ctx, c, rc.Scheme, postgresCluster, readOnlyEndpoint, roPoolerMetricsEnabled); err != nil {
-		return ctrl.Result{}, err
+		return monitoringFailure(reasonPoolerMetricsServiceFailed, EventMetricsServiceReconcileFailed, fmt.Sprintf("Failed to reconcile RO pooler metrics Service: %v", err), err)
+	}
+	if err := reconcilePostgreSQLMetricsServiceMonitor(ctx, c, rc.Scheme, postgresCluster, postgresMetricsEnabled); err != nil {
+		return monitoringFailure(reasonPostgresMetricsMonitorFailed, EventServiceMonitorReconcileFailed, fmt.Sprintf("Failed to reconcile PostgreSQL metrics ServiceMonitor: %v", err), err)
+	}
+	if err := reconcileConnectionPoolerMetricsServiceMonitor(ctx, c, rc.Scheme, postgresCluster, readWriteEndpoint, rwPoolerMetricsEnabled); err != nil {
+		return monitoringFailure(reasonPoolerMetricsMonitorFailed, EventServiceMonitorReconcileFailed, fmt.Sprintf("Failed to reconcile RW pooler metrics ServiceMonitor: %v", err), err)
+	}
+	if err := reconcileConnectionPoolerMetricsServiceMonitor(ctx, c, rc.Scheme, postgresCluster, readOnlyEndpoint, roPoolerMetricsEnabled); err != nil {
+		return monitoringFailure(reasonPoolerMetricsMonitorFailed, EventServiceMonitorReconcileFailed, fmt.Sprintf("Failed to reconcile RO pooler metrics ServiceMonitor: %v", err), err)
 	}
 
-	if err := reconcilePostgreSQLMetricsServiceMonitor(
-		ctx, c, rc.Scheme, postgresCluster, isPostgreSQLMetricsEnabled(postgresCluster, clusterClass),
-	); err != nil {
-		return ctrl.Result{}, err
-	}
+	if !monitoringEnabled {
+		if err := removeCondition(ctx, c, postgresCluster, monitoringReady); err != nil {
+			if apierrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, err
+		}
+	} else {
+		if err := setCondition(ctx, c, postgresCluster, monitoringReady, metav1.ConditionTrue, reasonObservabilityResourcesReady, "Monitoring resources are ready"); err != nil {
+			if apierrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, err
+		}
 
-	if err := reconcileConnectionPoolerMetricsServiceMonitor(
-		ctx, c, rc.Scheme, postgresCluster, readWriteEndpoint, rwPoolerMetricsEnabled,
-	); err != nil {
-		return ctrl.Result{}, err
-	}
-	if err := reconcileConnectionPoolerMetricsServiceMonitor(
-		ctx, c, rc.Scheme, postgresCluster, readOnlyEndpoint, roPoolerMetricsEnabled,
-	); err != nil {
-		return ctrl.Result{}, err
+		rc.emitMonitoringReadyTransition(postgresCluster, oldConditions)
 	}
 
 	// Reconcile ConfigMap when CNPG cluster is healthy.
@@ -843,6 +862,50 @@ func setStatus(ctx context.Context, c client.Client, metrics ports.Recorder, clu
 		return fmt.Errorf("failed to update PostgresCluster status: %w", err)
 	}
 	return nil
+}
+
+// setCondition updates a specific condition on the PostgresCluster status.
+func setCondition(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster, condType conditionTypes, status metav1.ConditionStatus, reason conditionReasons, message string) error {
+	base := cluster.Status.DeepCopy()
+
+	meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
+		Type:               string(condType),
+		Status:             status,
+		Reason:             string(reason),
+		Message:            message,
+		ObservedGeneration: cluster.Generation,
+	})
+
+	if equality.Semantic.DeepEqual(*base, cluster.Status) {
+		return nil
+	}
+	if err := c.Status().Update(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to update PostgresCluster condition: %w", err)
+	}
+	return nil
+}
+
+// removeCondition removes a specific condition from the PostgresCluster status.
+func removeCondition(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster, condType conditionTypes) error {
+	base := cluster.Status.DeepCopy()
+
+	meta.RemoveStatusCondition(&cluster.Status.Conditions, string(condType))
+
+	if equality.Semantic.DeepEqual(*base, cluster.Status) {
+		return nil
+	}
+	if err := c.Status().Update(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to remove PostgresCluster condition: %w", err)
+	}
+	return nil
+}
+
+func handleMonitoringFailure(ctx context.Context, c client.Client, rc *ReconcileContext, cluster *enterprisev4.PostgresCluster, reason conditionReasons, eventReason string, message string, err error) error {
+	rc.emitWarning(cluster, eventReason, message)
+	if statusErr := setCondition(ctx, c, cluster, monitoringReady, metav1.ConditionFalse, reason, message); statusErr != nil {
+		return errors.Join(err, fmt.Errorf("failed to update MonitoringReady condition: %w", statusErr))
+	}
+	return err
 }
 
 // generateConfigMap builds a ConfigMap with connection details for the PostgresCluster.

@@ -49,6 +49,7 @@ type PostgresClusterClassSpec struct {
 	CNPG *CNPGConfig `json:"cnpg,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!has(self.monitoring) || !has(self.monitoring.connectionPoolerMetrics) || !has(self.monitoring.connectionPoolerMetrics.enabled) || !self.monitoring.connectionPoolerMetrics.enabled || (has(self.connectionPoolerEnabled) && self.connectionPoolerEnabled)",message="connectionPoolerEnabled must be true when monitoring.connectionPoolerMetrics.enabled is true"
 // PostgresClusterClassConfig contains provider-agnostic cluster configuration.
 // These fields define PostgresCluster infrastructure and can be overridden in PostgresCluster CR.
 type PostgresClusterClassConfig struct {
@@ -100,12 +101,12 @@ type PostgresClusterClassConfig struct {
 	// +optional
 	ConnectionPoolerEnabled *bool `json:"connectionPoolerEnabled,omitempty"`
 
-	// Observability contains configuration for metrics exposure.
+	// Monitoring contains configuration for metrics exposure.
 	// When enabled, creates metrics resources for clusters using this class.
 	// Can be overridden in PostgresCluster CR.
 	// +kubebuilder:default={}
 	// +optional
-	Observability *PostgresObservabilityClassConfig `json:"observability,omitempty"`
+	Monitoring *PostgresMonitoringClassConfig `json:"monitoring,omitempty"`
 }
 
 // ConnectionPoolerMode defines the PgBouncer connection pooling strategy.
@@ -179,11 +180,11 @@ type PostgresClusterClassStatus struct {
 	Phase *string `json:"phase,omitempty"`
 }
 
-type PostgresObservabilityClassConfig struct {
+type PostgresMonitoringClassConfig struct {
 	// +optional
-	PostgreSQL *MetricsClassConfig `json:"postgresql,omitempty"`
+	PostgreSQLMetrics *MetricsClassConfig `json:"postgresqlMetrics,omitempty"`
 	// +optional
-	PgBouncer *MetricsClassConfig `json:"pgbouncer,omitempty"`
+	ConnectionPoolerMetrics *MetricsClassConfig `json:"connectionPoolerMetrics,omitempty"`
 }
 
 type MetricsClassConfig struct {
