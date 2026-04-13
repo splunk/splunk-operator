@@ -35,7 +35,7 @@ type AppSourceS3Spec struct {
 	Bucket string `json:"bucket,omitempty"`
 
 	// +optional
-	BasePath string `json:"basePath,omitempty"`
+	Path string `json:"path,omitempty"`
 }
 
 type AppSourceGitSpec struct {
@@ -51,6 +51,7 @@ type AppSourceAuth struct {
 	// +required
 	SecretRef corev1.LocalObjectReference `json:"secretRef"`
 }
+
 // +kubebuilder:validation:XValidation:rule="self.type != 's3' || has(self.s3)",message="s3 configuration is required when type is s3"
 // +kubebuilder:validation:XValidation:rule="self.type != 'git' || has(self.git)",message="git configuration is required when type is git"
 // +kubebuilder:validation:XValidation:rule="[has(self.s3), has(self.git)].filter(x, x == true).size() == 1",message="exactly one of s3 or git must be specified"
@@ -58,7 +59,6 @@ type AppSourceAuth struct {
 type AppSourceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-
 
 	// Type of the App Source
 	// Valid values are "git", "s3", "gcp", "azure"
@@ -77,6 +77,8 @@ type AppSourceSpec struct {
 	// GCP and Azure specific configuration
 	// TODO: Add GCP and Azure specific configuration
 
+	// TODO: Add SplunkBase support
+
 	// Authentication configuration
 	// +required
 	Auth AppSourceAuth `json:"auth"`
@@ -94,8 +96,8 @@ type AppSourceStatus struct {
 
 	// Conditions represent the current state of the AppSource
 	// +optional
-    // +listType=map
-    // +listMapKey=type
+	// +listType=map
+	// +listMapKey=type
 	Conditions []metav1.Condition `json:"condition,omitempty"`
 
 	// ObservedGeneration represents the most recent generation observed for this AppSource
