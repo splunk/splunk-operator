@@ -70,6 +70,12 @@ const (
 	// C3 deployments require bundle push across all indexers and SHC deployer which can exceed 5 minutes.
 	AppInstallTimeout = 10 * time.Minute
 
+	// AppStateVerificationTimeout is the timeout for VerifyAppState polls that
+	// try to catch a transient app-framework phase (e.g. download-in-progress).
+	// M4 clusters need time to initialise before app processing begins, so this
+	// must be generous but still bounded to avoid hanging until the suite timeout.
+	AppStateVerificationTimeout = 30 * time.Minute
+
 	// SearchHeadPod Template String for Search Head pod
 	SearchHeadPod = "splunk-%s-shc-search-head-%d"
 

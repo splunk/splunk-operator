@@ -1101,9 +1101,9 @@ func (testenv *TestCaseEnv) VerifyAppListPhase(ctx context.Context, deployment *
 }
 
 // VerifyAppState verify given app state is in between states passed as parameters, i.e when Status is between 101 and 303 we would pass enterpriseApi.AppPkgInstallComplete and enterpriseApi.AppPkgPodCopyComplete
-func (testenv *TestCaseEnv) VerifyAppState(ctx context.Context, deployment *Deployment, name string, crKind string, appSourceName string, appList []string, appStateFinal enterpriseApi.AppPhaseStatusType, appStateInitial enterpriseApi.AppPhaseStatusType) error {
+func (testenv *TestCaseEnv) VerifyAppState(ctx context.Context, deployment *Deployment, name string, crKind string, appSourceName string, appList []string, appStateFinal enterpriseApi.AppPhaseStatusType, appStateInitial enterpriseApi.AppPhaseStatusType, timeout time.Duration) error {
 	for _, appName := range appList {
-		err := wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
+		err := wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 			appDeploymentInfo, _ := testenv.GetAppDeploymentInfo(ctx, deployment, name, crKind, appSourceName, appName)
 			status := appDeploymentInfo.PhaseInfo.Status
 			// Check status value is approximately between appStateInitial and appStateFinal
