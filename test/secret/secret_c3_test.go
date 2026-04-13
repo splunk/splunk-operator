@@ -189,7 +189,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, updatedSecretData, true)
 
 			// Verify Hec token on InputConf on Pod
-			testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, updatedSecretData, true)
+			testcaseEnvInst.VerifySplunkInputConfSecrets(ctx, deployment, verificationPods, updatedSecretData, true)
 
 			// Verify Secrets via api access on Pod
 			testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, updatedSecretData, true)

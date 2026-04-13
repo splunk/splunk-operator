@@ -147,19 +147,19 @@ var _ = Describe("Smartstore test", func() {
 			serverConfPath := "/opt/splunk/etc/apps/splunk-operator/local/server.conf"
 
 			// Validate MaxCacheSizeMB
-			testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "max_cache_size", fmt.Sprint(cacheManagerSmartStoreSpec.MaxCacheSizeMB))
+			testcaseEnvInst.VerifyConfOnPod(ctx, deployment, podName, serverConfPath, "max_cache_size", fmt.Sprint(cacheManagerSmartStoreSpec.MaxCacheSizeMB))
 
 			// Validate EvictionPaddingSizeMB
-			testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "eviction_padding", fmt.Sprint(cacheManagerSmartStoreSpec.EvictionPaddingSizeMB))
+			testcaseEnvInst.VerifyConfOnPod(ctx, deployment, podName, serverConfPath, "eviction_padding", fmt.Sprint(cacheManagerSmartStoreSpec.EvictionPaddingSizeMB))
 
 			// Validate MaxConcurrentDownloads
-			testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "max_concurrent_downloads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentDownloads))
+			testcaseEnvInst.VerifyConfOnPod(ctx, deployment, podName, serverConfPath, "max_concurrent_downloads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentDownloads))
 
 			// Validate MaxConcurrentUploads
-			testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "max_concurrent_uploads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentUploads))
+			testcaseEnvInst.VerifyConfOnPod(ctx, deployment, podName, serverConfPath, "max_concurrent_uploads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentUploads))
 
 			// Validate EvictionPolicy
-			testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "eviction_policy", cacheManagerSmartStoreSpec.EvictionPolicy)
+			testcaseEnvInst.VerifyConfOnPod(ctx, deployment, podName, serverConfPath, "eviction_policy", cacheManagerSmartStoreSpec.EvictionPolicy)
 
 		})
 	})

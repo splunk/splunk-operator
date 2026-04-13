@@ -449,9 +449,9 @@ func (testenv *TestCaseEnv) VerifyRollingRestartFinished(ctx context.Context, de
 }
 
 // VerifyConfOnPod Verify give conf and value on config file on pod
-func (testenv *TestCaseEnv) VerifyConfOnPod(deployment *Deployment, podName string, confFilePath string, config string, value string) {
+func (testenv *TestCaseEnv) VerifyConfOnPod(ctx context.Context, deployment *Deployment, podName string, confFilePath string, config string, value string) {
 	gomega.Consistently(func() bool {
-		confLine, err := GetConfLineFromPod(podName, confFilePath, testenv.GetName(), config, "", false)
+		confLine, err := GetConfLineFromPod(ctx, podName, confFilePath, testenv.GetName(), config, "", false)
 		if err != nil {
 			testenv.Log.Error(err, "Failed to get config on pod")
 			return false
@@ -789,14 +789,14 @@ func (testenv *TestCaseEnv) VerifySplunkServerConfSecrets(ctx context.Context, d
 
 // VerifySplunkInputConfSecrets Compare secret value on passed in map to value present on input.conf for given indexer or standalone pods
 // Set match to true or false to indicate desired +ve or -ve match
-func (testenv *TestCaseEnv) VerifySplunkInputConfSecrets(deployment *Deployment, verificationPods []string, data map[string][]byte, match bool) {
+func (testenv *TestCaseEnv) VerifySplunkInputConfSecrets(ctx context.Context, deployment *Deployment, verificationPods []string, data map[string][]byte, match bool) {
 	secretName := "hec_token"
 	for _, podName := range verificationPods {
 		if strings.Contains(podName, "standalone") || strings.Contains(podName, "indexer") {
 			found := false
 			testenv.Log.Info("Key Verificaton", "Pod Name", podName, "Key", secretName)
 			stanza := SecretKeytoServerConfStanza[secretName]
-			_, value, err := GetSecretFromInputsConf(deployment, podName, testenv.GetName(), "token", stanza)
+			_, value, err := GetSecretFromInputsConf(ctx, deployment, podName, testenv.GetName(), "token", stanza)
 			gomega.Expect(err).To(gomega.Succeed(), "Secret not found in conf file", "Secret Name", secretName)
 			comparsion := strings.Compare(value, string(data[secretName]))
 			if comparsion == 0 {

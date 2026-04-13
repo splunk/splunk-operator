@@ -243,7 +243,7 @@ func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []s
 	stdinReader := strings.NewReader(stdin)
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	err = exec.Stream(remotecommand.StreamOptions{
+	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:  stdinReader,
 		Stdout: stdout,
 		Stderr: stderr,
@@ -315,7 +315,7 @@ func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string,
 	stdinReader := strings.NewReader(stdin)
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	err = exec.Stream(remotecommand.StreamOptions{
+	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:  stdinReader,
 		Stdout: stdout,
 		Stderr: stderr,

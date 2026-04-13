@@ -157,7 +157,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, updatedSecretData, true)
 
 			// Verify Hec token on InputConf on Pod
-			testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, updatedSecretData, true)
+			testcaseEnvInst.VerifySplunkInputConfSecrets(ctx, deployment, verificationPods, updatedSecretData, true)
 
 			// Verify Secrets via api access on Pod
 			testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, updatedSecretData, true)
@@ -260,7 +260,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, secretStruct.Data, false)
 
 			// Verify Hec token on InputConf on Pod
-			testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, secretStruct.Data, false)
+			testcaseEnvInst.VerifySplunkInputConfSecrets(ctx, deployment, verificationPods, secretStruct.Data, false)
 
 			// Verify Secrets via api access on Pod
 			testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, secretStruct.Data, false)
@@ -345,7 +345,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, secretStruct.Data, false)
 
 			// Verify Hec token on InputConf on Pod
-			testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, secretStruct.Data, false)
+			testcaseEnvInst.VerifySplunkInputConfSecrets(ctx, deployment, verificationPods, secretStruct.Data, false)
 
 			// Verify Secrets via api access on Pod
 			testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, secretStruct.Data, false)
