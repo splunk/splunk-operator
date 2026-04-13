@@ -48,11 +48,11 @@ const TeardownTimeout = 10 * time.Minute
 // Each value must accommodate multiple specs running back-to-back.
 const (
 	// ShortSuiteTimeout for lightweight suites:
-	// smartstore (7m), indingsep (12m), deletecr (14m).
+	// smartstore (7m), indingsep (12m).
 	ShortSuiteTimeout = 30 * time.Minute
 
 	// MediumSuiteTimeout for moderate suites:
-	// smoke (41m), s1appfw (1h00m), lmanager (1h00m).
+	// smoke (41m), s1appfw (1h00m), lmanager (1h00m), deletecr (30m).
 	MediumSuiteTimeout = 90 * time.Minute
 
 	// LongSuiteTimeout for heavy suites:
