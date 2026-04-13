@@ -202,10 +202,8 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 
 	Expect(testenv.VerifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)).To(Succeed(), "M4 cluster or RF/SF verification failed after adding index")
 
-	// Verify new bundle is pushed (only for v3)
-	if config.GetAPIVersion() == "v3" {
-		Expect(testcaseEnvInst.VerifyClusterManagerBundlePush(ctx, deployment, 1, oldBundleHash)).To(Succeed(), "Cluster Manager bundle push not detected")
-	}
+	// Verify new bundle is pushed to all indexers
+	Expect(testcaseEnvInst.VerifyClusterManagerBundlePush(ctx, deployment, 1, oldBundleHash)).To(Succeed(), "Cluster Manager bundle push not detected")
 
 	// Verify both indexes on all sites
 	for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
