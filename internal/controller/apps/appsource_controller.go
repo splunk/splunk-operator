@@ -18,8 +18,10 @@ package apps
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"gocloud.dev/blob"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -113,8 +115,58 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// TODO: check remote storage is accessible using the secret. we need to gothrough
 	// the custom client code to validate how to use or if we should just use gocloud.dev pacakge
 
+	// get bucket, region, and path
+	bucket := appSourceInstance.Spec.S3.Bucket
+	region := appSourceInstance.Spec.S3.Region
+	path := appSourceInstance.Spec.S3.Path
+
+	logger.Info("Bucket", bucket)
+	logger.Info("Region", region)
+	logger.Info("Path", path)
+
+	// Get AWS credentials from secret
+	accessKey := string(secret.Data["AWS_ACCESS_KEY_ID"])
+	secretAccessKey := string(secret.Data["AWS_SECRET_ACCESS_KEY"])
+
+	if accessKey == "" || secretAccessKey == "" {
+		logger.Error(nil, "AWS credentials not found in secret")
+		return ctrl.Result{}, nil
+	}
+
+	logger.Info("Access Key", accessKey)
+	logger.Info("Secret Access Key", secretAccessKey)
+
+	bucketURL := fmt.Sprintf("s3://%s?region=%s", bucket, region)
+	logger.Info("Bucket URL", bucketURL)
+
+	bkt, err := blob.OpenBucket(ctx, bucketURL)
+	if err != nil {
+		logger.Error(err, "Failed to open bucket")
+		return ctrl.Result{}, err
+	}
+	defer bkt.Close()
+
+	//
 
 	return ctrl.Result{}, nil
+}
+
+
+func ListApps(ctx context.Context, req client.Client, secretRef string, namespace string) {
+	logger := logf.FromContext(ctx)
+
+	// get s3 creds
+	if secretRef != "" {
+		secret := &corev1.Secret{}
+		secretKey := types.NamespacedName{
+			Name:      secretRef,
+			Namespace: namespace,
+		}
+		if err := req.Get(ctx, secretKey, secret); err != nil {
+			logger.Error(err, "Failed to get secret")
+			return
+		}
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
