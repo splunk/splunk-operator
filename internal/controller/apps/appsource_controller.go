@@ -120,13 +120,13 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	region := appSourceInstance.Spec.S3.Region
 	path := appSourceInstance.Spec.S3.Path
 
-	logger.Info("Bucket", bucket)
-	logger.Info("Region", region)
-	logger.Info("Path", path)
+	logger.Info("Bucket", "bucket", bucket)
+	logger.Info("Region", "region", region)
+	logger.Info("Path", "path", path)
 
 	// Get AWS credentials from secret
-	accessKey := string(secret.Data["AWS_ACCESS_KEY_ID"])
-	secretAccessKey := string(secret.Data["AWS_SECRET_ACCESS_KEY"])
+	accessKey := string(secret.Data["s3_access_key"])
+	secretAccessKey := string(secret.Data["s3_secret_key"])
 
 	if accessKey == "" || secretAccessKey == "" {
 		logger.Error(nil, "AWS credentials not found in secret")
@@ -150,7 +150,6 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	return ctrl.Result{}, nil
 }
-
 
 func ListApps(ctx context.Context, req client.Client, secretRef string, namespace string) {
 	logger := logf.FromContext(ctx)
