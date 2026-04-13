@@ -25,6 +25,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -161,6 +162,12 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
+		err = syncMonitoringConsoleRuntimeState(ctx, client, cr)
+		if err != nil {
+			eventPublisher.Warning(ctx, "syncMonitoringConsoleRuntimeState", fmt.Sprintf("sync monitoring console runtime state failed %s", err.Error()))
+			return result, err
+		}
+
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
 
@@ -176,7 +183,6 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 // getMonitoringConsoleStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise monitoring console instances.
 func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) (*appsv1.StatefulSet, error) {
 	// get generic statefulset for Splunk Enterprise objects
-	var monitoringConsoleConfigMap *corev1.ConfigMap
 	configMap := GetSplunkMonitoringconsoleConfigMapName(cr.GetName(), SplunkMonitoringConsole)
 	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, 1, []corev1.EnvVar{})
 	if err != nil {
@@ -195,15 +201,84 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 
 	//update podTemplate annotation with configMap resource version
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMap}
-	monitoringConsoleConfigMap, err = splctrl.GetMCConfigMap(ctx, client, cr, namespacedName)
+	_, err = splctrl.GetMCConfigMap(ctx, client, cr, namespacedName)
 	if err != nil {
 		return nil, err
 	}
-	ss.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
+	// Keep the pod template stable so MC membership changes are applied over REST instead of forcing a pod recycle.
+	ss.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = ""
 
 	// Setup App framework staging volume for apps
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 	return ss, nil
+}
+
+var newMonitoringConsoleSplunkClient = splclient.NewSplunkClient
+
+func syncMonitoringConsoleRuntimeState(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) error {
+	configMapName := GetSplunkMonitoringconsoleConfigMapName(cr.GetName(), SplunkMonitoringConsole)
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
+	monitoringConsoleConfigMap, err := splctrl.GetMCConfigMap(ctx, client, cr, namespacedName)
+	if err != nil {
+		return err
+	}
+
+	mcClient, err := getMonitoringConsoleClient(ctx, client, cr)
+	if err != nil {
+		return err
+	}
+
+	return mcClient.SyncMonitoringConsoleConfig(getMonitoringConsoleDesiredPeers(monitoringConsoleConfigMap))
+}
+
+func getMonitoringConsoleClient(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) (*splclient.SplunkClient, error) {
+	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
+	defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
+	if err != nil {
+		return nil, fmt.Errorf("could not access default secret object to fetch admin password: %w", err)
+	}
+
+	adminPwd, foundSecret := defaultSecret.Data["password"]
+	if !foundSecret {
+		return nil, fmt.Errorf("could not find admin password while trying to sync the monitoring console")
+	}
+
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkMonitoringConsole, cr.GetName(), false))
+	return newMonitoringConsoleSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd)), nil
+}
+
+func getMonitoringConsoleDesiredPeers(configMap *corev1.ConfigMap) []string {
+	desiredPeerSet := make(map[string]struct{})
+	desiredPeers := make([]string, 0)
+
+	for _, key := range []string{
+		"SPLUNK_INDEXER_URL",
+		splcommon.ClusterManagerURL,
+		splcommon.LicenseManagerURL,
+		"SPLUNK_STANDALONE_URL",
+		"SPLUNK_SEARCH_HEAD_URL",
+		"SPLUNK_DEPLOYER_URL",
+	} {
+		if configMap == nil || configMap.Data == nil {
+			continue
+		}
+
+		for _, peer := range strings.Split(configMap.Data[key], ",") {
+			peer = strings.TrimSpace(peer)
+			if peer == "" {
+				continue
+			}
+			if _, ok := desiredPeerSet[peer]; ok {
+				continue
+			}
+			desiredPeerSet[peer] = struct{}{}
+			desiredPeers = append(desiredPeers, peer)
+		}
+	}
+
+	sort.Strings(desiredPeers)
+	return desiredPeers
 }
 
 // helper function to get the list of MonitoringConsole types in the current namespace

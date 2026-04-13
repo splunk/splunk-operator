@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -495,6 +496,39 @@ func TestUpdateDMCClusteringLabelGroup(t *testing.T) {
 		return nil
 	}
 	splunkClientTester(t, "TestUpdateDMCClusteringLabelGroup", 201, "", wantRequest, test)
+}
+
+func TestAddMonitoringConsolePeer(t *testing.T) {
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/search/distributed/peers", nil)
+	mockSplunkClient := &spltest.MockHTTPClient{}
+	mockSplunkClient.AddHandler(wantRequest, 201, "", nil)
+
+	c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c.Client = mockSplunkClient
+
+	err := c.AddMonitoringConsolePeer("https://splunk-example-search-head-service")
+	if err != nil {
+		t.Fatalf("AddMonitoringConsolePeer() returned err=%v", err)
+	}
+
+	mockSplunkClient.CheckRequests(t, "TestAddMonitoringConsolePeer")
+	gotBody, err := io.ReadAll(mockSplunkClient.GotRequests[0].Body)
+	if err != nil {
+		t.Fatalf("unable to read request body: %v", err)
+	}
+
+	wantBody := "name=splunk-example-search-head-service%3A8089&remotePassword=p%40ssw0rd&remoteUsername=admin"
+	if string(gotBody) != wantBody {
+		t.Fatalf("AddMonitoringConsolePeer() body=%q; want %q", string(gotBody), wantBody)
+	}
+}
+
+func TestRemoveMonitoringConsolePeer(t *testing.T) {
+	wantRequest, _ := http.NewRequest("DELETE", "https://localhost:8089/services/search/distributed/peers/splunk-example-search-head-service:8089", nil)
+	test := func(c SplunkClient) error {
+		return c.RemoveMonitoringConsolePeer("splunk-example-search-head-service")
+	}
+	splunkClientTester(t, "TestRemoveMonitoringConsolePeer", 200, "", wantRequest, test)
 }
 
 func TestGetMonitoringconsoleAssetTable(t *testing.T) {

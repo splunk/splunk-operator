@@ -1084,28 +1084,65 @@ func WaitForAppInstall(ctx context.Context, deployment *Deployment, testenvInsta
 
 // VerifyPodsInMCConfigMap checks if given pod names are present in given KEY of given MC's Config Map
 func VerifyPodsInMCConfigMap(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, pods []string, key string, mcName string, expected bool) {
-	// Get contents of MC config map
-	mcConfigMap, err := GetMCConfigMap(ctx, deployment, testenvInstance.GetName(), mcName)
-	gomega.Expect(err).To(gomega.Succeed(), "Unable to get MC config map")
 	for _, podName := range pods {
-		testenvInstance.Log.Info("Checking for POD on  MC Config Map", "POD Name", podName, "DATA", mcConfigMap.Data)
-		gomega.Expect(expected).To(gomega.Equal(CheckPodNameInString(podName, mcConfigMap.Data[key])), "Verify Pod in MC Config Map. Pod Name %s.", podName)
+		gomega.Eventually(func() error {
+			mcConfigMap, err := GetMCConfigMap(ctx, deployment, testenvInstance.GetName(), mcName)
+			if err != nil {
+				return err
+			}
+
+			testenvInstance.Log.Info("Checking for POD on MC Config Map", "POD Name", podName, "KEY", key, "EXPECTED", expected, "DATA", mcConfigMap.Data)
+			found := CheckPodNameInString(podName, mcConfigMap.Data[key])
+			if found != expected {
+				return fmt.Errorf("expected MC config map key %s for pod %s to be %t, got %t", key, podName, expected, found)
+			}
+
+			return nil
+		}, deployment.GetTimeout(), PollInterval).Should(gomega.Succeed(), "Verify Pod in MC Config Map. Pod Name %s.", podName)
 	}
 }
 
 // VerifyPodsInMCConfigString checks if given pod names are present in given KEY of given MC's Config Map
 func VerifyPodsInMCConfigString(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, pods []string, mcName string, expected bool, checkPodIP bool) {
 	for _, podName := range pods {
-		testenvInstance.Log.Info("Checking pod configured in MC POD Peers String", "Pod Name", podName)
-		var found bool
-		if checkPodIP {
-			podIP := GetPodIP(testenvInstance.GetName(), podName)
-			found = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podIP)
-		} else {
-			found = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podName)
-		}
-		gomega.Expect(expected).To(gomega.Equal(found), "Verify Pod in MC Config String. Pod Name %s.", podName)
+		gomega.Eventually(func() error {
+			testenvInstance.Log.Info("Checking pod configured in MC POD peers string", "Pod Name", podName, "EXPECTED", expected)
+
+			var (
+				found bool
+				err   error
+			)
+			if checkPodIP {
+				podIP := GetPodIP(testenvInstance.GetName(), podName)
+				if podIP == "" {
+					return fmt.Errorf("empty pod IP for pod %s", podName)
+				}
+				found, err = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podIP)
+			} else {
+				found, err = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podName)
+			}
+			if err != nil {
+				return err
+			}
+
+			if found != expected {
+				return fmt.Errorf("expected MC configured peers for pod %s to be %t, got %t", podName, expected, found)
+			}
+
+			return nil
+		}, deployment.GetTimeout(), PollInterval).Should(gomega.Succeed(), "Verify Pod in MC Config String. Pod Name %s.", podName)
 	}
+}
+
+// VerifyPodDidNotReset verifies a pod kept the same start time across an operation.
+func VerifyPodDidNotReset(deployment *Deployment, testenvInstance *TestCaseEnv, ns string, podName string, podStartTime time.Time) {
+	gomega.Expect(podStartTime.IsZero()).To(gomega.Equal(false), "Pod start time was not captured. Pod Name %s.", podName)
+
+	gomega.Eventually(func() bool {
+		currentPodStartTime := GetPodStartTime(ns, podName)
+		testenvInstance.Log.Info("Checking pod reset for Pod Name", "PodName", podName, "Current Pod Start Time", currentPodStartTime, "Previous Pod Start Time", podStartTime)
+		return currentPodStartTime.Equal(podStartTime)
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true), "Pod reset was detected. Pod Name %s.", podName)
 }
 
 // VerifyClusterManagerBundlePush verify that bundle push was pushed on all indexers
@@ -1169,9 +1206,6 @@ func VerifyNoPodReset(ctx context.Context, deployment *Deployment, testenvInstan
 		// Get current Age on all splunk pods and compare with previous
 		currentSplunkPodAge := GetPodsStartTime(ns)
 		for podName, currentpodAge := range currentSplunkPodAge {
-			if strings.Contains(podName, "monitoring-console") {
-				continue
-			}
 			// Only compare if the pod was present in previous pod iteration
 			testenvInstance.Log.Info("Checking Pod reset for Pod Name", "PodName", podName, "Current Pod Age", currentpodAge)
 			if _, ok := podStartTimeMap[podName]; ok {

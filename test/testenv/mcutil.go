@@ -75,8 +75,8 @@ func CheckMCPodReady(ns string) bool {
 	return stsReady && podReady
 }
 
-// GetConfiguredPeers get list of Peers Configured on Montioring Console
-func GetConfiguredPeers(ns string, mcName string) []string {
+// GetConfiguredPeers gets the peers configured on the monitoring console.
+func GetConfiguredPeers(ns string, mcName string) ([]string, error) {
 	podName := fmt.Sprintf(MonitoringConsolePod, mcName)
 	var peerList []string
 	if len(podName) > 0 {
@@ -85,6 +85,7 @@ func GetConfiguredPeers(ns string, mcName string) []string {
 		if err != nil {
 			cmd := fmt.Sprintf("kubectl exec -n %s %s -- cat %s", ns, podName, peerFile)
 			logf.Log.Error(err, "Failed to execute command", "command", cmd)
+			return nil, err
 		}
 		for _, line := range strings.Split(string(output), "\n") {
 			// Check for empty lines to prevent an error in logic below
@@ -101,7 +102,7 @@ func GetConfiguredPeers(ns string, mcName string) []string {
 		}
 	}
 	logf.Log.Info("Peer List found on MC Pod", "MC POD", podName, "Configured Peers", peerList)
-	return peerList
+	return peerList, nil
 }
 
 // DeleteMCPod delete monitoring console deployment
@@ -116,10 +117,13 @@ func DeleteMCPod(ns string) {
 	}
 }
 
-// CheckPodNameOnMC Check given pod is configured on Monitoring console pod
-func CheckPodNameOnMC(ns string, mcName string, podName string) bool {
+// CheckPodNameOnMC checks whether the given pod is configured on the monitoring console pod.
+func CheckPodNameOnMC(ns string, mcName string, podName string) (bool, error) {
 	// Get Peers configured on Monitoring Console
-	peerList := GetConfiguredPeers(ns, mcName)
+	peerList, err := GetConfiguredPeers(ns, mcName)
+	if err != nil {
+		return false, err
+	}
 	logf.Log.Info("Peer List", "instance", peerList)
 	found := false
 	for _, peer := range peerList {
@@ -129,7 +133,7 @@ func CheckPodNameOnMC(ns string, mcName string, podName string) bool {
 			break
 		}
 	}
-	return found
+	return found, nil
 }
 
 // GetPodIP returns IP address of a POD as a string

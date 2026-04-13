@@ -22,7 +22,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -682,6 +684,287 @@ type MCServerRolesInfo struct {
 type MCDistributedPeers struct {
 	ClusterLabel []string `json:"cluster_label"`
 	ServerRoles  []string `json:"server_roles"`
+	PeerType     string   `json:"peerType"`
+}
+
+// MCDistributedPeerEntry is the struct for a monitoring console distributed peer entry.
+type MCDistributedPeerEntry struct {
+	Name    string             `json:"name"`
+	Content MCDistributedPeers `json:"content"`
+}
+
+// GetMonitoringConsoleDistributedPeers returns the configured peers for the monitoring console.
+func (c *SplunkClient) GetMonitoringConsoleDistributedPeers() ([]MCDistributedPeerEntry, error) {
+	apiResponse := struct {
+		Entry []MCDistributedPeerEntry `json:"entry"`
+	}{}
+	path := "/services/search/distributed/peers"
+	err := c.Get(path, &apiResponse)
+	if err != nil {
+		return nil, err
+	}
+	return apiResponse.Entry, nil
+}
+
+// AddMonitoringConsolePeer adds a peer to the monitoring console distributed search peers.
+func (c *SplunkClient) AddMonitoringConsolePeer(peerName string) error {
+	peerName = normalizeMonitoringConsolePeerName(peerName)
+	if peerName == "" {
+		return nil
+	}
+
+	reqBody := url.Values{}
+	reqBody.Set("name", peerName)
+	reqBody.Set("remoteUsername", c.Username)
+	reqBody.Set("remotePassword", c.Password)
+
+	endpoint := fmt.Sprintf("%s/services/search/distributed/peers", c.ManagementURI)
+	request, err := http.NewRequest("POST", endpoint, strings.NewReader(reqBody.Encode()))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	expectedStatus := []int{200, 201, 409}
+	return c.Do(request, expectedStatus, nil)
+}
+
+// RemoveMonitoringConsolePeer removes a peer from the monitoring console distributed search peers.
+func (c *SplunkClient) RemoveMonitoringConsolePeer(peerName string) error {
+	peerName = normalizeMonitoringConsolePeerName(peerName)
+	if peerName == "" {
+		return nil
+	}
+
+	endpoint := fmt.Sprintf("%s/services/search/distributed/peers/%s", c.ManagementURI, url.PathEscape(peerName))
+	request, err := http.NewRequest("DELETE", endpoint, nil)
+	if err != nil {
+		return err
+	}
+
+	expectedStatus := []int{200, 404}
+	return c.Do(request, expectedStatus, nil)
+}
+
+// SyncMonitoringConsoleConfig updates distributed peers and DMC groups without requiring an MC restart.
+// If desiredConfiguredPeers is nil, peer add/remove reconciliation is skipped and only the DMC refresh runs.
+func (c *SplunkClient) SyncMonitoringConsoleConfig(desiredConfiguredPeers []string) error {
+	apiResponseServerRoles, err := c.GetMonitoringconsoleServerRoles()
+	if err != nil {
+		return err
+	}
+
+	distributedPeers, err := c.GetMonitoringConsoleDistributedPeers()
+	if err != nil {
+		return err
+	}
+
+	if desiredConfiguredPeers != nil {
+		err = c.reconcileMonitoringConsolePeers(distributedPeers, desiredConfiguredPeers)
+		if err != nil {
+			return err
+		}
+
+		distributedPeers, err = c.GetMonitoringConsoleDistributedPeers()
+		if err != nil {
+			return err
+		}
+	}
+
+	return c.refreshMonitoringConsoleState(apiResponseServerRoles.ServerRoles, distributedPeers)
+}
+
+func (c *SplunkClient) reconcileMonitoringConsolePeers(distributedPeers []MCDistributedPeerEntry, desiredConfiguredPeers []string) error {
+	desiredSet := make(map[string]struct{})
+	desiredPeers := make([]string, 0, len(desiredConfiguredPeers))
+	for _, peer := range desiredConfiguredPeers {
+		normalizedPeer := normalizeMonitoringConsolePeerName(peer)
+		if normalizedPeer == "" {
+			continue
+		}
+		if _, ok := desiredSet[normalizedPeer]; ok {
+			continue
+		}
+		desiredSet[normalizedPeer] = struct{}{}
+		desiredPeers = append(desiredPeers, normalizedPeer)
+	}
+	sort.Strings(desiredPeers)
+
+	currentPeers := make(map[string]struct{})
+	configuredPeers := make([]string, 0, len(distributedPeers))
+	for _, peer := range distributedPeers {
+		normalizedPeer := normalizeMonitoringConsolePeerName(peer.Name)
+		if normalizedPeer == "" {
+			continue
+		}
+		currentPeers[normalizedPeer] = struct{}{}
+		if peer.Content.PeerType == "configured" {
+			configuredPeers = append(configuredPeers, normalizedPeer)
+		}
+	}
+	sort.Strings(configuredPeers)
+
+	for _, peer := range desiredPeers {
+		if _, ok := currentPeers[peer]; ok {
+			continue
+		}
+		if err := c.AddMonitoringConsolePeer(peer); err != nil {
+			return err
+		}
+	}
+
+	for _, peer := range configuredPeers {
+		if _, ok := desiredSet[peer]; ok {
+			continue
+		}
+		if err := c.RemoveMonitoringConsolePeer(peer); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *SplunkClient) refreshMonitoringConsoleState(localServerRoles []string, distributedPeers []MCDistributedPeerEntry) error {
+	groupSpecs := []struct {
+		name         string
+		defaultValue bool
+		serverRoles  []string
+	}{
+		{name: "dmc_group_cluster_master", defaultValue: false, serverRoles: []string{"cluster_manager", "cluster_master"}},
+		{name: "dmc_group_indexer", defaultValue: true, serverRoles: []string{"indexer"}},
+		{name: "dmc_group_deployment_server", defaultValue: true, serverRoles: []string{"deployment_server"}},
+		{name: splcommon.LicenseManagerDMCGroup, defaultValue: false, serverRoles: []string{"license_manager", "license_master"}},
+		{name: "dmc_group_search_head", defaultValue: false, serverRoles: []string{"cluster_search_head", "search_head", "shc_member", "shc_captain"}},
+	}
+
+	for _, spec := range groupSpecs {
+		members := buildMonitoringConsoleMembers(localServerRoles, distributedPeers, spec.serverRoles...)
+		err := c.UpdateDMCGroups(spec.name, buildMonitoringConsoleGroupBody(members, spec.defaultValue))
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, groupName := range []string{"dmc_group_kv_store", "dmc_group_shc_deployer"} {
+		err := c.UpdateDMCGroups(groupName, buildMonitoringConsoleGroupBody(nil, false))
+		if err != nil {
+			return err
+		}
+	}
+
+	clusterLabelGroups := make(map[string][]string)
+	for _, peer := range distributedPeers {
+		for _, clusterLabel := range peer.Content.ClusterLabel {
+			if clusterLabel == "" {
+				continue
+			}
+			clusterLabelGroups[clusterLabel] = append(clusterLabelGroups[clusterLabel], peer.Name)
+		}
+	}
+
+	clusterLabels := make([]string, 0, len(clusterLabelGroups))
+	for clusterLabel := range clusterLabelGroups {
+		clusterLabels = append(clusterLabels, clusterLabel)
+	}
+	sort.Strings(clusterLabels)
+
+	for _, clusterLabel := range clusterLabels {
+		members := clusterLabelGroups[clusterLabel]
+		sort.Strings(members)
+		err := c.UpdateDMCClusteringLabelGroup(clusterLabel, buildMonitoringConsoleClusterLabelBody(members))
+		if err != nil {
+			return err
+		}
+	}
+
+	apiResponseMCAssetTableBuild, err := c.GetMonitoringconsoleAssetTable()
+	if err != nil {
+		return err
+	}
+	err = c.PostMonitoringConsoleAssetTable(apiResponseMCAssetTableBuild)
+	if err != nil {
+		return err
+	}
+
+	configuredPeers := make([]string, 0, len(distributedPeers))
+	for _, peer := range distributedPeers {
+		configuredPeers = append(configuredPeers, peer.Name)
+	}
+	sort.Strings(configuredPeers)
+
+	UISettingsObject, err := c.GetMonitoringConsoleUISettings()
+	if err != nil {
+		return err
+	}
+	err = c.UpdateLookupUISettings(strings.Join(configuredPeers, ","), UISettingsObject)
+	if err != nil {
+		return err
+	}
+
+	return c.UpdateMonitoringConsoleApp()
+}
+
+func buildMonitoringConsoleMembers(localServerRoles []string, distributedPeers []MCDistributedPeerEntry, expectedRoles ...string) []string {
+	members := make([]string, 0, len(distributedPeers)+1)
+	if hasAnyMonitoringConsoleServerRole(localServerRoles, expectedRoles...) {
+		members = append(members, "localhost:localhost")
+	}
+	for _, peer := range distributedPeers {
+		if hasAnyMonitoringConsoleServerRole(peer.Content.ServerRoles, expectedRoles...) {
+			members = append(members, peer.Name)
+		}
+	}
+	sort.Strings(members)
+	return members
+}
+
+func buildMonitoringConsoleGroupBody(members []string, defaultValue bool) string {
+	if len(members) == 0 {
+		defaultValue = false
+	}
+
+	reqBody := url.Values{}
+	for _, member := range members {
+		reqBody.Add("member", member)
+	}
+	reqBody.Set("default", strconv.FormatBool(defaultValue))
+	return reqBody.Encode()
+}
+
+func buildMonitoringConsoleClusterLabelBody(members []string) string {
+	reqBody := url.Values{}
+	for _, member := range members {
+		reqBody.Add("member", member)
+	}
+	return reqBody.Encode()
+}
+
+func hasAnyMonitoringConsoleServerRole(serverRoles []string, expectedRoles ...string) bool {
+	for _, serverRole := range serverRoles {
+		for _, expectedRole := range expectedRoles {
+			if serverRole == expectedRole {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func normalizeMonitoringConsolePeerName(peerName string) string {
+	peerName = strings.TrimSpace(peerName)
+	peerName = strings.TrimPrefix(peerName, "https://")
+	peerName = strings.TrimPrefix(peerName, "http://")
+	if idx := strings.Index(peerName, "/"); idx >= 0 {
+		peerName = peerName[:idx]
+	}
+	if peerName == "" {
+		return ""
+	}
+	if !strings.Contains(peerName, ":") {
+		peerName = peerName + ":8089"
+	}
+	return peerName
 }
 
 // AutomateMCApplyChanges change the state of new indexers from "New" to "Configured" and add them in monitoring console asset table
