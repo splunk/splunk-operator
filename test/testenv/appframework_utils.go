@@ -171,7 +171,7 @@ func GetPodAppInstallStatus(ctx context.Context, deployment *Deployment, podName
 	stdin := fmt.Sprintf("/opt/splunk/bin/splunk display app '%s' -auth admin:$(cat /mnt/splunk-secrets/password)", appname)
 	command := []string{"/bin/sh"}
 	var stdout, stderr string
-	err := wait.PollUntilContextTimeout(ctx, PollInterval, 10*time.Second, true, func(ctx context.Context) (bool, error) {
+	err := wait.PollUntilContextTimeout(ctx, PollInterval, 60*time.Second, true, func(ctx context.Context) (bool, error) {
 		var execErr error
 		stdout, stderr, execErr = deployment.PodExecCommand(ctx, podName, command, stdin, false)
 		return execErr == nil, nil

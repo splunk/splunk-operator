@@ -876,7 +876,7 @@ func (testenv *TestCaseEnv) VerifyAppInstalled(ctx context.Context, deployment *
 		for _, appName := range apps {
 			status, versionInstalled, err := GetPodAppStatus(ctx, deployment, podName, ns, appName, clusterWideInstall)
 			testenv.Log.Info("App details", "app", appName, "status", status, "version", versionInstalled, "error", err)
-			gomega.Expect(err).To(gomega.Succeed(), "Unable to get app status on pod ")
+			gomega.Expect(err).To(gomega.Succeed(), fmt.Sprintf("Unable to get app status on pod %s for app %s", podName, appName))
 			comparison := strings.EqualFold(status, statusCheck)
 			//Check the app is installed on specific pods and un-installed on others for cluster-wide install
 			var check bool
