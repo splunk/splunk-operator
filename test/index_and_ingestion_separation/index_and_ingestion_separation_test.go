@@ -37,7 +37,7 @@ var _ = Describe("indingsep test", func() {
 
 	var cmSpec enterpriseApi.ClusterManagerSpec
 
-	BeforeEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
@@ -61,7 +61,7 @@ var _ = Describe("indingsep test", func() {
 		}
 	})
 
-	AfterEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
 		}

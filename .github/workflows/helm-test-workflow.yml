@@ -60,6 +60,7 @@ jobs:
     needs: build-operator-image
     timeout-minutes: 240
     env:
+      TEST_TIMEOUT: 225m
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator

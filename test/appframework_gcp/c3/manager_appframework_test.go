@@ -47,7 +47,7 @@ var _ = Describe("c3appfw test", func() {
 	var uploadedApps []string
 	var filePresentOnOperator bool
 
-	BeforeEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 
 		var err error
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
@@ -63,7 +63,7 @@ var _ = Describe("c3appfw test", func() {
 		testenv.SpecifiedTestTimeout = 100000
 	})
 
-	AfterEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true

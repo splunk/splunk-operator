@@ -127,7 +127,6 @@ jobs:
         COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
   smoke-tests-arm-ubuntu:
     needs: build-operator-image-arm-ubuntu
-    timeout-minutes: 240
     strategy:
       fail-fast: false
       matrix:
@@ -261,7 +260,9 @@ jobs:
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run smoke test
         id: smoketest
+        timeout-minutes: 240
         env:
+          TEST_TIMEOUT: 225m
           TEST_S3_ACCESS_KEY_ID: ${{ vars.TEST_S3_ACCESS_KEY_ID }}
           TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.TEST_S3_SECRET_ACCESS_KEY }}
         run: |

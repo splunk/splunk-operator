@@ -228,7 +228,7 @@ func (testenv *TestCaseEnv) createNamespace() error {
 
 	// Cleanup the namespace when we teardown this testenv
 	testenv.pushCleanupFunc(func() error {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), TeardownTimeout-2*time.Minute)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Duration(float64(SetupTeardownTimeout)*CleanupGraceFraction))
 		defer cleanupCancel()
 		err := testenv.GetKubeClient().Delete(cleanupCtx, namespace)
 		if err != nil {

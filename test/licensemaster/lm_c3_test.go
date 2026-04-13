@@ -29,7 +29,7 @@ var _ = Describe("licensemaster test", func() {
 	var deployment *testenv.Deployment
 	var config *licensemanager.LicenseTestConfig
 
-	BeforeEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 
@@ -46,7 +46,7 @@ var _ = Describe("licensemaster test", func() {
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
-	AfterEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true

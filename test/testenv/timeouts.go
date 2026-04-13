@@ -42,9 +42,27 @@ const (
 	LongTimeout = 100 * time.Minute
 )
 
-// TeardownTimeout limits AfterEach teardown (namespace/resource cleanup).
-// Prevents hung teardowns from consuming the entire suite timeout.
-const TeardownTimeout = 10 * time.Minute
+// defaultTestTimeout is the max timeout in seconds before async test failed.
+// Used as the default for the -test-timeout flag and SpecifiedTestTimeout.
+const defaultTestTimeout = 5400
+
+// DefaultTimeout is a backstop for infrastructure-level polls (namespace creation,
+// operator deployment readiness, CR existence after create). These operations should
+// complete in seconds; this value is a generous safety net.
+const DefaultTimeout = 15 * time.Minute
+
+// AppInstallTimeout is the timeout for waiting for apps to reach Install phase on a CR.
+// C3 deployments require bundle push across all indexers and SHC deployer which can exceed 5 minutes.
+const AppInstallTimeout = 10 * time.Minute
+
+// SetupTeardownTimeout limits BeforeEach setup and AfterEach teardown nodes.
+// Prevents hung setup or cleanup from consuming the entire suite timeout.
+const SetupTeardownTimeout = 10 * time.Minute
+
+// CleanupGraceFraction is the fraction of SetupTeardownTimeout used for
+// cleanup context deadlines, leaving the remainder as a grace period so
+// cleanup can fail gracefully before Ginkgo's NodeTimeout forcibly kills the node.
+const CleanupGraceFraction = 0.8
 
 // Suite-level timeouts. Applied via GinkgoConfiguration().Timeout in suite files.
 // Sized for sequential spec execution (no ginkgo -nodes parallelism).

@@ -49,7 +49,7 @@ var _ = Describe("m4appfw test", func() {
 	var s3TestDirIdxcCluster string
 	var filePresentOnOperator bool
 
-	BeforeEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
@@ -67,7 +67,7 @@ var _ = Describe("m4appfw test", func() {
 		appSourceVolumeNameShc = "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
 	})
 
-	AfterEach(NodeTimeout(testenv.TeardownTimeout), func(ctx SpecContext) {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
