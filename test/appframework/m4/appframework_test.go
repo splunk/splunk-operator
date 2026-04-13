@@ -2292,7 +2292,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Wait for ClusterManager to reach Ready phase
 			testcaseEnvInst.Log.Info("Wait for ClusterManager and SearchHeadCluster to reach Ready phase")
-			err = testcaseEnvInst.WaitForClusterManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), cm.Name, enterpriseApi.PhaseReady, 5*time.Minute)
+			err = testcaseEnvInst.WaitForClusterMasterPhase(ctx, deployment, testcaseEnvInst.GetName(), cm.Name, enterpriseApi.PhaseReady, 5*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for ClusterManager to reach Ready phase")
 
 			// Verify status is 'ON' in config map for Cluster Master and Search Head Cluster

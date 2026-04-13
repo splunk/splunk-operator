@@ -1270,6 +1270,11 @@ func (testenv *TestCaseEnv) WaitForClusterManagerPhase(ctx context.Context, depl
 	return testenv.WatchForClusterManagerPhase(ctx, deployment, namespace, crName, expectedPhase, timeout)
 }
 
+// WaitForClusterMasterPhase waits for ClusterMaster (v3) to reach expected phase
+func (testenv *TestCaseEnv) WaitForClusterMasterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
+	return testenv.WatchForClusterMasterPhase(ctx, deployment, namespace, crName, expectedPhase, timeout)
+}
+
 // WaitForSearchHeadClusterPhase waits for SearchHeadCluster to reach expected phase
 func (testenv *TestCaseEnv) WaitForSearchHeadClusterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
 	return testenv.WatchForSearchHeadClusterPhase(ctx, deployment, namespace, crName, expectedPhase, timeout)
