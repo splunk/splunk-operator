@@ -556,7 +556,7 @@ func (d *Deployment) deployCR(ctx context.Context, name string, cr client.Object
 	})
 
 	// Returns once we can retrieve the lm instance
-	if err := wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
+	if err := wait.PollUntilContextTimeout(ctx, PollInterval, DefaultTimeout, true, func(ctx context.Context) (bool, error) {
 		key := client.ObjectKey{Name: name, Namespace: d.testenv.namespace}
 		err := d.testenv.GetKubeClient().Get(ctx, key, cr)
 		if err != nil {

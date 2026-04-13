@@ -255,7 +255,7 @@ func (testenv *TestCaseEnv) createNamespace() error {
 		return nil
 	})
 
-	if err := wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
+	if err := wait.PollUntilContextTimeout(ctx, PollInterval, DefaultTimeout, true, func(ctx context.Context) (bool, error) {
 		key := client.ObjectKey{Name: testenv.namespace}
 		ns := &corev1.Namespace{}
 		err := testenv.GetKubeClient().Get(ctx, key, ns)
@@ -431,7 +431,7 @@ func (testenv *TestCaseEnv) createOperator() error {
 		return nil
 	})
 
-	if err := wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
+	if err := wait.PollUntilContextTimeout(ctx, PollInterval, DefaultTimeout, true, func(ctx context.Context) (bool, error) {
 		key := client.ObjectKey{Name: testenv.operatorName, Namespace: testenv.namespace}
 		deployment := &appsv1.Deployment{}
 		err := testenv.GetKubeClient().Get(ctx, key, deployment)
