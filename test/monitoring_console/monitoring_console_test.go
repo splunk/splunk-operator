@@ -224,7 +224,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("mastermc, integration: MC can configure SHC, indexer instances and reconfigure to new MC", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("mastermc, integration: MC can configure SHC, indexer instances and reconfigure to new MC", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 			/*
 				Test Steps
 				1. Deploy Single Site Indexer Cluster

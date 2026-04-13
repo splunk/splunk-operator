@@ -68,7 +68,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("managercrcrud, integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("managercrcrud, integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()

@@ -925,7 +925,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3azure, masterappframeworkazurec3, appframeworkazure: can deploy a C3 SVA and have ES app installed on Search Head Cluster", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("integration, c3azure, masterappframeworkazurec3, appframeworkazure: can deploy a C3 SVA and have ES app installed on Search Head Cluster", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1106,7 +1106,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration, masterappframeworkazurec3, appframeworkazure: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("c3, integration, masterappframeworkazurec3, appframeworkazure: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1334,7 +1334,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration, masterappframeworkazurec3, appframeworkazure: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then downgrade them", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("c3, integration, masterappframeworkazurec3, appframeworkazure: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then downgrade them", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1549,7 +1549,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3azure, masterappframeworkazurec3, appframeworkazure: can deploy a C3 SVA instance with App Framework enabled and install above 200MB of apps at once", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("integration, c3azure, masterappframeworkazurec3, appframeworkazure: can deploy a C3 SVA instance with App Framework enabled and install above 200MB of apps at once", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1888,7 +1888,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3azure, masterappframeworkazurec3, appframeworkazure: can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("integration, c3azure, masterappframeworkazurec3, appframeworkazure: can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2072,7 +2072,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration, masterappframeworkazurec3, appframeworkazure: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("c3, integration, masterappframeworkazurec3, appframeworkazure: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2988,7 +2988,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration, masterappframeworkazurec3, appframeworkazure: can deploy a C3 SVA and install a bigger volume of apps than the operator PV disk space", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("c3, integration, masterappframeworkazurec3, appframeworkazure: can deploy a C3 SVA and install a bigger volume of apps than the operator PV disk space", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################

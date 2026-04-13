@@ -22,20 +22,23 @@ import "time"
 //
 //	It("test name", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) { ... })
 const (
-	// ShortTimeout for quick tests (observed max ≤10 min):
-	// smartstore (4m), indingsep (8m), s1 appfw (9m), deletecr s1 (3m),
-	// crcrud s1 (8m), lmanager s1 (6m), smoke s1 (est).
+	// ShortTimeout for quick tests:
+	// smartstore, indingsep, s1 appfw, deletecr s1,
+	// crcrud s1, lmanager s1, smoke s1.
 	ShortTimeout = 15 * time.Minute
 
-	// MediumTimeout for moderate tests (observed max 10–30 min):
-	// mc s1/m4 (10–28m), crcrud shc/PVC (11–20m), lmanager c3 (20m),
-	// secret s1 (18m), deletecr c3 (11m), most c3/m4 appfw (11–28m),
-	// smoke c3/m4 (est).
+	// MediumTimeout for moderate tests:
+	// mc s1/m4, crcrud shc/PVC, lmanager c3,
+	// secret s1, deletecr c3, most c3/m4 appfw, smoke c3/m4.
 	MediumTimeout = 45 * time.Minute
 
-	// LongTimeout for heavy tests (observed max 30–88 min):
-	// secret m4 (88m), c3appfw max (54m), m4appfw max (52m),
-	// crcrud c3 (49m), mc c3 (46m), crcrud m4 (39m), lmanager m4 (31m).
+	// MediumLongTimeout for heavier tests:
+	// m4appfw scale-up, crcrud c3, mc c3,
+	// m4appfw install-local, crcrud m4, lmanager m4.
+	MediumLongTimeout = 70 * time.Minute
+
+	// LongTimeout for heavy tests:
+	// secret m4, c3appfw image-upgrade variants.
 	LongTimeout = 100 * time.Minute
 )
 
@@ -48,15 +51,18 @@ const TeardownTimeout = 10 * time.Minute
 // Each value must accommodate multiple specs running back-to-back.
 const (
 	// ShortSuiteTimeout for lightweight suites:
-	// smartstore (7m), indingsep (12m).
+	// smartstore, indingsep.
 	ShortSuiteTimeout = 30 * time.Minute
 
 	// MediumSuiteTimeout for moderate suites:
-	// smoke (41m), s1appfw (1h00m), lmanager (1h00m), deletecr (30m).
+	// smoke, s1appfw.
 	MediumSuiteTimeout = 90 * time.Minute
 
+	// MediumLongSuiteTimeout for mid-heavy suites:
+	// mc, lmanager, secret.
+	MediumLongSuiteTimeout = 150 * time.Minute
+
 	// LongSuiteTimeout for heavy suites:
-	// mc (1h53m), secret (2h02m), crcrud (2h22m),
-	// m4appfw (5h29m), c3appfw (6h01m).
+	// crcrud, m4appfw, c3appfw.
 	LongSuiteTimeout = 200 * time.Minute
 )
