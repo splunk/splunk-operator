@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"gocloud.dev/blob"
+	_ "gocloud.dev/blob/s3blob"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -133,11 +134,11 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	logger.Info("Access Key", accessKey)
-	logger.Info("Secret Access Key", secretAccessKey)
+	logger.Info("Access Key", "accessKey", accessKey)
+	logger.Info("Secret Access Key", "secretAccessKey", secretAccessKey)
 
 	bucketURL := fmt.Sprintf("s3://%s?region=%s", bucket, region)
-	logger.Info("Bucket URL", bucketURL)
+	logger.Info("Bucket URL", "bucketURL", bucketURL)
 
 	bkt, err := blob.OpenBucket(ctx, bucketURL)
 	if err != nil {
