@@ -543,18 +543,12 @@ func getBundlePushState(afwPipeline *AppInstallPipeline) enterpriseApi.BundlePus
 }
 
 // createAppDownloadDir creates the app download directory on the operator pod
-func createAppDownloadDir(ctx context.Context, path string) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("createAppDownloadDir").WithValues("path", path)
+func createAppDownloadDir(_ context.Context, path string) error {
 	_, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		errDir := os.MkdirAll(path, 0700)
-		if errDir != nil {
-			scopedLog.Error(errDir, "Unable to create directory at path")
-			return errDir
-		}
+		return os.MkdirAll(path, 0700)
 	}
-	return nil
+	return err
 }
 
 // getAvailableDiskSpace returns the disk space available to download apps at volume "/opt/splunk/appframework"

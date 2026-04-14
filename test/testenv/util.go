@@ -73,6 +73,15 @@ func RandomDNSName(n int) string {
 	return string(b)
 }
 
+// RandomHex returns a random string of hex characters
+func RandomHex(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = splcommon.HexBytes[rand.Intn(len(splcommon.HexBytes))]
+	}
+	return string(b)
+}
+
 // newStandalone creates and initializes CR for Standalone Kind
 func newStandalone(name, ns, splunkImage string) *enterpriseApi.Standalone {
 
@@ -259,7 +268,7 @@ func newClusterMaster(name, ns, licenseManagerName, ansibleConfig, splunkImage s
 
 	new := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,
@@ -334,7 +343,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName, ansibleConfi
 
 	new := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterManager",
+			Kind: "ClusterMaster",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,
@@ -1177,9 +1186,9 @@ func GeneratePodNameSlice(formatString string, key string, count int, multisite 
 	return podNames
 }
 
-// GetPodsStartTime prints and returns list of pods in namespace and their respective start time
-func GetPodsStartTime(ns string) map[string]time.Time {
-	splunkPodsStartTime := make(map[string]time.Time)
+// GetPodUIDs returns list of pods in namespace and their respective UIDs
+func GetPodUIDs(ns string) map[string]string {
+	splunkPodUIDs := make(map[string]string)
 	splunkPods := DumpGetPods(ns)
 
 	for _, podName := range splunkPods {
@@ -1189,10 +1198,9 @@ func GetPodsStartTime(ns string) map[string]time.Time {
 		if err != nil {
 			logf.Log.Error(err, "Failed to parse splunk pods")
 		}
-		podStartTime, _ := time.Parse("2006-01-02T15:04:05Z", restResponse.Status.StartTime)
-		splunkPodsStartTime[podName] = podStartTime
+		splunkPodUIDs[podName] = restResponse.Metadata.UID
 	}
-	return splunkPodsStartTime
+	return splunkPodUIDs
 }
 
 // DeletePod Delete pod in the namespace

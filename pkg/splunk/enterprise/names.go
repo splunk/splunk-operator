@@ -112,6 +112,19 @@ const (
 
 	shcBundlePushStatusCheckFile = "/operator-staging/appframework/.shcluster_bundle_status.txt"
 
+	// splunkFIPSProviderBannerStr is the line written to stderr by the Splunk CLI at
+	// startup on FIPS-enabled clusters.  Because the bundle push command redirects all
+	// output (&>) to the status file, this banner can appear in the file before the
+	// actual push result.
+	splunkFIPSProviderBannerStr = "FIPS provider enabled."
+
+	// splunkSSLCertWarnStr is the prefix of SSL certificate-related warnings emitted
+	// by the Splunk CLI to stderr.  On FIPS-enabled clusters these appear alongside the
+	// FIPS banner and must be treated as informational.  On non-FIPS clusters an SSL
+	// warning without a FIPS banner indicates a silent failure and should not suppress
+	// error detection.
+	splunkSSLCertWarnStr = "WARNING: Server Certificate"
+
 	applyIdxcBundleCmdStr = "/opt/splunk/bin/splunk apply cluster-bundle -auth admin:`cat /mnt/splunk-secrets/password` --skip-validation --answer-yes"
 
 	idxcShowClusterBundleStatusStr = "/opt/splunk/bin/splunk show cluster-bundle-status -auth admin:`cat /mnt/splunk-secrets/password`"

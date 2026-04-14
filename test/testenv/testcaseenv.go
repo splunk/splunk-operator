@@ -72,10 +72,8 @@ func NewDefaultTestCaseEnv(kubeClient client.Client, name string) (*TestCaseEnv,
 
 // NewTestCaseEnv creates a new test environment to run tests againsts
 func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string, splunkImage string, licenseFilePath string) (*TestCaseEnv, error) {
-	var envName string
-
 	// The name are used in various resource label and there is a 63 char limit. Do our part to make sure we do not exceed that limit
-	if len(envName) > 24 {
+	if len(name) > 24 {
 		return nil, fmt.Errorf("name %s has exceeded 24 chars", name)
 	}
 
@@ -215,6 +213,7 @@ func (testenv *TestCaseEnv) popCleanupFunc() (cleanupFunc, error) {
 }
 
 func (testenv *TestCaseEnv) createNamespace() error {
+	ctx := context.Background()
 
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -222,14 +221,15 @@ func (testenv *TestCaseEnv) createNamespace() error {
 		},
 	}
 
-	err := testenv.GetKubeClient().Create(context.TODO(), namespace)
+	err := testenv.GetKubeClient().Create(ctx, namespace)
 	if err != nil {
 		return err
 	}
 
 	// Cleanup the namespace when we teardown this testenv
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.TODO(), namespace)
+		cleanupCtx := context.Background()
+		err := testenv.GetKubeClient().Delete(cleanupCtx, namespace)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete namespace")
 			return err
@@ -237,7 +237,7 @@ func (testenv *TestCaseEnv) createNamespace() error {
 		if err = wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
 			key := client.ObjectKey{Name: testenv.namespace, Namespace: testenv.namespace}
 			ns := &corev1.Namespace{}
-			err := testenv.GetKubeClient().Get(context.TODO(), key, ns)
+			err := testenv.GetKubeClient().Get(cleanupCtx, key, ns)
 			if errors.IsNotFound(err) {
 				return true, nil
 			}
@@ -257,7 +257,7 @@ func (testenv *TestCaseEnv) createNamespace() error {
 	if err := wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
 		key := client.ObjectKey{Name: testenv.namespace}
 		ns := &corev1.Namespace{}
-		err := testenv.GetKubeClient().Get(context.TODO(), key, ns)
+		err := testenv.GetKubeClient().Get(ctx, key, ns)
 		if err != nil {
 			// Try again
 			if errors.IsNotFound(err) {
@@ -305,6 +305,7 @@ func (testenv *TestCaseEnv) createNamespace() error {
 }
 
 func (testenv *TestCaseEnv) createSA() error {
+	ctx := context.Background()
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      testenv.serviceAccountName,
@@ -312,14 +313,14 @@ func (testenv *TestCaseEnv) createSA() error {
 		},
 	}
 
-	err := testenv.GetKubeClient().Create(context.TODO(), sa)
+	err := testenv.GetKubeClient().Create(ctx, sa)
 	if err != nil {
 		testenv.Log.Error(err, "Unable to create service account")
 		return err
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.TODO(), sa)
+		err := testenv.GetKubeClient().Delete(context.Background(), sa)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete service account")
 			return err
@@ -331,16 +332,17 @@ func (testenv *TestCaseEnv) createSA() error {
 }
 
 func (testenv *TestCaseEnv) createRole() error {
+	ctx := context.Background()
 	role := newRole(testenv.roleName, testenv.namespace)
 
-	err := testenv.GetKubeClient().Create(context.TODO(), role)
+	err := testenv.GetKubeClient().Create(ctx, role)
 	if err != nil {
 		testenv.Log.Error(err, "Unable to create role")
 		return err
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.TODO(), role)
+		err := testenv.GetKubeClient().Delete(context.Background(), role)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete role")
 			return err
@@ -352,16 +354,17 @@ func (testenv *TestCaseEnv) createRole() error {
 }
 
 func (testenv *TestCaseEnv) createRoleBinding() error {
+	ctx := context.Background()
 	binding := newRoleBinding(testenv.roleBindingName, testenv.serviceAccountName, testenv.namespace, testenv.roleName)
 
-	err := testenv.GetKubeClient().Create(context.TODO(), binding)
+	err := testenv.GetKubeClient().Create(ctx, binding)
 	if err != nil {
 		testenv.Log.Error(err, "Unable to create rolebinding")
 		return err
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.TODO(), binding)
+		err := testenv.GetKubeClient().Delete(context.Background(), binding)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete rolebinding")
 			return err
@@ -422,9 +425,10 @@ func (testenv *TestCaseEnv) attachPVCToOperator(name string) error {
 }
 
 func (testenv *TestCaseEnv) createOperator() error {
+	ctx := context.Background()
 	//op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage, "nil")
 	op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage)
-	err := testenv.GetKubeClient().Create(context.TODO(), op)
+	err := testenv.GetKubeClient().Create(ctx, op)
 	if err != nil {
 		testenv.Log.Error(err, "Unable to create operator")
 		return err
@@ -436,7 +440,7 @@ func (testenv *TestCaseEnv) createOperator() error {
 		testenv.Log.Error(err, "Unable to create PVC", "pvcName", pvc.ObjectMeta.Name)
 		return err
 	}
-	err = testenv.GetKubeClient().Create(context.TODO(), pvc)
+	err = testenv.GetKubeClient().Create(ctx, pvc)
 	if err != nil {
 		testenv.Log.Error(err, "Unable to create PVC")
 		return err
@@ -450,7 +454,7 @@ func (testenv *TestCaseEnv) createOperator() error {
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.TODO(), op)
+		err := testenv.GetKubeClient().Delete(context.Background(), op)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete operator")
 			return err
@@ -458,11 +462,10 @@ func (testenv *TestCaseEnv) createOperator() error {
 		return nil
 	})
 
-	OperatorInstallationTimeout := 5 * time.Minute
-	if err := wait.PollImmediate(PollInterval, OperatorInstallationTimeout, func() (bool, error) {
+	if err := wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
 		key := client.ObjectKey{Name: testenv.operatorName, Namespace: testenv.namespace}
 		deployment := &appsv1.Deployment{}
-		err := testenv.GetKubeClient().Get(context.TODO(), key, deployment)
+		err := testenv.GetKubeClient().Get(ctx, key, deployment)
 		if err != nil {
 			testenv.Log.Error(err, "operator not found waiting")
 			return false, nil
@@ -494,6 +497,7 @@ func (testenv *TestCaseEnv) CreateLicenseConfigMap(path string) error {
 }
 
 func (testenv *TestCaseEnv) createLicenseConfigMap() error {
+	ctx := context.Background()
 	lic, err := newLicenseConfigMap(testenv.licenseCMName, testenv.namespace, testenv.licenseFilePath)
 	if err != nil {
 		return err
@@ -501,7 +505,7 @@ func (testenv *TestCaseEnv) createLicenseConfigMap() error {
 
 	// Check if config map already exists
 	key := client.ObjectKey{Name: testenv.namespace, Namespace: testenv.namespace}
-	err = testenv.GetKubeClient().Get(context.TODO(), key, lic)
+	err = testenv.GetKubeClient().Get(ctx, key, lic)
 
 	if err != nil {
 		testenv.Log.Info("No Existing license config map not found. Creating a new License Configmap", "Name", testenv.namespace)
@@ -511,7 +515,7 @@ func (testenv *TestCaseEnv) createLicenseConfigMap() error {
 	}
 
 	// Create a new licese config map
-	err = testenv.GetKubeClient().Create(context.TODO(), lic)
+	err = testenv.GetKubeClient().Create(ctx, lic)
 	if err != nil {
 		testenv.Log.Error(err, "Unable to create license configmap")
 		return err
@@ -520,7 +524,7 @@ func (testenv *TestCaseEnv) createLicenseConfigMap() error {
 	testenv.Log.Info("New License Config Map created.", "License Config Map Name", testenv.namespace)
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.TODO(), lic)
+		err := testenv.GetKubeClient().Delete(context.Background(), lic)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete license configmap ")
 			return err
@@ -533,14 +537,15 @@ func (testenv *TestCaseEnv) createLicenseConfigMap() error {
 
 // CreateServiceAccount Create a service account with given name
 func (testenv *TestCaseEnv) CreateServiceAccount(name string) error {
+	ctx := context.Background()
 	serviceAccountConfig := newServiceAccount(testenv.namespace, name)
-	if err := testenv.GetKubeClient().Create(context.TODO(), serviceAccountConfig); err != nil {
+	if err := testenv.GetKubeClient().Create(ctx, serviceAccountConfig); err != nil {
 		testenv.Log.Error(err, "Unable to create service account")
 		return err
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.TODO(), serviceAccountConfig)
+		err := testenv.GetKubeClient().Delete(context.Background(), serviceAccountConfig)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete service account")
 			return err
@@ -552,6 +557,7 @@ func (testenv *TestCaseEnv) CreateServiceAccount(name string) error {
 
 // CreateIndexSecret create secret object
 func (testenv *TestCaseEnv) createIndexSecret() error {
+	ctx := context.Background()
 	secretName := testenv.s3IndexSecret
 	ns := testenv.namespace
 
@@ -567,13 +573,13 @@ func (testenv *TestCaseEnv) createIndexSecret() error {
 	data := map[string][]byte{"s3_access_key": []byte(accessKey),
 		"s3_secret_key": []byte(secretKey)}
 	secret := newSecretSpec(ns, secretName, data)
-	if err := testenv.GetKubeClient().Create(context.TODO(), secret); err != nil {
+	if err := testenv.GetKubeClient().Create(ctx, secret); err != nil {
 		testenv.Log.Error(err, "Unable to create s3 index secret object")
 		return err
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.TODO(), secret)
+		err := testenv.GetKubeClient().Delete(context.Background(), secret)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete s3 index secret object")
 			return err
@@ -585,6 +591,7 @@ func (testenv *TestCaseEnv) createIndexSecret() error {
 
 // CreateIndexSecret create secret object
 func (testenv *TestCaseEnv) createIndexSecretGCP() error {
+	ctx := context.Background()
 	secretName := testenv.s3IndexSecret
 	ns := testenv.namespace
 	encodedString := os.Getenv("GCP_SERVICE_ACCOUNT_KEY")
@@ -595,13 +602,13 @@ func (testenv *TestCaseEnv) createIndexSecretGCP() error {
 	}
 	data := map[string][]byte{"key.json": []byte(gcpCredentials)}
 	secret := newSecretSpec(ns, secretName, data)
-	if err := testenv.GetKubeClient().Create(context.TODO(), secret); err != nil {
+	if err := testenv.GetKubeClient().Create(ctx, secret); err != nil {
 		testenv.Log.Error(err, "Unable to create GCP index secret object")
 		return err
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.TODO(), secret)
+		err := testenv.GetKubeClient().Delete(context.Background(), secret)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete GCP index secret object")
 			return err
@@ -613,18 +620,19 @@ func (testenv *TestCaseEnv) createIndexSecretGCP() error {
 
 // createIndexSecretAzure create secret object for Azure
 func (testenv *TestCaseEnv) createIndexSecretAzure() error {
+	ctx := context.Background()
 	secretName := testenv.s3IndexSecret
 	ns := testenv.namespace
 	data := map[string][]byte{"azure_sa_name": []byte(os.Getenv("STORAGE_ACCOUNT")),
 		"azure_sa_secret_key": []byte(os.Getenv("STORAGE_ACCOUNT_KEY"))}
 	secret := newSecretSpec(ns, secretName, data)
-	if err := testenv.GetKubeClient().Create(context.TODO(), secret); err != nil {
+	if err := testenv.GetKubeClient().Create(ctx, secret); err != nil {
 		testenv.Log.Error(err, "Unable to create Azure index secret object")
 		return err
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.TODO(), secret)
+		err := testenv.GetKubeClient().Delete(context.Background(), secret)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete Azure index secret object")
 			return err
@@ -636,6 +644,7 @@ func (testenv *TestCaseEnv) createIndexSecretAzure() error {
 
 // CreateIndexIngestSepSecret creates secret object
 func (testenv *TestCaseEnv) createIndexIngestSepSecret() error {
+	ctx := context.Background()
 	secretName := testenv.indexIngestSepSecret
 	ns := testenv.namespace
 
@@ -651,13 +660,13 @@ func (testenv *TestCaseEnv) createIndexIngestSepSecret() error {
 		"s3_secret_key": []byte(secretKey)}
 	secret := newSecretSpec(ns, secretName, data)
 
-	if err := testenv.GetKubeClient().Create(context.TODO(), secret); err != nil {
+	if err := testenv.GetKubeClient().Create(ctx, secret); err != nil {
 		testenv.Log.Error(err, "Unable to create index and ingestion sep secret object")
 		return err
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.TODO(), secret)
+		err := testenv.GetKubeClient().Delete(context.Background(), secret)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete index and ingestion sep secret object")
 			return err
