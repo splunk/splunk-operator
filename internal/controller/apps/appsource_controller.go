@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"gocloud.dev/blob"
+	"gocloud.dev/blob/s3blob"
 	_ "gocloud.dev/blob/s3blob"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -34,6 +35,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	appsv1alpha1 "github.com/splunk/splunk-operator/api/apps/v1alpha1"
 )
 
@@ -141,7 +145,24 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	bucketURL := fmt.Sprintf("s3://%s?region=%s", bucket, region)
 	logger.Info("Bucket URL", "bucketURL", bucketURL)
 
-	bkt, err := blob.OpenBucket(ctx, bucketURL)
+	// set up s3 client via s3 sdk for authentication
+	// doc: https://gocloud.dev/howto/blob/
+	// doc: https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/config#LoadDefaultConfig
+	cfg, err := config.LoadDefaultConfig(ctx,
+		config.WithRegion(region),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+			accessKey,       // access key
+			secretAccessKey, // secret access key
+			"",              // session token -> leave empty because we are using hardcoded credentials
+		)),
+	)
+	if err != nil {
+		logger.Error(err, "Failed to load AWS config")
+		return ctrl.Result{}, err
+	}
+
+	awsClient := s3.NewFromConfig(cfg)
+	bkt, err := s3blob.OpenBucket(ctx, awsClient, bucket, nil)
 	if err != nil {
 		logger.Error(err, "Failed to open bucket")
 		return ctrl.Result{}, err
