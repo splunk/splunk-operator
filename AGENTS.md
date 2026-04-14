@@ -142,6 +142,8 @@ Test coverage includes:
 
 #### Integration Tests
 
+> **Maintenance note:** When modifying test framework files (`test/testenv/`, `test/run-tests.sh`, `test/env.sh`), also update `docs/IntegrationTesting.md` to keep the guide accurate.
+
 **Integration Test Structure:**
 - Each test suite has its own directory under `test/`
 - Suite file: `*_suite_test.go` - Creates TestEnv (namespace)
