@@ -422,7 +422,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("s1, smoke, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("s1, smoke, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################

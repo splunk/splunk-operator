@@ -78,16 +78,15 @@ type PodDetailsStruct struct {
 
 // VerifyMonitoringConsoleReady verify Monitoring Console CR is in Ready Status and does not flip-flop
 func (testenv *TestCaseEnv) VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, mcName string, monitoringConsole *enterpriseApi.MonitoringConsole) {
-	gomega.Eventually(func() enterpriseApi.Phase {
-		err := deployment.GetInstance(ctx, mcName, monitoringConsole)
-		if err != nil {
-			return enterpriseApi.PhaseError
-		}
-		testenv.Log.Info("Waiting for Monitoring Console phase to be ready", "instance", monitoringConsole.ObjectMeta.Name, "Phase", monitoringConsole.Status.Phase)
-		DumpGetPods(testenv.GetName())
+	// Use optimized watch to wait for Ready phase
+	err := testenv.WatchForMonitoringConsolePhase(ctx, deployment, testenv.GetName(), mcName, enterpriseApi.PhaseReady, deployment.GetTimeout())
+	gomega.Expect(err).To(gomega.Succeed(), "MonitoringConsole failed to reach Ready phase")
 
-		return monitoringConsole.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	// Refresh the instance to get latest state
+	err = deployment.GetInstance(ctx, mcName, monitoringConsole)
+	gomega.Expect(err).To(gomega.Succeed())
+	testenv.Log.Info("MonitoringConsole reached Ready phase", "instance", monitoringConsole.ObjectMeta.Name, "Phase", monitoringConsole.Status.Phase)
+	DumpGetPods(testenv.GetName())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
