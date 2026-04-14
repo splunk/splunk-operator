@@ -89,6 +89,24 @@ type AppSourceSpec struct {
 	PollIntervalSeconds *int32 `json:"pollIntervalSeconds,omitempty"`
 }
 
+
+type DiscoveredApp struct {
+	// Name is the name of the App with extension
+	Name string `json:"name"`
+
+	// Path is the path to the App in the remote repository
+	Path string `json:"path"`
+
+	// Size is the size of the App in bytes
+	Size int64 `json:"size"`
+
+	// Checksum is the checksum of the App (might differ between s3, git, gcp, and azure)
+	Checksum string `json:"checksum"`
+
+	// LastModified is the last modified time of the App
+	LastModified metav1.Time `json:"lastModified"`
+}
+
 // AppSourceStatus defines the observed state of AppSource.
 type AppSourceStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
@@ -108,6 +126,10 @@ type AppSourceStatus struct {
 	// LastPolledTime represents the last time the AppSource was polled
 	// +optional
 	LastPolledTime *metav1.Time `json:"lastPolledTime,omitempty"`
+
+	// DiscoveredApps is the list of discovered apps
+	// +optional
+	DiscoveredApps []DiscoveredApp `json:"discoveredApps,omitempty"`
 }
 
 const (
