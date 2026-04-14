@@ -226,6 +226,7 @@ func (r *AppRuntimeReconciler) createCR(ctx context.Context, crNN types.Namespac
 		standalone := &enterpriseApi.Standalone{}
 		if err := r.Get(ctx, parentName, standalone); err == nil {
 			cr.Spec.Replicas = standalone.Spec.Replicas
+			cr.Spec.SplunkImage = enterprise.GetSplunkImage(standalone.Spec.Image)
 			err = ctrl.SetControllerReference(standalone, cr, r.Scheme)
 			if err != nil {
 				return nil, err
@@ -236,6 +237,7 @@ func (r *AppRuntimeReconciler) createCR(ctx context.Context, crNN types.Namespac
 		indexer := &enterpriseApi.IndexerCluster{}
 		if err := r.Get(ctx, parentName, indexer); err == nil {
 			cr.Spec.Replicas = indexer.Spec.Replicas
+			cr.Spec.SplunkImage = enterprise.GetSplunkImage(indexer.Spec.Image)
 			err = ctrl.SetControllerReference(indexer, cr, r.Scheme)
 			if err != nil {
 				return nil, err
@@ -246,6 +248,7 @@ func (r *AppRuntimeReconciler) createCR(ctx context.Context, crNN types.Namespac
 		searchHead := &enterpriseApi.SearchHeadCluster{}
 		if err := r.Get(ctx, parentName, searchHead); err == nil {
 			cr.Spec.Replicas = searchHead.Spec.Replicas
+			cr.Spec.SplunkImage = enterprise.GetSplunkImage(searchHead.Spec.Image)
 			err = ctrl.SetControllerReference(searchHead, cr, r.Scheme)
 			if err != nil {
 				return nil, err
@@ -318,6 +321,25 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 					},
 				},
 			},
+			InitContainers: []corev1.Container{
+				{
+					Name:            "copy-splunk-dirs", // populate lib and bin from Splunk image - most apps need it
+					Image:           appRuntime.Spec.SplunkImage,
+					ImagePullPolicy: corev1.PullIfNotPresent,
+					Command:         []string{"sh", "-c", "cp -rp /opt/splunk/lib/. /mnt/splunk-lib/ && cp -rp /opt/splunk/bin/. /mnt/splunk-bin/"},
+					SecurityContext: &corev1.SecurityContext{RunAsUser: func() *int64 { uid := int64(0); return &uid }()},
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "splunk-lib",
+							MountPath: "/mnt/splunk-lib",
+						},
+						{
+							Name:      "splunk-bin",
+							MountPath: "/mnt/splunk-bin",
+						},
+					},
+				},
+			},
 			Containers: []corev1.Container{
 				{
 					Image:           appRuntime.Spec.Image,
@@ -348,6 +370,14 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 							MountPath: "/opt/splunk/var",
 						},
 						{
+							Name:      "splunk-lib",
+							MountPath: "/opt/splunk/lib",
+						},
+						{
+							Name:      "splunk-bin",
+							MountPath: "/opt/splunk/bin",
+						},
+						{
 							Name:      "containerd-data",
 							MountPath: "/var/lib/containerd-nested",
 						},
@@ -375,6 +405,14 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 							ClaimName: varPvcName,
 						},
 					},
+				},
+				{
+					Name:         "splunk-lib",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+				},
+				{
+					Name:         "splunk-bin",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 				{
 					Name: "containerd-data",

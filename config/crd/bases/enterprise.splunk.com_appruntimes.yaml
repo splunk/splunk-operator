@@ -55,6 +55,8 @@ spec:
               replicas:
                 format: int32
                 type: integer
+              splunkImage:
+                type: string
             type: object
           status:
             properties:

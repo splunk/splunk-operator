@@ -7,8 +7,9 @@ import (
 // Your AppRuntime, AppRuntimeList, AppRuntimeSpec, AppRuntimeStatus structs with kubebuilder marker comments.
 
 type AppRuntimeSpec struct {
-	Replicas int32  `json:"replicas"`
-	Image    string `json:"image"`
+	Replicas    int32  `json:"replicas"`
+	Image       string `json:"image"`
+	SplunkImage string `json:"splunkImage"` // needs the splunk image to get its etc and lib dirs
 }
 
 type AppRuntimeStatus struct {

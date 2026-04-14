@@ -842,6 +842,40 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		}
 	}
 
+	// Add EP shim init container: copies splunk-epshim binary from the supervisor
+	// image into an emptyDir volume, then mounts it into all Splunk containers.
+	// Needs for faster shim build and test cycles (instead of rebuilding whole splunk+shim image)
+	epShimVolumeName := "ep-shim-bin"
+	epShimImage := "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/supervisor:v3.1.0-appruntime"
+
+	podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, corev1.Volume{
+		Name: epShimVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	})
+
+	podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, corev1.Container{
+		Name:            "install-epshim",
+		Image:           epShimImage,
+		ImagePullPolicy: corev1.PullAlways,
+		Command:         []string{"cp", "/usr/bin/splunk-epshim", "/ep-bin/splunk-epshim"},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      epShimVolumeName,
+				MountPath: "/ep-bin",
+			},
+		},
+	})
+
+	for idx := range podTemplateSpec.Spec.Containers {
+		podTemplateSpec.Spec.Containers[idx].VolumeMounts = append(podTemplateSpec.Spec.Containers[idx].VolumeMounts, corev1.VolumeMount{
+			Name:      epShimVolumeName,
+			MountPath: "/usr/bin/splunk-epshim",
+			SubPath:   "splunk-epshim",
+		})
+	}
+
 	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
 	secretVolDefaultMode := corev1.SecretVolumeSourceDefaultMode
 	addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-secrets", "/mnt/splunk-secrets", corev1.VolumeSource{
