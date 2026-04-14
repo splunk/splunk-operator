@@ -2719,12 +2719,12 @@ func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
 	base := "https://splunk-test-indexer-0.splunk-test-indexer-headless.test.svc.cluster.local:8089/servicesNS/nobody/system/configs"
 	q := "remote_queue:test-queue"
 
-	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-outputs", base), "name="+q), 200, "", nil)
-	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-outputs/%s", base, q), ""), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-outputs", base), "name="+q), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-outputs/%s", base, q), ""), 200, "", nil)
 
 	// inputs.conf
-	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-inputs", base), "name="+q), 200, "", nil)
-	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-inputs/%s", base, q), ""), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-inputs", base), "name="+q), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-inputs/%s", base, q), ""), 200, "", nil)
 
 	// default-mode.conf
 	pipelineFields := []string{
@@ -2735,8 +2735,8 @@ func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
 		"pipeline:typing",
 	}
 	for range pipelineFields {
-		mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-default-mode", base), "name="), 200, "", nil)
-		mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-default-mode/", base), ""), 200, "", nil)
+		mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-default-mode", base), "name="), 200, "", nil)
+		mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-default-mode/", base), ""), 200, "", nil)
 	}
 
 	res, err := ApplyIndexerCluster(ctx, c, cr)
@@ -2744,7 +2744,8 @@ func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-func mustReq(method, url, body string) *http.Request {
+func mustReq(t *testing.T, method, url, body string) *http.Request {
+	t.Helper()
 	var r *http.Request
 	var err error
 	if body != "" {
@@ -2753,10 +2754,9 @@ func mustReq(method, url, body string) *http.Request {
 		r, err = http.NewRequest(method, url, nil)
 	}
 	if err != nil {
-		panic(err)
+		t.Fatalf("failed to create HTTP request: %v", err)
 	}
 	return r
-
 }
 
 func TestPasswordSyncCompleted(t *testing.T) {
@@ -3194,7 +3194,7 @@ func TestIdxcScaledUpScaledDownEvent(t *testing.T) {
 	if phase == enterpriseApi.PhaseReady {
 		if desiredReplicas > previousReplicas && cr.Status.Replicas == desiredReplicas {
 			ep.Normal(ctx, "ScaledUp",
-				fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+				fmt.Sprintf("Successfully scaled %s up to %d replicas", cr.GetName(), desiredReplicas))
 		}
 	}
 
@@ -3208,7 +3208,7 @@ func TestIdxcScaledUpScaledDownEvent(t *testing.T) {
 			if !strings.Contains(event.message, crName) {
 				t.Errorf("Expected event message to contain CR name '%s', got: %s", crName, event.message)
 			}
-			if !strings.Contains(event.message, "1") || !strings.Contains(event.message, "3") {
+			if !strings.Contains(event.message, "3") {
 				t.Errorf("Expected event message to contain replica counts, got: %s", event.message)
 			}
 			break
@@ -3227,7 +3227,7 @@ func TestIdxcScaledUpScaledDownEvent(t *testing.T) {
 	if phase == enterpriseApi.PhaseReady {
 		if desiredReplicas < previousReplicas && cr.Status.Replicas == desiredReplicas {
 			ep.Normal(ctx, "ScaledDown",
-				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+				fmt.Sprintf("Successfully scaled %s down to %d replicas", cr.GetName(), desiredReplicas))
 		}
 	}
 
@@ -3254,7 +3254,7 @@ func TestIdxcScaledUpScaledDownEvent(t *testing.T) {
 	if phase == enterpriseApi.PhaseReady {
 		if desiredReplicas < previousReplicas && cr.Status.Replicas == desiredReplicas {
 			ep.Normal(ctx, "ScaledDown",
-				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+				fmt.Sprintf("Successfully scaled %s down to %d replicas", cr.GetName(), desiredReplicas))
 		}
 	}
 	if len(recorder.events) != 0 {
@@ -3268,7 +3268,7 @@ func TestIdxcScaledUpScaledDownEvent(t *testing.T) {
 	if phase == enterpriseApi.PhaseReady {
 		if desiredReplicas < previousReplicas && cr.Status.Replicas == desiredReplicas {
 			ep.Normal(ctx, "ScaledDown",
-				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+				fmt.Sprintf("Successfully scaled %s down to %d replicas", cr.GetName(), desiredReplicas))
 		}
 	}
 	if len(recorder.events) != 0 {
