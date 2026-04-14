@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"gocloud.dev/blob"
@@ -172,8 +173,8 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		Prefix: path, // shc-apps
 	})
 
-	// appsMap should store apps and its metadata (size, modified time, checksum/sha/etag/md5)
-	appsMap := map[string]map[string]string{}
+	// discoveredApps should store apps and its metadata (size, modified time, checksum/sha/etag/md5)
+	discoveredApps := []appsv1alpha1.DiscoveredApp{}
 
 	for {
 		obj, err := appsIter.Next(ctx)
@@ -184,16 +185,25 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			logger.Error(err, "Failed to list objects")
 			return ctrl.Result{}, err
 		}
-
-		appsMap[obj.Key] = map[string]string{
-			"size":     fmt.Sprintf("%d", obj.Size),
-			"modified": metav1.NewTime(obj.ModTime).String(),
-			"checksum": fmt.Sprintf("%x", obj.MD5),
+		// check if the object is .tgz, .spl, or .tar.gz
+		if !strings.HasSuffix(obj.Key, ".tgz") && !strings.HasSuffix(obj.Key, ".spl") && !strings.HasSuffix(obj.Key, ".tar.gz") {
+			continue
 		}
+		
+		discoveredApps = append(discoveredApps, appsv1alpha1.DiscoveredApp{
+			Name:         obj.Key,
+			Path:         path,
+			Size:         int64(obj.Size),
+			LastModified: metav1.NewTime(obj.ModTime),
+			Checksum:     fmt.Sprintf("%x", obj.MD5),
+		})
 
 		// log the app metadata
-		logger.Info("App metadata", "app", obj.Key, "size", appsMap[obj.Key]["size"], "modified", appsMap[obj.Key]["modified"], "checksum", appsMap[obj.Key]["checksum"])
+		logger.Info("App metadata", "app", obj.Key, "size", discoveredApps[len(discoveredApps)-1].Size, "modified", discoveredApps[len(discoveredApps)-1].LastModified, "checksum", discoveredApps[len(discoveredApps)-1].Checksum)
 	}
+
+	// update the AppSource status with the discovered apps
+	appSourceInstance.Status.DiscoveredApps = discoveredApps
 
 	return ctrl.Result{}, nil
 }
