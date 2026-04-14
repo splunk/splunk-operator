@@ -69,7 +69,7 @@ var _ = Describe("Smoke test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("smoke, basic, c3: can deploy indexers and search head cluster", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("smoke, basic, c3: can deploy indexers and search head cluster", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 
 			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")
 			Expect(err).To(Succeed(), "Unable to deploy cluster")

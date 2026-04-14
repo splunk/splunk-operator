@@ -29,12 +29,12 @@ const (
 
 	// MediumTimeout for moderate tests:
 	// mc s1/m4, crcrud shc/PVC, lmanager c3,
-	// secret s1, deletecr c3, most c3/m4 appfw, smoke c3/m4.
+	// secret s1, deletecr c3, most c3/m4 appfw, smoke m4.
 	MediumTimeout = 45 * time.Minute
 
 	// MediumLongTimeout for heavier tests:
 	// m4appfw scale-up, crcrud c3, mc c3,
-	// m4appfw install-local, crcrud m4, lmanager m4.
+	// m4appfw install-local, crcrud m4, lmanager m4, smoke c3.
 	MediumLongTimeout = 70 * time.Minute
 
 	// LongTimeout for heavy tests:
