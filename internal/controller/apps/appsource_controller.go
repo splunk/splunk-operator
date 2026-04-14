@@ -189,17 +189,17 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if !strings.HasSuffix(obj.Key, ".tgz") && !strings.HasSuffix(obj.Key, ".spl") && !strings.HasSuffix(obj.Key, ".tar.gz") {
 			continue
 		}
-		
+
 		discoveredApps = append(discoveredApps, appsv1alpha1.DiscoveredApp{
-			Name:         obj.Key,
-			Path:         path,
+			Name:         strings.Split(obj.Key, "/")[len(strings.Split(obj.Key, "/"))-1], // get only the package name
+			Path:         obj.Key, // full path to the object
 			Size:         int64(obj.Size),
 			LastModified: metav1.NewTime(obj.ModTime),
 			Checksum:     fmt.Sprintf("%x", obj.MD5),
 		})
 
 		// log the app metadata
-		logger.Info("App metadata", "app", obj.Key, "size", discoveredApps[len(discoveredApps)-1].Size, "modified", discoveredApps[len(discoveredApps)-1].LastModified, "checksum", discoveredApps[len(discoveredApps)-1].Checksum)
+		logger.Info("App metadata", "app", discoveredApps[len(discoveredApps)-1].Name, "path", discoveredApps[len(discoveredApps)-1].Path, "size", discoveredApps[len(discoveredApps)-1].Size, "modified", discoveredApps[len(discoveredApps)-1].LastModified, "checksum", discoveredApps[len(discoveredApps)-1].Checksum)
 	}
 
 	// update the AppSource status with the discovered apps

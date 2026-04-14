@@ -89,7 +89,6 @@ type AppSourceSpec struct {
 	PollIntervalSeconds *int32 `json:"pollIntervalSeconds,omitempty"`
 }
 
-
 type DiscoveredApp struct {
 	// Name is the name of the App with extension
 	Name string `json:"name"`
