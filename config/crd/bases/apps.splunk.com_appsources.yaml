@@ -81,11 +81,11 @@ spec:
               s3:
                 description: S3 specific configuration
                 properties:
-                  basePath:
-                    type: string
                   bucket:
                     type: string
                   endpoint:
+                    type: string
+                  path:
                     type: string
                   region:
                     type: string
