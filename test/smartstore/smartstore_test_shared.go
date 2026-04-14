@@ -189,8 +189,11 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	// Use multisite workflow helper to verify index, ingest data, roll to warm, and verify on S3
 	Expect(testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, siteCount, indexName)).To(Succeed(), "Multisite indexer workflow failed")
 
-	// Get old bundle hash before adding new index
-	oldBundleHash := config.GetBundleHash(ctx, deployment)
+	// V3 needs explicit bundle-push verification; V4 did not have this check historically
+	var oldBundleHash string
+	if config.GetAPIVersion() == "v3" {
+		oldBundleHash = config.GetBundleHash(ctx, deployment)
+	}
 
 	testcaseEnvInst.Log.Info("Adding new index to Cluster Manager CR")
 	indexNameTwo := "test-index-" + testenv.RandomDNSName(3)
@@ -202,8 +205,10 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 
 	Expect(testenv.VerifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)).To(Succeed(), "M4 cluster or RF/SF verification failed after adding index")
 
-	// Verify new bundle is pushed to all indexers
-	Expect(testcaseEnvInst.VerifyClusterManagerBundlePush(ctx, deployment, 1, oldBundleHash)).To(Succeed(), "Cluster Manager bundle push not detected")
+	if config.GetAPIVersion() == "v3" {
+		// Verify new bundle is pushed to all indexers
+		Expect(testcaseEnvInst.VerifyClusterManagerBundlePush(ctx, deployment, 1, oldBundleHash)).To(Succeed(), "Cluster Manager bundle push not detected")
+	}
 
 	// Verify both indexes on all sites
 	for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
