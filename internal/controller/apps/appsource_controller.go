@@ -19,6 +19,7 @@ package apps
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"gocloud.dev/blob"
@@ -117,9 +118,9 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// the custom client code to validate how to use or if we should just use gocloud.dev pacakge
 
 	// get bucket, region, and path
-	bucket := appSourceInstance.Spec.S3.Bucket
-	region := appSourceInstance.Spec.S3.Region
-	path := appSourceInstance.Spec.S3.Path
+	bucket := appSourceInstance.Spec.S3.Bucket // nai-apps-for-sok
+	region := appSourceInstance.Spec.S3.Region // us-west-2
+	path := appSourceInstance.Spec.S3.Path     // shc-apps
 
 	logger.Info("Bucket", "bucket", bucket)
 	logger.Info("Region", "region", region)
@@ -146,6 +147,25 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 	defer bkt.Close()
+
+	// list the apps in the bucker
+	// create a list iterator
+	// doc: https://pkg.go.dev/gocloud.dev/blob?utm_source=godoc#example-Bucket.List
+	appsIter := bkt.List(&blob.ListOptions{
+		Prefix: path, // shc-apps
+	})
+
+	for {
+		obj, err := appsIter.Next(ctx)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			logger.Error(err, "Failed to list objects")
+			return ctrl.Result{}, err
+		}
+		logger.Info("Object", "key", obj.Key)
+	}
 
 	//
 
