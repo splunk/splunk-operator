@@ -176,6 +176,9 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		Prefix: path, // shc-apps
 	})
 
+	// appsMap should store apps and its metadata (size, modified time, checksum/sha/etag/md5)
+	appsMap := map[string]map[string]string{}
+
 	for {
 		obj, err := appsIter.Next(ctx)
 		if err == io.EOF {
@@ -185,7 +188,15 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			logger.Error(err, "Failed to list objects")
 			return ctrl.Result{}, err
 		}
-		logger.Info("Object", "key", obj.Key)
+
+		appsMap[obj.Key] = map[string]string{
+			"size":     fmt.Sprintf("%d", obj.Size),
+			"modified": metav1.NewTime(obj.ModTime).String(),
+			"checksum": fmt.Sprintf("%x", obj.MD5),
+		}
+
+		// log the app metadata
+		logger.Info("App metadata", "app", obj.Key, "size", appsMap[obj.Key]["size"], "modified", appsMap[obj.Key]["modified"], "checksum", appsMap[obj.Key]["checksum"])
 	}
 
 	//
