@@ -122,9 +122,9 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// the custom client code to validate how to use or if we should just use gocloud.dev pacakge
 
 	// get bucket, region, and path
-	bucket := appSourceInstance.Spec.S3.Bucket // nai-apps-for-sok
-	region := appSourceInstance.Spec.S3.Region // us-west-2
-	path := appSourceInstance.Spec.S3.Path     // shc-apps
+	bucket := appSourceInstance.Spec.S3.Bucket
+	region := appSourceInstance.Spec.S3.Region
+	path := appSourceInstance.Spec.S3.Path
 
 	logger.Info("Bucket", "bucket", bucket)
 	logger.Info("Region", "region", region)
@@ -138,9 +138,6 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		logger.Error(nil, "AWS credentials not found in secret")
 		return ctrl.Result{}, nil
 	}
-
-	logger.Info("Access Key", "accessKey", accessKey)
-	logger.Info("Secret Access Key", "secretAccessKey", secretAccessKey)
 
 	bucketURL := fmt.Sprintf("s3://%s?region=%s", bucket, region)
 	logger.Info("Bucket URL", "bucketURL", bucketURL)
@@ -198,8 +195,6 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		// log the app metadata
 		logger.Info("App metadata", "app", obj.Key, "size", appsMap[obj.Key]["size"], "modified", appsMap[obj.Key]["modified"], "checksum", appsMap[obj.Key]["checksum"])
 	}
-
-	//
 
 	return ctrl.Result{}, nil
 }
