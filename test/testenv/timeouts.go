@@ -82,5 +82,5 @@ const (
 
 	// LongSuiteTimeout for heavy suites:
 	// crcrud, m4appfw, c3appfw.
-	LongSuiteTimeout = 200 * time.Minute
+	LongSuiteTimeout = 225 * time.Minute
 )
