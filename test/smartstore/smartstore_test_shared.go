@@ -184,7 +184,7 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	err := config.DeployMultisiteClusterWithIndexes(ctx, deployment, deployment.GetName(), 1, siteCount, testcaseEnvInst.GetIndexSecretName(), smartStoreSpec)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-	Expect(testenv.VerifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)).To(Succeed(), "M4 cluster or RF/SF verification failed")
+	Expect(testenv.VerifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount, false)).To(Succeed(), "M4 cluster or RF/SF verification failed")
 
 	// Use multisite workflow helper to verify index, ingest data, roll to warm, and verify on S3
 	Expect(testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, siteCount, indexName)).To(Succeed(), "Multisite indexer workflow failed")
@@ -203,7 +203,9 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	// Update CR with new index based on API version
 	Expect(config.AppendSmartStoreIndex(ctx, deployment, newIndex)).To(Succeed(), "Unable to append SmartStore index")
 
-	Expect(testenv.VerifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount)).To(Succeed(), "M4 cluster or RF/SF verification failed after adding index")
+	// Second-round: skip VerifyIndexerClusterMultisiteStatus (already verified in
+	// the first round; multisite topology is unchanged by an index addition).
+	Expect(testenv.VerifyM4ClusterAndRFSF(ctx, deployment, testcaseEnvInst, config, siteCount, true)).To(Succeed(), "M4 cluster or RF/SF verification failed after adding index")
 
 	if config.GetAPIVersion() == "v3" {
 		// Verify new bundle is pushed to all indexers

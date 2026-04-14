@@ -1672,15 +1672,19 @@ func VerifyC3ClusterPVCs(testcaseEnvInst *TestCaseEnv, deployment *Deployment, c
 }
 
 // VerifyM4ClusterAndRFSF verifies Cluster Manager and multisite cluster are ready and RF/SF is met.
-func VerifyM4ClusterAndRFSF(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig, siteCount int) error {
+// When skipMultisiteStatus is true the VerifyIndexerClusterMultisiteStatus check is omitted
+// (useful on second-round verification after an index addition where multisite topology is unchanged).
+func VerifyM4ClusterAndRFSF(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, config *ClusterReadinessConfig, siteCount int, skipMultisiteStatus bool) error {
 	if err := config.ClusterManagerReady(ctx, deployment, testcaseEnvInst); err != nil {
 		return err
 	}
 	if err := testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount); err != nil {
 		return err
 	}
-	if err := testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount); err != nil {
-		return err
+	if !skipMultisiteStatus {
+		if err := testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount); err != nil {
+			return err
+		}
 	}
 	if err := testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment); err != nil {
 		return err
