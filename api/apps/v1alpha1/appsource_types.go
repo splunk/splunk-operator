@@ -98,7 +98,7 @@ type AppSourceStatus struct {
 	// +optional
 	// +listType=map
 	// +listMapKey=type
-	Conditions []metav1.Condition `json:"condition,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// ObservedGeneration represents the most recent generation observed for this AppSource
 	// This will be used to determine if the AppSource needs to be reconciled

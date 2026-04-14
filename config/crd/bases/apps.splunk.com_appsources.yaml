@@ -117,7 +117,7 @@ spec:
           status:
             description: AppSourceStatus defines the observed state of AppSource.
             properties:
-              condition:
+              conditions:
                 description: Conditions represent the current state of the AppSource
                 items:
                   description: Condition contains details for one aspect of the current
