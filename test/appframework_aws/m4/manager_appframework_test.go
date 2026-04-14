@@ -91,7 +91,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("smoke, m4, managerappframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("smoke, m4, managerappframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################

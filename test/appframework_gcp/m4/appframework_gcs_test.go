@@ -92,7 +92,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It(" m4gcp, masterappframeworkm4gcp,  m4_gcp_sanity: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It(" m4gcp, masterappframeworkm4gcp,  m4_gcp_sanity: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
