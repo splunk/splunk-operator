@@ -22,8 +22,9 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
-	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	sharedreconcile "github.com/splunk/splunk-operator/pkg/postgresql/shared/reconcile"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,6 +65,9 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics}
 	result, err := clustercore.PostgresClusterService(ctx, rc, req)
 	r.FleetCollector.CollectClusterMetrics(ctx, r.Client, r.Metrics)
+	if sharedreconcile.IsPureConflict(err) {
+		return ctrl.Result{Requeue: true}, nil
+	}
 	return result, err
 }
 

@@ -60,10 +60,6 @@ func PostgresDatabaseService(
 	if !controllerutil.ContainsFinalizer(postgresDB, postgresDatabaseFinalizerName) {
 		controllerutil.AddFinalizer(postgresDB, postgresDatabaseFinalizerName)
 		if err := c.Update(ctx, postgresDB); err != nil {
-			if errors.IsConflict(err) {
-				logger.Info("Conflict while adding finalizer, will requeue")
-				return ctrl.Result{Requeue: true}, nil
-			}
 			logger.Error(err, "Failed to add finalizer to PostgresDatabase")
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
@@ -304,9 +300,6 @@ func PostgresDatabaseService(
 	postgresDB.Status.ObservedGeneration = &postgresDB.Generation
 
 	if err := c.Status().Update(ctx, postgresDB); err != nil {
-		if errors.IsConflict(err) {
-			return ctrl.Result{Requeue: true}, nil
-		}
 		return ctrl.Result{}, fmt.Errorf("failed to persist final status: %w", err)
 	}
 
