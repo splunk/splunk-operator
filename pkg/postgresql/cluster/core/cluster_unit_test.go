@@ -403,8 +403,9 @@ func TestBuildCNPGPooler(t *testing.T) {
 	}
 
 	t.Run("rw pooler", func(t *testing.T) {
-		pooler := buildCNPGPooler(scheme, postgresCluster, cfg, cnpgCluster, "rw")
+		pooler, err := buildCNPGPooler(scheme, postgresCluster, cfg, cnpgCluster, "rw")
 
+		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-pooler-rw", pooler.Name)
 		assert.Equal(t, "db-ns", pooler.Namespace)
 		assert.Equal(t, "my-cluster", pooler.Spec.Cluster.Name)
@@ -418,8 +419,9 @@ func TestBuildCNPGPooler(t *testing.T) {
 	})
 
 	t.Run("ro pooler", func(t *testing.T) {
-		pooler := buildCNPGPooler(scheme, postgresCluster, cfg, cnpgCluster, "ro")
+		pooler, err := buildCNPGPooler(scheme, postgresCluster, cfg, cnpgCluster, "ro")
 
+		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-pooler-ro", pooler.Name)
 		assert.Equal(t, cnpgv1.PoolerType("ro"), pooler.Spec.Type)
 	})
@@ -451,8 +453,9 @@ func TestBuildCNPGCluster(t *testing.T) {
 		},
 	}
 
-	cluster := buildCNPGCluster(scheme, postgresCluster, cfg, "my-secret")
+	cluster, err := buildCNPGCluster(scheme, postgresCluster, cfg, "my-secret")
 
+	require.NoError(t, err)
 	assert.Equal(t, "my-cluster", cluster.Name)
 	assert.Equal(t, "db-ns", cluster.Namespace)
 	require.Len(t, cluster.OwnerReferences, 1)
