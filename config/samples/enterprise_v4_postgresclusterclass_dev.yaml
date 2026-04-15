@@ -27,10 +27,10 @@ spec:
         cpu: "1"
         memory: "2Gi"
     connectionPoolerEnabled: true
-    observability:
-      postgresql:
+    monitoring:
+      postgresqlMetrics:
         enabled: true
-      pgbouncer:
+      connectionPoolerMetrics:
         enabled: true
 
   cnpg:
