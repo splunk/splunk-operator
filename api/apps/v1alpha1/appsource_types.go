@@ -132,10 +132,14 @@ type AppSourceStatus struct {
 }
 
 const (
-	TypeAppSourceConditionPending = "Pending"
-	TypeAppSourceConditionSyncing = "Syncing"
-	TypeAppSourceConditionReady   = "Ready"
-	TypeAppSourceConditionFailed  = "Failed"
+	// AppSourceConditionReady indicates that the AppSource is ready
+	AppSourceConditionReady = "Ready"
+	// AppSourceConditionSecretValid indicates that the secret is valid
+	AppSourceConditionSecretValid = "SecretValid"
+	// AppSourceConditionBackendAccessible indicates that the backend is accessible
+	AppSourceConditionBackendAccessible = "BackendAccessible"
+	// AppSourceConditionAppSynced indicates that the apps have been synced
+	AppSourceConditionAppSynced = "AppSynced"
 )
 
 // +kubebuilder:object:root=true
