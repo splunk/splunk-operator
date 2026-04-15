@@ -125,6 +125,8 @@ make deploy IMG=<your-image> SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splun
 
 For backwards compatibility, setting `ENABLE_VALIDATION_WEBHOOK=true` as an environment variable on the operator container will still enable the validation webhook. The operator logs a deprecation warning when this method is used.
 
+When both the `--feature-gates=ValidationWebhook=...` CLI flag and the `ENABLE_VALIDATION_WEBHOOK` env var are set, the **CLI flag takes precedence**. The env var is applied at startup before flag parsing, so the CLI value overwrites it.
+
 ## Validated Fields
 
 The webhook validates the following spec fields:

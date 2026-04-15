@@ -10,14 +10,6 @@ Enable or disable feature gates at operator startup:
 /manager --feature-gates=ValidationWebhook=true
 ```
 
-Or via Helm values:
-
-```yaml
-splunkOperator:
-  featureGates:
-    ValidationWebhook: true
-```
-
 ## Maturity Lifecycle
 
 | Stage     | Default | Can Override | Next Step                               |

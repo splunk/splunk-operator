@@ -121,8 +121,12 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	if gates := config.DefaultMutableFeatureGate.KnownFeatures(); len(gates) > 0 {
-		setupLog.Info("Feature gates initialized", "allGates", gates)
+	if allGates := config.DefaultMutableFeatureGate.GetAll(); len(allGates) > 0 {
+		effectiveStates := make(map[string]bool, len(allGates))
+		for gate := range allGates {
+			effectiveStates[string(gate)] = config.DefaultMutableFeatureGate.Enabled(gate)
+		}
+		setupLog.Info("Feature gates initialized", "gates", effectiveStates)
 	}
 
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
