@@ -54,7 +54,7 @@ func TestValidateAppCreate(t *testing.T) {
 			app:          newValidApp("app-one"),
 			wantErrCount: 1,
 			wantErrFields: []string{
-				"spec.sourceRef.metadata.name",
+				"spec.sourceRef.name",
 			},
 			wantMessage: "Not found",
 		},

@@ -55,6 +55,9 @@ spec:
               appID:
                 minLength: 1
                 type: string
+                x-kubernetes-validations:
+                - message: spec.appID is immutable
+                  rule: self == oldSelf
               package:
                 description: AppPackageSpec defines the package location within the
                   source.
@@ -70,6 +73,9 @@ spec:
                 - local
                 - cluster
                 type: string
+                x-kubernetes-validations:
+                - message: spec.scope is immutable
+                  rule: self == oldSelf
               sourceRef:
                 description: AppSourceRef defines the app source details.
                 properties:
@@ -79,6 +85,9 @@ spec:
                 required:
                 - name
                 type: object
+                x-kubernetes-validations:
+                - message: spec.sourceRef is immutable
+                  rule: self == oldSelf
               targetRef:
                 description: AppTargetRef defines the target environment the app should
                   bind to.
@@ -102,6 +111,9 @@ spec:
                 - kind
                 - name
                 type: object
+                x-kubernetes-validations:
+                - message: spec.targetRef is immutable
+                  rule: self == oldSelf
               version:
                 minLength: 1
                 type: string
@@ -113,15 +125,6 @@ spec:
             - targetRef
             - version
             type: object
-            x-kubernetes-validations:
-            - message: appID is immutable once created
-              rule: self.appID == oldSelf.appID
-            - message: targetRef is immutable once created
-              rule: self.targetRef == oldSelf.targetRef
-            - message: sourceRef is immutable once created
-              rule: self.sourceRef == oldSelf.sourceRef
-            - message: scope is immutable once created
-              rule: self.scope == oldSelf.scope
           status:
             description: AppStatus defines the observed state of App.
             properties:

@@ -53,6 +53,7 @@ type AppSourceRef struct {
 type AppSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec.appID is immutable"
 	AppID string `json:"appID"`
 
 	// +kubebuilder:validation:Required
@@ -60,9 +61,11 @@ type AppSpec struct {
 	Version string `json:"version"`
 
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec.targetRef is immutable"
 	TargetRef AppTargetRef `json:"targetRef"`
 
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec.sourceRef is immutable"
 	SourceRef AppSourceRef `json:"sourceRef"`
 
 	// +kubebuilder:validation:Required
@@ -70,6 +73,7 @@ type AppSpec struct {
 
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum="local";"cluster"
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec.scope is immutable"
 	Scope string `json:"scope"`
 }
 
