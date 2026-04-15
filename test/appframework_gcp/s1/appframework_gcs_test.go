@@ -190,7 +190,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Delete apps on gcs
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on gcs", appVersion))
-			testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to gcs for Standalone and Monitoring Console
@@ -351,7 +351,7 @@ var _ = Describe("s1appfw test", func() {
 			// ############# DOWNGRADE APPS ################
 			// Delete apps on gcs
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on gcs", appVersion))
-			testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// get revision number of the resource
@@ -700,7 +700,7 @@ var _ = Describe("s1appfw test", func() {
 			// ############## UPGRADE APPS #################
 			// Delete apps on gcs
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on gcs", appVersion))
-			testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to gcs for Standalone and Monitoring Console
@@ -803,7 +803,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Delete apps on gcs
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on gcs", appVersion))
-			testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Download ES App from gcs
@@ -1025,7 +1025,7 @@ var _ = Describe("s1appfw test", func() {
 			//############### UPGRADE APPS ################
 
 			//Delete apps on GCS for new Apps
-			testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			//Upload new Versioned Apps to GCS
@@ -1375,7 +1375,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to delete ConfigMao", "ConfigMap name", ConfigMapName)
 
 			// Delete Operator pod while Install in progress
-			testcaseEnvInst.DeleteOperatorPod()
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
@@ -1456,7 +1456,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testcaseEnvInst.DeleteOperatorPod()
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
@@ -1667,7 +1667,7 @@ var _ = Describe("s1appfw test", func() {
 			// ############## UPGRADE APPS #################
 			// Delete apps on
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
-			testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to GCS for Standalone

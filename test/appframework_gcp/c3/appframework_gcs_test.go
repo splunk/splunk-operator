@@ -204,7 +204,7 @@ var _ = Describe("c3appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete apps on GCS
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// get revision number of the resource
@@ -396,7 +396,7 @@ var _ = Describe("c3appfw test", func() {
 			//############## DOWNGRADE APPS ###############
 			// Delete apps on GCS
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// get revision number of the resource
@@ -542,7 +542,7 @@ var _ = Describe("c3appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on GCS
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to GCS

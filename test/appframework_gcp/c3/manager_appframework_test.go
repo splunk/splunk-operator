@@ -212,7 +212,7 @@ var _ = Describe("c3appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete apps on GCS
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// get revision number of the resource
@@ -293,17 +293,17 @@ var _ = Describe("c3appfw test", func() {
 				licenseFilePath, err := testenv.DownloadLicenseFromGCPBucket()
 				Expect(err).To(Succeed(), "Unable to download license file from GCS")
 				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+				Expect(testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)).To(Succeed(), "Failed to create license config map")
 			case "azure":
 				licenseFilePath, err := testenv.DownloadLicenseFromAzure(ctx, downloadDir)
 				Expect(err).To(Succeed(), "Unable to download license file from Azure")
 				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+				Expect(testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)).To(Succeed(), "Failed to create license config map")
 			case "gcp":
 				licenseFilePath, err := testenv.DownloadLicenseFromGCPBucket()
 				Expect(err).To(Succeed(), "Unable to download license file from GCP")
 				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+				Expect(testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)).To(Succeed(), "Failed to create license config map")
 			default:
 				fmt.Printf("Unable to download license file")
 				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with provider set as %v", testenv.ClusterProvider))
@@ -570,7 +570,7 @@ var _ = Describe("c3appfw test", func() {
 			//############## DOWNGRADE APPS ###############
 			// Delete apps on GCS
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// get revision number of the resource
@@ -1016,7 +1016,7 @@ var _ = Describe("c3appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on GCS
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to GCS
@@ -1209,7 +1209,7 @@ var _ = Describe("c3appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete apps on GCS
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
@@ -1434,7 +1434,7 @@ var _ = Describe("c3appfw test", func() {
 			//############# DOWNGRADE APPS ################
 			// Delete apps on GCS
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
@@ -1729,7 +1729,7 @@ var _ = Describe("c3appfw test", func() {
 			// ############### UPGRADE APPS ################
 			// Delete V1 apps on GCS
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to GCS for C3
@@ -1938,7 +1938,7 @@ var _ = Describe("c3appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on GCS
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to GCS
@@ -2168,7 +2168,7 @@ var _ = Describe("c3appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete apps on GCS
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
@@ -2579,7 +2579,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testcaseEnvInst.DeleteOperatorPod()
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Ensure Cluster Manager goes to Ready phase
 			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
@@ -2674,7 +2674,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testcaseEnvInst.DeleteOperatorPod()
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Ensure Cluster Manager goes to Ready phase
 			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")

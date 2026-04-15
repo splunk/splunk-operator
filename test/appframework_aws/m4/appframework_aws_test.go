@@ -205,7 +205,7 @@ var _ = Describe("m4appfw test", func() {
 			//############# UPGRADE APPS ################
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// get revision number of the resource
@@ -394,7 +394,7 @@ var _ = Describe("m4appfw test", func() {
 			// Delete V2 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Upload V1 apps to S3 for Indexer Cluster
@@ -535,8 +535,8 @@ var _ = Describe("m4appfw test", func() {
 			for i := 1; i <= siteCount; i++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
 				logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
-				testenv.CreateMockLogfile(logFile, 2000)
-				testenv.IngestFileViaMonitor(ctx, deployment, logFile, "main", podName)
+				Expect(testenv.CreateMockLogfile(logFile, 2000)).To(Succeed(), "Failed to create mock logfile")
+				Expect(testenv.IngestFileViaMonitor(ctx, deployment, logFile, "main", podName)).To(Succeed(), "Failed to ingest file via monitor")
 			}
 
 			// ############ Verify livenessProbe and readinessProbe config object and scripts############
@@ -603,8 +603,8 @@ var _ = Describe("m4appfw test", func() {
 			// Ingest data on  new Indexers
 			podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 1)
 			logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
-			testenv.CreateMockLogfile(logFile, 2000)
-			testenv.IngestFileViaMonitor(ctx, deployment, logFile, "main", podName)
+			Expect(testenv.CreateMockLogfile(logFile, 2000)).To(Succeed(), "Failed to create mock logfile")
+			Expect(testenv.IngestFileViaMonitor(ctx, deployment, logFile, "main", podName)).To(Succeed(), "Failed to ingest file via monitor")
 
 			// Ensure Search Head Cluster go to Ready phase
 			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
@@ -797,7 +797,7 @@ var _ = Describe("m4appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to S3 for Indexer Cluster
@@ -966,7 +966,7 @@ var _ = Describe("m4appfw test", func() {
 			// Delete V2 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to S3 for Indexer Cluster
@@ -1171,7 +1171,7 @@ var _ = Describe("m4appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to S3 for Indexer Cluster
@@ -1398,7 +1398,7 @@ var _ = Describe("m4appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
@@ -1806,7 +1806,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testcaseEnvInst.DeleteOperatorPod()
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "M4 cluster not ready")
@@ -1890,7 +1890,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testcaseEnvInst.DeleteOperatorPod()
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "M4 cluster not ready")
@@ -2152,7 +2152,7 @@ var _ = Describe("m4appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to S3 for Indexer Cluster

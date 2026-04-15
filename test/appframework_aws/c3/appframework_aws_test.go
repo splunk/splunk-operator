@@ -204,7 +204,7 @@ var _ = Describe("c3appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// get revision number of the resource
@@ -396,7 +396,7 @@ var _ = Describe("c3appfw test", func() {
 			//############## DOWNGRADE APPS ###############
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// get revision number of the resource
@@ -821,7 +821,7 @@ var _ = Describe("c3appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to S3
@@ -1002,7 +1002,7 @@ var _ = Describe("c3appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
@@ -1215,7 +1215,7 @@ var _ = Describe("c3appfw test", func() {
 			//############# DOWNGRADE APPS ################
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
@@ -1492,7 +1492,7 @@ var _ = Describe("c3appfw test", func() {
 			// ############### UPGRADE APPS ################
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to S3 for C3
@@ -1689,7 +1689,7 @@ var _ = Describe("c3appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to S3
@@ -1907,7 +1907,7 @@ var _ = Describe("c3appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
@@ -2308,7 +2308,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testcaseEnvInst.DeleteOperatorPod()
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Ensure C3 cluster is ready
 			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready")
@@ -2397,7 +2397,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testcaseEnvInst.DeleteOperatorPod()
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Ensure C3 cluster is ready
 			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready")

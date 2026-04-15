@@ -180,7 +180,7 @@ var _ = Describe("s1appfw test", func() {
 			// Delete apps on Azure
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 
 			uploadedApps = nil
 			appVersion = "V2"
@@ -340,7 +340,7 @@ var _ = Describe("s1appfw test", func() {
 			// Delete apps on Azure
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 			uploadedApps = nil
 
 			// get revision number of the resource
@@ -676,7 +676,7 @@ var _ = Describe("s1appfw test", func() {
 			// Delete apps on Azure
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to Azure for Standalone and Monitoring Console
@@ -779,7 +779,7 @@ var _ = Describe("s1appfw test", func() {
 			// Delete apps on Azure
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 
 			// Download ES App from Azure
 			containerName = "/" + AzureDataContainer + "/" + testenv.AppLocationV2
@@ -1002,7 +1002,7 @@ var _ = Describe("s1appfw test", func() {
 
 			//Delete apps on Azure for new Apps
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 			uploadedApps = nil
 
 			//Upload new Versioned Apps to Azure
@@ -1343,7 +1343,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testcaseEnvInst.DeleteOperatorPod()
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
@@ -1415,7 +1415,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testcaseEnvInst.DeleteOperatorPod()
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
@@ -1629,7 +1629,7 @@ var _ = Describe("s1appfw test", func() {
 			// Delete apps on Azure
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to Azure for Standalone

@@ -191,7 +191,7 @@ var _ = Describe("m4appfw test", func() {
 			// Delete apps on Azure
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to Azure for Indexer Cluster
@@ -378,7 +378,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 			uploadedApps = nil
 
 			// Upload V1 apps to Azure for Indexer Cluster
@@ -519,8 +519,8 @@ var _ = Describe("m4appfw test", func() {
 			for i := 1; i <= siteCount; i++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
 				logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
-				testenv.CreateMockLogfile(logFile, 2000)
-				testenv.IngestFileViaMonitor(ctx, deployment, logFile, "main", podName)
+				Expect(testenv.CreateMockLogfile(logFile, 2000)).To(Succeed(), "Failed to create mock logfile")
+				Expect(testenv.IngestFileViaMonitor(ctx, deployment, logFile, "main", podName)).To(Succeed(), "Failed to ingest file via monitor")
 			}
 
 			//########### INITIAL VERIFICATIONS #########
@@ -577,8 +577,8 @@ var _ = Describe("m4appfw test", func() {
 			// Ingest data on  new Indexers
 			podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 1)
 			logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
-			testenv.CreateMockLogfile(logFile, 2000)
-			testenv.IngestFileViaMonitor(ctx, deployment, logFile, "main", podName)
+			Expect(testenv.CreateMockLogfile(logFile, 2000)).To(Succeed(), "Failed to create mock logfile")
+			Expect(testenv.IngestFileViaMonitor(ctx, deployment, logFile, "main", podName)).To(Succeed(), "Failed to ingest file via monitor")
 
 			// Ensure Search Head Cluster go to Ready phase
 			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
@@ -767,7 +767,7 @@ var _ = Describe("m4appfw test", func() {
 			// Delete V1 apps on Azure
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to Azure for Indexer Cluster
@@ -1135,7 +1135,7 @@ var _ = Describe("m4appfw test", func() {
 			// Delete V1 apps on Azure
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to Azure for Indexer Cluster
@@ -1363,7 +1363,7 @@ var _ = Describe("m4appfw test", func() {
 			// Delete apps on Azure
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
@@ -1774,7 +1774,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testcaseEnvInst.DeleteOperatorPod()
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "M4 cluster not ready")
@@ -1859,7 +1859,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testcaseEnvInst.DeleteOperatorPod()
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "M4 cluster not ready")
@@ -2125,7 +2125,7 @@ var _ = Describe("m4appfw test", func() {
 			// Delete V1 apps on Azure
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to Azure for Indexer Cluster
