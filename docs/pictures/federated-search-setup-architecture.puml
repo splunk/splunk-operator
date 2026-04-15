@@ -1,0 +1,38 @@
+@startuml
+!include <C4/C4_Container>
+
+title Federated Search Setup: LOCAL to REMOTE
+LAYOUT_TOP_DOWN()
+
+AddElementTag("cluster", $bgColor="#F7F9FC", $fontColor="#1F2937", $borderColor="#64748B")
+AddElementTag("app", $bgColor="#E0F2FE", $fontColor="#0F172A", $borderColor="#0284C7")
+AddElementTag("network", $bgColor="#FEF3C7", $fontColor="#78350F", $borderColor="#D97706")
+AddElementTag("security", $bgColor="#FCE7F3", $fontColor="#831843", $borderColor="#DB2777")
+AddElementTag("data", $bgColor="#DCFCE7", $fontColor="#14532D", $borderColor="#16A34A")
+
+System_Boundary(local_ns, "LOCAL Kubernetes namespace") {
+  Container_Boundary(local_shc_boundary, "LOCAL SearchHeadCluster") {
+    Container(local_shc, "LOCAL SHC pods", "Splunk SearchHeadCluster", "Runs user searches", $tags="cluster")
+    Container(local_app, "federated-search-app", "Splunk app", "Defines federated provider and federated indexes", $tags="app")
+  }
+}
+
+Container(remote_mgmt, "remote-mgmt Service + Ingress NGINX", "Kubernetes Service / Ingress", "Exposes the REMOTE management path over HTTPS", $tags="network")
+
+System_Boundary(remote_ns, "REMOTE Kubernetes namespace") {
+  Container_Boundary(remote_shc_boundary, "REMOTE SearchHeadCluster") {
+    Container(remote_shc, "REMOTE SHC pods", "Splunk SearchHeadCluster", "Authenticates and brokers federated requests", $tags="cluster")
+    Container(remote_config, "remote federated config", "Splunk role + service account", "fsh_user and fsh_svc with access to shared indexes", $tags="security")
+  }
+  ContainerDb(remote_idxc, "REMOTE IndexerCluster", "Splunk indexes", "Stores _audit, demo, and other remote datasets", $tags="data")
+}
+
+Rel(local_app, local_shc, "Installed on")
+Rel(local_shc, remote_mgmt, "Connects to REMOTE management API", "HTTPS 443")
+Rel(remote_mgmt, remote_shc, "Routes management traffic", "HTTPS 8089")
+Rel(remote_config, remote_shc, "Configured on")
+Rel(local_app, remote_config, "References provider name and service account")
+Rel(remote_shc, remote_idxc, "Searches remote indexes")
+
+SHOW_LEGEND()
+@enduml

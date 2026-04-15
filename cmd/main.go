@@ -303,6 +303,7 @@ func main() {
 			Validators:   validation.DefaultValidators,
 			ReadTimeout:  readTimeout,
 			WriteTimeout: writeTimeout,
+			Client:       mgr.GetClient(),
 		})
 
 		// Add webhook server as a runnable to the manager

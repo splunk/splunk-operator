@@ -4741,3 +4741,366 @@ func TestIsAppAlreadyInstalled(t *testing.T) {
 		})
 	}
 }
+
+func TestSHCIsBundlePushComplete(t *testing.T) {
+	ctx := context.TODO()
+	cr := &enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+
+	catCmd := fmt.Sprintf("cat %s", shcBundlePushStatusCheckFile)
+	rmCmd := fmt.Sprintf("rm %s", shcBundlePushStatusCheckFile)
+
+	tests := []struct {
+		name           string
+		catStdOut      string
+		catStdErr      string
+		catErr         error
+		expectsRemoval bool
+		removalStdErr  string
+		expectedResult bool
+		expectedError  bool
+		description    string
+	}{
+		{
+			name:           "empty stdOut - bundle push still in progress",
+			catStdOut:      "",
+			catStdErr:      "",
+			catErr:         nil,
+			expectsRemoval: false,
+			expectedResult: false,
+			expectedError:  false,
+			description:    "Empty status file means push still in progress",
+		},
+		{
+			name:           "FIPS provider banner only - treated as still in progress",
+			catStdOut:      splunkFIPSProviderBannerStr,
+			catStdErr:      "",
+			catErr:         nil,
+			expectsRemoval: false,
+			expectedResult: false,
+			expectedError:  false,
+			description:    "Status file with only FIPS banner should not be treated as an error",
+		},
+		{
+			name:           "FIPS banner and WARNING lines only - treated as still in progress",
+			catStdOut:      splunkFIPSProviderBannerStr + "\n" + splunkSSLCertWarnStr + " Validation Disabled\n",
+			catStdErr:      "",
+			catErr:         nil,
+			expectsRemoval: false,
+			expectedResult: false,
+			expectedError:  false,
+			description:    "Status file with FIPS banner and SSL warnings should not be treated as an error",
+		},
+		{
+			name:           "FIPS banner and blank lines only - treated as still in progress",
+			catStdOut:      "\n" + splunkFIPSProviderBannerStr + "\n\n",
+			catStdErr:      "",
+			catErr:         nil,
+			expectsRemoval: false,
+			expectedResult: false,
+			expectedError:  false,
+			description:    "Blank lines alongside FIPS banner should still be treated as informational",
+		},
+		{
+			name:           "FIPS banner followed by real error content - treated as error",
+			catStdOut:      splunkFIPSProviderBannerStr + "\nError applying bundle: permission denied",
+			catStdErr:      "",
+			catErr:         nil,
+			expectsRemoval: true,
+			removalStdErr:  "",
+			expectedResult: false,
+			expectedError:  true,
+			description:    "Meaningful error content after FIPS banner should cause an error",
+		},
+		{
+			name:           "SSL WARNING only without FIPS banner - treated as error",
+			catStdOut:      splunkSSLCertWarnStr + " Hostname Validation is disabled.",
+			catStdErr:      "",
+			catErr:         nil,
+			expectsRemoval: true,
+			removalStdErr:  "",
+			expectedResult: false,
+			expectedError:  true,
+			description:    "SSL warning without FIPS banner means a silent failure on non-FIPS clusters; must not hang waiting for a push that already exited",
+		},
+		{
+			name:           "SSL WARNING only without FIPS banner (multiple lines) - treated as error",
+			catStdOut:      splunkSSLCertWarnStr + " Hostname Validation is disabled.\n" + splunkSSLCertWarnStr + " Validation Disabled\n",
+			catStdErr:      "",
+			catErr:         nil,
+			expectsRemoval: true,
+			removalStdErr:  "",
+			expectedResult: false,
+			expectedError:  true,
+			description:    "Multiple SSL warnings without FIPS banner must not suppress error detection on non-FIPS clusters",
+		},
+		{
+			name:           "meaningful error in stdOut - treated as error",
+			catStdOut:      "Error while deploying apps",
+			catStdErr:      "",
+			catErr:         nil,
+			expectsRemoval: true,
+			removalStdErr:  "",
+			expectedResult: false,
+			expectedError:  true,
+			description:    "Non-success, non-FIPS content is a real bundle push error",
+		},
+		{
+			name:           "stdErr from cat command - error",
+			catStdOut:      "",
+			catStdErr:      "cat: no such file or directory",
+			catErr:         nil,
+			expectsRemoval: true,
+			removalStdErr:  "",
+			expectedResult: false,
+			expectedError:  true,
+			description:    "Stderr from status file read indicates a failure",
+		},
+		{
+			name:           "exec error from cat command - error",
+			catStdOut:      "",
+			catStdErr:      "",
+			catErr:         fmt.Errorf("pod exec failed"),
+			expectsRemoval: true,
+			removalStdErr:  "",
+			expectedResult: false,
+			expectedError:  true,
+			description:    "Exec error when reading status file should propagate",
+		},
+		{
+			name:           "bundle push complete success string - complete",
+			catStdOut:      shcBundlePushCompleteStr,
+			catStdErr:      "",
+			catErr:         nil,
+			expectsRemoval: true,
+			removalStdErr:  "",
+			expectedResult: true,
+			expectedError:  false,
+			description:    "Status file with success string means push complete",
+		},
+		{
+			name:           "FIPS banner preceding success string - complete",
+			catStdOut:      splunkFIPSProviderBannerStr + "\n" + shcBundlePushCompleteStr,
+			catStdErr:      "",
+			catErr:         nil,
+			expectsRemoval: true,
+			removalStdErr:  "",
+			expectedResult: true,
+			expectedError:  false,
+			description:    "FIPS banner before success string should still be recognized as complete",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			appDeployContext := &enterpriseApi.AppDeploymentContext{
+				BundlePushStatus: enterpriseApi.BundlePushTracker{
+					BundlePushStage: enterpriseApi.BundlePushInProgress,
+				},
+			}
+			afwPipeline := &AppInstallPipeline{
+				appDeployContext: appDeployContext,
+			}
+
+			mockPodExecClient := &spltest.MockPodExecClient{Cr: cr}
+
+			podExecCmds := []string{catCmd}
+			mockReturnCtxts := []*spltest.MockPodExecReturnContext{
+				{StdOut: tt.catStdOut, StdErr: tt.catStdErr, Err: tt.catErr},
+			}
+
+			if tt.expectsRemoval {
+				podExecCmds = append(podExecCmds, rmCmd)
+				mockReturnCtxts = append(mockReturnCtxts, &spltest.MockPodExecReturnContext{
+					StdOut: "",
+					StdErr: tt.removalStdErr,
+				})
+			}
+
+			mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCmds, mockReturnCtxts...)
+
+			shcCtx := &SHCPlaybookContext{
+				client:        c,
+				cr:            cr,
+				afwPipeline:   afwPipeline,
+				targetPodName: "splunk-stack1-searchheadcluster-0",
+				podExecClient: mockPodExecClient,
+			}
+
+			result, err := shcCtx.isBundlePushComplete(ctx)
+
+			if tt.expectedError {
+				if err == nil {
+					t.Errorf("Expected error for %q but got none", tt.description)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for %q: %v", tt.description, err)
+				}
+			}
+
+			if result != tt.expectedResult {
+				t.Errorf("Expected result %v but got %v for %q", tt.expectedResult, result, tt.description)
+			}
+		})
+	}
+}
+
+func TestHandleEsappPostinstallFipsAware(t *testing.T) {
+	ctx := context.TODO()
+
+	cr := enterpriseApi.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{
+						Name: "appSrc1",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							Scope: enterpriseApi.ScopePremiumApps,
+							PremiumAppsProps: enterpriseApi.PremiumAppsProps{
+								Type: enterpriseApi.PremiumAppsTypeEs,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	appSrcSpec := &cr.Spec.AppFrameworkConfig.AppSources[0]
+	// The command registered in the mock only needs a prefix since matching uses strings.Contains.
+	esPostInstallCmdPrefix := "/opt/splunk/bin/splunk search"
+
+	tests := []struct {
+		name          string
+		stdOut        string
+		stdErr        string
+		execErr       error
+		expectedError bool
+		description   string
+	}{
+		{
+			name:          "success with no stderr - no error",
+			stdOut:        "Successfully installed",
+			stdErr:        "",
+			execErr:       nil,
+			expectedError: false,
+			description:   "Clean success should return nil",
+		},
+		{
+			name:          "success with FIPS stderr - no error",
+			stdOut:        "Successfully installed",
+			stdErr:        splunkFIPSProviderBannerStr,
+			execErr:       nil,
+			expectedError: false,
+			description:   "Stderr content alone should not cause failure on FIPS-enabled clusters",
+		},
+		{
+			name:          "success with WARNING stderr - no error",
+			stdOut:        "Successfully installed",
+			stdErr:        splunkSSLCertWarnStr + " Validation Disabled",
+			execErr:       nil,
+			expectedError: false,
+			description:   "SSL warning in stderr alone should not cause failure",
+		},
+		{
+			name:          "exec error with no stderr - error",
+			stdOut:        "",
+			stdErr:        "",
+			execErr:       fmt.Errorf("command terminated with exit code 1"),
+			expectedError: true,
+			description:   "A real exec error must be surfaced",
+		},
+		{
+			name:          "exec error with FIPS stderr - error",
+			stdOut:        "",
+			stdErr:        splunkFIPSProviderBannerStr,
+			execErr:       fmt.Errorf("essinstall failed"),
+			expectedError: true,
+			description:   "Exec error takes precedence even when stderr carries only FIPS banner",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockPodExecClient := &spltest.MockPodExecClient{}
+
+			mockPodExecClient.AddMockPodExecReturnContext(ctx, esPostInstallCmdPrefix, &spltest.MockPodExecReturnContext{
+				StdOut: tt.stdOut,
+				StdErr: tt.stdErr,
+				Err:    tt.execErr,
+			})
+
+			var replicas int32 = 1
+			sts := &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "splunk-stack1",
+					Namespace: "test",
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Replicas: &replicas,
+				},
+			}
+
+			c := spltest.NewMockClient()
+			var client splcommon.ControllerClient = getConvertedClient(c)
+			var waiter sync.WaitGroup
+
+			localInstallCtxt := &localScopePlaybookContext{
+				worker: &PipelineWorker{
+					appSrcName:    appSrcSpec.Name,
+					targetPodName: "splunk-stack1-standalone-0",
+					sts:           sts,
+					cr:            &cr,
+					appDeployInfo: &enterpriseApi.AppDeploymentInfo{
+						AppName:      "app1.tgz",
+						ObjectHash:   "abcdef12345",
+						AuxPhaseInfo: make([]enterpriseApi.PhaseInfo, 1),
+					},
+					afwConfig: &cr.Spec.AppFrameworkConfig,
+					client:    client,
+					waiter:    &waiter,
+				},
+				sem:           make(chan struct{}, 1),
+				podExecClient: mockPodExecClient,
+			}
+
+			pCtx := premiumAppScopePlaybookContext{
+				localCtx:    localInstallCtxt,
+				client:      client,
+				appSrcSpec:  appSrcSpec,
+				cr:          &cr,
+				afwPipeline: &AppInstallPipeline{},
+			}
+
+			phaseInfo := &enterpriseApi.PhaseInfo{}
+			err := handleEsappPostinstall(ctx, &pCtx, phaseInfo)
+
+			if tt.expectedError {
+				if err == nil {
+					t.Errorf("Expected error for %q but got none", tt.description)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for %q: %v", tt.description, err)
+				}
+			}
+		})
+	}
+}

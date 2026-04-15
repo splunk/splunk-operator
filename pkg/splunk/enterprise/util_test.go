@@ -22,6 +22,7 @@ import (
 
 	//"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -1196,7 +1197,13 @@ func TestCreateAppDownloadDir(t *testing.T) {
 		t.Errorf("Didn't expect error")
 	}
 
-	err = createAppDownloadDir(ctx, "/xyzzz.txt")
+	blockerFile, err := os.CreateTemp(t.TempDir(), "app-download-dir-blocker")
+	if err != nil {
+		t.Fatalf("failed to create blocker file: %v", err)
+	}
+	defer blockerFile.Close()
+
+	err = createAppDownloadDir(ctx, filepath.Join(blockerFile.Name(), "child"))
 	if err == nil {
 		t.Errorf("Expected error")
 	}
