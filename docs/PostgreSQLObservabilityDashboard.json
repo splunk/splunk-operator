@@ -792,7 +792,7 @@
       },
       "id": 200,
       "options": {
-        "content": "## Domain Metrics (custom, `splunk_operator_postgres_*`)\nFleet state gauges (collected every reconcile) and status transitions (emitted on condition changes).\n\nRuntime PostgreSQL and PgBouncer panels above assume annotation-based pod scraping and filter by `pod`, not dedicated metrics Services.",
+        "content": "## Domain Metrics (custom, `splunk_operator_postgres_*`)\nFleet state gauges (collected every reconcile) and status transitions (emitted on condition changes).\n\nRuntime PostgreSQL and PgBouncer panels above assume annotation-based pod scraping and filter by `pod`, not dedicated metrics Services.\n\nIf you validate through OpenTelemetry Collector, keep the Grafana datasource as Prometheus and have Prometheus scrape only the OTel Collector exporter for these metrics to avoid duplicate series.",
         "mode": "markdown"
       },
       "title": "",

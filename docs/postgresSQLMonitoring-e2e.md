@@ -13,6 +13,12 @@ Verify that:
 
 `ServiceMonitor` is still acceptable for operator-controller metrics if you want that separately, but it is not part of this feature validation.
 
+The reference dashboard in [PostgreSQLObservabilityDashboard.json](./PostgreSQLObservabilityDashboard.json) assumes:
+
+- `namespace=test`
+- `cluster=postgresql-cluster-dev`
+- `kube_pod_labels` is available for dashboard variables
+
 ## Prerequisites
 
 - KIND cluster is running
@@ -131,20 +137,28 @@ spec:
 EOF
 ```
 
-## 3. Apply test resources
+## 3. Apply sample resources
 
 Create the namespace and apply the sample resources:
 
 ```bash
 kubectl create namespace test
-kubectl apply -f test/postgresql/monitoring/postgresclusterclass.yaml
-kubectl apply -f pgclustertest.yaml
+kubectl apply -f config/samples/enterprise_v4_postgresclusterclass_dev.yaml
+kubectl apply -n test -f config/samples/enterprise_v4_postgrescluster_dev.yaml
+kubectl apply -n test -f config/samples/enterprise_v4_postgresdatabase.yaml
 ```
+
+These samples create:
+
+- `PostgresClusterClass` `postgresql-dev`
+- `PostgresCluster` `postgresql-cluster-dev`
+- `PostgresDatabase` `splunk-databases`
 
 ## 4. Verify reconciled resources
 
 ```bash
 kubectl get postgrescluster -n test
+kubectl get postgresdatabase -n test
 kubectl get cluster.postgresql.cnpg.io -n test
 kubectl get pooler.postgresql.cnpg.io -n test
 kubectl get pods -n test
@@ -155,7 +169,7 @@ kubectl get pods -n test
 PostgreSQL pods:
 
 ```bash
-kubectl get pods -n test -l cnpg.io/cluster=<cluster-name> -o yaml | rg 'prometheus.io/'
+kubectl get pods -n test -l cnpg.io/cluster=postgresql-cluster-dev -o yaml | rg 'prometheus.io/'
 ```
 
 Expected:
@@ -167,8 +181,8 @@ Expected:
 Pooler pods:
 
 ```bash
-kubectl get pods -n test -l cnpg.io/poolerName=<cluster-name>-pooler-rw -o yaml | rg 'prometheus.io/'
-kubectl get pods -n test -l cnpg.io/poolerName=<cluster-name>-pooler-ro -o yaml | rg 'prometheus.io/'
+kubectl get pods -n test -l cnpg.io/poolerName=postgresql-cluster-dev-pooler-rw -o yaml | rg 'prometheus.io/'
+kubectl get pods -n test -l cnpg.io/poolerName=postgresql-cluster-dev-pooler-ro -o yaml | rg 'prometheus.io/'
 ```
 
 Expected:
@@ -194,11 +208,15 @@ up{job="annotated-pods", namespace="test"}
 ```
 
 ```promql
-count by (pod) (cnpg_pg_postmaster_start_time{namespace="test"})
+count(count by (pod) (cnpg_pg_postmaster_start_time{namespace="test",pod=~"postgresql-cluster-dev-[0-9]+"}))
 ```
 
 ```promql
-cnpg_pgbouncer_last_collection_error{namespace="test"}
+max(1 - clamp_max(cnpg_pgbouncer_last_collection_error{namespace="test",pod=~"postgresql-cluster-dev-pooler-rw-.*"}, 1))
+```
+
+```promql
+sum(rate(cnpg_pg_stat_archiver_archived_count{namespace="test",pod=~"postgresql-cluster-dev-[0-9]+"}[5m]))
 ```
 
 ## 7. Access Grafana
@@ -242,7 +260,7 @@ cnpg_pgbouncer_last_collection_error{namespace="test"}
 
 You can also import the reference dashboard from:
 
-- [PostgreSQLObservabilityDashboard.json](/Users/dpishchenkov/splunk-operator/docs/PostgreSQLObservabilityDashboard.json)
+- [PostgreSQLObservabilityDashboard.json](./PostgreSQLObservabilityDashboard.json)
 
 In Grafana:
 
@@ -250,13 +268,29 @@ In Grafana:
 2. Click **New** -> **Import**
 3. Upload `docs/PostgreSQLObservabilityDashboard.json`
 4. Select the Prometheus datasource
+5. Set `namespace` to `test`
+6. Set `cluster` to `postgresql-cluster-dev`
+
+The dashboard variables use:
+
+```promql
+label_values(kube_pod_labels{label_cnpg_io_cluster!=""}, namespace)
+```
+
+and:
+
+```promql
+label_values(kube_pod_labels{label_cnpg_io_cluster!="", namespace="$namespace"}, label_cnpg_io_cluster)
+```
+
+So `kubeStateMetrics.enabled: true` in `values.yaml` is required for the imported dashboard to work as-is.
 
 ## 8. Optional disable test
 
 Disable monitoring in the `PostgresCluster` and verify annotations disappear:
 
 ```bash
-kubectl patch postgrescluster <cluster-name> -n test --type=merge -p '
+kubectl patch postgrescluster postgresql-cluster-dev -n test --type=merge -p '
 spec:
   monitoring:
     postgresqlMetrics:
