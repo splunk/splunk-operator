@@ -192,7 +192,7 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		discoveredApps = append(discoveredApps, appsv1alpha1.DiscoveredApp{
 			Name:         strings.Split(obj.Key, "/")[len(strings.Split(obj.Key, "/"))-1], // get only the package name
-			Path:         obj.Key, // full path to the object
+			Path:         obj.Key,                                                         // full path to the object
 			Size:         int64(obj.Size),
 			LastModified: metav1.NewTime(obj.ModTime),
 			Checksum:     fmt.Sprintf("%x", obj.MD5),
@@ -204,8 +204,16 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// update the AppSource status with the discovered apps
 	appSourceInstance.Status.DiscoveredApps = discoveredApps
+	if err := r.Status().Update(ctx, appSourceInstance); err != nil {
+		logger.Error(err, "Failed to update AppSource status")
+		return ctrl.Result{}, err
+	}
 
-	return ctrl.Result{}, nil
+	logger.Info("AppSource reconciled successfully", "discoveredApps", len(discoveredApps))
+
+	// reque for next poll
+	requeueAfter := time.Duration(*appSourceInstance.Spec.PollIntervalSeconds) * time.Second
+	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 
 func ListApps(ctx context.Context, req client.Client, secretRef string, namespace string) {
