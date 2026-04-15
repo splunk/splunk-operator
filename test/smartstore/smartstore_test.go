@@ -77,7 +77,7 @@ var _ = Describe("Smartstore test", func() {
 				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(tc.Label+", m4, integration: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
+			It(tc.Label+", m4, smoke: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
 				config := tc.NewConfig()
 				RunM4MultisiteSmartStoreTest(ctx, deployment, testcaseEnvInst, config)
 			})
