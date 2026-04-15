@@ -34,6 +34,7 @@ import (
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
+	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

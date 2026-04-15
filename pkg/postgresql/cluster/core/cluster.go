@@ -119,6 +119,8 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		return ctrl.Result{}, errors.Join(err, statusErr)
 	}
 
+	postgresMetricsEnabled := isPostgreSQLMetricsEnabled(postgresCluster, clusterClass)
+	poolerMetricsEnabled := isConnectionPoolerMetricsEnabled(postgresCluster, clusterClass)
 	// Resolve or derive the superuser secret name.
 	if postgresCluster.Status.Resources != nil && postgresCluster.Status.Resources.SuperUserSecretRef != nil {
 		postgresSecretName = postgresCluster.Status.Resources.SuperUserSecretRef.Name
@@ -191,7 +193,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	switch {
 	case apierrors.IsNotFound(err):
 		logger.Info("CNPG Cluster creation started", "name", postgresCluster.Name)
-		newCluster, err := buildCNPGCluster(rc.Scheme, postgresCluster, mergedConfig, postgresSecretName)
+		newCluster, err := buildCNPGCluster(rc.Scheme, postgresCluster, mergedConfig, postgresSecretName, postgresMetricsEnabled)
 		if err != nil {
 			logger.Error(err, "Failed to build CNPG Cluster", "name", postgresCluster.Name)
 			return ctrl.Result{}, err
@@ -508,7 +510,7 @@ func buildCNPGClusterSpec(cfg *MergedConfig, secretName string, postgresMetricsE
 	return spec
 }
 
-func buildCNPGCluster(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, secretName string, postgresMetricsEnabled bool) *cnpgv1.Cluster {
+func buildCNPGCluster(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, secretName string, postgresMetricsEnabled bool) (*cnpgv1.Cluster, error) {
 	cnpg := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
 		Spec:       buildCNPGClusterSpec(cfg, secretName, postgresMetricsEnabled),
