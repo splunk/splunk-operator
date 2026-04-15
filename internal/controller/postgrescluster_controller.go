@@ -50,7 +50,7 @@ type PostgresClusterReconciler struct {
 	Metrics        ports.Recorder
 	FleetCollector *pgprometheus.FleetCollector
 }
-// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;update;patch;delete
+
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters/finalizers,verbs=update
@@ -62,7 +62,11 @@ type PostgresClusterReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics}
+	metrics := r.Metrics
+	if metrics == nil {
+		metrics = &pgprometheus.NoopRecorder{}
+	}
+	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: metrics}
 	result, err := clustercore.PostgresClusterService(ctx, rc, req)
 	r.FleetCollector.CollectClusterMetrics(ctx, r.Client, r.Metrics)
 	if sharedreconcile.IsPureConflict(err) {

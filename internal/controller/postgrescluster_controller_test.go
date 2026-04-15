@@ -28,17 +28,13 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
-
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
-	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 /*
@@ -81,6 +77,15 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		req               reconcile.Request
 	)
 
+	const (
+		scrapeAnnotationKey = "prometheus.io/scrape"
+		pathAnnotationKey   = "prometheus.io/path"
+		portAnnotationKey   = "prometheus.io/port"
+		metricsPath         = "/metrics"
+		postgresPort        = "9187"
+		poolerPort          = "9127"
+	)
+
 	reconcileNTimes := func(times int) {
 		for i := 0; i < times; i++ {
 			_, err := reconciler.Reconcile(ctx, req)
@@ -88,25 +93,18 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		}
 	}
 
-	recreateClassWithMonitoring := func(postgresMetricsEnabled bool) {
+	recreateClusterClass := func(modify func(*enterprisev4.PostgresClusterClass)) {
 		Expect(k8sClient.Delete(ctx, pgClusterClass)).To(Succeed())
+		Eventually(func() bool {
+			return apierrors.IsNotFound(k8sClient.Get(ctx, pgClusterClassKey, &enterprisev4.PostgresClusterClass{}))
+		}, "10s", "250ms").Should(BeTrue())
 
-		pgClusterClass = &enterprisev4.PostgresClusterClass{
-			ObjectMeta: metav1.ObjectMeta{Name: className},
-			Spec: enterprisev4.PostgresClusterClassSpec{
-				Provisioner: provisioner,
-				Config: &enterprisev4.PostgresClusterClassConfig{
-					Instances:               &[]int32{clusterMemberCount}[0],
-					Storage:                 &[]resource.Quantity{resource.MustParse(storageAmount)}[0],
-					PostgresVersion:         &[]string{postgresVersion}[0],
-					ConnectionPoolerEnabled: &[]bool{poolerEnabled}[0],
-					Monitoring: &enterprisev4.PostgresMonitoringClassConfig{
-						PostgreSQLMetrics: &enterprisev4.MetricsClassConfig{Enabled: ptr.To(postgresMetricsEnabled)},
-					},
-				},
-			},
+		pgClusterClass = pgClusterClass.DeepCopy()
+		pgClusterClass.ResourceVersion = ""
+		pgClusterClass.UID = ""
+		if modify != nil {
+			modify(pgClusterClass)
 		}
-
 		Expect(k8sClient.Create(ctx, pgClusterClass)).To(Succeed())
 	}
 
@@ -266,63 +264,105 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(cond.ObservedGeneration).To(Equal(pc.Generation))
 			})
 
-			It("creates monitoring resources and sets MonitoringReady when monitoring is enabled", func() {
-				recreateClassWithMonitoring(true)
+			It("adds PostgreSQL scrape annotations to the CNPG Cluster when monitoring is enabled", func() {
+				recreateClusterClass(func(class *enterprisev4.PostgresClusterClass) {
+					class.Spec.Config.Monitoring = &enterprisev4.PostgresMonitoringClassConfig{
+						PostgreSQLMetrics: &enterprisev4.MetricsClassConfig{Enabled: &[]bool{true}[0]},
+					}
+				})
 
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
-				reconcileNTimes(3)
+				reconcileNTimes(2)
 
-				pc := &enterprisev4.PostgresCluster{}
-				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
-				cond := meta.FindStatusCondition(pc.Status.Conditions, "MonitoringReady")
-				Expect(cond).NotTo(BeNil())
-				Expect(cond.Status).To(Equal(metav1.ConditionTrue))
-				Expect(cond.Reason).To(Equal("ObservabilityResourcesReady"))
-
-				metricsService := &corev1.Service{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name:      clusterName + "-postgres-metrics",
-					Namespace: namespace,
-				}, metricsService)).To(Succeed())
-
-				serviceMonitor := &monitoringv1.ServiceMonitor{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name:      clusterName + "-postgres-metrics-monitor",
-					Namespace: namespace,
-				}, serviceMonitor)).To(Succeed())
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				Expect(cnpg.Spec.InheritedMetadata).NotTo(BeNil())
+				Expect(cnpg.Spec.InheritedMetadata.Annotations).To(HaveKeyWithValue(scrapeAnnotationKey, "true"))
+				Expect(cnpg.Spec.InheritedMetadata.Annotations).To(HaveKeyWithValue(pathAnnotationKey, metricsPath))
+				Expect(cnpg.Spec.InheritedMetadata.Annotations).To(HaveKeyWithValue(portAnnotationKey, postgresPort))
 			})
 
-			It("removes monitoring resources and MonitoringReady when monitoring is disabled by cluster override", func() {
-				recreateClassWithMonitoring(true)
+			It("removes PostgreSQL scrape annotations when disabled by cluster override", func() {
+				recreateClusterClass(func(class *enterprisev4.PostgresClusterClass) {
+					class.Spec.Config.Monitoring = &enterprisev4.PostgresMonitoringClassConfig{
+						PostgreSQLMetrics: &enterprisev4.MetricsClassConfig{Enabled: &[]bool{true}[0]},
+					}
+				})
 
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
-				reconcileNTimes(3)
+				reconcileNTimes(2)
+
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				Expect(cnpg.Spec.InheritedMetadata).NotTo(BeNil())
+				Expect(cnpg.Spec.InheritedMetadata.Annotations).To(HaveKeyWithValue(portAnnotationKey, postgresPort))
 
 				current := &enterprisev4.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
 				current.Spec.Monitoring = &enterprisev4.PostgresClusterMonitoring{
-					PostgreSQLMetrics: &enterprisev4.FeatureDisableOverride{Disabled: ptr.To(true)},
+					PostgreSQLMetrics: &enterprisev4.FeatureDisableOverride{Disabled: &[]bool{true}[0]},
 				}
 				Expect(k8sClient.Update(ctx, current)).To(Succeed())
 
 				reconcileNTimes(1)
 
-				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
-				Expect(meta.FindStatusCondition(current.Status.Conditions, "MonitoringReady")).To(BeNil())
+				Eventually(func(g Gomega) {
+					updated := &cnpgv1.Cluster{}
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, updated)).To(Succeed())
+					if updated.Spec.InheritedMetadata != nil {
+						g.Expect(updated.Spec.InheritedMetadata.Annotations).NotTo(HaveKey(scrapeAnnotationKey))
+						g.Expect(updated.Spec.InheritedMetadata.Annotations).NotTo(HaveKey(pathAnnotationKey))
+						g.Expect(updated.Spec.InheritedMetadata.Annotations).NotTo(HaveKey(portAnnotationKey))
+					}
+				}, "20s", "250ms").Should(Succeed())
+			})
 
-				metricsService := &corev1.Service{}
-				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      clusterName + "-postgres-metrics",
-					Namespace: namespace,
-				}, metricsService)
-				Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			It("creates poolers with scrape annotations only after the CNPG cluster becomes healthy", func() {
+				recreateClusterClass(func(class *enterprisev4.PostgresClusterClass) {
+					class.Spec.Config.ConnectionPoolerEnabled = &[]bool{true}[0]
+					class.Spec.Config.Monitoring = &enterprisev4.PostgresMonitoringClassConfig{
+						ConnectionPoolerMetrics: &enterprisev4.MetricsClassConfig{Enabled: &[]bool{true}[0]},
+					}
+					class.Spec.CNPG = &enterprisev4.CNPGConfig{
+						ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{
+							Instances: &[]int32{2}[0],
+							Mode:      &[]enterprisev4.ConnectionPoolerMode{enterprisev4.ConnectionPoolerModeTransaction}[0],
+						},
+					}
+				})
 
-				serviceMonitor := &monitoringv1.ServiceMonitor{}
-				err = k8sClient.Get(ctx, types.NamespacedName{
-					Name:      clusterName + "-postgres-metrics-monitor",
-					Namespace: namespace,
-				}, serviceMonitor)
-				Expect(apierrors.IsNotFound(err)).To(BeTrue())
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+
+				rwKey := types.NamespacedName{Name: clusterName + "-pooler-rw", Namespace: namespace}
+				roKey := types.NamespacedName{Name: clusterName + "-pooler-ro", Namespace: namespace}
+
+				Expect(apierrors.IsNotFound(k8sClient.Get(ctx, rwKey, &cnpgv1.Pooler{}))).To(BeTrue())
+				Expect(apierrors.IsNotFound(k8sClient.Get(ctx, roKey, &cnpgv1.Pooler{}))).To(BeTrue())
+
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				cnpg.Status.Phase = cnpgv1.PhaseHealthy
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					rw := &cnpgv1.Pooler{}
+					g.Expect(k8sClient.Get(ctx, rwKey, rw)).To(Succeed())
+					g.Expect(rw.Spec.Template).NotTo(BeNil())
+					g.Expect(rw.Spec.Template.ObjectMeta.Annotations).To(HaveKeyWithValue(scrapeAnnotationKey, "true"))
+					g.Expect(rw.Spec.Template.ObjectMeta.Annotations).To(HaveKeyWithValue(pathAnnotationKey, metricsPath))
+					g.Expect(rw.Spec.Template.ObjectMeta.Annotations).To(HaveKeyWithValue(portAnnotationKey, poolerPort))
+
+					ro := &cnpgv1.Pooler{}
+					g.Expect(k8sClient.Get(ctx, roKey, ro)).To(Succeed())
+					g.Expect(ro.Spec.Template).NotTo(BeNil())
+					g.Expect(ro.Spec.Template.ObjectMeta.Annotations).To(HaveKeyWithValue(scrapeAnnotationKey, "true"))
+					g.Expect(ro.Spec.Template.ObjectMeta.Annotations).To(HaveKeyWithValue(pathAnnotationKey, metricsPath))
+					g.Expect(ro.Spec.Template.ObjectMeta.Annotations).To(HaveKeyWithValue(portAnnotationKey, poolerPort))
+				}, "20s", "250ms").Should(Succeed())
 			})
 		})
 	})

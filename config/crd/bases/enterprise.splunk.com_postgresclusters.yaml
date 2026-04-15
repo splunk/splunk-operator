@@ -126,6 +126,27 @@ spec:
                 x-kubernetes-list-map-keys:
                 - name
                 x-kubernetes-list-type: map
+              monitoring:
+                description: Monitoring contains configuration for metrics exposure
+                  features.
+                properties:
+                  connectionPoolerMetrics:
+                    properties:
+                      disabled:
+                        default: false
+                        description: Disabled set to true will disable the feature
+                          even if it's enabled in the class.
+                        type: boolean
+                    type: object
+                  postgresqlMetrics:
+                    properties:
+                      disabled:
+                        default: false
+                        description: Disabled set to true will disable the feature
+                          even if it's enabled in the class.
+                        type: boolean
+                    type: object
+                type: object
               pgHBA:
                 default: []
                 description: |-

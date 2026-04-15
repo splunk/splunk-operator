@@ -33,6 +33,7 @@ type normalizedCNPGClusterSpec struct {
 	Owner                   string
 	StorageSize             string
 	Resources               corev1.ResourceRequirements
+	InheritedAnnotations    map[string]string
 }
 
 // MergedConfig is the resolved configuration after overlaying PostgresCluster on PostgresClusterClass defaults.
@@ -76,27 +77,21 @@ const (
 	failedClusterPhase       reconcileClusterPhases = "Failed"
 
 	// condition types
-	clusterReady    conditionTypes = "ClusterReady"
-	poolerReady     conditionTypes = "PoolerReady"
-	monitoringReady conditionTypes = "MonitoringReady"
+	clusterReady conditionTypes = "ClusterReady"
+	poolerReady  conditionTypes = "PoolerReady"
 
 	// condition reasons — clusterReady
-	reasonClusterClassNotFound         conditionReasons = "ClusterClassNotFound"
-	reasonManagedRolesFailed           conditionReasons = "ManagedRolesReconciliationFailed"
-	reasonClusterBuildFailed           conditionReasons = "ClusterBuildFailed"
-	reasonClusterBuildSucceeded        conditionReasons = "ClusterBuildSucceeded"
-	reasonClusterGetFailed             conditionReasons = "ClusterGetFailed"
-	reasonClusterPatchFailed           conditionReasons = "ClusterPatchFailed"
-	reasonInvalidConfiguration         conditionReasons = "InvalidConfiguration"
-	reasonConfigMapFailed              conditionReasons = "ConfigMapReconciliationFailed"
-	reasonUserSecretFailed             conditionReasons = "UserSecretReconciliationFailed"
-	reasonSuperUserSecretFailed        conditionReasons = "SuperUserSecretFailed"
-	reasonClusterDeleteFailed          conditionReasons = "ClusterDeleteFailed"
-	reasonObservabilityResourcesReady  conditionReasons = "ObservabilityResourcesReady"
-	reasonPostgresMetricsMonitorFailed conditionReasons = "PostgresMetricsMonitorFailed"
-	reasonPostgresMetricsServiceFailed conditionReasons = "PostgresMetricsServiceFailed"
-	reasonPoolerMetricsServiceFailed   conditionReasons = "PoolerMetricsServiceFailed"
-	reasonPoolerMetricsMonitorFailed   conditionReasons = "PoolerMetricsMonitorFailed"
+	reasonClusterClassNotFound  conditionReasons = "ClusterClassNotFound"
+	reasonManagedRolesFailed    conditionReasons = "ManagedRolesReconciliationFailed"
+	reasonClusterBuildFailed    conditionReasons = "ClusterBuildFailed"
+	reasonClusterBuildSucceeded conditionReasons = "ClusterBuildSucceeded"
+	reasonClusterGetFailed      conditionReasons = "ClusterGetFailed"
+	reasonClusterPatchFailed    conditionReasons = "ClusterPatchFailed"
+	reasonInvalidConfiguration  conditionReasons = "InvalidConfiguration"
+	reasonConfigMapFailed       conditionReasons = "ConfigMapReconciliationFailed"
+	reasonUserSecretFailed      conditionReasons = "UserSecretReconciliationFailed"
+	reasonSuperUserSecretFailed conditionReasons = "SuperUserSecretFailed"
+	reasonClusterDeleteFailed   conditionReasons = "ClusterDeleteFailed"
 
 	// condition reasons — poolerReady
 	reasonPoolerReconciliationFailed conditionReasons = "PoolerReconciliationFailed"

@@ -205,6 +205,27 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 			},
 		},
 		{
+			name: "inherited annotations included when non-empty",
+			spec: cnpgv1.ClusterSpec{
+				ImageName: "img:18",
+				Instances: 1,
+				InheritedMetadata: &cnpgv1.EmbeddedObjectMetadata{
+					Annotations: map[string]string{
+						prometheusScrapeAnnotation: "true",
+						prometheusPortAnnotation:   postgresMetricsPortString,
+					},
+				},
+			},
+			expected: normalizedCNPGClusterSpec{
+				ImageName: "img:18",
+				Instances: 1,
+				InheritedAnnotations: map[string]string{
+					prometheusScrapeAnnotation: "true",
+					prometheusPortAnnotation:   postgresMetricsPortString,
+				},
+			},
+		},
+		{
 			name: "nil bootstrap leaves database and owner empty",
 			spec: cnpgv1.ClusterSpec{
 				ImageName: "img:18",
@@ -354,7 +375,7 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 		},
 	}
 
-	spec := buildCNPGClusterSpec(cfg, "my-secret")
+	spec := buildCNPGClusterSpec(cfg, "my-secret", false)
 
 	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:18", spec.ImageName)
 	assert.Equal(t, 3, spec.Instances)
@@ -371,6 +392,16 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 	require.Len(t, spec.PostgresConfiguration.PgHBA, 2)
 	assert.Equal(t, "hostssl all all 0.0.0.0/0 scram-sha-256", spec.PostgresConfiguration.PgHBA[0])
 	assert.Equal(t, "host replication all 10.0.0.0/8 md5", spec.PostgresConfiguration.PgHBA[1])
+	assert.Nil(t, spec.InheritedMetadata)
+
+	t.Run("adds postgres scrape annotations when enabled", func(t *testing.T) {
+		spec := buildCNPGClusterSpec(cfg, "my-secret", true)
+
+		require.NotNil(t, spec.InheritedMetadata)
+		assert.Equal(t, "true", spec.InheritedMetadata.Annotations[prometheusScrapeAnnotation])
+		assert.Equal(t, metricsPath, spec.InheritedMetadata.Annotations[prometheusPathAnnotation])
+		assert.Equal(t, postgresMetricsPortString, spec.InheritedMetadata.Annotations[prometheusPortAnnotation])
+	})
 }
 
 func TestBuildCNPGPooler(t *testing.T) {
@@ -403,7 +434,7 @@ func TestBuildCNPGPooler(t *testing.T) {
 	}
 
 	t.Run("rw pooler", func(t *testing.T) {
-		pooler, err := buildCNPGPooler(scheme, postgresCluster, cfg, cnpgCluster, "rw")
+		pooler, err := buildCNPGPooler(scheme, postgresCluster, cfg, cnpgCluster, "rw", false)
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-pooler-rw", pooler.Name)
@@ -416,14 +447,21 @@ func TestBuildCNPGPooler(t *testing.T) {
 		assert.Equal(t, "25", pooler.Spec.PgBouncer.Parameters["default_pool_size"])
 		require.Len(t, pooler.OwnerReferences, 1)
 		assert.Equal(t, "test-uid", string(pooler.OwnerReferences[0].UID))
+		assert.Nil(t, pooler.Spec.Template)
 	})
 
 	t.Run("ro pooler", func(t *testing.T) {
-		pooler, err := buildCNPGPooler(scheme, postgresCluster, cfg, cnpgCluster, "ro")
+		pooler, err := buildCNPGPooler(scheme, postgresCluster, cfg, cnpgCluster, "ro", true)
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-pooler-ro", pooler.Name)
 		assert.Equal(t, cnpgv1.PoolerType("ro"), pooler.Spec.Type)
+		require.NotNil(t, pooler.Spec.Template)
+		assert.Equal(t, "true", pooler.Spec.Template.ObjectMeta.Annotations[prometheusScrapeAnnotation])
+		assert.Equal(t, metricsPath, pooler.Spec.Template.ObjectMeta.Annotations[prometheusPathAnnotation])
+		assert.Equal(t, poolerMetricsPortString, pooler.Spec.Template.ObjectMeta.Annotations[prometheusPortAnnotation])
+		require.Len(t, pooler.Spec.Template.Spec.Containers, 1)
+		assert.Equal(t, "pgbouncer", pooler.Spec.Template.Spec.Containers[0].Name)
 	})
 }
 
@@ -453,7 +491,7 @@ func TestBuildCNPGCluster(t *testing.T) {
 		},
 	}
 
-	cluster, err := buildCNPGCluster(scheme, postgresCluster, cfg, "my-secret")
+	cluster, err := buildCNPGCluster(scheme, postgresCluster, cfg, "my-secret", true)
 
 	require.NoError(t, err)
 	assert.Equal(t, "my-cluster", cluster.Name)
@@ -461,6 +499,8 @@ func TestBuildCNPGCluster(t *testing.T) {
 	require.Len(t, cluster.OwnerReferences, 1)
 	assert.Equal(t, "pg-uid", string(cluster.OwnerReferences[0].UID))
 	assert.Equal(t, 3, cluster.Spec.Instances)
+	require.NotNil(t, cluster.Spec.InheritedMetadata)
+	assert.Equal(t, postgresMetricsPortString, cluster.Spec.InheritedMetadata.Annotations[prometheusPortAnnotation])
 }
 
 func TestClusterSecretExists(t *testing.T) {
@@ -924,7 +964,7 @@ func TestCreateConnectionPooler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
 
-			err := createConnectionPooler(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpg, "rw")
+			err := createConnectionPooler(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpg, "rw", false)
 
 			require.NoError(t, err)
 			fetched := &cnpgv1.Pooler{}
@@ -1098,7 +1138,7 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 	t.Run("creates both rw and ro poolers", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster)
+		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, false)
 
 		require.NoError(t, err)
 
@@ -1128,7 +1168,7 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing...).Build()
 
-		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster)
+		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, false)
 
 		require.NoError(t, err)
 		rw := &cnpgv1.Pooler{}
@@ -1137,5 +1177,27 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 		ro := &cnpgv1.Pooler{}
 		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-ro", Namespace: "default"}, ro))
 		assert.Equal(t, int32(1), *ro.Spec.Instances)
+	})
+
+	t.Run("creates both rw and ro poolers with scrape annotations when metrics are enabled", func(t *testing.T) {
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, true)
+
+		require.NoError(t, err)
+
+		rw := &cnpgv1.Pooler{}
+		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, rw))
+		require.NotNil(t, rw.Spec.Template)
+		assert.Equal(t, "true", rw.Spec.Template.ObjectMeta.Annotations[prometheusScrapeAnnotation])
+		assert.Equal(t, metricsPath, rw.Spec.Template.ObjectMeta.Annotations[prometheusPathAnnotation])
+		assert.Equal(t, poolerMetricsPortString, rw.Spec.Template.ObjectMeta.Annotations[prometheusPortAnnotation])
+
+		ro := &cnpgv1.Pooler{}
+		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-ro", Namespace: "default"}, ro))
+		require.NotNil(t, ro.Spec.Template)
+		assert.Equal(t, "true", ro.Spec.Template.ObjectMeta.Annotations[prometheusScrapeAnnotation])
+		assert.Equal(t, metricsPath, ro.Spec.Template.ObjectMeta.Annotations[prometheusPathAnnotation])
+		assert.Equal(t, poolerMetricsPortString, ro.Spec.Template.ObjectMeta.Annotations[prometheusPortAnnotation])
 	})
 }

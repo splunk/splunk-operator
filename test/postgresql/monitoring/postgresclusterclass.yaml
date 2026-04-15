@@ -1,0 +1,21 @@
+apiVersion: enterprise.splunk.com/v4
+kind: PostgresClusterClass
+metadata:
+  name: pg-monitoring
+spec:
+  provisioner: postgresql.cnpg.io
+  config:
+    instances: 2
+    storage: 1Gi
+    postgresVersion: "17"
+    connectionPoolerEnabled: true
+    monitoring:
+      postgresqlMetrics:
+        enabled: true
+      connectionPoolerMetrics:
+        enabled: true
+  cnpg:
+    primaryUpdateMethod: switchover
+    connectionPooler:
+      instances: 2
+      mode: transaction
