@@ -43,7 +43,6 @@ import (
 func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.Request) (ctrl.Result, error) {
 	c := rc.Client
 	logger := log.FromContext(ctx)
-	logger.Info("Reconciling PostgresCluster")
 
 	var cnpgCluster *cnpgv1.Cluster
 	var poolerEnabled bool
@@ -66,6 +65,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 
 	logger = logger.WithValues("postgresCluster", postgresCluster.Name)
 	ctx = log.IntoContext(ctx, logger)
+	logger.Info("Reconciling PostgresCluster")
 
 	updateStatus := func(conditionType conditionTypes, status metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileClusterPhases) error {
 		return setStatus(ctx, c, rc.Metrics, postgresCluster, conditionType, status, reason, message, phase)
@@ -84,7 +84,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		return ctrl.Result{}, errors.Join(err, statusErr)
 	}
 	if postgresCluster.GetDeletionTimestamp() != nil {
-		logger.Info("Deletion cleanup complete, finalizer removed")
+		logger.Info("PostgresCluster cleanup completed")
 		return ctrl.Result{}, nil
 	}
 
@@ -92,10 +92,10 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	if !controllerutil.ContainsFinalizer(postgresCluster, PostgresClusterFinalizerName) {
 		controllerutil.AddFinalizer(postgresCluster, PostgresClusterFinalizerName)
 		if err := c.Update(ctx, postgresCluster); err != nil {
-			logger.Error(err, "Failed to add finalizer to PostgresCluster")
+			logger.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
-		logger.Info("Finalizer added")
+		logger.Info("Finalizer added successfully")
 		return ctrl.Result{}, nil
 	}
 
@@ -132,7 +132,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 
 	secretExists, secretErr := clusterSecretExists(ctx, c, postgresCluster.Namespace, postgresSecretName, secret)
 	if secretErr != nil {
-		logger.Error(secretErr, "Failed to check if PostgresCluster secret exists", "name", postgresSecretName)
+		logger.Error(secretErr, "Failed to check superuser secret existence", "name", postgresSecretName)
 		rc.emitWarning(postgresCluster, EventSecretReconcileFailed, fmt.Sprintf("Failed to check secret existence: %v", secretErr))
 		statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonUserSecretFailed,
 			fmt.Sprintf("Failed to check secret existence: %v", secretErr), failedClusterPhase)
@@ -141,40 +141,40 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	if !secretExists {
 		logger.Info("Superuser secret creation started", "name", postgresSecretName)
 		if err := ensureClusterSecret(ctx, c, rc.Scheme, postgresCluster, postgresSecretName, secret); err != nil {
-			logger.Error(err, "Failed to ensure PostgresCluster secret", "name", postgresSecretName)
+			logger.Error(err, "Failed to create superuser secret", "name", postgresSecretName)
 			rc.emitWarning(postgresCluster, EventSecretReconcileFailed, fmt.Sprintf("Failed to generate cluster secret: %v", err))
 			statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonUserSecretFailed,
 				fmt.Sprintf("Failed to generate PostgresCluster secret: %v", err), failedClusterPhase)
 			return ctrl.Result{}, errors.Join(err, statusErr)
 		}
 		if err := c.Status().Update(ctx, postgresCluster); err != nil {
-			logger.Error(err, "Failed to update status after secret creation")
+			logger.Error(err, "Failed to persist superuser secret status")
 			return ctrl.Result{}, err
 		}
 		rc.emitNormal(postgresCluster, EventSecretReady, fmt.Sprintf("Superuser secret %s created", postgresSecretName))
-		logger.Info("Superuser secret ref persisted to status")
+		logger.Info("Superuser secret status persisted")
 	}
 
 	// Re-attach ownerRef if it was stripped (e.g. by a Retain-policy deletion of a previous cluster).
 	hasOwnerRef, ownerRefErr := controllerutil.HasOwnerReference(secret.GetOwnerReferences(), postgresCluster, rc.Scheme)
 	if ownerRefErr != nil {
-		logger.Error(ownerRefErr, "Failed to check owner reference on Secret")
+		logger.Error(ownerRefErr, "Failed to check Secret owner reference")
 		return ctrl.Result{}, fmt.Errorf("failed to check owner reference on secret: %w", ownerRefErr)
 	}
 	if secretExists && !hasOwnerRef {
-		logger.Info("Existing secret linked to PostgresCluster", "name", postgresSecretName)
 		rc.emitNormal(postgresCluster, EventClusterAdopted, fmt.Sprintf("Adopted existing CNPG cluster and secret %s", postgresSecretName))
 		originalSecret := secret.DeepCopy()
 		if err := ctrl.SetControllerReference(postgresCluster, secret, rc.Scheme); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to set controller reference on existing secret: %w", err)
 		}
 		if err := patchObject(ctx, c, originalSecret, secret, "Secret"); err != nil {
-			logger.Error(err, "Failed to patch existing secret with controller reference")
+			logger.Error(err, "Failed to patch Secret")
 			rc.emitWarning(postgresCluster, EventSecretReconcileFailed, fmt.Sprintf("Failed to patch existing secret: %v", err))
 			statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonSuperUserSecretFailed,
 				fmt.Sprintf("Failed to patch existing secret: %v", err), failedClusterPhase)
 			return ctrl.Result{}, errors.Join(err, statusErr)
 		}
+		logger.Info("Secret adopted", "name", postgresSecretName)
 	}
 
 	if postgresCluster.Status.Resources.SuperUserSecretRef == nil {
@@ -210,10 +210,10 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			"CNPG Cluster created", pendingClusterPhase); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
-		logger.Info("CNPG Cluster created, requeueing for status update", "name", postgresCluster.Name)
+		logger.Info("CNPG Cluster created", "name", postgresCluster.Name)
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	case err != nil:
-		logger.Error(err, "Failed to get CNPG Cluster")
+		logger.Error(err, "Failed to fetch CNPG Cluster")
 		statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterGetFailed,
 			fmt.Sprintf("Failed to get CNPG Cluster: %v", err), failedClusterPhase)
 		return ctrl.Result{}, errors.Join(err, statusErr)
@@ -225,7 +225,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	desiredNormalized := normalizeCNPGClusterSpec(desiredSpec, mergedConfig.Spec.PostgreSQLConfig)
 
 	if !equality.Semantic.DeepEqual(currentNormalized, desiredNormalized) {
-		logger.Info("CNPG Cluster spec drift detected, patch started", "name", cnpgCluster.Name)
+		logger.Info("CNPG Cluster patch started", "name", cnpgCluster.Name)
 		originalCluster := cnpgCluster.DeepCopy()
 		cnpgCluster.Spec = desiredSpec
 
@@ -242,7 +242,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 				return ctrl.Result{}, statusErr
 			}
 			rc.emitNormal(postgresCluster, EventClusterUpdateStarted, "CNPG cluster spec updated, waiting for healthy state")
-			logger.Info("CNPG Cluster patched, requeueing for status update", "name", cnpgCluster.Name)
+			logger.Info("CNPG Cluster patched", "name", cnpgCluster.Name)
 			return ctrl.Result{RequeueAfter: retryDelay}, nil
 		}
 	}
@@ -261,14 +261,14 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 
 	rwPoolerExists, err := poolerExists(ctx, c, postgresCluster, readWriteEndpoint)
 	if err != nil {
-		logger.Error(err, "Failed to check RW pooler existence")
+		logger.Error(err, "Failed to check CNPG Pooler existence", "type", readWriteEndpoint)
 		statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerReconciliationFailed,
 			fmt.Sprintf("Failed to check pooler existence: %v", err), failedClusterPhase)
 		return ctrl.Result{}, errors.Join(err, statusErr)
 	}
 	roPoolerExists, err := poolerExists(ctx, c, postgresCluster, readOnlyEndpoint)
 	if err != nil {
-		logger.Error(err, "Failed to check RO pooler existence")
+		logger.Error(err, "Failed to check CNPG Pooler existence", "type", readOnlyEndpoint)
 		statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerReconciliationFailed,
 			fmt.Sprintf("Failed to check pooler existence: %v", err), failedClusterPhase)
 		return ctrl.Result{}, errors.Join(err, statusErr)
@@ -288,7 +288,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	case !rwPoolerExists || !roPoolerExists:
 		if mergedConfig.CNPG == nil || mergedConfig.CNPG.ConnectionPooler == nil {
 			logger.Info("Connection pooler enabled but no config found in class or cluster spec, skipping",
-				"class", postgresCluster.Spec.Class, "cluster", postgresCluster.Name)
+				"class", postgresCluster.Spec.Class)
 			statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerConfigMissing,
 				fmt.Sprintf("Connection pooler is enabled but no config found in class %q or cluster %q",
 					postgresCluster.Spec.Class, postgresCluster.Name), failedClusterPhase)
@@ -308,7 +308,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			return ctrl.Result{}, errors.Join(err, statusErr)
 		}
 		rc.emitNormal(postgresCluster, EventPoolerCreationStarted, "Connection poolers created, waiting for readiness")
-		logger.Info("Connection pooler creation started, requeueing")
+		logger.Info("Connection pooler creation started")
 		if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerCreating,
 			"Connection poolers are being provisioned", provisioningClusterPhase); statusErr != nil {
 			return ctrl.Result{}, statusErr
@@ -328,7 +328,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		}, roPooler)
 		return rwErr != nil || roErr != nil || !arePoolersReady(rwPooler, roPooler)
 	}():
-		logger.Info("Connection Poolers are not ready yet, requeueing")
+		logger.Info("Connection poolers are not ready yet")
 		statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerCreating,
 			"Connection poolers are being provisioned", pendingClusterPhase)
 		return ctrl.Result{RequeueAfter: retryDelay}, statusErr
@@ -337,7 +337,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		oldConditions := make([]metav1.Condition, len(postgresCluster.Status.Conditions))
 		copy(oldConditions, postgresCluster.Status.Conditions)
 		if err := syncPoolerStatus(ctx, c, rc.Metrics, postgresCluster); err != nil {
-			logger.Error(err, "Failed to sync pooler status")
+			logger.Error(err, "Failed to sync connection pooler status")
 			rc.emitWarning(postgresCluster, EventPoolerReconcileFailed, fmt.Sprintf("Failed to sync pooler status: %v", err))
 			statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerReconciliationFailed,
 				fmt.Sprintf("Failed to sync pooler status: %v", err), failedClusterPhase)
@@ -397,7 +397,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		oldPhase = *postgresCluster.Status.Phase
 	}
 	if err := syncStatus(ctx, c, rc.Metrics, postgresCluster, cnpgCluster); err != nil {
-		logger.Error(err, "Failed to sync status")
+		logger.Error(err, "Failed to sync PostgresCluster status")
 		return ctrl.Result{}, err
 	}
 	var newPhase string
@@ -417,14 +417,14 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			Namespace: postgresCluster.Namespace,
 		}, roPooler)
 		if rwErr == nil && roErr == nil && arePoolersReady(rwPooler, roPooler) {
-			logger.Info("Poolers ready, syncing status")
+			logger.Info("Connection poolers ready, syncing status")
 			poolerOldConditions := make([]metav1.Condition, len(postgresCluster.Status.Conditions))
 			copy(poolerOldConditions, postgresCluster.Status.Conditions)
 			_ = syncPoolerStatus(ctx, c, rc.Metrics, postgresCluster)
 			rc.emitPoolerReadyTransition(postgresCluster, poolerOldConditions)
 		}
 	}
-	logger.Info("Reconciliation complete")
+	logger.Info("PostgresCluster reconciliation completed")
 	return ctrl.Result{}, nil
 }
 
@@ -580,7 +580,7 @@ func reconcileManagedRoles(ctx context.Context, c client.Client, cluster *enterp
 		return nil
 	}
 
-	logger.Info("CNPG Cluster roles drift detected, update started",
+	logger.Info("Managed roles patch started",
 		"currentCount", len(currentRoles), "desiredCount", len(desiredRoles))
 
 	originalCluster := cnpgCluster.DeepCopy()
@@ -592,7 +592,7 @@ func reconcileManagedRoles(ctx context.Context, c client.Client, cluster *enterp
 	if err := c.Patch(ctx, cnpgCluster, client.MergeFrom(originalCluster)); err != nil {
 		return fmt.Errorf("patching CNPG Cluster managed roles: %w", err)
 	}
-	logger.Info("CNPG Cluster managed roles updated", "roleCount", len(desiredRoles))
+	logger.Info("Managed roles patched", "roleCount", len(desiredRoles))
 	return nil
 }
 
@@ -831,7 +831,9 @@ func setStatus(ctx context.Context, c client.Client, metrics ports.Recorder, clu
 		return nil
 	}
 
-	metrics.IncStatusTransition(ports.ControllerCluster, string(condType), string(status), string(reason))
+	if metrics != nil {
+		metrics.IncStatusTransition(ports.ControllerCluster, string(condType), string(status), string(reason))
+	}
 
 	if err := c.Status().Update(ctx, cluster); err != nil {
 		return fmt.Errorf("failed to update PostgresCluster status: %w", err)
@@ -943,11 +945,11 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 	scheme := rc.Scheme
 	logger := log.FromContext(ctx)
 	if cluster.GetDeletionTimestamp() == nil {
-		logger.Info("PostgresCluster not marked for deletion, skipping finalizer logic")
+		logger.Info("PostgresCluster not marked for deletion, skipping finalizer cleanup")
 		return nil
 	}
 	if !controllerutil.ContainsFinalizer(cluster, PostgresClusterFinalizerName) {
-		logger.Info("Finalizer not present on PostgresCluster, skipping finalizer logic")
+		logger.Info("Finalizer not present on PostgresCluster, skipping finalizer cleanup")
 		return nil
 	}
 
@@ -956,7 +958,7 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			cnpgCluster = nil
-			logger.Info("CNPG cluster not found during cleanup")
+			logger.Info("CNPG Cluster not found during cleanup")
 		} else {
 			return fmt.Errorf("fetching CNPG cluster: %w", err)
 		}
@@ -974,7 +976,7 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 
 	switch policy {
 	case clusterDeletionPolicyDelete:
-		logger.Info("ClusterDeletionPolicy 'Delete', CNPG Cluster deletion started")
+		logger.Info("Cluster deletion policy is Delete")
 		if cnpgCluster != nil {
 			if err := deleteCNPGCluster(ctx, c, cnpgCluster); err != nil {
 				return fmt.Errorf("deleting CNPG Cluster: %w", err)
@@ -984,7 +986,7 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 		}
 
 	case clusterDeletionPolicyRetain:
-		logger.Info("ClusterDeletionPolicy 'Retain', orphaning CNPG Cluster")
+		logger.Info("Cluster deletion policy is Retain")
 		if cnpgCluster != nil {
 			originalCNPG := cnpgCluster.DeepCopy()
 			refRemoved, err := removeOwnerRef(scheme, cluster, cnpgCluster)
@@ -997,7 +999,7 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 			if err := patchObject(ctx, c, originalCNPG, cnpgCluster, "CNPGCluster"); err != nil {
 				return fmt.Errorf("patching CNPG cluster after removing owner reference: %w", err)
 			}
-			logger.Info("Removed owner reference from CNPG Cluster")
+			logger.Info("CNPG Cluster owner reference removed")
 		}
 
 		// Remove owner reference from the superuser Secret to prevent cascading deletion.
@@ -1007,7 +1009,7 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 				if !apierrors.IsNotFound(err) {
 					return fmt.Errorf("fetching secret during cleanup: %w", err)
 				}
-				logger.Info("Secret not found, skipping owner reference removal", "secret", secretName)
+				logger.Info("Secret not found, skipping owner reference removal", "name", secretName)
 			} else {
 				originalSecret := secret.DeepCopy()
 				refRemoved, err := removeOwnerRef(scheme, cluster, secret)
@@ -1019,12 +1021,12 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 						return fmt.Errorf("patching Secret after removing owner reference: %w", err)
 					}
 				}
-				logger.Info("Removed owner reference from Secret")
+				logger.Info("Secret owner reference removed")
 			}
 		}
 
 	default:
-		logger.Info("Unknown ClusterDeletionPolicy", "policy", policy)
+		logger.Info("Unknown cluster deletion policy", "policy", policy)
 	}
 
 	controllerutil.RemoveFinalizer(cluster, PostgresClusterFinalizerName)
@@ -1036,7 +1038,7 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 		return fmt.Errorf("removing finalizer: %w", err)
 	}
 	rc.emitNormal(cluster, EventCleanupComplete, fmt.Sprintf("Cleanup complete (policy: %s)", policy))
-	logger.Info("Finalizer removed, cleanup complete")
+	logger.Info("Finalizer removed successfully")
 	return nil
 }
 
