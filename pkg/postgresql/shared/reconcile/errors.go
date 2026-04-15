@@ -24,19 +24,18 @@ import (
 // within it is a 409 Conflict. When a business error and a status-write
 // conflict are joined together the business error takes priority and this
 // returns false, preserving exponential backoff for real failures.
-//
-// TODO(human): implement this function.
-// Guidance: errors.Join wraps multiple errors; use the Unwrap() []error
-// interface to walk all joined errors. Consider all four cases:
-//   - err == nil                      → false
-//   - single conflict error           → true
-//   - single non-conflict error       → false
-//   - joined errors, mixed conflict   → false (business error wins)
 func IsPureConflict(err error) bool {
 	if err == nil {
 		return false
 	}
-	_ = apierrors.IsConflict // ensure the import is used once implemented
-	// TODO(human): replace this placeholder with the real implementation
-	return false
+	// check if err can be unwrapped
+	if wrappedErrs, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, err := range wrappedErrs.Unwrap() {
+			if !apierrors.IsConflict(err) {
+				return false
+			}
+		}
+		return true
+	}
+	return apierrors.IsConflict(err)
 }

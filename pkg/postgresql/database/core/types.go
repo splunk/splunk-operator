@@ -34,7 +34,7 @@ const (
 
 	deletionPolicyRetain string = "Retain"
 	deletionPolicyDelete string = "Delete"
-	
+
 	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"
 	annotationRetainedFrom        string = "enterprise.splunk.com/retained-from"
 
@@ -79,10 +79,10 @@ const (
 	reasonUsersAvailable           conditionReasons = "UsersAvailable"
 	reasonRoleConflict             conditionReasons = "RoleConflict"
 	reasonConfigMapsCreationFailed conditionReasons = "ConfigMapsCreationFailed"
-	reasonConfigMapsCreated         conditionReasons = "ConfigMapsCreated"
-	reasonDatabaseReconcileFailed   conditionReasons = "DatabaseReconcileFailed"
-	reasonPrivilegesGranted         conditionReasons = "PrivilegesGranted"
-	reasonPrivilegesGrantFailed     conditionReasons = "PrivilegesGrantFailed"
+	reasonConfigMapsCreated        conditionReasons = "ConfigMapsCreated"
+	reasonDatabaseReconcileFailed  conditionReasons = "DatabaseReconcileFailed"
+	reasonPrivilegesGranted        conditionReasons = "PrivilegesGranted"
+	reasonPrivilegesGrantFailed    conditionReasons = "PrivilegesGrantFailed"
 
 	// ClusterReady sentinel values returned by ensureClusterReady.
 	// Exported so the controller adapter can switch on them if needed.
