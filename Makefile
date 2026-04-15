@@ -1,7 +1,5 @@
 # Default environment is default
-ENVIRONMENT ?= ${1}
-${ENVIRONMENT}:
-	ENVIRONMENT = default
+ENVIRONMENT ?= default
 
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
@@ -122,7 +120,7 @@ help: ## Display this help.
 
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-	rm config/crd/bases/_.yaml
+	rm -f config/crd/bases/_.yaml
 
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
@@ -146,7 +144,7 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 
 docs-preview: ## Preview documentation locally with Jekyll (requires Ruby and bundler)
 	@echo "Installing dependencies locally..."
-	@cd docs && bundle install --path vendor/bundle
+	@cd docs && bundle config set --local path vendor/bundle && bundle install
 	@echo "Starting Jekyll server for documentation preview..."
 	@cd docs && bundle exec jekyll serve --livereload
 	@echo "Documentation available at http://localhost:4000/splunk-operator"
@@ -170,19 +168,19 @@ docker-push: ## Push docker image with the manager.
 # Defaults:
 #   Build Platform: linux/amd64,linux/arm64
 #   Build Base OS: registry.access.redhat.com/ubi8/ubi-minimal
-#   Build Base OS Version: 8.10-1770223153
+#   Build Base OS Version: 8.10-1775152441
 # Pass only what is required, the rest will be defaulted
 # Setup defaults for build arguments
 PLATFORMS ?= linux/amd64,linux/arm64
 BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal
-BASE_IMAGE_VERSION ?= 8.10-1770223153
+BASE_IMAGE_VERSION ?= 8.10-1775152441
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
             echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
             exit 1; \
         fi; \
-        	docker buildx create --name project-v3-builder --use || true; \
+        	docker buildx inspect project-v3-builder >/dev/null 2>&1 || docker buildx create --name project-v3-builder; \
         	docker buildx use project-v3-builder; \
         if echo "${BASE_IMAGE}" | grep -q "distroless"; then \
             DOCKERFILE="Dockerfile.distroless"; \
@@ -192,8 +190,7 @@ docker-buildx:
         docker buildx build --push --platform="${PLATFORMS}" \
             --build-arg BASE_IMAGE="${BASE_IMAGE}" \
             --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
-            --tag "${IMG}" -f "$$DOCKERFILE" .; \
-        - docker buildx rm project-v3-builder || true
+            --tag "${IMG}" -f "$$DOCKERFILE" .
 
 
 

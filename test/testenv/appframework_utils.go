@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	gomega "github.com/onsi/gomega"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	wait "k8s.io/apimachinery/pkg/util/wait"
