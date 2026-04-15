@@ -32,7 +32,7 @@ alertmanager:
   enabled: false
 
 kubeStateMetrics:
-  enabled: false
+  enabled: true
 
 nodeExporter:
   enabled: false
@@ -44,14 +44,16 @@ prometheus:
         kubernetes_sd_configs:
           - role: pod
         relabel_configs:
-          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          - source_labels:
+              [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep
             regex: true
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
             action: replace
             target_label: __metrics_path__
             regex: (.+)
-          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          - source_labels:
+              [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
             action: replace
             regex: ([^:]+)(?::\d+)?;(\d+)
             replacement: $1:$2
@@ -192,11 +194,11 @@ up{job="annotated-pods", namespace="test"}
 ```
 
 ```promql
-count by (pod) (cnpg_pg_postmaster_start_time_seconds{namespace="test"})
+count by (pod) (cnpg_pg_postmaster_start_time{namespace="test"})
 ```
 
 ```promql
-cnpg_pgbouncer_up{namespace="test"}
+cnpg_pgbouncer_last_collection_error{namespace="test"}
 ```
 
 ## 7. Access Grafana
@@ -229,11 +231,11 @@ up{job="annotated-pods", namespace="test"}
 ```
 
 ```promql
-cnpg_pg_postmaster_start_time_seconds{namespace="test"}
+cnpg_pg_postmaster_start_time{namespace="test"}
 ```
 
 ```promql
-cnpg_pgbouncer_up{namespace="test"}
+cnpg_pgbouncer_last_collection_error{namespace="test"}
 ```
 
 ### Dashboard import

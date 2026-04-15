@@ -1,7 +1,0 @@
-apiVersion: enterprise.splunk.com/v4
-kind: PostgresCluster
-metadata:
-  name: pg-e2e
-spec:
-  class: pg-monitoring
-  clusterDeletionPolicy: Delete

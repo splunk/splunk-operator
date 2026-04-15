@@ -52,7 +52,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 4,
         "x": 0,
         "y": 0
       },
@@ -63,9 +63,7 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -75,7 +73,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "count(count by (pod) (cnpg_pg_postmaster_start_time_seconds{namespace=\"$namespace\",service=\"$cluster-postgres-metrics\"}))",
+          "expr": "count(count by (pod) (cnpg_pg_postmaster_start_time{namespace=\"$namespace\",pod=~\"$cluster-[0-9]+\"}))",
           "legendFormat": "postgres pods",
           "range": true,
           "refId": "A"
@@ -128,8 +126,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 6,
+        "w": 4,
+        "x": 4,
         "y": 0
       },
       "id": 2,
@@ -139,9 +137,7 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -151,7 +147,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "max(cnpg_pgbouncer_up{namespace=\"$namespace\",service=\"$cluster-pooler-rw-metrics\"})",
+          "expr": "max(1 - clamp_max(cnpg_pgbouncer_last_collection_error{namespace=\"$namespace\",pod=~\"$cluster-pooler-rw-.*\"}, 1))",
           "legendFormat": "rw",
           "range": true,
           "refId": "A"
@@ -204,8 +200,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 12,
+        "w": 4,
+        "x": 8,
         "y": 0
       },
       "id": 3,
@@ -215,9 +211,7 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -227,7 +221,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "max(cnpg_pgbouncer_up{namespace=\"$namespace\",service=\"$cluster-pooler-ro-metrics\"})",
+          "expr": "max(1 - clamp_max(cnpg_pgbouncer_last_collection_error{namespace=\"$namespace\",pod=~\"$cluster-pooler-ro-.*\"}, 1))",
           "legendFormat": "ro",
           "range": true,
           "refId": "A"
@@ -266,8 +260,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 18,
+        "w": 4,
+        "x": 12,
         "y": 0
       },
       "id": 4,
@@ -277,9 +271,7 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -289,13 +281,77 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(cnpg_pg_stat_archiver_archived_count{namespace=\"$namespace\",service=\"$cluster-postgres-metrics\"}[5m]))",
+          "expr": "sum(rate(cnpg_pg_stat_archiver_archived_count{namespace=\"$namespace\",pod=~\"$cluster-[0-9]+\"}[5m]))",
           "legendFormat": "archive rate",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Archive Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(splunk_operator_postgres_databases{phase=\"Failed\"})",
+          "legendFormat": "failed",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Failed Databases",
       "type": "stat"
     },
     {
@@ -380,7 +436,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (datname) (cnpg_pg_database_size_bytes{namespace=\"$namespace\",service=\"$cluster-postgres-metrics\"})",
+          "expr": "sum by (datname) (cnpg_pg_database_size_bytes{namespace=\"$namespace\",pod=~\"$cluster-[0-9]+\"})",
           "legendFormat": "{{datname}}",
           "range": true,
           "refId": "A"
@@ -471,15 +527,15 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (service) (cnpg_pgbouncer_pools_cl_active{namespace=\"$namespace\",service=~\"$cluster-pooler-(rw|ro)-metrics\"})",
-          "legendFormat": "{{service}} active",
+          "expr": "sum by (pooler) (label_replace(cnpg_pgbouncer_pools_cl_active{namespace=\"$namespace\",pod=~\"$cluster-pooler-(rw|ro)-.*\"}, \"pooler\", \"$1\", \"pod\", \".*-pooler-(rw|ro)-.*\"))",
+          "legendFormat": "{{pooler}} active",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum by (service) (cnpg_pgbouncer_pools_cl_waiting{namespace=\"$namespace\",service=~\"$cluster-pooler-(rw|ro)-metrics\"})",
-          "legendFormat": "{{service}} waiting",
+          "expr": "sum by (pooler) (label_replace(cnpg_pgbouncer_pools_cl_waiting{namespace=\"$namespace\",pod=~\"$cluster-pooler-(rw|ro)-.*\"}, \"pooler\", \"$1\", \"pod\", \".*-pooler-(rw|ro)-.*\"))",
+          "legendFormat": "{{pooler}} waiting",
           "range": true,
           "refId": "B"
         }
@@ -569,14 +625,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(cnpg_pg_stat_archiver_archived_count{namespace=\"$namespace\",service=\"$cluster-postgres-metrics\"}[5m]))",
+          "expr": "sum(rate(cnpg_pg_stat_archiver_archived_count{namespace=\"$namespace\",pod=~\"$cluster-[0-9]+\"}[5m]))",
           "legendFormat": "archived WAL / sec",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(cnpg_pg_wal_files_total{namespace=\"$namespace\",service=\"$cluster-postgres-metrics\"})",
+          "expr": "sum(cnpg_collector_pg_wal{namespace=\"$namespace\",pod=~\"$cluster-[0-9]+\",value=\"count\"})",
           "legendFormat": "wal files total",
           "range": true,
           "refId": "B"
@@ -594,7 +650,7 @@
       },
       "id": 100,
       "options": {
-        "content": "## Controller-Runtime (built-in, zero code)\nReconcile count, duration, errors — provided automatically by the framework.",
+        "content": "## Controller-Runtime (built-in, zero code)\nReconcile count, duration, errors \u2014 provided automatically by the framework.",
         "mode": "markdown"
       },
       "title": "",
@@ -736,7 +792,7 @@
       },
       "id": 200,
       "options": {
-        "content": "## Domain Metrics (custom, `splunk_operator_postgres_*`)\nFleet state gauges (collected every reconcile) and status transitions (emitted on condition changes).",
+        "content": "## Domain Metrics (custom, `splunk_operator_postgres_*`)\nFleet state gauges (collected every reconcile) and status transitions (emitted on condition changes).\n\nRuntime PostgreSQL and PgBouncer panels above assume annotation-based pod scraping and filter by `pod`, not dedicated metrics Services.",
         "mode": "markdown"
       },
       "title": "",
@@ -758,9 +814,7 @@
         "legend": {
           "displayMode": "table",
           "placement": "right",
-          "values": [
-            "value"
-          ]
+          "values": ["value"]
         },
         "pieType": "donut"
       },
@@ -796,9 +850,7 @@
         "legend": {
           "displayMode": "table",
           "placement": "right",
-          "values": [
-            "value"
-          ]
+          "values": ["value"]
         },
         "pieType": "donut"
       },
@@ -914,13 +966,7 @@
   "refresh": "30s",
   "schemaVersion": 39,
   "style": "dark",
-  "tags": [
-    "postgresql",
-    "cnpg",
-    "pgbouncer",
-    "splunk-operator",
-    "reference"
-  ],
+  "tags": ["postgresql", "cnpg", "pgbouncer", "splunk-operator", "reference"],
   "templating": {
     "list": [
       {
@@ -944,14 +990,14 @@
       {
         "current": {
           "selected": true,
-          "text": "default",
-          "value": "default"
+          "text": "test",
+          "value": "test"
         },
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(cnpg_pg_postmaster_start_time_seconds, namespace)",
+        "definition": "label_values(kube_pod_labels{label_cnpg_io_cluster!=\"\"}, namespace)",
         "hide": 0,
         "includeAll": false,
         "label": "Namespace",
@@ -959,7 +1005,7 @@
         "name": "namespace",
         "options": [],
         "query": {
-          "query": "label_values(cnpg_pg_postmaster_start_time_seconds, namespace)",
+          "query": "label_values(kube_pod_labels{label_cnpg_io_cluster!=\"\"}, namespace)",
           "refId": "Prometheus-namespace"
         },
         "refresh": 2,
@@ -970,30 +1016,31 @@
       },
       {
         "current": {
-          "selected": false,
-          "text": "",
-          "value": ""
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
         },
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(cnpg_pg_postmaster_start_time_seconds{namespace=\"$namespace\"}, service)",
+        "definition": "label_values(kube_pod_labels{label_cnpg_io_cluster!=\"\", namespace=\"$namespace\"}, label_cnpg_io_cluster)",
         "hide": 0,
-        "includeAll": false,
+        "includeAll": true,
         "label": "Cluster",
         "multi": false,
         "name": "cluster",
         "options": [],
         "query": {
-          "query": "label_values(cnpg_pg_postmaster_start_time_seconds{namespace=\"$namespace\"}, service)",
+          "query": "label_values(kube_pod_labels{label_cnpg_io_cluster!=\"\", namespace=\"$namespace\"}, label_cnpg_io_cluster)",
           "refId": "Prometheus-cluster"
         },
         "refresh": 2,
-        "regex": "/(.*)-postgres-metrics/",
+        "regex": "",
         "skipUrlSync": false,
         "sort": 1,
-        "type": "query"
+        "type": "query",
+        "allValue": ".*"
       }
     ]
   },

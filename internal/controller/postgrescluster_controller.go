@@ -64,6 +64,8 @@ type PostgresClusterReconciler struct {
 func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	metrics := r.Metrics
 	if metrics == nil {
+		// Tests and minimal reconciler wiring may omit a metrics adapter.
+		// Fall back to a no-op recorder so status updates can proceed safely.
 		metrics = &pgprometheus.NoopRecorder{}
 	}
 	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: metrics}
