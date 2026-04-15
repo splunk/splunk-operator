@@ -786,6 +786,9 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 		return statefulSet, err
 	}
 
+	// Add containerd and Splunk library volumes for the AppRuntime sidecar
+	addAppRuntimeVolumes(statefulSet, spec.Image)
+
 	// add serviceaccount if configured
 	if spec.ServiceAccount != "" {
 		namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: spec.ServiceAccount}
@@ -821,15 +824,90 @@ func getAppRuntimeSidecar(instanceType InstanceType) []corev1.Container {
 		return nil
 	}
 	restartAlways := corev1.ContainerRestartPolicyAlways
+	privileged := true
+	runAsUser := int64(0)
+	runAsNonRoot := false
 	return []corev1.Container{
 		{
 			Image:           getAppRuntimeImage(),
 			ImagePullPolicy: corev1.PullAlways,
 			Name:            "appruntime",
-			Command:         []string{"/usr/bin/splunk-eps"},
+			Command:         []string{"/usr/local/bin/entrypoint.sh"},
 			RestartPolicy:   &restartAlways,
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "containerd-data",
+					MountPath: "/var/lib/containerd-nested",
+				},
+				{
+					Name:      "containerd-run",
+					MountPath: "/var/run/containerd-nested",
+				},
+			},
+			SecurityContext: &corev1.SecurityContext{
+				Privileged:   &privileged,
+				RunAsUser:    &runAsUser,
+				RunAsNonRoot: &runAsNonRoot,
+			},
 		},
 	}
+}
+
+// addAppRuntimeVolumes adds containerd and Splunk library volumes to the StatefulSet
+// for the AppRuntime sidecar. It also adds an init container that copies /opt/splunk/lib
+// and /opt/splunk/bin from the Splunk image into emptyDir volumes mounted only on the sidecar.
+func addAppRuntimeVolumes(statefulSet *appsv1.StatefulSet, splunkImage string) {
+	if len(statefulSet.Spec.Template.Spec.InitContainers) == 0 {
+		return
+	}
+	statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes,
+		corev1.Volume{
+			Name:         "containerd-data",
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		},
+		corev1.Volume{
+			Name:         "containerd-run",
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		},
+		corev1.Volume{
+			Name:         "splunk-lib",
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		},
+		corev1.Volume{
+			Name:         "splunk-bin",
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		},
+	)
+
+	// Init container copies Splunk lib and bin into the shared volumes.
+	statefulSet.Spec.Template.Spec.InitContainers = append(statefulSet.Spec.Template.Spec.InitContainers, corev1.Container{
+		Name:            "copy-splunk-dirs",
+		Image:           splunkImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Command:         []string{"sh", "-c", "cp -r /opt/splunk/lib/. /mnt/splunk-lib/ && cp -r /opt/splunk/bin/. /mnt/splunk-bin/"},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "splunk-lib",
+				MountPath: "/mnt/splunk-lib",
+			},
+			{
+				Name:      "splunk-bin",
+				MountPath: "/mnt/splunk-bin",
+			},
+		},
+	})
+
+	// Mount splunk-lib and splunk-bin only on the sidecar (InitContainers[0]).
+	statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts,
+		corev1.VolumeMount{
+			Name:      "splunk-lib",
+			MountPath: "/opt/splunk/lib",
+		},
+		corev1.VolumeMount{
+			Name:      "splunk-bin",
+			MountPath: "/opt/splunk/bin",
+		},
+	)
 }
 
 // getAppRuntimeImage returns the AppRuntime container image from env or a default.
@@ -837,7 +915,7 @@ func getAppRuntimeImage() string {
 	if image, ok := os.LookupEnv("RELATED_IMAGE_APP_RUNTIME"); ok {
 		return image
 	}
-	return "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/supervisor:v3.1.0-mb-1"
+	return "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/supervisor:v3.1.0-sidecar"
 }
 
 // getSmartstoreConfigMap returns the smartstore configMap, if it exists and applicable for that instanceType
@@ -883,6 +961,38 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 				})
 			}
 		}
+	}
+
+	// Add EP shim init container: copies splunk-epshim binary from the AppRuntime
+	// image into an emptyDir volume, then mounts it into all Splunk containers.
+	epShimVolumeName := "ep-shim-bin"
+
+	podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, corev1.Volume{
+		Name: epShimVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	})
+
+	podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, corev1.Container{
+		Name:            "install-epshim",
+		Image:           getAppRuntimeImage(),
+		ImagePullPolicy: corev1.PullAlways,
+		Command:         []string{"cp", "/usr/bin/splunk-epshim", "/ep-bin/splunk-epshim"},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      epShimVolumeName,
+				MountPath: "/ep-bin",
+			},
+		},
+	})
+
+	for idx := range podTemplateSpec.Spec.Containers {
+		podTemplateSpec.Spec.Containers[idx].VolumeMounts = append(podTemplateSpec.Spec.Containers[idx].VolumeMounts, corev1.VolumeMount{
+			Name:      epShimVolumeName,
+			MountPath: "/usr/bin/splunk-epshim",
+			SubPath:   "splunk-epshim",
+		})
 	}
 
 	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
