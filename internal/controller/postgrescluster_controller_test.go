@@ -36,6 +36,7 @@ import (
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
+	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 )
 
 /*
@@ -122,9 +123,11 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		}
 
 		reconciler = &PostgresClusterReconciler{
-			Client:   k8sClient,
-			Scheme:   k8sClient.Scheme(),
-			Recorder: record.NewFakeRecorder(100),
+			Client:         k8sClient,
+			Scheme:         k8sClient.Scheme(),
+			Recorder:       record.NewFakeRecorder(100),
+			Metrics:        &pgprometheus.NoopRecorder{},
+			FleetCollector: pgprometheus.NewFleetCollector(),
 		}
 		req = reconcile.Request{NamespacedName: types.NamespacedName{Name: clusterName, Namespace: namespace}}
 	})

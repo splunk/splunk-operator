@@ -24,8 +24,9 @@ import (
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	dbadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter"
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
-	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	sharedreconcile "github.com/splunk/splunk-operator/pkg/postgresql/shared/reconcile"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -78,7 +79,9 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	rc := &dbcore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics}
 	result, err := dbcore.PostgresDatabaseService(ctx, rc, postgresDB, dbadapter.NewDBRepository)
 	r.FleetCollector.CollectDatabaseMetrics(ctx, r.Client, r.Metrics)
-
+	if sharedreconcile.IsPureConflict(err) {
+		return ctrl.Result{Requeue: true}, nil
+	}
 	return result, err
 }
 

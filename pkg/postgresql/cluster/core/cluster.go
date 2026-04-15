@@ -79,13 +79,9 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		}
 		logger.Error(err, "Failed to handle finalizer")
 		rc.emitWarning(postgresCluster, EventCleanupFailed, fmt.Sprintf("Cleanup failed: %v", err))
-		errs := []error{err}
-		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterDeleteFailed,
-			fmt.Sprintf("Failed to delete resources during cleanup: %v", err), failedClusterPhase); statusErr != nil {
-			logger.Error(statusErr, "Failed to update status")
-			errs = append(errs, statusErr)
-		}
-		return ctrl.Result{}, errors.Join(errs...)
+		statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterDeleteFailed,
+			fmt.Sprintf("Failed to delete resources during cleanup: %v", err), failedClusterPhase)
+		return ctrl.Result{}, errors.Join(err, statusErr)
 	}
 	if postgresCluster.GetDeletionTimestamp() != nil {
 		logger.Info("Deletion cleanup complete, finalizer removed")
@@ -96,10 +92,6 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	if !controllerutil.ContainsFinalizer(postgresCluster, PostgresClusterFinalizerName) {
 		controllerutil.AddFinalizer(postgresCluster, PostgresClusterFinalizerName)
 		if err := c.Update(ctx, postgresCluster); err != nil {
-			if apierrors.IsConflict(err) {
-				logger.Info("Conflict while adding finalizer, will requeue")
-				return ctrl.Result{Requeue: true}, nil
-			}
 			logger.Error(err, "Failed to add finalizer to PostgresCluster")
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
@@ -112,11 +104,9 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	if err := c.Get(ctx, client.ObjectKey{Name: postgresCluster.Spec.Class}, clusterClass); err != nil {
 		logger.Error(err, "Failed to fetch PostgresClusterClass", "className", postgresCluster.Spec.Class)
 		rc.emitWarning(postgresCluster, EventClusterClassNotFound, fmt.Sprintf("ClusterClass %s not found", postgresCluster.Spec.Class))
-		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterClassNotFound,
-			fmt.Sprintf("ClusterClass %s not found: %v", postgresCluster.Spec.Class, err), failedClusterPhase); statusErr != nil {
-			logger.Error(statusErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterClassNotFound,
+			fmt.Sprintf("ClusterClass %s not found: %v", postgresCluster.Spec.Class, err), failedClusterPhase)
+		return ctrl.Result{}, errors.Join(err, statusErr)
 	}
 
 	// Merge PostgresClusterSpec on top of PostgresClusterClass defaults.
@@ -124,11 +114,9 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	if err != nil {
 		logger.Error(err, "Failed to merge PostgresCluster configuration")
 		rc.emitWarning(postgresCluster, EventConfigMergeFailed, fmt.Sprintf("Failed to merge configuration: %v", err))
-		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonInvalidConfiguration,
-			fmt.Sprintf("Failed to merge configuration: %v", err), failedClusterPhase); statusErr != nil {
-			logger.Error(statusErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonInvalidConfiguration,
+			fmt.Sprintf("Failed to merge configuration: %v", err), failedClusterPhase)
+		return ctrl.Result{}, errors.Join(err, statusErr)
 	}
 
 	// Resolve or derive the superuser secret name.
@@ -144,28 +132,20 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	if secretErr != nil {
 		logger.Error(secretErr, "Failed to check if PostgresCluster secret exists", "name", postgresSecretName)
 		rc.emitWarning(postgresCluster, EventSecretReconcileFailed, fmt.Sprintf("Failed to check secret existence: %v", secretErr))
-		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonUserSecretFailed,
-			fmt.Sprintf("Failed to check secret existence: %v", secretErr), failedClusterPhase); statusErr != nil {
-			logger.Error(statusErr, "Failed to update status")
-		}
-		return ctrl.Result{}, secretErr
+		statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonUserSecretFailed,
+			fmt.Sprintf("Failed to check secret existence: %v", secretErr), failedClusterPhase)
+		return ctrl.Result{}, errors.Join(secretErr, statusErr)
 	}
 	if !secretExists {
 		logger.Info("Superuser secret creation started", "name", postgresSecretName)
 		if err := ensureClusterSecret(ctx, c, rc.Scheme, postgresCluster, postgresSecretName, secret); err != nil {
 			logger.Error(err, "Failed to ensure PostgresCluster secret", "name", postgresSecretName)
 			rc.emitWarning(postgresCluster, EventSecretReconcileFailed, fmt.Sprintf("Failed to generate cluster secret: %v", err))
-			if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonUserSecretFailed,
-				fmt.Sprintf("Failed to generate PostgresCluster secret: %v", err), failedClusterPhase); statusErr != nil {
-				logger.Error(statusErr, "Failed to update status")
-			}
-			return ctrl.Result{}, err
+			statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonUserSecretFailed,
+				fmt.Sprintf("Failed to generate PostgresCluster secret: %v", err), failedClusterPhase)
+			return ctrl.Result{}, errors.Join(err, statusErr)
 		}
 		if err := c.Status().Update(ctx, postgresCluster); err != nil {
-			if apierrors.IsConflict(err) {
-				logger.Info("Conflict after secret creation, will requeue")
-				return ctrl.Result{Requeue: true}, nil
-			}
 			logger.Error(err, "Failed to update status after secret creation")
 			return ctrl.Result{}, err
 		}
@@ -189,11 +169,9 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		if err := patchObject(ctx, c, originalSecret, secret, "Secret"); err != nil {
 			logger.Error(err, "Failed to patch existing secret with controller reference")
 			rc.emitWarning(postgresCluster, EventSecretReconcileFailed, fmt.Sprintf("Failed to patch existing secret: %v", err))
-			if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonSuperUserSecretFailed,
-				fmt.Sprintf("Failed to patch existing secret: %v", err), failedClusterPhase); statusErr != nil {
-				logger.Error(statusErr, "Failed to update status")
-			}
-			return ctrl.Result{}, err
+			statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonSuperUserSecretFailed,
+				fmt.Sprintf("Failed to patch existing secret: %v", err), failedClusterPhase)
+			return ctrl.Result{}, errors.Join(err, statusErr)
 		}
 	}
 
@@ -221,26 +199,22 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		if err := c.Create(ctx, newCluster); err != nil {
 			logger.Error(err, "Failed to create CNPG Cluster")
 			rc.emitWarning(postgresCluster, EventClusterCreateFailed, fmt.Sprintf("Failed to create CNPG cluster: %v", err))
-			if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterBuildFailed,
-				fmt.Sprintf("Failed to create CNPG Cluster: %v", err), failedClusterPhase); statusErr != nil {
-				logger.Error(statusErr, "Failed to update status")
-			}
-			return ctrl.Result{}, err
+			statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterBuildFailed,
+				fmt.Sprintf("Failed to create CNPG Cluster: %v", err), failedClusterPhase)
+			return ctrl.Result{}, errors.Join(err, statusErr)
 		}
 		rc.emitNormal(postgresCluster, EventClusterCreationStarted, "CNPG cluster created, waiting for healthy state")
 		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterBuildSucceeded,
 			"CNPG Cluster created", pendingClusterPhase); statusErr != nil {
-			logger.Error(statusErr, "Failed to update status")
+			return ctrl.Result{}, statusErr
 		}
 		logger.Info("CNPG Cluster created, requeueing for status update", "name", postgresCluster.Name)
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	case err != nil:
 		logger.Error(err, "Failed to get CNPG Cluster")
-		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterGetFailed,
-			fmt.Sprintf("Failed to get CNPG Cluster: %v", err), failedClusterPhase); statusErr != nil {
-			logger.Error(statusErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterGetFailed,
+			fmt.Sprintf("Failed to get CNPG Cluster: %v", err), failedClusterPhase)
+		return ctrl.Result{}, errors.Join(err, statusErr)
 	}
 
 	// Patch CNPG Cluster spec if drift detected.
@@ -254,22 +228,16 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		cnpgCluster.Spec = desiredSpec
 
 		switch patchErr := patchObject(ctx, c, originalCluster, cnpgCluster, "CNPGCluster"); {
-		case apierrors.IsConflict(patchErr):
-			logger.Info("Conflict occurred while updating CNPG Cluster, requeueing", "name", cnpgCluster.Name)
-			return ctrl.Result{Requeue: true}, nil
 		case patchErr != nil:
 			logger.Error(patchErr, "Failed to patch CNPG Cluster", "name", cnpgCluster.Name)
 			rc.emitWarning(postgresCluster, EventClusterUpdateFailed, fmt.Sprintf("Failed to patch CNPG cluster: %v", patchErr))
-			if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterPatchFailed,
-				fmt.Sprintf("Failed to patch CNPG Cluster: %v", patchErr), failedClusterPhase); statusErr != nil {
-				logger.Error(statusErr, "Failed to update status")
-			}
-			return ctrl.Result{}, patchErr
+			statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterPatchFailed,
+				fmt.Sprintf("Failed to patch CNPG Cluster: %v", patchErr), failedClusterPhase)
+			return ctrl.Result{}, errors.Join(patchErr, statusErr)
 		default:
 			if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterBuildSucceeded,
 				"CNPG Cluster spec updated, waiting for healthy state", provisioningClusterPhase); statusErr != nil {
-				logger.Error(statusErr, "Failed to update status after patch")
-				return ctrl.Result{Requeue: true}, nil
+				return ctrl.Result{}, statusErr
 			}
 			rc.emitNormal(postgresCluster, EventClusterUpdateStarted, "CNPG cluster spec updated, waiting for healthy state")
 			logger.Info("CNPG Cluster patched, requeueing for status update", "name", cnpgCluster.Name)
@@ -281,11 +249,9 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	if err := reconcileManagedRoles(ctx, c, postgresCluster, cnpgCluster); err != nil {
 		logger.Error(err, "Failed to reconcile managed roles")
 		rc.emitWarning(postgresCluster, EventManagedRolesFailed, fmt.Sprintf("Failed to reconcile managed roles: %v", err))
-		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonManagedRolesFailed,
-			fmt.Sprintf("Failed to reconcile managed roles: %v", err), failedClusterPhase); statusErr != nil {
-			logger.Error(statusErr, "Failed to update status")
-		}
-		return ctrl.Result{}, err
+		statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonManagedRolesFailed,
+			fmt.Sprintf("Failed to reconcile managed roles: %v", err), failedClusterPhase)
+		return ctrl.Result{}, errors.Join(err, statusErr)
 	}
 
 	// Reconcile Connection Pooler.
@@ -294,35 +260,25 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	rwPoolerExists, err := poolerExists(ctx, c, postgresCluster, readWriteEndpoint)
 	if err != nil {
 		logger.Error(err, "Failed to check RW pooler existence")
-		errs := []error{err}
-		if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerReconciliationFailed,
-			fmt.Sprintf("Failed to check pooler existence: %v", err), failedClusterPhase); statusErr != nil {
-			logger.Error(statusErr, "Failed to update status")
-			errs = append(errs, statusErr)
-		}
-		return ctrl.Result{}, errors.Join(errs...)
+		statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerReconciliationFailed,
+			fmt.Sprintf("Failed to check pooler existence: %v", err), failedClusterPhase)
+		return ctrl.Result{}, errors.Join(err, statusErr)
 	}
 	roPoolerExists, err := poolerExists(ctx, c, postgresCluster, readOnlyEndpoint)
 	if err != nil {
 		logger.Error(err, "Failed to check RO pooler existence")
-		errs := []error{err}
-		if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerReconciliationFailed,
-			fmt.Sprintf("Failed to check pooler existence: %v", err), failedClusterPhase); statusErr != nil {
-			logger.Error(statusErr, "Failed to update status")
-			errs = append(errs, statusErr)
-		}
-		return ctrl.Result{}, errors.Join(errs...)
+		statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerReconciliationFailed,
+			fmt.Sprintf("Failed to check pooler existence: %v", err), failedClusterPhase)
+		return ctrl.Result{}, errors.Join(err, statusErr)
 	}
 
 	switch {
 	case !poolerEnabled:
 		if err := deleteConnectionPoolers(ctx, c, postgresCluster); err != nil {
 			logger.Error(err, "Failed to delete connection poolers")
-			if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerReconciliationFailed,
-				fmt.Sprintf("Failed to delete connection poolers: %v", err), failedClusterPhase); statusErr != nil {
-				logger.Error(statusErr, "Failed to update status")
-			}
-			return ctrl.Result{}, err
+			statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerReconciliationFailed,
+				fmt.Sprintf("Failed to delete connection poolers: %v", err), failedClusterPhase)
+			return ctrl.Result{}, errors.Join(err, statusErr)
 		}
 		postgresCluster.Status.ConnectionPoolerStatus = nil
 		meta.RemoveStatusCondition(&postgresCluster.Status.Conditions, string(poolerReady))
@@ -331,35 +287,29 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		if mergedConfig.CNPG == nil || mergedConfig.CNPG.ConnectionPooler == nil {
 			logger.Info("Connection pooler enabled but no config found in class or cluster spec, skipping",
 				"class", postgresCluster.Spec.Class, "cluster", postgresCluster.Name)
-			if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerConfigMissing,
+			statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerConfigMissing,
 				fmt.Sprintf("Connection pooler is enabled but no config found in class %q or cluster %q",
-					postgresCluster.Spec.Class, postgresCluster.Name), failedClusterPhase); statusErr != nil {
-				logger.Error(statusErr, "Failed to update status")
-			}
-			return ctrl.Result{}, nil
+					postgresCluster.Spec.Class, postgresCluster.Name), failedClusterPhase)
+			return ctrl.Result{}, statusErr
 		}
 		if cnpgCluster.Status.Phase != cnpgv1.PhaseHealthy {
 			logger.Info("CNPG Cluster not healthy yet, pending pooler creation", "clusterPhase", cnpgCluster.Status.Phase)
-			if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonCNPGClusterNotHealthy,
-				"Waiting for CNPG cluster to become healthy before creating poolers", pendingClusterPhase); statusErr != nil {
-				logger.Error(statusErr, "Failed to update status")
-			}
-			return ctrl.Result{RequeueAfter: retryDelay}, nil
+			statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonCNPGClusterNotHealthy,
+				"Waiting for CNPG cluster to become healthy before creating poolers", pendingClusterPhase)
+			return ctrl.Result{RequeueAfter: retryDelay}, statusErr
 		}
 		if err := createOrUpdateConnectionPoolers(ctx, c, rc.Scheme, postgresCluster, mergedConfig, cnpgCluster); err != nil {
 			logger.Error(err, "Failed to reconcile connection pooler")
 			rc.emitWarning(postgresCluster, EventPoolerReconcileFailed, fmt.Sprintf("Failed to reconcile connection pooler: %v", err))
-			if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerReconciliationFailed,
-				fmt.Sprintf("Failed to reconcile connection pooler: %v", err), failedClusterPhase); statusErr != nil {
-				logger.Error(statusErr, "Failed to update status")
-			}
-			return ctrl.Result{}, err
+			statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerReconciliationFailed,
+				fmt.Sprintf("Failed to reconcile connection pooler: %v", err), failedClusterPhase)
+			return ctrl.Result{}, errors.Join(err, statusErr)
 		}
 		rc.emitNormal(postgresCluster, EventPoolerCreationStarted, "Connection poolers created, waiting for readiness")
 		logger.Info("Connection pooler creation started, requeueing")
 		if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerCreating,
 			"Connection poolers are being provisioned", provisioningClusterPhase); statusErr != nil {
-			logger.Error(statusErr, "Failed to update status")
+			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 
@@ -377,14 +327,9 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		return rwErr != nil || roErr != nil || !arePoolersReady(rwPooler, roPooler)
 	}():
 		logger.Info("Connection Poolers are not ready yet, requeueing")
-		if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerCreating,
-			"Connection poolers are being provisioned", pendingClusterPhase); statusErr != nil {
-			if apierrors.IsConflict(statusErr) {
-				logger.Info("Conflict updating pooler status, will requeue")
-				return ctrl.Result{Requeue: true}, nil
-			}
-		}
-		return ctrl.Result{RequeueAfter: retryDelay}, nil
+		statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerCreating,
+			"Connection poolers are being provisioned", pendingClusterPhase)
+		return ctrl.Result{RequeueAfter: retryDelay}, statusErr
 
 	default:
 		oldConditions := make([]metav1.Condition, len(postgresCluster.Status.Conditions))
@@ -392,11 +337,9 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		if err := syncPoolerStatus(ctx, c, rc.Metrics, postgresCluster); err != nil {
 			logger.Error(err, "Failed to sync pooler status")
 			rc.emitWarning(postgresCluster, EventPoolerReconcileFailed, fmt.Sprintf("Failed to sync pooler status: %v", err))
-			if statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerReconciliationFailed,
-				fmt.Sprintf("Failed to sync pooler status: %v", err), failedClusterPhase); statusErr != nil {
-				logger.Error(statusErr, "Failed to update status")
-			}
-			return ctrl.Result{}, err
+			statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerReconciliationFailed,
+				fmt.Sprintf("Failed to sync pooler status: %v", err), failedClusterPhase)
+			return ctrl.Result{}, errors.Join(err, statusErr)
 		}
 		rc.emitPoolerReadyTransition(postgresCluster, oldConditions)
 	}
@@ -408,11 +351,9 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		if err != nil {
 			logger.Error(err, "Failed to generate ConfigMap")
 			rc.emitWarning(postgresCluster, EventConfigMapReconcileFailed, fmt.Sprintf("Failed to reconcile ConfigMap: %v", err))
-			if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonConfigMapFailed,
-				fmt.Sprintf("Failed to generate ConfigMap: %v", err), failedClusterPhase); statusErr != nil {
-				logger.Error(statusErr, "Failed to update status")
-			}
-			return ctrl.Result{}, err
+			statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonConfigMapFailed,
+				fmt.Sprintf("Failed to generate ConfigMap: %v", err), failedClusterPhase)
+			return ctrl.Result{}, errors.Join(err, statusErr)
 		}
 		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: desiredCM.Name, Namespace: desiredCM.Namespace}}
 		createOrUpdateResult, err := controllerutil.CreateOrUpdate(ctx, c, cm, func() error {
@@ -429,11 +370,9 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		if err != nil {
 			logger.Error(err, "Failed to reconcile ConfigMap", "name", desiredCM.Name)
 			rc.emitWarning(postgresCluster, EventConfigMapReconcileFailed, fmt.Sprintf("Failed to reconcile ConfigMap: %v", err))
-			if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonConfigMapFailed,
-				fmt.Sprintf("Failed to reconcile ConfigMap: %v", err), failedClusterPhase); statusErr != nil {
-				logger.Error(statusErr, "Failed to update status")
-			}
-			return ctrl.Result{}, err
+			statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonConfigMapFailed,
+				fmt.Sprintf("Failed to reconcile ConfigMap: %v", err), failedClusterPhase)
+			return ctrl.Result{}, errors.Join(err, statusErr)
 		}
 		switch createOrUpdateResult {
 		case controllerutil.OperationResultCreated:
@@ -457,11 +396,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	}
 	if err := syncStatus(ctx, c, rc.Metrics, postgresCluster, cnpgCluster); err != nil {
 		logger.Error(err, "Failed to sync status")
-		if apierrors.IsConflict(err) {
-			logger.Info("Conflict during status update, will requeue")
-			return ctrl.Result{Requeue: true}, nil
-		}
-		return ctrl.Result{}, fmt.Errorf("failed to sync status: %w", err)
+		return ctrl.Result{}, err
 	}
 	var newPhase string
 	if postgresCluster.Status.Phase != nil {

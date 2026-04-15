@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -80,9 +81,11 @@ const (
 
 func reconcilePostgresDatabase(ctx context.Context, nn types.NamespacedName) (ctrl.Result, error) {
 	reconciler := &PostgresDatabaseReconciler{
-		Client:   k8sClient,
-		Scheme:   k8sClient.Scheme(),
-		Recorder: record.NewFakeRecorder(100),
+		Client:         k8sClient,
+		Scheme:         k8sClient.Scheme(),
+		Recorder:       record.NewFakeRecorder(100),
+		Metrics:        &pgprometheus.NoopRecorder{},
+		FleetCollector: pgprometheus.NewFleetCollector(),
 	}
 	return reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
 }

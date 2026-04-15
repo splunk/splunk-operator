@@ -1425,12 +1425,11 @@ func TestFindRemovedRoleNames(t *testing.T) {
 	}
 }
 
-
 func TestBuildRolesToRemove(t *testing.T) {
 	tests := []struct {
-		name     string
-		deleted  []enterprisev4.DatabaseDefinition
-		want     []enterprisev4.ManagedRole
+		name    string
+		deleted []enterprisev4.DatabaseDefinition
+		want    []enterprisev4.ManagedRole
 	}{
 		{
 			name:    "nothing to remove",
@@ -1458,7 +1457,6 @@ func TestBuildRolesToRemove(t *testing.T) {
 		})
 	}
 }
-
 
 func TestStripOwnerReference(t *testing.T) {
 	obj := &corev1.ConfigMap{
