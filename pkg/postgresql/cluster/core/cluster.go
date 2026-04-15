@@ -213,7 +213,11 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	switch {
 	case apierrors.IsNotFound(err):
 		logger.Info("CNPG Cluster creation started", "name", postgresCluster.Name)
-		newCluster := buildCNPGCluster(rc.Scheme, postgresCluster, mergedConfig, postgresSecretName)
+		newCluster, err := buildCNPGCluster(rc.Scheme, postgresCluster, mergedConfig, postgresSecretName)
+		if err != nil {
+			logger.Error(err, "Failed to build CNPG Cluster", "name", postgresCluster.Name)
+			return ctrl.Result{}, err
+		}
 		if err := c.Create(ctx, newCluster); err != nil {
 			logger.Error(err, "Failed to create CNPG Cluster")
 			rc.emitWarning(postgresCluster, EventClusterCreateFailed, fmt.Sprintf("Failed to create CNPG cluster: %v", err))
@@ -560,13 +564,15 @@ func buildCNPGClusterSpec(cfg *MergedConfig, secretName string) cnpgv1.ClusterSp
 	}
 }
 
-func buildCNPGCluster(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, secretName string) *cnpgv1.Cluster {
+func buildCNPGCluster(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, secretName string) (*cnpgv1.Cluster, error) {
 	cnpg := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
 		Spec:       buildCNPGClusterSpec(cfg, secretName),
 	}
-	ctrl.SetControllerReference(cluster, cnpg, scheme)
-	return cnpg
+	if err := ctrl.SetControllerReference(cluster, cnpg, scheme); err != nil {
+		return nil, fmt.Errorf("setting controller reference on CNPG cluster: %w", err)
+	}
+	return cnpg, nil
 }
 
 func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec, customDefinedParameters map[string]string) normalizedCNPGClusterSpec {
@@ -705,10 +711,14 @@ func createConnectionPooler(ctx context.Context, c client.Client, scheme *runtim
 		return err
 	}
 	logger.Info("CNPG Pooler creation started", "name", poolerName, "type", poolerType)
-	return c.Create(ctx, buildCNPGPooler(scheme, cluster, cfg, cnpgCluster, poolerType))
+	pooler, err := buildCNPGPooler(scheme, cluster, cfg, cnpgCluster, poolerType)
+	if err != nil {
+		return err
+	}
+	return c.Create(ctx, pooler)
 }
 
-func buildCNPGPooler(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerType string) *cnpgv1.Pooler {
+func buildCNPGPooler(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerType string) (*cnpgv1.Pooler, error) {
 	pc := cfg.CNPG.ConnectionPooler
 	instances := *pc.Instances
 	mode := cnpgv1.PgBouncerPoolMode(*pc.Mode)
@@ -724,8 +734,10 @@ func buildCNPGPooler(scheme *runtime.Scheme, cluster *enterprisev4.PostgresClust
 			},
 		},
 	}
-	ctrl.SetControllerReference(cluster, pooler, scheme)
-	return pooler
+	if err := ctrl.SetControllerReference(cluster, pooler, scheme); err != nil {
+		return nil, fmt.Errorf("setting controller reference on CNPG pooler: %w", err)
+	}
+	return pooler, nil
 }
 
 // deleteConnectionPoolers removes RW and RO poolers if they exist.
