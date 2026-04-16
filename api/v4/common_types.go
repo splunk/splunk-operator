@@ -327,7 +327,7 @@ type IndexConfDefaultsSpec struct {
 }
 
 // VolumeSpec defines remote volume config
-// +kubebuilder:validation:XValidation:rule="self.provider != 'aws' || size(self.region) > 0",message="region is required when provider is aws"
+// +kubebuilder:validation:XValidation:rule="!has(self.provider) || self.provider != 'aws' || (has(self.region) && size(self.region) > 0)",message="region is required when provider is aws"
 type VolumeSpec struct {
 	// Remote volume name
 	// +kubebuilder:validation:Required
