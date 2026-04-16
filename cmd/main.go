@@ -291,7 +291,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if os.Getenv("ENABLE_VALIDATION_WEBHOOK") == "true" {
+	if _, ok := os.LookupEnv("ENABLE_VALIDATION_WEBHOOK"); ok {
 		setupLog.Info("DEPRECATED: ENABLE_VALIDATION_WEBHOOK env var is deprecated and will be removed in a future release; use --feature-gates=ValidationWebhook=true instead")
 	}
 
