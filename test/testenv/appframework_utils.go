@@ -133,13 +133,13 @@ func GetPodAppStatus(ctx context.Context, deployment *Deployment, podName string
 		return "", "", err
 	}
 	status := strings.Fields(output)[2]
-	version, err := GetPodInstalledAppVersion(deployment, podName, ns, appname, clusterWideInstall)
+	version, err := GetPodInstalledAppVersion(ctx, deployment, podName, ns, appname, clusterWideInstall)
 	return status, version, err
 
 }
 
 // GetPodInstalledAppVersion Get the version of the app installed on pod
-func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string, appname string, clusterWideInstall bool) (string, error) {
+func GetPodInstalledAppVersion(ctx context.Context, deployment *Deployment, podName string, ns string, appname string, clusterWideInstall bool) (string, error) {
 	path := "etc/apps"
 	//For cluster-wide install the apps are extracted to different locations
 	if clusterWideInstall {
@@ -156,7 +156,7 @@ func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string
 	filePath := fmt.Sprintf("/opt/splunk/%s/%s/default/app.conf", path, appname)
 	logf.Log.Info("Check app version", "App", appname, "Conf file", filePath)
 
-	confline, err := GetConfLineFromPod(podName, filePath, ns, "version", "launcher", true)
+	confline, err := GetConfLineFromPod(ctx, podName, filePath, ns, "version", "launcher", true)
 	if err != nil {
 		logf.Log.Error(err, "Failed to get version from pod", "Pod Name", podName)
 		return "", err
@@ -171,7 +171,7 @@ func GetPodAppInstallStatus(ctx context.Context, deployment *Deployment, podName
 	stdin := fmt.Sprintf("/opt/splunk/bin/splunk display app '%s' -auth admin:$(cat /mnt/splunk-secrets/password)", appname)
 	command := []string{"/bin/sh"}
 	var stdout, stderr string
-	err := wait.PollUntilContextTimeout(ctx, PollInterval, 10*time.Second, true, func(ctx context.Context) (bool, error) {
+	err := wait.PollUntilContextTimeout(ctx, PollInterval, 60*time.Second, true, func(ctx context.Context) (bool, error) {
 		var execErr error
 		stdout, stderr, execErr = deployment.PodExecCommand(ctx, podName, command, stdin, false)
 		return execErr == nil, nil

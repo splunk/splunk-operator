@@ -14,7 +14,7 @@
 package c3gcpappfw
 
 import (
-	"context"
+
 	//"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -51,9 +51,7 @@ var _ = Describe("c3appfw test", func() {
 	var uploadedApps []string
 	var filePresentOnOperator bool
 
-	ctx := context.TODO()
-
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 
 		var err error
 		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
@@ -68,7 +66,7 @@ var _ = Describe("c3appfw test", func() {
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -95,7 +93,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It(" c3gcp, masterappframeworkc3gcp,  c3_gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then upgrade them", func() {
+		It(" c3gcp, masterappframeworkc3gcp,  c3_gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then upgrade them", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -315,7 +313,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It(" c3gcp, masterappframeworkc3gcp,  c3_gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", func() {
+		It(" c3gcp, masterappframeworkc3gcp,  c3_gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -523,7 +521,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It(" c3gcp, masterappframeworkc3gcp,  c3_gcp_sanity: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
+		It(" c3gcp, masterappframeworkc3gcp,  c3_gcp_sanity: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -662,7 +660,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It(" c3gcp, masterappframeworkc3gcp,  c3_gcp_sanity: can deploy a C3 SVA with App Framework enabled and check isDeploymentInProgressFlag for CM and SHC CR's", func() {
+		It(" c3gcp, masterappframeworkc3gcp,  c3_gcp_sanity: can deploy a C3 SVA with App Framework enabled and check isDeploymentInProgressFlag for CM and SHC CR's", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/*
 			   Test Steps

@@ -1,7 +1,6 @@
 package smartstore
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -17,10 +16,9 @@ import (
 var _ = Describe("Smartstore test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
-	ctx := context.TODO()
 	var deployment *testenv.Deployment
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
@@ -33,7 +31,7 @@ var _ = Describe("Smartstore test", func() {
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -47,7 +45,7 @@ var _ = Describe("Smartstore test", func() {
 	})
 
 	Context("Standalone Deployment (S1)", func() {
-		It("managersmartstore, integration: Can configure multiple indexes through app", func() {
+		It("managersmartstore, integration: Can configure multiple indexes through app", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexVolumeMap := map[string]string{"test-index-" + testenv.RandomDNSName(3): volName,
 				"test-index-" + testenv.RandomDNSName(3): volName,
@@ -101,7 +99,7 @@ var _ = Describe("Smartstore test", func() {
 	})
 
 	Context("Standalone Deployment (S1)", func() {
-		It("managersmartstore, integration: Can configure indexes which use default volumes through app", func() {
+		It("managersmartstore, integration: Can configure indexes which use default volumes through app", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexName := "test-index-" + testenv.RandomDNSName(3)
 
@@ -149,25 +147,25 @@ var _ = Describe("Smartstore test", func() {
 			serverConfPath := "/opt/splunk/etc/apps/splunk-operator/local/server.conf"
 
 			// Validate MaxCacheSizeMB
-			testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "max_cache_size", fmt.Sprint(cacheManagerSmartStoreSpec.MaxCacheSizeMB))
+			testcaseEnvInst.VerifyConfOnPod(ctx, deployment, podName, serverConfPath, "max_cache_size", fmt.Sprint(cacheManagerSmartStoreSpec.MaxCacheSizeMB))
 
 			// Validate EvictionPaddingSizeMB
-			testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "eviction_padding", fmt.Sprint(cacheManagerSmartStoreSpec.EvictionPaddingSizeMB))
+			testcaseEnvInst.VerifyConfOnPod(ctx, deployment, podName, serverConfPath, "eviction_padding", fmt.Sprint(cacheManagerSmartStoreSpec.EvictionPaddingSizeMB))
 
 			// Validate MaxConcurrentDownloads
-			testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "max_concurrent_downloads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentDownloads))
+			testcaseEnvInst.VerifyConfOnPod(ctx, deployment, podName, serverConfPath, "max_concurrent_downloads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentDownloads))
 
 			// Validate MaxConcurrentUploads
-			testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "max_concurrent_uploads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentUploads))
+			testcaseEnvInst.VerifyConfOnPod(ctx, deployment, podName, serverConfPath, "max_concurrent_uploads", fmt.Sprint(cacheManagerSmartStoreSpec.MaxConcurrentUploads))
 
 			// Validate EvictionPolicy
-			testcaseEnvInst.VerifyConfOnPod(deployment, podName, serverConfPath, "eviction_policy", cacheManagerSmartStoreSpec.EvictionPolicy)
+			testcaseEnvInst.VerifyConfOnPod(ctx, deployment, podName, serverConfPath, "eviction_policy", cacheManagerSmartStoreSpec.EvictionPolicy)
 
 		})
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4)", func() {
-		It("managersmartstore, smoke: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
+		It("managersmartstore, smoke: Can configure indexes and volumes on Multisite Indexer Cluster through app", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexName := "test-index-" + testenv.RandomDNSName(3)

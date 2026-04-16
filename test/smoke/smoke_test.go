@@ -14,7 +14,6 @@
 package smoke
 
 import (
-	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -31,9 +30,8 @@ var _ = Describe("Smoke test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	ctx := context.TODO()
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
@@ -46,7 +44,7 @@ var _ = Describe("Smoke test", func() {
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -60,7 +58,7 @@ var _ = Describe("Smoke test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("smoke, basic, s1: can deploy a standalone instance", func() {
+		It("smoke, basic, s1: can deploy a standalone instance", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
@@ -71,7 +69,7 @@ var _ = Describe("Smoke test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("smoke, basic, c3: can deploy indexers and search head cluster", func() {
+		It("smoke, basic, c3: can deploy indexers and search head cluster", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 
 			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
@@ -91,7 +89,7 @@ var _ = Describe("Smoke test", func() {
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
-		It("smoke, basic, m4: can deploy indexers and search head cluster", func() {
+		It("smoke, basic, m4: can deploy indexers and search head cluster", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			siteCount := 3
 			err := deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, "")
@@ -115,7 +113,7 @@ var _ = Describe("Smoke test", func() {
 	})
 
 	Context("Multisite cluster deployment (M1 - multisite indexer cluster)", func() {
-		It("smoke, basic: can deploy multisite indexers cluster", func() {
+		It("smoke, basic: can deploy multisite indexers cluster", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			siteCount := 3
 			err := deployment.DeployMultisiteCluster(ctx, deployment.GetName(), 1, siteCount, "")
@@ -136,7 +134,7 @@ var _ = Describe("Smoke test", func() {
 	})
 
 	Context("Standalone deployment (S1) with Service Account", func() {
-		It("smoke, basic, s1: can deploy a standalone instance attached to a service account", func() {
+		It("smoke, basic, s1: can deploy a standalone instance attached to a service account", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			// Create Service Account
 			serviceAccountName := "smoke-service-account"
 			testcaseEnvInst.CreateServiceAccount(serviceAccountName)

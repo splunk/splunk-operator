@@ -228,16 +228,17 @@ func (testenv *TestCaseEnv) createNamespace() error {
 
 	// Cleanup the namespace when we teardown this testenv
 	testenv.pushCleanupFunc(func() error {
-		cleanupCtx := context.Background()
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Duration(float64(SetupTeardownTimeout)*CleanupGraceFraction))
+		defer cleanupCancel()
 		err := testenv.GetKubeClient().Delete(cleanupCtx, namespace)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete namespace")
 			return err
 		}
-		if err = wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
+		if err = wait.PollUntilContextCancel(cleanupCtx, PollInterval, true, func(ctx context.Context) (bool, error) {
 			key := client.ObjectKey{Name: testenv.namespace, Namespace: testenv.namespace}
 			ns := &corev1.Namespace{}
-			err := testenv.GetKubeClient().Get(cleanupCtx, key, ns)
+			err := testenv.GetKubeClient().Get(ctx, key, ns)
 			if errors.IsNotFound(err) {
 				return true, nil
 			}
@@ -254,7 +255,7 @@ func (testenv *TestCaseEnv) createNamespace() error {
 		return nil
 	})
 
-	if err := wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
+	if err := wait.PollUntilContextTimeout(ctx, PollInterval, DefaultTimeout, true, func(ctx context.Context) (bool, error) {
 		key := client.ObjectKey{Name: testenv.namespace}
 		ns := &corev1.Namespace{}
 		err := testenv.GetKubeClient().Get(ctx, key, ns)
@@ -430,7 +431,7 @@ func (testenv *TestCaseEnv) createOperator() error {
 		return nil
 	})
 
-	if err := wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
+	if err := wait.PollUntilContextTimeout(ctx, PollInterval, DefaultTimeout, true, func(ctx context.Context) (bool, error) {
 		key := client.ObjectKey{Name: testenv.operatorName, Namespace: testenv.namespace}
 		deployment := &appsv1.Deployment{}
 		err := testenv.GetKubeClient().Get(ctx, key, deployment)

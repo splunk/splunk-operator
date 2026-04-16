@@ -14,7 +14,6 @@
 package crcrud
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -37,9 +36,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	var newCPULimits string
 	var verificationTimeout time.Duration
 
-	ctx := context.TODO()
-
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
@@ -56,7 +53,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 		verificationTimeout = 150 * time.Second
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -70,7 +67,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("mastercrcrud, integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", func() {
+		It("mastercrcrud, integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
@@ -169,7 +166,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("mastercrcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", func() {
+		It("mastercrcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
