@@ -47,6 +47,7 @@ rules:
 - apiGroups:
   - apps.splunk.com
   resources:
+  - apps
   - appsources
   verbs:
   - create
@@ -59,12 +60,14 @@ rules:
 - apiGroups:
   - apps.splunk.com
   resources:
+  - apps/finalizers
   - appsources/finalizers
   verbs:
   - update
 - apiGroups:
   - apps.splunk.com
   resources:
+  - apps/status
   - appsources/status
   verbs:
   - get

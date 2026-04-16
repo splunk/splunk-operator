@@ -1,0 +1,18 @@
+apiVersion: apps.splunk.com/v1alpha1
+kind: App
+metadata:
+  labels:
+    app.kubernetes.io/name: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: app-sample
+spec:
+  appID: sample-app
+  version: "1.0.0"
+  targetRef:
+    kind: Standalone
+    name: standalone-sample
+  sourceRef:
+      name: appsource-sample-s3
+  package:
+    path: apps/sample-app.tgz
+  scope: local

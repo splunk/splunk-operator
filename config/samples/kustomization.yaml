@@ -17,4 +17,5 @@ resources:
 - enterprise_v4_queue.yaml
 - enterprise_v4_objectstorage.yaml
 - apps_v1alpha1_appsource.yaml
+- apps_v1alpha1_app.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples
