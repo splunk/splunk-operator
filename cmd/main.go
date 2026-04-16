@@ -51,7 +51,7 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
-	enterprisecontroller "github.com/splunk/splunk-operator/internal/controller/enterprise"
+	enterpriseController "github.com/splunk/splunk-operator/internal/controller/enterprise"
 	//+kubebuilder:scaffold:imports
 	//extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
@@ -197,7 +197,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&enterprisecontroller.ClusterManagerReconciler{
+	if err = (&enterpriseController.ClusterManagerReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("clustermanager-controller"),
@@ -207,7 +207,7 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("%v", err)
-	if err = (&enterprisecontroller.ClusterMasterReconciler{
+	if err = (&enterpriseController.ClusterMasterReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("clustermaster-controller"),
@@ -215,7 +215,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterMaster")
 		os.Exit(1)
 	}
-	if err = (&enterprisecontroller.IndexerClusterReconciler{
+	if err = (&enterpriseController.IndexerClusterReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("indexercluster-controller"),
@@ -223,7 +223,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "IndexerCluster")
 		os.Exit(1)
 	}
-	if err = (&enterprisecontroller.LicenseMasterReconciler{
+	if err = (&enterpriseController.LicenseMasterReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("licensemaster-controller"),
@@ -231,7 +231,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "LicenseMaster")
 		os.Exit(1)
 	}
-	if err = (&enterprisecontroller.LicenseManagerReconciler{
+	if err = (&enterpriseController.LicenseManagerReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("licensemanager-controller"),
@@ -239,7 +239,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "LicenseManager")
 		os.Exit(1)
 	}
-	if err = (&enterprisecontroller.MonitoringConsoleReconciler{
+	if err = (&enterpriseController.MonitoringConsoleReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("monitoringconsole-controller"),
@@ -247,7 +247,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "MonitoringConsole")
 		os.Exit(1)
 	}
-	if err = (&enterprisecontroller.SearchHeadClusterReconciler{
+	if err = (&enterpriseController.SearchHeadClusterReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("searchheadcluster-controller"),
@@ -255,7 +255,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "SearchHeadCluster")
 		os.Exit(1)
 	}
-	if err = (&enterprisecontroller.StandaloneReconciler{
+	if err = (&enterpriseController.StandaloneReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("standalone-controller"),
@@ -263,7 +263,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Standalone")
 		os.Exit(1)
 	}
-	if err := (&enterprisecontroller.IngestorClusterReconciler{
+	if err := (&enterpriseController.IngestorClusterReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("ingestorcluster-controller"),
@@ -271,7 +271,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "IngestorCluster")
 		os.Exit(1)
 	}
-	if err = (&enterprisecontroller.TelemetryReconciler{
+	if err = (&enterpriseController.TelemetryReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
