@@ -95,7 +95,7 @@ build-stage-image:
     - kubectl-splunk-tests
   variables:
     WORKFLOW_SLUG: build-test-push-workflow
-    BUILDER_IMAGE: docker.repo.splunkdev.net/ci-cd/ci-container/golang-1.25-aws:5.1.0
+    BUILDER_IMAGE: golang:1.25.8
   script:
     - gitlab-ci/build-test-push.sh
   artifacts:

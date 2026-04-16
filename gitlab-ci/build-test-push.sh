@@ -43,7 +43,7 @@ export AWS_REGION="${ECR_REGION}"
 export IMAGE_TAG="${CI_COMMIT_SHA}"
 export IMAGE_REF="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 export REPOSITORY_NAME="${IMAGE_REPOSITORY#${ECR_REGISTRY}/}"
-export BUILDER_IMAGE="${BUILDER_IMAGE:-docker.repo.splunkdev.net/ci-cd/ci-container/golang-1.25-aws:5.1.0}"
+export BUILDER_IMAGE="${BUILDER_IMAGE:-golang:1.25.8}"
 
 append_context "${context_file}" "ecr_registry_present" "true"
 append_context "${context_file}" "image_repository_mode" "${RESOLVED_IMAGE_REPOSITORY_MODE}"
