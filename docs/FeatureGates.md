@@ -26,7 +26,7 @@ Enable or disable feature gates at operator startup:
 
 ## Adding a New Feature Gate
 
-Follow these four steps:
+Follow these steps:
 
 ### 1. Register the gate in `pkg/config/featuregates.go`
 
