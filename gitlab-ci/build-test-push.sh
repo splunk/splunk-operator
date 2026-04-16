@@ -23,6 +23,7 @@ export BASE_IMAGE="registry.access.redhat.com/ubi8/ubi-minimal"
 repo_default_base_image_version="$(awk '/^BASE_IMAGE[[:space:]]*\\?=/ { next } /^BASE_IMAGE_VERSION[[:space:]]*\\?=/ { print $3; exit }' "${CI_PROJECT_DIR}/Makefile")"
 export BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION:-${repo_default_base_image_version:-8.10-1775152441}}"
 context_file="ci-output/${WORKFLOW_SLUG}-runtime-context.txt"
+mkdir -p "ci-output"
 : > "${context_file}"
 
 resolve_staging_image_repository "${STAGING_ECR_REPOSITORY}" "splunk/splunk-operator"

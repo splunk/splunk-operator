@@ -20,6 +20,7 @@ else
   export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
 fi
 context_file="ci-output/${WORKFLOW_SLUG}-runtime-context.txt"
+mkdir -p "ci-output"
 : > "${context_file}"
 TRIVY_RELEASE="${STAGING_TRIVY_RELEASE:-v0.69.3}"
 TRIVY_ASSET_URL="${STAGING_TRIVY_ASSET_URL:-}"
