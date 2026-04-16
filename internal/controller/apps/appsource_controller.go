@@ -192,7 +192,7 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			logger.Error(err, "Failed to update AppSource status")
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, fmt.Errorf("AWS credentials (s3_access_key and s3_secret_key) not found in secret %s", appSourceInstance.Spec.Auth.SecretRef.Name)
 	}
 
 	bucketURL := fmt.Sprintf("s3://%s?region=%s", bucket, region)
