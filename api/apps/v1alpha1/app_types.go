@@ -27,7 +27,6 @@ const (
 // AppTargetRef defines the target environment the app should bind to.
 type AppTargetRef struct {
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Enum="ClusterManager";"ClusterMaster";"IndexerCluster";"IngestorCluster";"LicenseManager";"LicenseMaster";"MonitoringConsole";"SearchHeadCluster";"Standalone"
 	Kind string `json:"kind"`
 
@@ -70,7 +69,6 @@ type AppSpec struct {
 	Package AppPackageSpec `json:"package"`
 
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Enum="local";"cluster"
 	Scope string `json:"scope"`
 }

@@ -69,7 +69,6 @@ spec:
                 enum:
                 - local
                 - cluster
-                minLength: 1
                 type: string
               sourceRef:
                 description: AppSourceRef defines the app source details.
@@ -95,7 +94,6 @@ spec:
                     - MonitoringConsole
                     - SearchHeadCluster
                     - Standalone
-                    minLength: 1
                     type: string
                   name:
                     minLength: 1
