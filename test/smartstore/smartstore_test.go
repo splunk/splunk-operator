@@ -14,7 +14,6 @@
 package smartstore
 
 import (
-	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -42,42 +41,41 @@ var _ = Describe("Smartstore test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	ctx := context.TODO()
 
 	for _, tc := range masterManagerSmartstoreConfigs {
 		tc := tc
 		Context("Standalone deployment (S1)", func() {
-			BeforeEach(func() {
+			BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 				var err error
 				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
 				Expect(err).To(Succeed(), "Failed to setup test case environment")
 			})
 
-			AfterEach(func() {
+			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(tc.Label+", integration: Can configure multiple indexes through app", func() {
+			It(tc.Label+", integration: Can configure multiple indexes through app", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 				RunS1MultipleIndexesTest(ctx, deployment, testcaseEnvInst, tc.S1IndexesTimeout)
 			})
 
-			It(tc.Label+", integration: Can configure indexes which use default volumes through app", func() {
+			It(tc.Label+", integration: Can configure indexes which use default volumes through app", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 				RunS1DefaultVolumesTest(ctx, deployment, testcaseEnvInst)
 			})
 		})
 
 		Context("Multisite Indexer Cluster with Search Head Cluster (M4)", func() {
-			BeforeEach(func() {
+			BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 				var err error
 				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
 				Expect(err).To(Succeed(), "Failed to setup test case environment")
 			})
 
-			AfterEach(func() {
+			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(tc.Label+", m4, smoke: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
+			It(tc.Label+", m4, smoke: Can configure indexes and volumes on Multisite Indexer Cluster through app", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 				config := tc.NewConfig()
 				RunM4MultisiteSmartStoreTest(ctx, deployment, testcaseEnvInst, config)
 			})
@@ -85,22 +83,22 @@ var _ = Describe("Smartstore test", func() {
 	}
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		BeforeEach(func() {
+		BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 			var err error
 			testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "master")
 			Expect(err).To(Succeed(), "Failed to setup test case environment")
 		})
 
-		AfterEach(func() {
+		AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 			Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 		})
 
-		It("integration, s1, smartstore: can deploy a Standalone instance with Ephemeral Etc storage", func() {
+		It("integration, s1, smartstore: can deploy a Standalone instance with Ephemeral Etc storage", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			storageConfig := enterpriseApi.StorageClassSpec{StorageClassName: "TestStorageEtcEph", StorageCapacity: "1Gi", EphemeralStorage: true}
 			RunS1EphemeralStorageTest(ctx, deployment, testcaseEnvInst, storageConfig, true)
 		})
 
-		It("integration, s1, smartstore: can deploy a Standalone instance with Ephemeral Var storage", func() {
+		It("integration, s1, smartstore: can deploy a Standalone instance with Ephemeral Var storage", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			storageConfig := enterpriseApi.StorageClassSpec{StorageClassName: "TestStorageVarEph", StorageCapacity: "1Gi", EphemeralStorage: true}
 			RunS1EphemeralStorageTest(ctx, deployment, testcaseEnvInst, storageConfig, false)
 		})

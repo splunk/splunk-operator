@@ -71,22 +71,21 @@ var _ = Describe("Monitoring Console C3 scale-up tests", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	ctx := context.TODO()
 
 	for _, cfg := range masterManagerMCConfigs {
 		cfg := cfg
 		Context("Clustered deployment C3 scale-up ("+cfg.Label+")", func() {
-			BeforeEach(func() {
+			BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 				var err error
 				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, cfg.NamePrefix)
 				Expect(err).To(Succeed(), "Failed to setup test case environment")
 			})
 
-			AfterEach(func() {
+			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(cfg.Label+", smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
+			It(cfg.Label+", smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 				RunC3MCScaleUpTest(ctx, deployment, testcaseEnvInst, cfg)
 			})
 		})
@@ -98,20 +97,19 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	ctx := context.TODO()
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
 		Expect(err).To(Succeed(), "Failed to setup test case environment")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 	})
 
 	Context("Deploy Monitoring Console", func() {
-		It("smoke, monitoringconsole: can deploy MC CR and can be configured standalone", func() {
+		It("smoke, monitoringconsole: can deploy MC CR and can be configured standalone", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			/*
 				Test Steps
 				1. Deploy Monitoring Console
@@ -175,13 +173,13 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managermc1, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
+		It("managermc1, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			RunS1StandaloneAddDeleteMCTest(ctx, deployment, testcaseEnvInst, deployment.GetName(), "standalone-"+testenv.RandomDNSName(3))
 		})
 	})
 
 	Context("Standalone deployment with Scale up", func() {
-		It("managermc1, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", func() {
+		It("managermc1, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			/*
 				Test Steps
 				1.  Deploy Standalone
@@ -239,7 +237,7 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managermc2, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", func() {
+		It("managermc2, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			RunS1StandaloneAddDeleteMCTest(ctx, deployment, testcaseEnvInst, "search-head-adhoc", "search-head")
 		})
 	})
@@ -251,23 +249,22 @@ var _ = Describe("Monitoring Console reconfig tests", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	ctx := context.TODO()
 
 	// C3 reconfig tests
 	for _, cfg := range masterManagerMCConfigs {
 		cfg := cfg
 		Context("Clustered deployment C3 reconfig ("+cfg.Label+")", func() {
-			BeforeEach(func() {
+			BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 				var err error
 				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, cfg.NamePrefix)
 				Expect(err).To(Succeed(), "Failed to setup test case environment")
 			})
 
-			AfterEach(func() {
+			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(cfg.Label+", integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
+			It(cfg.Label+", integration: MC can configure SHC, indexer instances and reconfigure to new MC", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 				RunC3MCReconfigTest(ctx, deployment, testcaseEnvInst, cfg)
 			})
 		})
@@ -277,17 +274,17 @@ var _ = Describe("Monitoring Console reconfig tests", func() {
 	for _, cfg := range masterManagerMCConfigs {
 		cfg := cfg
 		Context("Multisite Clustered deployment M4 reconfig ("+cfg.Label+")", func() {
-			BeforeEach(func() {
+			BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 				var err error
 				testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, cfg.NamePrefix)
 				Expect(err).To(Succeed(), "Failed to setup test case environment")
 			})
 
-			AfterEach(func() {
+			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(cfg.Label+", integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", func() {
+			It(cfg.Label+", integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 				RunM4MCReconfigTest(ctx, deployment, testcaseEnvInst, cfg)
 			})
 		})

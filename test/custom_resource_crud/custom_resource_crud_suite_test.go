@@ -41,7 +41,10 @@ var (
 func TestCRCRUD(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecs(t, "Running "+testSuiteName)
+	sc, _ := GinkgoConfiguration()
+	sc.Timeout = testenv.LongSuiteTimeout
+
+	RunSpecs(t, "Running "+testSuiteName, sc)
 }
 
 var _ = BeforeSuite(func() {

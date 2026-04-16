@@ -557,7 +557,7 @@ func (testenv *TestCaseEnv) VerifyIndexExistsOnS3(ctx context.Context, deploymen
 // VerifyConfOnPod Verify give conf and value on config file on pod
 func (testenv *TestCaseEnv) VerifyConfOnPod(ctx context.Context, podName string, confFilePath string, config string, value string) error {
 	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
-		confLine, err := GetConfLineFromPod(podName, confFilePath, testenv.GetName(), config, "", false)
+		confLine, err := GetConfLineFromPod(ctx, podName, confFilePath, testenv.GetName(), config, "", false)
 		if err != nil {
 			testenv.Log.Error(err, "Failed to get config on pod")
 			return fmt.Errorf("failed to get config on pod %s: %w", podName, err)
@@ -800,14 +800,14 @@ func (testenv *TestCaseEnv) VerifySplunkServerConfSecrets(ctx context.Context, d
 
 // VerifySplunkInputConfSecrets compares secret values on passed-in map to values present in input.conf for given Indexer or Standalone pods
 // Set match to true or false to indicate desired +ve or -ve match
-func (testenv *TestCaseEnv) VerifySplunkInputConfSecrets(verificationPods []string, data map[string][]byte, match bool) error {
+func (testenv *TestCaseEnv) VerifySplunkInputConfSecrets(ctx context.Context, deployment *Deployment, verificationPods []string, data map[string][]byte, match bool) error {
 	secretName := "hec_token"
 	for _, podName := range verificationPods {
 		if strings.Contains(podName, "standalone") || strings.Contains(podName, "indexer") {
 			found := false
 			testenv.Log.Info("Key Verificaton", "podName", podName, "key", secretName)
 			stanza := SecretKeytoServerConfStanza[secretName]
-			_, value, err := GetSecretFromInputsConf(podName, testenv.GetName(), "token", stanza)
+			_, value, err := GetSecretFromInputsConf(ctx, deployment, podName, testenv.GetName(), "token", stanza)
 			if err != nil {
 				return fmt.Errorf("secret %s not found in input.conf on pod %s: %w", secretName, podName, err)
 			}
@@ -1926,7 +1926,7 @@ func VerifySecretsPropagated(ctx context.Context, deployment *Deployment, testca
 	}
 
 	// Verify Hec token on InputConf on Pod
-	if err := testcaseEnvInst.VerifySplunkInputConfSecrets(verificationPods, secretData, updated); err != nil {
+	if err := testcaseEnvInst.VerifySplunkInputConfSecrets(ctx, deployment, verificationPods, secretData, updated); err != nil {
 		return err
 	}
 

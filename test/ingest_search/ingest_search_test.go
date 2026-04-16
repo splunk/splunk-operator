@@ -14,8 +14,6 @@
 package ingestsearch
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -26,24 +24,23 @@ var _ = Describe("Ingest and Search test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	ctx := context.TODO()
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
 		Expect(err).To(Succeed(), "Failed to setup test case environment")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("ingest_search, integration, s1: can search internal logs for standalone instance", func() {
+		It("ingest_search, integration, s1: can search internal logs for standalone instance", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			RunS1InternalLogSearchTest(ctx, deployment, testcaseEnvInst)
 		})
 
-		It("ingest_search, integration, s1: can ingest custom data to new index and search", func() {
+		It("ingest_search, integration, s1: can ingest custom data to new index and search", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			RunS1IngestAndSearchTest(ctx, deployment, testcaseEnvInst)
 		})
 	})

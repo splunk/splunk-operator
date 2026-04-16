@@ -864,7 +864,7 @@ func DumpGetPvcs(ns string) []string {
 }
 
 // GetConfLineFromPod gets given config from file on POD
-func GetConfLineFromPod(podName string, filePath string, ns string, configName string, stanza string, checkStanza bool) (string, error) {
+func GetConfLineFromPod(ctx context.Context, podName string, filePath string, ns string, configName string, stanza string, checkStanza bool) (string, error) {
 	var config string
 	fileContent, err := GetConfFile(podName, filePath, ns)
 	if err != nil {

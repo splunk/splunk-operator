@@ -14,8 +14,6 @@
 package deletecr
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -26,26 +24,25 @@ var _ = Describe("Delete CR test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	ctx := context.TODO()
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
 		Expect(err).To(Succeed(), "Failed to setup test case environment")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("integration, managerdeletecr: can deploy standalone and delete", func() {
+		It("integration, managerdeletecr: can deploy standalone and delete", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			Expect(testcaseEnvInst.RunDeleteStandaloneWorkflow(ctx, deployment)).To(Succeed(), "Unable to run delete Standalone workflow")
 		})
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3)", func() {
-		It("integration, managerdeletecr: can deploy C3 and delete search head, clustermanager", func() {
+		It("integration, managerdeletecr: can deploy C3 and delete search head, clustermanager", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			Expect(testcaseEnvInst.RunDeleteC3Workflow(ctx, deployment, 3)).To(Succeed(), "Unable to run delete C3 workflow")
 		})
 	})
