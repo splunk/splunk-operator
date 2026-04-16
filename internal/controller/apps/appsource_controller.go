@@ -78,15 +78,22 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// initialize conditions if needed
 	if len(appSourceInstance.Status.Conditions) == 0 {
-		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
-			Type:    appsv1alpha1.TypeAppSourceConditionPending,
-			Status:  metav1.ConditionTrue,
-			Reason:  "AppSourceInitialized",
-			Message: "AppSource resource has been initialized",
-		})
-
+		// initialize alll the conditions
+		for _, conditionType := range []string{
+			appsv1alpha1.AppSourceConditionReady,
+			appsv1alpha1.AppSourceConditionSecretValid,
+			appsv1alpha1.AppSourceConditionBackendAccessible,
+			appsv1alpha1.AppSourceConditionAppSynced,
+		} {
+			meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+				Type:    conditionType,
+				Status:  metav1.ConditionUnknown,
+				Reason:  "Initializing",
+				Message: "Waiting for first reconciliation",
+			})
+		}
 		if err := r.Status().Update(ctx, appSourceInstance); err != nil {
-			logger.Error(err, "Failed to update AppSource conditions")
+			logger.Error(err, "Failed to initialize AppSource conditions")
 			return ctrl.Result{}, err
 		}
 
@@ -115,9 +122,38 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		Namespace: appSourceInstance.Namespace,
 	}
 	if err := r.Get(ctx, secretKey, secret); err != nil {
-		logger.Error(err, "Failed to get secret")
+		logger.Error(err, "Failed to get secret", "secretName", appSourceInstance.Spec.Auth.SecretRef.Name)
+		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+			Type:               appsv1alpha1.AppSourceConditionSecretValid,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: appSourceInstance.Generation,
+			Reason:             "SecretNotFound",
+			Message:            "reference secret not dound: " + appSourceInstance.Spec.Auth.SecretRef.Name,
+		})
+		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+			Type:               appsv1alpha1.AppSourceConditionReady,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: appSourceInstance.Generation,
+			Reason:             "SecretNotFound",
+			Message:            "secret validation failed",
+		})
+		appSourceInstance.Status.ObservedGeneration = appSourceInstance.Generation
+		if err := r.Status().Update(ctx, appSourceInstance); err != nil {
+			logger.Error(err, "Failed to update AppSource status")
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, err
 	}
+
+	// secrets are valid
+	meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+		Type:               appsv1alpha1.AppSourceConditionSecretValid,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: appSourceInstance.Generation,
+		Reason:             "SecretValid",
+		Message:            "secret exists and accessible",
+	})
+
 	// TODO: check remote storage is accessible using the secret. we need to gothrough
 	// the custom client code to validate how to use or if we should just use gocloud.dev pacakge
 
@@ -136,6 +172,26 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	if accessKey == "" || secretAccessKey == "" {
 		logger.Error(nil, "AWS credentials not found in secret")
+
+		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+			Type:               appsv1alpha1.AppSourceConditionSecretValid,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: appSourceInstance.Status.ObservedGeneration,
+			Reason:             "CredentialsMissing",
+			Message:            "s3_access_key or s3_secret_key not found in secret",
+		})
+		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+			Type:               appsv1alpha1.AppSourceConditionReady,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: appSourceInstance.Generation,
+			Reason:             "CredentialsMissing",
+			Message:            "AWS credentials missing from secret",
+		})
+		appSourceInstance.Status.ObservedGeneration = appSourceInstance.Generation
+		if err := r.Status().Update(ctx, appSourceInstance); err != nil {
+			logger.Error(err, "Failed to update AppSource status")
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -155,6 +211,29 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	)
 	if err != nil {
 		logger.Error(err, "Failed to load AWS config")
+
+		// update the backend accessible bc aws / sdk issue
+		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+            Type:               appsv1alpha1.AppSourceConditionBackendAccessible,
+            Status:             metav1.ConditionFalse,
+            ObservedGeneration: appSourceInstance.Generation,
+            Reason:             "AWSConfigError",
+            Message:            "failed to load AWS config: " + err.Error(), // might need to change this later, can check if we are leaking anything
+        })
+        meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+            Type:               appsv1alpha1.AppSourceConditionReady,
+            Status:             metav1.ConditionFalse,
+            ObservedGeneration: appSourceInstance.Generation,
+            Reason:             "AWSConfigError",
+            Message:            "failed to configure AWS client",
+        })
+        appSourceInstance.Status.ObservedGeneration = appSourceInstance.Generation
+        if err := r.Status().Update(ctx, appSourceInstance); err != nil {
+            logger.Error(err, "Failed to update AppSource status")
+            return ctrl.Result{}, err
+        }
+
+
 		return ctrl.Result{}, err
 	}
 
