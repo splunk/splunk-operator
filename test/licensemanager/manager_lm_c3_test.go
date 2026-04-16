@@ -16,11 +16,6 @@ package licensemanager
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"time"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
 	. "github.com/onsi/ginkgo/v2"
 	"github.com/onsi/ginkgo/v2/types"
