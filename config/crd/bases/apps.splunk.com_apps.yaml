@@ -23,7 +23,7 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    - description: Auxillary message describing CR status
+    - description: Auxiliary message describing CR status
       jsonPath: .status.message
       name: Message
       type: string
@@ -66,10 +66,13 @@ spec:
                 - path
                 type: object
               scope:
+                enum:
+                - local
+                - cluster
                 minLength: 1
                 type: string
               sourceRef:
-                description: AppSourceSpec defines the app source details.
+                description: AppSourceRef defines the app source details.
                 properties:
                   name:
                     minLength: 1
@@ -82,6 +85,16 @@ spec:
                   bind to.
                 properties:
                   kind:
+                    enum:
+                    - ClusterManager
+                    - ClusterMaster
+                    - IndexerCluster
+                    - IngestorCluster
+                    - LicenseManager
+                    - LicenseMaster
+                    - MonitoringConsole
+                    - SearchHeadCluster
+                    - Standalone
                     minLength: 1
                     type: string
                   name:
@@ -184,7 +197,7 @@ spec:
                 description: InstalledVersion is the app version installed on target
                 type: string
               message:
-                description: Auxillary message describing CR status
+                description: Auxiliary message describing CR status
                 type: string
               observedGeneration:
                 description: ObservedGeneration tracks the latest reconciled generation

@@ -28,6 +28,7 @@ const (
 type AppTargetRef struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Enum="ClusterManager";"ClusterMaster";"IndexerCluster";"IngestorCluster";"LicenseManager";"LicenseMaster";"MonitoringConsole";"SearchHeadCluster";"Standalone"
 	Kind string `json:"kind"`
 
 	// +kubebuilder:validation:Required
@@ -42,7 +43,7 @@ type AppPackageSpec struct {
 	Path string `json:"path"`
 }
 
-// AppSourceSpec defines the app source details.
+// AppSourceRef defines the app source details.
 type AppSourceRef struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
@@ -70,6 +71,7 @@ type AppSpec struct {
 
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Enum="local";"cluster"
 	Scope string `json:"scope"`
 }
 
@@ -78,7 +80,7 @@ type AppStatus struct {
 	// Phase of the app resource
 	Phase string `json:"phase,omitempty"`
 
-	// Auxillary message describing CR status
+	// Auxiliary message describing CR status
 	Message string `json:"message,omitempty"`
 
 	// InstalledVersion is the app version installed on target
@@ -114,7 +116,7 @@ type AppArtifactStatus struct {
 // +kubebuilder:resource:path=apps,scope=Namespaced
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of app"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of app resource"
-// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
+// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxiliary message describing CR status"
 // +kubebuilder:storageversion
 type App struct {
 	metav1.TypeMeta   `json:",inline"`
