@@ -346,9 +346,6 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		rc.emitPoolerReadyTransition(postgresCluster, oldConditions)
 	}
 
-	oldConditions := make([]metav1.Condition, len(postgresCluster.Status.Conditions))
-	copy(oldConditions, postgresCluster.Status.Conditions)
-
 	// Reconcile ConfigMap when CNPG cluster is healthy.
 	if cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy {
 		logger.Info("CNPG Cluster healthy, reconciling ConfigMap")
@@ -502,11 +499,11 @@ func buildCNPGClusterSpec(cfg *MergedConfig, secretName string, postgresMetricsE
 		},
 		Resources: *cfg.Spec.Resources,
 	}
+	annotations := make(map[string]string)
 	if postgresMetricsEnabled {
-		spec.InheritedMetadata = &cnpgv1.EmbeddedObjectMetadata{
-			Annotations: buildPostgresScrapeAnnotations(),
-		}
+		annotations = buildPostgresScrapeAnnotations()
 	}
+	spec.InheritedMetadata = &cnpgv1.EmbeddedObjectMetadata{Annotations: annotations}
 	return spec
 }
 
@@ -683,20 +680,19 @@ func buildCNPGPooler(scheme *runtime.Scheme, cluster *enterprisev4.PostgresClust
 			},
 		},
 	}
+	poolerAnnotations := make(map[string]string)
 	if poolerMetricsEnabled {
-		pooler.Spec.Template = &cnpgv1.PodTemplateSpec{
-			ObjectMeta: cnpgv1.Metadata{
-				Annotations: buildPoolerScrapeAnnotations(),
-			},
-			Spec: corev1.PodSpec{
-				// CNPG's Pooler CRD requires template.spec.containers to be present.
-				// A minimal named container lets CNPG's podspec builder merge in the
-				// real PgBouncer image/command/ports while still carrying our annotations.
-				Containers: []corev1.Container{
-					{Name: "pgbouncer"},
-				},
-			},
-		}
+		poolerAnnotations = buildPoolerScrapeAnnotations()
+	}
+	// Template is always set so that annotation removal is explicit in merge patches.
+	// CNPG's Pooler CRD requires template.spec.containers to be present — a minimal
+	// named container lets CNPG's podspec builder merge in the real PgBouncer
+	// image/command/ports while still carrying our annotations.
+	pooler.Spec.Template = &cnpgv1.PodTemplateSpec{
+		ObjectMeta: cnpgv1.Metadata{Annotations: poolerAnnotations},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "pgbouncer"}},
+		},
 	}
 	if err := ctrl.SetControllerReference(cluster, pooler, scheme); err != nil {
 		return nil, fmt.Errorf("setting controller reference on CNPG pooler: %w", err)

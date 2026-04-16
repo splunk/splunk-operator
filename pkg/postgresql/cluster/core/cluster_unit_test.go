@@ -392,7 +392,8 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 	require.Len(t, spec.PostgresConfiguration.PgHBA, 2)
 	assert.Equal(t, "hostssl all all 0.0.0.0/0 scram-sha-256", spec.PostgresConfiguration.PgHBA[0])
 	assert.Equal(t, "host replication all 10.0.0.0/8 md5", spec.PostgresConfiguration.PgHBA[1])
-	assert.Nil(t, spec.InheritedMetadata)
+	require.NotNil(t, spec.InheritedMetadata)
+	assert.Empty(t, spec.InheritedMetadata.Annotations)
 
 	t.Run("adds postgres scrape annotations when enabled", func(t *testing.T) {
 		spec := buildCNPGClusterSpec(cfg, "my-secret", true)
@@ -447,7 +448,8 @@ func TestBuildCNPGPooler(t *testing.T) {
 		assert.Equal(t, "25", pooler.Spec.PgBouncer.Parameters["default_pool_size"])
 		require.Len(t, pooler.OwnerReferences, 1)
 		assert.Equal(t, "test-uid", string(pooler.OwnerReferences[0].UID))
-		assert.Nil(t, pooler.Spec.Template)
+		require.NotNil(t, pooler.Spec.Template)
+		assert.Empty(t, pooler.Spec.Template.ObjectMeta.Annotations)
 	})
 
 	t.Run("ro pooler", func(t *testing.T) {
@@ -1131,6 +1133,9 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 			PgBouncer: &cnpgv1.PgBouncerSpec{
 				PoolMode:   cnpgv1.PgBouncerPoolMode("transaction"),
 				Parameters: map[string]string{"default_pool_size": "25"},
+			},
+			Template: &cnpgv1.PodTemplateSpec{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "pgbouncer"}}},
 			},
 		}
 	}

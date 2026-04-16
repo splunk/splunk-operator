@@ -36,6 +36,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 /*
@@ -70,6 +71,8 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		ctx               context.Context
 		clusterName       string
 		className         string
+		classNameMetrics  string
+		classNamePooler   string
 		pgCluster         *enterprisev4.PostgresCluster
 		pgClusterClass    *enterprisev4.PostgresClusterClass
 		pgClusterKey      types.NamespacedName
@@ -78,35 +81,11 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		req               reconcile.Request
 	)
 
-	const (
-		scrapeAnnotationKey = "prometheus.io/scrape"
-		pathAnnotationKey   = "prometheus.io/path"
-		portAnnotationKey   = "prometheus.io/port"
-		metricsPath         = "/metrics"
-		postgresPort        = "9187"
-		poolerPort          = "9127"
-	)
-
 	reconcileNTimes := func(times int) {
-		for i := 0; i < times; i++ {
+		for range times {
 			_, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
 		}
-	}
-
-	recreateClusterClass := func(modify func(*enterprisev4.PostgresClusterClass)) {
-		Expect(k8sClient.Delete(ctx, pgClusterClass)).To(Succeed())
-		Eventually(func() bool {
-			return apierrors.IsNotFound(k8sClient.Get(ctx, pgClusterClassKey, &enterprisev4.PostgresClusterClass{}))
-		}, "10s", "250ms").Should(BeTrue())
-
-		pgClusterClass = pgClusterClass.DeepCopy()
-		pgClusterClass.ResourceVersion = ""
-		pgClusterClass.UID = ""
-		if modify != nil {
-			modify(pgClusterClass)
-		}
-		Expect(k8sClient.Create(ctx, pgClusterClass)).To(Succeed())
 	}
 
 	BeforeEach(func() {
@@ -119,6 +98,8 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		ctx = context.Background()
 		clusterName = clusterNamePrefix + nameSuffix
 		className = classNamePrefix + nameSuffix
+		classNameMetrics = classNamePrefix + "metrics-" + nameSuffix
+		classNamePooler = classNamePrefix + "pooler-" + nameSuffix
 		pgClusterKey = types.NamespacedName{Name: clusterName, Namespace: namespace}
 		pgClusterClassKey = types.NamespacedName{Name: className, Namespace: namespace}
 
@@ -127,21 +108,60 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			Spec: enterprisev4.PostgresClusterClassSpec{
 				Provisioner: provisioner,
 				Config: &enterprisev4.PostgresClusterClassConfig{
-					Instances:               &[]int32{clusterMemberCount}[0],
-					Storage:                 &[]resource.Quantity{resource.MustParse(storageAmount)}[0],
-					PostgresVersion:         &[]string{postgresVersion}[0],
-					ConnectionPoolerEnabled: &[]bool{poolerEnabled}[0],
+					Instances:               ptr.To(clusterMemberCount),
+					Storage:                 ptr.To(resource.MustParse(storageAmount)),
+					PostgresVersion:         ptr.To(postgresVersion),
+					ConnectionPoolerEnabled: ptr.To(poolerEnabled),
+				},
+			},
+		}
+
+		pgClassPostgresMetrics := &enterprisev4.PostgresClusterClass{
+			ObjectMeta: metav1.ObjectMeta{Name: classNameMetrics},
+			Spec: enterprisev4.PostgresClusterClassSpec{
+				Provisioner: provisioner,
+				Config: &enterprisev4.PostgresClusterClassConfig{
+					Instances:       ptr.To(clusterMemberCount),
+					Storage:         ptr.To(resource.MustParse(storageAmount)),
+					PostgresVersion: ptr.To(postgresVersion),
+					Monitoring: &enterprisev4.PostgresMonitoringClassConfig{
+						PostgreSQLMetrics: &enterprisev4.MetricsClassConfig{Enabled: ptr.To(true)},
+					},
+				},
+			},
+		}
+
+		pgClassPoolerMetrics := &enterprisev4.PostgresClusterClass{
+			ObjectMeta: metav1.ObjectMeta{Name: classNamePooler},
+			Spec: enterprisev4.PostgresClusterClassSpec{
+				Provisioner: provisioner,
+				Config: &enterprisev4.PostgresClusterClassConfig{
+					Instances:               ptr.To(clusterMemberCount),
+					Storage:                 ptr.To(resource.MustParse(storageAmount)),
+					PostgresVersion:         ptr.To(postgresVersion),
+					ConnectionPoolerEnabled: ptr.To(true),
+					Monitoring: &enterprisev4.PostgresMonitoringClassConfig{
+						ConnectionPoolerMetrics: &enterprisev4.MetricsClassConfig{Enabled: ptr.To(true)},
+					},
+				},
+				CNPG: &enterprisev4.CNPGConfig{
+					ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{
+						Instances: ptr.To(int32(2)),
+						Mode:      ptr.To(enterprisev4.ConnectionPoolerModeTransaction),
+					},
 				},
 			},
 		}
 
 		Expect(k8sClient.Create(ctx, pgClusterClass)).To(Succeed())
+		Expect(k8sClient.Create(ctx, pgClassPostgresMetrics)).To(Succeed())
+		Expect(k8sClient.Create(ctx, pgClassPoolerMetrics)).To(Succeed())
 
 		pgCluster = &enterprisev4.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: namespace},
 			Spec: enterprisev4.PostgresClusterSpec{
 				Class:                 className,
-				ClusterDeletionPolicy: &[]string{deletePolicy}[0],
+				ClusterDeletionPolicy: ptr.To(deletePolicy),
 			},
 		}
 
@@ -196,12 +216,19 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			return apierrors.IsNotFound(getErr)
 		}, "10s", "500ms").Should(BeTrue())
 
-		By("Cleaning up PostgresClusterClass fixture")
-		err = k8sClient.Get(ctx, pgClusterClassKey, pgClusterClass)
-		if err == nil {
-			Expect(k8sClient.Delete(ctx, pgClusterClass)).To(Succeed())
-		} else {
-			Expect(apierrors.IsNotFound(err)).To(BeTrue())
+		By("Cleaning up PostgresClusterClass fixtures")
+		for _, key := range []types.NamespacedName{
+			pgClusterClassKey,
+			{Name: classNameMetrics},
+			{Name: classNamePooler},
+		} {
+			existing := &enterprisev4.PostgresClusterClass{}
+			err = k8sClient.Get(ctx, key, existing)
+			if err == nil {
+				Expect(k8sClient.Delete(ctx, existing)).To(Succeed())
+			} else {
+				Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}
 		}
 	})
 
@@ -265,13 +292,25 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(cond.ObservedGeneration).To(Equal(pc.Generation))
 			})
 
-			It("adds PostgreSQL scrape annotations to the CNPG Cluster when monitoring is enabled", func() {
-				recreateClusterClass(func(class *enterprisev4.PostgresClusterClass) {
-					class.Spec.Config.Monitoring = &enterprisev4.PostgresMonitoringClassConfig{
-						PostgreSQLMetrics: &enterprisev4.MetricsClassConfig{Enabled: &[]bool{true}[0]},
-					}
-				})
+		})
+	})
 
+	When("monitoring is configured", func() {
+		const (
+			scrapeAnnotationKey = "prometheus.io/scrape"
+			pathAnnotationKey   = "prometheus.io/path"
+			portAnnotationKey   = "prometheus.io/port"
+			metricsPath         = "/metrics"
+			postgresPort        = "9187"
+			poolerPort          = "9127"
+		)
+
+		Context("with PostgreSQL metrics enabled in class", func() {
+			BeforeEach(func() {
+				pgCluster.Spec.Class = classNameMetrics
+			})
+
+			It("adds scrape annotations to the CNPG Cluster", func() {
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 
@@ -283,13 +322,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(cnpg.Spec.InheritedMetadata.Annotations).To(HaveKeyWithValue(portAnnotationKey, postgresPort))
 			})
 
-			It("removes PostgreSQL scrape annotations when disabled by cluster override", func() {
-				recreateClusterClass(func(class *enterprisev4.PostgresClusterClass) {
-					class.Spec.Config.Monitoring = &enterprisev4.PostgresMonitoringClassConfig{
-						PostgreSQLMetrics: &enterprisev4.MetricsClassConfig{Enabled: &[]bool{true}[0]},
-					}
-				})
-
+			It("removes scrape annotations when disabled by cluster override", func() {
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 
@@ -301,37 +334,28 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				current := &enterprisev4.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
 				current.Spec.Monitoring = &enterprisev4.PostgresClusterMonitoring{
-					PostgreSQLMetrics: &enterprisev4.FeatureDisableOverride{Disabled: &[]bool{true}[0]},
+					PostgreSQLMetrics: ptr.To(false),
 				}
 				Expect(k8sClient.Update(ctx, current)).To(Succeed())
-
 				reconcileNTimes(1)
 
 				Eventually(func(g Gomega) {
 					updated := &cnpgv1.Cluster{}
 					g.Expect(k8sClient.Get(ctx, pgClusterKey, updated)).To(Succeed())
-					if updated.Spec.InheritedMetadata != nil {
-						g.Expect(updated.Spec.InheritedMetadata.Annotations).NotTo(HaveKey(scrapeAnnotationKey))
-						g.Expect(updated.Spec.InheritedMetadata.Annotations).NotTo(HaveKey(pathAnnotationKey))
-						g.Expect(updated.Spec.InheritedMetadata.Annotations).NotTo(HaveKey(portAnnotationKey))
-					}
+					g.Expect(updated.Spec.InheritedMetadata).NotTo(BeNil())
+					g.Expect(updated.Spec.InheritedMetadata.Annotations).NotTo(HaveKey(scrapeAnnotationKey))
+					g.Expect(updated.Spec.InheritedMetadata.Annotations).NotTo(HaveKey(pathAnnotationKey))
+					g.Expect(updated.Spec.InheritedMetadata.Annotations).NotTo(HaveKey(portAnnotationKey))
 				}, "20s", "250ms").Should(Succeed())
 			})
+		})
 
-			It("creates poolers with scrape annotations only after the CNPG cluster becomes healthy", func() {
-				recreateClusterClass(func(class *enterprisev4.PostgresClusterClass) {
-					class.Spec.Config.ConnectionPoolerEnabled = &[]bool{true}[0]
-					class.Spec.Config.Monitoring = &enterprisev4.PostgresMonitoringClassConfig{
-						ConnectionPoolerMetrics: &enterprisev4.MetricsClassConfig{Enabled: &[]bool{true}[0]},
-					}
-					class.Spec.CNPG = &enterprisev4.CNPGConfig{
-						ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{
-							Instances: &[]int32{2}[0],
-							Mode:      &[]enterprisev4.ConnectionPoolerMode{enterprisev4.ConnectionPoolerModeTransaction}[0],
-						},
-					}
-				})
+		Context("with connection pooler metrics enabled in class", func() {
+			BeforeEach(func() {
+				pgCluster.Spec.Class = classNamePooler
+			})
 
+			It("adds scrape annotations to poolers only after the CNPG cluster becomes healthy", func() {
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 

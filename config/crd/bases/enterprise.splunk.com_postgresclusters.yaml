@@ -131,21 +131,15 @@ spec:
                   features.
                 properties:
                   connectionPoolerMetrics:
-                    properties:
-                      disabled:
-                        default: false
-                        description: Disabled set to true will disable the feature
-                          even if it's enabled in the class.
-                        type: boolean
-                    type: object
+                    description: |-
+                      ConnectionPoolerMetrics overrides whether connection pooler metrics scraping is enabled.
+                      When unset, the class-level setting applies.
+                    type: boolean
                   postgresqlMetrics:
-                    properties:
-                      disabled:
-                        default: false
-                        description: Disabled set to true will disable the feature
-                          even if it's enabled in the class.
-                        type: boolean
-                    type: object
+                    description: |-
+                      PostgreSQLMetrics overrides whether PostgreSQL metrics scraping is enabled.
+                      When unset, the class-level setting applies.
+                    type: boolean
                 type: object
               pgHBA:
                 default: []

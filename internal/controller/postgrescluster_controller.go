@@ -62,13 +62,7 @@ type PostgresClusterReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	metrics := r.Metrics
-	if metrics == nil {
-		// Tests and minimal reconciler wiring may omit a metrics adapter.
-		// Fall back to a no-op recorder so status updates can proceed safely.
-		metrics = &pgprometheus.NoopRecorder{}
-	}
-	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: metrics}
+	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics}
 	result, err := clustercore.PostgresClusterService(ctx, rc, req)
 	r.FleetCollector.CollectClusterMetrics(ctx, r.Client, r.Metrics)
 	if sharedreconcile.IsPureConflict(err) {

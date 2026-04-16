@@ -78,6 +78,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 			filepath.Join("..", "..", "config", "crd", "bases"),
 			filepath.Join(cnpgModuleDir, "config", "crd", "bases"),
 		},
+		ErrorIfCRDPathMissing: true,
 	}
 
 	var err error

@@ -39,7 +39,7 @@ func TestIsPostgreSQLMetricsEnabled(t *testing.T) {
 			cluster: &enterprisev4.PostgresCluster{
 				Spec: enterprisev4.PostgresClusterSpec{
 					Monitoring: &enterprisev4.PostgresClusterMonitoring{
-						PostgreSQLMetrics: &enterprisev4.FeatureDisableOverride{Disabled: ptr.To(true)},
+						PostgreSQLMetrics: ptr.To(false),
 					},
 				},
 			},
@@ -51,11 +51,11 @@ func TestIsPostgreSQLMetricsEnabled(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "disabled when class disables even if cluster has override struct",
+			name: "enabled when cluster overrides class that has it disabled",
 			cluster: &enterprisev4.PostgresCluster{
 				Spec: enterprisev4.PostgresClusterSpec{
 					Monitoring: &enterprisev4.PostgresClusterMonitoring{
-						PostgreSQLMetrics: &enterprisev4.FeatureDisableOverride{Disabled: ptr.To(false)},
+						PostgreSQLMetrics: ptr.To(true),
 					},
 				},
 			},
@@ -64,7 +64,7 @@ func TestIsPostgreSQLMetricsEnabled(t *testing.T) {
 				nil,
 				nil,
 			),
-			want: false,
+			want: true,
 		},
 	}
 
@@ -165,7 +165,7 @@ func TestIsConnectionPoolerMetricsEnabled(t *testing.T) {
 			cluster: &enterprisev4.PostgresCluster{
 				Spec: enterprisev4.PostgresClusterSpec{
 					Monitoring: &enterprisev4.PostgresClusterMonitoring{
-						ConnectionPoolerMetrics: &enterprisev4.FeatureDisableOverride{Disabled: ptr.To(true)},
+						ConnectionPoolerMetrics: ptr.To(false),
 					},
 				},
 			},
