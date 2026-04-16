@@ -214,25 +214,24 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		// update the backend accessible bc aws / sdk issue
 		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
-            Type:               appsv1alpha1.AppSourceConditionBackendAccessible,
-            Status:             metav1.ConditionFalse,
-            ObservedGeneration: appSourceInstance.Generation,
-            Reason:             "AWSConfigError",
-            Message:            "failed to load AWS config: " + err.Error(), // might need to change this later, can check if we are leaking anything
-        })
-        meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
-            Type:               appsv1alpha1.AppSourceConditionReady,
-            Status:             metav1.ConditionFalse,
-            ObservedGeneration: appSourceInstance.Generation,
-            Reason:             "AWSConfigError",
-            Message:            "failed to configure AWS client",
-        })
-        appSourceInstance.Status.ObservedGeneration = appSourceInstance.Generation
-        if err := r.Status().Update(ctx, appSourceInstance); err != nil {
-            logger.Error(err, "Failed to update AppSource status")
-            return ctrl.Result{}, err
-        }
-
+			Type:               appsv1alpha1.AppSourceConditionBackendAccessible,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: appSourceInstance.Generation,
+			Reason:             "AWSConfigError",
+			Message:            "failed to load AWS config: " + err.Error(), // might need to change this later, can check if we are leaking anything
+		})
+		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+			Type:               appsv1alpha1.AppSourceConditionReady,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: appSourceInstance.Generation,
+			Reason:             "AWSConfigError",
+			Message:            "failed to configure AWS client",
+		})
+		appSourceInstance.Status.ObservedGeneration = appSourceInstance.Generation
+		if err := r.Status().Update(ctx, appSourceInstance); err != nil {
+			logger.Error(err, "Failed to update AppSource status")
+			return ctrl.Result{}, err
+		}
 
 		return ctrl.Result{}, err
 	}
@@ -241,9 +240,39 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	bkt, err := s3blob.OpenBucket(ctx, awsClient, bucket, nil)
 	if err != nil {
 		logger.Error(err, "Failed to open bucket")
+
+		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+			Type:               appsv1alpha1.AppSourceConditionBackendAccessible,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: appSourceInstance.Generation,
+			Reason:             "BucketOpenFailed",
+			Message:            "failed to open bucket: " + err.Error(),
+		})
+		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+			Type:               appsv1alpha1.AppSourceConditionReady,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: appSourceInstance.Generation,
+			Reason:             "BucketOpenFailed",
+			Message:            "cannot access S3 bucket",
+		})
+		appSourceInstance.Status.ObservedGeneration = appSourceInstance.Generation
+		if err := r.Status().Update(ctx, appSourceInstance); err != nil {
+			logger.Error(err, "Failed to update AppSource status")
+			return ctrl.Result{}, err
+		}
+
 		return ctrl.Result{}, err
 	}
 	defer bkt.Close()
+
+	// set backend accessible to true
+	meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+		Type:               appsv1alpha1.AppSourceConditionBackendAccessible,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: appSourceInstance.Generation,
+		Reason:             "BackendReachable",
+		Message:            "S3 bucket is accessible",
+	})
 
 	// list the apps in the bucker
 	// create a list iterator
@@ -262,6 +291,28 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		if err != nil {
 			logger.Error(err, "Failed to list objects")
+
+			meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+				Type:               appsv1alpha1.AppSourceConditionAppSynced,
+				Status:             metav1.ConditionFalse,
+				ObservedGeneration: appSourceInstance.Generation,
+				Reason:             "ListFailed",
+				Message:            "failed to list objects: " + err.Error(),
+			})
+
+			meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+				Type:               appsv1alpha1.AppSourceConditionReady,
+				Status:             metav1.ConditionFalse,
+				ObservedGeneration: appSourceInstance.Generation,
+				Reason:             "ListFailed",
+				Message:            "failed to list apps from backend",
+			})
+			appSourceInstance.Status.ObservedGeneration = appSourceInstance.Generation
+			if err := r.Status().Update(ctx, appSourceInstance); err != nil {
+				logger.Error(err, "Failed to update AppSource status")
+				return ctrl.Result{}, err
+			}
+
 			return ctrl.Result{}, err
 		}
 		// check if the object is .tgz, .spl, or .tar.gz
@@ -281,12 +332,34 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		logger.Info("App metadata", "app", discoveredApps[len(discoveredApps)-1].Name, "path", discoveredApps[len(discoveredApps)-1].Path, "size", discoveredApps[len(discoveredApps)-1].Size, "modified", discoveredApps[len(discoveredApps)-1].LastModified, "checksum", discoveredApps[len(discoveredApps)-1].Checksum)
 	}
 
+	meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+        Type:               appsv1alpha1.AppSourceConditionAppSynced,
+        Status:             metav1.ConditionTrue,
+        ObservedGeneration: appSourceInstance.Generation,
+        Reason:             "AppsSynced",
+        Message:            fmt.Sprintf("discovered %d apps", len(discoveredApps)),
+    })
+
+	// everything works update the status
 	// update the AppSource status with the discovered apps
 	appSourceInstance.Status.DiscoveredApps = discoveredApps
+	now := metav1.Now()
+	appSourceInstance.Status.LastPolledTime = &now
+	appSourceInstance.Status.ObservedGeneration = appSourceInstance.Generation
+
+	meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+        Type:               appsv1alpha1.AppSourceConditionReady,
+        Status:             metav1.ConditionTrue,
+        ObservedGeneration: appSourceInstance.Generation,
+        Reason:             "Available",
+        Message:            fmt.Sprintf("all checks passed, %d apps discovered", len(discoveredApps)),
+    })
+
 	if err := r.Status().Update(ctx, appSourceInstance); err != nil {
 		logger.Error(err, "Failed to update AppSource status")
 		return ctrl.Result{}, err
 	}
+
 
 	logger.Info("AppSource reconciled successfully", "discoveredApps", len(discoveredApps))
 
