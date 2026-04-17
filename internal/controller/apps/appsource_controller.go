@@ -176,7 +176,7 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
 			Type:               appsv1alpha1.AppSourceConditionSecretValid,
 			Status:             metav1.ConditionFalse,
-			ObservedGeneration: appSourceInstance.Status.ObservedGeneration,
+			ObservedGeneration: appSourceInstance.Generation,
 			Reason:             "CredentialsMissing",
 			Message:            "s3_access_key or s3_secret_key not found in secret",
 		})
