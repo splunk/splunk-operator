@@ -20,6 +20,7 @@ bases:
 - ../manager
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
 # crd/kustomization.yaml
+# - ../webhook
 - ../app-webhook
 # [CERTMANAGER] Required for apps webhook
 - ../certmanager
