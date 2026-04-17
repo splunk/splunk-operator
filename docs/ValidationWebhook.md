@@ -85,23 +85,25 @@ If you prefer not to use cert-manager, you can provide your own TLS certificates
 
 #### Option 1: Use the Webhook-Enabled Kustomize Overlay
 
-Deploy using the `config/default-with-webhook` overlay which includes all necessary webhook components:
+Deploy using the `config/default-with-webhook` overlay which includes all necessary webhook components and enables the `ValidationWebhook` feature gate automatically:
 
 ```bash
-# Build and apply the webhook-enabled configuration
-kustomize build config/default-with-webhook | kubectl apply -f -
+make deploy IMG=<your-image> ENVIRONMENT=default-with-webhook \
+  SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com"
 ```
 
-#### Option 2: Enable Webhook on Existing Deployment
+This uses the same `make deploy` target as the standard deployment, which substitutes the `WATCH_NAMESPACE`, `SPLUNK_ENTERPRISE_IMAGE`, and `SPLUNK_GENERAL_TERMS` placeholder values before running `kustomize build`.
 
-If you already have the operator deployed, you can enable the webhook by setting the `ENABLE_VALIDATION_WEBHOOK` environment variable:
+#### Option 2: Enable via Feature Gate on Existing Deployment
+
+If you already have the operator deployed with the webhook Kubernetes resources (Service, ValidatingWebhookConfiguration, TLS certificates), enable the feature gate by patching the container args:
 
 ```bash
-kubectl set env deployment/splunk-operator-controller-manager \
-  ENABLE_VALIDATION_WEBHOOK=true -n splunk-operator
+kubectl patch deployment splunk-operator-controller-manager -n splunk-operator \
+  --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--feature-gates=ValidationWebhook=true"}]'
 ```
 
-**Note:** This option also requires the webhook service, ValidatingWebhookConfiguration, and TLS certificates to be deployed. Use Option 1 for a complete deployment.
+**Note:** This requires the webhook service, ValidatingWebhookConfiguration, and TLS certificates to already be deployed. Use Option 1 for a complete deployment.
 
 #### Option 3: Modify Default Kustomization
 
@@ -118,6 +120,14 @@ Then deploy:
 ```bash
 make deploy IMG=<your-image> SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com"
 ```
+
+### Legacy: ENABLE_VALIDATION_WEBHOOK Environment Variable
+
+> **Deprecated:** The `ENABLE_VALIDATION_WEBHOOK` environment variable is deprecated and will be removed in a future release. Use the `--feature-gates=ValidationWebhook=true` flag instead.
+
+For backwards compatibility, setting `ENABLE_VALIDATION_WEBHOOK=true` as an environment variable on the operator container will still enable the validation webhook. The operator logs a deprecation warning when this method is used.
+
+When both the `--feature-gates=ValidationWebhook=...` CLI flag and the `ENABLE_VALIDATION_WEBHOOK` env var are set, the **CLI flag takes precedence**. The env var is applied at startup before flag parsing, so the CLI value overwrites it.
 
 ## Validated Fields
 
@@ -290,7 +300,7 @@ kubectl get validatingwebhookconfiguration splunk-operator-validating-webhook-co
 
 ```bash
 kubectl logs -n splunk-operator deployment/splunk-operator-controller-manager | grep -i webhook
-# Look for: "Validation webhook enabled via ENABLE_VALIDATION_WEBHOOK=true"
+# Look for: "Validation webhook enabled"
 # Look for: "Starting webhook server" {"port": 9443}
 ```
 
@@ -362,7 +372,7 @@ kubectl logs -n splunk-operator deployment/splunk-operator-controller-manager | 
 
 If you see "Validation webhook disabled" in the logs, ensure:
 
-1. The `ENABLE_VALIDATION_WEBHOOK` environment variable is set to `true`
+1. The `--feature-gates=ValidationWebhook=true` flag is set on the operator container args (or the legacy `ENABLE_VALIDATION_WEBHOOK=true` env var is set)
 2. You're using the correct kustomize overlay (`config/default-with-webhook`)
 
 ## Architecture
@@ -457,7 +467,7 @@ var <CRD>GVR = schema.GroupVersionResource{
 // Add to DefaultValidators map
 var DefaultValidators = map[schema.GroupVersionResource]Validator{
     // ... existing validators ...
-    
+
     <CRD>GVR: &GenericValidator[*enterpriseApi.<CRD>]{
         ValidateCreateFunc:            Validate<CRD>Create,
         ValidateUpdateFunc:            Validate<CRD>Update,
@@ -503,12 +513,7 @@ If your CRD doesn't need context-aware validation, you can omit `ValidateCreateW
 
 ## Disabling the Webhook
 
-To disable the webhook after it has been enabled:
-
-```bash
-kubectl set env deployment/splunk-operator-controller-manager \
-  ENABLE_VALIDATION_WEBHOOK=false -n splunk-operator
-```
+To disable the webhook after it has been enabled, remove the `--feature-gates=ValidationWebhook=true` flag from the container args (or remove the `ENABLE_VALIDATION_WEBHOOK` env var if using the legacy method).
 
 Or redeploy using the default kustomization (without webhook):
 
