@@ -175,6 +175,7 @@ docker-push: ## Push docker image with the manager.
 PLATFORMS ?= linux/amd64,linux/arm64
 BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal
 BASE_IMAGE_VERSION ?= 8.10-1775152441
+BUILDER_IMAGE ?=
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
@@ -187,10 +188,16 @@ docker-buildx:
             DOCKERFILE="Dockerfile.distroless"; \
         else \
             DOCKERFILE="Dockerfile"; \
+            if [ -n "${BUILDER_IMAGE}" ]; then \
+                BUILDER_IMAGE_ARG="--build-arg BUILDER_IMAGE=${BUILDER_IMAGE}"; \
+            else \
+                BUILDER_IMAGE_ARG=""; \
+            fi; \
         fi; \
         docker buildx build --push --platform="${PLATFORMS}" \
             --build-arg BASE_IMAGE="${BASE_IMAGE}" \
             --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
+            $$BUILDER_IMAGE_ARG \
             --tag "${IMG}" -f "$$DOCKERFILE" .
 
 
