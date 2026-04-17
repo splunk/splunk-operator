@@ -5,15 +5,11 @@ build-stage-image:
     - kubectl-splunk-tests
   variables:
     WORKFLOW_SLUG: build-test-push-workflow
-    BUILDER_IMAGE: golang:1.25.8
   script:
     - gitlab-ci/build-test-push.sh
   artifacts:
     paths:
       - ci-output/build-test-push-workflow-*
-      - ci-output/build-test-push-workflow-image-ref.txt
-      - ci-output/build-test-push-workflow-digest.txt
-      - ci-output/build-test-push-workflow-runtime-context.txt
 
 scan-stage-image-trivy:
   extends: .runtime-image-scan-job
@@ -27,9 +23,6 @@ scan-stage-image-trivy:
   artifacts:
     paths:
       - ci-output/scan-stage-image-trivy-*
-      - ci-output/scan-stage-image-trivy-trivy-results.sarif
-      - ci-output/scan-stage-image-trivy-trivy-results.txt
-      - ci-output/scan-stage-image-trivy-runtime-context.txt
 
 eks-smoke-validation:
   extends: .runtime-integration-job
@@ -42,7 +35,8 @@ eks-smoke-validation:
   variables:
     WORKFLOW_SLUG: int-test-workflow
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
-    JOB_INT_TEST_PROFILE: managersecret-smoke-s1
+    JOB_INT_TEST_PROFILE: smoke
+    STAGING_INT_TEST_FOCUS: "smoke, basic, s1"
     JOB_INT_TEST_TIMEOUT: 3h
   script:
     - gitlab-ci/int-test-workflow.sh

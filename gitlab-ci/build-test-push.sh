@@ -43,7 +43,9 @@ export AWS_REGION="${ECR_REGION}"
 export IMAGE_TAG="${CI_COMMIT_SHA}"
 export IMAGE_REF="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 export REPOSITORY_NAME="${IMAGE_REPOSITORY#${ECR_REGISTRY}/}"
-export BUILDER_IMAGE="${BUILDER_IMAGE:-golang:1.25.8}"
+dockerfile_default_builder_image="$(awk -F= '/^ARG BUILDER_IMAGE=/{print $2; exit}' "${CI_PROJECT_DIR}/Dockerfile")"
+export BUILDER_IMAGE="${BUILDER_IMAGE:-${dockerfile_default_builder_image:-golang:1.25.8}}"
+export BUILD_PLATFORMS="${STAGING_BUILD_PLATFORMS:-${JOB_BUILD_PLATFORMS:-linux/amd64}}"
 
 append_context "${context_file}" "ecr_registry_present" "true"
 append_context "${context_file}" "image_repository_mode" "${RESOLVED_IMAGE_REPOSITORY_MODE}"
@@ -51,6 +53,7 @@ append_context "${context_file}" "ecr_region_source" "${RESOLVED_ECR_REGION_SOUR
 append_context "${context_file}" "aws_auth_mode" "${aws_auth_mode}"
 append_context "${context_file}" "image_tag" "${IMAGE_TAG}"
 append_context "${context_file}" "builder_image" "${BUILDER_IMAGE}"
+append_context "${context_file}" "build_platforms" "${BUILD_PLATFORMS}"
 
 printf '%s\n' "${IMAGE_REF}" > "ci-output/${WORKFLOW_SLUG}-image-ref.txt"
 
@@ -60,13 +63,12 @@ if [ "${aws_auth_mode}" = "oidc" ]; then
   aws_prepare_oidc_env "${aws_oidc_token_file}"
 fi
 aws ecr get-login-password --region "${ECR_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
-DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" \
-  -f "${CI_PROJECT_DIR}/Dockerfile" \
-  -t "${IMAGE_REF}" \
-  --build-arg BUILDER_IMAGE="${BUILDER_IMAGE}" \
-  --build-arg BASE_IMAGE="${BASE_IMAGE}" \
-  --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}"
-docker push "${IMAGE_REF}"
+make docker-buildx \
+  IMG="${IMAGE_REF}" \
+  PLATFORMS="${BUILD_PLATFORMS}" \
+  BASE_IMAGE="${BASE_IMAGE}" \
+  BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
+  BUILDER_IMAGE="${BUILDER_IMAGE}"
 aws ecr describe-images \
   --region "${ECR_REGION}" \
   --repository-name "${REPOSITORY_NAME}" \

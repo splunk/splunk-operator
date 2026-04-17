@@ -13,7 +13,6 @@ unit-tests:
     GOFLAGS: ""
   script:
     - make setup/ginkgo
-    - go mod tidy
     - make test
     - go tool cover -func=coverage.out | tee coverage-summary.txt
   artifacts:

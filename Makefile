@@ -136,7 +136,7 @@ vet: setup/ginkgo	 ## Run go vet against code.
 	go vet ./...
 
 test: manifests generate fmt vet setup-envtest ## Run tests.
-	REPORT_FILE="unit_test-$$(date +%Y%m%d-%H%M%S)$${GITHUB_RUN_ID:+-$$GITHUB_RUN_ID}.xml"; \
+	REPORT_FILE="$${UNIT_TEST_REPORT_FILE:-unit_test.xml}"; \
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=$$REPORT_FILE --output-dir=`pwd` -vv --trace --keep-going --timeout=$${TEST_TIMEOUT:-170m} --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/client ./pkg/splunk/util ./internal/controller ./pkg/splunk/splkcontroller
 
 
@@ -174,6 +174,7 @@ docker-push: ## Push docker image with the manager.
 PLATFORMS ?= linux/amd64,linux/arm64
 BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal
 BASE_IMAGE_VERSION ?= 8.10-1775152441
+BUILDER_IMAGE ?=
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
@@ -186,10 +187,16 @@ docker-buildx:
             DOCKERFILE="Dockerfile.distroless"; \
         else \
             DOCKERFILE="Dockerfile"; \
+            if [ -n "${BUILDER_IMAGE}" ]; then \
+                BUILDER_IMAGE_ARG="--build-arg BUILDER_IMAGE=${BUILDER_IMAGE}"; \
+            else \
+                BUILDER_IMAGE_ARG=""; \
+            fi; \
         fi; \
         docker buildx build --push --platform="${PLATFORMS}" \
             --build-arg BASE_IMAGE="${BASE_IMAGE}" \
             --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
+            $$BUILDER_IMAGE_ARG \
             --tag "${IMG}" -f "$$DOCKERFILE" .
 
 
@@ -459,10 +466,7 @@ cleanup:
 .PHONY: setup/ginkgo
 setup/ginkgo:
 	@echo Installing ginkgo
-	@go get github.com/onsi/ginkgo/v2
 	@go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@$(shell go list -m -f '{{.Version}}' github.com/onsi/ginkgo/v2)
-	@echo Installing gomega
-	@go get github.com/onsi/gomega/...
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize

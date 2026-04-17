@@ -20,7 +20,6 @@ default:
     - |
       set -eu
       export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
-      rm -rf .cache/go
       go version
 
 .go-verify-job:
@@ -32,7 +31,7 @@ default:
 .runtime-artifact-job:
   artifacts:
     when: always
-    expire_in: 30 days
+    expire_in: 90 days
 
 .runtime-build-job:
   extends: .runtime-artifact-job
@@ -50,6 +49,5 @@ default:
 .python-venv-job:
   before_script:
     - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
-    - rm -rf .cache/go
     - ensure_python_venv_tooling
     - python3 --version
