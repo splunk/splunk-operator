@@ -108,7 +108,7 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		WithEventFilter(predicate.Funcs{GenericFunc: func(event.GenericEvent) bool { return false }}).
 		For(&enterprisev4.PostgresDatabase{}, builder.WithPredicates(postgresDatabasePredicator())).
-		Owns(&cnpgv1.Database{}, builder.WithPredicates(postgresDatabaseCNPGDatabasePredicator())).
+		Owns(&cnpgv1.Database{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&corev1.Secret{}, builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
 		Owns(&corev1.ConfigMap{}, builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
 		Named("postgresdatabase").
@@ -127,23 +127,6 @@ func postgresDatabasePredicator() predicate.Predicate {
 					return true
 				}
 				return !equality.Semantic.DeepEqual(e.ObjectOld.GetFinalizers(), e.ObjectNew.GetFinalizers())
-			},
-		},
-	)
-}
-
-func postgresDatabaseCNPGDatabasePredicator() predicate.Predicate {
-	return predicate.Or(
-		predicate.GenerationChangedPredicate{},
-		predicate.Funcs{
-			UpdateFunc: func(e event.UpdateEvent) bool {
-				oldObj, okOld := e.ObjectOld.(*cnpgv1.Database)
-				newObj, okNew := e.ObjectNew.(*cnpgv1.Database)
-				if !okOld || !okNew {
-					return true
-				}
-				return !equality.Semantic.DeepEqual(oldObj.Status.Applied, newObj.Status.Applied) ||
-					ownerReferencesChanged(oldObj, newObj)
 			},
 		},
 	)

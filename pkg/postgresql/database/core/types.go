@@ -96,7 +96,6 @@ const (
 	conflictFinalizer              reconcileConflictCategory = "finalizer"
 	conflictClusterStatus          reconcileConflictCategory = "cluster_status"
 	conflictRoleConflictStatus     reconcileConflictCategory = "role_conflict_status"
-	conflictCNPGClusterFetch       reconcileConflictCategory = "cnpg_cluster_fetch"
 	conflictSecretsReconcile       reconcileConflictCategory = "secrets_reconcile"
 	conflictSecretsStatus          reconcileConflictCategory = "secrets_status"
 	conflictConfigMapsReconcile    reconcileConflictCategory = "configmaps_reconcile"

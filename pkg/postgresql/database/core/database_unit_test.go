@@ -238,7 +238,7 @@ func TestPostgresDatabaseServiceRequeuesOnConflict(t *testing.T) {
 
 			result, err := PostgresDatabaseService(
 				context.Background(),
-				&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)},
+				&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}},
 				postgresDB,
 				nil,
 			)
@@ -296,22 +296,6 @@ func TestGetDesiredRoles(t *testing.T) {
 	}
 
 	got := getDesiredRoles(postgresDB)
-
-	assert.Equal(t, want, got)
-}
-
-func TestGetRolesInClusterSpec(t *testing.T) {
-	cluster := &enterprisev4.PostgresCluster{
-		Spec: enterprisev4.PostgresClusterSpec{
-			ManagedRoles: []enterprisev4.ManagedRole{
-				{Name: "main_db_admin"},
-				{Name: "main_db_rw"},
-			},
-		},
-	}
-	want := []string{"main_db_admin", "main_db_rw"}
-
-	got := getRolesInClusterSpec(cluster)
 
 	assert.Equal(t, want, got)
 }
@@ -1278,6 +1262,41 @@ func TestEnsureSecret(t *testing.T) {
 		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
 		assert.Equal(t, wantUsername, string(got.Data["username"]))
 		assert.Equal(t, "existing-password", string(got.Data[secretKeyPassword]))
+	})
+
+	t.Run("returns drift error when secret is owned by a different controller", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		otherOwnerUID := types.UID("other-owner-uid")
+		existing := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: postgresDB.Namespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         "v1",
+						Kind:               "SomeOtherController",
+						Name:               "other-controller",
+						UID:                otherOwnerUID,
+						Controller:         boolPtr(true),
+						BlockOwnerDeletion: boolPtr(true),
+					},
+				},
+			},
+			Data: map[string][]byte{
+				"username":        []byte(roleName),
+				secretKeyPassword: []byte("existing-password"),
+			},
+		}
+		c := testClient(t, scheme, existing)
+
+		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+
+		require.Error(t, err)
+		var driftErr *secretReconcileError
+		require.ErrorAs(t, err, &driftErr)
+		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+		assert.ErrorContains(t, err, secretName)
 	})
 }
 

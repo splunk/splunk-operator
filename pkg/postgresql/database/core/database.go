@@ -178,9 +178,6 @@ func PostgresDatabaseService(
 		Name:      cluster.Status.ProvisionerRef.Name,
 		Namespace: cluster.Status.ProvisionerRef.Namespace,
 	}, cnpgCluster); err != nil {
-		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictCNPGClusterFetch, "fetching CNPG cluster"); ok {
-			return result, conflictErr
-		}
 		logger.Error(err, "Failed to fetch CNPG Cluster", "cluster", cluster.Status.ProvisionerRef.Name)
 		return ctrl.Result{}, err
 	}
@@ -485,14 +482,6 @@ func existingDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase) map[strin
 	return existing
 }
 
-func getRolesInClusterSpec(cluster *enterprisev4.PostgresCluster) []string {
-	users := make([]string, 0, len(cluster.Spec.ManagedRoles))
-	for _, role := range cluster.Spec.ManagedRoles {
-		users = append(users, role.Name)
-	}
-	return users
-}
-
 // rolesMatchClusterSpec returns true if desired and actual contain the same roles
 // (by name and Exists state), regardless of order.
 
@@ -624,9 +613,7 @@ func verifyDatabasesReady(ctx context.Context, c client.Client, postgresDB *ente
 
 func persistStatus(ctx context.Context, c client.Client, metrics ports.Recorder, db *enterprisev4.PostgresDatabase, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) error {
 	applyStatus(db, conditionType, conditionStatus, reason, message, phase)
-	if metrics != nil {
-		metrics.IncStatusTransition(ports.ControllerDatabase, string(conditionType), string(conditionStatus), string(reason))
-	}
+	metrics.IncStatusTransition(ports.ControllerDatabase, string(conditionType), string(conditionStatus), string(reason))
 	return c.Status().Update(ctx, db)
 }
 
@@ -1025,6 +1012,8 @@ func ensureProvisionedSecret(ctx context.Context, c client.Client, scheme *runti
 	return reconcileExistingSecret(ctx, c, scheme, postgresDB, secretName, secret)
 }
 
+// reconcileExistingSecret only reconciles ownership — it never rewrites secret data.
+// Passwords must not be regenerated for existing credentials; CNPG and consumers hold live references.
 func reconcileExistingSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, secretName string, secret *corev1.Secret) error {
 	logger := log.FromContext(ctx)
 	switch {
