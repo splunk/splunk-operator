@@ -38,6 +38,7 @@ format-and-vet:
   script:
     - make fmt
     - make vet
+    - git diff --exit-code
 
 unit-tests:
   stage: test
@@ -132,6 +133,7 @@ eks-smoke-validation:
   needs:
     - job: build-stage-image
       artifacts: true
+    - job: scan-stage-image-trivy
   variables:
     WORKFLOW_SLUG: int-test-workflow
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
