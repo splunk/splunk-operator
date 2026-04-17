@@ -32,7 +32,7 @@ partition ImageScan {
 partition Integration {
   :eks-smoke-validation;
   note right
-    Runs managersecret-smoke-s1
+    Runs smoke,basic,s1
     and captures ci-output evidence.
   end note
 }

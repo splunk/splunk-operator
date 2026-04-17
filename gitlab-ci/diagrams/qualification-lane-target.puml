@@ -15,8 +15,9 @@ partition Artifact {
 
 partition Runtime {
   :Execute qualification runtime suites;
+  :Run Helm qualification validation;
   note right
-    EKS and related qualification slices
+    EKS, Helm, and related qualification slices
     stay explicit in their own MR.
   end note
 }

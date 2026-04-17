@@ -14,4 +14,4 @@
 
 [`gitlab-ci/lib/pipeline-common.sh`](lib/pipeline-common.sh) contains shared runtime helpers for registry resolution, environment loading, tool bootstrap, and artifact checks.
 
-[`gitlab-ci/diagrams/`](diagrams) contains the PlantUML source and rendered PNGs for the current develop lane and the planned qualification and release flows.
+[`gitlab-ci/diagrams/`](diagrams) contains the PlantUML source and rendered PNGs for the current develop lane and the planned nightly, qualification, and release flows.
