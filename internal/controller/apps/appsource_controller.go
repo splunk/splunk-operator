@@ -368,22 +368,6 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 
-func ListApps(ctx context.Context, req client.Client, secretRef string, namespace string) {
-	logger := logf.FromContext(ctx)
-
-	// get s3 creds
-	if secretRef != "" {
-		secret := &corev1.Secret{}
-		secretKey := types.NamespacedName{
-			Name:      secretRef,
-			Namespace: namespace,
-		}
-		if err := req.Get(ctx, secretKey, secret); err != nil {
-			logger.Error(err, "Failed to get secret")
-			return
-		}
-	}
-}
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *AppSourceReconciler) SetupWithManager(mgr ctrl.Manager) error {
