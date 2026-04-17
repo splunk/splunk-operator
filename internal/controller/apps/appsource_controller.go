@@ -154,6 +154,11 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		Message:            "secret exists and accessible",
 	})
 
+	if err := r.Status().Update(ctx, appSourceInstance); err != nil {
+		logger.Error(err, "Failed to update AppSource status")
+		return ctrl.Result{}, err
+	}
+
 	// TODO: check remote storage is accessible using the secret. we need to gothrough
 	// the custom client code to validate how to use or if we should just use gocloud.dev pacakge
 
@@ -274,7 +279,7 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		Message:            "S3 bucket is accessible",
 	})
 
-	// list the apps in the bucker
+	// list the apps in the bucket
 	// create a list iterator
 	// doc: https://pkg.go.dev/gocloud.dev/blob?utm_source=godoc#example-Bucket.List
 	appsIter := bkt.List(&blob.ListOptions{
