@@ -16,6 +16,7 @@ partition Artifact {
 partition Validation {
   :Run release validation and FIPS slices;
   :Run Helm release validation;
+  :Prepare PSR release qualification request;
 }
 
 partition Publish {
