@@ -244,8 +244,8 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 	splcommon.AppendParentMeta(service.ObjectMeta.GetObjectMeta(), cr.GetObjectMeta())
 
 	if instanceType == SplunkDeployer || isHeadless {
-		// required for SHC bootstrap process and for App Runtime Unison sync (which needs to
-		// reach the unison-server sidecar before splunkd is fully ready)
+		// required for SHC bootstrap process and for App Runtime Syncthing sync (which needs to
+		// reach the syncthing-server sidecar before splunkd is fully ready)
 		service.Spec.PublishNotReadyAddresses = true
 	}
 
@@ -1173,24 +1173,25 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		}
 	}
 
-	// Add Unison server sidecar for filesystem sync with App Runtime pods.
+	// Add Syncthing server sidecar for filesystem sync with App Runtime pods.
 	// Appended AFTER the container loop above so its Env/Resources/SecurityContext are not overwritten.
-	unisonServerImage := os.Getenv("RELATED_IMAGE_UNISON_SERVER")
-	if unisonServerImage == "" {
-		unisonServerImage = "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/unison-server:latest"
+	syncthingServerImage := os.Getenv("RELATED_IMAGE_SYNCTHING_SERVER")
+	if syncthingServerImage == "" {
+		syncthingServerImage = "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/syncthing-server:latest"
 	}
 	podTemplateSpec.Spec.Containers = append(podTemplateSpec.Spec.Containers, corev1.Container{
-		Name:            "unison-server",
-		Image:           unisonServerImage,
+		Name:            "syncthing-server",
+		Image:           syncthingServerImage,
 		ImagePullPolicy: corev1.PullAlways,
-		Command:         []string{"unison", "-socket", "5000"},
-		Env: []corev1.EnvVar{
-			{Name: "UNISON", Value: "/tmp/.unison"},
-		},
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          "unison",
-				ContainerPort: 5000,
+				Name:          "st-sync",
+				ContainerPort: 22000,
+				Protocol:      corev1.ProtocolTCP,
+			},
+			{
+				Name:          "st-api",
+				ContainerPort: 8384,
 				Protocol:      corev1.ProtocolTCP,
 			},
 		},
@@ -1198,10 +1199,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			{
 				Name:      fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.EtcVolumeStorage),
 				MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, splcommon.EtcVolumeStorage),
-			},
-			{
-				Name:      fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.VarVolumeStorage),
-				MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, splcommon.VarVolumeStorage),
 			},
 		},
 		Resources: corev1.ResourceRequirements{

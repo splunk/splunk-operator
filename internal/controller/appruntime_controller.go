@@ -291,8 +291,6 @@ func (r *AppRuntimeReconciler) createHeadlessService(ctx context.Context, ar *en
 }
 
 func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterpriseApi.AppRuntime, nn types.NamespacedName, splunkStsName string, ordinal int32) error {
-	// Construct Unison server address: the Unison server runs as a sidecar in the
-	// corresponding Splunk pod, reachable via the Splunk headless service DNS.
 	splunkPodName := fmt.Sprintf("%s-%d", splunkStsName, ordinal)
 	parentName := getParentName(appRuntime.Name)
 	parentKind := getParentKind(appRuntime.Name)
@@ -308,37 +306,131 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 		instType = enterprise.SplunkStandalone
 	}
 	splunkHeadlessSvc := enterprise.GetSplunkServiceName(instType, parentName, true)
-	unisonAddr := fmt.Sprintf("%s.%s.%s.svc.cluster.local", splunkPodName, splunkHeadlessSvc, nn.Namespace)
+	splunkAddr := fmt.Sprintf("%s.%s.%s.svc.cluster.local", splunkPodName, splunkHeadlessSvc, nn.Namespace)
 
-	// Unison command components shared between init container and sidecar
-	unisonRemoteRoot := fmt.Sprintf("socket://%s:5000//opt/splunk", unisonAddr)
-	unisonInitCmd := fmt.Sprintf(`# Create var directory structure needed by the worker process
+	syncthingAPIKey := "syncthing-appruntime"
+
+	// Init script: generate certs, discover server device ID via REST API,
+	// configure mutual peering, wait for initial sync to complete.
+	// Uses Syncthing v1.18 CLI syntax (-flag= instead of --flag or subcommands).
+	// Uses /rest/system/config endpoint (works across all Syncthing versions).
+	syncthingInitCmd := fmt.Sprintf(`set -e
+
+# Create var directory structure needed by the worker process
 mkdir -p /opt/splunk/var/log/splunk/ep \
          /opt/splunk/var/lib/splunk \
          /opt/splunk/var/run/splunk \
          /opt/splunk/var/spool
 
-for i in $(seq 1 30); do
-  unison %s /opt/splunk \
-    -path etc \
-    -batch -auto -confirmbigdel=false
-  rc=$?
-  if [ $rc -eq 0 ] || [ $rc -eq 1 ]; then
-    echo "Unison initial sync completed (exit code $rc)"
+ST_HOME=/var/syncthing
+SERVER_ADDR="%s"
+SERVER_API="http://${SERVER_ADDR}:8384"
+API_KEY="%s"
+
+mkdir -p "$ST_HOME"
+
+# Generate local certs (v1.18 syntax)
+syncthing -generate="$ST_HOME"
+MY_DEVICE_ID=$(syncthing -home="$ST_HOME" -device-id)
+echo "Client device ID: $MY_DEVICE_ID"
+
+# Wait for server API to be reachable and get its device ID
+echo "Waiting for Syncthing server at $SERVER_API..."
+SERVER_DEVICE_ID=""
+for i in $(seq 1 60); do
+  SERVER_DEVICE_ID=$(curl -sf -H "X-API-Key: $API_KEY" "$SERVER_API/rest/system/status" 2>/dev/null | \
+    python3 -c "import sys,json; print(json.load(sys.stdin)['myID'])" 2>/dev/null) && break
+  SERVER_DEVICE_ID=""
+  echo "  attempt $i: server not ready, retrying in 3s..."
+  sleep 3
+done
+if [ -z "$SERVER_DEVICE_ID" ]; then
+  echo "ERROR: could not reach Syncthing server after 60 attempts"
+  exit 1
+fi
+echo "Server device ID: $SERVER_DEVICE_ID"
+
+# Write client config with server as peer
+cat > "$ST_HOME/config.xml" <<XMLEOF
+<configuration version="28">
+  <folder id="splunk-etc" label="splunk-etc" path="/opt/splunk/etc" type="sendreceive" rescanIntervalS="3600" fsWatcherEnabled="true" fsWatcherDelayS="1">
+    <filesystemType>basic</filesystemType>
+    <device id="$MY_DEVICE_ID" introducedBy=""></device>
+    <device id="$SERVER_DEVICE_ID" introducedBy=""></device>
+    <minDiskFree unit="%%">0</minDiskFree>
+  </folder>
+  <device id="$MY_DEVICE_ID" name="client" compression="metadata">
+    <address>dynamic</address>
+  </device>
+  <device id="$SERVER_DEVICE_ID" name="server" compression="metadata">
+    <address>tcp://${SERVER_ADDR}:22000</address>
+  </device>
+  <gui enabled="true" tls="false" debugging="false">
+    <address>0.0.0.0:8385</address>
+    <apikey>$API_KEY</apikey>
+  </gui>
+  <options>
+    <listenAddress>tcp://0.0.0.0:22001</listenAddress>
+    <globalAnnounceEnabled>false</globalAnnounceEnabled>
+    <localAnnounceEnabled>false</localAnnounceEnabled>
+    <relaysEnabled>false</relaysEnabled>
+    <natEnabled>false</natEnabled>
+    <urAccepted>-1</urAccepted>
+    <crashReportingEnabled>false</crashReportingEnabled>
+  </options>
+</configuration>
+XMLEOF
+
+# Add this client as a device on the server and share the folder with it.
+# Uses /rest/system/config (GET + POST entire config) which works on all versions.
+echo "Adding client device to server config..."
+SERVER_CFG=$(curl -sf -H "X-API-Key: $API_KEY" "$SERVER_API/rest/system/config")
+UPDATED_CFG=$(echo "$SERVER_CFG" | python3 -c "
+import sys, json
+cfg = json.load(sys.stdin)
+my_id = '$MY_DEVICE_ID'
+# Add client device if not present
+devs = cfg.get('devices', [])
+if not any(d['deviceID'] == my_id for d in devs):
+    devs.append({'deviceID': my_id, 'name': 'client-$HOSTNAME', 'addresses': ['dynamic'], 'compression': 'metadata'})
+    cfg['devices'] = devs
+# Add client device to the folder if not present
+for f in cfg.get('folders', []):
+    if f['id'] == 'splunk-etc':
+        fdevs = f.get('devices', [])
+        if not any(d['deviceID'] == my_id for d in fdevs):
+            fdevs.append({'deviceID': my_id, 'introducedBy': ''})
+            f['devices'] = fdevs
+json.dump(cfg, sys.stdout)
+")
+curl -sf -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+  "$SERVER_API/rest/system/config" \
+  -d "$UPDATED_CFG"
+echo "Server config updated."
+
+# Start syncthing in the background to perform initial sync (v1.18 syntax)
+syncthing -home="$ST_HOME" -no-browser -no-restart -verbose &
+ST_PID=$!
+
+# Wait for initial sync to complete
+echo "Waiting for initial sync to complete..."
+for i in $(seq 1 120); do
+  sleep 3
+  RESULT=$(curl -sf -H "X-API-Key: $API_KEY" "http://127.0.0.1:8385/rest/db/completion?folder=splunk-etc&device=$SERVER_DEVICE_ID" 2>/dev/null) || continue
+  COMPLETION=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f\"{d['completion']:.0f}\")" 2>/dev/null) || COMPLETION="0"
+  NEED=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['needBytes'])" 2>/dev/null) || NEED="-1"
+  echo "  sync progress: ${COMPLETION}%% (needBytes: $NEED)"
+  if [ "$COMPLETION" = "100" ] && [ "$NEED" = "0" ]; then
+    echo "Initial sync complete!"
+    kill $ST_PID 2>/dev/null || true
+    wait $ST_PID 2>/dev/null || true
     exit 0
   fi
-  echo "Unison sync attempt $i failed (exit code $rc), retrying in 5s..."
-  sleep 5
 done
-echo "Unison initial sync failed after 30 attempts"
-exit 1`, unisonRemoteRoot)
+echo "ERROR: initial sync did not complete in time"
+kill $ST_PID 2>/dev/null || true
+exit 1`, splunkAddr, syncthingAPIKey)
 
-	unisonSyncCmd := fmt.Sprintf(`unison %s /opt/splunk \
-  -path etc \
-  -batch -auto -confirmbigdel=false \
-  -repeat 30`, unisonRemoteRoot)
-
-	// Volume mounts shared by the appruntime container and unison containers
 	splunkVolumeMounts := []corev1.VolumeMount{
 		{Name: "splunk-etc", MountPath: "/opt/splunk/etc"},
 		{Name: "splunk-var", MountPath: "/opt/splunk/var"},
@@ -354,10 +446,9 @@ exit 1`, unisonRemoteRoot)
 		Spec: corev1.PodSpec{
 			Hostname:  nn.Name,
 			Subdomain: getHeadlessName(appRuntime.Name),
-			// No Affinity — Unison sync replaces shared PVCs, pod can schedule on any node
 			InitContainers: []corev1.Container{
 				{
-					Name:            "copy-splunk-dirs", // populate lib and bin from Splunk image - most apps need it
+					Name:            "copy-splunk-dirs",
 					Image:           appRuntime.Spec.SplunkImage,
 					ImagePullPolicy: corev1.PullIfNotPresent,
 					Command:         []string{"sh", "-c", "cp -rp /opt/splunk/lib/. /mnt/splunk-lib/ && cp -rp /opt/splunk/bin/. /mnt/splunk-bin/"},
@@ -368,13 +459,12 @@ exit 1`, unisonRemoteRoot)
 					},
 				},
 				{
-					Name:            "unison-init-sync", // one-shot sync before supervisor starts
+					Name:            "syncthing-init",
 					Image:           appRuntime.Spec.Image,
 					ImagePullPolicy: corev1.PullIfNotPresent,
-					Command:         []string{"sh", "-c", unisonInitCmd},
-					Env:             []corev1.EnvVar{{Name: "UNISON", Value: "/unison-archive"}},
+					Command:         []string{"sh", "-c", syncthingInitCmd},
 					VolumeMounts: append(splunkVolumeMounts,
-						corev1.VolumeMount{Name: "unison-archive", MountPath: "/unison-archive"},
+						corev1.VolumeMount{Name: "syncthing-config", MountPath: "/var/syncthing"},
 					),
 				},
 			},
@@ -407,13 +497,12 @@ exit 1`, unisonRemoteRoot)
 					SecurityContext: &corev1.SecurityContext{Privileged: &privileged},
 				},
 				{
-					Name:            "unison-client", // continuous bidirectional sync
+					Name:            "syncthing-client",
 					Image:           appRuntime.Spec.Image,
 					ImagePullPolicy: corev1.PullIfNotPresent,
-					Command:         []string{"sh", "-c", unisonSyncCmd},
-					Env:             []corev1.EnvVar{{Name: "UNISON", Value: "/unison-archive"}},
+					Command:         []string{"syncthing", "-home=/var/syncthing", "-no-browser", "-no-restart", "-verbose"},
 					VolumeMounts: append(splunkVolumeMounts,
-						corev1.VolumeMount{Name: "unison-archive", MountPath: "/unison-archive"},
+						corev1.VolumeMount{Name: "syncthing-config", MountPath: "/var/syncthing"},
 					),
 				},
 			},
@@ -443,7 +532,7 @@ exit 1`, unisonRemoteRoot)
 					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 				{
-					Name:         "unison-archive",
+					Name:         "syncthing-config",
 					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 			},
