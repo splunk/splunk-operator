@@ -308,133 +308,30 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 	splunkHeadlessSvc := enterprise.GetSplunkServiceName(instType, parentName, true)
 	splunkAddr := fmt.Sprintf("%s.%s.%s.svc.cluster.local", splunkPodName, splunkHeadlessSvc, nn.Namespace)
 
-	syncthingAPIKey := "syncthing-appruntime"
+	nfsMountCmd := fmt.Sprintf(`set -e
 
-	// Init script: generate certs, discover server device ID via REST API,
-	// configure mutual peering, wait for initial sync to complete.
-	// Uses Syncthing v1.18 CLI syntax (-flag= instead of --flag or subcommands).
-	// Uses /rest/system/config endpoint (works across all Syncthing versions).
-	syncthingInitCmd := fmt.Sprintf(`set -e
+NFS_SERVER="%s"
 
-# Create var directory structure needed by the worker process
-mkdir -p /opt/splunk/var/log/splunk/ep \
-         /opt/splunk/var/lib/splunk \
-         /opt/splunk/var/run/splunk \
-         /opt/splunk/var/spool
-
-ST_HOME=/var/syncthing
-SERVER_ADDR="%s"
-SERVER_API="http://${SERVER_ADDR}:8384"
-API_KEY="%s"
-
-mkdir -p "$ST_HOME"
-
-# Generate local certs (v1.18 syntax)
-syncthing -generate="$ST_HOME"
-MY_DEVICE_ID=$(syncthing -home="$ST_HOME" -device-id)
-echo "Client device ID: $MY_DEVICE_ID"
-
-# Wait for server API to be reachable and get its device ID
-echo "Waiting for Syncthing server at $SERVER_API..."
-SERVER_DEVICE_ID=""
-for i in $(seq 1 60); do
-  SERVER_DEVICE_ID=$(curl -sf -H "X-API-Key: $API_KEY" "$SERVER_API/rest/system/status" 2>/dev/null | \
-    python3 -c "import sys,json; print(json.load(sys.stdin)['myID'])" 2>/dev/null) && break
-  SERVER_DEVICE_ID=""
-  echo "  attempt $i: server not ready, retrying in 3s..."
+echo "Mounting NFS from $NFS_SERVER..."
+for i in $(seq 1 30); do
+  mount -t nfs4 -o soft,timeo=50,retrans=2,nolock "$NFS_SERVER":/splunk-etc /opt/splunk/etc && \
+  mount -t nfs4 -o soft,timeo=50,retrans=2,nolock "$NFS_SERVER":/splunk-var /opt/splunk/var && break
+  echo "NFS mount attempt $i failed, retrying in 3s..."
+  umount /opt/splunk/etc 2>/dev/null || true
   sleep 3
 done
-if [ -z "$SERVER_DEVICE_ID" ]; then
-  echo "ERROR: could not reach Syncthing server after 60 attempts"
+
+if ! mountpoint -q /opt/splunk/etc; then
+  echo "ERROR: failed to mount NFS /etc after 30 attempts"
   exit 1
 fi
-echo "Server device ID: $SERVER_DEVICE_ID"
+if ! mountpoint -q /opt/splunk/var; then
+  echo "ERROR: failed to mount NFS /var after 30 attempts"
+  exit 1
+fi
 
-# Write client config with server as peer
-cat > "$ST_HOME/config.xml" <<XMLEOF
-<configuration version="28">
-  <folder id="splunk-etc" label="splunk-etc" path="/opt/splunk/etc" type="sendreceive" rescanIntervalS="3600" fsWatcherEnabled="true" fsWatcherDelayS="1">
-    <filesystemType>basic</filesystemType>
-    <device id="$MY_DEVICE_ID" introducedBy=""></device>
-    <device id="$SERVER_DEVICE_ID" introducedBy=""></device>
-    <minDiskFree unit="%%">0</minDiskFree>
-  </folder>
-  <device id="$MY_DEVICE_ID" name="client" compression="metadata">
-    <address>dynamic</address>
-  </device>
-  <device id="$SERVER_DEVICE_ID" name="server" compression="metadata">
-    <address>tcp://${SERVER_ADDR}:22000</address>
-  </device>
-  <gui enabled="true" tls="false" debugging="false">
-    <address>0.0.0.0:8385</address>
-    <apikey>$API_KEY</apikey>
-  </gui>
-  <options>
-    <listenAddress>tcp://0.0.0.0:22001</listenAddress>
-    <globalAnnounceEnabled>false</globalAnnounceEnabled>
-    <localAnnounceEnabled>false</localAnnounceEnabled>
-    <relaysEnabled>false</relaysEnabled>
-    <natEnabled>false</natEnabled>
-    <urAccepted>-1</urAccepted>
-    <crashReportingEnabled>false</crashReportingEnabled>
-  </options>
-</configuration>
-XMLEOF
-
-# Add this client as a device on the server and share the folder with it.
-# Uses /rest/system/config (GET + POST entire config) which works on all versions.
-echo "Adding client device to server config..."
-SERVER_CFG=$(curl -sf -H "X-API-Key: $API_KEY" "$SERVER_API/rest/system/config")
-UPDATED_CFG=$(echo "$SERVER_CFG" | python3 -c "
-import sys, json
-cfg = json.load(sys.stdin)
-my_id = '$MY_DEVICE_ID'
-# Add client device if not present
-devs = cfg.get('devices', [])
-if not any(d['deviceID'] == my_id for d in devs):
-    devs.append({'deviceID': my_id, 'name': 'client-$HOSTNAME', 'addresses': ['dynamic'], 'compression': 'metadata'})
-    cfg['devices'] = devs
-# Add client device to the folder if not present
-for f in cfg.get('folders', []):
-    if f['id'] == 'splunk-etc':
-        fdevs = f.get('devices', [])
-        if not any(d['deviceID'] == my_id for d in fdevs):
-            fdevs.append({'deviceID': my_id, 'introducedBy': ''})
-            f['devices'] = fdevs
-json.dump(cfg, sys.stdout)
-")
-curl -sf -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$SERVER_API/rest/system/config" \
-  -d "$UPDATED_CFG"
-echo "Server config updated."
-
-# Start syncthing in the background to perform initial sync (v1.18 syntax)
-syncthing -home="$ST_HOME" -no-browser -no-restart -verbose &
-ST_PID=$!
-
-# Wait for initial sync to complete
-echo "Waiting for initial sync to complete..."
-for i in $(seq 1 120); do
-  sleep 3
-  RESULT=$(curl -sf -H "X-API-Key: $API_KEY" "http://127.0.0.1:8385/rest/db/completion?folder=splunk-etc&device=$SERVER_DEVICE_ID" 2>/dev/null) || continue
-  COMPLETION=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f\"{d['completion']:.0f}\")" 2>/dev/null) || COMPLETION="0"
-  NEED=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['needBytes'])" 2>/dev/null) || NEED="-1"
-  echo "  sync progress: ${COMPLETION}%% (needBytes: $NEED)"
-  if [ "$COMPLETION" = "100" ] && [ "$NEED" = "0" ]; then
-    echo "Initial sync complete!"
-    kill $ST_PID 2>/dev/null || true
-    wait $ST_PID 2>/dev/null || true
-    exit 0
-  fi
-done
-echo "ERROR: initial sync did not complete in time"
-kill $ST_PID 2>/dev/null || true
-exit 1`, splunkAddr, syncthingAPIKey)
-
-	splunkVolumeMounts := []corev1.VolumeMount{
-		{Name: "splunk-etc", MountPath: "/opt/splunk/etc"},
-		{Name: "splunk-var", MountPath: "/opt/splunk/var"},
-	}
+echo "NFS mounts established successfully"
+exec /usr/local/bin/entrypoint.sh`, splunkAddr)
 
 	privileged := true
 	pod := &corev1.Pod{
@@ -458,24 +355,13 @@ exit 1`, splunkAddr, syncthingAPIKey)
 						{Name: "splunk-bin", MountPath: "/mnt/splunk-bin"},
 					},
 				},
-				{
-					Name:            "syncthing-init",
-					Image:           appRuntime.Spec.Image,
-					ImagePullPolicy: corev1.PullIfNotPresent,
-					Command:         []string{"sh", "-c", syncthingInitCmd},
-					VolumeMounts: append(splunkVolumeMounts,
-						corev1.VolumeMount{Name: "syncthing-config", MountPath: "/var/syncthing"},
-					),
-				},
 			},
 			Containers: []corev1.Container{
 				{
 					Image:           appRuntime.Spec.Image,
 					Name:            "appruntime",
 					ImagePullPolicy: corev1.PullAlways,
-					Command: []string{
-						"/usr/local/bin/entrypoint.sh",
-					},
+					Command:         []string{"sh", "-c", nfsMountCmd},
 					Ports: []corev1.ContainerPort{
 						{
 							Name:          "appruntime",
@@ -488,22 +374,15 @@ exit 1`, splunkAddr, syncthingAPIKey)
 							Protocol:      corev1.ProtocolTCP,
 						},
 					},
-					VolumeMounts: append(splunkVolumeMounts,
-						corev1.VolumeMount{Name: "splunk-lib", MountPath: "/opt/splunk/lib"},
-						corev1.VolumeMount{Name: "splunk-bin", MountPath: "/opt/splunk/bin"},
-						corev1.VolumeMount{Name: "containerd-data", MountPath: "/var/lib/containerd-nested"},
-						corev1.VolumeMount{Name: "containerd-run", MountPath: "/run/containerd-nested"},
-					),
+					VolumeMounts: []corev1.VolumeMount{
+						{Name: "splunk-etc", MountPath: "/opt/splunk/etc"},
+						{Name: "splunk-var", MountPath: "/opt/splunk/var"},
+						{Name: "splunk-lib", MountPath: "/opt/splunk/lib"},
+						{Name: "splunk-bin", MountPath: "/opt/splunk/bin"},
+						{Name: "containerd-data", MountPath: "/var/lib/containerd-nested"},
+						{Name: "containerd-run", MountPath: "/run/containerd-nested"},
+					},
 					SecurityContext: &corev1.SecurityContext{Privileged: &privileged},
-				},
-				{
-					Name:            "syncthing-client",
-					Image:           appRuntime.Spec.Image,
-					ImagePullPolicy: corev1.PullIfNotPresent,
-					Command:         []string{"syncthing", "-home=/var/syncthing", "-no-browser", "-no-restart", "-verbose"},
-					VolumeMounts: append(splunkVolumeMounts,
-						corev1.VolumeMount{Name: "syncthing-config", MountPath: "/var/syncthing"},
-					),
 				},
 			},
 			Volumes: []corev1.Volume{
@@ -529,10 +408,6 @@ exit 1`, splunkAddr, syncthingAPIKey)
 				},
 				{
 					Name:         "containerd-run",
-					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-				},
-				{
-					Name:         "syncthing-config",
 					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 			},

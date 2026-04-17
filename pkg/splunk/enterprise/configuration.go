@@ -244,8 +244,8 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 	splcommon.AppendParentMeta(service.ObjectMeta.GetObjectMeta(), cr.GetObjectMeta())
 
 	if instanceType == SplunkDeployer || isHeadless {
-		// required for SHC bootstrap process and for App Runtime Syncthing sync (which needs to
-		// reach the syncthing-server sidecar before splunkd is fully ready)
+		// required for SHC bootstrap process and for App Runtime NFS mount (which needs to
+		// reach the nfs-server sidecar before splunkd is fully ready)
 		service.Spec.PublishNotReadyAddresses = true
 	}
 
@@ -1173,25 +1173,20 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		}
 	}
 
-	// Add Syncthing server sidecar for filesystem sync with App Runtime pods.
+	// Add NFS server sidecar for filesystem sharing with App Runtime pods.
 	// Appended AFTER the container loop above so its Env/Resources/SecurityContext are not overwritten.
-	syncthingServerImage := os.Getenv("RELATED_IMAGE_SYNCTHING_SERVER")
-	if syncthingServerImage == "" {
-		syncthingServerImage = "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/syncthing-server:latest"
+	nfsServerImage := os.Getenv("RELATED_IMAGE_NFS_SERVER")
+	if nfsServerImage == "" {
+		nfsServerImage = "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/nfs-server:latest"
 	}
 	podTemplateSpec.Spec.Containers = append(podTemplateSpec.Spec.Containers, corev1.Container{
-		Name:            "syncthing-server",
-		Image:           syncthingServerImage,
+		Name:            "nfs-server",
+		Image:           nfsServerImage,
 		ImagePullPolicy: corev1.PullAlways,
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          "st-sync",
-				ContainerPort: 22000,
-				Protocol:      corev1.ProtocolTCP,
-			},
-			{
-				Name:          "st-api",
-				ContainerPort: 8384,
+				Name:          "nfs",
+				ContainerPort: 2049,
 				Protocol:      corev1.ProtocolTCP,
 			},
 		},
@@ -1200,6 +1195,16 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 				Name:      fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.EtcVolumeStorage),
 				MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, splcommon.EtcVolumeStorage),
 			},
+			{
+				Name:      fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.VarVolumeStorage),
+				MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, splcommon.VarVolumeStorage),
+			},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			Privileged:   func() *bool { b := true; return &b }(),
+			RunAsUser:    func() *int64 { uid := int64(0); return &uid }(),
+			RunAsGroup:   func() *int64 { gid := int64(0); return &gid }(),
+			RunAsNonRoot: func() *bool { b := false; return &b }(),
 		},
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
