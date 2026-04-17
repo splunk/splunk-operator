@@ -15,10 +15,12 @@ partition Artifact {
 
 partition Validation {
   :Run release validation and FIPS slices;
+  :Run Helm release validation;
 }
 
 partition Publish {
-  :Publish release bundles and charts;
+  :Package and publish Helm charts;
+  :Publish release bundles;
   :Write GitLab release record;
 }
 
