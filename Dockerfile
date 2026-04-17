@@ -19,6 +19,7 @@ RUN go mod download
 COPY cmd/main.go cmd/main.go
 COPY api/ api/
 COPY internal/controller/ internal/controller/
+COPY internal/webhook/ internal/webhook/
 COPY pkg/ pkg/
 COPY tools/ tools/
 COPY hack hack/
