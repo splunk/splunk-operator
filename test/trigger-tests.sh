@@ -25,9 +25,6 @@ fi
 rc=$(which ginkgo)
 if [ -z "$rc" ]; then
   echo "ginkgo is not installed or in the PATH. Installing..."
-  go get github.com/onsi/ginkgo/ginkgo/v2
-  go get github.com/onsi/gomega/...
-
   go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@$(go list -m -f '{{.Version}}' github.com/onsi/ginkgo/v2)
 fi
 
