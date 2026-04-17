@@ -88,9 +88,11 @@ If you prefer not to use cert-manager, you can provide your own TLS certificates
 Deploy using the `config/default-with-webhook` overlay which includes all necessary webhook components and enables the `ValidationWebhook` feature gate automatically:
 
 ```bash
-# Build and apply the webhook-enabled configuration
-kustomize build config/default-with-webhook | kubectl apply -f -
+make deploy IMG=<your-image> ENVIRONMENT=default-with-webhook \
+  SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com"
 ```
+
+This uses the same `make deploy` target as the standard deployment, which substitutes the `WATCH_NAMESPACE`, `SPLUNK_ENTERPRISE_IMAGE`, and `SPLUNK_GENERAL_TERMS` placeholder values before running `kustomize build`.
 
 #### Option 2: Enable via Feature Gate on Existing Deployment
 
@@ -298,7 +300,7 @@ kubectl get validatingwebhookconfiguration splunk-operator-validating-webhook-co
 
 ```bash
 kubectl logs -n splunk-operator deployment/splunk-operator-controller-manager | grep -i webhook
-# Look for: "Validation webhook enabled via feature gate"
+# Look for: "Validation webhook enabled"
 # Look for: "Starting webhook server" {"port": 9443}
 ```
 
