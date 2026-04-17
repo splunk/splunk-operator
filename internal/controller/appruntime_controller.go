@@ -291,8 +291,59 @@ func (r *AppRuntimeReconciler) createHeadlessService(ctx context.Context, ar *en
 }
 
 func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterpriseApi.AppRuntime, nn types.NamespacedName, splunkStsName string, ordinal int32) error {
-	etcPvcName := fmt.Sprintf("pvc-etc-%s-%d", splunkStsName, ordinal)
-	varPvcName := fmt.Sprintf("pvc-var-%s-%d", splunkStsName, ordinal)
+	// Construct Unison server address: the Unison server runs as a sidecar in the
+	// corresponding Splunk pod, reachable via the Splunk headless service DNS.
+	splunkPodName := fmt.Sprintf("%s-%d", splunkStsName, ordinal)
+	parentName := getParentName(appRuntime.Name)
+	parentKind := getParentKind(appRuntime.Name)
+	var instType enterprise.InstanceType
+	switch parentKind {
+	case enterprise.SplunkStandalone.ToString():
+		instType = enterprise.SplunkStandalone
+	case enterprise.SplunkIndexer.ToString():
+		instType = enterprise.SplunkIndexer
+	case enterprise.SplunkSearchHead.ToString():
+		instType = enterprise.SplunkSearchHead
+	default:
+		instType = enterprise.SplunkStandalone
+	}
+	splunkHeadlessSvc := enterprise.GetSplunkServiceName(instType, parentName, true)
+	unisonAddr := fmt.Sprintf("%s.%s.%s.svc.cluster.local", splunkPodName, splunkHeadlessSvc, nn.Namespace)
+
+	// Unison command components shared between init container and sidecar
+	unisonRemoteRoot := fmt.Sprintf("socket://%s:5000//opt/splunk", unisonAddr)
+	unisonInitCmd := fmt.Sprintf(`# Create var directory structure needed by the worker process
+mkdir -p /opt/splunk/var/log/splunk/ep \
+         /opt/splunk/var/lib/splunk \
+         /opt/splunk/var/run/splunk \
+         /opt/splunk/var/spool
+
+for i in $(seq 1 30); do
+  unison %s /opt/splunk \
+    -path etc \
+    -batch -auto -confirmbigdel=false
+  rc=$?
+  if [ $rc -eq 0 ] || [ $rc -eq 1 ]; then
+    echo "Unison initial sync completed (exit code $rc)"
+    exit 0
+  fi
+  echo "Unison sync attempt $i failed (exit code $rc), retrying in 5s..."
+  sleep 5
+done
+echo "Unison initial sync failed after 30 attempts"
+exit 1`, unisonRemoteRoot)
+
+	unisonSyncCmd := fmt.Sprintf(`unison %s /opt/splunk \
+  -path etc \
+  -batch -auto -confirmbigdel=false \
+  -repeat 30`, unisonRemoteRoot)
+
+	// Volume mounts shared by the appruntime container and unison containers
+	splunkVolumeMounts := []corev1.VolumeMount{
+		{Name: "splunk-etc", MountPath: "/opt/splunk/etc"},
+		{Name: "splunk-var", MountPath: "/opt/splunk/var"},
+	}
+
 	privileged := true
 	pod := &corev1.Pod{
 		ObjectMeta: v1.ObjectMeta{
@@ -303,24 +354,7 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 		Spec: corev1.PodSpec{
 			Hostname:  nn.Name,
 			Subdomain: getHeadlessName(appRuntime.Name),
-			Affinity: &corev1.Affinity{
-				PodAffinity: &corev1.PodAffinity{
-					RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
-						{
-							LabelSelector: &v1.LabelSelector{
-								MatchExpressions: []v1.LabelSelectorRequirement{
-									{
-										Key:      "statefulset.kubernetes.io/pod-name",
-										Operator: v1.LabelSelectorOpIn,
-										Values:   []string{fmt.Sprintf("%s-%d", splunkStsName, ordinal)},
-									},
-								},
-							},
-							TopologyKey: "kubernetes.io/hostname",
-						},
-					},
-				},
-			},
+			// No Affinity — Unison sync replaces shared PVCs, pod can schedule on any node
 			InitContainers: []corev1.Container{
 				{
 					Name:            "copy-splunk-dirs", // populate lib and bin from Splunk image - most apps need it
@@ -329,15 +363,19 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 					Command:         []string{"sh", "-c", "cp -rp /opt/splunk/lib/. /mnt/splunk-lib/ && cp -rp /opt/splunk/bin/. /mnt/splunk-bin/"},
 					SecurityContext: &corev1.SecurityContext{RunAsUser: func() *int64 { uid := int64(0); return &uid }()},
 					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "splunk-lib",
-							MountPath: "/mnt/splunk-lib",
-						},
-						{
-							Name:      "splunk-bin",
-							MountPath: "/mnt/splunk-bin",
-						},
+						{Name: "splunk-lib", MountPath: "/mnt/splunk-lib"},
+						{Name: "splunk-bin", MountPath: "/mnt/splunk-bin"},
 					},
+				},
+				{
+					Name:            "unison-init-sync", // one-shot sync before supervisor starts
+					Image:           appRuntime.Spec.Image,
+					ImagePullPolicy: corev1.PullIfNotPresent,
+					Command:         []string{"sh", "-c", unisonInitCmd},
+					Env:             []corev1.EnvVar{{Name: "UNISON", Value: "/unison-archive"}},
+					VolumeMounts: append(splunkVolumeMounts,
+						corev1.VolumeMount{Name: "unison-archive", MountPath: "/unison-archive"},
+					),
 				},
 			},
 			Containers: []corev1.Container{
@@ -360,51 +398,33 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 							Protocol:      corev1.ProtocolTCP,
 						},
 					},
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "pvc-etc",
-							MountPath: "/opt/splunk/etc",
-						},
-						{
-							Name:      "pvc-var",
-							MountPath: "/opt/splunk/var",
-						},
-						{
-							Name:      "splunk-lib",
-							MountPath: "/opt/splunk/lib",
-						},
-						{
-							Name:      "splunk-bin",
-							MountPath: "/opt/splunk/bin",
-						},
-						{
-							Name:      "containerd-data",
-							MountPath: "/var/lib/containerd-nested",
-						},
-						{
-							Name:      "containerd-run",
-							MountPath: "/run/containerd-nested",
-						},
-					},
+					VolumeMounts: append(splunkVolumeMounts,
+						corev1.VolumeMount{Name: "splunk-lib", MountPath: "/opt/splunk/lib"},
+						corev1.VolumeMount{Name: "splunk-bin", MountPath: "/opt/splunk/bin"},
+						corev1.VolumeMount{Name: "containerd-data", MountPath: "/var/lib/containerd-nested"},
+						corev1.VolumeMount{Name: "containerd-run", MountPath: "/run/containerd-nested"},
+					),
 					SecurityContext: &corev1.SecurityContext{Privileged: &privileged},
+				},
+				{
+					Name:            "unison-client", // continuous bidirectional sync
+					Image:           appRuntime.Spec.Image,
+					ImagePullPolicy: corev1.PullIfNotPresent,
+					Command:         []string{"sh", "-c", unisonSyncCmd},
+					Env:             []corev1.EnvVar{{Name: "UNISON", Value: "/unison-archive"}},
+					VolumeMounts: append(splunkVolumeMounts,
+						corev1.VolumeMount{Name: "unison-archive", MountPath: "/unison-archive"},
+					),
 				},
 			},
 			Volumes: []corev1.Volume{
 				{
-					Name: "pvc-etc",
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: etcPvcName,
-						},
-					},
+					Name:         "splunk-etc",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 				{
-					Name: "pvc-var",
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: varPvcName,
-						},
-					},
+					Name:         "splunk-var",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 				{
 					Name:         "splunk-lib",
@@ -415,10 +435,16 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 				{
-					Name: "containerd-data",
+					Name:         "containerd-data",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 				{
-					Name: "containerd-run",
+					Name:         "containerd-run",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+				},
+				{
+					Name:         "unison-archive",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 			},
 		},

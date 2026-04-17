@@ -243,8 +243,9 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 	// append labels and annotations from parent
 	splcommon.AppendParentMeta(service.ObjectMeta.GetObjectMeta(), cr.GetObjectMeta())
 
-	if instanceType == SplunkDeployer || (instanceType == SplunkSearchHead && isHeadless) {
-		// required for SHC bootstrap process; use services with heads when readiness is desired
+	if instanceType == SplunkDeployer || isHeadless {
+		// required for SHC bootstrap process and for App Runtime Unison sync (which needs to
+		// reach the unison-server sidecar before splunkd is fully ready)
 		service.Spec.PublishNotReadyAddresses = true
 	}
 
@@ -1171,6 +1172,49 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			},
 		}
 	}
+
+	// Add Unison server sidecar for filesystem sync with App Runtime pods.
+	// Appended AFTER the container loop above so its Env/Resources/SecurityContext are not overwritten.
+	unisonServerImage := os.Getenv("RELATED_IMAGE_UNISON_SERVER")
+	if unisonServerImage == "" {
+		unisonServerImage = "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/unison-server:latest"
+	}
+	podTemplateSpec.Spec.Containers = append(podTemplateSpec.Spec.Containers, corev1.Container{
+		Name:            "unison-server",
+		Image:           unisonServerImage,
+		ImagePullPolicy: corev1.PullAlways,
+		Command:         []string{"unison", "-socket", "5000"},
+		Env: []corev1.EnvVar{
+			{Name: "UNISON", Value: "/tmp/.unison"},
+		},
+		Ports: []corev1.ContainerPort{
+			{
+				Name:          "unison",
+				ContainerPort: 5000,
+				Protocol:      corev1.ProtocolTCP,
+			},
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.EtcVolumeStorage),
+				MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, splcommon.EtcVolumeStorage),
+			},
+			{
+				Name:      fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.VarVolumeStorage),
+				MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, splcommon.VarVolumeStorage),
+			},
+		},
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("100m"),
+				corev1.ResourceMemory: resource.MustParse("256Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
+			},
+		},
+	})
 }
 
 func removeDuplicateEnvVars(sliceList []corev1.EnvVar) []corev1.EnvVar {
