@@ -1,82 +1,58 @@
 # GitLab CI Operating Notes
 
-This directory contains the checked-in runtime pieces for the canonical GitLab migration of
-`sok/splunk-operator`. The current review stack is intentionally staged. The first MR proves only the
-minimum `develop` lane needed to make the canonical repo operational. This follow-up keeps that same lane
-behavior but reshapes the CI into a more maintainable, production-facing layout so future MRs can extend it
-without collapsing back into one large YAML file.
+This directory is the checked-in runtime surface for the canonical GitLab migration of
+`sok/splunk-operator`. The review stack is intentionally staged. The first MR proves only the minimum
+`develop` lane that makes the canonical repo operational. This follow-up keeps that same lane behavior and
+recasts the CI into a production-facing module layout so later MRs can add lanes without turning the root
+pipeline file back into a single monolith.
 
-The top-level [`.gitlab-ci.yml`](../.gitlab-ci.yml) should stay small. It owns only workflow entry rules and
-the list of local include files. That keeps the review surface obvious: pipeline entry logic at the root,
-shared defaults in one place, baseline verification in one place, and runtime jobs in one place. The actual
-job behavior still lives in the checked-in scripts under [`gitlab-ci/`](.) and
-[`gitlab-ci/lib/`](lib), not in large inline shell blocks.
+The design rule is simple. The top-level [`.gitlab-ci.yml`](../.gitlab-ci.yml) stays thin and owns only entry
+rules plus local includes. Shared defaults and reusable hidden templates live in
+[`gitlab-ci/includes/base.yml`](includes/base.yml). Repository verification and test jobs live in
+[`gitlab-ci/includes/baseline.yml`](includes/baseline.yml). Runtime jobs that stage an image, scan that exact
+artifact, and validate it in EKS live in [`gitlab-ci/includes/runtime.yml`](includes/runtime.yml). The visible
+jobs remain explicit so a reviewer can still read the active lane from top to bottom, while the hidden
+templates provide the pluggable CI pattern boundary for future lanes.
 
-## Current lane boundary
+This split is deliberately responsibility-based rather than tool-based. A future nightly, qualification, or
+release lane should plug into the same model by adding another include file and extending the hidden template
+family it needs. The repo should not go back to large inline shell blocks, dynamic job assembly, or opaque
+script indirection. Job behavior belongs in checked-in scripts under [`gitlab-ci/`](.) and
+[`gitlab-ci/lib/`](lib), versioned beside the code they validate.
 
-The active canonical migration lane is still the narrow `develop` path only. It is limited to:
+The current active canonical lane is still the narrow `develop` path only. It performs repository formatting
+and vetting, Go unit coverage, kubectl-splunk test coverage, staged operator image build, staged image Trivy
+scan, and a bounded EKS smoke run. Nightly, qualification, release, variant-runtime, mirror, intake, and
+rollback remain separate follow-up MRs. That boundary is deliberate. The goal of the current stack is to prove
+the smallest production-relevant GitLab path before enabling broader operating modes.
 
-- repository verification
-- unit tests
-- kubectl-splunk tests
-- staged operator image build
-- staged image Trivy scan
-- bounded EKS smoke validation
+The checked-in runtime scripts define the data contract between jobs. [`gitlab-ci/build-test-push.sh`](build-test-push.sh)
+builds the operator image for the current commit, pushes it only to the staging ECR path, and writes the image
+reference, digest, and runtime context into `ci-output/`. [`gitlab-ci/build-test-push-trivy-scan.sh`](build-test-push-trivy-scan.sh)
+consumes that exact staged image artifact so the scan validates the same image that was built. [`gitlab-ci/int-test-workflow.sh`](int-test-workflow.sh)
+consumes the same image reference, resolves the Splunk Enterprise image into staging ECR, provisions the
+ephemeral EKS environment, runs the bounded `managersecret-smoke-s1` focus, and emits runtime evidence under
+`ci-output/`, including runtime context, cluster logs, cleanup logs, copied pod logs, and JUnit-style output.
 
-Nightly, qualification, release, variant-runtime, mirror, intake, and rollback remain separate follow-up MRs.
-That boundary is deliberate. The point of the current stack is to let the team verify the smallest production-
-relevant GitLab path before adding broader operating modes.
+The production-readiness rule for follow-up work is that a structural MR should only improve composition and
+maintainability. It should not silently widen the runtime matrix, add credentials, or alter which environments
+are provisioned. New behavior belongs in a new lane MR with its own review boundary. That is how we keep the
+port reviewable and avoid mixing parity work with new capability.
 
-## File layout
+The diagrams in [`gitlab-ci/diagrams/`](diagrams) show the current `develop` lane and the intended later
+qualification and release flows. The develop diagram reflects what is active today. The qualification and
+release diagrams describe the target operating model for later MRs and should not be read as already-enabled
+behavior in the canonical repo.
 
-The local include split is by responsibility rather than by tool:
+![Develop Lane](diagrams/develop-lane.png)
 
-- [`gitlab-ci/includes/base.yml`](includes/base.yml)
-  keeps global stages, default job image, and common top-level variables.
-- [`gitlab-ci/includes/baseline.yml`](includes/baseline.yml)
-  keeps the repository verification and test jobs.
-- [`gitlab-ci/includes/runtime.yml`](includes/runtime.yml)
-  keeps the staging build, image scan, and EKS smoke jobs.
+![Qualification Lane Target](diagrams/qualification-lane-target.png)
 
-That split is intentionally modest. It makes the current lane easier to read without inventing a large
-abstraction layer too early.
+![Release Lane Target](diagrams/release-lane-target.png)
 
-The includes also use hidden template jobs as the reusable CI pattern boundary. Shared defaults such as Go
-verification, Go test execution, Python venv setup, runtime artifact retention, and runtime-stage job families
-live in [`gitlab-ci/includes/base.yml`](includes/base.yml). The visible jobs in the other include files extend
-those templates instead of duplicating stage and artifact policy by hand. That keeps the current lane explicit
-while still making later lanes pluggable.
-
-## Runtime contract
-
-[`gitlab-ci/build-test-push.sh`](build-test-push.sh) builds the operator image for the current commit and pushes
-it only to the staging ECR path. It writes the image reference, digest, and runtime context into `ci-output/`
-so downstream jobs validate the same artifact instead of rebuilding their own copy.
-
-[`gitlab-ci/build-test-push-trivy-scan.sh`](build-test-push-trivy-scan.sh) consumes that staged image artifact
-and runs the bounded image scan used in this first migration slice.
-
-[`gitlab-ci/int-test-workflow.sh`](int-test-workflow.sh) consumes the staged operator image, resolves the
-Splunk Enterprise image into staging ECR, provisions the ephemeral EKS environment, runs the bounded
-`managersecret-smoke-s1` focus, and emits runtime evidence under `ci-output/`. The outputs include runtime
-context, cluster logs, cleanup logs, copied pod logs, and JUnit-style test output.
-
-## Why this MR exists
-
-This restructure MR is meant to be the first maintainability follow-up after the minimal lane proves out. It
-should not introduce new pipeline capabilities. If a change would alter which jobs run, which environments are
-provisioned, or which credentials are required, that belongs in a later MR with its own review boundary.
-
-The next planned migration-owned MRs after this one are:
-
-1. security template and scanner adoption where it does not change the proven `develop` lane unexpectedly
-2. nightly lane
-3. qualification lane
-4. release lane
-5. mirror, intake, and rollback reapplication
-
-## Branch and ownership rule
-
-Migration-owned branches should use the owning `CSPL-xxxx` key in the branch name so Jira, Git history, and MR
-review can be correlated directly. Pipeline-driving pushes and automation changes should continue to use the
-shared non-personal bot identity rather than a developer account wherever practical.
+The planned migration-owned sequence after this MR remains straightforward. Security template adoption should
+land without unexpectedly widening the proven `develop` lane. After that, nightly, qualification, release, and
+then mirror, intake, and rollback can each land in their own review slices. Migration-owned branches should
+use the owning `CSPL-xxxx` key in the branch name so Jira, Git history, and MR review can be correlated
+directly. Pipeline-driving pushes and automation changes should continue to use the shared non-personal bot
+identity rather than a developer account wherever practical.
