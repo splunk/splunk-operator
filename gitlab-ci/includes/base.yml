@@ -1,0 +1,24 @@
+stages:
+  - verify
+  - test
+  - build
+  - image_scan
+  - integration
+
+variables:
+  GIT_DEPTH: "0"
+  GOCACHE: "/tmp/go-build"
+  GOMODCACHE: "/go/pkg/mod"
+  GOTOOLCHAIN: "auto"
+  GOWORK: "off"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+default:
+  image: docker.repo.splunkdev.net/ci-cd/ci-container/golang-1.25-aws:5.1.0
+  interruptible: true
+  before_script:
+    - |
+      set -eu
+      export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
+      rm -rf .cache/go
+      go version
