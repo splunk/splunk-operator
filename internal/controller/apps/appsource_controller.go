@@ -279,6 +279,63 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		Message:            "S3 bucket is accessible",
 	})
 
+	// check if the prefix actually exists
+	prefixIter := bkt.List(&blob.ListOptions{
+		Prefix: path,
+	})
+	_, err = prefixIter.Next(ctx)
+	if err == io.EOF { // prefix does not exist
+		logger.Info("Prefix does not exist", "prefix", path)
+
+		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+			Type:               appsv1alpha1.AppSourceConditionAppSynced,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: appSourceInstance.Generation,
+			Reason:             "PrefixNotFound",
+			Message:            "prefix does not exist",
+		})
+
+		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+			Type:               appsv1alpha1.AppSourceConditionReady,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: appSourceInstance.Generation,
+			Reason:             "PrefixNotFound",
+			Message:            "prefix does not exist",
+		})
+
+		if err := r.Status().Update(ctx, appSourceInstance); err != nil {
+			logger.Error(err, "Failed to update AppSource status")
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{}, nil
+	} else if err != nil {
+		logger.Error(err, "Failed to list objects")
+
+		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+			Type:               appsv1alpha1.AppSourceConditionAppSynced,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: appSourceInstance.Generation,
+			Reason:             "ListFailed",
+			Message:            "Failed to list objects",
+		})
+
+		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+			Type:               appsv1alpha1.AppSourceConditionReady,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: appSourceInstance.Generation,
+			Reason:             "ListFailed",
+			Message:            "Failed to list objects",
+		})
+
+		if err := r.Status().Update(ctx, appSourceInstance); err != nil {
+			logger.Error(err, "Failed to update AppSource status")
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{}, nil
+	}
+
 	// list the apps in the bucket
 	// create a list iterator
 	// doc: https://pkg.go.dev/gocloud.dev/blob?utm_source=godoc#example-Bucket.List
@@ -338,12 +395,12 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
-        Type:               appsv1alpha1.AppSourceConditionAppSynced,
-        Status:             metav1.ConditionTrue,
-        ObservedGeneration: appSourceInstance.Generation,
-        Reason:             "AppsSynced",
-        Message:            fmt.Sprintf("discovered %d apps", len(discoveredApps)),
-    })
+		Type:               appsv1alpha1.AppSourceConditionAppSynced,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: appSourceInstance.Generation,
+		Reason:             "AppsSynced",
+		Message:            fmt.Sprintf("discovered %d apps", len(discoveredApps)),
+	})
 
 	// everything works update the status
 	// update the AppSource status with the discovered apps
@@ -353,18 +410,17 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	appSourceInstance.Status.ObservedGeneration = appSourceInstance.Generation
 
 	meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
-        Type:               appsv1alpha1.AppSourceConditionReady,
-        Status:             metav1.ConditionTrue,
-        ObservedGeneration: appSourceInstance.Generation,
-        Reason:             "Available",
-        Message:            fmt.Sprintf("all checks passed, %d apps discovered", len(discoveredApps)),
-    })
+		Type:               appsv1alpha1.AppSourceConditionReady,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: appSourceInstance.Generation,
+		Reason:             "Available",
+		Message:            fmt.Sprintf("all checks passed, %d apps discovered", len(discoveredApps)),
+	})
 
 	if err := r.Status().Update(ctx, appSourceInstance); err != nil {
 		logger.Error(err, "Failed to update AppSource status")
 		return ctrl.Result{}, err
 	}
-
 
 	logger.Info("AppSource reconciled successfully", "discoveredApps", len(discoveredApps))
 
@@ -372,7 +428,6 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	requeueAfter := time.Duration(*appSourceInstance.Spec.PollIntervalSeconds) * time.Second
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
-
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *AppSourceReconciler) SetupWithManager(mgr ctrl.Manager) error {
