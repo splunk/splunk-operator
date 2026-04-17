@@ -1,0 +1,26 @@
+@startuml
+title Release Lane Target
+start
+:Release trigger on reviewed branch or tag;
+:Prepare release metadata;
+
+partition Baseline {
+  :Reuse proven verification and test gates;
+}
+
+partition Artifact {
+  :Stage release operator images;
+  :Run release image scanning;
+}
+
+partition Validation {
+  :Run release validation and FIPS slices;
+}
+
+partition Publish {
+  :Publish release bundles and charts;
+  :Write GitLab release record;
+}
+
+stop
+@enduml
