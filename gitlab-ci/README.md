@@ -41,6 +41,12 @@ The local include split is by responsibility rather than by tool:
 That split is intentionally modest. It makes the current lane easier to read without inventing a large
 abstraction layer too early.
 
+The includes also use hidden template jobs as the reusable CI pattern boundary. Shared defaults such as Go
+verification, Go test execution, Python venv setup, runtime artifact retention, and runtime-stage job families
+live in [`gitlab-ci/includes/base.yml`](includes/base.yml). The visible jobs in the other include files extend
+those templates instead of duplicating stage and artifact policy by hand. That keeps the current lane explicit
+while still making later lanes pluggable.
+
 ## Runtime contract
 
 [`gitlab-ci/build-test-push.sh`](build-test-push.sh) builds the operator image for the current commit and pushes

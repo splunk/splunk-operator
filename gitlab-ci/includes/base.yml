@@ -22,3 +22,34 @@ default:
       export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
       rm -rf .cache/go
       go version
+
+.go-verify-job:
+  stage: verify
+
+.go-test-job:
+  stage: test
+
+.runtime-artifact-job:
+  artifacts:
+    when: always
+    expire_in: 30 days
+
+.runtime-build-job:
+  extends: .runtime-artifact-job
+  stage: build
+
+.runtime-image-scan-job:
+  extends: .runtime-artifact-job
+  stage: image_scan
+
+.runtime-integration-job:
+  extends: .runtime-artifact-job
+  stage: integration
+  interruptible: false
+
+.python-venv-job:
+  before_script:
+    - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
+    - rm -rf .cache/go
+    - ensure_python_venv_tooling
+    - python3 --version

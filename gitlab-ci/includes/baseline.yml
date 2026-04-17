@@ -1,12 +1,12 @@
 format-and-vet:
-  stage: verify
+  extends: .go-verify-job
   script:
     - make fmt
     - make vet
     - git diff --exit-code
 
 unit-tests:
-  stage: test
+  extends: .go-test-job
   needs:
     - format-and-vet
   variables:
@@ -27,12 +27,9 @@ unit-tests:
   coverage: '/^total:\s+\(statements\)\s+(\d+\.\d+)%$/'
 
 kubectl-splunk-tests:
-  stage: test
-  before_script:
-    - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
-    - rm -rf .cache/go
-    - ensure_python_venv_tooling
-    - python3 --version
+  extends:
+    - .go-test-job
+    - .python-venv-job
   script:
     - python3 -m venv /tmp/kubectl-splunk-venv
     - . /tmp/kubectl-splunk-venv/bin/activate
