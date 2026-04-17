@@ -128,7 +128,7 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			Status:             metav1.ConditionFalse,
 			ObservedGeneration: appSourceInstance.Generation,
 			Reason:             "SecretNotFound",
-			Message:            "reference secret not dound: " + appSourceInstance.Spec.Auth.SecretRef.Name,
+			Message:            "reference secret not found: " + appSourceInstance.Spec.Auth.SecretRef.Name,
 		})
 		meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
 			Type:               appsv1alpha1.AppSourceConditionReady,
