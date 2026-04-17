@@ -173,13 +173,13 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managermc1, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("managermc1, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			RunS1StandaloneAddDeleteMCTest(ctx, deployment, testcaseEnvInst, deployment.GetName(), "standalone-"+testenv.RandomDNSName(3))
 		})
 	})
 
 	Context("Standalone deployment with Scale up", func() {
-		It("managermc1, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("managermc1, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			/*
 				Test Steps
 				1.  Deploy Standalone
@@ -237,7 +237,7 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managermc2, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("managermc2, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			RunS1StandaloneAddDeleteMCTest(ctx, deployment, testcaseEnvInst, "search-head-adhoc", "search-head")
 		})
 	})

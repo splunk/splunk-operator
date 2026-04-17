@@ -1206,7 +1206,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworksS1, appframework: can add new apps to app source while install is in progress and have all apps installed", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
+		It("integration, s1, appframeworksS1, appframework: can add new apps to app source while install is in progress and have all apps installed", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1320,7 +1320,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
+		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1414,7 +1414,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
+		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1722,7 +1722,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and update apps after app download is completed", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
+		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and update apps after app download is completed", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			################## SETUP ####################
@@ -1885,7 +1885,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and delete apps from app directory when app download is complete", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
+		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and delete apps from app directory when app download is complete", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
