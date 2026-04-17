@@ -460,7 +460,7 @@ cleanup:
 setup/ginkgo:
 	@echo Installing ginkgo
 	@go get github.com/onsi/ginkgo/v2
-	@go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@latest
+	@go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@$(shell go list -m -f '{{.Version}}' github.com/onsi/ginkgo/v2)
 	@echo Installing gomega
 	@go get github.com/onsi/gomega/...
 
