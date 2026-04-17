@@ -19,7 +19,6 @@ variables:
   GIT_DEPTH: "0"
   GOCACHE: "/tmp/go-build"
   GOMODCACHE: "/go/pkg/mod"
-  GOTOOLCHAIN: "auto"
   GOWORK: "off"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
