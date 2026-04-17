@@ -51,6 +51,7 @@ func NewAppValidator(k8sClient client.Client) *AppValidator {
 	return &AppValidator{Client: k8sClient}
 }
 
+// appFromObject converts a runtime.Object to an *appsv1alpha1.App.
 func appFromObject(obj runtime.Object) (*appsv1alpha1.App, error) {
 	app, ok := obj.(*appsv1alpha1.App)
 	if !ok {
@@ -60,7 +61,7 @@ func appFromObject(obj runtime.Object) (*appsv1alpha1.App, error) {
 	return app, nil
 }
 
-// ValidateCreate implements admission.CustomValidator so a webhook will be registered for the type App.
+// ValidateAppCreate validates an App on CREATE.
 func (v *AppValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	app, err := appFromObject(obj)
 	if err != nil {
@@ -75,7 +76,7 @@ func (v *AppValidator) ValidateCreate(_ context.Context, obj runtime.Object) (ad
 	return GetAppWarningsOnCreate(app), nil
 }
 
-// ValidateUpdate implements admission.CustomValidator so a webhook will be registered for the type App.
+// ValidateAppUpdate validates an App on UPDATE.
 func (v *AppValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	oldApp, err := appFromObject(oldObj)
 	if err != nil {
@@ -95,7 +96,7 @@ func (v *AppValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.
 	return GetAppWarningsOnUpdate(app, oldApp), nil
 }
 
-// ValidateDelete implements admission.CustomValidator so a webhook will be registered for the type App.
+// ValidateAppDelete validates an App on DELETE. No validation is needed for deletion, so it always returns nil.
 func (v *AppValidator) ValidateDelete(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	return nil, nil
 }
@@ -135,6 +136,7 @@ func ValidateAppUpdate(k8sClient client.Client, obj, _ *appsv1alpha1.App) field.
 	return validateApp(context.Background(), k8sClient, obj)
 }
 
+// validateApp performs common validation for both CREATE and UPDATE operations on App.
 func validateApp(ctx context.Context, k8sClient client.Client, app *appsv1alpha1.App) field.ErrorList {
 	if k8sClient == nil {
 		return field.ErrorList{
@@ -149,6 +151,7 @@ func validateApp(ctx context.Context, k8sClient client.Client, app *appsv1alpha1
 	return allErrs
 }
 
+// validateAppSourceRef checks if the App's sourceRef points to an existing AppSource.
 func validateAppSourceRef(ctx context.Context, k8sClient client.Client, app *appsv1alpha1.App) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -168,6 +171,7 @@ func validateAppSourceRef(ctx context.Context, k8sClient client.Client, app *app
 	return allErrs
 }
 
+// validateAppUniqueness checks that there are no other Apps in the same namespace with the same appID, scope, and targetRef combination.
 func validateAppUniqueness(ctx context.Context, k8sClient client.Client, app *appsv1alpha1.App) field.ErrorList {
 	var allErrs field.ErrorList
 
