@@ -1200,6 +1200,10 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 				Name:      fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.EtcVolumeStorage),
 				MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, splcommon.EtcVolumeStorage),
 			},
+			{
+				Name:      fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.VarVolumeStorage),
+				MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, splcommon.VarVolumeStorage),
+			},
 		},
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{

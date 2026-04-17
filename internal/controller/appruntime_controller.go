@@ -322,6 +322,14 @@ mkdir -p /opt/splunk/var/log/splunk/ep \
          /opt/splunk/var/run/splunk \
          /opt/splunk/var/spool
 
+# Write .stignore for var folder - exclude kvstore, logs, PID files, sockets
+cat > /opt/splunk/var/.stignore <<STIGNORE
+/lib/splunk/kvstore
+/log
+/run/splunk/*.pid
+/run/splunk/*.sock
+STIGNORE
+
 ST_HOME=/var/syncthing
 SERVER_ADDR="%s"
 SERVER_API="http://${SERVER_ADDR}:8384"
@@ -354,6 +362,12 @@ echo "Server device ID: $SERVER_DEVICE_ID"
 cat > "$ST_HOME/config.xml" <<XMLEOF
 <configuration version="28">
   <folder id="splunk-etc" label="splunk-etc" path="/opt/splunk/etc" type="sendreceive" rescanIntervalS="3600" fsWatcherEnabled="true" fsWatcherDelayS="1">
+    <filesystemType>basic</filesystemType>
+    <device id="$MY_DEVICE_ID" introducedBy=""></device>
+    <device id="$SERVER_DEVICE_ID" introducedBy=""></device>
+    <minDiskFree unit="%%">0</minDiskFree>
+  </folder>
+  <folder id="splunk-var" label="splunk-var" path="/opt/splunk/var" type="sendreceive" rescanIntervalS="3600" fsWatcherEnabled="true" fsWatcherDelayS="1">
     <filesystemType>basic</filesystemType>
     <device id="$MY_DEVICE_ID" introducedBy=""></device>
     <device id="$SERVER_DEVICE_ID" introducedBy=""></device>
@@ -394,9 +408,9 @@ devs = cfg.get('devices', [])
 if not any(d['deviceID'] == my_id for d in devs):
     devs.append({'deviceID': my_id, 'name': 'client-$HOSTNAME', 'addresses': ['dynamic'], 'compression': 'metadata'})
     cfg['devices'] = devs
-# Add client device to the folder if not present
+# Add client device to all synced folders if not present
 for f in cfg.get('folders', []):
-    if f['id'] == 'splunk-etc':
+    if f['id'] in ('splunk-etc', 'splunk-var'):
         fdevs = f.get('devices', [])
         if not any(d['deviceID'] == my_id for d in fdevs):
             fdevs.append({'deviceID': my_id, 'introducedBy': ''})
@@ -412,16 +426,22 @@ echo "Server config updated."
 syncthing -home="$ST_HOME" -no-browser -no-restart -verbose &
 ST_PID=$!
 
-# Wait for initial sync to complete
+# Wait for initial sync to complete (both folders)
 echo "Waiting for initial sync to complete..."
 for i in $(seq 1 120); do
   sleep 3
-  RESULT=$(curl -sf -H "X-API-Key: $API_KEY" "http://127.0.0.1:8385/rest/db/completion?folder=splunk-etc&device=$SERVER_DEVICE_ID" 2>/dev/null) || continue
-  COMPLETION=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f\"{d['completion']:.0f}\")" 2>/dev/null) || COMPLETION="0"
-  NEED=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['needBytes'])" 2>/dev/null) || NEED="-1"
-  echo "  sync progress: ${COMPLETION}%% (needBytes: $NEED)"
-  if [ "$COMPLETION" = "100" ] && [ "$NEED" = "0" ]; then
-    echo "Initial sync complete!"
+  ALL_DONE=true
+  for FOLDER in splunk-etc splunk-var; do
+    RESULT=$(curl -sf -H "X-API-Key: $API_KEY" "http://127.0.0.1:8385/rest/db/completion?folder=$FOLDER&device=$SERVER_DEVICE_ID" 2>/dev/null) || { ALL_DONE=false; break; }
+    COMPLETION=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f\"{d['completion']:.0f}\")" 2>/dev/null) || COMPLETION="0"
+    NEED=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['needBytes'])" 2>/dev/null) || NEED="-1"
+    echo "  $FOLDER sync progress: ${COMPLETION}%% (needBytes: $NEED)"
+    if [ "$COMPLETION" != "100" ] || [ "$NEED" != "0" ]; then
+      ALL_DONE=false
+    fi
+  done
+  if [ "$ALL_DONE" = "true" ]; then
+    echo "Initial sync complete (both folders)!"
     kill $ST_PID 2>/dev/null || true
     wait $ST_PID 2>/dev/null || true
     exit 0
