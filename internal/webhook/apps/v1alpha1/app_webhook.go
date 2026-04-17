@@ -1,18 +1,16 @@
-/*
-Copyright 2021.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package v1alpha1
 
@@ -26,15 +24,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	appsv1alpha1 "github.com/splunk/splunk-operator/api/apps/v1alpha1"
 )
-
-// nolint:unused
-// log is for logging in this package.
-var applog = logf.Log.WithName("app-resource")
 
 const AppValidationPath = "/validate-apps-splunk-com-v1alpha1-app"
 
@@ -46,11 +39,9 @@ func SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-// NOTE: If you want to customise the 'path', use the flags '--defaulting-path' or '--validation-path'.
 // +kubebuilder:webhook:path=/validate-apps-splunk-com-v1alpha1-app,mutating=false,failurePolicy=fail,sideEffects=None,groups=apps.splunk.com,resources=apps,verbs=create;update,versions=v1alpha1,name=vapp-v1alpha1.kb.io,admissionReviewVersions=v1
 
-// AppValidator is a scaffold validator for the App resource.
+// AppValidator is a validator for the App resource.
 type AppValidator struct {
 	Client client.Client
 }
@@ -76,8 +67,6 @@ func (v *AppValidator) ValidateCreate(_ context.Context, obj runtime.Object) (ad
 		return nil, err
 	}
 
-	applog.Info("Validation for App upon creation", "name", app.GetName())
-
 	allErrs := ValidateAppCreate(v.Client, app)
 	if len(allErrs) > 0 {
 		return GetAppWarningsOnCreate(app), apierrors.NewInvalid(v.GetGroupKind(obj), v.GetName(obj), allErrs)
@@ -98,8 +87,6 @@ func (v *AppValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.
 		return nil, err
 	}
 
-	applog.Info("Validation for App upon update", "name", app.GetName())
-
 	allErrs := ValidateAppUpdate(v.Client, app, oldApp)
 	if len(allErrs) > 0 {
 		return GetAppWarningsOnUpdate(app, oldApp), apierrors.NewInvalid(v.GetGroupKind(newObj), v.GetName(newObj), allErrs)
@@ -110,13 +97,6 @@ func (v *AppValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.
 
 // ValidateDelete implements admission.CustomValidator so a webhook will be registered for the type App.
 func (v *AppValidator) ValidateDelete(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	app, err := appFromObject(obj)
-	if err != nil {
-		return nil, err
-	}
-
-	applog.Info("Validation for App upon deletion", "name", app.GetName())
-
 	return nil, nil
 }
 
