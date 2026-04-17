@@ -126,6 +126,21 @@ spec:
                 x-kubernetes-list-map-keys:
                 - name
                 x-kubernetes-list-type: map
+              monitoring:
+                description: Monitoring contains configuration for metrics exposure
+                  features.
+                properties:
+                  connectionPoolerMetrics:
+                    description: |-
+                      ConnectionPoolerMetrics overrides whether connection pooler metrics scraping is enabled.
+                      When unset, the class-level setting applies.
+                    type: boolean
+                  postgresqlMetrics:
+                    description: |-
+                      PostgreSQLMetrics overrides whether PostgreSQL metrics scraping is enabled.
+                      When unset, the class-level setting applies.
+                    type: boolean
+                type: object
               pgHBA:
                 default: []
                 description: |-

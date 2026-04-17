@@ -76,6 +76,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		return ctrl.Result{}, err
 	}
+
 	rc := &dbcore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics}
 	result, err := dbcore.PostgresDatabaseService(ctx, rc, postgresDB, dbadapter.NewDBRepository)
 	r.FleetCollector.CollectDatabaseMetrics(ctx, r.Client, r.Metrics)

@@ -27,6 +27,11 @@ spec:
         cpu: "1"
         memory: "2Gi"
     connectionPoolerEnabled: true
+    monitoring:
+      postgresqlMetrics:
+        enabled: true
+      connectionPoolerMetrics:
+        enabled: true
 
   cnpg:
     # Restart method - tolerate downtime in dev
@@ -36,4 +41,3 @@ spec:
       mode: transaction
       config:
         max_client_conn: "100"
-

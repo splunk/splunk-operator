@@ -119,6 +119,8 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		return ctrl.Result{}, errors.Join(err, statusErr)
 	}
 
+	postgresMetricsEnabled := isPostgreSQLMetricsEnabled(postgresCluster, clusterClass)
+	poolerMetricsEnabled := isConnectionPoolerMetricsEnabled(postgresCluster, clusterClass)
 	// Resolve or derive the superuser secret name.
 	if postgresCluster.Status.Resources != nil && postgresCluster.Status.Resources.SuperUserSecretRef != nil {
 		postgresSecretName = postgresCluster.Status.Resources.SuperUserSecretRef.Name
@@ -183,7 +185,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	}
 
 	// Build desired CNPG Cluster spec.
-	desiredSpec := buildCNPGClusterSpec(mergedConfig, postgresSecretName)
+	desiredSpec := buildCNPGClusterSpec(mergedConfig, postgresSecretName, postgresMetricsEnabled)
 
 	// Fetch existing CNPG Cluster or create it.
 	existingCNPG := &cnpgv1.Cluster{}
@@ -191,7 +193,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	switch {
 	case apierrors.IsNotFound(err):
 		logger.Info("CNPG Cluster creation started", "name", postgresCluster.Name)
-		newCluster, err := buildCNPGCluster(rc.Scheme, postgresCluster, mergedConfig, postgresSecretName)
+		newCluster, err := buildCNPGCluster(rc.Scheme, postgresCluster, mergedConfig, postgresSecretName, postgresMetricsEnabled)
 		if err != nil {
 			logger.Error(err, "Failed to build CNPG Cluster", "name", postgresCluster.Name)
 			return ctrl.Result{}, err
@@ -298,7 +300,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 				"Waiting for CNPG cluster to become healthy before creating poolers", pendingClusterPhase)
 			return ctrl.Result{RequeueAfter: retryDelay}, statusErr
 		}
-		if err := createOrUpdateConnectionPoolers(ctx, c, rc.Scheme, postgresCluster, mergedConfig, cnpgCluster); err != nil {
+		if err := createOrUpdateConnectionPoolers(ctx, c, rc.Scheme, postgresCluster, mergedConfig, cnpgCluster, poolerMetricsEnabled); err != nil {
 			logger.Error(err, "Failed to reconcile connection pooler")
 			rc.emitWarning(postgresCluster, EventPoolerReconcileFailed, fmt.Sprintf("Failed to reconcile connection pooler: %v", err))
 			statusErr := updateStatus(poolerReady, metav1.ConditionFalse, reasonPoolerReconciliationFailed,
@@ -475,8 +477,8 @@ func getMergedConfig(class *enterprisev4.PostgresClusterClass, cluster *enterpri
 // buildCNPGClusterSpec builds the desired CNPG ClusterSpec.
 // IMPORTANT: any field added here must also appear in normalizeCNPGClusterSpec,
 // otherwise spec drift will be silently ignored.
-func buildCNPGClusterSpec(cfg *MergedConfig, secretName string) cnpgv1.ClusterSpec {
-	return cnpgv1.ClusterSpec{
+func buildCNPGClusterSpec(cfg *MergedConfig, secretName string, postgresMetricsEnabled bool) cnpgv1.ClusterSpec {
+	spec := cnpgv1.ClusterSpec{
 		ImageName: fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", *cfg.Spec.PostgresVersion),
 		Instances: int(*cfg.Spec.Instances),
 		PostgresConfiguration: cnpgv1.PostgresConfiguration{
@@ -497,12 +499,18 @@ func buildCNPGClusterSpec(cfg *MergedConfig, secretName string) cnpgv1.ClusterSp
 		},
 		Resources: *cfg.Spec.Resources,
 	}
+	annotations := make(map[string]string)
+	if postgresMetricsEnabled {
+		annotations = buildPostgresScrapeAnnotations()
+	}
+	spec.InheritedMetadata = &cnpgv1.EmbeddedObjectMetadata{Annotations: annotations}
+	return spec
 }
 
-func buildCNPGCluster(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, secretName string) (*cnpgv1.Cluster, error) {
+func buildCNPGCluster(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, secretName string, postgresMetricsEnabled bool) (*cnpgv1.Cluster, error) {
 	cnpg := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(cfg, secretName),
+		Spec:       buildCNPGClusterSpec(cfg, secretName, postgresMetricsEnabled),
 	}
 	if err := ctrl.SetControllerReference(cluster, cnpg, scheme); err != nil {
 		return nil, fmt.Errorf("setting controller reference on CNPG cluster: %w", err)
@@ -525,6 +533,9 @@ func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec, customDefinedParameters m
 	}
 	if len(spec.PostgresConfiguration.PgHBA) > 0 {
 		normalized.PgHBA = spec.PostgresConfiguration.PgHBA
+	}
+	if spec.InheritedMetadata != nil && len(spec.InheritedMetadata.Annotations) > 0 {
+		normalized.InheritedAnnotations = spec.InheritedMetadata.Annotations
 	}
 	if spec.Bootstrap != nil && spec.Bootstrap.InitDB != nil {
 		normalized.DefaultDatabase = spec.Bootstrap.InitDB.Database
@@ -624,17 +635,17 @@ func poolerInstanceCount(p *cnpgv1.Pooler) (desired, scheduled int32) {
 }
 
 // createOrUpdateConnectionPoolers creates RW and RO poolers if they don't exist.
-func createOrUpdateConnectionPoolers(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster) error {
-	if err := createConnectionPooler(ctx, c, scheme, cluster, cfg, cnpgCluster, readWriteEndpoint); err != nil {
+func createOrUpdateConnectionPoolers(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerMetricsEnabled bool) error {
+	if err := createConnectionPooler(ctx, c, scheme, cluster, cfg, cnpgCluster, readWriteEndpoint, poolerMetricsEnabled); err != nil {
 		return fmt.Errorf("reconciling RW pooler: %w", err)
 	}
-	if err := createConnectionPooler(ctx, c, scheme, cluster, cfg, cnpgCluster, readOnlyEndpoint); err != nil {
+	if err := createConnectionPooler(ctx, c, scheme, cluster, cfg, cnpgCluster, readOnlyEndpoint, poolerMetricsEnabled); err != nil {
 		return fmt.Errorf("reconciling RO pooler: %w", err)
 	}
 	return nil
 }
 
-func createConnectionPooler(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerType string) error {
+func createConnectionPooler(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerType string, poolerMetricsEnabled bool) error {
 	logger := log.FromContext(ctx)
 	poolerName := poolerResourceName(cluster.Name, poolerType)
 	existing := &cnpgv1.Pooler{}
@@ -646,14 +657,14 @@ func createConnectionPooler(ctx context.Context, c client.Client, scheme *runtim
 		return err
 	}
 	logger.Info("CNPG Pooler creation started", "name", poolerName, "type", poolerType)
-	pooler, err := buildCNPGPooler(scheme, cluster, cfg, cnpgCluster, poolerType)
+	pooler, err := buildCNPGPooler(scheme, cluster, cfg, cnpgCluster, poolerType, poolerMetricsEnabled)
 	if err != nil {
 		return err
 	}
 	return c.Create(ctx, pooler)
 }
 
-func buildCNPGPooler(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerType string) (*cnpgv1.Pooler, error) {
+func buildCNPGPooler(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerType string, poolerMetricsEnabled bool) (*cnpgv1.Pooler, error) {
 	pc := cfg.CNPG.ConnectionPooler
 	instances := *pc.Instances
 	mode := cnpgv1.PgBouncerPoolMode(*pc.Mode)
@@ -667,6 +678,20 @@ func buildCNPGPooler(scheme *runtime.Scheme, cluster *enterprisev4.PostgresClust
 				PoolMode:   mode,
 				Parameters: pc.Config,
 			},
+		},
+	}
+	poolerAnnotations := make(map[string]string)
+	if poolerMetricsEnabled {
+		poolerAnnotations = buildPoolerScrapeAnnotations()
+	}
+	// Template is always set so that annotation removal is explicit in merge patches.
+	// CNPG's Pooler CRD requires template.spec.containers to be present — a minimal
+	// named container lets CNPG's podspec builder merge in the real PgBouncer
+	// image/command/ports while still carrying our annotations.
+	pooler.Spec.Template = &cnpgv1.PodTemplateSpec{
+		ObjectMeta: cnpgv1.Metadata{Annotations: poolerAnnotations},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "pgbouncer"}},
 		},
 	}
 	if err := ctrl.SetControllerReference(cluster, pooler, scheme); err != nil {

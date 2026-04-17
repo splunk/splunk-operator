@@ -33,6 +33,7 @@ type normalizedCNPGClusterSpec struct {
 	Owner                   string
 	StorageSize             string
 	Resources               corev1.ResourceRequirements
+	InheritedAnnotations    map[string]string
 }
 
 // MergedConfig is the resolved configuration after overlaying PostgresCluster on PostgresClusterClass defaults.

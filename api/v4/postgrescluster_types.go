@@ -107,6 +107,24 @@ type PostgresClusterSpec struct {
 	// +kubebuilder:default=Retain
 	// +optional
 	ClusterDeletionPolicy *string `json:"clusterDeletionPolicy,omitempty"`
+
+	// Monitoring contains configuration for metrics exposure features.
+	// +optional
+	Monitoring *PostgresClusterMonitoring `json:"monitoring,omitempty"`
+}
+
+// PostgresClusterMonitoring overrides monitoring configuration options for PostgresClusterClass.
+// Set a field to false to disable a metric target that is enabled in the class.
+type PostgresClusterMonitoring struct {
+	// PostgreSQLMetrics overrides whether PostgreSQL metrics scraping is enabled.
+	// When unset, the class-level setting applies.
+	// +optional
+	PostgreSQLMetrics *bool `json:"postgresqlMetrics,omitempty"`
+
+	// ConnectionPoolerMetrics overrides whether connection pooler metrics scraping is enabled.
+	// When unset, the class-level setting applies.
+	// +optional
+	ConnectionPoolerMetrics *bool `json:"connectionPoolerMetrics,omitempty"`
 }
 
 // PostgresClusterResources defines references to Kubernetes resources related to the PostgresCluster, such as ConfigMaps and Secrets.
