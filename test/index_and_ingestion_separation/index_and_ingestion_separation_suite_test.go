@@ -33,65 +33,43 @@ const (
 	// ConsistentPollInterval is the interval to use to consistently check a state is stable
 	ConsistentPollInterval = 200 * time.Millisecond
 	ConsistentDuration     = 2000 * time.Millisecond
+
+	// Default values for AWS resources (used when environment variables are not set)
+	defaultSQSQueueName = "index-ingest-separation-test-q"
+	defaultSQSDLQName   = "index-ingest-separation-test-dlq"
+	defaultS3Bucket     = "index-ingest-separation-test-bucket"
+	defaultS3Prefix     = "smartbus-test"
+	defaultAWSRegion    = "us-west-2"
+)
+
+// AWS resource configuration - populated in init() from environment variables
+var (
+	// Configurable AWS resources via environment variables
+	sqsQueueName string
+	sqsDLQName   string
+	s3Bucket     string
+	s3Prefix     string
+	awsRegion    string
+	sqsEndpoint  string
+	s3Endpoint   string
 )
 
 var (
 	testenvInstance *testenv.TestEnv
 	testSuiteName   = "indingsep-" + testenv.RandomDNSName(3)
 
-	queue = enterpriseApi.QueueSpec{
-		Provider: "sqs",
-		SQS: enterpriseApi.SQSSpec{
-			Name:       "index-ingest-separation-test-q",
-			AuthRegion: "us-west-2",
-			Endpoint:   "https://sqs.us-west-2.amazonaws.com",
-			DLQ:        "index-ingest-separation-test-dlq",
-		},
-	}
-	objectStorage = enterpriseApi.ObjectStorageSpec{
-		Provider: "s3",
-		S3: enterpriseApi.S3Spec{
-			Endpoint: "https://s3.us-west-2.amazonaws.com",
-			Path:     "index-ingest-separation-test-bucket/smartbus-test",
-		},
-	}
+	queue         enterpriseApi.QueueSpec
+	objectStorage enterpriseApi.ObjectStorageSpec
+
 	serviceAccountName = "index-ingest-sa"
 
-	inputs = []string{
-		"[remote_queue:index-ingest-separation-test-q]",
-		"remote_queue.type = sqs_smartbus",
-		"remote_queue.sqs_smartbus.auth_region = us-west-2",
-		"remote_queue.sqs_smartbus.dead_letter_queue.name = index-ingest-separation-test-dlq",
-		"remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com",
-		"remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com",
-		"remote_queue.sqs_smartbus.large_message_store.path = s3://index-ingest-separation-test-bucket/smartbus-test",
-		"remote_queue.sqs_smartbus.retry_policy = max_count",
-		"remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4"}
-	outputs     = append(inputs, "remote_queue.sqs_smartbus.encoding_format = s2s", "remote_queue.sqs_smartbus.send_interval = 5s")
-	defaultsAll = []string{
-		"[pipeline:remotequeueruleset]\ndisabled = false",
-		"[pipeline:ruleset]\ndisabled = true",
-		"[pipeline:remotequeuetyping]\ndisabled = false",
-		"[pipeline:remotequeueoutput]\ndisabled = false",
-		"[pipeline:typing]\ndisabled = true",
-	}
-	defaultsIngest = append(defaultsAll, "[pipeline:indexerPipe]\ndisabled = true")
-
-	awsEnvVars = []string{
-		"AWS_REGION=us-west-2",
-		"AWS_DEFAULT_REGION=us-west-2",
-		"AWS_WEB_IDENTITY_TOKEN_FILE=/var/run/secrets/eks.amazonaws.com/serviceaccount/token",
-		"AWS_ROLE_ARN=arn:aws:iam::",
-		"AWS_STS_REGIONAL_ENDPOINTS=regional",
-	}
-
-	inputsShouldNotContain = []string{
-		"[remote_queue:index-ingest-separation-test-q]",
-		"remote_queue.sqs_smartbus.dead_letter_queue.name = index-ingest-separation-test-dlq",
-		"remote_queue.sqs_smartbus.large_message_store.path = s3://index-ingest-separation-test-bucket/smartbus-test",
-		"remote_queue.sqs_smartbus.retry_policy = max_count",
-		"remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4"}
-	outputsShouldNotContain = append(inputs, "remote_queue.sqs_smartbus.send_interval = 5s")
+	inputs                  []string
+	outputs                 []string
+	defaultsAll             []string
+	defaultsIngest          []string
+	awsEnvVars              []string
+	inputsShouldNotContain  []string
+	outputsShouldNotContain []string
 
 	testDataS3Bucket    = os.Getenv("TEST_BUCKET")
 	testS3Bucket        = os.Getenv("TEST_INDEXES_S3_BUCKET")
@@ -102,6 +80,80 @@ var (
 	appListV1           = testenv.BasicApps
 	s3AppDirV1          = testenv.AppLocationV1
 )
+
+func init() {
+	// Initialize AWS resource configuration from environment variables with defaults
+	sqsQueueName = testenv.GetEnvWithDefault("TEST_SQS_QUEUE_NAME", defaultSQSQueueName)
+	sqsDLQName = testenv.GetEnvWithDefault("TEST_SQS_DLQ_NAME", defaultSQSDLQName)
+	s3Bucket = testenv.GetEnvWithDefault("TEST_INGEST_S3_BUCKET", defaultS3Bucket)
+	s3Prefix = testenv.GetEnvWithDefault("TEST_INGEST_S3_PREFIX", defaultS3Prefix)
+	awsRegion = testenv.GetEnvWithDefault("TEST_AWS_REGION", defaultAWSRegion)
+	sqsEndpoint = testenv.GetEnvWithDefault("TEST_SQS_ENDPOINT", "https://sqs."+awsRegion+".amazonaws.com")
+	s3Endpoint = testenv.GetEnvWithDefault("TEST_S3_ENDPOINT", "https://s3."+awsRegion+".amazonaws.com")
+
+	// Build queue spec
+	queue = enterpriseApi.QueueSpec{
+		Provider: "sqs",
+		SQS: enterpriseApi.SQSSpec{
+			Name:       sqsQueueName,
+			AuthRegion: awsRegion,
+			Endpoint:   sqsEndpoint,
+			DLQ:        sqsDLQName,
+		},
+	}
+
+	// Build object storage spec
+	objectStorage = enterpriseApi.ObjectStorageSpec{
+		Provider: "s3",
+		S3: enterpriseApi.S3Spec{
+			Endpoint: s3Endpoint,
+			Path:     s3Bucket + "/" + s3Prefix,
+		},
+	}
+
+	// Build inputs configuration
+	inputs = []string{
+		"[remote_queue:" + sqsQueueName + "]",
+		"remote_queue.type = sqs_smartbus",
+		"remote_queue.sqs_smartbus.auth_region = " + awsRegion,
+		"remote_queue.sqs_smartbus.dead_letter_queue.name = " + sqsDLQName,
+		"remote_queue.sqs_smartbus.endpoint = " + sqsEndpoint,
+		"remote_queue.sqs_smartbus.large_message_store.endpoint = " + s3Endpoint,
+		"remote_queue.sqs_smartbus.large_message_store.path = s3://" + s3Bucket + "/" + s3Prefix,
+		"remote_queue.sqs_smartbus.retry_policy = max_count",
+		"remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4",
+	}
+	outputs = append(inputs, "remote_queue.sqs_smartbus.encoding_format = s2s", "remote_queue.sqs_smartbus.send_interval = 5s")
+
+	// Build defaults configuration
+	defaultsAll = []string{
+		"[pipeline:remotequeueruleset]\ndisabled = false",
+		"[pipeline:ruleset]\ndisabled = true",
+		"[pipeline:remotequeuetyping]\ndisabled = false",
+		"[pipeline:remotequeueoutput]\ndisabled = false",
+		"[pipeline:typing]\ndisabled = true",
+	}
+	defaultsIngest = append(defaultsAll, "[pipeline:indexerPipe]\ndisabled = true")
+
+	// Build AWS environment variables for pods
+	awsEnvVars = []string{
+		"AWS_REGION=" + awsRegion,
+		"AWS_DEFAULT_REGION=" + awsRegion,
+		"AWS_WEB_IDENTITY_TOKEN_FILE=/var/run/secrets/eks.amazonaws.com/serviceaccount/token",
+		"AWS_ROLE_ARN=arn:aws:iam::",
+		"AWS_STS_REGIONAL_ENDPOINTS=regional",
+	}
+
+	// Build negative test assertions
+	inputsShouldNotContain = []string{
+		"[remote_queue:" + sqsQueueName + "]",
+		"remote_queue.sqs_smartbus.dead_letter_queue.name = " + sqsDLQName,
+		"remote_queue.sqs_smartbus.large_message_store.path = s3://" + s3Bucket + "/" + s3Prefix,
+		"remote_queue.sqs_smartbus.retry_policy = max_count",
+		"remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4",
+	}
+	outputsShouldNotContain = append(inputs, "remote_queue.sqs_smartbus.send_interval = 5s")
+}
 
 // TestBasic is the main entry point
 func TestBasic(t *testing.T) {
