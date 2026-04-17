@@ -136,7 +136,8 @@ vet: setup/ginkgo	 ## Run go vet against code.
 	go vet ./...
 
 test: manifests generate fmt vet setup-envtest ## Run tests.
-	REPORT_FILE="unit_test-$$(date +%Y%m%d-%H%M%S)$${GITHUB_RUN_ID:+-$$GITHUB_RUN_ID}.xml"; \
+	RUN_ID="$${CI_PIPELINE_ID:-$${GITHUB_RUN_ID:-}}"; \
+	REPORT_FILE="unit_test-$$(date +%Y%m%d-%H%M%S)$${RUN_ID:+-$$RUN_ID}.xml"; \
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=$$REPORT_FILE --output-dir=`pwd` -vv --trace --keep-going --timeout=$${TEST_TIMEOUT:-170m} --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/client ./pkg/splunk/util ./internal/controller ./pkg/splunk/splkcontroller
 
 

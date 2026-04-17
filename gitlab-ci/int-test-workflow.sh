@@ -20,6 +20,17 @@ log_step() {
   printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
 }
 
+copy_integration_junit() {
+  if copy_if_exists "${CI_PROJECT_DIR}/inttest-junit.xml" "${integration_junit}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  junit_report="$(find "${CI_PROJECT_DIR}" -maxdepth 1 -name 'report-junit-*.xml' -type f | sort | tail -n 1)"
+  if [ -n "${junit_report}" ]; then
+    copy_if_exists "${junit_report}" "${integration_junit}" >/dev/null 2>&1 || true
+  fi
+}
+
 : > "${context_file}"
 : > "${cleanup_log}"
 : > "${cluster_log}"
@@ -61,7 +72,7 @@ requested_profile="${STAGING_INT_TEST_PROFILE:-${JOB_INT_TEST_PROFILE:-managerse
 resolve_integration_profile "${requested_profile}"
 test_focus="${RESOLVED_INT_TEST_FOCUS}"
 safe_test_focus="$(sanitize_slug "${test_focus}")"
-cluster_name_prefix="${JOB_EKS_CLUSTER_NAME_PREFIX:-${STAGING_EKS_CLUSTER_NAME_PREFIX:-eks-integration-test-cluster}}"
+cluster_name_prefix="${JOB_EKS_CLUSTER_NAME_PREFIX:-${STAGING_EKS_CLUSTER_NAME_PREFIX:-eks-int-test-cluster}}"
 cluster_nodes="${STAGING_INT_CLUSTER_NODES:-${JOB_INT_CLUSTER_NODES:-${RESOLVED_INT_CLUSTER_NODES_DEFAULT}}}"
 cluster_workers="${STAGING_INT_CLUSTER_WORKERS:-${JOB_INT_CLUSTER_WORKERS:-${RESOLVED_INT_CLUSTER_WORKERS_DEFAULT}}}"
 use_existing_cluster="false"
@@ -138,7 +149,7 @@ cleanup_and_exit() {
 
   log_step "cleanup:start" | tee -a "${cleanup_log}" >/dev/null
 
-  copy_if_exists "${CI_PROJECT_DIR}/inttest-junit.xml" "${integration_junit}" >/dev/null 2>&1 || true
+  copy_integration_junit
 
   log_step "cleanup:collect-test-logs" | tee -a "${cleanup_log}" >/dev/null
   find "${CI_PROJECT_DIR}/test" -name "*.log" -type f -exec cp {} "${pod_log_dir}/" \; >> "${cleanup_log}" 2>&1 || cleanup_rc=1
@@ -225,4 +236,4 @@ log_step "tests:int-test:start focus=${TEST_FOCUS}"
 make int-test
 log_step "tests:int-test:complete"
 
-copy_if_exists "${CI_PROJECT_DIR}/inttest-junit.xml" "${integration_junit}" >/dev/null 2>&1 || true
+copy_integration_junit

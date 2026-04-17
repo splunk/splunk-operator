@@ -29,8 +29,6 @@ default:
   before_script:
     - |
       set -eu
-      export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
-      rm -rf .cache/go
       go version
 
 format-and-vet:
@@ -48,7 +46,6 @@ unit-tests:
     GOFLAGS: ""
   script:
     - make setup/ginkgo
-    - go mod tidy
     - make test
     - go tool cover -func=coverage.out | tee coverage-summary.txt
   artifacts:
@@ -65,7 +62,6 @@ kubectl-splunk-tests:
   stage: test
   before_script:
     - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
-    - rm -rf .cache/go
     - ensure_python_venv_tooling
     - python3 --version
   script:
@@ -96,17 +92,13 @@ build-stage-image:
     - kubectl-splunk-tests
   variables:
     WORKFLOW_SLUG: build-test-push-workflow
-    BUILDER_IMAGE: golang:1.25.8
   script:
     - gitlab-ci/build-test-push.sh
   artifacts:
     when: always
-    expire_in: 30 days
+    expire_in: 90 days
     paths:
       - ci-output/build-test-push-workflow-*
-      - ci-output/build-test-push-workflow-image-ref.txt
-      - ci-output/build-test-push-workflow-digest.txt
-      - ci-output/build-test-push-workflow-runtime-context.txt
 
 scan-stage-image-trivy:
   stage: image_scan
@@ -119,12 +111,9 @@ scan-stage-image-trivy:
     - gitlab-ci/build-test-push-trivy-scan.sh
   artifacts:
     when: always
-    expire_in: 30 days
+    expire_in: 90 days
     paths:
       - ci-output/scan-stage-image-trivy-*
-      - ci-output/scan-stage-image-trivy-trivy-results.sarif
-      - ci-output/scan-stage-image-trivy-trivy-results.txt
-      - ci-output/scan-stage-image-trivy-runtime-context.txt
 
 eks-smoke-validation:
   stage: integration
@@ -143,7 +132,7 @@ eks-smoke-validation:
     - gitlab-ci/int-test-workflow.sh
   artifacts:
     when: always
-    expire_in: 30 days
+    expire_in: 90 days
     paths:
       - ci-output/
     reports:
