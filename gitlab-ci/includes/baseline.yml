@@ -1,0 +1,53 @@
+format-and-vet:
+  stage: verify
+  script:
+    - make fmt
+    - make vet
+    - git diff --exit-code
+
+unit-tests:
+  stage: test
+  needs:
+    - format-and-vet
+  variables:
+    GOFLAGS: ""
+  script:
+    - make setup/ginkgo
+    - make test
+    - go tool cover -func=coverage.out | tee coverage-summary.txt
+  artifacts:
+    when: always
+    paths:
+      - coverage.out
+      - coverage-summary.txt
+      - unit_test.xml
+    reports:
+      junit: unit_test.xml
+  coverage: '/^total:\s+\(statements\)\s+(\d+\.\d+)%$/'
+
+kubectl-splunk-tests:
+  stage: test
+  before_script:
+    - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
+    - ensure_python_venv_tooling
+    - python3 --version
+  script:
+    - python3 -m venv /tmp/kubectl-splunk-venv
+    - . /tmp/kubectl-splunk-venv/bin/activate
+    - pip install --upgrade pip
+    - pip install -r tools/kubectl-splunk/requirements.txt
+    - pip install -e tools/kubectl-splunk
+    - pip install coverage pytest
+    - cd tools/kubectl-splunk
+    - coverage run -m unittest discover -s tests
+    - coverage report | tee "$CI_PROJECT_DIR/kubectl-splunk-coverage-summary.txt"
+    - coverage xml -o "$CI_PROJECT_DIR/kubectl-splunk-coverage.xml"
+  artifacts:
+    when: always
+    paths:
+      - kubectl-splunk-coverage-summary.txt
+      - kubectl-splunk-coverage.xml
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: kubectl-splunk-coverage.xml
