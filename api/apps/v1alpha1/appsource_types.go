@@ -144,7 +144,12 @@ const (
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].reason"
+// +kubebuilder:printcolumn:name="Backend",type="string",JSONPath=`.status.conditions[?(@.type=="BackendAccessible")].status`,priority=1
+// +kubebuilder:printcolumn:name="Secret",type="string",JSONPath=`.status.conditions[?(@.type=="SecretValid")].status`,priority=1
+// +kubebuilder:printcolumn:name="Synced",type="string",JSONPath=`.status.conditions[?(@.type=="AppsSynced")].status`,priority=1
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=`.metadata.creationTimestamp`
 // AppSource is the Schema for the appsources API.
 type AppSource struct {
 	metav1.TypeMeta   `json:",inline"`

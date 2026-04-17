@@ -14,7 +14,29 @@ spec:
     singular: appsource
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].reason
+      name: Status
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="BackendAccessible")].status
+      name: Backend
+      priority: 1
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="SecretValid")].status
+      name: Secret
+      priority: 1
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="AppsSynced")].status
+      name: Synced
+      priority: 1
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: AppSource is the Schema for the appsources API.
