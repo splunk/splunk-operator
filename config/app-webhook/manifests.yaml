@@ -10,7 +10,7 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-apps
+      path: /validate-apps-splunk-com-v1alpha1-app
   failurePolicy: Fail
   name: vapp-v1alpha1.kb.io
   rules:

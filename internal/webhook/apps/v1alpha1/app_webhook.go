@@ -36,7 +36,7 @@ import (
 // log is for logging in this package.
 var applog = logf.Log.WithName("app-resource")
 
-const AppValidationPath = "/validate-apps"
+const AppValidationPath = "/validate-apps-splunk-com-v1alpha1-app"
 
 // SetupWebhookWithManager registers the webhook for App in the manager.
 func SetupWebhookWithManager(mgr ctrl.Manager) error {
@@ -48,7 +48,7 @@ func SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 // NOTE: If you want to customise the 'path', use the flags '--defaulting-path' or '--validation-path'.
-// +kubebuilder:webhook:path=/validate-apps,mutating=false,failurePolicy=fail,sideEffects=None,groups=apps.splunk.com,resources=apps,verbs=create;update,versions=v1alpha1,name=vapp-v1alpha1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-apps-splunk-com-v1alpha1-app,mutating=false,failurePolicy=fail,sideEffects=None,groups=apps.splunk.com,resources=apps,verbs=create;update,versions=v1alpha1,name=vapp-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // AppValidator is a scaffold validator for the App resource.
 type AppValidator struct {
