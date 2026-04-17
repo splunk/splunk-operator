@@ -1,0 +1,41 @@
+@startuml
+title Develop Lane
+start
+:Merge request event or develop push;
+:Workflow rules admit only the minimal lane;
+
+partition Verify {
+  :format-and-vet;
+}
+
+partition Test {
+  :unit-tests;
+  :kubectl-splunk-tests;
+}
+
+partition Build {
+  :build-stage-image;
+  note right
+    Builds the operator image for the commit
+    and pushes it to staging ECR only.
+  end note
+}
+
+partition ImageScan {
+  :scan-stage-image-trivy;
+  note right
+    Scans the same staged image artifact
+    produced by build-stage-image.
+  end note
+}
+
+partition Integration {
+  :eks-smoke-validation;
+  note right
+    Runs managersecret-smoke-s1
+    and captures ci-output evidence.
+  end note
+}
+
+stop
+@enduml
