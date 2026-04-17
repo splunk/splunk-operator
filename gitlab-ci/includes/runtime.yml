@@ -1,6 +1,5 @@
 build-stage-image:
-  extends: .aws-staging-env-job
-  stage: build
+  extends: .runtime-build-job
   needs:
     - unit-tests
     - kubectl-splunk-tests
@@ -9,14 +8,11 @@ build-stage-image:
   script:
     - gitlab-ci/build-test-push.sh
   artifacts:
-    when: always
-    expire_in: 90 days
     paths:
       - ci-output/build-test-push-workflow-*
 
 scan-stage-image-trivy:
-  extends: .aws-staging-env-job
-  stage: image_scan
+  extends: .runtime-image-scan-job
   needs:
     - job: build-stage-image
       artifacts: true
@@ -25,15 +21,11 @@ scan-stage-image-trivy:
   script:
     - gitlab-ci/build-test-push-trivy-scan.sh
   artifacts:
-    when: always
-    expire_in: 90 days
     paths:
       - ci-output/scan-stage-image-trivy-*
 
 eks-smoke-validation:
-  extends: .aws-staging-env-job
-  stage: integration
-  interruptible: false
+  extends: .runtime-integration-job
   timeout: 10h
   needs:
     - job: build-stage-image
@@ -48,8 +40,6 @@ eks-smoke-validation:
   script:
     - gitlab-ci/int-test-workflow.sh
   artifacts:
-    when: always
-    expire_in: 90 days
     paths:
       - ci-output/
     reports:

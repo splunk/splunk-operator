@@ -30,3 +30,39 @@ default:
     AWS_ACCESS_KEY_ID: $STAGING_AWS_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY: $STAGING_AWS_SECRET_ACCESS_KEY
     AWS_DEFAULT_REGION: $STAGING_AWS_DEFAULT_REGION
+
+.go-verify-job:
+  stage: verify
+
+.go-test-job:
+  stage: test
+
+.runtime-artifact-job:
+  artifacts:
+    when: always
+    expire_in: 90 days
+
+.runtime-build-job:
+  extends:
+    - .runtime-artifact-job
+    - .aws-staging-env-job
+  stage: build
+
+.runtime-image-scan-job:
+  extends:
+    - .runtime-artifact-job
+    - .aws-staging-env-job
+  stage: image_scan
+
+.runtime-integration-job:
+  extends:
+    - .runtime-artifact-job
+    - .aws-staging-env-job
+  stage: integration
+  interruptible: false
+
+.python-venv-job:
+  before_script:
+    - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
+    - ensure_python_venv_tooling
+    - python3 --version
