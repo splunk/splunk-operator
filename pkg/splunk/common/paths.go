@@ -35,4 +35,22 @@ const (
 
 	//OperatorMountLocalServerConf
 	OperatorMountLocalServerConf = "/mnt/splunk-operator/local/server.conf"
+
+	//OperatorClusterManagerAppsLocalOutputsConf
+	OperatorClusterManagerAppsLocalOutputsConf = "/opt/splk/etc/manager-apps/splunk-operator/local/outputs.conf"
+
+	//OperatorClusterManagerAppsLocalInputsConf
+	OperatorClusterManagerAppsLocalInputsConf = "/opt/splk/etc/manager-apps/splunk-operator/local/inputs.conf"
+
+	//OperatorClusterManagerAppsLocalDefaultModeConf
+	OperatorClusterManagerAppsLocalDefaultModeConf = "/opt/splk/etc/manager-apps/splunk-operator/local/default-mode.conf"
+
+	//OperatorMountLocalOutputsConf
+	OperatorMountLocalOutputsConf = "/mnt/splunk-operator/local/outputs.conf"
+
+	//OperatorMountLocalInputsConf
+	OperatorMountLocalInputsConf = "/mnt/splunk-operator/local/inputs.conf"
+
+	//OperatorMountLocalDefaultModeConf
+	OperatorMountLocalDefaultModeConf = "/mnt/splunk-operator/local/default-mode.conf"
 )

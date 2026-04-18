@@ -76,11 +76,6 @@ type IngestorClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	// Credential secret version to track changes to the secret and trigger rolling restart of indexer cluster peers when the secret is updated
-	CredentialSecretVersion string `json:"credentialSecretVersion,omitempty"`
-
-	// Service account to track changes to the service account and trigger rolling restart of indexer cluster peers when the service account is updated
-	ServiceAccount string `json:"serviceAccount,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -16,17 +16,11 @@ package enterprise
 
 import (
 	"context"
-	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/go-logr/logr"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/stretchr/testify/assert"
@@ -64,8 +58,6 @@ func TestApplyIngestorCluster(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Object definitions
-	provider := "sqs_smartbus"
-
 	queue := &enterpriseApi.Queue{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Queue",
@@ -249,68 +241,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 	assert.True(t, result.Requeue)
 	assert.NotEqual(t, enterpriseApi.PhaseError, cr.Status.Phase)
 
-	// outputs.conf
-	origNew := newIngestorClusterPodManager
-	mockHTTPClient := &spltest.MockHTTPClient{}
-	newIngestorClusterPodManager = func(l logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
-		return ingestorClusterPodManager{
-			c:   c,
-			log: l, cr: cr, secrets: secret,
-			newSplunkClient: func(uri, user, pass string) *splclient.SplunkClient {
-				return &splclient.SplunkClient{ManagementURI: uri, Username: user, Password: pass, Client: mockHTTPClient}
-			},
-		}
-	}
-	defer func() { newIngestorClusterPodManager = origNew }()
-
-	propertyKVList := [][]string{
-		{"remote_queue.type", provider},
-		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
-		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), os.Spec.S3.Path},
-		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
-		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
-		{fmt.Sprintf("remote_queue.%s.send_interval", provider), "5s"},
-	}
-
-	body := buildFormBody(propertyKVList)
-	addRemoteQueueHandlersForIngestor(mockHTTPClient, cr, &queue.Spec, "conf-outputs", body)
-
-	// default-mode.conf
-	propertyKVList = [][]string{
-		{"pipeline:remotequeueruleset", "disabled", "false"},
-		{"pipeline:ruleset", "disabled", "true"},
-		{"pipeline:remotequeuetyping", "disabled", "false"},
-		{"pipeline:remotequeueoutput", "disabled", "false"},
-		{"pipeline:typing", "disabled", "true"},
-		{"pipeline:indexerPipe", "disabled", "true"},
-	}
-
-	for i := 0; i < int(cr.Status.ReadyReplicas); i++ {
-		podName := fmt.Sprintf("splunk-test-ingestor-%d", i)
-		baseURL := fmt.Sprintf("https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/servicesNS/nobody/system/configs/conf-default-mode", podName, cr.GetName(), cr.GetNamespace())
-
-		for _, field := range propertyKVList {
-			req, _ := http.NewRequest("POST", baseURL, strings.NewReader(fmt.Sprintf("name=%s", field[0])))
-			mockHTTPClient.AddHandler(req, 200, "", nil)
-
-			updateURL := fmt.Sprintf("%s/%s", baseURL, field[0])
-			req, _ = http.NewRequest("POST", updateURL, strings.NewReader(fmt.Sprintf("%s=%s", field[1], field[2])))
-			mockHTTPClient.AddHandler(req, 200, "", nil)
-		}
-	}
-
-	for i := 0; i < int(cr.Status.ReadyReplicas); i++ {
-		podName := fmt.Sprintf("splunk-test-ingestor-%d", i)
-		baseURL := fmt.Sprintf("https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/services/server/control/restart", podName, cr.GetName(), cr.GetNamespace())
-		req, _ := http.NewRequest("POST", baseURL, nil)
-		mockHTTPClient.AddHandler(req, 200, "", nil)
-	}
-
-	// Second reconcile should now yield Ready
+	// Second reconcile with telemetry already installed should yield Ready
 	cr.Status.TelAppInstalled = true
 	result, err = ApplyIngestorCluster(ctx, c, cr)
 	assert.NoError(t, err)
@@ -371,7 +302,9 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 			}
 			return getIngestorStatefulSet(ctx, c, &cr)
 		}
-		configTester(t, "getIngestorStatefulSet()", f, want)
+		// Use configTester2 (no space-stripping) because the init container command string
+		// contains meaningful spaces that must be preserved in comparison.
+		configTester2(t, "getIngestorStatefulSet()", f, want)
 	}
 
 	// Define additional service port in CR and verify the statefulset has the new port
@@ -429,21 +362,9 @@ func TestGetQueueAndPipelineInputsForIngestorConfFiles(t *testing.T) {
 		},
 	}
 
-	os := enterpriseApi.ObjectStorage{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ObjectStorage",
-			APIVersion: "enterprise.splunk.com/v4",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "os",
-		},
-		Spec: enterpriseApi.ObjectStorageSpec{
-			Provider: "s3",
-			S3: enterpriseApi.S3Spec{
-				Endpoint: "https://s3.us-west-2.amazonaws.com",
-				Path:     "bucket/key",
-			},
-		},
+	// Deterministic
+	if computeIngestorConfChecksum("outputs", "defaultmode") != checksum {
+		t.Error("checksum is not deterministic")
 	}
 
 	key := "key"
@@ -762,16 +683,60 @@ func addRemoteQueueHandlersForIngestor(mockHTTPClient *spltest.MockHTTPClient, c
 	}
 }
 
-func newTestIngestorQueuePipelineManager(mockHTTPClient *spltest.MockHTTPClient) *ingestorClusterPodManager {
-	newSplunkClientForQueuePipeline := func(uri, user, pass string) *splclient.SplunkClient {
-		return &splclient.SplunkClient{
-			ManagementURI: uri,
-			Username:      user,
-			Password:      pass,
-			Client:        mockHTTPClient,
-		}
+func TestGenerateIngestorOutputsConf(t *testing.T) {
+	queue := enterpriseApi.QueueSpec{
+		Provider: "sqs",
+		SQS: enterpriseApi.SQSSpec{
+			Name:       "test-queue",
+			AuthRegion: "us-west-2",
+			Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+			DLQ:        "dlq",
+		},
 	}
-	return &ingestorClusterPodManager{
-		newSplunkClient: newSplunkClientForQueuePipeline,
+	os := enterpriseApi.ObjectStorageSpec{
+		Provider: "s3",
+		S3: enterpriseApi.S3Spec{
+			Endpoint: "https://s3.amazonaws.com",
+			Path:     "bucket/key",
+		},
 	}
+
+	// IRSA: no credentials embedded
+	conf := generateIngestorOutputsConf(&queue, &os, "", "")
+	assert.Contains(t, conf, "[remote_queue:test-queue]")
+	assert.NotContains(t, conf, "access_key")
+
+	// Static creds: credentials embedded
+	conf = generateIngestorOutputsConf(&queue, &os, "AKID", "secret")
+	assert.Contains(t, conf, "access_key")
+}
+
+func TestGenerateIngestorDefaultModeConf(t *testing.T) {
+	conf := generateIngestorDefaultModeConf()
+	for _, stanza := range []string{
+		"pipeline:remotequeueruleset",
+		"pipeline:ruleset",
+		"pipeline:remotequeuetyping",
+		"pipeline:remotequeueoutput",
+		"pipeline:typing",
+		"pipeline:indexerPipe",
+	} {
+		assert.Contains(t, conf, stanza)
+	}
+}
+
+func TestGenerateIngestorAppConf(t *testing.T) {
+	conf := generateQueueConfigAppConf("Splunk Operator Ingestor Queue Config")
+	assert.Contains(t, conf, "[install]")
+	assert.Contains(t, conf, "state = enabled")
+	assert.Contains(t, conf, "[package]")
+	assert.Contains(t, conf, "[ui]")
+}
+
+func TestGenerateIngestorLocalMeta(t *testing.T) {
+	conf := generateQueueConfigLocalMeta()
+	// install_source_checksum is not a valid local.meta field; it was removed to prevent parse errors.
+	assert.NotContains(t, conf, "install_source_checksum")
+	assert.Contains(t, conf, "export = system")
+	assert.Contains(t, conf, "access = read : [ * ], write : [ admin ]")
 }
