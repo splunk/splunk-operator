@@ -69,66 +69,69 @@ func TestApplySearchHeadCluster(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	funcCalls := []spltest.MockFuncCall{
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"}, // 0
+		{MetaName: "*v1.Secret-test-splunk-test-secret"}, // 1
+		{MetaName: "*v1.Secret-test-splunk-test-secret"}, // 2
 
-		{MetaName: "*v1.ConfigMap-test-splunk-search-head-stack1-configmap"},
+		{MetaName: "*v1.ConfigMap-test-splunk-search-head-stack1-configmap"}, // 3
 
-		{MetaName: "*v1.Service-test-splunk-stack1-search-head-headless"},
-		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},
+		{MetaName: "*v1.Service-test-splunk-stack1-search-head-headless"}, // 4
+		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},  // 5
 
-		{MetaName: "*v1.Service-test-splunk-stack1-deployer-service"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
+		{MetaName: "*v1.PodDisruptionBudget-test-splunk-stack1-search-head-pdb"}, // 6
 
-		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
-		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
-		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
+		{MetaName: "*v1.Service-test-splunk-stack1-deployer-service"}, // 7
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},     // 8
 
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.Secret-test-splunk-stack1-deployer-secret-v1"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"}, // 9
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"}, // 10
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"}, // 11
 
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},               // 12
+		{MetaName: "*v1.Secret-test-splunk-stack1-deployer-secret-v1"}, // 13
 
-		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secret-v1"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},    // 14
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"}, // 15
 
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v4.SearchHeadCluster-test-stack1"},
-		{MetaName: "*v4.SearchHeadCluster-test-stack1"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},      // 16
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},                  // 17
+		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secret-v1"}, // 18
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},      // 19
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},      // 20
+
+		{MetaName: "*v1.Secret-test-splunk-test-secret"}, // 21
+		{MetaName: "*v4.SearchHeadCluster-test-stack1"},  // 22
+		{MetaName: "*v4.SearchHeadCluster-test-stack1"},  // 23
 	}
 
 	createFuncCalls := []spltest.MockFuncCall{
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.ConfigMap-test-splunk-search-head-stack1-configmap"},
-		{MetaName: "*v1.Service-test-splunk-stack1-search-head-headless"},
-		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},                     // 0
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},                     // 1
+		{MetaName: "*v1.ConfigMap-test-splunk-search-head-stack1-configmap"}, // 2
+		{MetaName: "*v1.Service-test-splunk-stack1-search-head-headless"},    // 3
+		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},     // 4
 
-		{MetaName: "*v1.Service-test-splunk-stack1-deployer-service"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
+		{MetaName: "*v1.PodDisruptionBudget-test-splunk-stack1-search-head-pdb"}, // 5
 
-		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.Secret-test-splunk-stack1-deployer-secret-v1"},
-		//{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
+		{MetaName: "*v1.Service-test-splunk-stack1-deployer-service"}, // 6
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},     // 7
 
-		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secret-v1"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v4.SearchHeadCluster-test-stack1"},
-		{MetaName: "*v4.SearchHeadCluster-test-stack1"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},   // 8
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},               // 9
+		{MetaName: "*v1.Secret-test-splunk-stack1-deployer-secret-v1"}, // 10
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},      // 11
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},      // 12
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},   // 13
+
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},      // 14
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},                  // 15
+		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secret-v1"}, // 16
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},      // 17
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},      // 18
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},      // 19
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},                  // 20
+		{MetaName: "*v4.SearchHeadCluster-test-stack1"},                   // 21
+		{MetaName: "*v4.SearchHeadCluster-test-stack1"},                   // 22
 	}
 
 	labels := map[string]string{
@@ -142,8 +145,8 @@ func TestApplySearchHeadCluster(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[10], funcCalls[12], funcCalls[13], funcCalls[17], funcCalls[19]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Update": {createFuncCalls[6], createFuncCalls[18]}, "List": {listmockCall[0], listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[11], funcCalls[13], funcCalls[14], funcCalls[18], funcCalls[20]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Update": {createFuncCalls[7], createFuncCalls[19]}, "List": {listmockCall[0], listmockCall[0]}}
 	statefulSet := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -376,17 +379,12 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		Body:   loadFixture(t, "shc_member_remove_response.json"),
 	}
 	mockHandlers = append(mockHandlers, spltest.MockHTTPHandler{
-		Method: "POST",
-		URL:    "https://splunk-stack1-search-head-1.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/shcluster/member/consensus/default/remove_server?output_mode=json",
+		Method: "GET",
+		URL:    "https://splunk-stack1-search-head-1.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/shcluster/member/info?count=0&output_mode=json",
 		Status: 200,
 		Err:    nil,
-		Body:   ``,
+		Body:   loadFixture(t, "shc_member_remove_response.json"),
 	})
-	pvcCalls := []spltest.MockFuncCall{
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
-	}
-
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -396,11 +394,9 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
 	}
 
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Delete": pvcCalls, "Update": {funcCalls[0]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Create": {funcCalls[1]}}
 	pvcList := []*corev1.PersistentVolumeClaim{
 		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc-splunk-stack1-1", Namespace: "test"}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var-splunk-stack1-1", Namespace: "test"}},
@@ -478,26 +474,7 @@ func TestApplyShcSecret(t *testing.T) {
 
 	c.AddObjects(initObjectList)
 
-	mockHandlers := []spltest.MockHTTPHandler{
-		{
-			Method: "POST",
-			URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/server/control/restart",
-			Status: 200,
-			Err:    nil,
-		},
-		{
-			Method: "POST",
-			URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/server/control/restart",
-			Status: 200,
-			Err:    nil,
-		},
-		{
-			Method: "POST",
-			URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/server/control/restart",
-			Status: 200,
-			Err:    nil,
-		},
-	}
+	mockHandlers := []spltest.MockHTTPHandler{}
 
 	cr := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -781,10 +758,25 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 	cr.Spec.Replicas = 5
 	cr.Spec.ClusterManagerRef.Name = "stack1"
 	test(loadFixture(t, "statefulset_stack1_search_head_base_2.json"))
+	test(loadFixture(t, "statefulset_stack1_search_head_base_2.json"))
+
+	cr.Spec.Replicas = 4
+	test(loadFixture(t, "statefulset_stack1_search_head_base_2r4.json"))
+
+	cr.Spec.Replicas = 5
+	cr.Spec.ClusterManagerRef.Name = "stack1"
+	test(loadFixture(t, "statefulset_stack1_search_head_base_2.json"))
 
 	cr.Spec.Replicas = 6
 
 	cr.Spec.ClusterManagerRef.Namespace = "test2"
+	test(loadFixture(t, "statefulset_stack1_search_head_base_3.json"))
+
+	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
+	test(loadFixture(t, "statefulset_stack1_search_head_base_4.json"))
+
+	// Define additional service port in CR and verified the statefulset has the new port
+	test(loadFixture(t, "statefulset_stack1_search_head_base_5.json"))
 	test(loadFixture(t, "statefulset_stack1_search_head_base_3.json"))
 
 	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
@@ -803,6 +795,7 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
 	test(loadFixture(t, "statefulset_stack1_search_head_with_service_account.json"))
+	test(loadFixture(t, "statefulset_stack1_search_head_with_service_account.json"))
 
 	// Add extraEnv
 	cr.Spec.CommonSplunkSpec.ExtraEnv = []corev1.EnvVar{
@@ -812,10 +805,12 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 		},
 	}
 	test(loadFixture(t, "statefulset_stack1_search_head_with_service_account_1.json"))
+	test(loadFixture(t, "statefulset_stack1_search_head_with_service_account_1.json"))
 
 	// Add additional label to cr metadata to transfer to the statefulset
 	cr.ObjectMeta.Labels = make(map[string]string)
 	cr.ObjectMeta.Labels["app.kubernetes.io/test-extra-label"] = "test-extra-label-value"
+	test(loadFixture(t, "statefulset_stack1_search_head_with_service_account_2.json"))
 	test(loadFixture(t, "statefulset_stack1_search_head_with_service_account_2.json"))
 }
 
@@ -851,6 +846,11 @@ func TestGetDeployerStatefulSet(t *testing.T) {
 	// Allow installation of apps via DefaultsURLApps on the SHCDeployer
 	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
 	test(loadFixture(t, "statefulset_stack1_deployer_with_apps.json"))
+	test(loadFixture(t, "statefulset_stack1_deployer_with_apps.json"))
+
+	// Allow installation of apps via DefaultsURLApps on the SHCDeployer
+	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
+	test(loadFixture(t, "statefulset_stack1_deployer_with_apps.json"))
 
 	// Create a serviceaccount
 	current := corev1.ServiceAccount{
@@ -862,6 +862,7 @@ func TestGetDeployerStatefulSet(t *testing.T) {
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
 
+	test(loadFixture(t, "statefulset_stack1_deployer_with_service_account.json"))
 	test(loadFixture(t, "statefulset_stack1_deployer_with_service_account.json"))
 }
 

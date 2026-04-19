@@ -174,6 +174,14 @@ func TestGetLicenseManagerStatefulSet(t *testing.T) {
 	// Allow installing apps via DefaultsURLApps for License Manager
 	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
 	test(loadFixture(t, "statefulset_stack1_license_manager_with_apps.json"))
+	test(loadFixture(t, "statefulset_stack1_license_manager_with_apps.json"))
+
+	cr.Spec.LicenseURL = "/mnt/splunk.lic"
+	test(loadFixture(t, "statefulset_stack1_license_manager_with_apps.json"))
+
+	// Allow installing apps via DefaultsURLApps for License Manager
+	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
+	test(loadFixture(t, "statefulset_stack1_license_manager_with_apps.json"))
 
 	// Create a serviceaccount
 	current := corev1.ServiceAccount{
@@ -185,6 +193,7 @@ func TestGetLicenseManagerStatefulSet(t *testing.T) {
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
 	test(loadFixture(t, "statefulset_stack1_license_manager_with_service_account.json"))
+	test(loadFixture(t, "statefulset_stack1_license_manager_with_service_account.json"))
 
 	// Add extraEnv
 	cr.Spec.CommonSplunkSpec.ExtraEnv = []corev1.EnvVar{
@@ -194,10 +203,12 @@ func TestGetLicenseManagerStatefulSet(t *testing.T) {
 		},
 	}
 	test(loadFixture(t, "statefulset_stack1_license_manager_with_service_account_1.json"))
+	test(loadFixture(t, "statefulset_stack1_license_manager_with_service_account_1.json"))
 
 	// Add additional label to cr metadata to transfer to the statefulset
 	cr.ObjectMeta.Labels = make(map[string]string)
 	cr.ObjectMeta.Labels["app.kubernetes.io/test-extra-label"] = "test-extra-label-value"
+	test(loadFixture(t, "statefulset_stack1_license_manager_with_service_account_2.json"))
 	test(loadFixture(t, "statefulset_stack1_license_manager_with_service_account_2.json"))
 }
 

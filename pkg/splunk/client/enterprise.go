@@ -1080,3 +1080,61 @@ func (c *SplunkClient) UpdateConfFile(scopedLog logr.Logger, fileName, property 
 	}
 	return err
 }
+
+// RestartRequiredResponse represents the response from /services/messages/restart_required
+type RestartRequiredResponse struct {
+	Entry []RestartRequiredEntry `json:"entry"`
+}
+
+// RestartRequiredEntry represents a single entry in the restart_required response
+type RestartRequiredEntry struct {
+	Name    string                 `json:"name"`
+	Content RestartRequiredContent `json:"content"`
+}
+
+// RestartRequiredContent represents the content of a restart_required message from bulletin board
+// The presence of an entry indicates restart is required (not a boolean field)
+// Splunk stores the message value in BOTH a key named "restart_required" AND in the "message" field
+type RestartRequiredContent struct {
+	RestartRequiredKey string `json:"restart_required,omitempty"`      // Message value in key named "restart_required"
+	Message            string `json:"message"`                         // Message string (e.g., "RESTART_REQUIRED:INITIATE_RESTART")
+	Server             string `json:"server,omitempty"`                // Server that generated the message
+	TimeCreatedEpoch   int64  `json:"timeCreated_epochSecs,omitempty"` // Message creation time (epoch seconds)
+	TimeCreatedISO     string `json:"timeCreated_iso,omitempty"`       // Message creation time (ISO8601)
+	Severity           string `json:"severity,omitempty"`              // Severity level (e.g., "warn")
+	Help               string `json:"help,omitempty"`                  // Help text for the message
+	MessageAlternate   string `json:"message_alternate,omitempty"`     // Alternate message text
+}
+
+// CheckRestartRequired checks if Splunk requires a restart by querying the bulletin board messages endpoint
+//
+// Detection mechanism: The PRESENCE of an entry at /services/messages/restart_required indicates restart is required.
+// Splunk creates this bulletin board message when restart is needed and removes it after restart.
+//
+// Returns:
+//   - restartRequired (bool): true if entry exists, false if no entries or 404
+//   - message (string): the message content from Splunk (e.g., "RESTART_REQUIRED:INITIATE_RESTART")
+//   - error: any error encountered while checking
+func (c *SplunkClient) CheckRestartRequired() (bool, string, error) {
+	url := c.ManagementURI + "/services/messages/restart_required?output_mode=json"
+	request, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to create restart_required request: %w", err)
+	}
+
+	response := &RestartRequiredResponse{}
+	// Accept 200 (success) and 404 (no restart_required message exists)
+	err = c.Do(request, []int{200, 404}, response)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to check restart_required: %w", err)
+	}
+
+	// If entry exists, restart is required
+	// The message field contains the restart reason (e.g., "RESTART_REQUIRED:INITIATE_RESTART")
+	if len(response.Entry) > 0 {
+		return true, response.Entry[0].Content.Message, nil
+	}
+
+	// No entries or 404 response means no restart required
+	return false, "", nil
+}

@@ -806,6 +806,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	funcCalls := []MockFuncCall{
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-1"},
 	}
 	createCalls := map[string][]MockFuncCall{"Get": {funcCalls[0]}, "Create": {funcCalls[0]}}
 	var replicas int32 = 1
@@ -853,19 +854,19 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	methodPlus := fmt.Sprintf("%s(%s)", method, "Update StatefulSet")
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseUpdating, revised, updateCalls, nil, current)
 
-	// test scale up (zero ready so far; wait for ready)
+	// test scale up wait state (zero ready so far; spec already at desired)
 	revised = current.DeepCopy()
 	current.Status.ReadyReplicas = 0
-	scaleUpCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
+	scaleUpWaitCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 0 ready")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhasePending, revised, scaleUpCalls, nil, current)
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseScalingUp, revised, scaleUpWaitCalls, nil, current)
 
-	// test scale up (1 ready scaling to 2; wait for ready)
+	// test scale up wait state (1/2 ready; spec already at desired)
 	replicas = 2
 	current.Status.Replicas = 2
 	current.Status.ReadyReplicas = 1
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 1/2 ready")
-	PodManagerUpdateTester(t, methodPlus, mgr, 2, enterpriseApi.PhaseScalingUp, revised, scaleUpCalls, nil, current, pod)
+	PodManagerUpdateTester(t, methodPlus, mgr, 2, enterpriseApi.PhaseScalingUp, revised, scaleUpWaitCalls, nil, current, pod)
 
 	// test scale up (1 ready scaling to 2)
 	replicas = 1
@@ -875,23 +876,19 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, Update Replicas 1=>2")
 	PodManagerUpdateTester(t, methodPlus, mgr, 2, enterpriseApi.PhaseScalingUp, revised, updateCalls, nil, current, pod)
 
-	// test scale down (2 ready, 1 desired)
+	// test scale down wait state from status lag (ready > desired while spec already at desired)
 	replicas = 1
 	current.Status.Replicas = 1
 	current.Status.ReadyReplicas = 2
-	delete(scaleUpCalls, "Update")
+	scaleDownWaitCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingDown, Ready > Replicas")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseScalingDown, revised, scaleUpCalls, nil, current, pod)
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseScalingDown, revised, scaleDownWaitCalls, nil, current, pod)
 
-	// test scale down (2 ready scaling down to 1)
-	pvcCalls := []MockFuncCall{
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
-	}
+	// test scale down (2 ready scaling down to 1): markPodForScaleDown gets pod-1 (not found -> ok), then scales down
+	// PVC deletion removed - now handled by pod finalizer
 	scaleDownCalls := map[string][]MockFuncCall{
-		"Get":    {funcCalls[0], funcCalls[0], pvcCalls[0], pvcCalls[1]},
+		"Get":    {funcCalls[0], funcCalls[0], funcCalls[2]},
 		"Update": {funcCalls[0]},
-		"Delete": pvcCalls,
 	}
 	pvcList := []*corev1.PersistentVolumeClaim{
 		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc-splunk-stack1-1", Namespace: "test"}},

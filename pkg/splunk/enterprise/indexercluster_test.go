@@ -879,10 +879,6 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		Err:    nil,
 		Body:   ``,
 	})
-	pvcCalls := []spltest.MockFuncCall{
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
-	}
 	decommisionFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -891,10 +887,9 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-1"},
 	}
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": decommisionFuncCalls, "Create": {funcCalls[1]}, "Delete": pvcCalls, "Update": {funcCalls[0]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": decommisionFuncCalls, "Create": {funcCalls[1]}, "Update": {funcCalls[0]}}
 	//wantCalls["Get"] = append(wantCalls["Get"], pvcCalls...)
 	pvcList := []*corev1.PersistentVolumeClaim{
 		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc-splunk-stack1-1", Namespace: "test"}},
@@ -1299,6 +1294,173 @@ func TestApplyIdxcSecret(t *testing.T) {
 	if err != nil {
 		t.Errorf("Couldn't recognize missing idxc secret %s", err.Error())
 	}
+}
+
+func TestApplyIdxcSecretRestartsPreSyncedUntrackedReplica(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	c := spltest.NewMockClient()
+
+	// Create namespace-scoped secret and use its idxc_secret value for pod secrets.
+	nsSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Fatalf("Apply namespace scoped secret failed: %v", err)
+	}
+	nsIdxcSecret := nsSecret.Data[splcommon.IdxcSecret]
+
+	makeIndexerPod := func(name, secretName string) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: "test",
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								MountPath: "/mnt/splunk-secrets",
+								Name:      "mnt-splunk-secrets",
+							},
+						},
+					},
+				},
+				Volumes: []corev1.Volume{
+					{
+						Name: "mnt-splunk-secrets",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: secretName,
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	makePodSecret := func(name string) *corev1.Secret {
+		return &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: "test",
+			},
+			Data: map[string][]byte{
+				"password":           []byte("123"),
+				splcommon.IdxcSecret: nsIdxcSecret,
+			},
+		}
+	}
+
+	initObjects := []client.Object{
+		makeIndexerPod("splunk-stack1-indexer-0", "stack1-secrets-0"),
+		makeIndexerPod("splunk-stack1-indexer-1", "stack1-secrets-1"),
+		makeIndexerPod("splunk-stack1-indexer-2", "stack1-secrets-2"),
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-stack1-cluster-manager-0",
+				Namespace: "test",
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								MountPath: "/mnt/splunk-secrets",
+								Name:      "mnt-splunk-secrets",
+							},
+						},
+					},
+				},
+				Volumes: []corev1.Volume{
+					{
+						Name: "mnt-splunk-secrets",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: "stack1-secrets-0",
+							},
+						},
+					},
+				},
+			},
+		},
+		makePodSecret("stack1-secrets-0"),
+		makePodSecret("stack1-secrets-1"),
+		makePodSecret("stack1-secrets-2"),
+	}
+
+	c.AddObjects(initObjects)
+
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "stack1",
+				},
+			},
+		},
+	}
+	// Simulate in-flight secret sync where first two replicas were already marked done.
+	cr.Status.NamespaceSecretResourceVersion = "0"
+	cr.Status.IndexerSecretChanged = []bool{true, true}
+	cr.Status.IdxcPasswordChangedSecrets = make(map[string]bool)
+
+	mockSplunkClient := &spltest.MockHTTPClient{}
+	mockSplunkClient.AddHandlers(
+		spltest.MockHTTPHandler{
+			Method: "POST",
+			URL:    "https://splunk-stack1-indexer-2.splunk-stack1-indexer-headless.test.svc.cluster.local:8089/services/server/control/restart",
+			Status: 200,
+			Err:    nil,
+		},
+	)
+
+	mgr := &indexerClusterPodManager{
+		c:   c,
+		log: logt.WithName("TestApplyIdxcSecretRestartsPreSyncedUntrackedReplica"),
+		cr:  cr,
+		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
+			splClient := splclient.NewSplunkClient(managementURI, username, password)
+			splClient.Client = mockSplunkClient
+			return splClient
+		},
+	}
+
+	podExecCommands := []string{"maintenance-mode"}
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
+		{StdOut: "", StdErr: "", Err: nil},
+	}
+	mockPodExecClient := &spltest.MockPodExecClient{}
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
+
+	err = ApplyIdxcSecret(ctx, mgr, 3, mockPodExecClient)
+	if err != nil {
+		t.Fatalf("ApplyIdxcSecret returned error: %v", err)
+	}
+
+	if len(mgr.cr.Status.IndexerSecretChanged) != 3 {
+		t.Fatalf("IndexerSecretChanged length=%d, want 3", len(mgr.cr.Status.IndexerSecretChanged))
+	}
+	for i, changed := range mgr.cr.Status.IndexerSecretChanged {
+		if !changed {
+			t.Fatalf("IndexerSecretChanged[%d]=false, want true", i)
+		}
+	}
+
+	if len(mockSplunkClient.GotRequests) != 1 {
+		t.Fatalf("got %d splunk API requests, want 1", len(mockSplunkClient.GotRequests))
+	}
+	gotURL := mockSplunkClient.GotRequests[0].URL.String()
+	wantURL := "https://splunk-stack1-indexer-2.splunk-stack1-indexer-headless.test.svc.cluster.local:8089/services/server/control/restart"
+	if gotURL != wantURL {
+		t.Fatalf("unexpected request URL: got %s, want %s", gotURL, wantURL)
+	}
+	mockPodExecClient.CheckPodExecCommands(t, "TestApplyIdxcSecretRestartsPreSyncedUntrackedReplica")
 }
 
 func TestInvalidIndexerClusterSpec(t *testing.T) {

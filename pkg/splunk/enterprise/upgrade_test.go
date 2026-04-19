@@ -827,6 +827,7 @@ func updateStatefulSetsInTest(t *testing.T, ctx context.Context, client common.C
 	statefulset.Status.Replicas = replicas
 	statefulset.Status.CurrentReplicas = replicas
 	statefulset.Status.AvailableReplicas = replicas
+	statefulset.Status.UpdatedReplicas = replicas
 	err = client.Status().Update(ctx, statefulset)
 	if err != nil {
 		t.Errorf("Unexpected update statefulset  %v", err)

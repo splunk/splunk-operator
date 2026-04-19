@@ -253,6 +253,27 @@ type CommonSplunkSpec struct {
 	// See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// RollingUpdateConfig defines the rolling update strategy for StatefulSets
+	// +optional
+	RollingUpdateConfig *RollingUpdateConfig `json:"rollingUpdateConfig,omitempty"`
+}
+
+// RollingUpdateConfig defines configuration for StatefulSet rolling updates
+type RollingUpdateConfig struct {
+	// MaxPodsUnavailable specifies the maximum number or percentage of pods that can be unavailable during the update.
+	// Can be an absolute number (e.g., 1) or a percentage (e.g., "25%").
+	// Defaults to 1 if not specified.
+	// +optional
+	MaxPodsUnavailable string `json:"maxPodsUnavailable,omitempty"`
+
+	// Partition indicates that all pods with an ordinal that is greater than or equal to the partition
+	// will be updated when the StatefulSet's .spec.template is updated. All pods with an ordinal that
+	// is less than the partition will not be updated, and, even if they are deleted, they will be
+	// recreated at the previous version.
+	// Useful for canary deployments. Defaults to 0.
+	// +optional
+	Partition *int32 `json:"partition,omitempty"`
 }
 
 // StorageClassSpec defines storage class configuration

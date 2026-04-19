@@ -92,3 +92,8 @@ build/make_bundle.sh
 helm-chart/
 kuttl/
 Makefile
+#Exceptions for spike CSPL-4530 (per-pod rolling restart)
+jira/
+tools/k8_probes/preStop.sh
+per-pod-rolling-restart-architecture.puml
+per-pod-rolling-restart-user-guide.md

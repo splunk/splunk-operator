@@ -1,0 +1,153 @@
+@startuml per-pod-rolling-restart-architecture
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Per-Pod Rolling Restart Architecture - Splunk Operator
+
+Person(admin, "Splunk Admin", "Manages Splunk clusters via kubectl")
+
+System_Boundary(k8s, "Kubernetes Cluster") {
+    Container_Boundary(operator, "Splunk Operator") {
+        Component(podctl, "Pod Controller", "Go", "Watches pods with finalizers, triggers cleanup on deletion")
+        Component(idxctl, "IndexerCluster Controller", "Go", "Manages IndexerCluster CR, delegates restart to CM")
+        Component(shctl, "SearchHeadCluster Controller", "Go", "Manages SearchHeadCluster CR, delegates restart to Deployer+Captain")
+        Component(ingestctl, "IngestorCluster Controller", "Go", "Manages IngestorCluster CR, monitors restart_required")
+        Component(sactl, "Standalone Controller", "Go", "Manages Standalone CR, monitors restart_required")
+
+        Component(delhandler, "Pod Deletion Handler", "Go", "Role-specific cleanup: decommission, detention, PVC deletion")
+        Component(stsutil, "StatefulSet Utility", "Go", "Marks pods with scale-down intent before scale-down")
+    }
+
+    Container_Boundary(k8sapi, "Kubernetes API Server") {
+        ComponentDb(pods, "Pods", "Kubernetes", "StatefulSet pods with finalizers and intent annotations")
+        ComponentDb(sts, "StatefulSets", "Kubernetes", "Manages pod replicas and rolling updates")
+        ComponentDb(pvc, "PVCs", "Kubernetes", "Persistent storage for Splunk data")
+        ComponentDb(secrets, "Secrets", "Kubernetes", "Splunk passwords, certificates")
+        Component(eviction, "Eviction API", "Kubernetes", "Graceful pod eviction with PDB respect")
+        Component(pdb, "PodDisruptionBudget", "Kubernetes", "Ensures minimum availability")
+    }
+
+    Container_Boundary(splunk, "Splunk Pods") {
+        Component(idxpod, "Indexer Pod", "Splunk Enterprise", "Has finalizer + intent annotation")
+        Component(shpod, "Search Head Pod", "Splunk Enterprise", "Has finalizer + intent annotation")
+        Component(ingestpod, "Ingestor Pod", "Splunk Enterprise", "Has finalizer + intent annotation")
+        Component(sapod, "Standalone Pod", "Splunk Enterprise", "Has finalizer + intent annotation")
+
+        Component(prestop, "PreStop Hook", "Container Hook", "Handles graceful shutdown and decommission")
+        Component(splunkapi, "Splunk REST API", "HTTPS", "restart_required messages, cluster operations")
+    }
+
+    Container_Boundary(splunkorchestrator, "Splunk In-Product Orchestrators") {
+        Component(cm, "Cluster Manager", "Splunk", "Orchestrates indexer restarts and replication")
+        Component(deployer, "Deployer + Captain", "Splunk", "Orchestrates search head restarts and detention")
+    }
+}
+
+' Admin interactions
+Rel(admin, secrets, "Updates secrets", "kubectl")
+Rel(admin, sts, "Scales replicas", "kubectl patch")
+Rel(admin, splunkapi, "Triggers restart", "kubectl exec + curl")
+
+' Pod Controller flow
+Rel(podctl, pods, "Watches pods with finalizer", "Watch API")
+Rel(podctl, delhandler, "Calls on pod deletion", "HandlePodDeletion()")
+Rel(delhandler, pods, "Reads intent annotation", "Get Pod")
+Rel(delhandler, sts, "Reads StatefulSet config", "Get StatefulSet")
+Rel(delhandler, splunkapi, "Decommissions indexers", "POST /services/cluster/slave/control/control/decommission")
+Rel(delhandler, splunkapi, "Detains search heads", "POST /services/shcluster/member/control/control/detention")
+Rel(delhandler, pvc, "Deletes PVCs on scale-down", "Delete PVC")
+Rel(delhandler, pods, "Removes finalizer", "Update Pod")
+
+' StatefulSet Controller flow
+Rel(idxctl, sts, "Manages replicas", "Create/Update StatefulSet")
+Rel(shctl, sts, "Manages replicas", "Create/Update StatefulSet")
+Rel(ingestctl, sts, "Manages replicas", "Create/Update StatefulSet")
+Rel(sactl, sts, "Manages replicas", "Create/Update StatefulSet")
+
+' Scale-down intent marking
+Rel(idxctl, stsutil, "Calls before scale-down", "markPodForScaleDown()")
+Rel(shctl, stsutil, "Calls before scale-down", "markPodForScaleDown()")
+Rel(ingestctl, stsutil, "Calls before scale-down", "markPodForScaleDown()")
+Rel(sactl, stsutil, "Calls before scale-down", "markPodForScaleDown()")
+Rel(stsutil, pods, "Sets intent=scale-down", "Update Pod annotation")
+
+' restart_required detection (Ingestor/Standalone only)
+Rel(ingestctl, splunkapi, "Monitors restart_required", "GET /services/messages/restart_required")
+Rel(sactl, splunkapi, "Monitors restart_required", "GET /services/messages/restart_required")
+Rel(ingestctl, eviction, "Evicts pod for restart", "POST Eviction")
+Rel(sactl, eviction, "Evicts pod for restart", "POST Eviction")
+Rel(eviction, pdb, "Respects disruption budget", "Check PDB")
+
+' StatefulSet manages pods
+Rel(sts, pods, "Creates/deletes pods", "Pod lifecycle")
+Rel(sts, idxpod, "Rolling updates", "Delete + Recreate")
+Rel(sts, shpod, "Rolling updates", "Delete + Recreate")
+Rel(sts, ingestpod, "Rolling updates", "Delete + Recreate")
+Rel(sts, sapod, "Rolling updates", "Delete + Recreate")
+
+' Pod lifecycle
+Rel(idxpod, prestop, "Triggers on termination", "Container lifecycle")
+Rel(shpod, prestop, "Triggers on termination", "Container lifecycle")
+Rel(ingestpod, prestop, "Triggers on termination", "Container lifecycle")
+Rel(sapod, prestop, "Triggers on termination", "Container lifecycle")
+Rel(prestop, splunkapi, "Decommissions if scale-down", "Check intent annotation")
+
+' Splunk orchestrators (NOT used by operator)
+Rel(cm, idxpod, "Orchestrates indexer restarts", "Splunk internal")
+Rel(deployer, shpod, "Orchestrates SH restarts", "Splunk internal")
+
+' Secret change triggers
+Rel(secrets, sts, "Triggers rolling update", "Pod template change")
+
+' Storage
+Rel(idxpod, pvc, "Mounts volumes", "PVC mount")
+Rel(shpod, pvc, "Mounts volumes", "PVC mount")
+Rel(ingestpod, pvc, "Mounts volumes", "PVC mount")
+Rel(sapod, pvc, "Mounts volumes", "PVC mount")
+
+SHOW_LEGEND()
+
+note right of idxctl
+  **No restart_required detection**
+  Relies on Cluster Manager
+  for restart orchestration
+end note
+
+note right of shctl
+  **No restart_required detection**
+  Relies on Deployer + Captain
+  for restart orchestration
+end note
+
+note right of ingestctl
+  **Has restart_required detection**
+  No in-product orchestrator
+  Operator handles restarts
+end note
+
+note right of sactl
+  **Has restart_required detection**
+  No in-product orchestrator
+  Operator handles restarts
+end note
+
+note bottom of delhandler
+  **Intent-based cleanup:**
+  • intent=serve → Restart (preserve PVCs)
+  • intent=scale-down → Remove (delete PVCs)
+  • intent=restart → Restart (preserve PVCs)
+
+  Fallback: Compare pod ordinal vs StatefulSet replicas
+end note
+
+note top of pods
+  **Finalizer:** splunk.com/pod-cleanup
+  **Annotation:** splunk.com/pod-intent
+
+  Finalizer blocks deletion until cleanup completes
+  Intent annotation guides cleanup behavior
+end note
+
+@enduml

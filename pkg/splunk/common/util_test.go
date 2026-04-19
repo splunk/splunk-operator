@@ -450,6 +450,28 @@ func TestCompareEnvs(t *testing.T) {
 	a = []corev1.EnvVar{aEnv, cEnv}
 	b = []corev1.EnvVar{cEnv}
 	test(true)
+
+	podNameNoDefaultAPIVersion := corev1.EnvVar{
+		Name: "POD_NAME",
+		ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: "metadata.name",
+			},
+		},
+	}
+	podNameWithDefaultAPIVersion := corev1.EnvVar{
+		Name: "POD_NAME",
+		ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{
+				APIVersion: "v1",
+				FieldPath:  "metadata.name",
+			},
+		},
+	}
+	a = []corev1.EnvVar{podNameNoDefaultAPIVersion}
+	b = []corev1.EnvVar{podNameWithDefaultAPIVersion}
+	test(false)
+
 }
 
 func TestCompareVolumeMounts(t *testing.T) {
@@ -916,6 +938,58 @@ func TestCompareVolumes(t *testing.T) {
 	secret2Volume := corev1.Volume{Name: "test-volume", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret2"}}}
 	secret3Volume := corev1.Volume{Name: "test-volume", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret2", DefaultMode: &defaultMode}}}
 	secret4Volume := corev1.Volume{Name: "test-volume", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret2", DefaultMode: &defaultMode}}}
+	downwardFieldPath := "metadata.annotations['splunk.com/pod-intent']"
+	downwardDefaultMode := int32(420)
+	downwardNonDefaultMode := int32(384)
+	downwardAPIVolumeNoDefaults := corev1.Volume{
+		Name: "podinfo",
+		VolumeSource: corev1.VolumeSource{
+			DownwardAPI: &corev1.DownwardAPIVolumeSource{
+				Items: []corev1.DownwardAPIVolumeFile{
+					{
+						Path: "intent",
+						FieldRef: &corev1.ObjectFieldSelector{
+							FieldPath: downwardFieldPath,
+						},
+					},
+				},
+			},
+		},
+	}
+	downwardAPIVolumeWithDefaults := corev1.Volume{
+		Name: "podinfo",
+		VolumeSource: corev1.VolumeSource{
+			DownwardAPI: &corev1.DownwardAPIVolumeSource{
+				DefaultMode: &downwardDefaultMode,
+				Items: []corev1.DownwardAPIVolumeFile{
+					{
+						Path: "intent",
+						FieldRef: &corev1.ObjectFieldSelector{
+							APIVersion: "v1",
+							FieldPath:  downwardFieldPath,
+						},
+					},
+				},
+			},
+		},
+	}
+	downwardAPIVolumeWithCustomMode := corev1.Volume{
+		Name: "podinfo",
+		VolumeSource: corev1.VolumeSource{
+			DownwardAPI: &corev1.DownwardAPIVolumeSource{
+				DefaultMode: &downwardNonDefaultMode,
+				Items: []corev1.DownwardAPIVolumeFile{
+					{
+						Path: "intent",
+						FieldRef: &corev1.ObjectFieldSelector{
+							APIVersion: "v1",
+							FieldPath:  downwardFieldPath,
+						},
+					},
+				},
+			},
+		},
+	}
 
 	// No change
 	a = []corev1.Volume{nullVolume, nullVolume}
@@ -946,6 +1020,16 @@ func TestCompareVolumes(t *testing.T) {
 	a = []corev1.Volume{secret3Volume}
 	b = []corev1.Volume{secret4Volume}
 	test(false)
+
+	// No change - DownwardAPI defaults from apiserver are normalized during compare
+	a = []corev1.Volume{downwardAPIVolumeNoDefaults}
+	b = []corev1.Volume{downwardAPIVolumeWithDefaults}
+	test(false)
+
+	// Change - explicit custom defaultMode must still be detected
+	a = []corev1.Volume{downwardAPIVolumeWithDefaults}
+	b = []corev1.Volume{downwardAPIVolumeWithCustomMode}
+	test(true)
 }
 
 func TestSortAndCompareSlices(t *testing.T) {

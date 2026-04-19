@@ -352,6 +352,10 @@ func ValidateSpec(spec *enterpriseApi.Spec, defaultResources corev1.ResourceRequ
 
 // setServiceTemplateDefaults sets default values for service templates
 func setServiceTemplateDefaults(spec *enterpriseApi.Spec) {
+	if spec.ServiceTemplate.Spec.Type == "" {
+		spec.ServiceTemplate.Spec.Type = corev1.ServiceTypeClusterIP
+	}
+
 	if spec.ServiceTemplate.Spec.Ports != nil {
 		for idx := range spec.ServiceTemplate.Spec.Ports {
 			var p *corev1.ServicePort = &spec.ServiceTemplate.Spec.Ports[idx]
@@ -666,6 +670,14 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 		return &configMap, err
 	}
 	configMap.Data[GetStartupScriptName()] = data
+	// Add preStop script to config map
+	preStopScriptLocation, _ := filepath.Abs(GetPreStopScriptLocation())
+	data, err = ReadFile(ctx, preStopScriptLocation)
+	if err != nil {
+		scopedLog.Info("preStop script not found, skipping", "location", preStopScriptLocation)
+	} else {
+		configMap.Data[GetPreStopScriptName()] = data
+	}
 
 	// Apply the configured config map
 	_, err = splctrl.ApplyConfigMap(ctx, client, &configMap)
@@ -730,6 +742,9 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 		}
 	}
 
+	// Build update strategy based on config
+	updateStrategy := buildUpdateStrategy(spec, replicas)
+
 	statefulSet.Spec = appsv1.StatefulSetSpec{
 		Selector: &metav1.LabelSelector{
 			MatchLabels: selectLabels,
@@ -737,9 +752,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 		ServiceName:         GetSplunkServiceName(instanceType, cr.GetName(), true),
 		Replicas:            &replicas,
 		PodManagementPolicy: appsv1.ParallelPodManagement,
-		UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-			Type: appsv1.OnDeleteStatefulSetStrategyType,
-		},
+		UpdateStrategy:      updateStrategy,
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels:      labels,
@@ -794,6 +807,29 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	// make Splunk Enterprise object the owner
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
+	// Add finalizer and intent annotation for instance types that need cleanup before pod deletion
+	// This ensures decommission/detention and cleanup operations complete before pod is removed
+	if instanceType == SplunkIndexer || instanceType == SplunkSearchHead {
+		// Add finalizer (check for duplicates)
+		if statefulSet.Spec.Template.ObjectMeta.Finalizers == nil {
+			statefulSet.Spec.Template.ObjectMeta.Finalizers = []string{}
+		}
+		finalizer := "splunk.com/pod-cleanup"
+		if !containsString(statefulSet.Spec.Template.ObjectMeta.Finalizers, finalizer) {
+			statefulSet.Spec.Template.ObjectMeta.Finalizers = append(
+				statefulSet.Spec.Template.ObjectMeta.Finalizers,
+				finalizer,
+			)
+		}
+
+		// Add intent annotation (default: serve)
+		// This will be updated to "scale-down" when scaling down
+		if statefulSet.Spec.Template.ObjectMeta.Annotations == nil {
+			statefulSet.Spec.Template.ObjectMeta.Annotations = make(map[string]string)
+		}
+		statefulSet.Spec.Template.ObjectMeta.Annotations["splunk.com/pod-intent"] = "serve"
+	}
+
 	return statefulSet, nil
 }
 
@@ -808,6 +844,52 @@ func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	return configMap
+}
+
+// buildUpdateStrategy builds the StatefulSet update strategy based on RollingUpdateConfig
+func buildUpdateStrategy(spec *enterpriseApi.CommonSplunkSpec, replicas int32) appsv1.StatefulSetUpdateStrategy {
+	strategy := appsv1.StatefulSetUpdateStrategy{
+		Type: appsv1.RollingUpdateStatefulSetStrategyType,
+		RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+			MaxUnavailable: &intstr.IntOrString{
+				Type:   intstr.Int,
+				IntVal: 1, // Default: 1 pod unavailable at a time
+			},
+		},
+	}
+
+	// Apply custom rolling update config if specified
+	if spec.RollingUpdateConfig != nil {
+		config := spec.RollingUpdateConfig
+
+		// Set maxPodsUnavailable if specified
+		if config.MaxPodsUnavailable != "" {
+			// Parse as percentage or absolute number
+			if strings.HasSuffix(config.MaxPodsUnavailable, "%") {
+				// Percentage value
+				strategy.RollingUpdate.MaxUnavailable = &intstr.IntOrString{
+					Type:   intstr.String,
+					StrVal: config.MaxPodsUnavailable,
+				}
+			} else {
+				// Absolute number
+				val, err := strconv.ParseInt(config.MaxPodsUnavailable, 10, 32)
+				if err == nil && val > 0 {
+					strategy.RollingUpdate.MaxUnavailable = &intstr.IntOrString{
+						Type:   intstr.Int,
+						IntVal: int32(val),
+					}
+				}
+			}
+		}
+
+		// Set partition if specified (for canary deployments)
+		if config.Partition != nil && *config.Partition >= 0 && *config.Partition <= replicas {
+			strategy.RollingUpdate.Partition = config.Partition
+		}
+	}
+
+	return strategy
 }
 
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
@@ -903,6 +985,21 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		}
 	}
 
+	// Add downward API volume for pod metadata (intent annotation)
+	// This volume updates dynamically when annotations change, unlike env vars
+	addSplunkVolumeToTemplate(podTemplateSpec, "podinfo", "/etc/podinfo", corev1.VolumeSource{
+		DownwardAPI: &corev1.DownwardAPIVolumeSource{
+			Items: []corev1.DownwardAPIVolumeFile{
+				{
+					Path: "intent",
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.annotations['splunk.com/pod-intent']",
+					},
+				},
+			},
+		},
+	})
+
 	// update security context
 	runAsUser := int64(41812)
 	fsGroup := int64(41812)
@@ -951,6 +1048,23 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
 		{Name: "SPLUNK_GENERAL_TERMS", Value: os.Getenv("SPLUNK_GENERAL_TERMS")},
 		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
+		// Pod metadata for preStop hook via Kubernetes downward API
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		{
+			Name: "POD_NAMESPACE",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.namespace",
+				},
+			},
+		},
 	}
 
 	// update variables for licensing, if configured
@@ -1062,9 +1176,21 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 
 	if clusterManagerURL != "" {
+		// Preserve existing semantics for Splunk Ansible: this value is expected to be
+		// the cluster manager service host name, not a full URL.
 		extraEnv = append(extraEnv, corev1.EnvVar{
 			Name:  splcommon.ClusterManagerURL,
 			Value: clusterManagerURL,
+		})
+
+		// Provide an explicit API endpoint for preStop logic that needs a full URL.
+		fullClusterManagerURL := clusterManagerURL
+		if clusterManagerURL != "localhost" {
+			fullClusterManagerURL = fmt.Sprintf("https://%s:8089", clusterManagerURL)
+		}
+		extraEnv = append(extraEnv, corev1.EnvVar{
+			Name:  "SPLUNK_CLUSTER_MANAGER_API_URL",
+			Value: fullClusterManagerURL,
 		})
 	}
 
@@ -1092,6 +1218,22 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 
 	privileged := false
+
+	// Set termination grace period for graceful Splunk shutdown
+	// Grace periods must accommodate role-specific operations:
+	// - Indexers: Bucket migration during scale-down (can take 15+ minutes)
+	// - Search heads: Cluster detention/removal (typically 5 minutes)
+	// - Others: Basic graceful shutdown (2 minutes)
+	var terminationGracePeriodSeconds int64
+	if instanceType == SplunkIndexer {
+		terminationGracePeriodSeconds = 1020 // 17 minutes for indexers (15 min decommission + 1.5 min stop + buffer)
+	} else if instanceType == SplunkSearchHead {
+		terminationGracePeriodSeconds = 360 // 6 minutes for search heads (5 min detention + 1 min stop)
+	} else {
+		terminationGracePeriodSeconds = 120 // 2 minutes for other roles (standalone, CM, etc.)
+	}
+	podTemplateSpec.Spec.TerminationGracePeriodSeconds = &terminationGracePeriodSeconds
+
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
 		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
@@ -1099,6 +1241,20 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
 		podTemplateSpec.Spec.Containers[idx].StartupProbe = startupProbe
 		podTemplateSpec.Spec.Containers[idx].Env = env
+
+		// Add preStop lifecycle hook for graceful Splunk shutdown
+		// Uses /mnt/probes/preStop.sh which handles role-specific shutdown:
+		// - Indexers: Decommission then stop (moves buckets to other peers)
+		// - Search Heads: Detention then stop (removes from pool gracefully)
+		// - Others: Just stop gracefully
+		podTemplateSpec.Spec.Containers[idx].Lifecycle = &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/mnt/probes/preStop.sh"},
+				},
+			},
+		}
+
 		podTemplateSpec.Spec.Containers[idx].SecurityContext = &corev1.SecurityContext{
 			RunAsUser:                &runAsUser,
 			RunAsNonRoot:             &runAsNonRoot,
@@ -2123,4 +2279,14 @@ func validateSplunkGeneralTerms() error {
 		return nil
 	}
 	return fmt.Errorf("license not accepted, please adjust SPLUNK_GENERAL_TERMS to indicate you have accepted the current/latest version of the license. See README file for additional information")
+}
+
+// containsString checks if a string slice contains a specific string
+func containsString(slice []string, str string) bool {
+	for _, s := range slice {
+		if s == str {
+			return true
+		}
+	}
+	return false
 }
