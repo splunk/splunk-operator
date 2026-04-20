@@ -9,27 +9,16 @@ set -eu
 
 . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
 
-aws_oidc_token_file="$(mktemp /tmp/${WORKFLOW_SLUG}-aws-oidc.XXXXXX.jwt)"
-trap 'rm -f "${aws_oidc_token_file}"' EXIT INT TERM
-
-aws_auth_mode="static-key"
-if aws_oidc_ready; then
-  aws_auth_mode="oidc"
-else
-  export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"
-  export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
-fi
 context_file="ci-output/${WORKFLOW_SLUG}-runtime-context.txt"
 mkdir -p "ci-output"
 : > "${context_file}"
+
 TRIVY_RELEASE="${STAGING_TRIVY_RELEASE:-v0.69.3}"
 TRIVY_ASSET_URL="${STAGING_TRIVY_ASSET_URL:-}"
 trivy_resolution_mode="direct-url"
 
-ensure_trivy_scan_tooling
-python3 -m venv /tmp/trivy-tools-venv
-. /tmp/trivy-tools-venv/bin/activate
-pip install --no-cache-dir awscli
+install_os_packages bash curl jq tar
+
 if [ -z "${TRIVY_ASSET_URL}" ]; then
   if [ "${TRIVY_RELEASE}" = "latest" ]; then
     trivy_resolution_mode="github-api"
@@ -62,27 +51,26 @@ trivy --version
 aws --version
 
 require_file "ci-output/build-test-push-workflow-image-ref.txt" "build image reference artifact"
-export IMAGE_REF="$(cat ci-output/build-test-push-workflow-image-ref.txt)"
-export ECR_REGISTRY="${IMAGE_REF%%/*}"
+IMAGE_REF="$(cat ci-output/build-test-push-workflow-image-ref.txt)"
+ECR_REGISTRY="${IMAGE_REF%%/*}"
+ECR_REGION="${AWS_REGION:-${STAGING_AWS_DEFAULT_REGION:-$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)}}"
 
-resolve_ecr_region "${STAGING_AWS_DEFAULT_REGION:-}" "${ECR_REGISTRY}"
-AWS_DEFAULT_REGION="${RESOLVED_ECR_REGION}"
-
-if [ -z "${AWS_DEFAULT_REGION}" ]; then
-  echo "Unable to determine ECR region for Trivy scan" >&2
+if [ -z "${ECR_REGION}" ]; then
+  echo "Unable to determine ECR region — set AWS_REGION or STAGING_AWS_DEFAULT_REGION" >&2
   exit 1
 fi
 
-export AWS_REGION="${AWS_DEFAULT_REGION}"
-if [ "${aws_auth_mode}" = "oidc" ]; then
-  aws_prepare_oidc_env "${aws_oidc_token_file}"
-fi
-export ECR_PASSWORD="$(aws ecr get-login-password --region "${AWS_DEFAULT_REGION}")"
+export AWS_DEFAULT_REGION="${ECR_REGION}"
+export AWS_REGION="${ECR_REGION}"
+
+# ECR_PASSWORD is consumed only by the trivy --password flag below.
+# It is not echoed or written to disk; GitLab masked-variable protection
+# covers the aws ecr get-login-password output in job traces.
+ECR_PASSWORD="$(aws ecr get-login-password --region "${ECR_REGION}")"
 
 append_context "${context_file}" "input_artifact" "ci-output/build-test-push-workflow-image-ref.txt"
-append_context "${context_file}" "ecr_registry_present" "true"
-append_context "${context_file}" "ecr_region_source" "${RESOLVED_ECR_REGION_SOURCE}"
-append_context "${context_file}" "aws_auth_mode" "${aws_auth_mode}"
+append_context "${context_file}" "ecr_registry" "${ECR_REGISTRY}"
+append_context "${context_file}" "ecr_region" "${ECR_REGION}"
 append_context "${context_file}" "trivy_release_selector" "${TRIVY_RELEASE}"
 append_context "${context_file}" "trivy_resolution_mode" "${trivy_resolution_mode}"
 append_context "${context_file}" "trivy_tag" "${TRIVY_TAG}"
