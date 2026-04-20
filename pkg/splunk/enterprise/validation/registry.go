@@ -71,6 +71,18 @@ var (
 		Version:  "v4",
 		Resource: "monitoringconsoles",
 	}
+
+	PostgresClusterGVR = schema.GroupVersionResource{
+		Group:    "enterprise.splunk.com",
+		Version:  "v4",
+		Resource: "postgresclusters",
+	}
+
+	PostgresClusterClassGVR = schema.GroupVersionResource{
+		Group:    "enterprise.splunk.com",
+		Version:  "v4",
+		Resource: "postgresclusterclasses",
+	}
 )
 
 // DefaultValidators is the registry of validators for all Splunk Enterprise CRDs
@@ -178,6 +190,28 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 		GroupKind: schema.GroupKind{
 			Group: "enterprise.splunk.com",
 			Kind:  "MonitoringConsole",
+		},
+	},
+
+	PostgresClusterGVR: &GenericValidator[*enterpriseApi.PostgresCluster]{
+		ValidateCreateFunc:   ValidatePostgresClusterCreate,
+		ValidateUpdateFunc:   ValidatePostgresClusterUpdate,
+		WarningsOnCreateFunc: GetPostgresClusterWarningsOnCreate,
+		WarningsOnUpdateFunc: GetPostgresClusterWarningsOnUpdate,
+		GroupKind: schema.GroupKind{
+			Group: "enterprise.splunk.com",
+			Kind:  "PostgresCluster",
+		},
+	},
+
+	PostgresClusterClassGVR: &GenericValidator[*enterpriseApi.PostgresClusterClass]{
+		ValidateCreateFunc:   ValidatePostgresClusterClassCreate,
+		ValidateUpdateFunc:   ValidatePostgresClusterClassUpdate,
+		WarningsOnCreateFunc: GetPostgresClusterClassWarningsOnCreate,
+		WarningsOnUpdateFunc: GetPostgresClusterClassWarningsOnUpdate,
+		GroupKind: schema.GroupKind{
+			Group: "enterprise.splunk.com",
+			Kind:  "PostgresClusterClass",
 		},
 	},
 }
