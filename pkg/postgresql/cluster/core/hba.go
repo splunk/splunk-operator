@@ -33,20 +33,19 @@ var hbaConnectionTypes = map[string]bool{
 }
 
 var hbaAuthMethods = map[string]bool{
-	"trust":         true,
-	"reject":        true,
-	"scram-sha-256": true,
-	"md5":           true,
-	"password":      true,
-	"gss":           true,
-	"sspi":          true,
-	"ident":         true,
-	"peer":          true,
-	"pam":           true,
-	"ldap":          true,
-	"radius":        true,
-	"cert":          true,
-	"oauth":         true,
+	"trust":          true,
+	"reject":         true,
+	"scram-sha-256":  true,
+	"md5":            true,
+	"password":       true,
+	"gss":            true,
+	"sspi":           true,
+	"ident":          true,
+	"peer":           true,
+	"pam":            true,
+	"ldap":           true,
+	"radius":         true,
+	"cert":           true,
 }
 
 var hbaSpecialAddresses = map[string]bool{
@@ -56,38 +55,31 @@ var hbaSpecialAddresses = map[string]bool{
 }
 
 // tokenPattern splits on whitespace while keeping double-quoted strings intact.
+// Matches pgtoolkit's regex: (?:"+.*?"+|\S)+
 var hbaTokenPattern = regexp.MustCompile(`(?:"+.*?"+|\S)+`)
 
-// hbaLabelPattern matches a valid DNS label sequence (hostname or domain suffix).
-var hbaLabelPattern = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$`)
-
-// RuleError describes a validation error for a single pg_hba.conf rule.
-type RuleError struct {
-	Index   int
-	Message string
-}
+// hostnamePattern matches valid hostname characters.
+var hbaHostnamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
 // ValidateRules validates a slice of pg_hba.conf rule strings.
-func ValidateRules(rules []string) []RuleError {
-	var errs []RuleError
+// Returns nil if all rules are valid, or an error listing each invalid rule.
+func ValidateRules(rules []string) error {
+	var errs []string
 	for i, rule := range rules {
-		for _, msg := range validateRule(rule) {
-			errs = append(errs, RuleError{Index: i, Message: msg})
+		if ruleErrs := validateRule(rule); len(ruleErrs) > 0 {
+			for _, e := range ruleErrs {
+				errs = append(errs, fmt.Sprintf("rule %d: %s", i+1, e))
+			}
 		}
 	}
-	return errs
+	if len(errs) == 0 {
+		return nil
+	}
+	return fmt.Errorf("invalid pg_hba.conf rules:\n  %s", strings.Join(errs, "\n  "))
 }
 
-// validateRule validates a single pg_hba rule using positional parsing.
-// pg_hba.conf has two formats:
-//
-//	local  DATABASE USER                    METHOD [OPTIONS]
-//	host*  DATABASE USER ADDRESS            METHOD [OPTIONS]
-//	host*  DATABASE USER IP-ADDRESS NETMASK METHOD [OPTIONS]
-//
-// Validation order: connection type → minimum field count → auth method
-// (at a fixed positional index) → address for host* types. The IP+netmask
-// form is detected by checking whether tokens[4] parses as a valid IP.
+// validateRule parses and validates a single pg_hba rule.
+// Returns a list of validation errors (empty means valid).
 func validateRule(rule string) []string {
 	trimmed := strings.TrimSpace(rule)
 	if trimmed == "" {
@@ -101,41 +93,46 @@ func validateRule(rule string) []string {
 
 	var errs []string
 
+	// Layer 0: connection type
 	connType := tokens[0]
 	if !hbaConnectionTypes[connType] {
 		return []string{fmt.Sprintf("unknown connection type %q", connType)}
 	}
 
-	isLocal := connType == "local"
-	minFields := 5 // TYPE DATABASE USER ADDRESS METHOD
-	if isLocal {
-		minFields = 4 // local DATABASE USER METHOD
-	}
-	if len(tokens) < minFields {
-		return []string{fmt.Sprintf("too few fields: expected at least %d (%s DATABASE USER %sMETHOD), got %d",
-			minFields, connType, map[bool]string{true: "", false: "ADDRESS "}[isLocal], len(tokens))}
-	}
-
-	methodIdx := 3 // local: tokens[3]
-	if !isLocal {
-		if len(tokens) > 5 && net.ParseIP(tokens[4]) != nil {
-			methodIdx = 5
-		} else {
-			methodIdx = 4
+	// Separate common fields from auth options (tokens containing "=")
+	var commonFields []string
+	for _, t := range tokens {
+		if !strings.Contains(t, "=") {
+			commonFields = append(commonFields, t)
 		}
 	}
-	if methodIdx >= len(tokens) {
-		return []string{fmt.Sprintf("too few fields: missing auth method")}
+
+	// Layer 1: field count
+	isLocal := connType == "local"
+	if isLocal {
+		// local DATABASE USER METHOD
+		if len(commonFields) < 4 {
+			return []string{fmt.Sprintf("too few fields: expected at least 4 (local DATABASE USER METHOD), got %d", len(commonFields))}
+		}
+	} else {
+		// host DATABASE USER ADDRESS METHOD  (or ADDRESS MASK METHOD)
+		if len(commonFields) < 5 {
+			return []string{fmt.Sprintf("too few fields: expected at least 5 (%s DATABASE USER ADDRESS METHOD), got %d", connType, len(commonFields))}
+		}
 	}
-	method := tokens[methodIdx]
+
+	// Layer 2: auth method (last common field)
+	method := commonFields[len(commonFields)-1]
 	if !hbaAuthMethods[method] {
 		errs = append(errs, fmt.Sprintf("unknown auth method %q", method))
 	}
 
+	// Layer 3: address validation (for non-local types)
 	if !isLocal {
-		address := tokens[3]
-		if methodIdx == 5 {
-			if addrErr := validateIPNetmask(tokens[3], tokens[4]); addrErr != "" {
+		address := commonFields[3]
+		// 6+ common fields means IP + separate netmask format
+		if len(commonFields) >= 6 {
+			if addrErr := validateIPNetmask(commonFields[3], commonFields[4]); addrErr != "" {
 				errs = append(errs, addrErr)
 			}
 		} else {
@@ -187,11 +184,7 @@ func validateAddress(address string) string {
 
 	// Domain suffix match: .example.com
 	if strings.HasPrefix(address, ".") && len(address) > 1 {
-		suffix := address[1:]
-		if hbaLabelPattern.MatchString(suffix) {
-			return ""
-		}
-		return fmt.Sprintf("invalid domain suffix %q", address)
+		return ""
 	}
 
 	// CIDR notation
@@ -208,7 +201,7 @@ func validateAddress(address string) string {
 	}
 
 	// Hostname
-	if hbaLabelPattern.MatchString(address) {
+	if hbaHostnamePattern.MatchString(address) {
 		return ""
 	}
 
