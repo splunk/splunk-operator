@@ -1,0 +1,50 @@
+name: Update UBI8 Minimal Base Image
+
+permissions:
+  contents: read
+  pull-requests: write
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 7 * * *'
+
+jobs:
+  update-ubi8-minimal-base-image:
+    name: Refresh pinned UBI8 minimal version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Update pinned UBI8 minimal version
+        id: update
+        run: bash ./.github/scripts/update-ubi8-minimal-base-image.sh
+
+      - name: Check for version changes
+        id: diff
+        run: |
+          if git diff --quiet -- Dockerfile Makefile; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Create pull request
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          base: develop
+          branch: automation/update-ubi8-minimal-${{ steps.update.outputs.latest_version }}
+          commit-message: "chore: bump ubi8/ubi-minimal to ${{ steps.update.outputs.latest_version }}"
+          title: "chore: bump ubi8/ubi-minimal to ${{ steps.update.outputs.latest_version }}"
+          body-path: ${{ steps.update.outputs.pr_body_path }}
+          delete-branch: true
+          labels: |
+            dependencies
+            automation
