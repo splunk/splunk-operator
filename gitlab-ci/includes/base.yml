@@ -69,6 +69,8 @@ default:
 
 .kubectl-splunk-python-job:
   extends: .python-venv-job
+  # GitLab replaces before_script on extend, so this intentionally repeats the
+  # parent bootstrap before adding the kubectl-splunk-specific virtualenv setup.
   before_script:
     - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
     - ensure_python_venv_tooling
