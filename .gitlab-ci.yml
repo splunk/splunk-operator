@@ -21,4 +21,8 @@ oss-scan:
   needs:
     - format-and-vet
   extends: .oss-scan
+  # The shared prodsec scanner image should run with its own bootstrap only.
+  # Inheriting the repo default before_script causes the job to execute Go setup
+  # inside the scanner container before FOSSA starts.
+  before_script: []
   allow_failure: true
