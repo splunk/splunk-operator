@@ -31,6 +31,23 @@ default:
       set -eu
       go version
 
+# Match the internal bootstrap pattern: use GitLab job identity plus creds-helper
+# for platform-managed access, while keeping the current staged AWS env contract
+# for ECR until the later auth-hardening MR removes that dependency.
+.aws-creds-helper-job:
+  id_tokens:
+    CI_JOB_JWT:
+      aud: $CICD_VAULT_ADDR
+  variables:
+    AWS_ACCESS_KEY_ID: $STAGING_AWS_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $STAGING_AWS_SECRET_ACCESS_KEY
+    AWS_DEFAULT_REGION: $STAGING_AWS_DEFAULT_REGION
+  before_script:
+    - |
+      set -eu
+      go version
+    - creds-helper init
+
 format-and-vet:
   stage: verify
   script:
@@ -86,6 +103,7 @@ kubectl-splunk-tests:
         path: kubectl-splunk-coverage.xml
 
 build-stage-image:
+  extends: .aws-creds-helper-job
   stage: build
   needs:
     - unit-tests
@@ -101,6 +119,7 @@ build-stage-image:
       - ci-output/build-test-push-workflow-*
 
 scan-stage-image-trivy:
+  extends: .aws-creds-helper-job
   stage: image_scan
   needs:
     - job: build-stage-image
@@ -116,6 +135,7 @@ scan-stage-image-trivy:
       - ci-output/scan-stage-image-trivy-*
 
 eks-smoke-validation:
+  extends: .aws-creds-helper-job
   stage: integration
   interruptible: false
   timeout: 10h

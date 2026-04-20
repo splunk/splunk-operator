@@ -53,7 +53,7 @@ aws --version
 require_file "ci-output/build-test-push-workflow-image-ref.txt" "build image reference artifact"
 IMAGE_REF="$(cat ci-output/build-test-push-workflow-image-ref.txt)"
 ECR_REGISTRY="${IMAGE_REF%%/*}"
-ECR_REGION="${AWS_REGION:-${STAGING_AWS_DEFAULT_REGION:-$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)}}"
+ECR_REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-${STAGING_AWS_DEFAULT_REGION:-$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)}}}"
 
 if [ -z "${ECR_REGION}" ]; then
   echo "Unable to determine ECR region — set AWS_REGION or STAGING_AWS_DEFAULT_REGION" >&2

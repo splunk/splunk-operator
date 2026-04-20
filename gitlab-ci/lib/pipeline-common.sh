@@ -65,6 +65,31 @@ require_file() {
   fi
 }
 
+resolve_staging_image_repository() {
+  staging_target="$1"
+  default_repo_path="$2"
+
+  if [ -z "${staging_target}" ]; then
+    echo "STAGING_ECR_REPOSITORY must be set" >&2
+    return 1
+  fi
+
+  case "${staging_target}" in
+    */*)
+      RESOLVED_ECR_REGISTRY="${staging_target%%/*}"
+      RESOLVED_IMAGE_REPOSITORY="${staging_target}"
+      RESOLVED_IMAGE_REPOSITORY_MODE="explicit-repository"
+      RESOLVED_REPOSITORY_NAME="${staging_target#${RESOLVED_ECR_REGISTRY}/}"
+      ;;
+    *)
+      RESOLVED_ECR_REGISTRY="${staging_target}"
+      RESOLVED_IMAGE_REPOSITORY="${staging_target}/${default_repo_path}"
+      RESOLVED_IMAGE_REPOSITORY_MODE="registry-only"
+      RESOLVED_REPOSITORY_NAME="${default_repo_path}"
+      ;;
+  esac
+}
+
 ensure_ci_bin_path() {
   ci_bin_dir="$1"
   mkdir -p "$ci_bin_dir"
