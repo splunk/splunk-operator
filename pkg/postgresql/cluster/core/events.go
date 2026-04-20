@@ -12,6 +12,7 @@ import (
 const (
 	EventSecretReady              = "SecretReady"
 	EventConfigMapReady           = "ConfigMapReady"
+	EventConfigMapReconciled      = "ConfigMapReconciled"
 	EventClusterAdopted           = "ClusterAdopted"
 	EventClusterCreationStarted   = "ClusterCreationStarted"
 	EventClusterUpdateStarted     = "ClusterUpdateStarted"

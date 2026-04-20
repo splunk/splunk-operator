@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/go-logr/logr"
 	password "github.com/sethvargo/go-password/password"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
@@ -165,49 +166,92 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	secretComponent := newSecretModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, postgresSecretName)
 	clusterComponent := newClusterModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, clusterClass, mergedConfig, postgresSecretName)
 
-	bootstrapComponents := []component{
-		secretComponent,
-		clusterComponent,
+	bootstrapManager := &componentManager{
+		components: []component{
+			secretComponent,
+			clusterComponent,
+		},
+		logger: logger,
+	}
+	result, err := bootstrapManager.Handle(ctx)
+	if err != nil {
+		return result, err
+	}
+	if result != (ctrl.Result{}) {
+		return result, nil
 	}
 
-	phase := func(component component) (ctrl.Result, error) {
-		componentLogger := logger.WithValues("component", component.Name())
-		gate, gateErr := component.EvaluatePrerequisites(ctx)
-		if gateErr != nil {
-			if isTransientError(gateErr) {
-				componentLogger.Error(gateErr, "Component prerequisite transient error, requeueing", "step", "prerequisites")
-				return transientResult(gateErr), nil
-			}
-			componentLogger.Error(gateErr, "Component prerequisite evaluation failed", "step", "prerequisites")
-			return ctrl.Result{}, fmt.Errorf("%s prerequisites: %w", component.Name(), gateErr)
+	cnpgCluster = clusterComponent.cnpgCluster
+	runtimeView := clusterRuntimeViewAdapter{model: clusterComponent}
+
+	runtimeManager := &componentManager{
+		components: []component{
+			newManagedRolesModel(c, rc.Scheme, rc, updateComponentHealthStatus, runtimeView, postgresCluster, postgresSecretName),
+			newPoolerModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, clusterClass, mergedConfig, cnpgCluster, poolerEnabled, poolerConfigPresent),
+			newConfigMapModel(c, rc.Scheme, rc, updateComponentHealthStatus, runtimeView, postgresCluster, postgresSecretName),
+		},
+		logger: logger,
+	}
+
+	result, err = runtimeManager.Handle(ctx)
+	if err != nil {
+		return result, err
+	}
+	if result != (ctrl.Result{}) {
+		return result, nil
+	}
+
+	logger.Info("Reconciliation complete")
+	if err := updatePhaseStatus(readyClusterPhase); err != nil {
+		if apierrors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
 		}
-		if !gate.Allowed {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func isTransientError(err error) bool {
+	return apierrors.IsConflict(err) ||
+		apierrors.IsServerTimeout(err) ||
+		apierrors.IsTooManyRequests(err) ||
+		apierrors.IsTimeout(err)
+}
+
+func transientResult(err error) ctrl.Result {
+	if apierrors.IsConflict(err) {
+		return ctrl.Result{Requeue: true}
+	}
+	return ctrl.Result{RequeueAfter: retryDelay}
+}
+
+func writeComponentStatus(updateStatus healthStatusUpdater, health componentHealth) error {
+	if updateStatus == nil {
+		return nil
+	}
+	return updateStatus(health)
+}
+
+type componentManager struct {
+	components []component
+	logger     logr.Logger
+}
+
+func (m *componentManager) Handle(ctx context.Context) (ctrl.Result, error) {
+	for _, component := range m.components {
+		componentLogger := m.logger.WithValues("component", component.Name())
+		gate := component.EvaluatePrerequisites(ctx)
+
+		if gate.Allowed {
+			component.Actuate(ctx)
+		} else {
 			componentLogger.Info("Component blocked by prerequisites",
 				"step", "prerequisites",
 				"condition", gate.Health.Condition,
 				"reason", gate.Health.Reason,
 				"phase", gate.Health.Phase,
 				"requeueAfter", gate.Health.Result.RequeueAfter)
-			health, err := component.Converge(ctx)
-			if err != nil && isTransientError(err) {
-				return transientResult(err), nil
-			}
-			if err != nil {
-				componentLogger.Error(err, "Blocked component convergence failed", "step", "converge")
-				return health.Result, fmt.Errorf("%s converge (blocked): %w", component.Name(), err)
-			}
-			return health.Result, nil
 		}
-
-		if err := component.Actuate(ctx); err != nil {
-			if isTransientError(err) {
-				componentLogger.Error(err, "Component actuation transient error, requeueing", "step", "actuate")
-				return transientResult(err), nil
-			}
-			componentLogger.Error(err, "Component actuation failed", "step", "actuate")
-			return ctrl.Result{}, fmt.Errorf("%s actuate: %w", component.Name(), err)
-		}
-		componentLogger.Info("Component actuation completed", "step", "actuate")
 
 		health, err := component.Converge(ctx)
 		if err != nil && isTransientError(err) {
@@ -243,65 +287,8 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 				"requeueAfter", health.Result.RequeueAfter)
 			return health.Result, nil
 		}
-		return ctrl.Result{}, nil
-	}
-
-	for _, component := range bootstrapComponents {
-		result, err := phase(component)
-		if err != nil {
-			return result, err
-		}
-		if result != (ctrl.Result{}) {
-			return result, nil
-		}
-	}
-
-	cnpgCluster = clusterComponent.cnpgCluster
-	runtimeView := clusterRuntimeViewAdapter{model: clusterComponent}
-	runtimeComponents := []component{
-		newManagedRolesModel(c, rc.Scheme, rc, updateComponentHealthStatus, runtimeView, postgresCluster, postgresSecretName),
-		newPoolerModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, clusterClass, mergedConfig, cnpgCluster, poolerEnabled, poolerConfigPresent),
-		newConfigMapModel(c, rc.Scheme, rc, updateComponentHealthStatus, runtimeView, postgresCluster, postgresSecretName),
-	}
-
-	for _, component := range runtimeComponents {
-		result, err := phase(component)
-		if err != nil {
-			return result, err
-		}
-		if result != (ctrl.Result{}) {
-			return result, nil
-		}
-	}
-	logger.Info("Reconciliation complete")
-	if err := updatePhaseStatus(readyClusterPhase); err != nil {
-		if apierrors.IsConflict(err) {
-			return ctrl.Result{Requeue: true}, nil
-		}
-		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
-}
-
-func isTransientError(err error) bool {
-	return apierrors.IsConflict(err) ||
-		apierrors.IsServerTimeout(err) ||
-		apierrors.IsTooManyRequests(err) ||
-		apierrors.IsTimeout(err)
-}
-
-func transientResult(err error) ctrl.Result {
-	if apierrors.IsConflict(err) {
-		return ctrl.Result{Requeue: true}
-	}
-	return ctrl.Result{RequeueAfter: retryDelay}
-}
-
-func writeComponentStatus(updateStatus healthStatusUpdater, health componentHealth) error {
-	if updateStatus == nil {
-		return nil
-	}
-	return updateStatus(health)
 }
 
 // types/dto candidate
@@ -315,9 +302,9 @@ type componentHealth struct {
 }
 
 type component interface {
-	Actuate(ctx context.Context) error
+	Actuate(ctx context.Context)
 	Converge(ctx context.Context) (componentHealth, error)
-	EvaluatePrerequisites(ctx context.Context) (prerequisiteDecision, error)
+	EvaluatePrerequisites(ctx context.Context) prerequisiteDecision
 	Name() string
 }
 
@@ -371,6 +358,7 @@ type clusterModel struct {
 
 	metricsEnabled bool
 	health         componentHealth
+	actuateErr     error
 }
 
 func newClusterModel(c client.Client, scheme *runtime.Scheme, events eventEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, clusterClass *enterprisev4.PostgresClusterClass, mergedConfig *MergedConfig, secretName string) *clusterModel {
@@ -386,17 +374,18 @@ func newClusterModel(c client.Client, scheme *runtime.Scheme, events eventEmitte
 
 func (p *clusterModel) Name() string { return pgcConstants.ComponentProvisioner }
 
-func (p *clusterModel) EvaluatePrerequisites(_ context.Context) (prerequisiteDecision, error) {
+func (p *clusterModel) EvaluatePrerequisites(_ context.Context) prerequisiteDecision {
 	if health, missing := p.getHealthOnMissingSecretRef(); missing {
 		return prerequisiteDecision{
 			Allowed: false,
 			Health:  health,
-		}, nil
+		}
 	}
-	return prerequisiteDecision{Allowed: true}, nil
+	return prerequisiteDecision{Allowed: true}
 }
 
-func (p *clusterModel) Actuate(ctx context.Context) error {
+func (p *clusterModel) Actuate(ctx context.Context) {
+	p.actuateErr = nil
 	p.cnpgCreated = false
 	p.cnpgPatched = false
 
@@ -408,17 +397,35 @@ func (p *clusterModel) Actuate(ctx context.Context) error {
 		newCluster, err := buildCNPGCluster(p.scheme, p.cluster, p.mergedConfig, p.secretName, p.metricsEnabled)
 		if err != nil {
 			p.events.emitWarning(p.cluster, EventClusterCreateFailed, fmt.Sprintf("Failed to build CNPG cluster: %v", err))
-			return err
+			p.health.State = pgcConstants.Failed
+			p.health.Reason = reasonClusterBuildFailed
+			p.health.Message = fmt.Sprintf("Failed to build CNPG cluster: %v", err)
+			p.health.Phase = failedClusterPhase
+			p.health.Result = ctrl.Result{}
+			p.actuateErr = err
+			return
 		}
 		if err = p.client.Create(ctx, newCluster); err != nil {
 			p.events.emitWarning(p.cluster, EventClusterCreateFailed, fmt.Sprintf("Failed to create CNPG cluster: %v", err))
-			return err
+			p.health.State = pgcConstants.Failed
+			p.health.Reason = reasonClusterBuildFailed
+			p.health.Message = fmt.Sprintf("Failed to create CNPG cluster: %v", err)
+			p.health.Phase = failedClusterPhase
+			p.health.Result = ctrl.Result{}
+			p.actuateErr = err
+			return
 		}
 		p.events.emitNormal(p.cluster, EventClusterCreationStarted, "CNPG cluster created, waiting for healthy state")
 		p.cnpgCluster = newCluster
 		p.cnpgCreated = true
 	case err != nil:
-		return err
+		p.health.State = pgcConstants.Failed
+		p.health.Reason = reasonClusterGetFailed
+		p.health.Message = fmt.Sprintf("Failed to get CNPG cluster: %v", err)
+		p.health.Phase = failedClusterPhase
+		p.health.Result = ctrl.Result{}
+		p.actuateErr = err
+		return
 	default:
 		p.cnpgCluster = existingCNPG
 		currentNormalized := normalizeCNPGClusterSpec(p.cnpgCluster.Spec, p.mergedConfig.Spec.PostgreSQLConfig)
@@ -428,7 +435,13 @@ func (p *clusterModel) Actuate(ctx context.Context) error {
 			p.cnpgCluster.Spec = desiredSpec
 			if patchErr := patchObject(ctx, p.client, originalCluster, p.cnpgCluster, "CNPGCluster"); patchErr != nil {
 				p.events.emitWarning(p.cluster, EventClusterUpdateFailed, fmt.Sprintf("Failed to patch CNPG cluster: %v", patchErr))
-				return patchErr
+				p.health.State = pgcConstants.Failed
+				p.health.Reason = reasonClusterPatchFailed
+				p.health.Message = fmt.Sprintf("Failed to patch CNPG cluster: %v", patchErr)
+				p.health.Phase = failedClusterPhase
+				p.health.Result = ctrl.Result{}
+				p.actuateErr = patchErr
+				return
 			}
 			p.events.emitNormal(p.cluster, EventClusterUpdateStarted, "CNPG cluster spec updated, waiting for healthy state")
 			p.cnpgPatched = true
@@ -444,7 +457,7 @@ func (p *clusterModel) Actuate(ctx context.Context) error {
 			UID:        p.cnpgCluster.UID,
 		}
 	}
-	return nil
+	return
 }
 
 func (p *clusterModel) Converge(_ context.Context) (health componentHealth, err error) {
@@ -464,6 +477,9 @@ func (p *clusterModel) Converge(_ context.Context) (health componentHealth, err 
 	if missingHealth, missing := p.getHealthOnMissingSecretRef(); missing {
 		p.health = missingHealth
 		return p.health, nil
+	}
+	if p.actuateErr != nil {
+		return p.health, p.actuateErr
 	}
 
 	if p.cnpgCluster == nil {
@@ -625,7 +641,8 @@ type managedRolesModel struct {
 	cluster      *enterprisev4.PostgresCluster
 	secret       string
 
-	health componentHealth
+	health     componentHealth
+	actuateErr error
 }
 
 func newManagedRolesModel(c client.Client, scheme *runtime.Scheme, events eventEmitter, updateStatus healthStatusUpdater, runtime clusterRuntimeView, cluster *enterprisev4.PostgresCluster, secret string) *managedRolesModel {
@@ -648,17 +665,18 @@ func (m *managedRolesModel) runtimeGateHealth() (componentHealth, bool) {
 	return componentHealth{}, false
 }
 
-func (m *managedRolesModel) EvaluatePrerequisites(_ context.Context) (prerequisiteDecision, error) {
+func (m *managedRolesModel) EvaluatePrerequisites(_ context.Context) prerequisiteDecision {
 	if gateHealth, blocked := m.runtimeGateHealth(); blocked {
 		return prerequisiteDecision{
 			Allowed: false,
 			Health:  gateHealth,
-		}, nil
+		}
 	}
-	return prerequisiteDecision{Allowed: true}, nil
+	return prerequisiteDecision{Allowed: true}
 }
 
-func (m *managedRolesModel) Actuate(ctx context.Context) error {
+func (m *managedRolesModel) Actuate(ctx context.Context) {
+	m.actuateErr = nil
 	if rolesErr := reconcileManagedRoles(ctx, m.client, m.cluster, m.runtime.Cluster()); rolesErr != nil {
 		m.events.emitWarning(m.cluster, EventManagedRolesFailed, fmt.Sprintf("Failed to reconcile managed roles: %v", rolesErr))
 		m.health.State = pgcConstants.Failed
@@ -666,14 +684,15 @@ func (m *managedRolesModel) Actuate(ctx context.Context) error {
 		m.health.Message = fmt.Sprintf("Failed to reconcile managed roles: %v", rolesErr)
 		m.health.Phase = failedClusterPhase
 		m.health.Result = ctrl.Result{}
-		return rolesErr
+		m.actuateErr = rolesErr
+		return
 	}
-	return nil
+	return
 }
 
 func (m *managedRolesModel) Converge(ctx context.Context) (health componentHealth, err error) {
 	_ = ctx
-	m.health = componentHealth{Condition: managedRolesReady}
+	m.health.Condition = managedRolesReady
 	defer func() {
 		statusErr := writeComponentStatus(m.updateStatus, m.health)
 		if statusErr != nil {
@@ -689,6 +708,9 @@ func (m *managedRolesModel) Converge(ctx context.Context) (health componentHealt
 	if gateHealth, blocked := m.runtimeGateHealth(); blocked {
 		m.health = gateHealth
 		return m.health, nil
+	}
+	if m.actuateErr != nil {
+		return m.health, m.actuateErr
 	}
 
 	syncManagedRolesStatusFromCNPG(m.cluster, m.runtime.Cluster())
@@ -817,6 +839,7 @@ type poolerModel struct {
 
 	metricsEnabled bool
 	health         componentHealth
+	actuateErr     error
 }
 
 func newPoolerModel(c client.Client, scheme *runtime.Scheme, events poolerEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, clusterClass *enterprisev4.PostgresClusterClass, mergedConfig *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerEnabled bool, poolerConfigPresent bool) *poolerModel {
@@ -838,9 +861,9 @@ func newPoolerModel(c client.Client, scheme *runtime.Scheme, events poolerEmitte
 
 func (p *poolerModel) Name() string { return pgcConstants.ComponentPooler }
 
-func (p *poolerModel) EvaluatePrerequisites(_ context.Context) (prerequisiteDecision, error) {
+func (p *poolerModel) EvaluatePrerequisites(_ context.Context) prerequisiteDecision {
 	if !p.poolerEnabled || !p.poolerConfigPresent {
-		return prerequisiteDecision{Allowed: true}, nil
+		return prerequisiteDecision{Allowed: true}
 	}
 	if p.cnpgCluster == nil {
 		return prerequisiteDecision{
@@ -853,7 +876,7 @@ func (p *poolerModel) EvaluatePrerequisites(_ context.Context) (prerequisiteDeci
 				Phase:     pendingClusterPhase,
 				Result:    ctrl.Result{RequeueAfter: retryDelay},
 			},
-		}, nil
+		}
 	}
 	if p.cnpgCluster.Status.Phase != cnpgv1.PhaseHealthy {
 		return prerequisiteDecision{
@@ -866,35 +889,49 @@ func (p *poolerModel) EvaluatePrerequisites(_ context.Context) (prerequisiteDeci
 				Phase:     provisioningClusterPhase,
 				Result:    ctrl.Result{RequeueAfter: retryDelay},
 			},
-		}, nil
+		}
 	}
-	return prerequisiteDecision{Allowed: true}, nil
+	return prerequisiteDecision{Allowed: true}
 }
 
-func (p *poolerModel) Actuate(ctx context.Context) error {
+func (p *poolerModel) Actuate(ctx context.Context) {
+	p.actuateErr = nil
 	switch {
 	case !p.poolerEnabled:
 		if err := deleteConnectionPoolers(ctx, p.client, p.cluster); err != nil {
-			return err
+			p.health.State = pgcConstants.Failed
+			p.health.Reason = reasonPoolerReconciliationFailed
+			p.health.Message = fmt.Sprintf("Failed to delete poolers: %v", err)
+			p.health.Phase = failedClusterPhase
+			p.health.Result = ctrl.Result{}
+			p.actuateErr = err
+			return
 		}
 		p.cluster.Status.ConnectionPoolerStatus = nil
 		meta.RemoveStatusCondition(&p.cluster.Status.Conditions, string(poolerReady))
-		return nil
+		return
 	case !p.poolerConfigPresent:
-		return nil
+		return
 	case p.cnpgCluster == nil || p.cnpgCluster.Status.Phase != cnpgv1.PhaseHealthy:
-		return nil
+		return
 	default:
 		if err := createOrUpdateConnectionPoolers(ctx, p.client, p.scheme, p.cluster, p.mergedConfig, p.cnpgCluster, p.metricsEnabled); err != nil {
 			p.events.emitWarning(p.cluster, EventPoolerReconcileFailed, fmt.Sprintf("Failed to reconcile connection pooler: %v", err))
-			return err
+			p.health.State = pgcConstants.Failed
+			p.health.Reason = reasonPoolerReconciliationFailed
+			p.health.Message = fmt.Sprintf("Failed to reconcile connection pooler: %v", err)
+			p.health.Phase = failedClusterPhase
+			p.health.Result = ctrl.Result{}
+			p.actuateErr = err
+			return
 		}
-		return nil
+		return
 	}
 }
 
 func (p *poolerModel) Converge(ctx context.Context) (health componentHealth, err error) {
-	p.health = componentHealth{Condition: poolerReady}
+	p.health.Condition = poolerReady
+	oldConditions := append([]metav1.Condition(nil), p.cluster.Status.Conditions...)
 	defer func() {
 		statusErr := writeComponentStatus(p.updateStatus, p.health)
 		if statusErr != nil {
@@ -922,6 +959,9 @@ func (p *poolerModel) Converge(ctx context.Context) (health componentHealth, err
 		p.health.Phase = failedClusterPhase
 		p.health.Result = ctrl.Result{}
 		return p.health, fmt.Errorf("pooler config missing")
+	}
+	if p.actuateErr != nil {
+		return p.health, p.actuateErr
 	}
 	if p.cnpgCluster == nil {
 		p.health.State = pgcConstants.Pending
@@ -1013,7 +1053,7 @@ func (p *poolerModel) Converge(ctx context.Context) (health componentHealth, err
 	p.health.Message = msgPoolersReady
 	p.health.Phase = readyClusterPhase
 	p.health.Result = ctrl.Result{}
-	p.events.emitPoolerReadyTransition(p.cluster, p.cluster.Status.Conditions)
+	p.events.emitPoolerReadyTransition(p.cluster, oldConditions)
 	return p.health, nil
 }
 
@@ -1026,7 +1066,8 @@ type configMapModel struct {
 	cluster      *enterprisev4.PostgresCluster
 	secret       string
 
-	health componentHealth
+	health     componentHealth
+	actuateErr error
 }
 
 func newConfigMapModel(c client.Client, scheme *runtime.Scheme, events eventEmitter, updateStatus healthStatusUpdater, runtime clusterRuntimeView, cluster *enterprisev4.PostgresCluster, secret string) *configMapModel {
@@ -1035,22 +1076,29 @@ func newConfigMapModel(c client.Client, scheme *runtime.Scheme, events eventEmit
 
 func (c *configMapModel) Name() string { return pgcConstants.ComponentConfigMap }
 
-func (c *configMapModel) EvaluatePrerequisites(_ context.Context) (prerequisiteDecision, error) {
-	return prerequisiteDecision{Allowed: true}, nil
+func (c *configMapModel) EvaluatePrerequisites(_ context.Context) prerequisiteDecision {
+	return prerequisiteDecision{Allowed: true}
 }
 
-func (c *configMapModel) Actuate(ctx context.Context) error {
+func (c *configMapModel) Actuate(ctx context.Context) {
+	c.actuateErr = nil
 	cnpgCluster := c.runtime.Cluster()
 	if cnpgCluster == nil {
-		return nil
+		return
 	}
 	desiredCM, err := generateConfigMap(ctx, c.client, c.scheme, c.cluster, cnpgCluster, c.secret)
 	if err != nil {
 		c.events.emitWarning(c.cluster, EventConfigMapReconcileFailed, fmt.Sprintf("Failed to reconcile ConfigMap: %v", err))
-		return err
+		c.health.State = pgcConstants.Failed
+		c.health.Reason = reasonConfigMapFailed
+		c.health.Message = fmt.Sprintf("Failed to reconcile ConfigMap: %v", err)
+		c.health.Phase = failedClusterPhase
+		c.health.Result = ctrl.Result{}
+		c.actuateErr = err
+		return
 	}
 	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: desiredCM.Name, Namespace: desiredCM.Namespace}}
-	_, err = controllerutil.CreateOrUpdate(ctx, c.client, cm, func() error {
+	op, err := controllerutil.CreateOrUpdate(ctx, c.client, cm, func() error {
 		cm.Data = desiredCM.Data
 		cm.Annotations = desiredCM.Annotations
 		cm.Labels = desiredCM.Labels
@@ -1063,16 +1111,27 @@ func (c *configMapModel) Actuate(ctx context.Context) error {
 	})
 	if err != nil {
 		c.events.emitWarning(c.cluster, EventConfigMapReconcileFailed, fmt.Sprintf("Failed to reconcile ConfigMap: %v", err))
-		return err
+		c.health.State = pgcConstants.Failed
+		c.health.Reason = reasonConfigMapFailed
+		c.health.Message = fmt.Sprintf("Failed to reconcile ConfigMap: %v", err)
+		c.health.Phase = failedClusterPhase
+		c.health.Result = ctrl.Result{}
+		c.actuateErr = err
+		return
+	}
+	if op == controllerutil.OperationResultCreated {
+		c.events.emitNormal(c.cluster, EventConfigMapReconciled, fmt.Sprintf("ConfigMap %s created", desiredCM.Name))
+	} else if op == controllerutil.OperationResultUpdated {
+		c.events.emitNormal(c.cluster, EventConfigMapReconciled, fmt.Sprintf("ConfigMap %s updated", desiredCM.Name))
 	}
 	if c.cluster.Status.Resources.ConfigMapRef == nil {
 		c.cluster.Status.Resources.ConfigMapRef = &corev1.LocalObjectReference{Name: desiredCM.Name}
 	}
-	return nil
+	return
 }
 
 func (c *configMapModel) Converge(ctx context.Context) (health componentHealth, err error) {
-	c.health = componentHealth{Condition: configMapsReady}
+	c.health.Condition = configMapsReady
 	defer func() {
 		statusErr := writeComponentStatus(c.updateStatus, c.health)
 		if statusErr != nil {
@@ -1092,6 +1151,9 @@ func (c *configMapModel) Converge(ctx context.Context) (health componentHealth, 
 		c.health.Phase = provisioningClusterPhase
 		c.health.Result = ctrl.Result{RequeueAfter: retryDelay}
 		return c.health, nil
+	}
+	if c.actuateErr != nil {
+		return c.health, c.actuateErr
 	}
 
 	if c.cluster.Status.Resources == nil || c.cluster.Status.Resources.ConfigMapRef == nil {
@@ -1159,7 +1221,8 @@ type secretModel struct {
 	cluster      *enterprisev4.PostgresCluster
 	name         string
 
-	health componentHealth
+	health     componentHealth
+	actuateErr error
 }
 
 func newSecretModel(c client.Client, scheme *runtime.Scheme, events eventEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, name string) *secretModel {
@@ -1168,35 +1231,66 @@ func newSecretModel(c client.Client, scheme *runtime.Scheme, events eventEmitter
 
 func (s *secretModel) Name() string { return pgcConstants.ComponentSecret }
 
-func (s *secretModel) EvaluatePrerequisites(_ context.Context) (prerequisiteDecision, error) {
-	return prerequisiteDecision{Allowed: true}, nil
+func (s *secretModel) EvaluatePrerequisites(_ context.Context) prerequisiteDecision {
+	return prerequisiteDecision{Allowed: true}
 }
 
-func (s *secretModel) Actuate(ctx context.Context) error {
+func (s *secretModel) Actuate(ctx context.Context) {
+	s.actuateErr = nil
 	secret := &corev1.Secret{}
 	secretExists, secretErr := clusterSecretExists(ctx, s.client, s.cluster.Namespace, s.name, secret)
 	if secretErr != nil {
 		s.events.emitWarning(s.cluster, EventSecretReconcileFailed, fmt.Sprintf("Failed to check secret existence: %v", secretErr))
-		return secretErr
+		s.health.State = pgcConstants.Failed
+		s.health.Reason = reasonSuperUserSecretFailed
+		s.health.Message = fmt.Sprintf("Failed to check secret existence: %v", secretErr)
+		s.health.Phase = failedClusterPhase
+		s.health.Result = ctrl.Result{}
+		s.actuateErr = secretErr
+		return
 	}
 	if !secretExists {
 		if err := ensureClusterSecret(ctx, s.client, s.scheme, s.cluster, s.name, secret); err != nil {
 			s.events.emitWarning(s.cluster, EventSecretReconcileFailed, fmt.Sprintf("Failed to generate cluster secret: %v", err))
-			return err
+			s.health.State = pgcConstants.Failed
+			s.health.Reason = reasonSuperUserSecretFailed
+			s.health.Message = fmt.Sprintf("Failed to generate cluster secret: %v", err)
+			s.health.Phase = failedClusterPhase
+			s.health.Result = ctrl.Result{}
+			s.actuateErr = err
+			return
 		}
 	}
 	hasOwnerRef, ownerRefErr := controllerutil.HasOwnerReference(secret.GetOwnerReferences(), s.cluster, s.scheme)
 	if ownerRefErr != nil {
-		return fmt.Errorf("failed to check owner reference on secret: %w", ownerRefErr)
+		s.health.State = pgcConstants.Failed
+		s.health.Reason = reasonSuperUserSecretFailed
+		s.health.Message = fmt.Sprintf("failed to check owner reference on secret: %v", ownerRefErr)
+		s.health.Phase = failedClusterPhase
+		s.health.Result = ctrl.Result{}
+		s.actuateErr = fmt.Errorf("failed to check owner reference on secret: %w", ownerRefErr)
+		return
 	}
 	if secretExists && !hasOwnerRef {
 		originalSecret := secret.DeepCopy()
 		if err := ctrl.SetControllerReference(s.cluster, secret, s.scheme); err != nil {
-			return fmt.Errorf("failed to set controller reference on existing secret: %w", err)
+			s.health.State = pgcConstants.Failed
+			s.health.Reason = reasonSuperUserSecretFailed
+			s.health.Message = fmt.Sprintf("failed to set controller reference on existing secret: %v", err)
+			s.health.Phase = failedClusterPhase
+			s.health.Result = ctrl.Result{}
+			s.actuateErr = fmt.Errorf("failed to set controller reference on existing secret: %w", err)
+			return
 		}
 		if err := patchObject(ctx, s.client, originalSecret, secret, "Secret"); err != nil {
 			s.events.emitWarning(s.cluster, EventSecretReconcileFailed, fmt.Sprintf("Failed to patch existing secret: %v", err))
-			return err
+			s.health.State = pgcConstants.Failed
+			s.health.Reason = reasonSuperUserSecretFailed
+			s.health.Message = fmt.Sprintf("Failed to patch existing secret: %v", err)
+			s.health.Phase = failedClusterPhase
+			s.health.Result = ctrl.Result{}
+			s.actuateErr = err
+			return
 		}
 		s.events.emitNormal(s.cluster, EventClusterAdopted, fmt.Sprintf("Adopted existing CNPG cluster and secret %s", s.name))
 	}
@@ -1206,11 +1300,11 @@ func (s *secretModel) Actuate(ctx context.Context) error {
 			Key:                  secretKeyPassword,
 		}
 	}
-	return nil
+	return
 }
 
 func (s *secretModel) Converge(ctx context.Context) (health componentHealth, err error) {
-	s.health = componentHealth{Condition: secretsReady}
+	s.health.Condition = secretsReady
 	defer func() {
 		statusErr := writeComponentStatus(s.updateStatus, s.health)
 		if statusErr != nil {
@@ -1222,6 +1316,10 @@ func (s *secretModel) Converge(ctx context.Context) (health componentHealth, err
 		}
 		health = s.health
 	}()
+
+	if s.actuateErr != nil {
+		return s.health, s.actuateErr
+	}
 
 	if s.cluster.Status.Resources == nil || s.cluster.Status.Resources.SuperUserSecretRef == nil {
 		s.health.State = pgcConstants.Provisioning

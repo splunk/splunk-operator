@@ -95,6 +95,9 @@ const (
 	// condition reasons — cluster/provisioner
 	reasonClusterClassNotFound conditionReasons = "ClusterClassNotFound"
 	reasonInvalidConfiguration conditionReasons = "InvalidConfiguration"
+	reasonClusterBuildFailed   conditionReasons = "ClusterBuildFailed"
+	reasonClusterGetFailed     conditionReasons = "ClusterGetFailed"
+	reasonClusterPatchFailed   conditionReasons = "ClusterPatchFailed"
 
 	// condition reasons — managedRolesReady
 	reasonManagedRolesReady   conditionReasons = "ManagedRolesReconciled"

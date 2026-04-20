@@ -25,6 +25,41 @@ type configMapNotFoundClient struct {
 	client.Client
 }
 
+type getErrorClient struct {
+	client.Client
+	err     error
+	matcher func(client.Object) bool
+}
+
+func (c getErrorClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if c.matcher != nil && c.matcher(obj) {
+		return c.err
+	}
+	return c.Client.Get(ctx, key, obj, opts...)
+}
+
+type createErrorClient struct {
+	client.Client
+	err     error
+	matcher func(client.Object) bool
+}
+
+func (c createErrorClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	if c.matcher != nil && c.matcher(obj) {
+		return c.err
+	}
+	return c.Client.Create(ctx, obj, opts...)
+}
+
+type patchErrorClient struct {
+	client.Client
+	err error
+}
+
+func (c patchErrorClient) Patch(_ context.Context, _ client.Object, _ client.Patch, _ ...client.PatchOption) error {
+	return c.err
+}
+
 type noopEventEmitter struct{}
 
 func (noopEventEmitter) emitNormal(_ client.Object, _, _ string)                         {}
@@ -1290,10 +1325,11 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 			Namespace: "default",
 		},
 		Data: map[string]string{
-			"CLUSTER_RW_ENDPOINT":   "pg1-rw.default",
-			"CLUSTER_RO_ENDPOINT":   "pg1-ro.default",
-			"DEFAULT_CLUSTER_PORT":  "5432",
-			"SUPER_USER_SECRET_REF": "pg1-secret",
+			configKeyClusterRWEndpoint:  "pg1-rw.default",
+			configKeyClusterROEndpoint:  "pg1-ro.default",
+			configKeyClusterREndpoint:   "pg1-r.default",
+			configKeyDefaultClusterPort: "5432",
+			configKeySuperUserSecretRef: "pg1-secret",
 		},
 	}
 	examplePgCluster := &enterprisev4.PostgresCluster{
@@ -1487,8 +1523,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 
 			state := pgcConstants.Empty
 			for i, check := range tt.components {
-				gate, gateErr := check.EvaluatePrerequisites(ctx)
-				require.NoError(t, gateErr)
+				gate := check.EvaluatePrerequisites(ctx)
 				if !gate.Allowed {
 					info := gate.Health
 					state = info.State
@@ -1497,7 +1532,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 					continue
 				}
 
-				require.NoError(t, check.Actuate(ctx))
+				check.Actuate(ctx)
 				info, err := check.Converge(ctx)
 				require.NoError(t, err)
 				state = info.State
@@ -1742,13 +1777,235 @@ func TestManagedRolesRuntimeGateHealthMatchesConverge(t *testing.T) {
 		"pg1-secret",
 	)
 
-	gate, err := model.EvaluatePrerequisites(context.Background())
-	require.NoError(t, err)
+	gate := model.EvaluatePrerequisites(context.Background())
 	require.False(t, gate.Allowed)
 
 	health, err := model.Converge(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, gate.Health, health)
+}
+
+func TestActuateErrorPassdownConvergeHandling(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	instances := int32(1)
+	version := "16"
+	storageSize := resource.MustParse("10Gi")
+	mergedConfig := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{
+			Instances:        &instances,
+			PostgresVersion:  &version,
+			Storage:          &storageSize,
+			Resources:        &corev1.ResourceRequirements{},
+			PostgreSQLConfig: map[string]string{},
+			PgHBA:            []string{},
+		},
+	}
+	clusterClass := &enterprisev4.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
+		Spec: enterprisev4.PostgresClusterClassSpec{
+			Config: &enterprisev4.PostgresClusterClassConfig{
+				ConnectionPoolerEnabled: ptr.To(true),
+			},
+		},
+	}
+
+	type convergeComponent interface {
+		Actuate(ctx context.Context)
+		Converge(ctx context.Context) (componentHealth, error)
+	}
+	type testCase struct {
+		name              string
+		expectedCondition conditionTypes
+		expectedReason    conditionReasons
+		build             func(updateStatus healthStatusUpdater) convergeComponent
+	}
+
+	tests := []testCase{
+		{
+			name:              "cluster component passes actuate get error through converge",
+			expectedCondition: clusterReady,
+			expectedReason:    reasonClusterGetFailed,
+			build: func(updateStatus healthStatusUpdater) convergeComponent {
+				cluster := &enterprisev4.PostgresCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+					Status: enterprisev4.PostgresClusterStatus{
+						Resources: &enterprisev4.PostgresClusterResources{
+							SuperUserSecretRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "pg1-secret"},
+								Key:                  "password",
+							},
+						},
+					},
+				}
+				base := fake.NewClientBuilder().WithScheme(scheme).Build()
+				errClient := getErrorClient{
+					Client: base,
+					err:    assert.AnError,
+					matcher: func(obj client.Object) bool {
+						_, ok := obj.(*cnpgv1.Cluster)
+						return ok
+					},
+				}
+				return newClusterModel(errClient, scheme, noopEventEmitter{}, updateStatus, cluster, clusterClass, mergedConfig, "pg1-secret")
+			},
+		},
+		{
+			name:              "managed roles component passes actuate patch error through converge",
+			expectedCondition: managedRolesReady,
+			expectedReason:    reasonManagedRolesFailed,
+			build: func(updateStatus healthStatusUpdater) convergeComponent {
+				cluster := &enterprisev4.PostgresCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+					Spec: enterprisev4.PostgresClusterSpec{
+						ManagedRoles: []enterprisev4.ManagedRole{{Name: "app_user", Exists: true}},
+					},
+				}
+				cnpg := &cnpgv1.Cluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+					Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
+				}
+				base := fake.NewClientBuilder().WithScheme(scheme).Build()
+				errClient := patchErrorClient{Client: base, err: assert.AnError}
+				return newManagedRolesModel(
+					errClient,
+					scheme,
+					noopEventEmitter{},
+					updateStatus,
+					clusterRuntimeViewAdapter{model: &clusterModel{cnpgCluster: cnpg}},
+					cluster,
+					"pg1-secret",
+				)
+			},
+		},
+		{
+			name:              "pooler component passes actuate create error through converge",
+			expectedCondition: poolerReady,
+			expectedReason:    reasonPoolerReconciliationFailed,
+			build: func(updateStatus healthStatusUpdater) convergeComponent {
+				poolerInstances := int32(2)
+				poolerMode := enterprisev4.ConnectionPoolerModeTransaction
+				cluster := &enterprisev4.PostgresCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+				}
+				cnpg := &cnpgv1.Cluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+					Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
+				}
+				base := fake.NewClientBuilder().WithScheme(scheme).Build()
+				errClient := createErrorClient{
+					Client: base,
+					err:    assert.AnError,
+					matcher: func(obj client.Object) bool {
+						_, ok := obj.(*cnpgv1.Pooler)
+						return ok
+					},
+				}
+				poolerCfg := &MergedConfig{
+					Spec: mergedConfig.Spec,
+					CNPG: &enterprisev4.CNPGConfig{
+						ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{
+							Instances: &poolerInstances,
+							Mode:      &poolerMode,
+							Config:    map[string]string{},
+						},
+					},
+				}
+				return newPoolerModel(errClient, scheme, noopEventEmitter{}, updateStatus, cluster, clusterClass, poolerCfg, cnpg, true, true)
+			},
+		},
+		{
+			name:              "configmap component passes actuate pooler lookup error through converge",
+			expectedCondition: configMapsReady,
+			expectedReason:    reasonConfigMapFailed,
+			build: func(updateStatus healthStatusUpdater) convergeComponent {
+				cluster := &enterprisev4.PostgresCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+					Status:     enterprisev4.PostgresClusterStatus{Resources: &enterprisev4.PostgresClusterResources{}},
+				}
+				cnpg := &cnpgv1.Cluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+					Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
+				}
+				base := fake.NewClientBuilder().WithScheme(scheme).Build()
+				errClient := getErrorClient{
+					Client: base,
+					err:    assert.AnError,
+					matcher: func(obj client.Object) bool {
+						_, ok := obj.(*cnpgv1.Pooler)
+						return ok
+					},
+				}
+				return newConfigMapModel(
+					errClient,
+					scheme,
+					noopEventEmitter{},
+					updateStatus,
+					clusterRuntimeViewAdapter{model: &clusterModel{cnpgCluster: cnpg}},
+					cluster,
+					"pg1-secret",
+				)
+			},
+		},
+		{
+			name:              "secret component passes actuate existence-check error through converge",
+			expectedCondition: secretsReady,
+			expectedReason:    reasonSuperUserSecretFailed,
+			build: func(updateStatus healthStatusUpdater) convergeComponent {
+				cluster := &enterprisev4.PostgresCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+					Status: enterprisev4.PostgresClusterStatus{
+						Resources: &enterprisev4.PostgresClusterResources{},
+					},
+				}
+				base := fake.NewClientBuilder().WithScheme(scheme).Build()
+				errClient := getErrorClient{
+					Client: base,
+					err:    assert.AnError,
+					matcher: func(obj client.Object) bool {
+						_, ok := obj.(*corev1.Secret)
+						return ok
+					},
+				}
+				return newSecretModel(errClient, scheme, noopEventEmitter{}, updateStatus, cluster, "pg1-secret")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var (
+				written componentHealth
+				writes  int
+			)
+			updateStatus := func(health componentHealth) error {
+				written = health
+				writes++
+				return nil
+			}
+			model := tt.build(updateStatus)
+
+			model.Actuate(context.Background())
+			health, err := model.Converge(context.Background())
+
+			require.Error(t, err)
+			require.ErrorIs(t, err, assert.AnError)
+			assert.Equal(t, tt.expectedCondition, health.Condition)
+			assert.Equal(t, pgcConstants.Failed, health.State)
+			assert.Equal(t, tt.expectedReason, health.Reason)
+			assert.Equal(t, failedClusterPhase, health.Phase)
+			assert.NotEmpty(t, health.Message)
+			assert.Equal(t, 1, writes)
+			assert.Equal(t, health, written)
+		})
+	}
 }
 
 func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
@@ -1878,7 +2135,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 			false,
 		)
 
-		require.NoError(t, model.Actuate(context.Background()))
+		model.Actuate(context.Background())
 		health, err := model.Converge(context.Background())
 		require.NoError(t, err)
 		assert.Nil(t, cluster.Status.ConnectionPoolerStatus)
