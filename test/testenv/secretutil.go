@@ -91,13 +91,13 @@ func GetMountedKey(ctx context.Context, deployment *Deployment, podName string, 
 
 // GetRandomeHECToken generates a random HEC token
 func GetRandomeHECToken() string {
-	return fmt.Sprintf("%s-%s-%s-%s-%s", strings.ToUpper(RandomDNSName(8)), strings.ToUpper(RandomDNSName(4)), strings.ToUpper(RandomDNSName(4)), strings.ToUpper(RandomDNSName(4)), strings.ToUpper(RandomDNSName(12)))
+	return fmt.Sprintf("%s-%s-%s-%s-%s", RandomHex(8), RandomHex(4), RandomHex(4), RandomHex(4), RandomHex(12))
 }
 
 // GetSecretFromServerConf gets give secret from server under given stanza
 func GetSecretFromServerConf(ctx context.Context, deployment *Deployment, podName string, ns string, configName string, stanza string) (string, string, error) {
 	filePath := "/opt/splunk/etc/system/local/server.conf"
-	confline, err := GetConfLineFromPod(podName, filePath, ns, configName, stanza, true)
+	confline, err := GetConfLineFromPod(ctx, podName, filePath, ns, configName, stanza, true)
 	if err != nil {
 		logf.Log.Error(err, "Failed to get secret from pod", "Pod Name", podName, "Secret Name", configName)
 		return "", "", err
@@ -194,9 +194,9 @@ func CheckSecretViaAPI(ctx context.Context, deployment *Deployment, podName stri
 }
 
 // GetSecretFromInputsConf gets give secret from server under given stanza
-func GetSecretFromInputsConf(deployment *Deployment, podName string, ns string, configName string, stanza string) (string, string, error) {
+func GetSecretFromInputsConf(ctx context.Context, deployment *Deployment, podName string, ns string, configName string, stanza string) (string, string, error) {
 	filePath := "/opt/splunk/etc/apps/splunk_httpinput/local/inputs.conf"
-	confline, err := GetConfLineFromPod(podName, filePath, ns, configName, stanza, true)
+	confline, err := GetConfLineFromPod(ctx, podName, filePath, ns, configName, stanza, true)
 	if err != nil {
 		logf.Log.Error(err, "Failed to get secret from pod", "Pod Name", podName, "Secret Name", configName)
 		return "", "", err

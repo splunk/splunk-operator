@@ -14,7 +14,6 @@
 package c3gcpappfw
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -48,9 +47,7 @@ var _ = Describe("c3appfw test", func() {
 	var uploadedApps []string
 	var filePresentOnOperator bool
 
-	ctx := context.TODO()
-
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 
 		var err error
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
@@ -58,10 +55,15 @@ var _ = Describe("c3appfw test", func() {
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+
+		// Validate test prerequisites early to fail fast
+		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
+
 		testenv.SpecifiedTestTimeout = 100000
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -88,7 +90,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It(" c3gcp,   c3_mgr_gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then upgrade them", func() {
+		It(" c3gcp,   c3_mgr_gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then upgrade them", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -152,7 +154,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// Upload V1 apps to Gcs for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Gcs for Indexer Cluster", appVersion))
@@ -177,7 +179,7 @@ var _ = Describe("c3appfw test", func() {
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, gcsTestDirShc, 60)
 
 			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -188,28 +190,28 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// wait for custom resource resource version to change
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// Verify no SH in disconnected status is present on CM
-			testenv.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// ############ Verify livenessProbe and readinessProbe config object and scripts############
 			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
@@ -218,7 +220,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
 			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
 			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-			testenv.VerifyFilesInDirectoryOnPod(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+			testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
 
 			//######### INITIAL VERIFICATIONS #############
 			var idxcPodNames, shcPodNames []string
@@ -231,10 +233,10 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on Gcs
@@ -243,7 +245,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = nil
 
 			// get revision number of the resource
-			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+			resourceVersion = testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
 
 			// Upload V2 apps to Gcs for Indexer Cluster
 			appVersion = "V2"
@@ -269,24 +271,24 @@ var _ = Describe("c3appfw test", func() {
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############ FINAL VERIFICATIONS ############
 			cmAppSourceInfo.CrAppVersion = appVersion
@@ -299,16 +301,16 @@ var _ = Describe("c3appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV2
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 		})
 	})
 
 	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework and Image Upgrade", func() {
-		It(" c3gcp, c3_mgr_gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then upgrade the image and apps", func() {
+		It(" c3gcp, c3_mgr_gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then upgrade the image and apps", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			//################## SETUP ####################
 
@@ -364,28 +366,28 @@ var _ = Describe("c3appfw test", func() {
 			idxc, err := deployment.DeployIndexerCluster(ctx, idxName, lm.GetName(), 3, cm.GetName(), "", corev1.ObjectReference{}, corev1.ObjectReference{}, "")
 
 			// Wait for License Manager to be in READY phase
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment)
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Monitoring Console goes to Ready phase
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// // Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// // Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// // Verify no SH in disconnected status is present on CM
-			testenv.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// ############ Verify livenessProbe and readinessProbe config object and scripts############
 			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
@@ -394,10 +396,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
 			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
 			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-			testenv.VerifyFilesInDirectoryOnPod(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+			testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 			//############### UPGRADE IMAGE ################
 
@@ -437,25 +439,25 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed upgrade Indexer Cluster image")
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Wait for License Manager to be in READY phase
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment)
 
 			// // Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// // Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// // Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 		})
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It(" c3gcp,   c3_mgr_gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", func() {
+		It(" c3gcp,   c3_mgr_gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -520,7 +522,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// Upload V2 apps to Gcs for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Gcs for Indexer Cluster", appVersion))
@@ -545,7 +547,7 @@ var _ = Describe("c3appfw test", func() {
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, gcsTestDirShc, 60)
 
 			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -556,25 +558,25 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// wait for custom resource resource version to change
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########### INITIAL VERIFICATIONS ###########
 			var idxcPodNames, shcPodNames []string
@@ -587,10 +589,10 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: "V2", CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: "V2", CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 			//############## DOWNGRADE APPS ###############
 			// Delete apps on Gcs
@@ -599,7 +601,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = nil
 
 			// get revision number of the resource
-			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+			resourceVersion = testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
 
 			// Upload V1 apps to Gcs for Indexer Cluster
 			appVersion = "V1"
@@ -625,24 +627,24 @@ var _ = Describe("c3appfw test", func() {
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########### FINAL VERIFICATIONS #############
 			cmAppSourceInfo.CrAppVersion = appVersion
@@ -655,15 +657,15 @@ var _ = Describe("c3appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV1
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 		})
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It("integration, c3,  appframework: can deploy a C3 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", func() {
+		It("integration, c3,  appframework: can deploy a C3 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -735,19 +737,19 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// ############ Verify livenessProbe and readinessProbe config object and scripts############
 			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
@@ -764,11 +766,26 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			time.Sleep(60 * time.Second)
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			// Wait for apps to reach Install phase before verification (local scope only)
+			// Cluster-scoped apps reach PhaseInstall only after bundle push completes;
+			// their phase is validated after VerifyAppFrameworkState below.
+			for _, appSource := range allAppSourceInfo {
+				if appSource.CrAppScope != enterpriseApi.ScopeCluster {
+					err = testcaseEnvInst.WaitForAllAppsPhase(ctx, deployment, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, 2*time.Minute)
+					Expect(err).To(Succeed(), "Timed out waiting for apps to reach Install phase on %s", appSource.CrName)
+				}
+			}
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			// Validate cluster-scoped apps also reached Install phase (bundle push already done by VerifyAppFrameworkState)
+			for _, appSource := range allAppSourceInfo {
+				if appSource.CrAppScope == enterpriseApi.ScopeCluster {
+					err = testcaseEnvInst.WaitForAllAppsPhase(ctx, deployment, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, 2*time.Minute)
+					Expect(err).To(Succeed(), "Timed out waiting for cluster-scoped apps to reach Install phase on %s", appSource.CrName)
+				}
+			}
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 			//Delete configMap Object
 			err = testenv.DeleteConfigMap(testcaseEnvInst.GetName(), ConfigMapName)
@@ -791,7 +808,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale up Search Head Cluster")
 
 			// Ensure Search Head Cluster scales up and go to ScalingUp phase
-			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseScalingUp)
+			testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp)
 
 			// Get instance of current Indexer CR with latest config
 			idxcName := deployment.GetName() + "-idxc"
@@ -808,10 +825,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale up Indexer Cluster")
 
 			// Ensure Indexer Cluster scales up and go to ScalingUp phase
-			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseScalingUp, idxcName)
+			testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp, idxcName)
 
 			// Ensure Indexer Cluster go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify New Indexer On Cluster Manager
 			indexerName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas-1)
@@ -827,10 +844,10 @@ var _ = Describe("c3appfw test", func() {
 			}
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Search for data on newly added indexer
 			searchPod := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas-1)
@@ -853,7 +870,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", indexerName, resultLine["host"].(string))
 
 			//########## SCALING UP VERIFICATIONS #########
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// ############ Verify livenessProbe and readinessProbe config object and scripts############
 			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
@@ -861,12 +878,12 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
 			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
 			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-			testenv.VerifyFilesInDirectoryOnPod(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+			testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
 
 			// Verify no pods reset by checking the pod age
 			shcPodNames = []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			shcPodNames = append(shcPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, shcPodNames)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, shcPodNames)
 
 			//############### SCALING DOWN ################
 			// Get instance of current Search Head Cluster CR with latest config
@@ -886,7 +903,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale down Search Head Cluster")
 
 			// Ensure Search Head Cluster scales down and go to ScalingDown phase
-			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseScalingDown)
+			testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown)
 
 			// Get instance of current Indexer CR with latest config
 			err = deployment.GetInstance(ctx, idxcName, idxc)
@@ -901,16 +918,16 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to Scale down Indexer Cluster")
 
 			// Ensure Indexer Cluster scales down and go to ScalingDown phase
-			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseScalingDown, idxcName)
+			testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown, idxcName)
 
 			// Ensure Indexer Cluster go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Search for data from removed indexer
 			searchPod = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas-1)
@@ -932,16 +949,16 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", indexerName, resultLine["host"].(string))
 
 			//######## SCALING DOWN VERIFICATIONS #########
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, shcPodNames)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, shcPodNames)
 
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It(" c3gcp,   c3_mgr_gcp_sanity: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
+		It(" c3gcp,   c3_mgr_gcp_sanity: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1001,19 +1018,19 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############## INITIAL VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
@@ -1024,10 +1041,10 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on Gcs
@@ -1050,19 +1067,19 @@ var _ = Describe("c3appfw test", func() {
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########### UPGRADE VERIFICATIONS ###########
 			cmAppSourceInfo.CrAppVersion = appVersion
@@ -1072,15 +1089,15 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration,  appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", func() {
+		It("c3, integration,  appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1190,19 +1207,19 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############ INITIAL VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
@@ -1215,10 +1232,10 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListLocal, CrAppFileList: localappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListCluster, CrAppFileList: clusterappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on Gcs
@@ -1254,19 +1271,19 @@ var _ = Describe("c3appfw test", func() {
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## UPGRADE VERIFICATION #############
 			cmAppSourceInfoLocal.CrAppVersion = appVersion
@@ -1282,16 +1299,16 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoCluster.CrAppList = appListCluster
 			shcAppSourceInfoCluster.CrAppFileList = clusterappFileList
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration,  appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then downgrade them", func() {
+		It("c3, integration,  appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then downgrade them", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1397,19 +1414,19 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############ INITIAL VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
@@ -1422,11 +1439,26 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: deployerPod, CrAppVersion: "V2", CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListLocal, CrAppFileList: localappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: deployerPod, CrAppVersion: "V2", CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListCluster, CrAppFileList: clusterappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			time.Sleep(2 * time.Minute) // FIXME adding sleep to see if verification succeedes
-			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			// Wait for apps to reach Install phase before verification (local scope only)
+			// Cluster-scoped apps reach PhaseInstall only after bundle push completes;
+			// their phase is validated after VerifyAppFrameworkState below.
+			for _, appSource := range allAppSourceInfo {
+				if appSource.CrAppScope != enterpriseApi.ScopeCluster {
+					err = testcaseEnvInst.WaitForAllAppsPhase(ctx, deployment, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, 2*time.Minute)
+					Expect(err).To(Succeed(), "Timed out waiting for apps to reach Install phase on %s", appSource.CrName)
+				}
+			}
+			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			// Validate cluster-scoped apps also reached Install phase (bundle push already done by VerifyAppFrameworkState)
+			for _, appSource := range allAppSourceInfo {
+				if appSource.CrAppScope == enterpriseApi.ScopeCluster {
+					err = testcaseEnvInst.WaitForAllAppsPhase(ctx, deployment, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, appSource.CrAppList, enterpriseApi.PhaseInstall, 2*time.Minute)
+					Expect(err).To(Succeed(), "Timed out waiting for cluster-scoped apps to reach Install phase on %s", appSource.CrName)
+				}
+			}
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 			//############# DOWNGRADE APPS ################
 			// Delete apps on Gcs
@@ -1462,19 +1494,19 @@ var _ = Describe("c3appfw test", func() {
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## DOWNGRADE VERIFICATION #############
 			cmAppSourceInfoLocal.CrAppVersion = appVersion
@@ -1490,16 +1522,16 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoCluster.CrAppList = appListCluster
 			shcAppSourceInfoCluster.CrAppFileList = clusterappFileList
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3,  appframework: can deploy a C3 SVA instance with App Framework enabled and install above 200MB of apps at once", func() {
+		It("integration, c3,  appframework: can deploy a C3 SVA instance with App Framework enabled and install above 200MB of apps at once", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1560,19 +1592,19 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//  ############### VERIFICATIONS ###############
 			var idxcPodNames, shcPodNames []string
@@ -1583,15 +1615,15 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 		})
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It("integration, c3,  appframework: can deploy a C3 SVA with App Framework enabled for manual update", func() {
+		It("integration, c3,  appframework: can deploy a C3 SVA with App Framework enabled for manual update", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload V1 apps to Gcs for Monitoring Console
@@ -1657,7 +1689,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// Upload V1 apps to Gcs for Indexer Cluster
 			gcsTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
@@ -1687,22 +1719,22 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App framework")
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//######### INITIAL VERIFICATIONS #############
 			var idxcPodNames, shcPodNames []string
@@ -1715,10 +1747,10 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 			// ############### UPGRADE APPS ################
 			// Delete V1 apps on Gcs
@@ -1749,21 +1781,21 @@ var _ = Describe("c3appfw test", func() {
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			//  ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
 			allPodNames := append(idxcPodNames, shcPodNames...)
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 
 			// ############ ENABLE MANUAL POLL ############
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
@@ -1776,10 +1808,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
 			config, err = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
@@ -1791,10 +1823,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
 			config, err = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
@@ -1806,10 +1838,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// Verify config map set back to off after poll trigger
 			testcaseEnvInst.Log.Info("Verify config map set back to off after poll trigger for app", "version", appVersion)
@@ -1828,15 +1860,15 @@ var _ = Describe("c3appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV2
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3,  appframework: can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", func() {
+		It("integration, c3,  appframework: can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1899,19 +1931,19 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############## INITIAL VERIFICATION ##########
 			var idxcPodNames, shcPodNames []string
@@ -1922,10 +1954,10 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on Gcs
@@ -1948,19 +1980,19 @@ var _ = Describe("c3appfw test", func() {
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			//  ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// ############ ENABLE MANUAL POLL ############
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
@@ -1974,10 +2006,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
 			config, err = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
@@ -1989,13 +2021,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// ########## Verify Manual Poll config map disabled after the poll is triggered #################
 			// Verify config map set back to off after poll trigger
@@ -2011,15 +2043,15 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration,  appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", func() {
+		It("c3, integration,  appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2124,19 +2156,19 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############ INITIAL VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
@@ -2149,10 +2181,10 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListLocal, CrAppFileList: localappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListCluster, CrAppFileList: clusterappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on Gcs
@@ -2200,19 +2232,19 @@ var _ = Describe("c3appfw test", func() {
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// ########## Verify Manual Poll config map disabled after the poll is triggered #################
 
@@ -2235,15 +2267,15 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoCluster.CrAppList = appListCluster
 			shcAppSourceInfoCluster.CrAppFileList = clusterappFileList
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 		})
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3,  appframework: can deploy a C3, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", func() {
+		It("integration, c3,  appframework: can deploy a C3, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2293,7 +2325,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// Download all apps from Gcs
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
@@ -2332,7 +2364,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify App installation is in progress on Cluster Manager
-			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
+			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
 
 			// Upload more apps to Gcs for Cluster Manager
 			appList = testenv.ExtraApps
@@ -2349,30 +2381,30 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Wait for polling interval to pass
-			testenv.WaitForAppInstall(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Verify all apps are installed on Cluster Manager
 			appList = append(testenv.BigSingleApp, testenv.ExtraApps...)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Cluster Manager", appList))
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), cmPod, appList, true, "enabled", false, false)
+			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), cmPod, appList, true, "enabled", false, false)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Verify all apps are installed on Deployer
 			appList = append(testenv.BigSingleApp, testenv.ExtraApps...)
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Deployer", appList))
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), deployerPod, appList, true, "enabled", false, false)
+			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), deployerPod, appList, true, "enabled", false, false)
 		})
 	})
 	// Vivek need testing
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3,  appframework: can deploy a C3, add new apps to app source while install is in progress and have all apps installed cluster-wide", func() {
+		It("integration, c3,  appframework: can deploy a C3, add new apps to app source while install is in progress and have all apps installed cluster-wide", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2422,7 +2454,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
 
 			// Download all apps from Gcs
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
@@ -2461,7 +2493,7 @@ var _ = Describe("c3appfw test", func() {
 			cm, _, shc, err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
+			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
 
 			// Upload more apps to Gcs for Cluster Manager
 			appList = testenv.ExtraApps
@@ -2478,37 +2510,37 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Wait for polling interval to pass
-			testenv.WaitForAppInstall(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify all apps are installed on indexers
 			appList = append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
 			idxcPodNames := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on indexers", appList))
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), idxcPodNames, appList, true, "enabled", false, true)
+			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), idxcPodNames, appList, true, "enabled", false, true)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Wait for polling interval to pass
-			testenv.WaitForAppInstall(ctx, deployment, testcaseEnvInst, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
+			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
 
 			// Verify all apps are installed on Search Heads
 			shcPodNames := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Search Heads", appList))
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), shcPodNames, appList, true, "enabled", false, true)
+			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), shcPodNames, appList, true, "enabled", false, true)
 
 		})
 	})
 	// Vivek need testing
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3,  appframework: can deploy a C3 SVA with App Framework enabled and reset operator pod while app install is in progress", func() {
+		It("integration, c3,  appframework: can deploy a C3 SVA with App Framework enabled and reset operator pod while app install is in progress", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2564,25 +2596,25 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify App installation is in progress on Cluster Manager
-			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending)
+			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending)
 
 			// Delete Operator pod while Install in progress
 			testenv.DeleteOperatorPod(testcaseEnvInst)
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//######### VERIFICATIONS #############
 			var idxcPodNames, shcPodNames []string
@@ -2593,16 +2625,16 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 		})
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3,  appframework: can deploy a C3 SVA with App Framework enabled and reset operator pod while app download is in progress", func() {
+		It("integration, c3,  appframework: can deploy a C3 SVA with App Framework enabled and reset operator pod while app download is in progress", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2658,25 +2690,25 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify App Download is in progress on Cluster Manager
-			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending)
+			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending)
 
 			// Delete Operator pod while Install in progress
 			testenv.DeleteOperatorPod(testcaseEnvInst)
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//######### VERIFICATIONS #############
 			var idxcPodNames, shcPodNames []string
@@ -2687,16 +2719,16 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 		})
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3,  appframework: can deploy a C3 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", func() {
+		It("integration, c3,  appframework: can deploy a C3 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2749,19 +2781,19 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// //######### INITIAL VERIFICATIONS #############
 			idxcPodNames := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)
@@ -2771,27 +2803,28 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify repo state on App to be disabled to be 1 (i.e app present on Gcs bucket)
 			appName := appListV1[0]
 			appFileName := testenv.GetAppFileList([]string{appName})
-			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])
+			testcaseEnvInst.VerifyAppRepoState(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])
 
 			// Disable the app
-			testenv.DisableAppsToGCP(downloadDirV1, appFileName, gcsTestDirIdxc)
+			err = testenv.DisableAppsToGCP(downloadDirV1, appFileName, gcsTestDirIdxc)
+			Expect(err).To(Succeed(), "Unable to disable apps on GCS")
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Wait for App state to update after config file change
-			testenv.WaitforAppInstallState(ctx, deployment, testcaseEnvInst, idxcPodNames, testcaseEnvInst.GetName(), appName, "disabled", true)
+			testcaseEnvInst.WaitforAppInstallState(ctx, deployment, idxcPodNames, testcaseEnvInst.GetName(), appName, "disabled", true)
 
 			// Delete the file from Gcs
 			gcsFilepath := filepath.Join(gcsTestDirIdxc, appFileName[0])
@@ -2799,13 +2832,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on Gcs test directory", appFileName[0]))
 
 			// Verify repo state is set to 2 (i.e app deleted from Gcs bucket)
-			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind, appSourceNameIdxc, 2, appFileName[0])
+			testcaseEnvInst.VerifyAppRepoState(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, 2, appFileName[0])
 
 		})
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3,  appframework: can deploy a C3 SVA with App Framework enabled and update apps after app download is completed", func() {
+		It("integration, c3,  appframework: can deploy a C3 SVA with App Framework enabled and update apps after app download is completed", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2869,7 +2902,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify App Download is in progress on Cluster Manager
-			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending)
+			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending)
 
 			// Upload V2 apps to Gcs for Indexer Cluster
 			appVersion = "V2"
@@ -2887,27 +2920,27 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//######### VERIFICATIONS #############
 			appVersion = "V1"
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appListV1, false, "enabled", false, false)
+			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appListV1, false, "enabled", false, false)
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			appFileList = testenv.GetAppFileList(appListV2)
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			//############  UPGRADE VERIFICATIONS ############
 			appVersion = "V2"
@@ -2919,13 +2952,13 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration,  appframework: can deploy a C3 SVA and install a bigger volume of apps than the operator PV disk space", func() {
+		It("c3, integration,  appframework: can deploy a C3 SVA and install a bigger volume of apps than the operator PV disk space", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2992,19 +3025,19 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############ INITIAL VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
@@ -3015,12 +3048,12 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 		})
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3,  appframework: can deploy a C3 SVA with App Framework enabled and delete apps from app directory when download is complete", func() {
+		It("integration, c3,  appframework: can deploy a C3 SVA with App Framework enabled and delete apps from app directory when download is complete", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -3076,7 +3109,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify App Download is completed on Cluster Manager
-			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending)
+			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending)
 
 			//Delete apps from app directory when app download is complete
 			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
@@ -3085,19 +3118,19 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to delete file on pod")
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//######### VERIFICATIONS #############
 			var idxcPodNames, shcPodNames []string
@@ -3108,16 +3141,16 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 
 		})
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It(" c3gcp,   c3_mgr_gcp_sanity: can deploy a C3 SVA with App Framework enabled and check isDeploymentInProgressFlag for CM and SHC CR's", func() {
+		It(" c3gcp,   c3_mgr_gcp_sanity: can deploy a C3 SVA with App Framework enabled and check isDeploymentInProgressFlag for CM and SHC CR's", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/*
 			   Test Steps
@@ -3162,28 +3195,28 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify IsDeploymentInProgress Flag is set to true for Cluster Manager CR
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag")
-			testenv.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind)
+			testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, cm.Name, cm.Kind)
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Verify IsDeploymentInProgress Flag is set to true for SHC CR
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag")
-			testenv.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, testcaseEnvInst, shc.Name, shc.Kind)
+			testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, shc.Name, shc.Kind)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3: can deploy a C3 SVA and a Standalone, then add that Standalone as a Search Head to the cluster", func() {
+		It("integration, c3: can deploy a C3 SVA and a Standalone, then add that Standalone as a Search Head to the cluster", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ###################
@@ -3219,19 +3252,19 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with clusterMasterRef")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			//  Ensure that the Standalone goes to Ready phase
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############# VERIFICATION #################
 			// Verify Standalone is configured as a Search Head for the Cluster Manager
@@ -3239,12 +3272,12 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testenv.CheckSearchHeadOnCM(ctx, deployment, standalonePodName)).To(Equal(true))
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3,  appframework: can deploy a C3 SVA and have ES app installed on Search Head Cluster", func() {
+		It("integration, c3,  appframework: can deploy a C3 SVA and have ES app installed on Search Head Cluster", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -3350,32 +3383,32 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//######### INITIAL VERIFICATIONS #############
 			shcPodNames := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), int(shSpec.Replicas), false, 1)
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: esApp, CrAppFileList: appFileList, CrReplicas: int(shSpec.Replicas), CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{shcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			idxcPodNames := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: taApp, CrAppFileList: appFileListIdxc, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// //############### UPGRADE APPS ################
 			// // Download ES App from Gcs
@@ -3403,10 +3436,10 @@ var _ = Describe("c3appfw test", func() {
 			// testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// // Verify RF SF is met
-			// testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			// testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 
 			// // Get Pod age to check for pod resets later
-			// splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			// splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// //############ FINAL VERIFICATIONS ############
 
@@ -3414,7 +3447,7 @@ var _ = Describe("c3appfw test", func() {
 			// shcAppSourceInfo.CrAppList = esApp
 			// shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(esApp)
 			// allAppSourceInfo = []testenv.AppSourceInfo{shcAppSourceInfo}
-			// testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			// testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 		})
 	})
 })

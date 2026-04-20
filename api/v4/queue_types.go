@@ -49,7 +49,6 @@ type SQSSpec struct {
 	// Name of the queue
 	Name string `json:"name"`
 
-	// +optional
 	// +kubebuilder:validation:Pattern=`^(?:us|ap|eu|me|af|sa|ca|cn|il)(?:-[a-z]+){1,3}-\d$`
 	// Auth Region of the resources
 	AuthRegion string `json:"authRegion"`
@@ -62,11 +61,24 @@ type SQSSpec struct {
 	// +optional
 	// +kubebuilder:validation:Pattern=`^https?://[^\s/$.?#].[^\s]*$`
 	// Amazon SQS Service endpoint
-	Endpoint string `json:"endpoint"`
+	Endpoint string `json:"endpoint,omitempty"`
 
 	// +optional
 	// List of remote storage volumes
-	VolList []VolumeSpec `json:"volumes,omitempty"`
+	VolList []SQSVolumeSpec `json:"volumes,omitempty"`
+}
+
+// SQSVolumeSpec defines a volume reference for SQS queue authentication
+type SQSVolumeSpec struct {
+	// Remote volume name
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Remote volume secret ref
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	SecretRef string `json:"secretRef"`
 }
 
 // QueueStatus defines the observed state of Queue

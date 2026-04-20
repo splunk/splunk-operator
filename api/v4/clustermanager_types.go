@@ -39,6 +39,7 @@ type ClusterManagerSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
+	// +optional
 	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management

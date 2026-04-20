@@ -45,7 +45,7 @@ func TestBasic(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	sc, _ := GinkgoConfiguration()
-	sc.Timeout = 240 * time.Minute
+	sc.Timeout = testenv.MediumLongSuiteTimeout
 
 	RunSpecs(t, "Running "+testSuiteName, sc)
 }

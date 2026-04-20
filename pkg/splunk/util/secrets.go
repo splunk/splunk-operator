@@ -396,28 +396,40 @@ func GetSplunkReadableNamespaceScopedSecretData(ctx context.Context, c splcommon
 
 	// Create individual token type data
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
-		splunkReadableData[tokenType] = namespaceScopedSecret.Data[tokenType]
+		if _, exists := namespaceScopedSecret.Data[tokenType]; exists {
+			splunkReadableData[tokenType] = namespaceScopedSecret.Data[tokenType]
+		}
 	}
 
-	// Create default.yml
-	splunkReadableData["default.yml"] = []byte(fmt.Sprintf(`
+	// Create default.yml with optional splunk_secret
+	defaultYmlBuilder := fmt.Sprintf(`
 splunk:
     hec_disabled: 0
     hec_enableSSL: 0
     hec_token: "%s"
     password: "%s"
-    pass4SymmKey: "%s"
+    pass4SymmKey: "%s"`,
+		namespaceScopedSecret.Data["hec_token"],
+		namespaceScopedSecret.Data["password"],
+		namespaceScopedSecret.Data["pass4SymmKey"])
+
+	// Add splunk_secret only if it exists
+	if splunkSecret, exists := namespaceScopedSecret.Data["splunk_secret"]; exists {
+		defaultYmlBuilder += fmt.Sprintf(`
+    splunk_secret: "%s"`, splunkSecret)
+	}
+
+	// Add idxc and shc sections
+	defaultYmlBuilder += fmt.Sprintf(`
     idxc:
         secret: "%s"
     shc:
         secret: "%s"
 `,
-		namespaceScopedSecret.Data["hec_token"],
-		namespaceScopedSecret.Data["password"],
-		namespaceScopedSecret.Data["pass4SymmKey"],
 		namespaceScopedSecret.Data["idxc_secret"],
-		namespaceScopedSecret.Data["shc_secret"]))
+		namespaceScopedSecret.Data["shc_secret"])
 
+	splunkReadableData["default.yml"] = []byte(strings.TrimSpace(defaultYmlBuilder))
 	return splunkReadableData, nil
 }
 
@@ -497,9 +509,19 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: splcommon.GetNamespaceScopedSecretName(namespace)}
 	err := client.Get(ctx, namespacedName, &current)
 	if err == nil {
+		// Validate existing secrets according to PasswordManagement documentation
+		err = validateNamespaceScopedSecrets(&current)
+		if err != nil {
+			return nil, err
+		}
+
 		// Generate values for only missing types of tokens them
 		var updateNeeded bool = false
 		for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
+			if tokenType == "splunk_secret" {
+				// splunk_secret is optional, skip if not found
+				continue
+			}
 			if _, ok := current.Data[tokenType]; !ok {
 				logger.WarnContext(ctx, "Secret is missing required field. Update secret with required data",
 					"secret_name", name,
@@ -547,7 +569,7 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
 		if tokenType == "hec_token" {
 			current.Data[tokenType] = generateHECToken()
-		} else {
+		} else if tokenType != "splunk_secret" {
 			current.Data[tokenType] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
 		}
 	}
@@ -580,6 +602,36 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 		}
 	}
 	return &current, nil
+}
+
+// validateNamespaceScopedSecrets validates that all Splunk secret tokens that exist are not empty
+// and meet their specific requirements
+// Validates secrets documented in PasswordManagement: hec_token, password, pass4SymmKey, idxc_secret, shc_secret
+func validateNamespaceScopedSecrets(secret *corev1.Secret) error {
+	if secret.Data == nil {
+		slog.Info("Secret data is nil for namespace scoped secret")
+		return nil
+	}
+
+	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
+		if secretValue, exists := secret.Data[tokenType]; exists {
+			var err error
+			if tokenType == "hec_token" {
+				err = ValidateHECToken(secretValue)
+			} else {
+				err = ValidateSecret(secretValue)
+			}
+
+			if err != nil {
+				slog.Error("Validation failed for secret", "secret", tokenType, "error", err)
+				return fmt.Errorf("validation failed for secret %s: %w", tokenType, err)
+			}
+
+			slog.Info("Namespace scoped secret validation passed", "secret", tokenType)
+		}
+	}
+
+	return nil
 }
 
 // GetSecretByName retrieves namespace scoped secret object for a given name.

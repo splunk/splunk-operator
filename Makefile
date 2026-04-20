@@ -1,14 +1,12 @@
 # Default environment is default
-ENVIRONMENT ?= ${1}
-${ENVIRONMENT}:
-	ENVIRONMENT = default
+ENVIRONMENT ?= default
 
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 3.0.0
+VERSION ?= 3.1.0
 
 # SPLUNK_ENTERPRISE_IMAGE defines the splunk docker tag that is used as default image.
 SPLUNK_ENTERPRISE_IMAGE ?= "docker.io/splunk/splunk"
@@ -18,7 +16,7 @@ SPLUNK_ENTERPRISE_IMAGE ?= "docker.io/splunk/splunk"
 # add namespace to this
 WATCH_NAMESPACE ?= ""
 
-# SPLUNK_GENERAL_TERMS is used for the mandatory acknowledgment mechanism for 
+# SPLUNK_GENERAL_TERMS is used for the mandatory acknowledgment mechanism for
 # the Splunk General Terms (SGT) https://www.splunk.com/en_us/legal/splunk-general-terms.html.
 # See README for more information on the required value.
 SPLUNK_GENERAL_TERMS ?= ""
@@ -122,7 +120,7 @@ help: ## Display this help.
 
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-	rm config/crd/bases/_.yaml
+	rm -f config/crd/bases/_.yaml
 
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
@@ -138,14 +136,15 @@ vet: setup/ginkgo	 ## Run go vet against code.
 	go vet ./...
 
 test: manifests generate fmt vet setup-envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=unit_test.xml --output-dir=`pwd` -vv --trace --keep-going --timeout=3h --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/client ./pkg/splunk/util ./internal/controller ./pkg/splunk/splkcontroller
+	REPORT_FILE="unit_test-$$(date +%Y%m%d-%H%M%S)$${GITHUB_RUN_ID:+-$$GITHUB_RUN_ID}.xml"; \
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=$$REPORT_FILE --output-dir=`pwd` -vv --trace --keep-going --timeout=$${TEST_TIMEOUT:-170m} --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/client ./pkg/splunk/util ./internal/controller ./pkg/splunk/splkcontroller
 
 
 ##@ Documentation
 
 docs-preview: ## Preview documentation locally with Jekyll (requires Ruby and bundler)
 	@echo "Installing dependencies locally..."
-	@cd docs && bundle install --path vendor/bundle
+	@cd docs && bundle config set --local path vendor/bundle && bundle install
 	@echo "Starting Jekyll server for documentation preview..."
 	@cd docs && bundle exec jekyll serve --livereload
 	@echo "Documentation available at http://localhost:4000/splunk-operator"
@@ -169,19 +168,19 @@ docker-push: ## Push docker image with the manager.
 # Defaults:
 #   Build Platform: linux/amd64,linux/arm64
 #   Build Base OS: registry.access.redhat.com/ubi8/ubi-minimal
-#   Build Base OS Version: 8.10-1770223153
+#   Build Base OS Version: 8.10-1775152441
 # Pass only what is required, the rest will be defaulted
 # Setup defaults for build arguments
 PLATFORMS ?= linux/amd64,linux/arm64
 BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal
-BASE_IMAGE_VERSION ?= 8.10-1770223153
+BASE_IMAGE_VERSION ?= 8.10-1775152441
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
             echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
             exit 1; \
         fi; \
-        	docker buildx create --name project-v3-builder --use || true; \
+        	docker buildx inspect project-v3-builder >/dev/null 2>&1 || docker buildx create --name project-v3-builder; \
         	docker buildx use project-v3-builder; \
         if echo "${BASE_IMAGE}" | grep -q "distroless"; then \
             DOCKERFILE="Dockerfile.distroless"; \
@@ -191,8 +190,7 @@ docker-buildx:
         docker buildx build --push --platform="${PLATFORMS}" \
             --build-arg BASE_IMAGE="${BASE_IMAGE}" \
             --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
-            --tag "${IMG}" -f "$$DOCKERFILE" .; \
-        - docker buildx rm project-v3-builder || true
+            --tag "${IMG}" -f "$$DOCKERFILE" .
 
 
 

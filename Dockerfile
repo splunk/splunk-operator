@@ -2,10 +2,10 @@
 ARG PLATFORMS=linux/amd64,linux/arm64
 
 ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal
-ARG BASE_IMAGE_VERSION=8.10-1770223153
+ARG BASE_IMAGE_VERSION=8.10-1775152441
 
 # Build the manager binary
-FROM golang:1.25.7 AS builder
+FROM golang:1.25.8 AS builder
 
 WORKDIR /workspace
 
@@ -63,6 +63,7 @@ RUN if grep -q 'Ubuntu' /etc/os-release; then \
         microdnf update -y libstdc++ && \
         microdnf update -y libxml2 && \
         microdnf update -y libgcc && \
+        microdnf update -y gnutls && \
         microdnf clean all; \
     fi
 
@@ -70,7 +71,7 @@ RUN if grep -q 'Ubuntu' /etc/os-release; then \
 LABEL name="splunk" \
       maintainer="support@splunk.com" \
       vendor="splunk" \
-      version="3.0.0" \
+      version="3.1.0" \
       release="1" \
       summary="Simplify the Deployment & Management of Splunk Products on Kubernetes" \
       description="The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk Administrators to deploy and operate Enterprise deployments in a Kubernetes infrastructure. Packaged as a container, it uses the operator pattern to manage Splunk-specific custom resources, following best practices to manage all the underlying Kubernetes objects for you."

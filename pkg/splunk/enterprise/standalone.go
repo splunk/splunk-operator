@@ -212,7 +212,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		return result, err
 	}
 
-	// Track previous ready replicas for scaling events
+	// Track last successful replica count to emit scale events after completion
 	previousReadyReplicas := cr.Status.ReadyReplicas
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}

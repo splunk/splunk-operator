@@ -16,7 +16,6 @@
 package deletecr
 
 import (
-	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -32,18 +31,21 @@ var _ = Describe("DeleteCR test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	ctx := context.TODO()
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+
+		// Validate test prerequisites early to fail fast
+		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -57,7 +59,7 @@ var _ = Describe("DeleteCR test", func() {
 	})
 
 	Context("Standalone deployment (S1 - Standalone Pod)", func() {
-		It("integration, managerdeletecr: can deploy standalone and delete", func() {
+		It("integration, managerdeletecr: can deploy standalone and delete", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -75,7 +77,7 @@ var _ = Describe("DeleteCR test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
 			// Delete Standalone CR
 			err = deployment.DeleteCR(ctx, standalone)
@@ -85,7 +87,7 @@ var _ = Describe("DeleteCR test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3)", func() {
-		It("integration, managerdeletecr: can deploy C3 and delete search head, clustermanager", func() {
+		It("integration, managerdeletecr: can deploy C3 and delete search head, clustermanager", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			// Deploy C3
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -94,13 +96,13 @@ var _ = Describe("DeleteCR test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy C3 instance")
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			idxc := &enterpriseApi.IndexerCluster{}
 			idxcName := deployment.GetName() + "-idxc"

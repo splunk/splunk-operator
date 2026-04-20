@@ -2281,7 +2281,7 @@ func TestShcScaledUpScaledDownEvent(t *testing.T) {
 	if phase == enterpriseApi.PhaseReady {
 		if desiredReplicas > previousReplicas && cr.Status.Replicas == desiredReplicas {
 			ep.Normal(ctx, "ScaledUp",
-				fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+				fmt.Sprintf("Successfully scaled %s up to %d replicas", cr.GetName(), desiredReplicas))
 		}
 	}
 
@@ -2295,7 +2295,7 @@ func TestShcScaledUpScaledDownEvent(t *testing.T) {
 			if !strings.Contains(event.message, crName) {
 				t.Errorf("Expected event message to contain CR name '%s', got: %s", crName, event.message)
 			}
-			if !strings.Contains(event.message, "3") || !strings.Contains(event.message, "5") {
+			if !strings.Contains(event.message, "5") {
 				t.Errorf("Expected event message to contain replica counts, got: %s", event.message)
 			}
 			break
@@ -2314,7 +2314,7 @@ func TestShcScaledUpScaledDownEvent(t *testing.T) {
 	if phase == enterpriseApi.PhaseReady {
 		if desiredReplicas < previousReplicas && cr.Status.Replicas == desiredReplicas {
 			ep.Normal(ctx, "ScaledDown",
-				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+				fmt.Sprintf("Successfully scaled %s down to %d replicas", cr.GetName(), desiredReplicas))
 		}
 	}
 
@@ -2341,7 +2341,7 @@ func TestShcScaledUpScaledDownEvent(t *testing.T) {
 	if phase == enterpriseApi.PhaseReady {
 		if desiredReplicas < previousReplicas && cr.Status.Replicas == desiredReplicas {
 			ep.Normal(ctx, "ScaledDown",
-				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+				fmt.Sprintf("Successfully scaled %s down to %d replicas", cr.GetName(), desiredReplicas))
 		}
 	}
 	if len(recorder.events) != 0 {

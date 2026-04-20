@@ -896,7 +896,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	// Get event publisher from context
 	eventPublisher := GetEventPublisher(ctx, mgr.cr)
 
-	// Track previous ready replicas for scaling events
+	// Track last successful replica count to emit scale events after completion
 	previousReadyReplicas := mgr.cr.Status.ReadyReplicas
 
 	// Assign client

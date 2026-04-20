@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -780,6 +781,18 @@ func TestGetSplunkReadableNamespaceScopedSecretData(t *testing.T) {
 		}
 	}
 
+	// Verify that default.yml contains splunk_secret only if it exists in the secret data
+	defaultYml := string(splunkReadableData["default.yml"])
+	if _, exists := namespacescopedsecret.Data["splunk_secret"]; exists {
+		if !strings.Contains(defaultYml, "splunk_secret") {
+			t.Errorf("default.yml should contain splunk_secret key when it exists in secret data")
+		}
+	} else {
+		if strings.Contains(defaultYml, "splunk_secret") {
+			t.Errorf("default.yml should not contain splunk_secret key when it doesn't exist in secret data")
+		}
+	}
+
 	// Re-concile tester
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -794,7 +807,38 @@ func TestGetSplunkReadableNamespaceScopedSecretData(t *testing.T) {
 
 	spltest.ReconcileTester(t, "TestGetSplunkReadableNamespaceScopedSecretData", nil, nil, createCalls, updateCalls, reconcile, false, namespacescopedsecret)
 
+	// Test case: Update namespace scoped secrets object with splunk_secret
+	c = spltest.NewMockClient()
+	namespacescopedsecret, err = ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	// Add splunk_secret to the secret data
+	namespacescopedsecret.Data["splunk_secret"] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
+	err = UpdateResource(ctx, c, namespacescopedsecret)
+	if err != nil {
+		t.Errorf("Failed to update namespace scoped secret")
+	}
+
+	splunkReadableData, err = GetSplunkReadableNamespaceScopedSecretData(ctx, c, "test")
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	// Verify that default.yml now contains splunk_secret since it was added
+	defaultYml = string(splunkReadableData["default.yml"])
+	if !strings.Contains(defaultYml, "splunk_secret") {
+		t.Errorf("default.yml should contain splunk_secret key when splunk_secret exists")
+	}
+
 	// Negative testing - Update namespace scoped secrets object with data which has hec_token missing
+	c = spltest.NewMockClient()
+	namespacescopedsecret, err = ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Error(err.Error())
+	}
+
 	secretData := make(map[string][]byte)
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
 		if tokenType != "hec_token" {
@@ -924,7 +968,8 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 	}
-	cerateFuncCalls := []spltest.MockFuncCall{
+	// For create case: Get returns NotFound, then Get in polling
+	createGetCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 	}
@@ -934,14 +979,16 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 		return err
 	}
 
-	// "splunk-secrets" object doesn't exist
-	createCalls := map[string][]spltest.MockFuncCall{"Get": cerateFuncCalls, "Create": funcCalls}
+	// "splunk-secrets" object doesn't exist - Get returns NotFound
+	createCalls := map[string][]spltest.MockFuncCall{"Get": createGetCalls, "Create": funcCalls}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls}
 
 	spltest.ReconcileTester(t, "TestApplyNamespaceScopedSecretObject", "test", "test", createCalls, updateCalls, reconcile, false)
 
 	// Partially baked "splunk-secrets" object(applies to empty as well)
-	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	// Create phase: Get and Update (missing tokens will be generated)
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+	// Update phase: only Get (secret is complete now, no update needed)
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 
 	secret := corev1.Secret{
@@ -950,9 +997,11 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
+			"hec_token":    generateHECToken(),
 			"password":     splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"pass4Symmkey": splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-		},
+			"pass4SymmKey": splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"idxc_secret":  splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"shc_secret":   splcommon.GenerateSecret(splcommon.SecretBytes, 24)},
 	}
 	spltest.ReconcileTester(t, "TestApplyNamespaceScopedSecretObject", "test", "test", createCalls, updateCalls, reconcile, false, &secret)
 
@@ -966,11 +1015,12 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
-			"hec_token":    generateHECToken(),
-			"password":     splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"pass4SymmKey": splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"idxc_secret":  splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"shc_secret":   splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"hec_token":     generateHECToken(),
+			"password":      splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"pass4SymmKey":  splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"splunk_secret": splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"idxc_secret":   splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"shc_secret":    splcommon.GenerateSecret(splcommon.SecretBytes, 24),
 		},
 	}
 	spltest.ReconcileTester(t, "TestApplyNamespaceScopedSecretObject", "test", "test", createCalls, updateCalls, reconcile, false, &secret)
@@ -1070,5 +1120,183 @@ func TestGetSecretByNameAPIError(t *testing.T) {
 	}
 	if err.Error() != "connection refused" {
 		t.Errorf("Expected 'connection refused' error, got: %v", err)
+	}
+}
+
+func TestValidateNamespaceScopedSecrets(t *testing.T) {
+	tests := []struct {
+		name      string
+		secret    *corev1.Secret
+		wantError bool
+		errMsg    string
+	}{
+		{
+			name: "secret with nil data",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: nil,
+			},
+			wantError: false,
+		},
+		{
+			name: "all valid secrets",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"hec_token":    []byte("ABCDEF01-2345-6789-ABCD-EF0123456789"),
+					"password":     []byte("validPassword123"),
+					"pass4SymmKey": []byte("validPass4Symm123"),
+					"idxc_secret":  []byte("validIDXCSecret123"),
+					"shc_secret":   []byte("validSHCSecret123"),
+				},
+			},
+			wantError: false,
+		},
+		{
+			name: "only password present and valid",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"password": []byte("validPassword123"),
+				},
+			},
+			wantError: false,
+		},
+		{
+			name: "hec_token invalid format",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"hec_token": []byte("invalid-token-format"),
+				},
+			},
+			wantError: true,
+			errMsg:    "validation failed for secret hec_token",
+		},
+		{
+			name: "password empty",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"password": []byte(""),
+				},
+			},
+			wantError: true,
+			errMsg:    "validation failed for secret password",
+		},
+		{
+			name: "pass4SymmKey too short",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"pass4SymmKey": []byte("short"),
+				},
+			},
+			wantError: true,
+			errMsg:    "validation failed for secret pass4SymmKey",
+		},
+		{
+			name: "idxc_secret empty",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"idxc_secret": []byte(""),
+				},
+			},
+			wantError: true,
+			errMsg:    "validation failed for secret idxc_secret",
+		},
+		{
+			name: "shc_secret too short",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"shc_secret": []byte("abc"),
+				},
+			},
+			wantError: true,
+			errMsg:    "validation failed for secret shc_secret",
+		},
+		{
+			name: "multiple valid secrets plus extra data",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"hec_token":   []byte("ABCDEF01-2345-6789-ABCD-EF0123456789"),
+					"password":    []byte("validPassword123"),
+					"extra_field": []byte("extra_value"),
+				},
+			},
+			wantError: false,
+		},
+		{
+			name: "first secret valid, second secret invalid",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"password":     []byte("validPassword123"),
+					"pass4SymmKey": []byte("x"),
+				},
+			},
+			wantError: true,
+			errMsg:    "validation failed for secret pass4SymmKey",
+		},
+		{
+			name: "empty secret data map",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{},
+			},
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateNamespaceScopedSecrets(tt.secret)
+
+			if (err != nil) != tt.wantError {
+				t.Errorf("validateNamespaceScopedSecrets() error = %v, wantError %v", err, tt.wantError)
+			}
+
+			if tt.wantError && err != nil && tt.errMsg != "" {
+				if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("validateNamespaceScopedSecrets() error message = %v, want to contain %v", err.Error(), tt.errMsg)
+				}
+			}
+		})
 	}
 }

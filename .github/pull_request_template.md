@@ -19,5 +19,6 @@ _Jira tickets, GitHub issues, Support tickets..._
 - [ ] Code changes adhere to the project's coding standards.
 - [ ] Relevant unit and integration tests are included.
 - [ ] Documentation has been updated accordingly.
+- [ ] If test framework files were changed (`test/testenv/`, `test/run-tests.sh`, `test/env.sh`), `docs/IntegrationTesting.md` has been updated
 - [ ] All tests pass locally.
 - [ ] The PR description follows the project's guidelines.

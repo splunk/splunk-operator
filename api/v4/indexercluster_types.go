@@ -43,13 +43,13 @@ type IndexerClusterSpec struct {
 
 	// +optional
 	// Queue reference
-	QueueRef corev1.ObjectReference `json:"queueRef"`
+	QueueRef corev1.ObjectReference `json:"queueRef,omitempty"`
 
 	// +optional
 	// Object Storage reference
-	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
+	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef,omitempty"`
 
-	// Number of search head pods; a search head cluster will be created if > 1
+	// Number of indexer cluster peers
 	Replicas int32 `json:"replicas"`
 }
 

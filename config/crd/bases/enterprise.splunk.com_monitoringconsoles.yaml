@@ -994,10 +994,12 @@ spec:
                       properties:
                         location:
                           description: Location relative to the volume path
+                          minLength: 1
                           type: string
                         name:
                           description: Logical name for the set of apps placed in
                             this location. Logical name must be unique to the appRepo
+                          minLength: 1
                           type: string
                         premiumAppsProps:
                           description: Properties for premium apps, fill in when scope
@@ -1022,6 +1024,8 @@ spec:
                             type:
                               description: 'Type: enterpriseSecurity for now, can
                                 accommodate itsi etc.. later'
+                              enum:
+                              - enterpriseSecurity
                               type: string
                           type: object
                         scope:
@@ -1033,8 +1037,14 @@ spec:
                         volumeName:
                           description: Remote Storage Volume name
                           type: string
+                      required:
+                      - location
+                      - name
                       type: object
                     type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
                   appsRepoPollIntervalSeconds:
                     description: |-
                       Interval in seconds to check the Remote Storage for App changes.
@@ -1072,6 +1082,8 @@ spec:
                           type:
                             description: 'Type: enterpriseSecurity for now, can accommodate
                               itsi etc.. later'
+                            enum:
+                            - enterpriseSecurity
                             type: string
                         type: object
                       scope:
@@ -1102,21 +1114,28 @@ spec:
                       properties:
                         endpoint:
                           description: Remote volume URI
+                          minLength: 1
                           type: string
                         name:
                           description: Remote volume name
+                          minLength: 1
                           type: string
                         path:
                           description: Remote volume path
+                          minLength: 1
                           type: string
                         provider:
                           description: 'App Package Remote Store provider. Supported
                             values: aws, minio, azure, gcp.'
+                          enum:
+                          - aws
+                          - minio
+                          - azure
+                          - gcp
                           type: string
                         region:
                           description: Region of the remote storage volume where apps
-                            reside. Used for aws, if provided. Not used for minio
-                            and azure.
+                            reside. Required for aws, optional for azure and gcp.
                           type: string
                         secretRef:
                           description: Secret object name
@@ -1125,8 +1144,19 @@ spec:
                           description: 'Remote Storage type. Supported values: s3,
                             blob, gcs. s3 works with aws or minio providers, whereas
                             blob works with azure provider, gcs works for gcp.'
+                          enum:
+                          - s3
+                          - blob
+                          - gcs
                           type: string
+                      required:
+                      - endpoint
+                      - name
+                      - path
                       type: object
+                      x-kubernetes-validations:
+                      - message: region is required when provider is aws
+                        rule: self.provider != 'aws' || size(self.region) > 0
                     type: array
                 type: object
               clusterManagerRef:
@@ -1236,19 +1266,25 @@ spec:
                 description: Storage configuration for /opt/splunk/etc volume
                 properties:
                   ephemeralStorage:
-                    description: |-
-                      If true, ephemeral (emptyDir) storage will be used
-                      default false
+                    default: false
+                    description: If true, ephemeral (emptyDir) storage will be used
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
-                      (default=”10Gi” for etc and "100Gi" for var)
+                      (default="10Gi" for etc and "100Gi" for var)
                     type: string
                   storageClassName:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: storageClassName and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
+                    == true)'
+                - message: storageCapacity and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
+                    == true)'
               extraEnv:
                 description: |-
                   ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
@@ -1374,12 +1410,13 @@ spec:
                   environment variables)
                 type: string
               imagePullPolicy:
+                default: IfNotPresent
                 description: 'Sets pull policy for all images ("Always", "Never",
                   or the default: "IfNotPresent")'
                 enum:
                 - Always
-                - Never
                 - IfNotPresent
+                - Never
                 type: string
               imagePullSecrets:
                 description: |-
@@ -1501,6 +1538,11 @@ spec:
                 minimum: 0
                 type: integer
               livenessProbe:
+                default:
+                  failureThreshold: 3
+                  initialDelaySeconds: 30
+                  periodSeconds: 30
+                  timeoutSeconds: 30
                 description: LivenessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
                 properties:
                   failureThreshold:
@@ -1577,6 +1619,11 @@ spec:
                 minimum: 0
                 type: integer
               readinessProbe:
+                default:
+                  failureThreshold: 3
+                  initialDelaySeconds: 10
+                  periodSeconds: 5
+                  timeoutSeconds: 5
                 description: ReadinessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes
                 properties:
                   failureThreshold:
@@ -2183,6 +2230,11 @@ spec:
                     type: object
                 type: object
               startupProbe:
+                default:
+                  failureThreshold: 12
+                  initialDelaySeconds: 40
+                  periodSeconds: 30
+                  timeoutSeconds: 30
                 description: StartupProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes
                 properties:
                   failureThreshold:
@@ -2424,19 +2476,25 @@ spec:
                 description: Storage configuration for /opt/splunk/var volume
                 properties:
                   ephemeralStorage:
-                    description: |-
-                      If true, ephemeral (emptyDir) storage will be used
-                      default false
+                    default: false
+                    description: If true, ephemeral (emptyDir) storage will be used
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
-                      (default=”10Gi” for etc and "100Gi" for var)
+                      (default="10Gi" for etc and "100Gi" for var)
                     type: string
                   storageClassName:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: storageClassName and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
+                    == true)'
+                - message: storageCapacity and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
+                    == true)'
               volumes:
                 description: List of one or more Kubernetes volumes. These will be
                   mounted in all pod containers as as /mnt/<name>
@@ -4249,11 +4307,13 @@ spec:
                           properties:
                             location:
                               description: Location relative to the volume path
+                              minLength: 1
                               type: string
                             name:
                               description: Logical name for the set of apps placed
                                 in this location. Logical name must be unique to the
                                 appRepo
+                              minLength: 1
                               type: string
                             premiumAppsProps:
                               description: Properties for premium apps, fill in when
@@ -4279,6 +4339,8 @@ spec:
                                 type:
                                   description: 'Type: enterpriseSecurity for now,
                                     can accommodate itsi etc.. later'
+                                  enum:
+                                  - enterpriseSecurity
                                   type: string
                               type: object
                             scope:
@@ -4290,8 +4352,14 @@ spec:
                             volumeName:
                               description: Remote Storage Volume name
                               type: string
+                          required:
+                          - location
+                          - name
                           type: object
                         type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
                       appsRepoPollIntervalSeconds:
                         description: |-
                           Interval in seconds to check the Remote Storage for App changes.
@@ -4330,6 +4398,8 @@ spec:
                               type:
                                 description: 'Type: enterpriseSecurity for now, can
                                   accommodate itsi etc.. later'
+                                enum:
+                                - enterpriseSecurity
                                 type: string
                             type: object
                           scope:
@@ -4360,21 +4430,29 @@ spec:
                           properties:
                             endpoint:
                               description: Remote volume URI
+                              minLength: 1
                               type: string
                             name:
                               description: Remote volume name
+                              minLength: 1
                               type: string
                             path:
                               description: Remote volume path
+                              minLength: 1
                               type: string
                             provider:
                               description: 'App Package Remote Store provider. Supported
                                 values: aws, minio, azure, gcp.'
+                              enum:
+                              - aws
+                              - minio
+                              - azure
+                              - gcp
                               type: string
                             region:
                               description: Region of the remote storage volume where
-                                apps reside. Used for aws, if provided. Not used for
-                                minio and azure.
+                                apps reside. Required for aws, optional for azure
+                                and gcp.
                               type: string
                             secretRef:
                               description: Secret object name
@@ -4384,8 +4462,19 @@ spec:
                                 s3, blob, gcs. s3 works with aws or minio providers,
                                 whereas blob works with azure provider, gcs works
                                 for gcp.'
+                              enum:
+                              - s3
+                              - blob
+                              - gcs
                               type: string
+                          required:
+                          - endpoint
+                          - name
+                          - path
                           type: object
+                          x-kubernetes-validations:
+                          - message: region is required when provider is aws
+                            rule: self.provider != 'aws' || size(self.region) > 0
                         type: array
                     type: object
                   appSrcDeployStatus:
@@ -5525,10 +5614,12 @@ spec:
                       properties:
                         location:
                           description: Location relative to the volume path
+                          minLength: 1
                           type: string
                         name:
                           description: Logical name for the set of apps placed in
                             this location. Logical name must be unique to the appRepo
+                          minLength: 1
                           type: string
                         premiumAppsProps:
                           description: Properties for premium apps, fill in when scope
@@ -5553,6 +5644,8 @@ spec:
                             type:
                               description: 'Type: enterpriseSecurity for now, can
                                 accommodate itsi etc.. later'
+                              enum:
+                              - enterpriseSecurity
                               type: string
                           type: object
                         scope:
@@ -5564,8 +5657,14 @@ spec:
                         volumeName:
                           description: Remote Storage Volume name
                           type: string
+                      required:
+                      - location
+                      - name
                       type: object
                     type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
                   appsRepoPollIntervalSeconds:
                     description: |-
                       Interval in seconds to check the Remote Storage for App changes.
@@ -5603,6 +5702,8 @@ spec:
                           type:
                             description: 'Type: enterpriseSecurity for now, can accommodate
                               itsi etc.. later'
+                            enum:
+                            - enterpriseSecurity
                             type: string
                         type: object
                       scope:
@@ -5633,21 +5734,28 @@ spec:
                       properties:
                         endpoint:
                           description: Remote volume URI
+                          minLength: 1
                           type: string
                         name:
                           description: Remote volume name
+                          minLength: 1
                           type: string
                         path:
                           description: Remote volume path
+                          minLength: 1
                           type: string
                         provider:
                           description: 'App Package Remote Store provider. Supported
                             values: aws, minio, azure, gcp.'
+                          enum:
+                          - aws
+                          - minio
+                          - azure
+                          - gcp
                           type: string
                         region:
                           description: Region of the remote storage volume where apps
-                            reside. Used for aws, if provided. Not used for minio
-                            and azure.
+                            reside. Required for aws, optional for azure and gcp.
                           type: string
                         secretRef:
                           description: Secret object name
@@ -5656,8 +5764,19 @@ spec:
                           description: 'Remote Storage type. Supported values: s3,
                             blob, gcs. s3 works with aws or minio providers, whereas
                             blob works with azure provider, gcs works for gcp.'
+                          enum:
+                          - s3
+                          - blob
+                          - gcs
                           type: string
+                      required:
+                      - endpoint
+                      - name
+                      - path
                       type: object
+                      x-kubernetes-validations:
+                      - message: region is required when provider is aws
+                        rule: self.provider != 'aws' || size(self.region) > 0
                     type: array
                 type: object
               clusterManagerRef:
@@ -5767,19 +5886,25 @@ spec:
                 description: Storage configuration for /opt/splunk/etc volume
                 properties:
                   ephemeralStorage:
-                    description: |-
-                      If true, ephemeral (emptyDir) storage will be used
-                      default false
+                    default: false
+                    description: If true, ephemeral (emptyDir) storage will be used
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
-                      (default=”10Gi” for etc and "100Gi" for var)
+                      (default="10Gi" for etc and "100Gi" for var)
                     type: string
                   storageClassName:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: storageClassName and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
+                    == true)'
+                - message: storageCapacity and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
+                    == true)'
               extraEnv:
                 description: |-
                   ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
@@ -5905,12 +6030,13 @@ spec:
                   environment variables)
                 type: string
               imagePullPolicy:
+                default: IfNotPresent
                 description: 'Sets pull policy for all images ("Always", "Never",
                   or the default: "IfNotPresent")'
                 enum:
                 - Always
-                - Never
                 - IfNotPresent
+                - Never
                 type: string
               imagePullSecrets:
                 description: |-
@@ -6032,6 +6158,11 @@ spec:
                 minimum: 0
                 type: integer
               livenessProbe:
+                default:
+                  failureThreshold: 3
+                  initialDelaySeconds: 30
+                  periodSeconds: 30
+                  timeoutSeconds: 30
                 description: LivenessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
                 properties:
                   failureThreshold:
@@ -6108,6 +6239,11 @@ spec:
                 minimum: 0
                 type: integer
               readinessProbe:
+                default:
+                  failureThreshold: 3
+                  initialDelaySeconds: 10
+                  periodSeconds: 5
+                  timeoutSeconds: 5
                 description: ReadinessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes
                 properties:
                   failureThreshold:
@@ -6714,6 +6850,11 @@ spec:
                     type: object
                 type: object
               startupProbe:
+                default:
+                  failureThreshold: 12
+                  initialDelaySeconds: 40
+                  periodSeconds: 30
+                  timeoutSeconds: 30
                 description: StartupProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes
                 properties:
                   failureThreshold:
@@ -6955,19 +7096,25 @@ spec:
                 description: Storage configuration for /opt/splunk/var volume
                 properties:
                   ephemeralStorage:
-                    description: |-
-                      If true, ephemeral (emptyDir) storage will be used
-                      default false
+                    default: false
+                    description: If true, ephemeral (emptyDir) storage will be used
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
-                      (default=”10Gi” for etc and "100Gi" for var)
+                      (default="10Gi" for etc and "100Gi" for var)
                     type: string
                   storageClassName:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: storageClassName and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
+                    == true)'
+                - message: storageCapacity and ephemeralStorage are mutually exclusive
+                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
+                    == true)'
               volumes:
                 description: List of one or more Kubernetes volumes. These will be
                   mounted in all pod containers as as /mnt/<name>
@@ -8780,11 +8927,13 @@ spec:
                           properties:
                             location:
                               description: Location relative to the volume path
+                              minLength: 1
                               type: string
                             name:
                               description: Logical name for the set of apps placed
                                 in this location. Logical name must be unique to the
                                 appRepo
+                              minLength: 1
                               type: string
                             premiumAppsProps:
                               description: Properties for premium apps, fill in when
@@ -8810,6 +8959,8 @@ spec:
                                 type:
                                   description: 'Type: enterpriseSecurity for now,
                                     can accommodate itsi etc.. later'
+                                  enum:
+                                  - enterpriseSecurity
                                   type: string
                               type: object
                             scope:
@@ -8821,8 +8972,14 @@ spec:
                             volumeName:
                               description: Remote Storage Volume name
                               type: string
+                          required:
+                          - location
+                          - name
                           type: object
                         type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
                       appsRepoPollIntervalSeconds:
                         description: |-
                           Interval in seconds to check the Remote Storage for App changes.
@@ -8861,6 +9018,8 @@ spec:
                               type:
                                 description: 'Type: enterpriseSecurity for now, can
                                   accommodate itsi etc.. later'
+                                enum:
+                                - enterpriseSecurity
                                 type: string
                             type: object
                           scope:
@@ -8891,21 +9050,29 @@ spec:
                           properties:
                             endpoint:
                               description: Remote volume URI
+                              minLength: 1
                               type: string
                             name:
                               description: Remote volume name
+                              minLength: 1
                               type: string
                             path:
                               description: Remote volume path
+                              minLength: 1
                               type: string
                             provider:
                               description: 'App Package Remote Store provider. Supported
                                 values: aws, minio, azure, gcp.'
+                              enum:
+                              - aws
+                              - minio
+                              - azure
+                              - gcp
                               type: string
                             region:
                               description: Region of the remote storage volume where
-                                apps reside. Used for aws, if provided. Not used for
-                                minio and azure.
+                                apps reside. Required for aws, optional for azure
+                                and gcp.
                               type: string
                             secretRef:
                               description: Secret object name
@@ -8915,8 +9082,19 @@ spec:
                                 s3, blob, gcs. s3 works with aws or minio providers,
                                 whereas blob works with azure provider, gcs works
                                 for gcp.'
+                              enum:
+                              - s3
+                              - blob
+                              - gcs
                               type: string
+                          required:
+                          - endpoint
+                          - name
+                          - path
                           type: object
+                          x-kubernetes-validations:
+                          - message: region is required when provider is aws
+                            rule: self.provider != 'aws' || size(self.region) > 0
                         type: array
                     type: object
                   appSrcDeployStatus:
