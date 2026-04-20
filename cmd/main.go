@@ -60,11 +60,6 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
-
-	// Version information (set via ldflags at build time)
-	version   = "dev"
-	buildTime = "unknown"
-	gitCommit = "unknown"
 )
 
 func init() {
@@ -175,9 +170,6 @@ func main() {
 
 	// Log startup information using slog
 	slog.Info("Splunk Operator starting",
-		slog.String("version", version),
-		slog.String("build_time", buildTime),
-		slog.String("git_commit", gitCommit),
 		slog.String("log_level", logging.LevelToString(logCfg.Level)),
 		slog.String("log_format", logCfg.Format),
 		slog.Bool("log_add_source", logCfg.AddSource))
