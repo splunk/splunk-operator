@@ -49,6 +49,14 @@ const (
 	sidecarName = "sok-debug"
 )
 
+// GetEnvWithDefault returns the environment variable value or the default if not set
+func GetEnvWithDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
 	opts := zap.Options{

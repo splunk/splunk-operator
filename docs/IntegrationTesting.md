@@ -492,9 +492,30 @@ These tests require pre-populated cloud storage buckets with Splunk app tarballs
 
 Environment variables are defined in `test/env.sh`.
 
-**10. _(Index/ingestion separation tests only)_ Provision AWS resources**
+**10. _(Index/ingestion separation tests only)_ Configure AWS resources**
 
-These tests require dedicated SQS queues and an S3 bucket in `us-west-2`. Resource names are hardcoded in the test suite file and the S3 bucket name is globally unique, so these tests can only be run by the SOK team against the team's AWS account.
+These tests require SQS queues and an S3 bucket. By default, they use SOK-team–owned resources in `us-west-2`. To run against your own AWS account, set the following environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TEST_SQS_QUEUE_NAME` | `index-ingest-separation-test-q` | SQS queue name |
+| `TEST_SQS_DLQ_NAME` | `index-ingest-separation-test-dlq` | SQS dead letter queue name |
+| `TEST_INGEST_S3_BUCKET` | `index-ingest-separation-test-bucket` | S3 bucket name |
+| `TEST_INGEST_S3_PREFIX` | `smartbus-test` | S3 prefix/path within the bucket |
+| `TEST_AWS_REGION` | `us-west-2` | AWS region for SQS and S3 |
+| `TEST_SQS_ENDPOINT` | `https://sqs.<region>.amazonaws.com` | SQS endpoint (derived from region) |
+| `TEST_S3_ENDPOINT` | `https://s3.<region>.amazonaws.com` | S3 endpoint (derived from region) |
+
+Example:
+
+```bash
+export TEST_SQS_QUEUE_NAME=my-test-queue
+export TEST_SQS_DLQ_NAME=my-test-dlq
+export TEST_INGEST_S3_BUCKET=my-unique-bucket-name
+export TEST_AWS_REGION=us-east-1
+```
+
+If no variables are set, tests fall back to the default SOK-team resources (backward compatible).
 
 ### Run All Integration Tests via Makefile
 
