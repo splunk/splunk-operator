@@ -49,6 +49,10 @@ type AppSourceRef struct {
 	Name string `json:"name"`
 }
 
+// +kubebuilder:validation:XValidation:rule="self.appID == oldSelf.appID",message="spec.appID is immutable"
+// +kubebuilder:validation:XValidation:rule="self.targetRef == oldSelf.targetRef",message="spec.targetRef is immutable"
+// +kubebuilder:validation:XValidation:rule="self.sourceRef == oldSelf.sourceRef",message="spec.sourceRef is immutable"
+// +kubebuilder:validation:XValidation:rule="self.scope == oldSelf.scope",message="spec.scope is immutable"
 // AppSpec defines the desired state of App.
 type AppSpec struct {
 	// +kubebuilder:validation:Required
