@@ -14,7 +14,6 @@
 package secret
 
 import (
-	"context"
 	"fmt"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -31,10 +30,9 @@ import (
 var _ = Describe("Secret Test for SVA S1", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
-	ctx := context.TODO()
 	var deployment *testenv.Deployment
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
@@ -47,7 +45,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -61,7 +59,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1) with LM and MC", func() {
-		It("managersecret, integration, s1: Secret update on a standalone instance with LM and MC", func() {
+		It("managersecret, integration, s1: Secret update on a standalone instance with LM and MC", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			//  Test Scenario
 			// 1. Update Secrets Data
@@ -159,7 +157,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, updatedSecretData, true)
 
 			// Verify Hec token on InputConf on Pod
-			testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, updatedSecretData, true)
+			testcaseEnvInst.VerifySplunkInputConfSecrets(ctx, deployment, verificationPods, updatedSecretData, true)
 
 			// Verify Secrets via api access on Pod
 			testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, updatedSecretData, true)
@@ -168,7 +166,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1) with LM amd MC", func() {
-		It("managersecret, integration, s1: Secret Object is recreated on delete and new secrets are applied to Splunk Pods", func() {
+		It("managersecret, integration, s1: Secret Object is recreated on delete and new secrets are applied to Splunk Pods", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			// Test Scenario
 			//1. Delete Secret Object
@@ -262,7 +260,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, secretStruct.Data, false)
 
 			// Verify Hec token on InputConf on Pod
-			testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, secretStruct.Data, false)
+			testcaseEnvInst.VerifySplunkInputConfSecrets(ctx, deployment, verificationPods, secretStruct.Data, false)
 
 			// Verify Secrets via api access on Pod
 			testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, secretStruct.Data, false)
@@ -270,7 +268,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managersecret, smoke, s1: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", func() {
+		It("managersecret, smoke, s1: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			// Test Scenario
 			// 1. Delete Secret Passing Empty Data Map to secret Object
@@ -347,7 +345,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, secretStruct.Data, false)
 
 			// Verify Hec token on InputConf on Pod
-			testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, secretStruct.Data, false)
+			testcaseEnvInst.VerifySplunkInputConfSecrets(ctx, deployment, verificationPods, secretStruct.Data, false)
 
 			// Verify Secrets via api access on Pod
 			testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, secretStruct.Data, false)

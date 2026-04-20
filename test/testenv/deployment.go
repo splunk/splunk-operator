@@ -207,6 +207,23 @@ func (d *Deployment) GetInstance(ctx context.Context, name string, instance clie
 	return nil
 }
 
+// streamWithContextGuard runs exec.StreamWithContext in a goroutine so the
+// caller returns promptly when ctx is cancelled, even if the underlying SPDY
+// connection is stuck in a TLS IO wait that does not respond to context
+// cancellation.
+func streamWithContextGuard(ctx context.Context, executor remotecommand.Executor, opts remotecommand.StreamOptions) error {
+	ch := make(chan error, 1)
+	go func() {
+		ch <- executor.StreamWithContext(ctx, opts)
+	}()
+	select {
+	case err := <-ch:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // PodExecCommand execute a shell command in the specified pod
 func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []string, stdin string, tty bool) (string, string, error) {
 	pod := &corev1.Pod{}
@@ -246,7 +263,7 @@ func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []s
 	stdinReader := strings.NewReader(stdin)
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	err = exec.Stream(remotecommand.StreamOptions{
+	err = streamWithContextGuard(ctx, exec, remotecommand.StreamOptions{
 		Stdin:  stdinReader,
 		Stdout: stdout,
 		Stderr: stderr,
@@ -321,7 +338,7 @@ func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string,
 	stdinReader := strings.NewReader(stdin)
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	err = exec.Stream(remotecommand.StreamOptions{
+	err = streamWithContextGuard(ctx, exec, remotecommand.StreamOptions{
 		Stdin:  stdinReader,
 		Stdout: stdout,
 		Stderr: stderr,
@@ -540,11 +557,13 @@ func (d *Deployment) deployCR(ctx context.Context, name string, cr client.Object
 	// Push the clean up func to delete the cr when done
 	d.pushCleanupFunc(func() error {
 		d.testenv.Log.Info("Deleting cr", "name", name)
-		err := d.testenv.GetKubeClient().Delete(ctx, cr)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Duration(float64(SetupTeardownTimeout)*CleanupGraceFraction))
+		defer cleanupCancel()
+		err := d.testenv.GetKubeClient().Delete(cleanupCtx, cr)
 		if err != nil {
 			return err
 		}
-		if err = wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
+		if err = wait.PollUntilContextCancel(cleanupCtx, PollInterval, true, func(ctx context.Context) (bool, error) {
 			key := client.ObjectKey{Name: name, Namespace: d.testenv.namespace}
 			err := d.testenv.GetKubeClient().Get(ctx, key, cr)
 
@@ -560,7 +579,7 @@ func (d *Deployment) deployCR(ctx context.Context, name string, cr client.Object
 	})
 
 	// Returns once we can retrieve the lm instance
-	if err := wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
+	if err := wait.PollUntilContextTimeout(ctx, PollInterval, DefaultTimeout, true, func(ctx context.Context) (bool, error) {
 		key := client.ObjectKey{Name: name, Namespace: d.testenv.namespace}
 		err := d.testenv.GetKubeClient().Get(ctx, key, cr)
 		if err != nil {

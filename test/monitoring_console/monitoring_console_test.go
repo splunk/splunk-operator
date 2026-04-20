@@ -14,7 +14,6 @@
 package monitoringconsoletest
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -32,9 +31,8 @@ var _ = Describe("Monitoring Console test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	ctx := context.TODO()
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
@@ -47,7 +45,7 @@ var _ = Describe("Monitoring Console test", func() {
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -62,7 +60,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("mastermc, smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
+		It("mastermc, smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 			/*
 				Test Steps
 				1. Deploy Single Site Indexer Cluster
@@ -226,7 +224,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("mastermc, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
+		It("mastermc, integration: MC can configure SHC, indexer instances and reconfigure to new MC", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 			/*
 				Test Steps
 				1. Deploy Single Site Indexer Cluster
@@ -448,7 +446,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Multisite Clustered deployment (M4 - 3 Site clustered indexer, search head cluster)", func() {
-		It("mastermc, integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", func() {
+		It("mastermc, integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			/*
 				Test Steps
 				1. Deploy Multisite Indexer Cluster

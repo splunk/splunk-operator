@@ -14,7 +14,6 @@
 package secret
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -31,9 +30,8 @@ var _ = Describe("Secret Test for SVA C3", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	ctx := context.TODO()
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
@@ -46,7 +44,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -60,7 +58,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("mastersecret, smoke, c3: secret update on indexers and search head cluster", func() {
+		It("mastersecret, smoke, c3: secret update on indexers and search head cluster", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			// Test Scenario
 			// 1. Update Secrets Data
@@ -191,7 +189,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			testcaseEnvInst.VerifySplunkServerConfSecrets(ctx, deployment, verificationPods, updatedSecretData, true)
 
 			// Verify Hec token on InputConf on Pod
-			testcaseEnvInst.VerifySplunkInputConfSecrets(deployment, verificationPods, updatedSecretData, true)
+			testcaseEnvInst.VerifySplunkInputConfSecrets(ctx, deployment, verificationPods, updatedSecretData, true)
 
 			// Verify Secrets via api access on Pod
 			testcaseEnvInst.VerifySplunkSecretViaAPI(ctx, deployment, verificationPods, updatedSecretData, true)

@@ -43,9 +43,7 @@ var _ = Describe("s1appfw test", func() {
 	var appSourceVolumeName string
 	var filePresentOnOperator bool
 
-	ctx := context.TODO()
-
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
@@ -61,7 +59,7 @@ var _ = Describe("s1appfw test", func() {
 		appSourceVolumeName = "appframework-test-volume-" + testenv.RandomDNSName(3)
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -85,7 +83,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smoke, s1, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", func() {
+		It("smoke, s1, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -258,7 +256,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smoke, s1, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then downgrade them", func() {
+		It("smoke, s1, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then downgrade them", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -423,7 +421,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("s1, smoke, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", func() {
+		It("s1, smoke, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -620,7 +618,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("s1, integration, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, upgrade apps", func() {
+		It("s1, integration, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, upgrade apps", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -755,7 +753,7 @@ var _ = Describe("s1appfw test", func() {
 
 	// ES App Installation not supported at the time. Will be added back at a later time.
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("s1, integration, appframeworksS1, appframework: can deploy a Standalone and have ES app installed", func() {
+		It("s1, integration, appframeworksS1, appframework: can deploy a Standalone and have ES app installed", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -857,7 +855,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled and install around 350MB of apps at once", func() {
+		It("integration, s1, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled and install around 350MB of apps at once", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -927,7 +925,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("s1, smoke, appframeworksS1, appframework: can deploy a standalone instance with App Framework enabled for manual poll", func() {
+		It("s1, smoke, appframeworksS1, appframework: can deploy a standalone instance with App Framework enabled for manual poll", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1109,7 +1107,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworksS1, appframework: can deploy Several standalone CRs in the same namespace with App Framework enabled", func() {
+		It("integration, s1, appframeworksS1, appframework: can deploy Several standalone CRs in the same namespace with App Framework enabled", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1212,7 +1210,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworksS1, appframework: can add new apps to app source while install is in progress and have all apps installed", func() {
+		It("integration, s1, appframeworksS1, appframework: can add new apps to app source while install is in progress and have all apps installed", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1326,7 +1324,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", func() {
+		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1416,7 +1414,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", func() {
+		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1485,7 +1483,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, install an app then disable it and remove it from app source", func() {
+		It("integration, s1, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, install an app then disable it and remove it from app source", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1581,7 +1579,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, attempt to update using incorrect S3 credentials", func() {
+		It("integration, s1, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, attempt to update using incorrect S3 credentials", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1719,7 +1717,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and update apps after app download is completed", func() {
+		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and update apps after app download is completed", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			################## SETUP ####################
@@ -1804,7 +1802,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworksS1, appframework: can deploy a Standalone instance and install a bigger volume of apps than the operator PV disk space", func() {
+		It("integration, s1, appframeworksS1, appframework: can deploy a Standalone instance and install a bigger volume of apps than the operator PV disk space", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1880,7 +1878,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and delete apps from app directory when app download is complete", func() {
+		It("integration, s1, appframeworksS1, appframework: Deploy a Standalone instance with App Framework enabled and delete apps from app directory when app download is complete", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1952,7 +1950,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smoke, s1, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, install apps and check isDeploymentInProgress is set for Standaloen and MC CR's", func() {
+		It("smoke, s1, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, install apps and check isDeploymentInProgress is set for Standaloen and MC CR's", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################

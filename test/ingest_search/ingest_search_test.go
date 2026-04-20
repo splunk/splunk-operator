@@ -15,7 +15,6 @@ package ingestsearchtest
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -37,9 +36,8 @@ var _ = Describe("Ingest and Search Test", func() {
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	var firstLine string
-	ctx := context.TODO()
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
@@ -52,7 +50,7 @@ var _ = Describe("Ingest and Search Test", func() {
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -66,7 +64,7 @@ var _ = Describe("Ingest and Search Test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("ingest_search, integration, s1: can search internal logs for standalone instance", func() {
+		It("ingest_search, integration, s1: can search internal logs for standalone instance", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
@@ -142,7 +140,7 @@ var _ = Describe("Ingest and Search Test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("ingest_search, integration, s1: can ingest custom data to new index and search", func() {
+		It("ingest_search, integration, s1: can ingest custom data to new index and search", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")

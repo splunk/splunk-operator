@@ -145,6 +145,9 @@ echo "Skipping following test :: ${TEST_TO_SKIP}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 REPORT_FILENAME="report-junit-${TIMESTAMP}${GITHUB_RUN_ID:+-${GITHUB_RUN_ID}}-${TEST_TO_RUN:-all}.xml"
 
+# Suite-level timeouts are set programmatically via sc.Timeout in each suite's
+# TestBasic function (see test/testenv/timeouts.go). The --timeout flag below
+# acts only as a CLI-level safety net; per-suite sc.Timeout values take precedence.
 TEST_TIMEOUT="${TEST_TIMEOUT:-225m}"
 
 # Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable

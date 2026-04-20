@@ -14,7 +14,6 @@
 package licensemanager
 
 import (
-	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -28,9 +27,8 @@ var _ = Describe("Licensemanager test", func() {
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	var config *LicenseTestConfig
-	ctx := context.TODO()
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
 
@@ -47,7 +45,7 @@ var _ = Describe("Licensemanager test", func() {
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -63,13 +61,13 @@ var _ = Describe("Licensemanager test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)  with License Manager", func() {
-		It("licensemanager, integration, c3: Splunk Operator can configure License Manager with Indexers and Search Heads in C3 SVA", func() {
+		It("licensemanager, integration, c3: Splunk Operator can configure License Manager with Indexers and Search Heads in C3 SVA", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			RunLMC3Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)  with License Manager", func() {
-		It("licensemanager, integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
+		It("licensemanager, integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			RunLMC3AppFrameworkTest(ctx, deployment, testcaseEnvInst, testenvInstance, config)
 		})
 	})

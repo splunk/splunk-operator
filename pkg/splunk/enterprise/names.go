@@ -210,7 +210,7 @@ version = 1.0.0
 `
 
 	telAppDefMetaConfString = `[]
-access = read : [ * ], write : [ admin ] 
+access = read : [ * ], write : [ admin ]
 `
 
 	// Command to create telemetry app on non SHC scenarios

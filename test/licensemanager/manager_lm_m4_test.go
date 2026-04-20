@@ -14,7 +14,6 @@
 package licensemanager
 
 import (
-	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -29,9 +28,8 @@ var _ = Describe("Licensemanager test", func() {
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	var config *LicenseTestConfig
-	ctx := context.TODO()
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
 
@@ -48,7 +46,7 @@ var _ = Describe("Licensemanager test", func() {
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -62,7 +60,7 @@ var _ = Describe("Licensemanager test", func() {
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)  with License Manager", func() {
-		It("licensemanager, integration, m4: Splunk Operator can configure License Manager with indexers and search head in M4 SVA", func() {
+		It("licensemanager, integration, m4: Splunk Operator can configure License Manager with indexers and search head in M4 SVA", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 			RunLMM4Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})

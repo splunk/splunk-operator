@@ -78,16 +78,15 @@ type PodDetailsStruct struct {
 
 // VerifyMonitoringConsoleReady verify Monitoring Console CR is in Ready Status and does not flip-flop
 func (testenv *TestCaseEnv) VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, mcName string, monitoringConsole *enterpriseApi.MonitoringConsole) {
-	gomega.Eventually(func() enterpriseApi.Phase {
-		err := deployment.GetInstance(ctx, mcName, monitoringConsole)
-		if err != nil {
-			return enterpriseApi.PhaseError
-		}
-		testenv.Log.Info("Waiting for Monitoring Console phase to be ready", "instance", monitoringConsole.ObjectMeta.Name, "Phase", monitoringConsole.Status.Phase)
-		DumpGetPods(testenv.GetName())
+	// Use optimized watch to wait for Ready phase
+	err := testenv.WatchForMonitoringConsolePhase(ctx, deployment, testenv.GetName(), mcName, enterpriseApi.PhaseReady, deployment.GetTimeout())
+	gomega.Expect(err).To(gomega.Succeed(), "MonitoringConsole failed to reach Ready phase")
 
-		return monitoringConsole.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	// Refresh the instance to get latest state
+	err = deployment.GetInstance(ctx, mcName, monitoringConsole)
+	gomega.Expect(err).To(gomega.Succeed())
+	testenv.Log.Info("MonitoringConsole reached Ready phase", "instance", monitoringConsole.ObjectMeta.Name, "Phase", monitoringConsole.Status.Phase)
+	DumpGetPods(testenv.GetName())
 }
 
 // VerifyStandaloneReady verify Standalone is in ReadyStatus and does not flip-flop
@@ -373,9 +372,9 @@ func (testenv *TestCaseEnv) VerifyRollingRestartFinished(ctx context.Context, de
 }
 
 // VerifyConfOnPod Verify give conf and value on config file on pod
-func (testenv *TestCaseEnv) VerifyConfOnPod(deployment *Deployment, podName string, confFilePath string, config string, value string) {
+func (testenv *TestCaseEnv) VerifyConfOnPod(ctx context.Context, deployment *Deployment, podName string, confFilePath string, config string, value string) {
 	gomega.Consistently(func() bool {
-		confLine, err := GetConfLineFromPod(podName, confFilePath, testenv.GetName(), config, "", false)
+		confLine, err := GetConfLineFromPod(ctx, podName, confFilePath, testenv.GetName(), config, "", false)
 		if err != nil {
 			testenv.Log.Error(err, "Failed to get config on pod")
 			return false
@@ -713,14 +712,14 @@ func (testenv *TestCaseEnv) VerifySplunkServerConfSecrets(ctx context.Context, d
 
 // VerifySplunkInputConfSecrets Compare secret value on passed in map to value present on input.conf for given indexer or standalone pods
 // Set match to true or false to indicate desired +ve or -ve match
-func (testenv *TestCaseEnv) VerifySplunkInputConfSecrets(deployment *Deployment, verificationPods []string, data map[string][]byte, match bool) {
+func (testenv *TestCaseEnv) VerifySplunkInputConfSecrets(ctx context.Context, deployment *Deployment, verificationPods []string, data map[string][]byte, match bool) {
 	secretName := "hec_token"
 	for _, podName := range verificationPods {
 		if strings.Contains(podName, "standalone") || strings.Contains(podName, "indexer") {
 			found := false
 			testenv.Log.Info("Key Verificaton", "Pod Name", podName, "Key", secretName)
 			stanza := SecretKeytoServerConfStanza[secretName]
-			_, value, err := GetSecretFromInputsConf(deployment, podName, testenv.GetName(), "token", stanza)
+			_, value, err := GetSecretFromInputsConf(ctx, deployment, podName, testenv.GetName(), "token", stanza)
 			gomega.Expect(err).To(gomega.Succeed(), "Secret not found in conf file", "Secret Name", secretName)
 			comparsion := strings.Compare(value, string(data[secretName]))
 			if comparsion == 0 {
@@ -800,7 +799,7 @@ func (testenv *TestCaseEnv) VerifyAppInstalled(ctx context.Context, deployment *
 		for _, appName := range apps {
 			status, versionInstalled, err := GetPodAppStatus(ctx, deployment, podName, ns, appName, clusterWideInstall)
 			testenv.Log.Info("App details", "app", appName, "status", status, "version", versionInstalled, "error", err)
-			gomega.Expect(err).To(gomega.Succeed(), "Unable to get app status on pod ")
+			gomega.Expect(err).To(gomega.Succeed(), fmt.Sprintf("Unable to get app status on pod %s for app %s", podName, appName))
 			comparison := strings.EqualFold(status, statusCheck)
 			//Check the app is installed on specific pods and un-installed on others for cluster-wide install
 			var check bool
@@ -831,14 +830,7 @@ func (testenv *TestCaseEnv) VerifyAppInstalled(ctx context.Context, deployment *
 						expectedVersion = AppInfo[appName]["V1"]
 					}
 					testenv.Log.Info("Verify app", "pod", podName, "app", appName, "expectedVersion", expectedVersion, "versionInstalled", versionInstalled, "updated", checkupdated)
-					gomega.Eventually(func() string {
-						_, ver, err := GetPodAppStatus(ctx, deployment, podName, ns, appName, clusterWideInstall)
-						if err != nil {
-							testenv.Log.Info("Retrying app version check", "pod", podName, "app", appName, "error", err)
-							return ""
-						}
-						return ver
-					}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(expectedVersion))
+					gomega.Expect(versionInstalled).Should(gomega.Equal(expectedVersion))
 				}
 			}
 		}

@@ -14,7 +14,6 @@
 package licensemaster
 
 import (
-	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -30,9 +29,8 @@ var _ = Describe("Licensemaster test", func() {
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	var config *licensemanager.LicenseTestConfig
-	ctx := context.TODO()
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 
@@ -49,7 +47,7 @@ var _ = Describe("Licensemaster test", func() {
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -63,7 +61,7 @@ var _ = Describe("Licensemaster test", func() {
 	})
 
 	Context("Standalone deployment (S1) with License Master", func() {
-		It("licensemaster, smoke, s1: Splunk Operator can configure License Master with Standalone in S1 SVA", func() {
+		It("licensemaster, smoke, s1: Splunk Operator can configure License Master with Standalone in S1 SVA", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			licensemanager.RunLMS1Test(ctx, deployment, testcaseEnvInst, config)
 		})
 	})

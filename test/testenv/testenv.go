@@ -48,9 +48,6 @@ const (
 	defaultOperatorImage = "splunk/splunk-operator"
 	defaultSplunkImage   = "splunk/splunk:latest"
 
-	// defaultTestTimeout is the max timeout in seconds before async test failed.
-	defaultTestTimeout = 2700
-
 	// PollInterval specifies the polling interval for slow operations (waiting for full cluster readiness)
 	PollInterval = 5 * time.Second
 
@@ -58,17 +55,10 @@ const (
 	ShortPollInterval = 2 * time.Second
 
 	// ConsistentPollInterval is the interval to use to consistently check a state is stable
-	ConsistentPollInterval = 1 * time.Second
+	ConsistentPollInterval = 200 * time.Millisecond
 
 	// ConsistentDuration is use to check a state is stable
-	ConsistentDuration = 5 * time.Second
-
-	// DefaultTimeout is the max timeout before we failed.
-	DefaultTimeout = 2000 * time.Minute
-
-	// AppInstallTimeout is the timeout for waiting for apps to reach Install phase on a CR.
-	// C3 deployments require bundle push across all indexers and SHC deployer which can exceed 5 minutes.
-	AppInstallTimeout = 10 * time.Minute
+	ConsistentDuration = 2000 * time.Millisecond
 
 	// SearchHeadPod Template String for search head pod
 	SearchHeadPod = "splunk-%s-shc-search-head-%d"

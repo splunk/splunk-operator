@@ -14,7 +14,6 @@
 package crcrud
 
 import (
-	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -32,17 +31,13 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 	var deployment *testenv.Deployment
 	var defaultCPULimits string
 	var newCPULimits string
-	var ctx context.Context
-
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
-		ctx = context.TODO()
-
 		// Validate test prerequisites early to fail fast
 		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
@@ -51,7 +46,7 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 		newCPULimits = "2"
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -65,7 +60,7 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
-		It("managercrcrud, integration, m4: can deploy can deploy multisite indexer and search head clusters, change their CR, update the instances", func() {
+		It("managercrcrud, integration, m4: can deploy can deploy multisite indexer and search head clusters, change their CR, update the instances", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 
 			// Deploy Multisite Cluster and Search Head Clusters
 			mcRef := deployment.GetName()

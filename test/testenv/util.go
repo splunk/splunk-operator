@@ -977,10 +977,10 @@ func DumpGetPvcs(ns string) []string {
 }
 
 // GetConfLineFromPod gets given config from file on POD
-func GetConfLineFromPod(podName string, filePath string, ns string, configName string, stanza string, checkStanza bool) (string, error) {
+func GetConfLineFromPod(ctx context.Context, podName string, filePath string, ns string, configName string, stanza string, checkStanza bool) (string, error) {
 	var config string
 	var err error
-	output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "cat", filePath).Output()
+	output, err := exec.CommandContext(ctx, "kubectl", "exec", "-n", ns, podName, "--", "cat", filePath).Output()
 	if err != nil {
 		cmd := fmt.Sprintf("kubectl exec -n %s %s -- cat %s", ns, podName, filePath)
 		logf.Log.Error(err, "Failed to execute command", "command", cmd)

@@ -16,7 +16,6 @@
 package deletecr
 
 import (
-	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -32,9 +31,8 @@ var _ = Describe("DeleteCR test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	ctx := context.TODO()
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
@@ -47,7 +45,7 @@ var _ = Describe("DeleteCR test", func() {
 		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -61,7 +59,7 @@ var _ = Describe("DeleteCR test", func() {
 	})
 
 	Context("Standalone deployment (S1 - Standalone Pod)", func() {
-		It("integration, managerdeletecr: can deploy standalone and delete", func() {
+		It("integration, managerdeletecr: can deploy standalone and delete", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -89,7 +87,7 @@ var _ = Describe("DeleteCR test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3)", func() {
-		It("integration, managerdeletecr: can deploy C3 and delete search head, clustermanager", func() {
+		It("integration, managerdeletecr: can deploy C3 and delete search head, clustermanager", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			// Deploy C3
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")

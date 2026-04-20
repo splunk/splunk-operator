@@ -14,7 +14,6 @@
 package indingsep
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -38,9 +37,7 @@ var _ = Describe("indingsep test", func() {
 
 	var cmSpec enterpriseApi.ClusterManagerSpec
 
-	ctx := context.TODO()
-
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
@@ -64,7 +61,7 @@ var _ = Describe("indingsep test", func() {
 		}
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
 		}
@@ -78,7 +75,7 @@ var _ = Describe("indingsep test", func() {
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
-		It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers", func() {
+		It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")
@@ -159,7 +156,7 @@ var _ = Describe("indingsep test", func() {
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
-		It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers with additional configurations", func() {
+		It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers with additional configurations", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")
@@ -272,7 +269,7 @@ var _ = Describe("indingsep test", func() {
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
-		It("indingsep, integration, indingsep: Splunk Operator can deploy Ingestors and Indexers with correct setup", func() {
+		It("indingsep, integration, indingsep: Splunk Operator can deploy Ingestors and Indexers with correct setup", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")
