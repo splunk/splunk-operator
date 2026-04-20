@@ -1177,7 +1177,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	// Appended AFTER the container loop above so its Env/Resources/SecurityContext are not overwritten.
 	nfsServerImage := os.Getenv("RELATED_IMAGE_NFS_SERVER")
 	if nfsServerImage == "" {
-		nfsServerImage = "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/nfs-server:latest"
+		nfsServerImage = "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/go-nfs-server:v3.1.0-fuse-nfs"
 	}
 	podTemplateSpec.Spec.Containers = append(podTemplateSpec.Spec.Containers, corev1.Container{
 		Name:            "nfs-server",
@@ -1201,7 +1201,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			},
 		},
 		SecurityContext: &corev1.SecurityContext{
-			Privileged:   func() *bool { b := true; return &b }(),
 			RunAsUser:    func() *int64 { uid := int64(0); return &uid }(),
 			RunAsGroup:   func() *int64 { gid := int64(0); return &gid }(),
 			RunAsNonRoot: func() *bool { b := false; return &b }(),
