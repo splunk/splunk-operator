@@ -26,7 +26,6 @@ scan-stage-image-trivy:
 
 eks-smoke-validation:
   extends: .runtime-integration-job
-  interruptible: false
   timeout: 10h
   needs:
     - job: build-stage-image
