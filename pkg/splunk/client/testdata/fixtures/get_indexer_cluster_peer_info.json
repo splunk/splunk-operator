@@ -1,0 +1,72 @@
+{
+  "links": {},
+  "origin": "https://localhost:8089/services/cluster/slave/info",
+  "updated": "2020-03-18T01:28:18+00:00",
+  "generator": {
+    "build": "a7f645ddaf91",
+    "version": "8.0.2"
+  },
+  "entry": [
+    {
+      "name": "slave",
+      "id": "https://localhost:8089/services/cluster/slave/info/slave",
+      "updated": "1970-01-01T00:00:00+00:00",
+      "links": {
+        "alternate": "/services/cluster/slave/info/slave",
+        "list": "/services/cluster/slave/info/slave"
+      },
+      "author": "system",
+      "acl": {
+        "app": "",
+        "can_list": true,
+        "can_write": true,
+        "modifiable": false,
+        "owner": "system",
+        "perms": {
+          "read": [
+            "admin",
+            "splunk-system-role"
+          ],
+          "write": [
+            "admin",
+            "splunk-system-role"
+          ]
+        },
+        "removable": false,
+        "sharing": "system"
+      },
+      "content": {
+        "active_bundle": {
+          "bundle_path": "/opt/splunk/var/run/splunk/cluster/remote-bundle/87c8c24e7fabc3ff9683c26652cb5890-1583870244.bundle",
+          "checksum": "14310A4AABD23E85BBD4559C4A3B59F8",
+          "timestamp": 1583870244
+        },
+        "base_generation_id": 26,
+        "eai:acl": null,
+        "is_registered": true,
+        "last_dry_run_bundle": {
+          "bundle_path": "",
+          "checksum": "",
+          "timestamp": 0
+        },
+        "last_heartbeat_attempt": 0,
+        "latest_bundle": {
+          "bundle_path": "/opt/splunk/var/run/splunk/cluster/remote-bundle/87c8c24e7fabc3ff9683c26652cb5890-1583870244.bundle",
+          "checksum": "14310A4AABD23E85BBD4559C4A3B59F8",
+          "timestamp": 1583870244
+        },
+        "maintenance_mode": false,
+        "registered_summary_state": 3,
+        "restart_state": "NoRestart",
+        "site": "default",
+        "status": "Up"
+      }
+    }
+  ],
+  "paging": {
+    "total": 1,
+    "perPage": 30,
+    "offset": 0
+  },
+  "messages": []
+}
