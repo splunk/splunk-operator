@@ -45,45 +45,6 @@ strip_docker_io_prefix() {
   esac
 }
 
-strip_oci_prefix() {
-  oci_ref="$1"
-  case "${oci_ref}" in
-    oci://*)
-      printf '%s' "${oci_ref#oci://}"
-      ;;
-    *)
-      printf '%s' "${oci_ref}"
-      ;;
-  esac
-}
-
-oci_registry_host() {
-  oci_ref="$1"
-  stripped_ref="$(strip_oci_prefix "${oci_ref}")"
-  printf '%s' "${stripped_ref}" | cut -d/ -f1
-}
-
-normalize_chart_repository_base() {
-  repository_ref="$1"
-  stripped_ref="$(strip_oci_prefix "${repository_ref}")"
-  stripped_ref="${stripped_ref%/}"
-
-  case "${stripped_ref}" in
-    */splunk-operator|*/splunk-enterprise)
-      stripped_ref="${stripped_ref%/*}"
-      ;;
-  esac
-
-  printf 'oci://%s' "${stripped_ref}"
-}
-
-chart_repository_ref() {
-  repository_base="$1"
-  chart_name="$2"
-  normalized_base="${repository_base%/}"
-  printf '%s/%s' "${normalized_base}" "${chart_name}"
-}
-
 bool_is_true() {
   case "${1:-}" in
     1|true|TRUE|True|yes|YES|Yes|on|ON|On)
@@ -96,197 +57,21 @@ bool_is_true() {
 }
 
 install_os_packages() {
-  if command -v apt-get >/dev/null 2>&1; then
-    apt-get update
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"
-    return 0
-  fi
-
-  if command -v dnf >/dev/null 2>&1; then
-    dnf install -y "$@"
-    return 0
-  fi
-
-  if command -v yum >/dev/null 2>&1; then
-    yum install -y "$@"
-    return 0
-  fi
-
-  if command -v apk >/dev/null 2>&1; then
-    apk add --no-cache "$@"
-    return 0
-  fi
-
-  echo "Unable to install packages because no supported package manager was found" >&2
-  return 1
-}
-
-helm_registry_login_with_password() {
-  registry_ref="$1"
-  username="$2"
-  password="$3"
-  registry_host="$(oci_registry_host "${registry_ref}")"
-
-  if [ -z "${registry_host}" ]; then
-    echo "Unable to determine OCI registry host from ${registry_ref}" >&2
+  if ! command -v apt-get >/dev/null 2>&1; then
+    echo "GitLab CI expects Debian-based runners with apt-get available" >&2
     return 1
   fi
 
-  printf '%s' "${password}" | helm registry login "${registry_host}" --username "${username}" --password-stdin
-}
-
-ensure_python3() {
-  if command -v python3 >/dev/null 2>&1; then
-    return 0
-  fi
-
-  if command -v apt-get >/dev/null 2>&1; then
-    install_os_packages python3
-  elif command -v dnf >/dev/null 2>&1; then
-    install_os_packages python3
-  elif command -v yum >/dev/null 2>&1; then
-    install_os_packages python3
-  elif command -v apk >/dev/null 2>&1; then
-    install_os_packages python3
-  else
-    echo "No supported package manager found to install python3" >&2
-    return 1
-  fi
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"
 }
 
 ensure_python_venv_tooling() {
-  if command -v apt-get >/dev/null 2>&1; then
-    install_os_packages python3 python3-pip python3-venv
-    return 0
-  fi
-
-  if command -v dnf >/dev/null 2>&1; then
-    install_os_packages python3 python3-pip
-    return 0
-  fi
-
-  if command -v yum >/dev/null 2>&1; then
-    install_os_packages python3 python3-pip
-    return 0
-  fi
-
-  if command -v apk >/dev/null 2>&1; then
-    install_os_packages python3 py3-pip py3-virtualenv
-    return 0
-  fi
-
-  echo "No supported package manager found to install Python venv tooling" >&2
-  return 1
-}
-
-ensure_git_ripgrep_python_venv_tooling() {
-  if command -v apt-get >/dev/null 2>&1; then
-    install_os_packages git ripgrep python3 python3-pip python3-venv
-    return 0
-  fi
-
-  if command -v dnf >/dev/null 2>&1; then
-    install_os_packages git ripgrep python3 python3-pip
-    return 0
-  fi
-
-  if command -v yum >/dev/null 2>&1; then
-    install_os_packages git ripgrep python3 python3-pip
-    return 0
-  fi
-
-  if command -v apk >/dev/null 2>&1; then
-    install_os_packages git ripgrep python3 py3-pip py3-virtualenv
-    return 0
-  fi
-
-  echo "No supported package manager found to install bias-language prerequisites" >&2
-  return 1
-}
-
-ensure_jq() {
-  if command -v jq >/dev/null 2>&1; then
-    return 0
-  fi
-
-  install_os_packages jq
+  install_os_packages python3 python3-pip python3-venv
 }
 
 ensure_trivy_scan_tooling() {
-  if command -v apt-get >/dev/null 2>&1; then
-    install_os_packages bash curl jq python3 python3-pip python3-venv tar
-    return 0
-  fi
-
-  if command -v dnf >/dev/null 2>&1; then
-    install_os_packages bash curl jq python3 python3-pip tar
-    return 0
-  fi
-
-  if command -v yum >/dev/null 2>&1; then
-    install_os_packages bash curl jq python3 python3-pip tar
-    return 0
-  fi
-
-  if command -v apk >/dev/null 2>&1; then
-    install_os_packages bash curl jq python3 py3-pip py3-virtualenv tar
-    return 0
-  fi
-
-  echo "No supported package manager found to install Trivy scan prerequisites" >&2
-  return 1
-}
-
-helm_registry_login_with_dockerconfig() {
-  registry_ref="$1"
-  dockerconfig_path="$2"
-  registry_host="$(oci_registry_host "${registry_ref}")"
-
-  if [ -z "${registry_host}" ]; then
-    echo "Unable to determine OCI registry host from ${registry_ref}" >&2
-    return 1
-  fi
-
-  if [ ! -f "${dockerconfig_path}" ]; then
-    echo "Missing docker config file: ${dockerconfig_path}" >&2
-    return 1
-  fi
-
-  ensure_python3
-
-  auth_payload="$(python3 - "${dockerconfig_path}" "${registry_host}" <<'PY'
-import base64
-import json
-import sys
-from pathlib import Path
-
-dockerconfig_path = Path(sys.argv[1])
-registry_host = sys.argv[2]
-payload = json.loads(dockerconfig_path.read_text(encoding="utf-8"))
-auths = payload.get("auths", {})
-entry = auths.get(registry_host)
-if entry is None and f"https://{registry_host}" in auths:
-    entry = auths[f"https://{registry_host}"]
-if entry is None and f"http://{registry_host}" in auths:
-    entry = auths[f"http://{registry_host}"]
-if not entry or "auth" not in entry:
-    raise SystemExit(1)
-decoded = base64.b64decode(entry["auth"]).decode("utf-8")
-print(decoded)
-PY
-)" || {
-    echo "Unable to extract OCI registry auth for ${registry_host} from ${dockerconfig_path}" >&2
-    return 1
-  }
-
-  username="${auth_payload%%:*}"
-  password="${auth_payload#*:}"
-  if [ -z "${username}" ] || [ "${password}" = "${auth_payload}" ]; then
-    echo "Invalid auth payload for ${registry_host} in ${dockerconfig_path}" >&2
-    return 1
-  fi
-
-  helm_registry_login_with_password "${registry_ref}" "${username}" "${password}"
+  install_os_packages bash curl jq python3 python3-pip python3-venv tar
 }
 
 resolve_enterprise_source_image() {
@@ -449,66 +234,6 @@ ensure_ci_bin_path() {
   export PATH
 }
 
-install_kubectl_version() {
-  kubectl_version="$1"
-  ci_bin_dir="$2"
-
-  ensure_ci_bin_path "$ci_bin_dir"
-
-  if [ ! -x "${ci_bin_dir}/kubectl" ]; then
-    curl -fsSL -o "${ci_bin_dir}/kubectl" "https://dl.k8s.io/release/${kubectl_version}/bin/linux/amd64/kubectl"
-    chmod +x "${ci_bin_dir}/kubectl"
-  fi
-}
-
-install_eksctl_version() {
-  eksctl_version="$1"
-  ci_bin_dir="$2"
-  temp_archive="/tmp/eksctl-${eksctl_version}-amd64.tar.gz"
-
-  ensure_ci_bin_path "$ci_bin_dir"
-
-  if [ ! -x "${ci_bin_dir}/eksctl" ]; then
-    curl --silent --location -o "${temp_archive}" "https://github.com/weaveworks/eksctl/releases/download/${eksctl_version}/eksctl_$(uname -s)_amd64.tar.gz"
-    tar -xzf "${temp_archive}" -C "${ci_bin_dir}" eksctl
-    chmod +x "${ci_bin_dir}/eksctl"
-    rm -f "${temp_archive}"
-  fi
-}
-
-install_helm_version() {
-  helm_version="$1"
-  ci_bin_dir="$2"
-  temp_archive="/tmp/helm-${helm_version}-linux-amd64.tar.gz"
-
-  ensure_ci_bin_path "$ci_bin_dir"
-
-  if [ ! -x "${ci_bin_dir}/helm" ]; then
-    curl -fsSL -o "${temp_archive}" "https://get.helm.sh/helm-${helm_version}-linux-amd64.tar.gz"
-    tar -xzf "${temp_archive}" -C /tmp linux-amd64/helm
-    mv /tmp/linux-amd64/helm "${ci_bin_dir}/helm"
-    chmod +x "${ci_bin_dir}/helm"
-    rm -f "${temp_archive}"
-    rm -rf /tmp/linux-amd64
-  fi
-}
-
-install_kuttl_version() {
-  kuttl_version="$1"
-  ci_bin_dir="$2"
-  temp_archive="/tmp/kuttl_${kuttl_version#v}_linux_x86_64.tar.gz"
-
-  ensure_ci_bin_path "$ci_bin_dir"
-
-  if [ ! -x "${ci_bin_dir}/kubectl-kuttl" ]; then
-    curl -fsSL -o "${temp_archive}" "https://github.com/kudobuilder/kuttl/releases/download/${kuttl_version}/kuttl_${kuttl_version#v}_linux_x86_64.tar.gz"
-    tar -xzf "${temp_archive}" -C /tmp kubectl-kuttl
-    mv /tmp/kubectl-kuttl "${ci_bin_dir}/kubectl-kuttl"
-    chmod +x "${ci_bin_dir}/kubectl-kuttl"
-    rm -f "${temp_archive}"
-  fi
-}
-
 copy_if_exists() {
   src="$1"
   dest="$2"
@@ -610,77 +335,4 @@ resolve_integration_profile() {
       RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="${STAGING_INT_CLUSTER_WORKERS:-3}"
       ;;
   esac
-}
-
-resolve_helm_test_profile() {
-  requested_profile="$1"
-
-  if [ -n "${STAGING_HELM_TEST_DIRS:-}" ]; then
-    RESOLVED_HELM_TEST_PROFILE="${requested_profile:-custom}"
-    RESOLVED_HELM_TEST_DIRS="${STAGING_HELM_TEST_DIRS}"
-    RESOLVED_HELM_TEST_TIMEOUT="${STAGING_HELM_TEST_TIMEOUT:-7000}"
-    RESOLVED_HELM_TEST_PARALLEL="${STAGING_HELM_TEST_PARALLEL:-1}"
-    return 0
-  fi
-
-  case "${requested_profile}" in
-    ""|smoke)
-      RESOLVED_HELM_TEST_PROFILE="smoke"
-      RESOLVED_HELM_TEST_DIRS="./kuttl/tests/helm/s1,./kuttl/tests/helm/s1-with-operator,./kuttl/tests/helm/operator-with-ephemeral-volume"
-      RESOLVED_HELM_TEST_TIMEOUT="${STAGING_HELM_SMOKE_TIMEOUT:-4000}"
-      RESOLVED_HELM_TEST_PARALLEL="${STAGING_HELM_SMOKE_PARALLEL:-1}"
-      ;;
-    clustered)
-      RESOLVED_HELM_TEST_PROFILE="clustered"
-      RESOLVED_HELM_TEST_DIRS="./kuttl/tests/helm/c3,./kuttl/tests/helm/c3-with-operator,./kuttl/tests/helm/m4,./kuttl/tests/helm/m4-with-operator"
-      RESOLVED_HELM_TEST_TIMEOUT="${STAGING_HELM_CLUSTERED_TIMEOUT:-7000}"
-      RESOLVED_HELM_TEST_PARALLEL="${STAGING_HELM_CLUSTERED_PARALLEL:-1}"
-      ;;
-    apps)
-      RESOLVED_HELM_TEST_PROFILE="apps"
-      RESOLVED_HELM_TEST_DIRS="./kuttl/tests/helm/c3-with-apps,./kuttl/tests/helm/c3-with-apps-private-link"
-      RESOLVED_HELM_TEST_TIMEOUT="${STAGING_HELM_APPS_TIMEOUT:-7000}"
-      RESOLVED_HELM_TEST_PARALLEL="${STAGING_HELM_APPS_PARALLEL:-1}"
-      ;;
-    full)
-      RESOLVED_HELM_TEST_PROFILE="full"
-      RESOLVED_HELM_TEST_DIRS="./kuttl/tests/helm"
-      RESOLVED_HELM_TEST_TIMEOUT="${STAGING_HELM_FULL_TIMEOUT:-7000}"
-      RESOLVED_HELM_TEST_PARALLEL="${STAGING_HELM_FULL_PARALLEL:-1}"
-      ;;
-    *)
-      RESOLVED_HELM_TEST_PROFILE="${requested_profile}"
-      RESOLVED_HELM_TEST_DIRS="./kuttl/tests/helm"
-      RESOLVED_HELM_TEST_TIMEOUT="${STAGING_HELM_TEST_TIMEOUT:-7000}"
-      RESOLVED_HELM_TEST_PARALLEL="${STAGING_HELM_TEST_PARALLEL:-1}"
-      ;;
-  esac
-}
-
-write_kuttl_testsuite_config() {
-  output_path="$1"
-  test_dirs_csv="$2"
-  parallel_value="$3"
-  timeout_value="$4"
-  artifacts_dir="$5"
-
-  {
-    echo "# Generated by gitlab-ci/lib/pipeline-common.sh"
-    echo "apiVersion: kuttl.dev/v1beta1"
-    echo "kind: TestSuite"
-    echo "testDirs:"
-    old_ifs="${IFS}"
-    IFS=','
-    for raw_dir in ${test_dirs_csv}; do
-      test_dir="$(trim_csv_field "${raw_dir}")"
-      [ -z "${test_dir}" ] && continue
-      echo "- ${test_dir}"
-    done
-    IFS="${old_ifs}"
-    echo "parallel: ${parallel_value}"
-    echo "timeout: ${timeout_value}"
-    echo "startKIND: false"
-    echo "artifactsDir: ${artifacts_dir}"
-    echo "kindNodeCache: false"
-  } > "${output_path}"
 }

@@ -28,14 +28,8 @@ unit-tests:
 kubectl-splunk-tests:
   extends:
     - .go-test-job
-    - .python-venv-job
+    - .kubectl-splunk-python-job
   script:
-    - python3 -m venv /tmp/kubectl-splunk-venv
-    - . /tmp/kubectl-splunk-venv/bin/activate
-    - pip install --upgrade pip
-    - pip install -r tools/kubectl-splunk/requirements.txt
-    - pip install -e tools/kubectl-splunk
-    - pip install coverage pytest
     - cd tools/kubectl-splunk
     - coverage run -m unittest discover -s tests
     - coverage report | tee "$CI_PROJECT_DIR/kubectl-splunk-coverage-summary.txt"
