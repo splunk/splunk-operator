@@ -206,6 +206,8 @@ kubectl get pods -A 2>&1 | tee -a "${cluster_log}"
 if [ "${use_existing_cluster}" = "true" ]; then
   log_step "cluster:addons:skipped-existing-cluster"
 else
+  # TODO CSPL-4731: replace public GitHub URLs with internal mirror once
+  # artifact mirroring is set up for the SOK staging environment.
   log_step "cluster:addons:metrics-server"
   kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml 2>&1 | tee -a "${cluster_log}"
   log_step "cluster:addons:metrics-server:complete"

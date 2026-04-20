@@ -86,9 +86,11 @@ trivy image \
   --output "ci-output/${WORKFLOW_SLUG}-trivy-results.sarif" \
   "${IMAGE_REF}"
 
+# --skip-db-update reuses the DB already downloaded by the SARIF pass above.
 trivy image \
   --username AWS \
   --password "${ECR_PASSWORD}" \
   --severity CRITICAL \
   --ignore-unfixed \
+  --skip-db-update \
   "${IMAGE_REF}" | tee "ci-output/${WORKFLOW_SLUG}-trivy-results.txt"
