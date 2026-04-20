@@ -1106,12 +1106,13 @@ func (testenv *TestCaseEnv) VerifyAppState(ctx context.Context, deployment *Depl
 		err := wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 			appDeploymentInfo, _ := testenv.GetAppDeploymentInfo(ctx, deployment, name, crKind, appSourceName, appName)
 			status := appDeploymentInfo.PhaseInfo.Status
-			// Check status value is approximately between appStateInitial and appStateFinal
-			diff := status - appStateFinal
+			// Replaces gomega.BeNumerically("~", appStateFinal, appStateInitial).
+			// Cast to int32 to avoid uint32 underflow when status < appStateFinal.
+			diff := int32(status) - int32(appStateFinal)
 			if diff < 0 {
 				diff = -diff
 			}
-			return diff <= appStateInitial, nil
+			return diff <= int32(appStateInitial), nil
 		})
 		if err != nil {
 			return fmt.Errorf("app %s state not in expected range: %w", appName, err)
