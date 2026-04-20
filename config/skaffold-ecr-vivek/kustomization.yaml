@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../default
+
+# Override operator manager image to ECR so Skaffold can build/push and deploy without `make deploy`.
+images:
+- name: docker.io/splunk/splunk-operator
+  newName: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk-operator
+  newTag: latest
+
+patchesStrategicMerge:
+- skaffold_env_patch.yaml

@@ -247,6 +247,10 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 		// required for SHC bootstrap process; use services with heads when readiness is desired
 		service.Spec.PublishNotReadyAddresses = true
 	}
+	if isHeadless && isMultiContainerPodEnabled() {
+		// In multi-container mode the operator may need to reach the sidecar before the pod is Ready.
+		service.Spec.PublishNotReadyAddresses = true
+	}
 
 	service.SetOwnerReferences(append(service.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
@@ -818,6 +822,9 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	// Add custom ports to splunk containers
 	if spec.ServiceTemplate.Spec.Ports != nil {
 		for idx := range podTemplateSpec.Spec.Containers {
+			if podTemplateSpec.Spec.Containers[idx].Name != "splunk" {
+				continue
+			}
 			for _, p := range spec.ServiceTemplate.Spec.Ports {
 
 				podTemplateSpec.Spec.Containers[idx].Ports = append(podTemplateSpec.Spec.Containers[idx].Ports, corev1.ContainerPort{
@@ -833,6 +840,9 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	if spec.Volumes != nil {
 		podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, spec.Volumes...)
 		for idx := range podTemplateSpec.Spec.Containers {
+			if podTemplateSpec.Spec.Containers[idx].Name != "splunk" {
+				continue
+			}
 			for v := range spec.Volumes {
 				podTemplateSpec.Spec.Containers[idx].VolumeMounts = append(podTemplateSpec.Spec.Containers[idx].VolumeMounts, corev1.VolumeMount{
 					Name:      spec.Volumes[v].Name,
@@ -1091,9 +1101,188 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		env = removeDuplicateEnvVars(env)
 	}
 
+	// Multi-container mode: inject init + sidecar, and rewire Splunk probes to HTTP so the main container can be distroless.
+	// This is strictly opt-in via SPLUNK_POD_ARCH to avoid changing legacy behavior and fixtures.
+	if isMultiContainerPodEnabled() {
+		// Ensure podTemplate annotations map is initialized (we may append later in other paths).
+		if podTemplateSpec.ObjectMeta.Annotations == nil {
+			podTemplateSpec.ObjectMeta.Annotations = make(map[string]string)
+		}
+
+		// Sidecar health endpoints back Splunk probes via kubelet httpGet.
+		livenessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/healthz/pod-live",
+					Port: intstr.FromInt(8080),
+				},
+			},
+			InitialDelaySeconds: livenessProbeDefaultDelaySec,
+			TimeoutSeconds:      livenessProbeTimeoutSec,
+			PeriodSeconds:       livenessProbePeriodSec,
+			FailureThreshold:    livenessProbeFailureThreshold,
+		}
+		startupProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/healthz/pod-startup",
+					Port: intstr.FromInt(8080),
+				},
+			},
+			InitialDelaySeconds: startupProbeDefaultDelaySec,
+			TimeoutSeconds:      startupProbeTimeoutSec,
+			PeriodSeconds:       startupProbePeriodSec,
+			FailureThreshold:    startupProbeFailureThreshold,
+		}
+		readinessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/healthz/pod-ready",
+					Port: intstr.FromInt(8080),
+				},
+			},
+			InitialDelaySeconds: readinessProbeDefaultDelaySec,
+			TimeoutSeconds:      readinessProbeTimeoutSec,
+			PeriodSeconds:       readinessProbePeriodSec,
+			FailureThreshold:    readinessProbeFailureThreshold,
+		}
+
+		// Choose sidecar role. For SHC members we want strict gating until SHC join completes.
+		sidecarRole := instanceType.ToString()
+		if instanceType == SplunkSearchHead {
+			if strings.EqualFold(cr.GetObjectKind().GroupVersionKind().Kind, "SearchHeadCluster") {
+				sidecarRole = "shc-member"
+			}
+		}
+
+		// Copy selected mounts from the Splunk container so the sidecar and init container see the same filesystem.
+		var splunkVM []corev1.VolumeMount
+		for i := range podTemplateSpec.Spec.Containers {
+			if podTemplateSpec.Spec.Containers[i].Name == "splunk" {
+				splunkVM = append([]corev1.VolumeMount(nil), podTemplateSpec.Spec.Containers[i].VolumeMounts...)
+				break
+			}
+		}
+		needMount := func(mountPath string) bool {
+			switch mountPath {
+			case "/opt/splunk/etc", "/opt/splunk/var", "/mnt/splunk-secrets":
+				return true
+			default:
+				// also propagate custom /mnt/<volume> mounts
+				return strings.HasPrefix(mountPath, "/mnt/")
+			}
+		}
+		sharedMounts := make([]corev1.VolumeMount, 0, len(splunkVM))
+		for _, m := range splunkVM {
+			if needMount(m.MountPath) {
+				sharedMounts = append(sharedMounts, m)
+			}
+		}
+
+		// Inject sidecar container (if image provided).
+		if img := strings.TrimSpace(GetSplunkSidecarImage()); img != "" {
+			privileged := false
+			sc := corev1.Container{
+				Name:            "splunk-sidecar",
+				Image:           img,
+				ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
+				Ports: []corev1.ContainerPort{
+					{Name: "sidecar-http", ContainerPort: 8080, Protocol: corev1.ProtocolTCP},
+					{Name: "sidecar-metrics", ContainerPort: 8081, Protocol: corev1.ProtocolTCP},
+				},
+				Env: []corev1.EnvVar{
+					{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
+					{Name: "SPLUNK_ROLE", Value: sidecarRole},
+					{Name: "WATCH_PATHS", Value: "/mnt/certificates,/mnt/splunk-secrets"},
+				},
+				VolumeMounts: sharedMounts,
+				LivenessProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{Path: "/healthz/live", Port: intstr.FromInt(8080)},
+					},
+					PeriodSeconds:    10,
+					TimeoutSeconds:   5,
+					FailureThreshold: 3,
+				},
+				ReadinessProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{Path: "/healthz/ready", Port: intstr.FromInt(8080)},
+					},
+					PeriodSeconds:    10,
+					TimeoutSeconds:   5,
+					FailureThreshold: 3,
+				},
+				SecurityContext: &corev1.SecurityContext{
+					RunAsUser:                &runAsUser,
+					RunAsNonRoot:             &runAsNonRoot,
+					AllowPrivilegeEscalation: &[]bool{false}[0],
+					Capabilities: &corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+						Add:  []corev1.Capability{"NET_BIND_SERVICE"},
+					},
+					Privileged: &privileged,
+					SeccompProfile: &corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					},
+				},
+			}
+
+			// Upsert by name.
+			found := false
+			for i := range podTemplateSpec.Spec.Containers {
+				if podTemplateSpec.Spec.Containers[i].Name == sc.Name {
+					podTemplateSpec.Spec.Containers[i] = sc
+					found = true
+					break
+				}
+			}
+			if !found {
+				podTemplateSpec.Spec.Containers = append(podTemplateSpec.Spec.Containers, sc)
+			}
+		}
+
+		// Inject init container (if image provided).
+		if img := strings.TrimSpace(GetSplunkInitImage()); img != "" {
+			ic := corev1.Container{
+				Name:            "splunk-init",
+				Image:           img,
+				ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
+				Env: []corev1.EnvVar{
+					{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
+					{Name: "SPLUNK_ROLE", Value: role},
+					// Reuse the same "defaults URL" logic to seed the init pipeline.
+					{Name: "SPLUNK_CONFIG_SOURCES", Value: splunkDefaults},
+				},
+				VolumeMounts: sharedMounts,
+				SecurityContext: &corev1.SecurityContext{
+					RunAsUser:    &runAsUser,
+					RunAsNonRoot: &runAsNonRoot,
+					SeccompProfile: &corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					},
+				},
+			}
+
+			found := false
+			for i := range podTemplateSpec.Spec.InitContainers {
+				if podTemplateSpec.Spec.InitContainers[i].Name == ic.Name {
+					podTemplateSpec.Spec.InitContainers[i] = ic
+					found = true
+					break
+				}
+			}
+			if !found {
+				podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, ic)
+			}
+		}
+	}
+
 	privileged := false
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
+		if podTemplateSpec.Spec.Containers[idx].Name != "splunk" {
+			continue
+		}
 		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
 		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe

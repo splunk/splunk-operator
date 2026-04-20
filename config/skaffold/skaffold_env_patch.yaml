@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: splunk-operator-controller-manager
+  namespace: splunk-operator
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        env:
+        - name: WATCH_NAMESPACE
+          value: ""
+        - name: SPLUNK_GENERAL_TERMS
+          value: "--accept-sgt-current-at-splunk-com"
+
+        - name: SPLUNK_POD_ARCH
+          value: "multi-container"
+        - name: RELATED_IMAGE_SPLUNK_INIT
+          value: "667741767953.dkr.ecr.us-west-2.amazonaws.com/splunk-init:latest"
+        - name: RELATED_IMAGE_SPLUNK_SIDECAR
+          value: "667741767953.dkr.ecr.us-west-2.amazonaws.com/splunk-sidecar:latest"

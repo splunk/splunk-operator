@@ -59,6 +59,14 @@
 : "${DEPLOYMENT_TYPE:=manifest}"
 : "${TEST_CLUSTER_PLATFORM:=eks}"
 
+# Go test helpers read TEST_CLUSTER_PLATFORM via os.Getenv(), so it must be exported.
+export TEST_CLUSTER_PLATFORM
+
+# Multi-container pod layout defaults for tests.
+# The per-testcase operator deployment (when -cluster-wide=false) picks these up from the test process env.
+: "${SPLUNK_POD_ARCH:=multi-container}"
+export SPLUNK_POD_ARCH
+
 # Docker registry to use to push the test images to and pull from in the cluster
 if [ -z "${PRIVATE_REGISTRY}" ]; then
     case ${CLUSTER_PROVIDER} in
@@ -90,3 +98,10 @@ if [ -z "${PRIVATE_REGISTRY}" ]; then
         ;;
     esac
 fi
+
+# Images used by the operator when SPLUNK_POD_ARCH=multi-container.
+# Default to images in the same registry used for operator/splunk images.
+: "${RELATED_IMAGE_SPLUNK_INIT:=${PRIVATE_REGISTRY}/splunk-init:latest}"
+: "${RELATED_IMAGE_SPLUNK_SIDECAR:=${PRIVATE_REGISTRY}/splunk-sidecar:latest}"
+export RELATED_IMAGE_SPLUNK_INIT
+export RELATED_IMAGE_SPLUNK_SIDECAR

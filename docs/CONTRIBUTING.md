@@ -185,6 +185,39 @@ We can always use improvements to our documentation! Anyone can contribute to th
 
 You can also edit documentation files directly in the GitHub web interface, without creating a local copy. This can be convenient for small typos or grammar fixes.
 
+## Skaffold (Dev + CI/CD)
+
+This fork supports Skaffold-based build/push/deploy loops for the operator manager image.
+
+### ECR + EKS
+
+1. Authenticate Docker to ECR (adjust via `AWS_ACCOUNT_ID` / `AWS_REGION` if needed):
+
+```bash
+./aws/ecr_login.sh
+./aws/ecr_ensure_repo.sh vivek/splunk-operator
+```
+
+2. Deploy to a kubecontext (example: `vivek-ipv6-splunk-20260227`):
+
+```bash
+skaffold dev -p ecr-vivek --kube-context vivek-ipv6-splunk-20260227
+```
+
+Notes:
+- Profile `ecr-vivek` deploys `config/skaffold-ecr-vivek` which sets concrete env values (no `make deploy` placeholder substitution required).
+- Multi-container pods are enabled via `SPLUNK_POD_ARCH=multi-container`.
+- Update init/sidecar image envs in `config/skaffold-ecr-vivek/skaffold_env_patch.yaml` when publishing new images.
+
+### Make Deploy (Same Overlay)
+
+If you prefer `make deploy`, you can use the same overlay:
+
+```bash
+make docker-buildx IMG=667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk-operator:dev PLATFORMS=linux/amd64
+make deploy ENVIRONMENT=skaffold-ecr-vivek IMG=667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk-operator:dev
+```
+
 ## Maintainers
 
 If you need help, tag one of the active maintainers of this project in a post or comment. We'll do our best to reach out to you as quickly as we can.
