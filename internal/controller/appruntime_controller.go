@@ -308,30 +308,7 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 	splunkHeadlessSvc := enterprise.GetSplunkServiceName(instType, parentName, true)
 	splunkAddr := fmt.Sprintf("%s.%s.%s.svc.cluster.local", splunkPodName, splunkHeadlessSvc, nn.Namespace)
 
-	nfsMountCmd := fmt.Sprintf(`set -e
-
-NFS_SERVER="%s"
-
-echo "Mounting NFS from $NFS_SERVER..."
-for i in $(seq 1 30); do
-  mount -t nfs4 -o soft,timeo=50,retrans=2,nolock "$NFS_SERVER":/splunk-etc /opt/splunk/etc && \
-  mount -t nfs4 -o soft,timeo=50,retrans=2,nolock "$NFS_SERVER":/splunk-var /opt/splunk/var && break
-  echo "NFS mount attempt $i failed, retrying in 3s..."
-  umount /opt/splunk/etc 2>/dev/null || true
-  sleep 3
-done
-
-if ! mountpoint -q /opt/splunk/etc; then
-  echo "ERROR: failed to mount NFS /etc after 30 attempts"
-  exit 1
-fi
-if ! mountpoint -q /opt/splunk/var; then
-  echo "ERROR: failed to mount NFS /var after 30 attempts"
-  exit 1
-fi
-
-echo "NFS mounts established successfully"
-exec /usr/local/bin/entrypoint.sh`, splunkAddr)
+	nfsServerAddr := fmt.Sprintf("%s:2049", splunkAddr)
 
 	privileged := true
 	pod := &corev1.Pod{
@@ -348,11 +325,10 @@ exec /usr/local/bin/entrypoint.sh`, splunkAddr)
 					Name:            "copy-splunk-dirs",
 					Image:           appRuntime.Spec.SplunkImage,
 					ImagePullPolicy: corev1.PullIfNotPresent,
-					Command:         []string{"sh", "-c", "cp -rp /opt/splunk/lib/. /mnt/splunk-lib/ && cp -rp /opt/splunk/bin/. /mnt/splunk-bin/"},
+					Command:         []string{"sh", "-c", "cp -rp /opt/splunk/lib/. /mnt/splunk-local/lib/ && cp -rp /opt/splunk/bin/. /mnt/splunk-local/bin/"},
 					SecurityContext: &corev1.SecurityContext{RunAsUser: func() *int64 { uid := int64(0); return &uid }()},
 					VolumeMounts: []corev1.VolumeMount{
-						{Name: "splunk-lib", MountPath: "/mnt/splunk-lib"},
-						{Name: "splunk-bin", MountPath: "/mnt/splunk-bin"},
+						{Name: "splunk-local", MountPath: "/mnt/splunk-local"},
 					},
 				},
 			},
@@ -361,7 +337,12 @@ exec /usr/local/bin/entrypoint.sh`, splunkAddr)
 					Image:           appRuntime.Spec.Image,
 					Name:            "appruntime",
 					ImagePullPolicy: corev1.PullAlways,
-					Command:         []string{"sh", "-c", nfsMountCmd},
+					Command:         []string{"/usr/local/bin/entrypoint.sh"},
+					Env: []corev1.EnvVar{
+						{Name: "NFS_SERVER_ADDR", Value: nfsServerAddr},
+						{Name: "LOCAL_BIN_PATH", Value: "/opt/splunk-local/bin"},
+						{Name: "LOCAL_LIB_PATH", Value: "/opt/splunk-local/lib"},
+					},
 					Ports: []corev1.ContainerPort{
 						{
 							Name:          "appruntime",
@@ -375,10 +356,7 @@ exec /usr/local/bin/entrypoint.sh`, splunkAddr)
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
-						{Name: "splunk-etc", MountPath: "/opt/splunk/etc"},
-						{Name: "splunk-var", MountPath: "/opt/splunk/var"},
-						{Name: "splunk-lib", MountPath: "/opt/splunk/lib"},
-						{Name: "splunk-bin", MountPath: "/opt/splunk/bin"},
+						{Name: "splunk-local", MountPath: "/opt/splunk-local"},
 						{Name: "containerd-data", MountPath: "/var/lib/containerd-nested"},
 						{Name: "containerd-run", MountPath: "/run/containerd-nested"},
 					},
@@ -387,19 +365,7 @@ exec /usr/local/bin/entrypoint.sh`, splunkAddr)
 			},
 			Volumes: []corev1.Volume{
 				{
-					Name:         "splunk-etc",
-					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-				},
-				{
-					Name:         "splunk-var",
-					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-				},
-				{
-					Name:         "splunk-lib",
-					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-				},
-				{
-					Name:         "splunk-bin",
+					Name:         "splunk-local",
 					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 				{
