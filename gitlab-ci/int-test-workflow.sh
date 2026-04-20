@@ -167,8 +167,8 @@ cleanup_and_exit() {
 trap 'cleanup_and_exit $?' EXIT INT TERM
 
 log_step "tools:install kubectl=${KUBECTL_VERSION} eksctl=${EKSCTL_VERSION}"
-install_kubectl_version "${KUBECTL_VERSION}" "${ci_bin_dir}"
-install_eksctl_version "${EKSCTL_VERSION}" "${ci_bin_dir}"
+make setup/kubectl KUBECTL_VERSION="${KUBECTL_VERSION}" CI_BIN_DIR="${ci_bin_dir}"
+make setup/eksctl EKSCTL_VERSION="${EKSCTL_VERSION}" CI_BIN_DIR="${ci_bin_dir}"
 
 log_step "build-helpers:setup-ginkgo:start"
 make setup/ginkgo

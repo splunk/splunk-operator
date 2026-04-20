@@ -66,3 +66,16 @@ default:
     - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
     - ensure_python_venv_tooling
     - python3 --version
+
+.kubectl-splunk-python-job:
+  extends: .python-venv-job
+  before_script:
+    - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
+    - ensure_python_venv_tooling
+    - python3 --version
+    - python3 -m venv /tmp/kubectl-splunk-venv
+    - . /tmp/kubectl-splunk-venv/bin/activate
+    - pip install --upgrade pip
+    - pip install coverage pytest
+    - pip install -r tools/kubectl-splunk/requirements.txt
+    - pip install -e tools/kubectl-splunk

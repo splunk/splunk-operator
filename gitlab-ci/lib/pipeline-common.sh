@@ -48,12 +48,107 @@ bool_is_true() {
 }
 
 install_os_packages() {
+  if ! command -v apt-get >/dev/null 2>&1; then
+    echo "GitLab CI expects Debian-based runners with apt-get available" >&2
+    return 1
+  fi
+
   apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"
 }
 
 ensure_python_venv_tooling() {
   install_os_packages python3 python3-pip python3-venv
+}
+
+ensure_trivy_scan_tooling() {
+  install_os_packages bash curl jq python3 python3-pip python3-venv tar
+}
+
+resolve_enterprise_source_image() {
+  target_branch="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-${CI_COMMIT_REF_NAME:-}}"
+  source_mode="${SOK_SOURCE_MODE:-}"
+
+  if [ -z "${source_mode}" ]; then
+    case "${target_branch}" in
+      main|release/*|patch/*)
+        source_mode="release"
+        ;;
+      *)
+        source_mode="develop"
+        ;;
+    esac
+  fi
+
+  trigger_kind="${SOK_TRIGGER_KIND:-}"
+  if [ -z "${trigger_kind}" ]; then
+    case "${source_mode}" in
+      release)
+        if [ -n "${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-}" ] || [ -n "${SOK_ENTERPRISE_RELEASE_IMAGE:-}" ]; then
+          trigger_kind="release-image-ready"
+        else
+          trigger_kind="qualification-cycle"
+        fi
+        ;;
+      *)
+        if [ -n "${SPLUNK_ENTERPRISE_DEVELOP_IMAGE:-}" ] || [ -n "${SOK_ENTERPRISE_DEVELOP_IMAGE:-}" ]; then
+          trigger_kind="develop-image-ready"
+        else
+          trigger_kind="develop-checkin"
+        fi
+        ;;
+    esac
+  fi
+
+  develop_image="${SPLUNK_ENTERPRISE_DEVELOP_IMAGE:-${SOK_ENTERPRISE_DEVELOP_IMAGE:-}}"
+  release_image="${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-${SOK_ENTERPRISE_RELEASE_IMAGE:-${SPLUNK_ENTERPRISE_IMAGE:-${SOK_ENTERPRISE_IMAGE:-}}}}"
+  fallback_image="${STAGING_SPLUNK_ENTERPRISE_IMAGE:-${RELATED_IMAGE_SPLUNK_ENTERPRISE:-}}"
+
+  selected_image=""
+  selected_source=""
+  case "${source_mode}" in
+    release)
+      if [ -n "${release_image}" ]; then
+        selected_image="${release_image}"
+        selected_source="release-image"
+      elif [ -n "${fallback_image}" ]; then
+        selected_image="${fallback_image}"
+        selected_source="staging-fallback-image"
+      elif [ -n "${develop_image}" ]; then
+        selected_image="${develop_image}"
+        selected_source="develop-image-fallback"
+      fi
+      ;;
+    *)
+      if [ -n "${develop_image}" ]; then
+        selected_image="${develop_image}"
+        selected_source="develop-image"
+      elif [ -n "${fallback_image}" ]; then
+        selected_image="${fallback_image}"
+        selected_source="staging-fallback-image"
+      elif [ -n "${release_image}" ]; then
+        selected_image="${release_image}"
+        selected_source="release-image-fallback"
+      fi
+      ;;
+  esac
+
+  if [ -z "${selected_image}" ]; then
+    echo "Unable to resolve a Splunk Enterprise image for source mode ${source_mode}" >&2
+    return 1
+  fi
+
+  RESOLVED_SOK_SOURCE_MODE="${source_mode}"
+  RESOLVED_SOK_TRIGGER_KIND="${trigger_kind}"
+  RESOLVED_SPLUNK_ENTERPRISE_IMAGE="${selected_image}"
+  RESOLVED_SPLUNK_ENTERPRISE_IMAGE_SOURCE="${selected_source}"
+  RESOLVED_SPLUNK_ENTERPRISE_IMAGE_NO_DOCKER_IO="$(strip_docker_io_prefix "${selected_image}")"
+
+  export RESOLVED_SOK_SOURCE_MODE
+  export RESOLVED_SOK_TRIGGER_KIND
+  export RESOLVED_SPLUNK_ENTERPRISE_IMAGE
+  export RESOLVED_SPLUNK_ENTERPRISE_IMAGE_SOURCE
+  export RESOLVED_SPLUNK_ENTERPRISE_IMAGE_NO_DOCKER_IO
 }
 
 require_file() {
@@ -95,33 +190,6 @@ ensure_ci_bin_path() {
   mkdir -p "$ci_bin_dir"
   PATH="${ci_bin_dir}:${PATH}"
   export PATH
-}
-
-install_kubectl_version() {
-  kubectl_version="$1"
-  ci_bin_dir="$2"
-
-  ensure_ci_bin_path "$ci_bin_dir"
-
-  if [ ! -x "${ci_bin_dir}/kubectl" ]; then
-    curl -fsSL -o "${ci_bin_dir}/kubectl" "https://dl.k8s.io/release/${kubectl_version}/bin/linux/amd64/kubectl"
-    chmod +x "${ci_bin_dir}/kubectl"
-  fi
-}
-
-install_eksctl_version() {
-  eksctl_version="$1"
-  ci_bin_dir="$2"
-  temp_archive="/tmp/eksctl-${eksctl_version}-amd64.tar.gz"
-
-  ensure_ci_bin_path "$ci_bin_dir"
-
-  if [ ! -x "${ci_bin_dir}/eksctl" ]; then
-    curl --silent --location -o "${temp_archive}" "https://github.com/weaveworks/eksctl/releases/download/${eksctl_version}/eksctl_$(uname -s)_amd64.tar.gz"
-    tar -xzf "${temp_archive}" -C "${ci_bin_dir}" eksctl
-    chmod +x "${ci_bin_dir}/eksctl"
-    rm -f "${temp_archive}"
-  fi
 }
 
 copy_if_exists() {
