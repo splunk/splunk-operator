@@ -56,7 +56,8 @@ if [ -z "${ECR_REGION}" ]; then
   exit 1
 fi
 
-# Enterprise image for develop lane — STAGING override or .env default.
+# Enterprise image for the minimal develop lane — prefer an explicit staging
+# override and otherwise reuse the existing repo .env image pin.
 enterprise_image="${STAGING_SPLUNK_ENTERPRISE_IMAGE:-${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-splunk/splunk:latest}}"
 enterprise_image="$(strip_docker_io_prefix "${enterprise_image}")"
 
@@ -76,7 +77,6 @@ fi
 existing_cluster_name="${STAGING_INT_EXISTING_CLUSTER_NAME:-${JOB_EXISTING_CLUSTER_NAME:-}}"
 
 export AWS_DEFAULT_REGION="${ECR_REGION}"
-export AWS_REGION="${ECR_REGION}"
 export S3_REGION="${ECR_REGION}"
 export ECR_REGISTRY
 export ECR_REPOSITORY="${ECR_REGISTRY}"

@@ -61,7 +61,6 @@ if [ -z "${ECR_REGION}" ]; then
 fi
 
 export AWS_DEFAULT_REGION="${ECR_REGION}"
-export AWS_REGION="${ECR_REGION}"
 
 # ECR_PASSWORD is consumed only by the trivy --password flag below.
 # It is not echoed or written to disk; GitLab masked-variable protection
