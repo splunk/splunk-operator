@@ -33,19 +33,19 @@ var hbaConnectionTypes = map[string]bool{
 }
 
 var hbaAuthMethods = map[string]bool{
-	"trust":          true,
-	"reject":         true,
-	"scram-sha-256":  true,
-	"md5":            true,
-	"password":       true,
-	"gss":            true,
-	"sspi":           true,
-	"ident":          true,
-	"peer":           true,
-	"pam":            true,
-	"ldap":           true,
-	"radius":         true,
-	"cert":           true,
+	"trust":         true,
+	"reject":        true,
+	"scram-sha-256": true,
+	"md5":           true,
+	"password":      true,
+	"gss":           true,
+	"sspi":          true,
+	"ident":         true,
+	"peer":          true,
+	"pam":           true,
+	"ldap":          true,
+	"radius":        true,
+	"cert":          true,
 }
 
 var hbaSpecialAddresses = map[string]bool{
@@ -55,7 +55,6 @@ var hbaSpecialAddresses = map[string]bool{
 }
 
 // tokenPattern splits on whitespace while keeping double-quoted strings intact.
-// Matches pgtoolkit's regex: (?:"+.*?"+|\S)+
 var hbaTokenPattern = regexp.MustCompile(`(?:"+.*?"+|\S)+`)
 
 // hostnamePattern matches valid hostname characters.
