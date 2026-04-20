@@ -12,3 +12,13 @@ include:
   - local: gitlab-ci/includes/base.yml
   - local: gitlab-ci/includes/baseline.yml
   - local: gitlab-ci/includes/runtime.yml
+  - project: 'ci-cd/templates'
+    ref: main
+    file: '/prodsec/.oss-scan.yml'
+
+oss-scan:
+  stage: test
+  needs:
+    - format-and-vet
+  extends: .oss-scan
+  allow_failure: true
