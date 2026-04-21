@@ -2,7 +2,7 @@
 ARG PLATFORMS=linux/amd64,linux/arm64
 
 ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal
-ARG BASE_IMAGE_VERSION=8.10-1775152441
+ARG BASE_IMAGE_VERSION=8.10-1776645784
 
 # Build the manager binary
 FROM golang:1.26.2 AS builder
