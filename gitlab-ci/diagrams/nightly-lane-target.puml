@@ -1,0 +1,26 @@
+@startuml
+title Nightly Lane Target
+start
+:Scheduled nightly trigger on develop;
+:Reuse proven develop verification gates;
+
+partition Artifact {
+  :Stage operator image;
+  :Run image scan on staged artifact;
+}
+
+partition Validation {
+  :Run nightly EKS integration validation;
+  :Run Helm validation;
+}
+
+partition Security {
+  :Run expanded nightly security checks;
+}
+
+partition Reporting {
+  :Collect nightly evidence and artifacts;
+}
+
+stop
+@enduml
