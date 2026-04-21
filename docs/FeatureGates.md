@@ -1,10 +1,37 @@
+---
+title: Feature Gates
+parent: Reference
+nav_order: 7
+---
+
 # Feature Gates
 
 The Splunk Operator uses the Kubernetes [FeatureGate](https://pkg.go.dev/k8s.io/component-base/featuregate) pattern to control rollout of new functionality. Feature gates allow new code to be merged to the main branch without activating in production, giving teams a safe, per-environment opt-in mechanism.
 
 ## Usage
 
-Enable or disable feature gates at operator startup:
+### Helm Chart
+
+Set feature gates via the `splunkOperator.featureGates` map in your values file:
+
+```yaml
+splunkOperator:
+  featureGates:
+    ValidationWebhook: true
+```
+
+Or pass them on the command line:
+
+```bash
+helm install splunk-operator splunk/splunk-operator \
+  --set splunkOperator.featureGates.ValidationWebhook=true
+```
+
+The chart formats the map into a single `--feature-gates=Key1=true,Key2=false` argument automatically. Adding a new gate requires no chart changes — just add an entry to the map.
+
+### Direct Binary
+
+When running the operator binary directly, pass feature gates at startup:
 
 ```bash
 /manager --feature-gates=ValidationWebhook=true
