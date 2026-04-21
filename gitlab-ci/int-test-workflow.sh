@@ -5,7 +5,7 @@ set -eu
 # - Purpose: execute the primary nonprod EKS integration path against the operator image built in GitLab.
 # - Inputs: build artifact image ref, pipeline AWS/EKS/S3 variables, focus selector, and repo .env defaults.
 # - Outputs: runtime context, cluster logs, cleanup log, copied pod logs, and JUnit output under ci-output/.
-# - Guardrails: ephemeral cluster naming, staging-only registries and buckets, cleanup on success, failure, or signal.
+# - Guardrails: ephemeral cluster naming, nonprod registries and buckets, cleanup on success, failure, or signal.
 
 . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
 
@@ -50,7 +50,7 @@ IMAGE_TAG="${IMAGE_REF##*:}"
 ECR_REGISTRY="${IMAGE_REPOSITORY%%/*}"
 OPERATOR_REPOSITORY_PATH="${IMAGE_REPOSITORY#${ECR_REGISTRY}/}"
 
-ECR_REGION="$(first_nonempty "${AWS_REGION:-}" "${AWS_DEFAULT_REGION:-}" "${PIPELINE_AWS_DEFAULT_REGION:-}" "${STAGING_AWS_DEFAULT_REGION:-}" "$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)")"
+ECR_REGION="$(first_nonempty "${AWS_REGION:-}" "${AWS_DEFAULT_REGION:-}" "${PIPELINE_AWS_DEFAULT_REGION:-}" "$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)")"
 
 if [ -z "${ECR_REGION}" ]; then
   echo "Unable to determine ECR region — set AWS_REGION, AWS_DEFAULT_REGION, or PIPELINE_AWS_DEFAULT_REGION" >&2
@@ -59,23 +59,23 @@ fi
 
 # Enterprise image for the minimal develop lane — prefer an explicit pipeline
 # override and otherwise reuse the existing repo .env image pin.
-enterprise_image="$(first_nonempty "${PIPELINE_SPLUNK_ENTERPRISE_IMAGE:-}" "${STAGING_SPLUNK_ENTERPRISE_IMAGE:-}" "${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-}" "splunk/splunk:latest")"
+enterprise_image="$(first_nonempty "${PIPELINE_SPLUNK_ENTERPRISE_IMAGE:-}" "${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-}" "splunk/splunk:latest")"
 enterprise_image="$(strip_docker_io_prefix "${enterprise_image}")"
 
-requested_profile="$(first_nonempty "${PIPELINE_INT_TEST_PROFILE:-}" "${STAGING_INT_TEST_PROFILE:-}" "${JOB_INT_TEST_PROFILE:-}" "smoke")"
+requested_profile="$(first_nonempty "${PIPELINE_INT_TEST_PROFILE:-}" "${JOB_INT_TEST_PROFILE:-}" "smoke")"
 resolve_integration_profile "${requested_profile}"
 test_focus="${RESOLVED_INT_TEST_FOCUS}"
 safe_test_focus="$(sanitize_slug "${test_focus}")"
 
-cluster_name_prefix="$(first_nonempty "${PIPELINE_EKS_CLUSTER_NAME_PREFIX:-}" "${STAGING_EKS_CLUSTER_NAME_PREFIX:-}" "${JOB_EKS_CLUSTER_NAME_PREFIX:-}" "eks-int-test-cluster")"
-cluster_nodes="$(first_nonempty "${PIPELINE_INT_CLUSTER_NODES:-}" "${STAGING_INT_CLUSTER_NODES:-}" "${JOB_INT_CLUSTER_NODES:-}" "${RESOLVED_INT_CLUSTER_NODES_DEFAULT}")"
-cluster_workers="$(first_nonempty "${PIPELINE_INT_CLUSTER_WORKERS:-}" "${STAGING_INT_CLUSTER_WORKERS:-}" "${JOB_INT_CLUSTER_WORKERS:-}" "${RESOLVED_INT_CLUSTER_WORKERS_DEFAULT}")"
+cluster_name_prefix="$(first_nonempty "${PIPELINE_EKS_CLUSTER_NAME_PREFIX:-}" "${JOB_EKS_CLUSTER_NAME_PREFIX:-}" "eks-int-test-cluster")"
+cluster_nodes="$(first_nonempty "${PIPELINE_INT_CLUSTER_NODES:-}" "${JOB_INT_CLUSTER_NODES:-}" "${RESOLVED_INT_CLUSTER_NODES_DEFAULT}")"
+cluster_workers="$(first_nonempty "${PIPELINE_INT_CLUSTER_WORKERS:-}" "${JOB_INT_CLUSTER_WORKERS:-}" "${RESOLVED_INT_CLUSTER_WORKERS_DEFAULT}")"
 
 use_existing_cluster="false"
-if bool_is_true "$(first_nonempty "${PIPELINE_INT_USE_EXISTING_CLUSTER:-}" "${STAGING_INT_USE_EXISTING_CLUSTER:-}" "${JOB_USE_EXISTING_CLUSTER:-}" "false")"; then
+if bool_is_true "$(first_nonempty "${PIPELINE_INT_USE_EXISTING_CLUSTER:-}" "${JOB_USE_EXISTING_CLUSTER:-}" "false")"; then
   use_existing_cluster="true"
 fi
-existing_cluster_name="$(first_nonempty "${PIPELINE_INT_EXISTING_CLUSTER_NAME:-}" "${STAGING_INT_EXISTING_CLUSTER_NAME:-}" "${JOB_EXISTING_CLUSTER_NAME:-}" "")"
+existing_cluster_name="$(first_nonempty "${PIPELINE_INT_EXISTING_CLUSTER_NAME:-}" "${JOB_EXISTING_CLUSTER_NAME:-}" "")"
 
 export AWS_DEFAULT_REGION="${ECR_REGION}"
 export S3_REGION="${ECR_REGION}"
@@ -87,7 +87,7 @@ export SPLUNK_ENTERPRISE_IMAGE="${enterprise_image}"
 normalize_testenv_commit_hash "${CI_COMMIT_SHORT_SHA:-${CI_COMMIT_SHA}}" 8
 export COMMIT_HASH="${NORMALIZED_TESTENV_COMMIT_HASH}"
 export TEST_FOCUS="${test_focus}"
-export TEST_TO_SKIP="$(first_nonempty "${PIPELINE_INT_TEST_TO_SKIP:-}" "${STAGING_INT_TEST_TO_SKIP:-}" "${JOB_INT_TEST_TO_SKIP:-}" "${RESOLVED_INT_TEST_TO_SKIP_DEFAULT}")"
+export TEST_TO_SKIP="$(first_nonempty "${PIPELINE_INT_TEST_TO_SKIP:-}" "${JOB_INT_TEST_TO_SKIP:-}" "${RESOLVED_INT_TEST_TO_SKIP_DEFAULT}")"
 export TEST_CLUSTER_PLATFORM="eks"
 if [ "${use_existing_cluster}" = "true" ]; then
   if [ -z "${existing_cluster_name}" ]; then
@@ -98,18 +98,18 @@ if [ "${use_existing_cluster}" = "true" ]; then
 else
   export TEST_CLUSTER_NAME="${cluster_name_prefix}-${safe_test_focus}-${CI_JOB_ID}"
 fi
-export CLUSTER_WIDE="$(first_nonempty "${PIPELINE_INT_CLUSTER_WIDE:-}" "${STAGING_INT_CLUSTER_WIDE:-}" "${JOB_INT_CLUSTER_WIDE:-}" "true")"
-export DEPLOYMENT_TYPE="$(first_nonempty "${PIPELINE_INT_DEPLOYMENT_TYPE:-}" "${STAGING_INT_DEPLOYMENT_TYPE:-}" "${JOB_INT_DEPLOYMENT_TYPE:-}" "")"
+export CLUSTER_WIDE="$(first_nonempty "${PIPELINE_INT_CLUSTER_WIDE:-}" "${JOB_INT_CLUSTER_WIDE:-}" "true")"
+export DEPLOYMENT_TYPE="$(first_nonempty "${PIPELINE_INT_DEPLOYMENT_TYPE:-}" "${JOB_INT_DEPLOYMENT_TYPE:-}" "")"
 export CLUSTER_NODES="${cluster_nodes}"
 export CLUSTER_WORKERS="${cluster_workers}"
-export TEST_TIMEOUT="$(first_nonempty "${PIPELINE_INT_TEST_TIMEOUT:-}" "${STAGING_INT_TEST_TIMEOUT:-}" "${JOB_INT_TEST_TIMEOUT:-}" "7h")"
-export EKS_VPC_PUBLIC_SUBNET_STRING="$(first_nonempty "${PIPELINE_EKS_VPC_PUBLIC_SUBNET_STRING:-}" "${STAGING_EKS_VPC_PUBLIC_SUBNET_STRING:-}" "${EKS_VPC_PUBLIC_SUBNET_STRING:-}" "")"
-export EKS_VPC_PRIVATE_SUBNET_STRING="$(first_nonempty "${PIPELINE_EKS_VPC_PRIVATE_SUBNET_STRING:-}" "${STAGING_EKS_VPC_PRIVATE_SUBNET_STRING:-}" "${EKS_VPC_PRIVATE_SUBNET_STRING:-}" "")"
-export TEST_BUCKET="$(first_nonempty "${PIPELINE_TEST_BUCKET:-}" "${STAGING_TEST_BUCKET:-}" "${TEST_BUCKET:-}" "")"
-export TEST_INDEXES_S3_BUCKET="$(first_nonempty "${PIPELINE_TEST_INDEXES_S3_BUCKET:-}" "${STAGING_TEST_INDEXES_S3_BUCKET:-}" "${TEST_INDEXES_S3_BUCKET:-}" "")"
-export EKSCTL_VERSION="$(first_nonempty "${PIPELINE_EKSCTL_VERSION:-}" "${STAGING_EKSCTL_VERSION:-}" "${EKSCTL_VERSION:-}" "")"
-export KUBECTL_VERSION="$(first_nonempty "${PIPELINE_KUBECTL_VERSION:-}" "${STAGING_KUBECTL_VERSION:-}" "${KUBECTL_VERSION:-}" "")"
-export EKS_CLUSTER_K8_VERSION="$(first_nonempty "${PIPELINE_EKS_CLUSTER_K8_VERSION:-}" "${STAGING_EKS_CLUSTER_K8_VERSION:-}" "${EKS_CLUSTER_K8_VERSION:-}" "")"
+export TEST_TIMEOUT="$(first_nonempty "${PIPELINE_INT_TEST_TIMEOUT:-}" "${JOB_INT_TEST_TIMEOUT:-}" "7h")"
+export EKS_VPC_PUBLIC_SUBNET_STRING="$(first_nonempty "${PIPELINE_EKS_VPC_PUBLIC_SUBNET_STRING:-}" "${EKS_VPC_PUBLIC_SUBNET_STRING:-}" "")"
+export EKS_VPC_PRIVATE_SUBNET_STRING="$(first_nonempty "${PIPELINE_EKS_VPC_PRIVATE_SUBNET_STRING:-}" "${EKS_VPC_PRIVATE_SUBNET_STRING:-}" "")"
+export TEST_BUCKET="$(first_nonempty "${PIPELINE_TEST_BUCKET:-}" "${TEST_BUCKET:-}" "")"
+export TEST_INDEXES_S3_BUCKET="$(first_nonempty "${PIPELINE_TEST_INDEXES_S3_BUCKET:-}" "${TEST_INDEXES_S3_BUCKET:-}" "")"
+export EKSCTL_VERSION="$(first_nonempty "${PIPELINE_EKSCTL_VERSION:-}" "${EKSCTL_VERSION:-}" "")"
+export KUBECTL_VERSION="$(first_nonempty "${PIPELINE_KUBECTL_VERSION:-}" "${KUBECTL_VERSION:-}" "")"
+export EKS_CLUSTER_K8_VERSION="$(first_nonempty "${PIPELINE_EKS_CLUSTER_K8_VERSION:-}" "${EKS_CLUSTER_K8_VERSION:-}" "")"
 
 append_context "${context_file}" "input_artifact" "${BUILD_IMAGE_REF_FILE}"
 append_context "${context_file}" "ecr_registry" "${ECR_REGISTRY}"

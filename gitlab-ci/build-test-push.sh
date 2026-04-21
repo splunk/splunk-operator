@@ -15,11 +15,11 @@ mkdir -p "ci-output"
 
 ensure_pipeline_aws_env
 
-resolve_pipeline_image_repository "$(first_nonempty "${PIPELINE_ECR_REPOSITORY:-}" "${STAGING_ECR_REPOSITORY:-}" "")" "splunk/splunk-operator"
+resolve_pipeline_image_repository "$(first_nonempty "${PIPELINE_ECR_REPOSITORY:-}" "")" "splunk/splunk-operator"
 
-ECR_REGISTRY="$(first_nonempty "${PIPELINE_ECR_REGISTRY:-}" "${STAGING_ECR_REGISTRY:-}" "${RESOLVED_ECR_REGISTRY}")"
+ECR_REGISTRY="$(first_nonempty "${PIPELINE_ECR_REGISTRY:-}" "${RESOLVED_ECR_REGISTRY}")"
 IMAGE_REPOSITORY="${RESOLVED_IMAGE_REPOSITORY}"
-ECR_REGION="$(first_nonempty "${AWS_REGION:-}" "${AWS_DEFAULT_REGION:-}" "${PIPELINE_AWS_DEFAULT_REGION:-}" "${STAGING_AWS_DEFAULT_REGION:-}" "$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)")"
+ECR_REGION="$(first_nonempty "${AWS_REGION:-}" "${AWS_DEFAULT_REGION:-}" "${PIPELINE_AWS_DEFAULT_REGION:-}" "$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)")"
 
 if [ -z "${ECR_REGION}" ]; then
   echo "Unable to determine ECR region — set AWS_REGION, AWS_DEFAULT_REGION, or PIPELINE_AWS_DEFAULT_REGION" >&2
@@ -31,7 +31,7 @@ export AWS_DEFAULT_REGION="${ECR_REGION}"
 IMAGE_TAG="${CI_COMMIT_SHA}"
 IMAGE_REF="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 REPOSITORY_NAME="${RESOLVED_REPOSITORY_NAME}"
-BUILD_PLATFORMS="$(first_nonempty "${PIPELINE_BUILD_PLATFORMS:-}" "${STAGING_BUILD_PLATFORMS:-}" "${JOB_BUILD_PLATFORMS:-}" "linux/amd64")"
+BUILD_PLATFORMS="$(first_nonempty "${PIPELINE_BUILD_PLATFORMS:-}" "${JOB_BUILD_PLATFORMS:-}" "linux/amd64")"
 
 append_context "${context_file}" "ecr_registry" "${ECR_REGISTRY}"
 append_context "${context_file}" "ecr_region" "${ECR_REGION}"

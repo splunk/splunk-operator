@@ -13,8 +13,8 @@ context_file="ci-output/${WORKFLOW_SLUG}-runtime-context.txt"
 mkdir -p "ci-output"
 : > "${context_file}"
 
-TRIVY_RELEASE="$(first_nonempty "${PIPELINE_TRIVY_RELEASE:-}" "${STAGING_TRIVY_RELEASE:-}" "v0.69.3")"
-TRIVY_ASSET_URL="$(first_nonempty "${PIPELINE_TRIVY_ASSET_URL:-}" "${STAGING_TRIVY_ASSET_URL:-}" "")"
+TRIVY_RELEASE="$(first_nonempty "${PIPELINE_TRIVY_RELEASE:-}" "v0.69.3")"
+TRIVY_ASSET_URL="$(first_nonempty "${PIPELINE_TRIVY_ASSET_URL:-}" "")"
 trivy_resolution_mode="direct-url"
 
 install_os_packages bash curl jq tar
@@ -54,7 +54,7 @@ aws --version
 require_file "ci-output/build-test-push-workflow-image-ref.txt" "build image reference artifact"
 IMAGE_REF="$(cat ci-output/build-test-push-workflow-image-ref.txt)"
 ECR_REGISTRY="${IMAGE_REF%%/*}"
-ECR_REGION="$(first_nonempty "${AWS_REGION:-}" "${AWS_DEFAULT_REGION:-}" "${PIPELINE_AWS_DEFAULT_REGION:-}" "${STAGING_AWS_DEFAULT_REGION:-}" "$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)")"
+ECR_REGION="$(first_nonempty "${AWS_REGION:-}" "${AWS_DEFAULT_REGION:-}" "${PIPELINE_AWS_DEFAULT_REGION:-}" "$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)")"
 
 if [ -z "${ECR_REGION}" ]; then
   echo "Unable to determine ECR region — set AWS_REGION, AWS_DEFAULT_REGION, or PIPELINE_AWS_DEFAULT_REGION" >&2
