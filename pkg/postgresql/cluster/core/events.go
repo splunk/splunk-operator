@@ -12,6 +12,7 @@ import (
 const (
 	EventSecretReady              = "SecretReady"
 	EventConfigMapReady           = "ConfigMapReady"
+	EventConfigMapReconciled      = "ConfigMapReconciled"
 	EventClusterAdopted           = "ClusterAdopted"
 	EventClusterCreationStarted   = "ClusterCreationStarted"
 	EventClusterUpdateStarted     = "ClusterUpdateStarted"
@@ -25,6 +26,7 @@ const (
 	EventClusterCreateFailed      = "ClusterCreateFailed"
 	EventClusterUpdateFailed      = "ClusterUpdateFailed"
 	EventManagedRolesFailed       = "ManagedRolesFailed"
+	EventManagedRolesReady        = "ManagedRolesReady"
 	EventPoolerReconcileFailed    = "PoolerReconcileFailed"
 	EventConfigMapReconcileFailed = "ConfigMapReconcileFailed"
 	EventClusterDegraded          = "ClusterDegraded"
@@ -59,4 +61,14 @@ func (rc *ReconcileContext) emitPoolerReadyTransition(obj client.Object, conditi
 	if !meta.IsStatusConditionTrue(conditions, string(poolerReady)) {
 		rc.emitNormal(obj, EventPoolerReady, "Connection poolers are ready")
 	}
+}
+
+// emitPoolerCreationTransition emits PoolerCreationStarted only when the
+// pooler condition is not already in the creating state.
+func (rc *ReconcileContext) emitPoolerCreationTransition(obj client.Object, conditions []metav1.Condition) {
+	cond := meta.FindStatusCondition(conditions, string(poolerReady))
+	if cond != nil && cond.Status == metav1.ConditionFalse && cond.Reason == string(reasonPoolerCreating) {
+		return
+	}
+	rc.emitNormal(obj, EventPoolerCreationStarted, "Connection poolers created, waiting for readiness")
 }

@@ -6,17 +6,101 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+type configMapNotFoundClient struct {
+	client.Client
+}
+
+type getErrorClient struct {
+	client.Client
+	err     error
+	matcher func(client.Object) bool
+}
+
+func (c getErrorClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if c.matcher != nil && c.matcher(obj) {
+		return c.err
+	}
+	return c.Client.Get(ctx, key, obj, opts...)
+}
+
+type createErrorClient struct {
+	client.Client
+	err     error
+	matcher func(client.Object) bool
+}
+
+func (c createErrorClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	if c.matcher != nil && c.matcher(obj) {
+		return c.err
+	}
+	return c.Client.Create(ctx, obj, opts...)
+}
+
+type patchErrorClient struct {
+	client.Client
+	err error
+}
+
+func (c patchErrorClient) Patch(_ context.Context, _ client.Object, _ client.Patch, _ ...client.PatchOption) error {
+	return c.err
+}
+
+type noopEventEmitter struct{}
+
+func (noopEventEmitter) emitNormal(_ client.Object, _, _ string)                         {}
+func (noopEventEmitter) emitWarning(_ client.Object, _, _ string)                        {}
+func (noopEventEmitter) emitPoolerReadyTransition(_ client.Object, _ []metav1.Condition) {}
+func (noopEventEmitter) emitPoolerCreationTransition(_ client.Object, _ []metav1.Condition) {
+}
+
+type captureEventEmitter struct {
+	normals  []string
+	warnings []string
+}
+
+func (c *captureEventEmitter) emitNormal(_ client.Object, reason, message string) {
+	c.normals = append(c.normals, reason+":"+message)
+}
+
+func (c *captureEventEmitter) emitWarning(_ client.Object, reason, message string) {
+	c.warnings = append(c.warnings, reason+":"+message)
+}
+
+func (c *captureEventEmitter) emitPoolerReadyTransition(_ client.Object, conditions []metav1.Condition) {
+	if !meta.IsStatusConditionTrue(conditions, string(poolerReady)) {
+		c.normals = append(c.normals, EventPoolerReady+":Connection poolers are ready")
+	}
+}
+
+func (c *captureEventEmitter) emitPoolerCreationTransition(_ client.Object, conditions []metav1.Condition) {
+	cond := meta.FindStatusCondition(conditions, string(poolerReady))
+	if cond != nil && cond.Status == metav1.ConditionFalse && cond.Reason == string(reasonPoolerCreating) {
+		return
+	}
+	c.normals = append(c.normals, EventPoolerCreationStarted+":Connection poolers created, waiting for readiness")
+}
+
+func (c configMapNotFoundClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if _, ok := obj.(*corev1.ConfigMap); ok {
+		return apierrors.NewNotFound(schema.GroupResource{Resource: "configmaps"}, key.Name)
+	}
+	return c.Client.Get(ctx, key, obj, opts...)
+}
 
 func TestPoolerResourceName(t *testing.T) {
 	tests := []struct {
@@ -90,6 +174,46 @@ func TestIsPoolerReady(t *testing.T) {
 			got := isPoolerReady(tt.pooler)
 
 			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestPoolerInstanceCountManual(t *testing.T) {
+	tests := []struct {
+		name              string
+		pooler            *cnpgv1.Pooler
+		expectedDesired   int32
+		expectedScheduled int32
+	}{
+		{
+			name: "nil instances defaults desired to 1",
+			pooler: &cnpgv1.Pooler{
+				Status: cnpgv1.PoolerStatus{Instances: 3},
+			},
+			expectedDesired:   1,
+			expectedScheduled: 3,
+		},
+		{
+			name: "explicit instances uses spec value",
+			pooler: &cnpgv1.Pooler{
+				Spec:   cnpgv1.PoolerSpec{Instances: ptr.To(int32(5))},
+				Status: cnpgv1.PoolerStatus{Instances: 2},
+			},
+			expectedDesired:   5,
+			expectedScheduled: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			desired := int32(1)
+			if tt.pooler.Spec.Instances != nil {
+				desired = *tt.pooler.Spec.Instances
+			}
+			scheduled := tt.pooler.Status.Instances
+
+			assert.Equal(t, tt.expectedDesired, desired)
+			assert.Equal(t, tt.expectedScheduled, scheduled)
 		})
 	}
 }
@@ -1044,42 +1168,6 @@ func TestGenerateConfigMap(t *testing.T) {
 	})
 }
 
-func TestPoolerInstanceCount(t *testing.T) {
-	tests := []struct {
-		name              string
-		pooler            *cnpgv1.Pooler
-		expectedDesired   int32
-		expectedScheduled int32
-	}{
-		{
-			name: "nil instances defaults desired to 1",
-			pooler: &cnpgv1.Pooler{
-				Status: cnpgv1.PoolerStatus{Instances: 3},
-			},
-			expectedDesired:   1,
-			expectedScheduled: 3,
-		},
-		{
-			name: "explicit instances returns spec value",
-			pooler: &cnpgv1.Pooler{
-				Spec:   cnpgv1.PoolerSpec{Instances: ptr.To(int32(5))},
-				Status: cnpgv1.PoolerStatus{Instances: 2},
-			},
-			expectedDesired:   5,
-			expectedScheduled: 2,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			desired, scheduled := poolerInstanceCount(tt.pooler)
-
-			assert.Equal(t, tt.expectedDesired, desired)
-			assert.Equal(t, tt.expectedScheduled, scheduled)
-		})
-	}
-}
-
 func TestGeneratePassword(t *testing.T) {
 	pw, err := generatePassword()
 
@@ -1205,4 +1293,997 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 		assert.Equal(t, metricsPath, ro.Spec.Template.ObjectMeta.Annotations[prometheusPathAnnotation])
 		assert.Equal(t, poolerMetricsPortString, ro.Spec.Template.ObjectMeta.Annotations[prometheusPortAnnotation])
 	})
+}
+
+func TestComponentStateTriggerConditions(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+
+	exampleClusterClass := &enterprisev4.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pg1-class",
+			Namespace: "default",
+		},
+		Spec: enterprisev4.PostgresClusterClassSpec{
+			Config: &enterprisev4.PostgresClusterClassConfig{
+				ConnectionPoolerEnabled: ptr.To(true),
+			},
+		},
+		Status: enterprisev4.PostgresClusterClassStatus{
+			Phase: ptr.To(string(enterprisev4.PhaseReady)),
+		},
+	}
+
+	exampleCm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pg1-config",
+			Namespace: "default",
+		},
+		Data: map[string]string{
+			configKeyClusterRWEndpoint:  "pg1-rw.default",
+			configKeyClusterROEndpoint:  "pg1-ro.default",
+			configKeyClusterREndpoint:   "pg1-r.default",
+			configKeyDefaultClusterPort: "5432",
+			configKeySuperUserSecretRef: "pg1-secret",
+		},
+	}
+	examplePgCluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pg1",
+			Namespace: "default",
+		},
+		Status: enterprisev4.PostgresClusterStatus{
+			Resources: &enterprisev4.PostgresClusterResources{
+				ConfigMapRef: &corev1.LocalObjectReference{Name: "pg1-config"},
+				SuperUserSecretRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "pg1-secret"},
+					Key:                  "password",
+				},
+			},
+		},
+	}
+	exampleSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pg1-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"password": []byte("s3cr3t"),
+		},
+	}
+
+	instances := int32(1)
+	version := "16"
+	storageSize := resource.MustParse("10Gi")
+	mergedConfig := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{
+			Instances:        &instances,
+			PostgresVersion:  &version,
+			Storage:          &storageSize,
+			Resources:        &corev1.ResourceRequirements{},
+			PostgreSQLConfig: map[string]string{},
+			PgHBA:            []string{},
+		},
+	}
+
+	makeReadyProvisioner := func(cluster *enterprisev4.PostgresCluster) *clusterModel {
+		cnpg := &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cluster.Name,
+				Namespace: cluster.Namespace,
+			},
+			Spec: buildCNPGClusterSpec(mergedConfig, "pg1-secret", false),
+			Status: cnpgv1.ClusterStatus{
+				Phase: cnpgv1.PhaseHealthy,
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
+		return newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster, exampleClusterClass, mergedConfig, "pg1-secret")
+	}
+
+	makeRuntimeView := func(healthy bool) clusterRuntimeView {
+		if !healthy {
+			return clusterRuntimeViewAdapter{model: &clusterModel{}}
+		}
+		return clusterRuntimeViewAdapter{model: &clusterModel{
+			cnpgCluster: &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+				Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
+			},
+		}}
+	}
+
+	// TODO: as soon as coupling is addressed, remove this monster of a test.
+	combinations := []struct {
+		name       string
+		components []component
+		conditions []conditionTypes
+		requeue    []bool
+		expectAll  bool
+		message    string
+	}{
+		{
+			name: "Provisioner ready, pooler blocked by prerequisites",
+			components: func() []component {
+				cluster := examplePgCluster.DeepCopy()
+				provisioner := makeReadyProvisioner(cluster)
+				pooler := newPoolerModel(
+					fake.NewClientBuilder().WithScheme(scheme).Build(),
+					scheme,
+					noopEventEmitter{},
+					nil,
+					cluster,
+					exampleClusterClass,
+					mergedConfig,
+					nil,
+					true,
+					true,
+				)
+				return []component{provisioner, pooler}
+			}(),
+			conditions: []conditionTypes{clusterReady, poolerReady},
+			requeue:    []bool{false, true},
+			expectAll:  false,
+			message:    "Provisioner ready but pooler gate is blocked until CNPG is healthy",
+		},
+		{
+			name: "Provisioner ready, pooler ready, configMap pending from NotFound",
+			components: func() []component {
+				cluster := examplePgCluster.DeepCopy()
+				provisioner := makeReadyProvisioner(cluster)
+				pooler := newPoolerModel(
+					fake.NewClientBuilder().WithScheme(scheme).Build(),
+					scheme,
+					noopEventEmitter{},
+					nil,
+					cluster,
+					exampleClusterClass,
+					mergedConfig,
+					nil,
+					false,
+					false,
+				)
+				configMap := newConfigMapModel(
+					configMapNotFoundClient{
+						Client: fake.NewClientBuilder().
+							WithScheme(scheme).
+							Build(),
+					},
+					scheme,
+					noopEventEmitter{},
+					nil,
+					makeRuntimeView(true),
+					cluster,
+					"pg1-secret",
+				)
+				return []component{provisioner, pooler, configMap}
+			}(),
+			conditions: []conditionTypes{clusterReady, poolerReady, configMapsReady},
+			requeue:    []bool{false, false, true},
+			expectAll:  false,
+			message:    "Provisioner and pooler ready are not enough when ConfigMap check returns NotFound/pending",
+		},
+		{
+			name: "Flow successful, all components ready",
+			components: func() []component {
+				cluster := examplePgCluster.DeepCopy()
+				provisioner := makeReadyProvisioner(cluster)
+				pooler := newPoolerModel(
+					fake.NewClientBuilder().WithScheme(scheme).Build(),
+					scheme,
+					noopEventEmitter{},
+					nil,
+					cluster,
+					exampleClusterClass,
+					mergedConfig,
+					nil,
+					false,
+					false,
+				)
+				configMap := newConfigMapModel(
+					fake.NewClientBuilder().
+						WithScheme(scheme).
+						WithObjects(exampleCm).
+						Build(),
+					scheme,
+					noopEventEmitter{},
+					nil,
+					makeRuntimeView(true),
+					cluster,
+					"pg1-secret",
+				)
+				secret := newSecretModel(
+					fake.NewClientBuilder().
+						WithScheme(scheme).
+						WithObjects(exampleSecret).
+						Build(),
+					scheme,
+					noopEventEmitter{},
+					nil,
+					cluster,
+					"pg1-secret",
+				)
+				return []component{provisioner, pooler, configMap, secret}
+			}(),
+			conditions: []conditionTypes{clusterReady, poolerReady, configMapsReady, secretsReady},
+			requeue:    []bool{false, false, false, false},
+			expectAll:  true,
+			message:    "",
+		},
+	}
+
+	for _, tt := range combinations {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			state := pgcConstants.Empty
+			for i, check := range tt.components {
+				gate := check.EvaluatePrerequisites(ctx)
+				if !gate.Allowed {
+					info := gate.Health
+					state = info.State
+					assert.Equal(t, tt.conditions[i], info.Condition)
+					assert.Equal(t, tt.requeue[i], info.Result.RequeueAfter > 0)
+					continue
+				}
+
+				check.Actuate(ctx)
+				info, err := check.Converge(ctx)
+				require.NoError(t, err)
+				state = info.State
+				assert.Equal(t, tt.conditions[i], info.Condition)
+				assert.Equal(t, tt.requeue[i], info.Result.RequeueAfter > 0)
+			}
+			assert.Equal(t, tt.expectAll, state&pgcConstants.Ready == pgcConstants.Ready,
+				tt.message)
+		})
+	}
+}
+
+func TestSyncManagedRolesStatusFromCNPG(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		specRoles  []enterprisev4.ManagedRole
+		cnpgStatus cnpgv1.ManagedRoles
+		reconciled []string
+		pending    []string
+		failed     map[string]string
+	}{
+		{
+			name: "marks unreconciled desired role as pending",
+			specRoles: []enterprisev4.ManagedRole{
+				{Name: "app_user", Exists: true},
+			},
+			cnpgStatus: cnpgv1.ManagedRoles{},
+			reconciled: nil,
+			pending:    []string{"app_user"},
+			failed:     nil,
+		},
+		{
+			name: "maps reconciled and pending roles from CNPG status",
+			specRoles: []enterprisev4.ManagedRole{
+				{Name: "app_user", Exists: true},
+				{Name: "app_rw", Exists: true},
+			},
+			cnpgStatus: cnpgv1.ManagedRoles{
+				ByStatus: map[cnpgv1.RoleStatus][]string{
+					cnpgv1.RoleStatusReconciled:            {"app_user"},
+					cnpgv1.RoleStatusPendingReconciliation: {"app_rw"},
+				},
+			},
+			reconciled: []string{"app_user"},
+			pending:    []string{"app_rw"},
+			failed:     nil,
+		},
+		{
+			name: "maps cannot reconcile errors as failed",
+			specRoles: []enterprisev4.ManagedRole{
+				{Name: "app_user", Exists: true},
+			},
+			cnpgStatus: cnpgv1.ManagedRoles{
+				CannotReconcile: map[string][]string{
+					"app_user": {"reserved role"},
+				},
+			},
+			reconciled: nil,
+			pending:    nil,
+			failed: map[string]string{
+				"app_user": "reserved role",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cluster := &enterprisev4.PostgresCluster{
+				Spec: enterprisev4.PostgresClusterSpec{
+					ManagedRoles: tt.specRoles,
+				},
+			}
+			cnpgCluster := &cnpgv1.Cluster{
+				Status: cnpgv1.ClusterStatus{
+					ManagedRolesStatus: tt.cnpgStatus,
+				},
+			}
+
+			syncManagedRolesStatusFromCNPG(cluster, cnpgCluster)
+
+			require.NotNil(t, cluster.Status.ManagedRolesStatus)
+			assert.Equal(t, tt.reconciled, cluster.Status.ManagedRolesStatus.Reconciled)
+			assert.Equal(t, tt.pending, cluster.Status.ManagedRolesStatus.Pending)
+			assert.Equal(t, tt.failed, cluster.Status.ManagedRolesStatus.Failed)
+		})
+	}
+}
+
+func TestManagedRolesModelConverge(t *testing.T) {
+	t.Parallel()
+
+	makeRuntimeView := func(phase string, managedRoles cnpgv1.ManagedRoles) clusterRuntimeView {
+		return clusterRuntimeViewAdapter{model: &clusterModel{
+			cnpgCluster: &cnpgv1.Cluster{
+				Status: cnpgv1.ClusterStatus{
+					Phase:              phase,
+					ManagedRolesStatus: managedRoles,
+				},
+			},
+		}}
+	}
+
+	tests := []struct {
+		name                  string
+		runtimeView           clusterRuntimeView
+		specRoles             []enterprisev4.ManagedRole
+		expectedState         pgcConstants.State
+		expectedReason        conditionReasons
+		expectErr             bool
+		expectStatusPublished bool
+		expectPending         []string
+		expectFailed          map[string]string
+	}{
+		{
+			name:        "returns pending when runtime is not healthy",
+			runtimeView: makeRuntimeView(cnpgv1.PhaseFirstPrimary, cnpgv1.ManagedRoles{}),
+			specRoles: []enterprisev4.ManagedRole{
+				{Name: "app_user", Exists: true},
+			},
+			expectedState:         pgcConstants.Pending,
+			expectedReason:        reasonManagedRolesPending,
+			expectErr:             false,
+			expectStatusPublished: false,
+		},
+		{
+			name: "returns pending when role is still pending reconciliation",
+			runtimeView: makeRuntimeView(cnpgv1.PhaseHealthy, cnpgv1.ManagedRoles{
+				ByStatus: map[cnpgv1.RoleStatus][]string{
+					cnpgv1.RoleStatusPendingReconciliation: {"app_user"},
+				},
+			}),
+			specRoles: []enterprisev4.ManagedRole{
+				{Name: "app_user", Exists: true},
+			},
+			expectedState:         pgcConstants.Pending,
+			expectedReason:        reasonManagedRolesPending,
+			expectErr:             false,
+			expectStatusPublished: true,
+			expectPending:         []string{"app_user"},
+		},
+		{
+			name: "returns failed when role cannot reconcile",
+			runtimeView: makeRuntimeView(cnpgv1.PhaseHealthy, cnpgv1.ManagedRoles{
+				CannotReconcile: map[string][]string{
+					"app_user": {"reserved role"},
+				},
+			}),
+			specRoles: []enterprisev4.ManagedRole{
+				{Name: "app_user", Exists: true},
+			},
+			expectedState:         pgcConstants.Failed,
+			expectedReason:        reasonManagedRolesFailed,
+			expectErr:             true,
+			expectStatusPublished: true,
+			expectFailed: map[string]string{
+				"app_user": "reserved role",
+			},
+		},
+		{
+			name: "returns ready when all desired roles are reconciled",
+			runtimeView: makeRuntimeView(cnpgv1.PhaseHealthy, cnpgv1.ManagedRoles{
+				ByStatus: map[cnpgv1.RoleStatus][]string{
+					cnpgv1.RoleStatusReconciled: {"app_user", "app_user_rw"},
+				},
+			}),
+			specRoles: []enterprisev4.ManagedRole{
+				{Name: "app_user", Exists: true},
+				{Name: "app_user_rw", Exists: true},
+			},
+			expectedState:         pgcConstants.Ready,
+			expectedReason:        reasonManagedRolesReady,
+			expectErr:             false,
+			expectStatusPublished: true,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cluster := &enterprisev4.PostgresCluster{
+				Spec: enterprisev4.PostgresClusterSpec{
+					ManagedRoles: tt.specRoles,
+				},
+			}
+			model := newManagedRolesModel(
+				fake.NewClientBuilder().Build(),
+				nil,
+				noopEventEmitter{},
+				nil,
+				tt.runtimeView,
+				cluster,
+				"pg1-secret",
+			)
+
+			health, err := model.Converge(context.Background())
+			if tt.expectErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, managedRolesReady, health.Condition)
+			assert.Equal(t, tt.expectedState, health.State)
+			assert.Equal(t, tt.expectedReason, health.Reason)
+			if tt.expectStatusPublished {
+				require.NotNil(t, cluster.Status.ManagedRolesStatus)
+				assert.Equal(t, tt.expectPending, cluster.Status.ManagedRolesStatus.Pending)
+				assert.Equal(t, tt.expectFailed, cluster.Status.ManagedRolesStatus.Failed)
+			} else {
+				assert.Nil(t, cluster.Status.ManagedRolesStatus)
+			}
+		})
+	}
+}
+
+func TestManagedRolesRuntimeGateHealthMatchesConverge(t *testing.T) {
+	t.Parallel()
+
+	cluster := &enterprisev4.PostgresCluster{
+		Spec: enterprisev4.PostgresClusterSpec{
+			ManagedRoles: []enterprisev4.ManagedRole{
+				{Name: "app_user", Exists: true},
+			},
+		},
+	}
+	model := newManagedRolesModel(
+		fake.NewClientBuilder().Build(),
+		nil,
+		noopEventEmitter{},
+		nil,
+		clusterRuntimeViewAdapter{model: &clusterModel{
+			cnpgCluster: &cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseFirstPrimary}},
+		}},
+		cluster,
+		"pg1-secret",
+	)
+
+	gate := model.EvaluatePrerequisites(context.Background())
+	require.False(t, gate.Allowed)
+
+	health, err := model.Converge(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, gate.Health, health)
+}
+
+func TestActuateErrorPassdownConvergeHandling(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	instances := int32(1)
+	version := "16"
+	storageSize := resource.MustParse("10Gi")
+	mergedConfig := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{
+			Instances:        &instances,
+			PostgresVersion:  &version,
+			Storage:          &storageSize,
+			Resources:        &corev1.ResourceRequirements{},
+			PostgreSQLConfig: map[string]string{},
+			PgHBA:            []string{},
+		},
+	}
+	clusterClass := &enterprisev4.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
+		Spec: enterprisev4.PostgresClusterClassSpec{
+			Config: &enterprisev4.PostgresClusterClassConfig{
+				ConnectionPoolerEnabled: ptr.To(true),
+			},
+		},
+	}
+
+	type convergeComponent interface {
+		Actuate(ctx context.Context)
+		Converge(ctx context.Context) (componentHealth, error)
+	}
+	type testCase struct {
+		name              string
+		expectedCondition conditionTypes
+		expectedReason    conditionReasons
+		build             func(updateStatus healthStatusUpdater) convergeComponent
+	}
+
+	tests := []testCase{
+		{
+			name:              "cluster component passes actuate get error through converge",
+			expectedCondition: clusterReady,
+			expectedReason:    reasonClusterGetFailed,
+			build: func(updateStatus healthStatusUpdater) convergeComponent {
+				cluster := &enterprisev4.PostgresCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+					Status: enterprisev4.PostgresClusterStatus{
+						Resources: &enterprisev4.PostgresClusterResources{
+							SuperUserSecretRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "pg1-secret"},
+								Key:                  "password",
+							},
+						},
+					},
+				}
+				base := fake.NewClientBuilder().WithScheme(scheme).Build()
+				errClient := getErrorClient{
+					Client: base,
+					err:    assert.AnError,
+					matcher: func(obj client.Object) bool {
+						_, ok := obj.(*cnpgv1.Cluster)
+						return ok
+					},
+				}
+				return newClusterModel(errClient, scheme, noopEventEmitter{}, updateStatus, cluster, clusterClass, mergedConfig, "pg1-secret")
+			},
+		},
+		{
+			name:              "managed roles component passes actuate patch error through converge",
+			expectedCondition: managedRolesReady,
+			expectedReason:    reasonManagedRolesFailed,
+			build: func(updateStatus healthStatusUpdater) convergeComponent {
+				cluster := &enterprisev4.PostgresCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+					Spec: enterprisev4.PostgresClusterSpec{
+						ManagedRoles: []enterprisev4.ManagedRole{{Name: "app_user", Exists: true}},
+					},
+				}
+				cnpg := &cnpgv1.Cluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+					Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
+				}
+				base := fake.NewClientBuilder().WithScheme(scheme).Build()
+				errClient := patchErrorClient{Client: base, err: assert.AnError}
+				return newManagedRolesModel(
+					errClient,
+					scheme,
+					noopEventEmitter{},
+					updateStatus,
+					clusterRuntimeViewAdapter{model: &clusterModel{cnpgCluster: cnpg}},
+					cluster,
+					"pg1-secret",
+				)
+			},
+		},
+		{
+			name:              "pooler component passes actuate create error through converge",
+			expectedCondition: poolerReady,
+			expectedReason:    reasonPoolerReconciliationFailed,
+			build: func(updateStatus healthStatusUpdater) convergeComponent {
+				poolerInstances := int32(2)
+				poolerMode := enterprisev4.ConnectionPoolerModeTransaction
+				cluster := &enterprisev4.PostgresCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+				}
+				cnpg := &cnpgv1.Cluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+					Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
+				}
+				base := fake.NewClientBuilder().WithScheme(scheme).Build()
+				errClient := createErrorClient{
+					Client: base,
+					err:    assert.AnError,
+					matcher: func(obj client.Object) bool {
+						_, ok := obj.(*cnpgv1.Pooler)
+						return ok
+					},
+				}
+				poolerCfg := &MergedConfig{
+					Spec: mergedConfig.Spec,
+					CNPG: &enterprisev4.CNPGConfig{
+						ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{
+							Instances: &poolerInstances,
+							Mode:      &poolerMode,
+							Config:    map[string]string{},
+						},
+					},
+				}
+				return newPoolerModel(errClient, scheme, noopEventEmitter{}, updateStatus, cluster, clusterClass, poolerCfg, cnpg, true, true)
+			},
+		},
+		{
+			name:              "configmap component passes actuate pooler lookup error through converge",
+			expectedCondition: configMapsReady,
+			expectedReason:    reasonConfigMapFailed,
+			build: func(updateStatus healthStatusUpdater) convergeComponent {
+				cluster := &enterprisev4.PostgresCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+					Status:     enterprisev4.PostgresClusterStatus{Resources: &enterprisev4.PostgresClusterResources{}},
+				}
+				cnpg := &cnpgv1.Cluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+					Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
+				}
+				base := fake.NewClientBuilder().WithScheme(scheme).Build()
+				errClient := getErrorClient{
+					Client: base,
+					err:    assert.AnError,
+					matcher: func(obj client.Object) bool {
+						_, ok := obj.(*cnpgv1.Pooler)
+						return ok
+					},
+				}
+				return newConfigMapModel(
+					errClient,
+					scheme,
+					noopEventEmitter{},
+					updateStatus,
+					clusterRuntimeViewAdapter{model: &clusterModel{cnpgCluster: cnpg}},
+					cluster,
+					"pg1-secret",
+				)
+			},
+		},
+		{
+			name:              "secret component passes actuate existence-check error through converge",
+			expectedCondition: secretsReady,
+			expectedReason:    reasonSuperUserSecretFailed,
+			build: func(updateStatus healthStatusUpdater) convergeComponent {
+				cluster := &enterprisev4.PostgresCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+					Status: enterprisev4.PostgresClusterStatus{
+						Resources: &enterprisev4.PostgresClusterResources{},
+					},
+				}
+				base := fake.NewClientBuilder().WithScheme(scheme).Build()
+				errClient := getErrorClient{
+					Client: base,
+					err:    assert.AnError,
+					matcher: func(obj client.Object) bool {
+						_, ok := obj.(*corev1.Secret)
+						return ok
+					},
+				}
+				return newSecretModel(errClient, scheme, noopEventEmitter{}, updateStatus, cluster, "pg1-secret")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var (
+				written componentHealth
+				writes  int
+			)
+			updateStatus := func(health componentHealth) error {
+				written = health
+				writes++
+				return nil
+			}
+			model := tt.build(updateStatus)
+
+			model.Actuate(context.Background())
+			health, err := model.Converge(context.Background())
+
+			require.Error(t, err)
+			require.ErrorIs(t, err, assert.AnError)
+			assert.Equal(t, tt.expectedCondition, health.Condition)
+			assert.Equal(t, pgcConstants.Failed, health.State)
+			assert.Equal(t, tt.expectedReason, health.Reason)
+			assert.Equal(t, failedClusterPhase, health.Phase)
+			assert.NotEmpty(t, health.Message)
+			assert.Equal(t, 1, writes)
+			assert.Equal(t, health, written)
+		})
+	}
+}
+
+func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	t.Run("does not set enabled true while pooler is pending", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := &enterprisev4.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		}
+		clusterClass := &enterprisev4.PostgresClusterClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pg1-class",
+				Namespace: "default",
+			},
+			Spec: enterprisev4.PostgresClusterClassSpec{
+				Config: &enterprisev4.PostgresClusterClassConfig{
+					ConnectionPoolerEnabled: ptr.To(true),
+				},
+			},
+		}
+		model := newPoolerModel(
+			fake.NewClientBuilder().WithScheme(scheme).Build(),
+			scheme,
+			noopEventEmitter{},
+			nil,
+			cluster,
+			clusterClass,
+			&MergedConfig{},
+			nil,
+			true,
+			true,
+		)
+
+		health, err := model.Converge(context.Background())
+		require.NoError(t, err)
+		assert.Nil(t, cluster.Status.ConnectionPoolerStatus)
+		assert.Equal(t, pgcConstants.Pending, health.State)
+	})
+
+	t.Run("sets enabled true when pooler converges ready", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := &enterprisev4.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		}
+		clusterClass := &enterprisev4.PostgresClusterClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pg1-class",
+				Namespace: "default",
+			},
+			Spec: enterprisev4.PostgresClusterClassSpec{
+				Config: &enterprisev4.PostgresClusterClassConfig{
+					ConnectionPoolerEnabled: ptr.To(true),
+				},
+			},
+		}
+		rwPooler := &cnpgv1.Pooler{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      poolerResourceName(cluster.Name, readWriteEndpoint),
+				Namespace: cluster.Namespace,
+			},
+			Status: cnpgv1.PoolerStatus{Instances: 1},
+		}
+		roPooler := &cnpgv1.Pooler{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      poolerResourceName(cluster.Name, readOnlyEndpoint),
+				Namespace: cluster.Namespace,
+			},
+			Status: cnpgv1.PoolerStatus{Instances: 1},
+		}
+		model := newPoolerModel(
+			fake.NewClientBuilder().WithScheme(scheme).WithObjects(rwPooler, roPooler).Build(),
+			scheme,
+			noopEventEmitter{},
+			nil,
+			cluster,
+			clusterClass,
+			&MergedConfig{},
+			&cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy}},
+			true,
+			true,
+		)
+
+		health, err := model.Converge(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, &enterprisev4.ConnectionPoolerStatus{Enabled: true}, cluster.Status.ConnectionPoolerStatus)
+		assert.Equal(t, pgcConstants.Ready, health.State)
+	})
+
+	t.Run("sets status nil when pooler disabled", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := &enterprisev4.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+			Status: enterprisev4.PostgresClusterStatus{
+				ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true},
+			},
+		}
+		clusterClass := &enterprisev4.PostgresClusterClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pg1-class",
+				Namespace: "default",
+			},
+			Spec: enterprisev4.PostgresClusterClassSpec{
+				Config: &enterprisev4.PostgresClusterClassConfig{
+					ConnectionPoolerEnabled: ptr.To(true),
+				},
+			},
+		}
+		model := newPoolerModel(
+			fake.NewClientBuilder().WithScheme(scheme).Build(),
+			scheme,
+			noopEventEmitter{},
+			nil,
+			cluster,
+			clusterClass,
+			&MergedConfig{},
+			nil,
+			false,
+			false,
+		)
+
+		model.Actuate(context.Background())
+		health, err := model.Converge(context.Background())
+		require.NoError(t, err)
+		assert.Nil(t, cluster.Status.ConnectionPoolerStatus)
+		assert.Equal(t, pgcConstants.Ready, health.State)
+	})
+}
+
+func TestPoolerConvergeEmitsReadyEventOnTransition(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+	}
+	clusterClass := &enterprisev4.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pg1-class",
+			Namespace: "default",
+		},
+		Spec: enterprisev4.PostgresClusterClassSpec{
+			Config: &enterprisev4.PostgresClusterClassConfig{
+				ConnectionPoolerEnabled: ptr.To(true),
+			},
+		},
+	}
+	events := &captureEventEmitter{}
+	rwPooler := &cnpgv1.Pooler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      poolerResourceName(cluster.Name, readWriteEndpoint),
+			Namespace: cluster.Namespace,
+		},
+		Status: cnpgv1.PoolerStatus{Instances: 1},
+	}
+	roPooler := &cnpgv1.Pooler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      poolerResourceName(cluster.Name, readOnlyEndpoint),
+			Namespace: cluster.Namespace,
+		},
+		Status: cnpgv1.PoolerStatus{Instances: 1},
+	}
+	model := newPoolerModel(
+		fake.NewClientBuilder().WithScheme(scheme).WithObjects(rwPooler, roPooler).Build(),
+		scheme,
+		events,
+		nil,
+		cluster,
+		clusterClass,
+		&MergedConfig{},
+		&cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy}},
+		true,
+		true,
+	)
+
+	_, err := model.Converge(context.Background())
+	require.NoError(t, err)
+	require.NotEmpty(t, events.normals)
+	assert.Contains(t, events.normals[0], EventPoolerReady)
+
+	// No re-emission when condition already True.
+	cluster.Status.Conditions = []metav1.Condition{{
+		Type:   string(poolerReady),
+		Status: metav1.ConditionTrue,
+	}}
+	events.normals = nil
+	_, err = model.Converge(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, events.normals)
+}
+
+func TestManagedRolesConvergeDoesNotEmitFailureForPending(t *testing.T) {
+	t.Parallel()
+
+	cluster := &enterprisev4.PostgresCluster{
+		Spec: enterprisev4.PostgresClusterSpec{
+			ManagedRoles: []enterprisev4.ManagedRole{{Name: "app_user", Exists: true}},
+		},
+	}
+	events := &captureEventEmitter{}
+	model := newManagedRolesModel(
+		fake.NewClientBuilder().Build(),
+		nil,
+		events,
+		nil,
+		clusterRuntimeViewAdapter{model: &clusterModel{
+			cnpgCluster: &cnpgv1.Cluster{
+				Status: cnpgv1.ClusterStatus{
+					Phase:              cnpgv1.PhaseHealthy,
+					ManagedRolesStatus: cnpgv1.ManagedRoles{},
+				},
+			},
+		}},
+		cluster,
+		"pg1-secret",
+	)
+
+	_, err := model.Converge(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, events.warnings)
+}
+
+func TestManagedRolesConvergeEmitsReadyEventOnTransition(t *testing.T) {
+	t.Parallel()
+
+	cluster := &enterprisev4.PostgresCluster{
+		Spec: enterprisev4.PostgresClusterSpec{
+			ManagedRoles: []enterprisev4.ManagedRole{
+				{Name: "app_user", Exists: true},
+			},
+		},
+	}
+	events := &captureEventEmitter{}
+	model := newManagedRolesModel(
+		fake.NewClientBuilder().Build(),
+		nil,
+		events,
+		nil,
+		clusterRuntimeViewAdapter{model: &clusterModel{
+			cnpgCluster: &cnpgv1.Cluster{
+				Status: cnpgv1.ClusterStatus{
+					Phase: cnpgv1.PhaseHealthy,
+					ManagedRolesStatus: cnpgv1.ManagedRoles{
+						ByStatus: map[cnpgv1.RoleStatus][]string{
+							cnpgv1.RoleStatusReconciled: {"app_user"},
+						},
+					},
+				},
+			},
+		}},
+		cluster,
+		"pg1-secret",
+	)
+
+	_, err := model.Converge(context.Background())
+	require.NoError(t, err)
+	require.NotEmpty(t, events.normals)
+	assert.Contains(t, events.normals[0], EventManagedRolesReady)
+
+	// No re-emission when condition already True.
+	cluster.Status.Conditions = []metav1.Condition{{
+		Type:   string(managedRolesReady),
+		Status: metav1.ConditionTrue,
+	}}
+	events.normals = nil
+	_, err = model.Converge(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, events.normals)
 }
