@@ -146,7 +146,7 @@ echo "Skipping following test :: ${TEST_TO_SKIP}"
 
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 REPORT_LABEL=$(printf '%s' "${TEST_TO_RUN:-all}" | tr ' /,' '_' | tr -s '_' | tr -cd '[:alnum:]_.-')
-RUN_ID="${CI_PIPELINE_ID:-${GITHUB_RUN_ID:-}}"
+RUN_ID="${CI_PIPELINE_ID:-${CI_JOB_ID:-}}"
 REPORT_FILENAME="report-junit-${TIMESTAMP}${RUN_ID:+-${RUN_ID}}-${REPORT_LABEL:-all}.xml"
 
 # Suite-level timeouts are set programmatically via sc.Timeout in each suite's
