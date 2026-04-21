@@ -3,6 +3,7 @@ workflow:
     on_new_commit: conservative
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH && $CI_COMMIT_TITLE =~ /^Merge /'
     - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"'
       when: never
     - if: '$CI_COMMIT_BRANCH == "develop"'

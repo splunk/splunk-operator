@@ -31,6 +31,12 @@ eks-smoke-validation:
     - job: build-stage-image
       artifacts: true
     - job: scan-stage-image-trivy
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH && $CI_COMMIT_TITLE =~ /^Merge /'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
   variables:
     WORKFLOW_SLUG: int-test-workflow
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
@@ -44,3 +50,25 @@ eks-smoke-validation:
       - ci-output/
     reports:
       junit: ci-output/int-test-workflow-inttest-junit.xml
+
+nightly-eks-integration-validation:
+  extends: .runtime-integration-job
+  timeout: 10h
+  needs:
+    - job: build-stage-image
+      artifacts: true
+    - job: scan-stage-image-trivy
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
+  variables:
+    WORKFLOW_SLUG: nightly-int-test-workflow
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
+    JOB_INT_TEST_PROFILE: full
+    JOB_INT_TEST_TIMEOUT: 8h
+  script:
+    - gitlab-ci/int-test-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/nightly-int-test-workflow-inttest-junit.xml
