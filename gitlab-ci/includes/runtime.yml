@@ -1,0 +1,46 @@
+build-stage-image:
+  extends: .runtime-build-job
+  needs:
+    - unit-tests
+    - kubectl-splunk-tests
+  variables:
+    WORKFLOW_SLUG: build-test-push-workflow
+  script:
+    - gitlab-ci/build-test-push.sh
+  artifacts:
+    paths:
+      - ci-output/build-test-push-workflow-*
+
+scan-stage-image-trivy:
+  extends: .runtime-image-scan-job
+  needs:
+    - job: build-stage-image
+      artifacts: true
+  variables:
+    WORKFLOW_SLUG: scan-stage-image-trivy
+  script:
+    - gitlab-ci/build-test-push-trivy-scan.sh
+  artifacts:
+    paths:
+      - ci-output/scan-stage-image-trivy-*
+
+eks-smoke-validation:
+  extends: .runtime-integration-job
+  timeout: 10h
+  needs:
+    - job: build-stage-image
+      artifacts: true
+    - job: scan-stage-image-trivy
+  variables:
+    WORKFLOW_SLUG: int-test-workflow
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
+    JOB_INT_TEST_PROFILE: smoke
+    STAGING_INT_TEST_FOCUS: "smoke, basic, s1"
+    JOB_INT_TEST_TIMEOUT: 3h
+  script:
+    - gitlab-ci/int-test-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/int-test-workflow-inttest-junit.xml

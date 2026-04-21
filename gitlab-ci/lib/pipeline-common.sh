@@ -48,6 +48,11 @@ bool_is_true() {
 }
 
 install_os_packages() {
+  if ! command -v apt-get >/dev/null 2>&1; then
+    echo "GitLab CI expects Debian-based runners with apt-get available" >&2
+    return 1
+  fi
+
   apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"
 }
@@ -55,6 +60,7 @@ install_os_packages() {
 ensure_python_venv_tooling() {
   install_os_packages python3 python3-pip python3-venv
 }
+
 
 require_file() {
   path="$1"
@@ -95,33 +101,6 @@ ensure_ci_bin_path() {
   mkdir -p "$ci_bin_dir"
   PATH="${ci_bin_dir}:${PATH}"
   export PATH
-}
-
-install_kubectl_version() {
-  kubectl_version="$1"
-  ci_bin_dir="$2"
-
-  ensure_ci_bin_path "$ci_bin_dir"
-
-  if [ ! -x "${ci_bin_dir}/kubectl" ]; then
-    curl -fsSL -o "${ci_bin_dir}/kubectl" "https://dl.k8s.io/release/${kubectl_version}/bin/linux/amd64/kubectl"
-    chmod +x "${ci_bin_dir}/kubectl"
-  fi
-}
-
-install_eksctl_version() {
-  eksctl_version="$1"
-  ci_bin_dir="$2"
-  temp_archive="/tmp/eksctl-${eksctl_version}-amd64.tar.gz"
-
-  ensure_ci_bin_path "$ci_bin_dir"
-
-  if [ ! -x "${ci_bin_dir}/eksctl" ]; then
-    curl --silent --location -o "${temp_archive}" "https://github.com/weaveworks/eksctl/releases/download/${eksctl_version}/eksctl_$(uname -s)_amd64.tar.gz"
-    tar -xzf "${temp_archive}" -C "${ci_bin_dir}" eksctl
-    chmod +x "${ci_bin_dir}/eksctl"
-    rm -f "${temp_archive}"
-  fi
 }
 
 copy_if_exists() {

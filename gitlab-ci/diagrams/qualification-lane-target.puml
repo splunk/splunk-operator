@@ -1,0 +1,37 @@
+@startuml
+title Qualification Lane Target
+start
+:Web or schedule trigger for qualification;
+:Resolve qualification inputs;
+
+partition Baseline {
+  :Repository verification and test jobs;
+}
+
+partition Artifact {
+  :Stage operator image;
+  :Run image scan on staged artifact;
+}
+
+partition Runtime {
+  :Execute qualification runtime suites;
+  :Run Helm qualification validation;
+  note right
+    Qualification uses selected released
+    Splunk Enterprise version inputs.
+    It is not tied to the moving develop
+    default enterprise image.
+  end note
+  note right
+    EKS, Helm, and related qualification slices
+    stay explicit in their own MR.
+  end note
+}
+
+partition Reporting {
+  :Collect compatibility evidence;
+  :Publish qualification report;
+}
+
+stop
+@enduml

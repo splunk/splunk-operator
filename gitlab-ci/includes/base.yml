@@ -1,0 +1,83 @@
+stages:
+  - verify
+  - test
+  - build
+  - image_scan
+  - integration
+
+variables:
+  GIT_DEPTH: "0"
+  GOCACHE: "/tmp/go-build"
+  GOMODCACHE: "/go/pkg/mod"
+  GOTOOLCHAIN: "auto"
+  GOWORK: "off"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+default:
+  image: docker.repo.splunkdev.net/ci-cd/ci-container/golang-1.25-aws:5.1.0
+  interruptible: true
+  before_script:
+    - |
+      set -eu
+      go version
+
+# Current minimal-lane contract: map the staged project variables into the
+# standard AWS environment expected by the build, scan, and smoke scripts.
+# The later auth-hardening MR will replace this with project onboarding for
+# ephemeral creds-helper / Vault roles.
+.aws-staging-env-job:
+  variables:
+    AWS_ACCESS_KEY_ID: $STAGING_AWS_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $STAGING_AWS_SECRET_ACCESS_KEY
+    AWS_DEFAULT_REGION: $STAGING_AWS_DEFAULT_REGION
+
+.go-verify-job:
+  stage: verify
+
+.go-test-job:
+  stage: test
+
+.runtime-artifact-job:
+  artifacts:
+    when: always
+    expire_in: 90 days
+
+.runtime-build-job:
+  extends:
+    - .runtime-artifact-job
+    - .aws-staging-env-job
+  stage: build
+
+.runtime-image-scan-job:
+  extends:
+    - .runtime-artifact-job
+    - .aws-staging-env-job
+  stage: image_scan
+
+.runtime-integration-job:
+  extends:
+    - .runtime-artifact-job
+    - .aws-staging-env-job
+  stage: integration
+  interruptible: false
+
+.python-venv-job:
+  before_script:
+    - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
+    - ensure_python_venv_tooling
+    - python3 --version
+
+.kubectl-splunk-python-job:
+  extends: .python-venv-job
+  # GitLab replaces before_script on extend, so this intentionally repeats the
+  # parent bootstrap before adding the kubectl-splunk-specific virtualenv setup.
+  before_script:
+    - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
+    - ensure_python_venv_tooling
+    - python3 --version
+    - python3 -m venv /tmp/kubectl-splunk-venv
+    - . /tmp/kubectl-splunk-venv/bin/activate
+    - pip install --upgrade pip
+    - pip install coverage pytest
+    - pip install -r tools/kubectl-splunk/requirements.txt
+    - pip install -e tools/kubectl-splunk
