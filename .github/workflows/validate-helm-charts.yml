@@ -1,0 +1,85 @@
+name: Validate Helm Charts
+permissions:
+  contents: read
+  pull-requests: write
+on:
+  pull_request:
+    paths:
+      - 'helm-chart/**/*.tgz'
+      - 'helm-chart/**/Chart.yaml'
+      - 'helm-chart/**/values.yaml'
+      - 'tools/validate-helm-charts.sh'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'helm-chart/**/*.tgz'
+      - 'helm-chart/**/Chart.yaml'
+      - 'helm-chart/**/values.yaml'
+      - 'tools/validate-helm-charts.sh'
+  workflow_dispatch:
+
+jobs:
+  validate-chart-tgz-files:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Validate Helm chart tgz files
+        run: |
+          chmod +x tools/validate-helm-charts.sh
+          ./tools/validate-helm-charts.sh
+
+      - name: Comment on PR with validation results
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Helm Chart Validation Failed**\n\nThe `tools/validate-helm-charts.sh` script detected issues with Helm chart tgz files.\n\nPlease check the workflow logs for details and ensure:\n- Operator chart tgz files contain only `splunk-operator/` content (not `splunk-enterprise/`)\n- File sizes are reasonable (3.x charts ~5-10KB, 2.x charts ~400-430KB)\n- No tgz files over 1MB\n\nSee workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
+            })
+
+  lint-helm-charts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install Helm
+        run: |
+          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+          chmod 700 get_helm.sh
+          DESIRED_VERSION=v3.8.2 bash get_helm.sh
+
+      - name: Lint splunk-operator chart
+        run: |
+          helm lint helm-chart/splunk-operator
+
+      - name: Lint splunk-enterprise chart
+        run: |
+          helm lint helm-chart/splunk-enterprise
+
+      - name: Test template rendering for common deployments
+        run: |
+          # Test default values
+          helm template test-default helm-chart/splunk-enterprise --dry-run > /dev/null
+
+          # Test c3 deployment
+          helm template test-c3 helm-chart/splunk-enterprise \
+            --set sva.c3.enabled=true \
+            --set "sva.c3.indexerClusters[0].name=idx1" \
+            --set "sva.c3.searchHeadClusters[0].name=shc1" \
+            --set clusterManager.enabled=true \
+            --dry-run > /dev/null
+
+          # Test s1 deployment
+          helm template test-s1 helm-chart/splunk-enterprise \
+            --set sva.s1.enabled=true \
+            --dry-run > /dev/null
+
+          echo "✅ All template rendering tests passed"
