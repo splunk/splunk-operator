@@ -83,7 +83,26 @@ If you prefer not to use cert-manager, you can provide your own TLS certificates
 
 ### Deployment Options
 
-#### Option 1: Use the Webhook-Enabled Kustomize Overlay
+#### Option 1: Enable via Helm Feature Gates
+
+If deploying with Helm, enable the feature gate through the `splunkOperator.featureGates` value:
+
+```bash
+helm install splunk-operator splunk/splunk-operator \
+  --set splunkOperator.featureGates.ValidationWebhook=true
+```
+
+Or in your values file:
+
+```yaml
+splunkOperator:
+  featureGates:
+    ValidationWebhook: true
+```
+
+**Note:** This requires the webhook Kubernetes resources (Service, ValidatingWebhookConfiguration, TLS certificates) to be deployed separately.
+
+#### Option 2: Use the Webhook-Enabled Kustomize Overlay
 
 Deploy using the `config/default-with-webhook` overlay which includes all necessary webhook components and enables the `ValidationWebhook` feature gate automatically:
 
@@ -94,7 +113,7 @@ make deploy IMG=<your-image> ENVIRONMENT=default-with-webhook \
 
 This uses the same `make deploy` target as the standard deployment, which substitutes the `WATCH_NAMESPACE`, `SPLUNK_ENTERPRISE_IMAGE`, and `SPLUNK_GENERAL_TERMS` placeholder values before running `kustomize build`.
 
-#### Option 2: Enable via Feature Gate on Existing Deployment
+#### Option 3: Enable via Feature Gate on Existing Deployment
 
 If you already have the operator deployed with the webhook Kubernetes resources (Service, ValidatingWebhookConfiguration, TLS certificates), enable the feature gate by patching the container args:
 
@@ -105,7 +124,7 @@ kubectl patch deployment splunk-operator-controller-manager -n splunk-operator \
 
 **Note:** This requires the webhook service, ValidatingWebhookConfiguration, and TLS certificates to already be deployed. Use Option 1 for a complete deployment.
 
-#### Option 3: Modify Default Kustomization
+#### Option 4: Modify Default Kustomization
 
 Edit `config/default/kustomization.yaml` to uncomment the webhook-related sections:
 
