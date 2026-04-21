@@ -199,6 +199,33 @@ docker-buildx:
             $$BUILDER_IMAGE_ARG \
             --tag "${IMG}" -f "$$DOCKERFILE" .
 
+.PHONY: setup/kubectl
+setup/kubectl:
+	@if [ -z "${KUBECTL_VERSION}" ] || [ -z "${CI_BIN_DIR}" ]; then \
+		echo "Error: KUBECTL_VERSION and CI_BIN_DIR are required"; \
+		exit 1; \
+	fi
+	@mkdir -p "${CI_BIN_DIR}"
+	@if [ ! -x "${CI_BIN_DIR}/kubectl" ]; then \
+		curl -fsSL -o "${CI_BIN_DIR}/kubectl" "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"; \
+		chmod +x "${CI_BIN_DIR}/kubectl"; \
+	fi
+
+.PHONY: setup/eksctl
+setup/eksctl:
+	@if [ -z "${EKSCTL_VERSION}" ] || [ -z "${CI_BIN_DIR}" ]; then \
+		echo "Error: EKSCTL_VERSION and CI_BIN_DIR are required"; \
+		exit 1; \
+	fi
+	@mkdir -p "${CI_BIN_DIR}"
+	@if [ ! -x "${CI_BIN_DIR}/eksctl" ]; then \
+		tmp_archive="/tmp/eksctl-${EKSCTL_VERSION}-amd64.tar.gz"; \
+		curl --silent --location -o "$$tmp_archive" "https://github.com/weaveworks/eksctl/releases/download/${EKSCTL_VERSION}/eksctl_$$(uname -s)_amd64.tar.gz"; \
+		tar -xzf "$$tmp_archive" -C "${CI_BIN_DIR}" eksctl; \
+		chmod +x "${CI_BIN_DIR}/eksctl"; \
+		rm -f "$$tmp_archive"; \
+	fi
+
 
 
 ##@ Deployment
