@@ -55,7 +55,11 @@ first_nonempty() {
     fi
   done
 
-  return 1
+  # Optional pipeline inputs often resolve through this helper inside command
+  # substitutions under `set -e`. Return an empty string instead of failing so
+  # callers can explicitly validate required values after fallback resolution.
+  printf '%s' ""
+  return 0
 }
 
 install_os_packages() {
