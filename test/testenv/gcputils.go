@@ -394,7 +394,7 @@ func UploadFilesToGCP(bucketName, gcpTestDir string, appList []string, uploadDir
 }
 
 // DisableAppsToGCP untars apps, modifies their config files to disable them, re-tars, and uploads the disabled versions to GCP
-func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir string) error {
+func DisableAppsToGCP(bucketName string, downloadDir string, appFileList []string, gcpTestDir string) error {
 	// Create directories for untarred and disabled apps
 	untarredAppsMainFolder := filepath.Join(downloadDir, "untarred_apps")
 	disabledAppsFolder := filepath.Join(downloadDir, "disabled_apps")
@@ -429,8 +429,25 @@ func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir strin
 			return err
 		}
 
+		// Find the app root directory inside the extracted folder
+		entries, err := os.ReadDir(untarredCurrentAppFolder)
+		if err != nil {
+			logf.Log.Error(err, "Unable to read untarred app folder", "Folder", untarredCurrentAppFolder)
+			return err
+		}
+		var appRootDir string
+		for _, entry := range entries {
+			if entry.IsDir() {
+				appRootDir = filepath.Join(untarredCurrentAppFolder, entry.Name())
+				break
+			}
+		}
+		if appRootDir == "" {
+			return fmt.Errorf("no app root directory found in %s", untarredCurrentAppFolder)
+		}
+
 		// Disable the app by modifying its config file
-		appConfFile := filepath.Join(untarredCurrentAppFolder, "default", "app.conf")
+		appConfFile := filepath.Join(appRootDir, "default", "app.conf")
 		err = disableAppConfig(appConfFile)
 		if err != nil {
 			logf.Log.Error(err, "Failed to disable app config", "File", appConfFile)
@@ -447,7 +464,7 @@ func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir strin
 	}
 
 	// Upload disabled apps to GCP
-	_, err = UploadFilesToGCP(testIndexesGCPBucket, gcpTestDir, appFileList, disabledAppsFolder)
+	_, err = UploadFilesToGCP(bucketName, gcpTestDir, appFileList, disabledAppsFolder)
 	if err != nil {
 		logf.Log.Error(err, "Failed to upload disabled apps to GCP")
 		return err
@@ -474,6 +491,9 @@ func untarFile(src, dest string) error {
 
 	for {
 		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
 			return err
 		}
@@ -483,15 +503,6 @@ func untarFile(src, dest string) error {
 		if !strings.HasPrefix(targetPath, filepath.Clean(dest)+string(os.PathSeparator)) {
 			return fmt.Errorf("invalid file path: %s", targetPath)
 		}
-
-		if err == io.EOF {
-			break // End of archive
-		}
-		if err != nil {
-			return err
-		}
-
-		targetPath = filepath.Join(dest, header.Name)
 
 		switch header.Typeflag {
 		case tar.TypeDir:

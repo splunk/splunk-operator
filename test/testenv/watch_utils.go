@@ -67,6 +67,7 @@ func (testenv *TestCaseEnv) WatchForCRPhase(ctx context.Context, deployment *Dep
 			testenv.Log.Info("CR reached expected phase", "kind", crKind, "name", crName, "phase", expectedPhase)
 			return true, nil
 		}
+		testenv.Log.Info("CR phase not yet expected", "kind", crKind, "name", crName, "currentPhase", currentPhase, "expectedPhase", expectedPhase)
 		return false, nil
 	})
 }

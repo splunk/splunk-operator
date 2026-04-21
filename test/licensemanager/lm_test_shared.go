@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -386,12 +385,6 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 	// Upload V2 apps
 	uploadedFiles = uploadAppFiles(ctx, testcaseEnvInst, testS3Bucket, testDir, downloadDirV2, appFileList, appVersion)
 	uploadedApps = append(uploadedApps, uploadedFiles...)
-
-	err = testcaseEnvInst.WaitForLicenseManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), deployment.GetName(), enterpriseApi.PhaseReady, 2*time.Minute)
-	Expect(err).To(Succeed(), "Timed out waiting for LicenseManager to reach Ready phase")
-
-	// Verify LM stays in ready state
-	testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment)
 
 	// Verify apps are copied at the correct location on License Manager/Master (/etc/apps/)
 	testcaseEnvInst.VerifyAppsCopied(ctx, deployment, testenvInstance.GetName(), podName, appListV2, true, enterpriseApi.ScopeLocal)

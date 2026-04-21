@@ -20,6 +20,47 @@ if [[ -z "${GKE_CLUSTER_K8_VERSION}" ]]; then
   export GKE_CLUSTER_K8_VERSION="1.29"
 fi
 
+function setupServiceAccountAuth() {
+  echo "Creating long-lived service account for CI test runs..."
+
+  kubectl create serviceaccount ci-test-runner -n kube-system 2>/dev/null || true
+  kubectl create clusterrolebinding ci-test-runner-admin \
+    --clusterrole=cluster-admin \
+    --serviceaccount=kube-system:ci-test-runner 2>/dev/null || true
+
+  cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ci-test-runner-token
+  namespace: kube-system
+  annotations:
+    kubernetes.io/service-account.name: ci-test-runner
+type: kubernetes.io/service-account-token
+EOF
+
+  echo "Waiting for service account token to be populated..."
+  TOKEN=""
+  for i in $(seq 1 30); do
+    TOKEN=$(kubectl get secret ci-test-runner-token -n kube-system -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null)
+    if [ -n "${TOKEN}" ]; then
+      break
+    fi
+    sleep 2
+  done
+
+  if [ -z "${TOKEN}" ]; then
+    echo "WARNING: Failed to obtain service account token, keeping exec-based auth"
+    return 0
+  fi
+
+  kubectl config set-credentials ci-test-runner --token="${TOKEN}"
+  kubectl config set-context --current --user=ci-test-runner
+
+  echo "Switched kubeconfig to long-lived service account token"
+  kubectl cluster-info
+}
+
 function deleteCluster() {
   echo "Cleanup remaining PVC on the GKE Cluster ${TEST_CLUSTER_NAME}"
   tools/cleanup.sh
@@ -49,7 +90,8 @@ function createCluster() {
       --subnetwork ${GCP_SUBNETWORK} \
       --machine-type n2-standard-8  \
       --scopes "https://www.googleapis.com/auth/cloud-platform" \
-      --enable-ip-alias 
+      --enable-ip-alias \
+      --cluster-version=${GKE_CLUSTER_K8_VERSION}
     if [ $? -ne 0 ]; then
       echo "Unable to create cluster - ${TEST_CLUSTER_NAME}"
       return 1
@@ -67,7 +109,8 @@ function createCluster() {
       return 1
   fi
 
-  # Output
+  setupServiceAccountAuth
+
   echo "GKE cluster nodes:"
   kubectl get nodes
 }

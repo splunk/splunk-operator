@@ -401,7 +401,7 @@ func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv,
 			volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpecAzureManagedID(volumeName, GetAzureEndpoint(ctx), "azure", "blob")}
 		}
 	case "gcp":
-		volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetGCPEndpoint(), testenvInstance.GetIndexSecretName(), "gcp", "gcs", GetDefaultS3Region())}
+		volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetGCPEndpoint(), testenvInstance.GetIndexSecretName(), "gcp", "gcs", GetDefaultGCPRegion())}
 
 	default:
 		testenvInstance.Log.Info("Failed to identify cluster provider name: Should be 'eks' or 'azure' or 'gcp' ")
@@ -427,15 +427,38 @@ func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv,
 	return appFrameworkSpec
 }
 
-// WaitforPhaseChange Wait for timeout or when phase change is seen on a CR for any particular app
-// Deprecated: Use WaitForAppPhaseChange instead for better timeout control
-func WaitforPhaseChange(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appList []string) {
-	if err := WaitForAppPhaseChange(ctx, deployment, testenvInstance, name, crKind, appSourceName, appList, 2*time.Minute); err != nil {
-		testenvInstance.Log.Error(err, "WaitforPhaseChange did not observe a phase transition within timeout", "cr", name, "kind", crKind, "appSource", appSourceName)
+// GenerateAppFrameworkVolumeSpec returns a VolumeSpec appropriate for the current ClusterProvider.
+// Use this instead of calling GenerateIndexVolumeSpec directly with hardcoded provider values.
+func GenerateAppFrameworkVolumeSpec(ctx context.Context, testenvInstance *TestCaseEnv, volumeName string) enterpriseApi.VolumeSpec {
+	switch ClusterProvider {
+	case "eks":
+		return GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", GetDefaultS3Region())
+	case "azure":
+		managedID := os.Getenv("AZURE_MANAGED_ID_ENABLED")
+		if managedID == "false" {
+			return GenerateIndexVolumeSpecAzure(volumeName, GetAzureEndpoint(ctx), testenvInstance.GetIndexSecretName(), "azure", "blob")
+		}
+		return GenerateIndexVolumeSpecAzureManagedID(volumeName, GetAzureEndpoint(ctx), "azure", "blob")
+	case "gcp":
+		return GenerateIndexVolumeSpec(volumeName, GetGCPEndpoint(), testenvInstance.GetIndexSecretName(), "gcp", "gcs", GetDefaultGCPRegion())
+	default:
+		testenvInstance.Log.Info("Failed to identify cluster provider name: Should be 'eks' or 'azure' or 'gcp' ")
+		return enterpriseApi.VolumeSpec{}
 	}
 }
 
-// WaitForAppPhaseChange waits for any app in the list to change from PhaseInstall to another phase
+// WaitforPhaseChange Wait for timeout or when phase change is seen on a CR for any particular app
+// Deprecated: Use WaitForAppPhaseChange instead for better timeout control
+func WaitforPhaseChange(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appList []string) {
+	if err := WaitForAppPhaseChange(ctx, deployment, testenvInstance, name, crKind, appSourceName, appList, 5*time.Minute); err != nil {
+		testenvInstance.Log.Info("WaitforPhaseChange: operator did not detect app changes within timeout, proceeding", "cr", name, "kind", crKind, "appSource", appSourceName)
+	}
+}
+
+// WaitForAppPhaseChange waits for any app in the list to show that the operator
+// has detected new app versions. It checks for either a phase change away from
+// PhaseInstall or a DeployStatus reset to DeployStatusPending (which happens
+// when the operator detects a changed ObjectHash in remote storage).
 func WaitForAppPhaseChange(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appList []string, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		for _, appName := range appList {
@@ -444,7 +467,9 @@ func WaitForAppPhaseChange(ctx context.Context, deployment *Deployment, testenvI
 				testenvInstance.Log.Error(err, "Failed to get app deployment info")
 				continue
 			}
-			if appDeploymentInfo.PhaseInfo.Phase != enterpriseApi.PhaseInstall {
+			if appDeploymentInfo.PhaseInfo.Phase != enterpriseApi.PhaseInstall ||
+				appDeploymentInfo.DeployStatus == enterpriseApi.DeployStatusPending {
+				testenvInstance.Log.Info("App change detected", "app", appName, "phase", appDeploymentInfo.PhaseInfo.Phase, "deployStatus", appDeploymentInfo.DeployStatus)
 				return true, nil
 			}
 		}

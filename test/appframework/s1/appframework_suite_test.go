@@ -11,9 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package c3gcpappfw
+package s1appfw
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -36,18 +37,19 @@ const (
 
 var (
 	testenvInstance       *testenv.TestEnv
-	testSuiteName         = "c3appfw-" + testenv.RandomDNSName(3)
+	testSuiteName         = "s1appfw-" + testenv.RandomDNSName(3)
 	appListV1             []string
 	appListV2             []string
-	testDataGcsBucket     = os.Getenv("TEST_BUCKET")
-	testGcsBucket         = os.Getenv("TEST_INDEXES_S3_BUCKET")
-	gcsAppDirV1           = testenv.AppLocationV1
-	gcsAppDirV2           = testenv.AppLocationV2
-	gcsPVTestApps         = testenv.PVTestAppsLocation
+	testDataS3Bucket      = os.Getenv("TEST_BUCKET")
+	testS3Bucket          = os.Getenv("TEST_INDEXES_S3_BUCKET")
+	s3AppDirV1            = testenv.AppLocationV1
+	s3AppDirV2            = testenv.AppLocationV2
+	s3PVTestApps          = testenv.PVTestAppsLocation
 	currDir, _            = os.Getwd()
-	downloadDirV1         = filepath.Join(currDir, "c3appfwV1-"+testenv.RandomDNSName(4))
-	downloadDirV2         = filepath.Join(currDir, "c3appfwV2-"+testenv.RandomDNSName(4))
-	downloadDirPVTestApps = filepath.Join(currDir, "c3appfwPVTestApps-"+testenv.RandomDNSName(4))
+	downloadDirV1         = filepath.Join(currDir, "s1appfwV1-"+testenv.RandomDNSName(4))
+	downloadDirV2         = filepath.Join(currDir, "s1appfwV2-"+testenv.RandomDNSName(4))
+	downloadDirPVTestApps = filepath.Join(currDir, "s1appfwPVTestApps-"+testenv.RandomDNSName(4))
+	cloudBackend          testenv.CloudStorageBackend
 )
 
 // TestBasic is the main entry point
@@ -56,36 +58,30 @@ func TestBasic(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	sc, _ := GinkgoConfiguration()
-	sc.Timeout = testenv.LongSuiteTimeout
+	sc.Timeout = testenv.MediumSuiteTimeout
 
 	RunSpecs(t, "Running "+testSuiteName, sc)
 }
 
 var _ = BeforeSuite(func() {
+	ctx := context.TODO()
 	var err error
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
 
-	if testenv.ClusterProvider == "gcp" {
-		// Create a list of apps to upload to Gcs
-		appListV1 = testenv.BasicApps
-		appFileList := testenv.GetAppFileList(appListV1)
+	cloudBackend = testenv.NewCloudStorageBackend(testS3Bucket, testDataS3Bucket)
 
-		// Download V1 Apps from Gcs
-		err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V1 app files")
+	appListV1 = testenv.BasicApps
+	appFileList := testenv.GetAppFileList(appListV1)
 
-		// Create a list of apps to upload to Gcs after poll period
-		appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
-		appFileList = testenv.GetAppFileList(appListV2)
+	err = cloudBackend.DownloadFiles(ctx, s3AppDirV1, downloadDirV1, appFileList)
+	Expect(err).To(Succeed(), "Unable to download V1 app files")
 
-		// Download V2 Apps from Gcs
-		err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV2, downloadDirV2, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V2 app files")
-	} else {
-		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenv.ClusterProvider)
-	}
+	appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
+	appFileList = testenv.GetAppFileList(appListV2)
 
+	err = cloudBackend.DownloadFiles(ctx, s3AppDirV2, downloadDirV2, appFileList)
+	Expect(err).To(Succeed(), "Unable to download V2 app files")
 })
 
 var _ = AfterSuite(func() {
@@ -93,13 +89,9 @@ var _ = AfterSuite(func() {
 		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 	}
 
-	if testenvInstance != nil {
-		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
-	}
-
 	// Delete locally downloaded app files
 	err := os.RemoveAll(downloadDirV1)
-	Expect(err).To(Succeed(), "Unable to delete locally downloaded V1 app files.")
+	Expect(err).To(Succeed(), "Unable to delete locally downloaded V1 app files")
 	err = os.RemoveAll(downloadDirV2)
-	Expect(err).To(Succeed(), "Unable to delete locally downloaded V2 app files.")
+	Expect(err).To(Succeed(), "Unable to delete locally downloaded V2 app files")
 })
