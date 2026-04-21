@@ -35,6 +35,7 @@ eks-smoke-validation:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH && $CI_COMMIT_TITLE =~ /^Merge /'
     - if: '$CI_COMMIT_BRANCH == "develop"'
   variables:
     WORKFLOW_SLUG: int-test-workflow
