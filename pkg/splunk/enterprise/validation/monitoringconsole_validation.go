@@ -32,10 +32,25 @@ func ValidateMonitoringConsoleCreate(obj *enterpriseApi.MonitoringConsole) field
 	return allErrs
 }
 
+// ValidateMonitoringConsoleCreateWithContext validates a MonitoringConsole on CREATE with ValidationContext
+func ValidateMonitoringConsoleCreateWithContext(obj *enterpriseApi.MonitoringConsole, vc *ValidationContext) field.ErrorList {
+	allErrs := ValidateMonitoringConsoleCreate(obj)
+	if len(obj.Spec.ImagePullSecrets) > 0 {
+		allErrs = append(allErrs, ValidateImagePullSecretsExistence(
+			obj.Spec.ImagePullSecrets, vc, field.NewPath("spec").Child("imagePullSecrets"))...)
+	}
+	return allErrs
+}
+
 // ValidateMonitoringConsoleUpdate validates a MonitoringConsole on UPDATE
 // TODO: Add immutable field validation here (e.g., compare obj vs oldObj for fields that cannot change after creation)
 func ValidateMonitoringConsoleUpdate(obj, oldObj *enterpriseApi.MonitoringConsole) field.ErrorList {
 	return ValidateMonitoringConsoleCreate(obj)
+}
+
+// ValidateMonitoringConsoleUpdateWithContext validates a MonitoringConsole on UPDATE with ValidationContext
+func ValidateMonitoringConsoleUpdateWithContext(obj, oldObj *enterpriseApi.MonitoringConsole, vc *ValidationContext) field.ErrorList {
+	return ValidateMonitoringConsoleCreateWithContext(obj, vc)
 }
 
 // GetMonitoringConsoleWarningsOnCreate returns warnings for MonitoringConsole CREATE

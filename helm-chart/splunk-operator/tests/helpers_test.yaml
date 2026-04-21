@@ -1,0 +1,57 @@
+suite: helpers
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: should use default operator fullname
+    asserts:
+      - equal:
+          path: metadata.name
+          value: splunk-operator-controller-manager
+
+  - it: should allow overriding operator name
+    set:
+      splunkOperator.nameOverride: my-operator
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-operator-controller-manager
+
+  - it: should use default namespace from release
+    release:
+      namespace: test-ns
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: test-ns
+
+  - it: should allow namespace override
+    release:
+      namespace: test-ns
+    set:
+      namespaceOverride: overridden-ns
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: overridden-ns
+
+  - it: should include common labels
+    chart:
+      version: 1.2.3
+      appVersion: 3.1.0
+    release:
+      name: my-release
+    asserts:
+      - exists:
+          path: metadata.labels["helm.sh/chart"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+      - equal:
+          path: metadata.labels["app.kubernetes.io/version"]
+          value: "3.1.0"
+
+  - it: should derive service account name from operator fullname
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: splunk-operator-controller-manager

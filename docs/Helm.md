@@ -44,6 +44,8 @@ helm show values splunk/splunk-operator
 
 ### Configuring Splunk Operator deployments
 
+**Note: The `SPLUNK_GENERAL_TERMS` environment variable is set to an empty string by default. This will need to be manually updated to the required value. See [SplunkGeneralTermsMigration.md](SplunkGeneralTermsMigration.html) for instructions on how to set the variable using helm commands with both the splunk/splunk-operator and splunk/splunk-enterprise charts.**
+
 There are a couple ways you can configure your operator deployment
 
 1. Using a ```new_values.yaml``` file to override default values (Recommended)

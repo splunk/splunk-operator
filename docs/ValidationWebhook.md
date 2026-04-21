@@ -23,9 +23,11 @@ The validation webhook is **disabled by default** and must be explicitly enabled
 
 ### Prerequisites
 
-Before enabling the webhook, ensure you have:
+Before enabling the webhook, you need TLS certificates for the webhook server. You have two options:
 
-1. **cert-manager** installed in your cluster (required for TLS certificate management)
+#### Option A: Use cert-manager (Recommended)
+
+Install cert-manager to automatically manage TLS certificates:
 
 ```bash
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.0/cert-manager.yaml
@@ -33,29 +35,96 @@ kubectl wait --for=condition=Available --timeout=300s deployment/cert-manager -n
 kubectl wait --for=condition=Available --timeout=300s deployment/cert-manager-webhook -n cert-manager
 ```
 
+#### Option B: Use Your Own Certificates
+
+If you prefer not to use cert-manager, you can provide your own TLS certificates:
+
+1. **Generate certificates** for the webhook service. The certificate must have:
+   - **Common Name (CN):** `splunk-operator-webhook-service.splunk-operator.svc`
+   - **Subject Alternative Names (SANs):**
+     - `splunk-operator-webhook-service.splunk-operator.svc`
+     - `splunk-operator-webhook-service.splunk-operator.svc.cluster.local`
+
+   Example using OpenSSL:
+   ```bash
+   # Generate CA
+   openssl genrsa -out ca.key 2048
+   openssl req -x509 -new -nodes -key ca.key -days 365 -out ca.crt -subj "/CN=splunk-webhook-ca"
+
+   # Generate server key and CSR
+   openssl genrsa -out tls.key 2048
+   openssl req -new -key tls.key -out server.csr -subj "/CN=splunk-operator-webhook-service.splunk-operator.svc" \
+     -config <(cat /etc/ssl/openssl.cnf <(printf "\n[SAN]\nsubjectAltName=DNS:splunk-operator-webhook-service.splunk-operator.svc,DNS:splunk-operator-webhook-service.splunk-operator.svc.cluster.local"))
+
+   # Sign the certificate
+   openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out tls.crt -days 365 \
+     -extensions SAN -extfile <(cat /etc/ssl/openssl.cnf <(printf "\n[SAN]\nsubjectAltName=DNS:splunk-operator-webhook-service.splunk-operator.svc,DNS:splunk-operator-webhook-service.splunk-operator.svc.cluster.local"))
+   ```
+
+2. **Create the webhook certificate Secret:**
+   ```bash
+   kubectl create secret tls webhook-server-cert \
+     --cert=tls.crt \
+     --key=tls.key \
+     -n splunk-operator
+   ```
+
+3. **Inject the CA bundle** into the ValidatingWebhookConfiguration:
+   ```bash
+   # Get base64-encoded CA certificate
+   CA_BUNDLE=$(cat ca.crt | base64 | tr -d '\n')
+
+   # Patch the webhook configuration
+   kubectl patch validatingwebhookconfiguration splunk-operator-validating-webhook-configuration \
+     --type='json' -p="[{'op': 'replace', 'path': '/webhooks/0/clientConfig/caBundle', 'value': '${CA_BUNDLE}'}]"
+   ```
+
+4. **Deploy without cert-manager:** Use the `config/default-with-webhook` overlay but skip the certmanager components, or manually deploy the webhook components.
+
 ### Deployment Options
 
-#### Option 1: Use the Webhook-Enabled Kustomize Overlay
+#### Option 1: Enable via Helm Feature Gates
 
-Deploy using the `config/default-with-webhook` overlay which includes all necessary webhook components:
-
-```bash
-# Build and apply the webhook-enabled configuration
-kustomize build config/default-with-webhook | kubectl apply -f -
-```
-
-#### Option 2: Enable Webhook on Existing Deployment
-
-If you already have the operator deployed, you can enable the webhook by setting the `ENABLE_VALIDATION_WEBHOOK` environment variable:
+If deploying with Helm, enable the feature gate through the `splunkOperator.featureGates` value:
 
 ```bash
-kubectl set env deployment/splunk-operator-controller-manager \
-  ENABLE_VALIDATION_WEBHOOK=true -n splunk-operator
+helm install splunk-operator splunk/splunk-operator \
+  --set splunkOperator.featureGates.ValidationWebhook=true
 ```
 
-**Note:** This option also requires the webhook service, ValidatingWebhookConfiguration, and TLS certificates to be deployed. Use Option 1 for a complete deployment.
+Or in your values file:
 
-#### Option 3: Modify Default Kustomization
+```yaml
+splunkOperator:
+  featureGates:
+    ValidationWebhook: true
+```
+
+**Note:** This requires the webhook Kubernetes resources (Service, ValidatingWebhookConfiguration, TLS certificates) to be deployed separately.
+
+#### Option 2: Use the Webhook-Enabled Kustomize Overlay
+
+Deploy using the `config/default-with-webhook` overlay which includes all necessary webhook components and enables the `ValidationWebhook` feature gate automatically:
+
+```bash
+make deploy IMG=<your-image> ENVIRONMENT=default-with-webhook \
+  SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com"
+```
+
+This uses the same `make deploy` target as the standard deployment, which substitutes the `WATCH_NAMESPACE`, `SPLUNK_ENTERPRISE_IMAGE`, and `SPLUNK_GENERAL_TERMS` placeholder values before running `kustomize build`.
+
+#### Option 3: Enable via Feature Gate on Existing Deployment
+
+If you already have the operator deployed with the webhook Kubernetes resources (Service, ValidatingWebhookConfiguration, TLS certificates), enable the feature gate by patching the container args:
+
+```bash
+kubectl patch deployment splunk-operator-controller-manager -n splunk-operator \
+  --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--feature-gates=ValidationWebhook=true"}]'
+```
+
+**Note:** This requires the webhook service, ValidatingWebhookConfiguration, and TLS certificates to already be deployed. Use Option 1 for a complete deployment.
+
+#### Option 4: Modify Default Kustomization
 
 Edit `config/default/kustomization.yaml` to uncomment the webhook-related sections:
 
@@ -71,6 +140,14 @@ Then deploy:
 make deploy IMG=<your-image> SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com"
 ```
 
+### Legacy: ENABLE_VALIDATION_WEBHOOK Environment Variable
+
+> **Deprecated:** The `ENABLE_VALIDATION_WEBHOOK` environment variable is deprecated and will be removed in a future release. Use the `--feature-gates=ValidationWebhook=true` flag instead.
+
+For backwards compatibility, setting `ENABLE_VALIDATION_WEBHOOK=true` as an environment variable on the operator container will still enable the validation webhook. The operator logs a deprecation warning when this method is used.
+
+When both the `--feature-gates=ValidationWebhook=...` CLI flag and the `ENABLE_VALIDATION_WEBHOOK` env var are set, the **CLI flag takes precedence**. The env var is applied at startup before flag parsing, so the CLI value overwrites it.
+
 ## Validated Fields
 
 The webhook validates the following spec fields:
@@ -83,6 +160,16 @@ The webhook validates the following spec fields:
 | `spec.varVolumeStorageConfig.storageCapacity` | Must match format `^[0-9]+Gi$` | must be in Gi format (e.g., '10Gi', '100Gi') |
 | `spec.etcVolumeStorageConfig.storageClassName` | Required when `ephemeralStorage=false` and `storageCapacity` is set | storageClassName is required when using persistent storage |
 | `spec.varVolumeStorageConfig.storageClassName` | Required when `ephemeralStorage=false` and `storageCapacity` is set | storageClassName is required when using persistent storage |
+| `spec.etcVolumeStorageConfig.ephemeralStorage` | Mutually exclusive with `storageClassName` and `storageCapacity` | storageClassName/storageCapacity cannot be set when ephemeralStorage is true |
+| `spec.varVolumeStorageConfig.ephemeralStorage` | Mutually exclusive with `storageClassName` and `storageCapacity` | storageClassName/storageCapacity cannot be set when ephemeralStorage is true |
+| `spec.extraEnv[*].name` | Must be unique across all entries | duplicate environment variable |
+| `spec.imagePullSecrets[*].name` | Must be unique across all entries | duplicate secret reference |
+| `spec.imagePullSecrets[*].name` | Must reference an existing Secret in the namespace | not found |
+| `spec.livenessProbe.initialDelaySeconds` | Must be ≥ 0 | must be non-negative |
+| `spec.readinessProbe.initialDelaySeconds` | Must be ≥ 0 | must be non-negative |
+| `spec.startupProbe.initialDelaySeconds` | Must be ≥ 0 | must be non-negative |
+| `spec.resources.requests.cpu` | Must be ≤ `limits.cpu` | request must be less than or equal to limit |
+| `spec.resources.requests.memory` | Must be ≤ `limits.memory` | request must be less than or equal to limit |
 
 ### CRD-Specific Fields
 
@@ -111,6 +198,9 @@ AppFramework configuration is validated only when provided:
 |-------|-----------------|
 | `spec.appRepo.appSources[*].name` | Required (non-empty) |
 | `spec.appRepo.appSources[*].location` | Required (non-empty) |
+| `spec.appRepo.appSources[*]` | Combination of `location` + `scope` must be unique across all appSources |
+| `spec.appRepo.appSources[*].premiumAppsProps` | Required when `scope=premiumApps` |
+| `spec.appRepo.appsRepoPollIntervalSeconds` | Must be ≥ 0 |
 | `spec.appRepo.volumes[*].name` | Required (non-empty) |
 
 ## Example Validation Errors
@@ -167,6 +257,42 @@ Error:
 The Standalone "example" is invalid: spec.smartstore.volumes[0].name: Required value: volume name is required
 ```
 
+### Non-Existent ImagePullSecret
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: example
+  namespace: splunk
+spec:
+  imagePullSecrets:
+    - name: my-registry-secret  # Invalid: secret does not exist in namespace
+```
+
+Error:
+```
+The Standalone "example" is invalid: spec.imagePullSecrets[0].name: Not found: "my-registry-secret"
+```
+
+### Ephemeral Storage with StorageClassName
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: example
+spec:
+  etcVolumeStorageConfig:
+    ephemeralStorage: true
+    storageClassName: "standard"  # Invalid: cannot set with ephemeralStorage=true
+```
+
+Error:
+```
+The Standalone "example" is invalid: spec.etcVolumeStorageConfig.storageClassName: Invalid value: "standard": storageClassName cannot be set when ephemeralStorage is true
+```
+
 ## Verifying Webhook Deployment
 
 ### Check Webhook Pod is Running
@@ -193,7 +319,7 @@ kubectl get validatingwebhookconfiguration splunk-operator-validating-webhook-co
 
 ```bash
 kubectl logs -n splunk-operator deployment/splunk-operator-controller-manager | grep -i webhook
-# Look for: "Validation webhook enabled via ENABLE_VALIDATION_WEBHOOK=true"
+# Look for: "Validation webhook enabled"
 # Look for: "Starting webhook server" {"port": 9443}
 ```
 
@@ -221,6 +347,8 @@ kubectl logs -n splunk-operator deployment/splunk-operator-controller-manager | 
 
 ### Certificate Issues
 
+#### If using cert-manager:
+
 1. Check cert-manager logs:
    ```bash
    kubectl logs -n cert-manager deployment/cert-manager
@@ -236,11 +364,34 @@ kubectl logs -n splunk-operator deployment/splunk-operator-controller-manager | 
    kubectl get issuer -n splunk-operator
    ```
 
+#### If using custom certificates:
+
+1. Verify the Secret exists and contains valid data:
+   ```bash
+   kubectl get secret webhook-server-cert -n splunk-operator -o yaml
+   ```
+
+2. Verify the certificate is valid and not expired:
+   ```bash
+   kubectl get secret webhook-server-cert -n splunk-operator -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -text -noout
+   ```
+
+3. Verify the CA bundle in the webhook configuration matches your CA:
+   ```bash
+   kubectl get validatingwebhookconfiguration splunk-operator-validating-webhook-configuration \
+     -o jsonpath='{.webhooks[0].clientConfig.caBundle}' | base64 -d | openssl x509 -text -noout
+   ```
+
+4. Ensure the certificate SANs include the webhook service DNS name:
+   ```
+   splunk-operator-webhook-service.splunk-operator.svc
+   ```
+
 ### Webhook Disabled
 
 If you see "Validation webhook disabled" in the logs, ensure:
 
-1. The `ENABLE_VALIDATION_WEBHOOK` environment variable is set to `true`
+1. The `--feature-gates=ValidationWebhook=true` flag is set on the operator container args (or the legacy `ENABLE_VALIDATION_WEBHOOK=true` env var is set)
 2. You're using the correct kustomize overlay (`config/default-with-webhook`)
 
 ## Architecture
@@ -252,7 +403,7 @@ The validation webhook consists of:
 | **Webhook Server** | HTTP server listening on port 9443 with TLS |
 | **Validator Registry** | Maps CRD types to their validation functions |
 | **ValidatingWebhookConfiguration** | Kubernetes resource that registers the webhook |
-| **Certificate** | TLS certificate managed by cert-manager |
+| **Certificate** | TLS certificate (managed by cert-manager or provided manually) |
 | **Service** | Kubernetes service exposing the webhook endpoint |
 
 ### Request Flow
@@ -264,14 +415,124 @@ The validation webhook consists of:
 5. Webhook returns Allowed/Denied response
 6. If allowed, the resource is persisted; if denied, user receives error
 
+## Adding a New CRD to the Webhook
+
+To add validation for a new CRD, follow these steps:
+
+### 1. Create Validation Functions
+
+Create a new file `pkg/splunk/enterprise/validation/<crd>_validation.go`:
+
+```go
+package validation
+
+import (
+    "k8s.io/apimachinery/pkg/util/validation/field"
+    enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+)
+
+// Validate<CRD>Create validates a <CRD> on CREATE
+func Validate<CRD>Create(obj *enterpriseApi.<CRD>) field.ErrorList {
+    var allErrs field.ErrorList
+    // Add validation logic
+    allErrs = append(allErrs, validateCommonSplunkSpec(&obj.Spec.CommonSplunkSpec, field.NewPath("spec"))...)
+    return allErrs
+}
+
+// Validate<CRD>CreateWithContext validates with access to Kubernetes API
+// Use this for validations that need to check if resources exist (e.g., Secrets)
+func Validate<CRD>CreateWithContext(obj *enterpriseApi.<CRD>, vc *ValidationContext) field.ErrorList {
+    allErrs := Validate<CRD>Create(obj)
+    if len(obj.Spec.ImagePullSecrets) > 0 {
+        allErrs = append(allErrs, ValidateImagePullSecretsExistence(
+            obj.Spec.ImagePullSecrets, vc, field.NewPath("spec").Child("imagePullSecrets"))...)
+    }
+    return allErrs
+}
+
+// Validate<CRD>Update validates a <CRD> on UPDATE
+func Validate<CRD>Update(obj, oldObj *enterpriseApi.<CRD>) field.ErrorList {
+    return Validate<CRD>Create(obj)
+}
+
+// Validate<CRD>UpdateWithContext validates on UPDATE with Kubernetes API access
+func Validate<CRD>UpdateWithContext(obj, oldObj *enterpriseApi.<CRD>, vc *ValidationContext) field.ErrorList {
+    return Validate<CRD>CreateWithContext(obj, vc)
+}
+
+// Get<CRD>WarningsOnCreate returns warnings for CREATE
+func Get<CRD>WarningsOnCreate(obj *enterpriseApi.<CRD>) []string {
+    return getCommonWarnings(&obj.Spec.CommonSplunkSpec)
+}
+
+// Get<CRD>WarningsOnUpdate returns warnings for UPDATE
+func Get<CRD>WarningsOnUpdate(obj, oldObj *enterpriseApi.<CRD>) []string {
+    return Get<CRD>WarningsOnCreate(obj)
+}
+```
+
+### 2. Register the Validator
+
+Add the GVR and validator to `pkg/splunk/enterprise/validation/registry.go`:
+
+```go
+// Add GVR constant
+var <CRD>GVR = schema.GroupVersionResource{
+    Group:    "enterprise.splunk.com",
+    Version:  "v4",
+    Resource: "<crd>s",  // plural, lowercase
+}
+
+// Add to DefaultValidators map
+var DefaultValidators = map[schema.GroupVersionResource]Validator{
+    // ... existing validators ...
+
+    <CRD>GVR: &GenericValidator[*enterpriseApi.<CRD>]{
+        ValidateCreateFunc:            Validate<CRD>Create,
+        ValidateUpdateFunc:            Validate<CRD>Update,
+        ValidateCreateWithContextFunc: Validate<CRD>CreateWithContext,  // Optional: for resource lookups
+        ValidateUpdateWithContextFunc: Validate<CRD>UpdateWithContext,  // Optional: for resource lookups
+        WarningsOnCreateFunc:          Get<CRD>WarningsOnCreate,
+        WarningsOnUpdateFunc:          Get<CRD>WarningsOnUpdate,
+        GroupKind: schema.GroupKind{
+            Group: "enterprise.splunk.com",
+            Kind:  "<CRD>",
+        },
+    },
+}
+```
+
+### 3. Add Unit Tests
+
+Create `pkg/splunk/enterprise/validation/<crd>_validation_test.go` with test cases.
+
+### 4. Update ValidatingWebhookConfiguration
+
+Add the new resource to `config/webhook/manifests.yaml`:
+
+```yaml
+webhooks:
+  - name: validate.enterprise.splunk.com
+    rules:
+      - apiGroups: ["enterprise.splunk.com"]
+        apiVersions: ["v4"]
+        operations: ["CREATE", "UPDATE"]
+        resources:
+          - standalones
+          - indexerclusters
+          - <crd>s  # Add new resource here
+```
+
+### Context-Aware vs Basic Validation
+
+- **Basic validation** (`ValidateCreateFunc`): For validations that only need the CR itself (field formats, required fields, cross-field rules)
+- **Context-aware validation** (`ValidateCreateWithContextFunc`): For validations that need to query the Kubernetes API (checking if Secrets, ConfigMaps, or other resources exist)
+
+If your CRD doesn't need context-aware validation, you can omit `ValidateCreateWithContextFunc` and `ValidateUpdateWithContextFunc` - the webhook will automatically fall back to the basic validation functions.
+
 ## Disabling the Webhook
 
-To disable the webhook after it has been enabled:
-
-```bash
-kubectl set env deployment/splunk-operator-controller-manager \
-  ENABLE_VALIDATION_WEBHOOK=false -n splunk-operator
-```
+To disable the webhook after it has been enabled, remove the `--feature-gates=ValidationWebhook=true` flag from the container args (or remove the `ENABLE_VALIDATION_WEBHOOK` env var if using the legacy method).
 
 Or redeploy using the default kustomization (without webhook):
 

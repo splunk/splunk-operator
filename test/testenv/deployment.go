@@ -182,7 +182,7 @@ func (d *Deployment) DeployMonitoringConsole(ctx context.Context, name string, L
 	if err != nil {
 		return nil, err
 	}
-	VerifyMonitoringConsoleReady(ctx, d, name, mc, d.testenv)
+	d.testenv.VerifyMonitoringConsoleReady(ctx, d, name, mc)
 	return deployed.(*enterpriseApi.MonitoringConsole), err
 }
 
@@ -205,6 +205,23 @@ func (d *Deployment) GetInstance(ctx context.Context, name string, instance clie
 		return err
 	}
 	return nil
+}
+
+// streamWithContextGuard runs exec.StreamWithContext in a goroutine so the
+// caller returns promptly when ctx is cancelled, even if the underlying SPDY
+// connection is stuck in a TLS IO wait that does not respond to context
+// cancellation.
+func streamWithContextGuard(ctx context.Context, executor remotecommand.Executor, opts remotecommand.StreamOptions) error {
+	ch := make(chan error, 1)
+	go func() {
+		ch <- executor.StreamWithContext(ctx, opts)
+	}()
+	select {
+	case err := <-ch:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // PodExecCommand execute a shell command in the specified pod
@@ -243,7 +260,7 @@ func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []s
 	stdinReader := strings.NewReader(stdin)
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	err = exec.Stream(remotecommand.StreamOptions{
+	err = streamWithContextGuard(ctx, exec, remotecommand.StreamOptions{
 		Stdin:  stdinReader,
 		Stdout: stdout,
 		Stderr: stderr,
@@ -315,7 +332,7 @@ func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string,
 	stdinReader := strings.NewReader(stdin)
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	err = exec.Stream(remotecommand.StreamOptions{
+	err = streamWithContextGuard(ctx, exec, remotecommand.StreamOptions{
 		Stdin:  stdinReader,
 		Stdout: stdout,
 		Stderr: stderr,
@@ -339,7 +356,7 @@ func (d *Deployment) DeployLicenseManager(ctx context.Context, name string) (*en
 		return nil, err
 	}
 	// Verify standalone goes to ready state
-	LicenseManagerReady(ctx, d, d.testenv)
+	d.testenv.VerifyLicenseManagerReady(ctx, d)
 
 	return deployed.(*enterpriseApi.LicenseManager), err
 }
@@ -357,7 +374,7 @@ func (d *Deployment) DeployLicenseMaster(ctx context.Context, name string) (*ent
 		return nil, err
 	}
 	// Verify standalone goes to ready state
-	LicenseMasterReady(ctx, d, d.testenv)
+	d.testenv.VerifyLicenseMasterReady(ctx, d)
 
 	return deployed.(*enterpriseApiV3.LicenseMaster), err
 }
@@ -377,7 +394,7 @@ func (d *Deployment) DeployClusterManager(ctx context.Context, name, LicenseMana
 	}
 
 	// Verify standalone goes to ready state
-	ClusterManagerReady(ctx, d, d.testenv)
+	d.testenv.VerifyClusterManagerReady(ctx, d)
 
 	return deployed.(*enterpriseApi.ClusterManager), err
 }
@@ -397,7 +414,7 @@ func (d *Deployment) DeployClusterMaster(ctx context.Context, name, LicenseManag
 	}
 
 	// Verify standalone goes to ready state
-	ClusterMasterReady(ctx, d, d.testenv)
+	d.testenv.VerifyClusterMasterReady(ctx, d)
 
 	return deployed.(*enterpriseApiV3.ClusterMaster), err
 }
@@ -534,11 +551,13 @@ func (d *Deployment) deployCR(ctx context.Context, name string, cr client.Object
 	// Push the clean up func to delete the cr when done
 	d.pushCleanupFunc(func() error {
 		d.testenv.Log.Info("Deleting cr", "name", name)
-		err := d.testenv.GetKubeClient().Delete(ctx, cr)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Duration(float64(SetupTeardownTimeout)*CleanupGraceFraction))
+		defer cleanupCancel()
+		err := d.testenv.GetKubeClient().Delete(cleanupCtx, cr)
 		if err != nil {
 			return err
 		}
-		if err = wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
+		if err = wait.PollUntilContextCancel(cleanupCtx, PollInterval, true, func(ctx context.Context) (bool, error) {
 			key := client.ObjectKey{Name: name, Namespace: d.testenv.namespace}
 			err := d.testenv.GetKubeClient().Get(ctx, key, cr)
 
@@ -554,7 +573,7 @@ func (d *Deployment) deployCR(ctx context.Context, name string, cr client.Object
 	})
 
 	// Returns once we can retrieve the lm instance
-	if err := wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
+	if err := wait.PollUntilContextTimeout(ctx, PollInterval, DefaultTimeout, true, func(ctx context.Context) (bool, error) {
 		key := client.ObjectKey{Name: name, Namespace: d.testenv.namespace}
 		err := d.testenv.GetKubeClient().Get(ctx, key, cr)
 		if err != nil {
@@ -814,7 +833,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHead(ctx context.Cont
 		return err
 	}
 
-	ClusterMasterReady(ctx, d, d.testenv)
+	d.testenv.VerifyClusterMasterReady(ctx, d)
 
 	// Deploy indexer sites
 	for site := 1; site <= siteCount; site++ {
@@ -886,7 +905,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 		return err
 	}
 
-	ClusterManagerReady(ctx, d, d.testenv)
+	d.testenv.VerifyClusterManagerReady(ctx, d)
 
 	// Deploy indexer sites
 	for site := 1; site <= siteCount; site++ {

@@ -15,7 +15,6 @@ package ingestsearchtest
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -37,18 +36,21 @@ var _ = Describe("Ingest and Search Test", func() {
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	var firstLine string
-	ctx := context.TODO()
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+
+		// Validate test prerequisites early to fail fast
+		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
@@ -62,13 +64,13 @@ var _ = Describe("Ingest and Search Test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("ingest_search, integration, s1: can search internal logs for standalone instance", func() {
+		It("ingest_search, integration, s1: can search internal logs for standalone instance", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Wait for standalone to be in READY Status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
 			Eventually(func() enterpriseApi.Phase {
 				podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
@@ -138,13 +140,13 @@ var _ = Describe("Ingest and Search Test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("ingest_search, integration, s1: can ingest custom data to new index and search", func() {
+		It("ingest_search, integration, s1: can ingest custom data to new index and search", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Wait for standalone to be in READY Status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 
 			// Verify splunk status is up
 			Eventually(func() enterpriseApi.Phase {
@@ -206,8 +208,10 @@ var _ = Describe("Ingest and Search Test", func() {
 
 			searchString := fmt.Sprintf("index=%s | stats count by host", indexName)
 
-			// Wait for ingestion lag prior to searching
-			time.Sleep(2 * time.Second)
+			// Wait for search results to be available instead of fixed sleep
+			err = testenv.WaitForSearchResultsNonEmpty(ctx, deployment, podName, searchString, 2*time.Second)
+			Expect(err).To(Succeed(), "Timed out waiting for search results")
+
 			searchResultsResp, err := testenv.PerformSearchSync(ctx, podName, searchString, deployment)
 			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", podName, searchString)
 

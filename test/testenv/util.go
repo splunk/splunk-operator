@@ -337,7 +337,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName, ansibleConfi
 
 	new := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterManager",
+			Kind: "ClusterMaster",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,
@@ -927,10 +927,10 @@ func DumpGetPvcs(ns string) []string {
 }
 
 // GetConfLineFromPod gets given config from file on POD
-func GetConfLineFromPod(podName string, filePath string, ns string, configName string, stanza string, checkStanza bool) (string, error) {
+func GetConfLineFromPod(ctx context.Context, podName string, filePath string, ns string, configName string, stanza string, checkStanza bool) (string, error) {
 	var config string
 	var err error
-	output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "cat", filePath).Output()
+	output, err := exec.CommandContext(ctx, "kubectl", "exec", "-n", ns, podName, "--", "cat", filePath).Output()
 	if err != nil {
 		cmd := fmt.Sprintf("kubectl exec -n %s %s -- cat %s", ns, podName, filePath)
 		logf.Log.Error(err, "Failed to execute command", "command", cmd)
@@ -1162,9 +1162,9 @@ func GeneratePodNameSlice(formatString string, key string, count int, multisite 
 	return podNames
 }
 
-// GetPodsStartTime prints and returns list of pods in namespace and their respective start time
-func GetPodsStartTime(ns string) map[string]time.Time {
-	splunkPodsStartTime := make(map[string]time.Time)
+// GetPodUIDs returns list of pods in namespace and their respective UIDs
+func GetPodUIDs(ns string) map[string]string {
+	splunkPodUIDs := make(map[string]string)
 	splunkPods := DumpGetPods(ns)
 
 	for _, podName := range splunkPods {
@@ -1174,10 +1174,9 @@ func GetPodsStartTime(ns string) map[string]time.Time {
 		if err != nil {
 			logf.Log.Error(err, "Failed to parse splunk pods")
 		}
-		podStartTime, _ := time.Parse("2006-01-02T15:04:05Z", restResponse.Status.StartTime)
-		splunkPodsStartTime[podName] = podStartTime
+		splunkPodUIDs[podName] = restResponse.Metadata.UID
 	}
-	return splunkPodsStartTime
+	return splunkPodUIDs
 }
 
 // DeletePod Delete pod in the namespace

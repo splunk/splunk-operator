@@ -14,7 +14,6 @@
 package indingsep
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -38,9 +37,7 @@ var _ = Describe("indingsep test", func() {
 
 	var cmSpec enterpriseApi.ClusterManagerSpec
 
-	ctx := context.TODO()
-
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
@@ -49,6 +46,10 @@ var _ = Describe("indingsep test", func() {
 
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+
+		// Validate test prerequisites early to fail fast
+		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
+		Expect(err).To(Succeed(), "Test prerequisites validation failed")
 
 		cmSpec = enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -60,7 +61,7 @@ var _ = Describe("indingsep test", func() {
 		}
 	})
 
-	AfterEach(func() {
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
 		}
@@ -74,7 +75,7 @@ var _ = Describe("indingsep test", func() {
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
-		It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers", func() {
+		It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")
@@ -114,15 +115,15 @@ var _ = Describe("indingsep test", func() {
 
 			// Ensure that Ingestor Cluster is in Ready phase
 			testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster is in Ready phase")
-			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyIngestorReady(ctx, deployment)
 
 			// Ensure that Cluster Manager is in Ready phase
 			testcaseEnvInst.Log.Info("Ensure that Cluster Manager is in Ready phase")
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure that Indexer Cluster is in Ready phase
 			testcaseEnvInst.Log.Info("Ensure that Indexer Cluster is in Ready phase")
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Delete the Indexer Cluster
 			idxc := &enterpriseApi.IndexerCluster{}
@@ -155,7 +156,7 @@ var _ = Describe("indingsep test", func() {
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
-		It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers with additional configurations", func() {
+		It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers with additional configurations", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")
@@ -229,7 +230,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Ensure that Ingestor Cluster is in Ready phase
 			testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster is in Ready phase")
-			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyIngestorReady(ctx, deployment)
 
 			// Upload apps to S3
 			testcaseEnvInst.Log.Info("Upload apps to S3")
@@ -252,8 +253,8 @@ var _ = Describe("indingsep test", func() {
 				CrReplicas:      3,
 			}
 			allAppSourceInfo := []testenv.AppSourceInfo{ingestorAppSourceInfo}
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
+			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 
 			// Verify probe configuration
 			testcaseEnvInst.Log.Info("Get config map for probes")
@@ -263,12 +264,12 @@ var _ = Describe("indingsep test", func() {
 			testcaseEnvInst.Log.Info("Verify probe configurations on Ingestor pods")
 			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
 			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-			testenv.VerifyFilesInDirectoryOnPod(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+			testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
 		})
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
-		It("indingsep, integration, indingsep: Splunk Operator can deploy Ingestors and Indexers with correct setup", func() {
+		It("indingsep, integration, indingsep: Splunk Operator can deploy Ingestors and Indexers with correct setup", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")
@@ -308,15 +309,15 @@ var _ = Describe("indingsep test", func() {
 
 			// Ensure that Ingestor Cluster is in Ready phase
 			testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster is in Ready phase")
-			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyIngestorReady(ctx, deployment)
 
 			// Ensure that Cluster Manager is in Ready phase
 			testcaseEnvInst.Log.Info("Ensure that Cluster Manager is in Ready phase")
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
 
 			// Ensure that Indexer Cluster is in Ready phase
 			testcaseEnvInst.Log.Info("Ensure that Indexer Cluster is in Ready phase")
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
 
 			// Get instance of current Ingestor Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Ingestor Cluster CR with latest config")

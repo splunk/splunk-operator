@@ -27,6 +27,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo/v2"
+	gomega "github.com/onsi/gomega"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
@@ -47,20 +48,17 @@ const (
 	defaultOperatorImage = "splunk/splunk-operator"
 	defaultSplunkImage   = "splunk/splunk:latest"
 
-	// defaultTestTimeout is the max timeout in seconds before async test failed.
-	defaultTestTimeout = 1000000
-
-	// PollInterval specifies the polling interval
+	// PollInterval specifies the polling interval for slow operations (waiting for full cluster readiness)
 	PollInterval = 5 * time.Second
+
+	// ShortPollInterval specifies the polling interval for fast-transitioning states
+	ShortPollInterval = 2 * time.Second
 
 	// ConsistentPollInterval is the interval to use to consistently check a state is stable
 	ConsistentPollInterval = 200 * time.Millisecond
 
 	// ConsistentDuration is use to check a state is stable
 	ConsistentDuration = 2000 * time.Millisecond
-
-	// DefaultTimeout is the max timeout before we failed.
-	DefaultTimeout = 2000 * time.Minute
 
 	// SearchHeadPod Template String for search head pod
 	SearchHeadPod = "splunk-%s-shc-search-head-%d"
@@ -286,9 +284,7 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	// use apireader instead of kubeclient when retrieving resources
 	go func() {
 		err := kubeManager.Start(signals.SetupSignalHandler())
-		if err != nil {
-			panic("Unable to start kube manager. Error: " + err.Error())
-		}
+		gomega.Expect(err).ToNot(gomega.HaveOccurred(), "Error starting kube manager")
 	}()
 
 	return testenv, nil

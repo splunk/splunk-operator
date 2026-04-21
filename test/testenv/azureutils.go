@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -533,7 +532,7 @@ func (client *AzureBlobClient) DeleteFilesOnAzure(ctx context.Context, endPoint,
 }
 
 // DisableAppsOnAzure untar apps, modify their conf file to disable them, re-tar and upload the disabled version to Azure
-func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []string, containerName string) ([]string, error) {
+func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []string, containerName string) error {
 
 	// Create a folder named 'untarred_apps' to store untarred apps folders
 	untarredAppsMainFolder := downloadDir + "/untarred_apps"
@@ -568,8 +567,7 @@ func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []s
 		appConfFile := untarredAppRootFolder + "/default/app.conf"
 		input, err := os.ReadFile(appConfFile)
 		if err != nil {
-			log.Fatalln(err)
-			return nil, err
+			return err
 		}
 		lines := strings.Split(string(input), "\n")
 		for i, line := range lines {
@@ -583,7 +581,7 @@ func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []s
 		output := strings.Join(lines, "\n")
 		err = os.WriteFile(appConfFile, []byte(output), 0644)
 		if err != nil {
-			log.Fatalln(err)
+			return err
 		}
 
 		// Tar disabled app folder
@@ -595,7 +593,7 @@ func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []s
 	}
 
 	// Upload disabled apps to Azure
-	uploadedFiles, _ := UploadFilesToAzure(ctx, StorageAccount, StorageAccountKey, disabledAppsFolder, containerName, appFileList)
+	_, err := UploadFilesToAzure(ctx, StorageAccount, StorageAccountKey, disabledAppsFolder, containerName, appFileList)
 
-	return uploadedFiles, nil
+	return err
 }

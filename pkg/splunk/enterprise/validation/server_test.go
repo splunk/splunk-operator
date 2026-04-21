@@ -131,7 +131,7 @@ func TestHandleValidate(t *testing.T) {
 					Namespace: "default",
 					Operation: admissionv1.Create,
 					Object: runtime.RawExtension{
-						Raw: mustMarshal(&enterpriseApi.Standalone{
+						Raw: mustMarshal(t, &enterpriseApi.Standalone{
 							TypeMeta: metav1.TypeMeta{
 								APIVersion: "enterprise.splunk.com/v4",
 								Kind:       "Standalone",
@@ -176,7 +176,7 @@ func TestHandleValidate(t *testing.T) {
 					Namespace: "default",
 					Operation: admissionv1.Create,
 					Object: runtime.RawExtension{
-						Raw: mustMarshal(&enterpriseApi.Standalone{
+						Raw: mustMarshal(t, &enterpriseApi.Standalone{
 							TypeMeta: metav1.TypeMeta{
 								APIVersion: "enterprise.splunk.com/v4",
 								Kind:       "Standalone",
@@ -359,7 +359,7 @@ func TestHandleValidateWithWarnings(t *testing.T) {
 			Namespace: "default",
 			Operation: admissionv1.Create,
 			Object: runtime.RawExtension{
-				Raw: mustMarshal(&enterpriseApi.Standalone{
+				Raw: mustMarshal(t, &enterpriseApi.Standalone{
 					TypeMeta: metav1.TypeMeta{
 						APIVersion: "enterprise.splunk.com/v4",
 						Kind:       "Standalone",
@@ -453,10 +453,11 @@ func TestWebhookServerOptions(t *testing.T) {
 
 // Helper functions
 
-func mustMarshal(obj interface{}) []byte {
+func mustMarshal(t *testing.T, obj interface{}) []byte {
+	t.Helper()
 	data, err := json.Marshal(obj)
 	if err != nil {
-		panic(err)
+		t.Fatalf("failed to marshal object: %v", err)
 	}
 	return data
 }
