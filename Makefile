@@ -136,7 +136,7 @@ vet: setup/ginkgo	 ## Run go vet against code.
 	go vet ./...
 
 test: manifests generate fmt vet setup-envtest ## Run tests.
-	REPORT_FILE="unit_test-$$(date +%Y%m%d-%H%M%S)$${GITHUB_RUN_ID:+-$$GITHUB_RUN_ID}.xml"; \
+	REPORT_FILE="$${UNIT_TEST_REPORT_FILE:-unit_test.xml}"; \
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=$$REPORT_FILE --output-dir=`pwd` -vv --trace --keep-going --timeout=$${TEST_TIMEOUT:-170m} --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/client ./pkg/splunk/util ./internal/controller ./pkg/splunk/splkcontroller
 
 
@@ -174,6 +174,7 @@ docker-push: ## Push docker image with the manager.
 PLATFORMS ?= linux/amd64,linux/arm64
 BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal
 BASE_IMAGE_VERSION ?= 8.10-1775152441
+BUILDER_IMAGE ?=
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
@@ -186,11 +187,44 @@ docker-buildx:
             DOCKERFILE="Dockerfile.distroless"; \
         else \
             DOCKERFILE="Dockerfile"; \
+            if [ -n "${BUILDER_IMAGE}" ]; then \
+                BUILDER_IMAGE_ARG="--build-arg BUILDER_IMAGE=${BUILDER_IMAGE}"; \
+            else \
+                BUILDER_IMAGE_ARG=""; \
+            fi; \
         fi; \
         docker buildx build --push --platform="${PLATFORMS}" \
             --build-arg BASE_IMAGE="${BASE_IMAGE}" \
             --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
+            $$BUILDER_IMAGE_ARG \
             --tag "${IMG}" -f "$$DOCKERFILE" .
+
+.PHONY: setup/kubectl
+setup/kubectl:
+	@if [ -z "${KUBECTL_VERSION}" ] || [ -z "${CI_BIN_DIR}" ]; then \
+		echo "Error: KUBECTL_VERSION and CI_BIN_DIR are required"; \
+		exit 1; \
+	fi
+	@mkdir -p "${CI_BIN_DIR}"
+	@if [ ! -x "${CI_BIN_DIR}/kubectl" ]; then \
+		curl -fsSL -o "${CI_BIN_DIR}/kubectl" "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"; \
+		chmod +x "${CI_BIN_DIR}/kubectl"; \
+	fi
+
+.PHONY: setup/eksctl
+setup/eksctl:
+	@if [ -z "${EKSCTL_VERSION}" ] || [ -z "${CI_BIN_DIR}" ]; then \
+		echo "Error: EKSCTL_VERSION and CI_BIN_DIR are required"; \
+		exit 1; \
+	fi
+	@mkdir -p "${CI_BIN_DIR}"
+	@if [ ! -x "${CI_BIN_DIR}/eksctl" ]; then \
+		tmp_archive="/tmp/eksctl-${EKSCTL_VERSION}-amd64.tar.gz"; \
+		curl --silent --location -o "$$tmp_archive" "https://github.com/weaveworks/eksctl/releases/download/${EKSCTL_VERSION}/eksctl_$$(uname -s)_amd64.tar.gz"; \
+		tar -xzf "$$tmp_archive" -C "${CI_BIN_DIR}" eksctl; \
+		chmod +x "${CI_BIN_DIR}/eksctl"; \
+		rm -f "$$tmp_archive"; \
+	fi
 
 
 
@@ -233,10 +267,9 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 	test -s $(LOCALBIN)/controller-gen || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@${CONTROLLER_TOOLS_VERSION}
 
 KUSTOMIZE = $(LOCALBIN)/kustomize
-KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)
-	test -s $(LOCALBIN)/kustomize || curl -s $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,${KUSTOMIZE_VERSION}) $(LOCALBIN)
+	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
 
 ENVTEST = $(LOCALBIN)/setup-envtest
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
@@ -459,10 +492,7 @@ cleanup:
 .PHONY: setup/ginkgo
 setup/ginkgo:
 	@echo Installing ginkgo
-	@go get github.com/onsi/ginkgo/v2
-	@go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@latest
-	@echo Installing gomega
-	@go get github.com/onsi/gomega/...
+	@go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@$(shell go list -m -f '{{.Version}}' github.com/onsi/ginkgo/v2)
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize
