@@ -35,7 +35,7 @@ eks-smoke-validation:
     WORKFLOW_SLUG: int-test-workflow
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
     JOB_INT_TEST_PROFILE: smoke
-    STAGING_INT_TEST_FOCUS: "smoke, basic, s1"
+    PIPELINE_INT_TEST_FOCUS: "smoke, basic, s1"
     JOB_INT_TEST_TIMEOUT: 3h
   script:
     - gitlab-ci/int-test-workflow.sh

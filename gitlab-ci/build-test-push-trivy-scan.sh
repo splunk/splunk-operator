@@ -3,9 +3,9 @@ set -eu
 
 # Runtime contract
 # - Purpose: scan the staged operator image emitted by build-stage-image.
-# - Inputs: build artifact containing the image ref plus staging AWS credentials.
+# - Inputs: build artifact containing the image ref plus pipeline AWS credentials.
 # - Outputs: SARIF and human-readable Trivy reports under ci-output/.
-# - Guardrails: read-only access to staging ECR, severity limited to CRITICAL for the current migration slice.
+# - Guardrails: read-only access to nonprod ECR, severity limited to CRITICAL for the current migration slice.
 
 . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
 
@@ -13,11 +13,12 @@ context_file="ci-output/${WORKFLOW_SLUG}-runtime-context.txt"
 mkdir -p "ci-output"
 : > "${context_file}"
 
-TRIVY_RELEASE="${STAGING_TRIVY_RELEASE:-v0.69.3}"
-TRIVY_ASSET_URL="${STAGING_TRIVY_ASSET_URL:-}"
+TRIVY_RELEASE="$(first_nonempty "${PIPELINE_TRIVY_RELEASE:-}" "${STAGING_TRIVY_RELEASE:-}" "v0.69.3")"
+TRIVY_ASSET_URL="$(first_nonempty "${PIPELINE_TRIVY_ASSET_URL:-}" "${STAGING_TRIVY_ASSET_URL:-}" "")"
 trivy_resolution_mode="direct-url"
 
 install_os_packages bash curl jq tar
+ensure_pipeline_aws_env
 
 if [ -z "${TRIVY_ASSET_URL}" ]; then
   if [ "${TRIVY_RELEASE}" = "latest" ]; then
@@ -53,10 +54,10 @@ aws --version
 require_file "ci-output/build-test-push-workflow-image-ref.txt" "build image reference artifact"
 IMAGE_REF="$(cat ci-output/build-test-push-workflow-image-ref.txt)"
 ECR_REGISTRY="${IMAGE_REF%%/*}"
-ECR_REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-${STAGING_AWS_DEFAULT_REGION:-$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)}}}"
+ECR_REGION="$(first_nonempty "${AWS_REGION:-}" "${AWS_DEFAULT_REGION:-}" "${PIPELINE_AWS_DEFAULT_REGION:-}" "${STAGING_AWS_DEFAULT_REGION:-}" "$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)")"
 
 if [ -z "${ECR_REGION}" ]; then
-  echo "Unable to determine ECR region — set AWS_REGION or STAGING_AWS_DEFAULT_REGION" >&2
+  echo "Unable to determine ECR region — set AWS_REGION, AWS_DEFAULT_REGION, or PIPELINE_AWS_DEFAULT_REGION" >&2
   exit 1
 fi
 

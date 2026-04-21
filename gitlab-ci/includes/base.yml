@@ -21,15 +21,14 @@ default:
       set -eu
       go version
 
-# Current minimal-lane contract: map the staged project variables into the
-# standard AWS environment expected by the build, scan, and smoke scripts.
-# The later auth-hardening MR will replace this with project onboarding for
-# ephemeral creds-helper / Vault roles.
-.aws-staging-env-job:
+# Current minimal-lane contract: prefer neutral pipeline variables for the
+# shared AWS environment and keep the old STAGING_* names only as script-level
+# fallback during the transition window.
+.aws-pipeline-env-job:
   variables:
-    AWS_ACCESS_KEY_ID: $STAGING_AWS_ACCESS_KEY_ID
-    AWS_SECRET_ACCESS_KEY: $STAGING_AWS_SECRET_ACCESS_KEY
-    AWS_DEFAULT_REGION: $STAGING_AWS_DEFAULT_REGION
+    AWS_ACCESS_KEY_ID: $PIPELINE_AWS_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $PIPELINE_AWS_SECRET_ACCESS_KEY
+    AWS_DEFAULT_REGION: $PIPELINE_AWS_DEFAULT_REGION
 
 .go-verify-job:
   stage: verify
@@ -45,19 +44,19 @@ default:
 .runtime-build-job:
   extends:
     - .runtime-artifact-job
-    - .aws-staging-env-job
+    - .aws-pipeline-env-job
   stage: build
 
 .runtime-image-scan-job:
   extends:
     - .runtime-artifact-job
-    - .aws-staging-env-job
+    - .aws-pipeline-env-job
   stage: image_scan
 
 .runtime-integration-job:
   extends:
     - .runtime-artifact-job
-    - .aws-staging-env-job
+    - .aws-pipeline-env-job
   stage: integration
   interruptible: false
 
