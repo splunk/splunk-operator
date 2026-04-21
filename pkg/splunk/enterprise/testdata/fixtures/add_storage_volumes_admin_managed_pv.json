@@ -1,0 +1,127 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "StatefulSet",
+  "metadata": {
+    "annotations": {
+      "enterprise.splunk.com/admin-managed-pv": "true"
+    },
+    "creationTimestamp": null,
+    "labels": {
+      "app.kubernetes.io/component": "indexer",
+      "app.kubernetes.io/instance": "splunk-CM-cluster-manager",
+      "app.kubernetes.io/managed-by": "splunk-operator",
+      "app.kubernetes.io/name": "cluster-manager"
+    },
+    "name": "test-statefulset",
+    "namespace": "test"
+  },
+  "spec": {
+    "replicas": 1,
+    "selector": null,
+    "serviceName": "",
+    "template": {
+      "metadata": {
+        "creationTimestamp": null
+      },
+      "spec": {
+        "containers": [
+          {
+            "image": "test",
+            "name": "splunk",
+            "resources": {},
+            "volumeMounts": [
+              {
+                "mountPath": "/opt/splunk/etc",
+                "name": "pvc-etc"
+              },
+              {
+                "mountPath": "/opt/splunk/var",
+                "name": "pvc-var"
+              },
+              {
+                "mountPath": "/mnt/probes",
+                "name": "splunk-test-probe-configmap"
+              }
+            ]
+          }
+        ],
+        "volumes": [
+          {
+            "configMap": {
+              "defaultMode": 365,
+              "name": "splunk-test-probe-configmap"
+            },
+            "name": "splunk-test-probe-configmap"
+          }
+        ]
+      }
+    },
+    "updateStrategy": {},
+    "volumeClaimTemplates": [
+      {
+        "metadata": {
+          "creationTimestamp": null,
+          "labels": {
+            "app.kubernetes.io/component": "indexer",
+            "app.kubernetes.io/instance": "splunk-CM-cluster-manager",
+            "app.kubernetes.io/managed-by": "splunk-operator",
+            "app.kubernetes.io/name": "cluster-manager"
+          },
+          "name": "pvc-etc",
+          "namespace": "test"
+        },
+        "spec": {
+          "accessModes": [
+            "ReadWriteOnce"
+          ],
+          "resources": {
+            "requests": {
+              "storage": "35Gi"
+            }
+          },
+          "selector": {
+            "matchLabels": {
+              "app.kubernetes.io/instance": "splunk-CM-cluster-manager",
+              "app.kubernetes.io/name": "cluster-manager"
+            }
+          }
+        },
+        "status": {}
+      },
+      {
+        "metadata": {
+          "creationTimestamp": null,
+          "labels": {
+            "app.kubernetes.io/component": "indexer",
+            "app.kubernetes.io/instance": "splunk-CM-cluster-manager",
+            "app.kubernetes.io/managed-by": "splunk-operator",
+            "app.kubernetes.io/name": "cluster-manager"
+          },
+          "name": "pvc-var",
+          "namespace": "test"
+        },
+        "spec": {
+          "accessModes": [
+            "ReadWriteOnce"
+          ],
+          "resources": {
+            "requests": {
+              "storage": "25Gi"
+            }
+          },
+          "selector": {
+            "matchLabels": {
+              "app.kubernetes.io/instance": "splunk-CM-cluster-manager",
+              "app.kubernetes.io/name": "cluster-manager"
+            }
+          }
+        },
+        "status": {}
+      }
+    ]
+  },
+  "status": {
+    "availableReplicas": 0,
+    "replicas": 0
+  }
+}
