@@ -1083,7 +1083,7 @@ func checkCmRemainingReferences(ctx context.Context, c splcommon.ControllerClien
 	// Look for indexerClusters still holding references to the ClusterManager
 	idxcList, err := getIndexerClusterList(ctx, c, cmCr, listOpts)
 	if err != nil {
-		if err.Error() != "NotFound" && !k8serrors.IsNotFound(err) {
+		if !strings.Contains(err.Error(), "NotFound") && !k8serrors.IsNotFound(err) {
 			scopedLog.ErrorContext(ctx, "Couldn't retrieve IndexerCluster list", "error", err)
 			return err
 		}
@@ -1099,7 +1099,7 @@ func checkCmRemainingReferences(ctx context.Context, c splcommon.ControllerClien
 	// Look for searchHeadClusters still holding references to the ClusterManager
 	shcList, err := getSearchHeadClusterList(ctx, c, cmCr, listOpts)
 	if err != nil {
-		if err.Error() != "NotFound" && !k8serrors.IsNotFound(err) {
+		if !strings.Contains(err.Error(), "NotFound") && !k8serrors.IsNotFound(err) {
 			scopedLog.ErrorContext(ctx, "Couldn't retrieve SearchHeadCluster list", "error", err)
 			return err
 		}
@@ -1115,7 +1115,7 @@ func checkCmRemainingReferences(ctx context.Context, c splcommon.ControllerClien
 	// Look for LicenseManagers still holding references to the ClusterManager
 	lmList, err := getLicenseManagerList(ctx, c, cmCr, listOpts)
 	if err != nil {
-		if err.Error() != "NotFound" && !k8serrors.IsNotFound(err) {
+		if !strings.Contains(err.Error(), "NotFound") && !k8serrors.IsNotFound(err) {
 			scopedLog.ErrorContext(ctx, "Couldn't retrieve LicenseManager list", "error", err)
 			return err
 		}
@@ -1131,7 +1131,7 @@ func checkCmRemainingReferences(ctx context.Context, c splcommon.ControllerClien
 	// Look for MonitoringConsole still holding references to the ClusterManager
 	mcList, err := getMonitoringConsoleList(ctx, c, cmCr, listOpts)
 	if err != nil {
-		if err.Error() != "NotFound" && !k8serrors.IsNotFound(err) {
+		if !strings.Contains(err.Error(), "NotFound") && !k8serrors.IsNotFound(err) {
 			scopedLog.ErrorContext(ctx, "Couldn't retrieve MonitoringConsole list", "error", err)
 			return err
 		}

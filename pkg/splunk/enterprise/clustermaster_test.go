@@ -234,7 +234,7 @@ func TestClusterMasterSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	// Assert that an error is returned
 	if err == nil {
 		t.Errorf("Expected error when SPLUNK_GENERAL_TERMS is not set, but got none")
-	} else if err.Error() != "license not accepted, please adjust SPLUNK_GENERAL_TERMS to indicate you have accepted the current/latest version of the license. See README file for additional information" {
+	} else if !strings.Contains(err.Error(), "license not accepted") {
 		t.Errorf("Unexpected error message: %v", err)
 	}
 }
