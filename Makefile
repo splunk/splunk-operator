@@ -149,6 +149,21 @@ docs-preview: ## Preview documentation locally with Jekyll (requires Ruby and bu
 	@cd docs && bundle exec jekyll serve --livereload
 	@echo "Documentation available at http://localhost:4000/splunk-operator"
 
+##@ Helm
+
+HELM_OPERATOR_CHART = helm-chart/splunk-operator
+
+.PHONY: helm-lint
+helm-lint: ## Lint Helm charts
+	helm lint $(HELM_OPERATOR_CHART)
+
+.PHONY: helm-test
+helm-test: setup/helm-unittest ## Run Helm chart unit tests
+	helm unittest $(HELM_OPERATOR_CHART)
+
+.PHONY: helm-check
+helm-check: helm-lint helm-test ## Run Helm lint and unit tests
+
 ##@ Build
 
 build: setup/ginkgo manifests generate fmt vet ## Build manager binary.
@@ -226,6 +241,7 @@ $(LOCALBIN):
 KUSTOMIZE_VERSION ?= v5.4.3
 CONTROLLER_TOOLS_VERSION ?= v0.18.0
 GOLANGCI_LINT_VERSION ?= v2.1.0
+HELM_UNITTEST_VERSION ?= v1.0.3
 
 CONTROLLER_GEN = $(LOCALBIN)/controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
@@ -463,6 +479,11 @@ setup/ginkgo:
 	@go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@latest
 	@echo Installing gomega
 	@go get github.com/onsi/gomega/...
+
+.PHONY: setup/helm-unittest
+setup/helm-unittest:
+	@helm plugin list 2>/dev/null | grep -q unittest || \
+		helm plugin install https://github.com/helm-unittest/helm-unittest.git --version $(HELM_UNITTEST_VERSION)
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize
