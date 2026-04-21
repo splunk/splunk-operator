@@ -31,6 +31,11 @@ eks-smoke-validation:
     - job: build-stage-image
       artifacts: true
     - job: scan-stage-image-trivy
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
   variables:
     WORKFLOW_SLUG: int-test-workflow
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
