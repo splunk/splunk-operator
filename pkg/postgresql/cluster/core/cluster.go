@@ -457,7 +457,6 @@ func (p *clusterModel) Actuate(ctx context.Context) {
 			UID:        p.cnpgCluster.UID,
 		}
 	}
-	return
 }
 
 func (p *clusterModel) Converge(_ context.Context) (health componentHealth, err error) {
@@ -687,7 +686,6 @@ func (m *managedRolesModel) Actuate(ctx context.Context) {
 		m.actuateErr = rolesErr
 		return
 	}
-	return
 }
 
 func (m *managedRolesModel) Converge(ctx context.Context) (health componentHealth, err error) {
@@ -1127,7 +1125,6 @@ func (c *configMapModel) Actuate(ctx context.Context) {
 	if c.cluster.Status.Resources.ConfigMapRef == nil {
 		c.cluster.Status.Resources.ConfigMapRef = &corev1.LocalObjectReference{Name: desiredCM.Name}
 	}
-	return
 }
 
 func (c *configMapModel) Converge(ctx context.Context) (health componentHealth, err error) {
@@ -1300,7 +1297,6 @@ func (s *secretModel) Actuate(ctx context.Context) {
 			Key:                  secretKeyPassword,
 		}
 	}
-	return
 }
 
 func (s *secretModel) Converge(ctx context.Context) (health componentHealth, err error) {
