@@ -55,6 +55,12 @@ const DefaultTimeout = 15 * time.Minute
 // C3 deployments require bundle push across all indexers and SHC deployer which can exceed 5 minutes.
 const AppInstallTimeout = 10 * time.Minute
 
+// AppStateVerificationTimeout is the timeout for VerifyAppState polls that
+// try to catch a transient app-framework phase (e.g. download-in-progress).
+// M4 clusters need time to initialise before app processing begins, so this
+// value is generous.
+const AppStateVerificationTimeout = 60 * time.Minute
+
 // SetupTeardownTimeout limits BeforeEach setup and AfterEach teardown nodes.
 // Prevents hung setup or cleanup from consuming the entire suite timeout.
 const SetupTeardownTimeout = 10 * time.Minute
