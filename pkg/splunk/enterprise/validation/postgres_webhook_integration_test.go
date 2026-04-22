@@ -34,7 +34,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newPostgresClusterAdmissionReview(uid string, op admissionv1.Operation, obj *enterpriseApi.PostgresCluster, oldObj *enterpriseApi.PostgresCluster) *admissionv1.AdmissionReview {
+func newPostgresClusterAdmissionReview(t *testing.T, uid string, op admissionv1.Operation, obj *enterpriseApi.PostgresCluster, oldObj *enterpriseApi.PostgresCluster) *admissionv1.AdmissionReview {
+	t.Helper()
 	ar := &admissionv1.AdmissionReview{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "admission.k8s.io/v1",
@@ -56,20 +57,21 @@ func newPostgresClusterAdmissionReview(uid string, op admissionv1.Operation, obj
 			Namespace: obj.Namespace,
 			Operation: op,
 			Object: runtime.RawExtension{
-				Raw: mustMarshal(obj),
+				Raw: mustMarshal(t, obj),
 			},
 			UserInfo: authenticationv1.UserInfo{Username: "test-user"},
 		},
 	}
 	if oldObj != nil {
 		ar.Request.OldObject = runtime.RawExtension{
-			Raw: mustMarshal(oldObj),
+			Raw: mustMarshal(t, oldObj),
 		}
 	}
 	return ar
 }
 
-func newPostgresClusterClassAdmissionReview(uid string, op admissionv1.Operation, obj *enterpriseApi.PostgresClusterClass, oldObj *enterpriseApi.PostgresClusterClass) *admissionv1.AdmissionReview {
+func newPostgresClusterClassAdmissionReview(t *testing.T, uid string, op admissionv1.Operation, obj *enterpriseApi.PostgresClusterClass, oldObj *enterpriseApi.PostgresClusterClass) *admissionv1.AdmissionReview {
+	t.Helper()
 	ar := &admissionv1.AdmissionReview{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "admission.k8s.io/v1",
@@ -90,14 +92,14 @@ func newPostgresClusterClassAdmissionReview(uid string, op admissionv1.Operation
 			Name:      obj.Name,
 			Operation: op,
 			Object: runtime.RawExtension{
-				Raw: mustMarshal(obj),
+				Raw: mustMarshal(t, obj),
 			},
 			UserInfo: authenticationv1.UserInfo{Username: "test-user"},
 		},
 	}
 	if oldObj != nil {
 		ar.Request.OldObject = runtime.RawExtension{
-			Raw: mustMarshal(oldObj),
+			Raw: mustMarshal(t, oldObj),
 		}
 	}
 	return ar
@@ -305,7 +307,7 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ar := newPostgresClusterAdmissionReview("uid-"+tt.name, admissionv1.Create, tt.obj, nil)
+			ar := newPostgresClusterAdmissionReview(t, "uid-"+tt.name, admissionv1.Create, tt.obj, nil)
 			resp := sendAdmissionReview(t, server, ar)
 
 			assert.Equal(t, tt.wantAllowed, resp.Allowed, "unexpected admission result")
@@ -350,7 +352,7 @@ func TestPostgresClusterPgHBAUpdateIntegration(t *testing.T) {
 			"hostssl all all 0.0.0.0/0 scram-sha-256",
 			"local all all peer",
 		}
-		ar := newPostgresClusterAdmissionReview("uid-update-valid", admissionv1.Update, newObj, oldObj)
+		ar := newPostgresClusterAdmissionReview(t, "uid-update-valid", admissionv1.Update, newObj, oldObj)
 		resp := sendAdmissionReview(t, server, ar)
 		assert.True(t, resp.Allowed)
 	})
@@ -360,7 +362,7 @@ func TestPostgresClusterPgHBAUpdateIntegration(t *testing.T) {
 		newObj.Spec.PgHBA = []string{
 			"hostx all all 0.0.0.0/0 md5",
 		}
-		ar := newPostgresClusterAdmissionReview("uid-update-invalid", admissionv1.Update, newObj, oldObj)
+		ar := newPostgresClusterAdmissionReview(t, "uid-update-invalid", admissionv1.Update, newObj, oldObj)
 		resp := sendAdmissionReview(t, server, ar)
 		assert.False(t, resp.Allowed)
 		assert.Contains(t, resp.Result.Message, "unknown connection type")
@@ -487,7 +489,7 @@ func TestPostgresClusterClassPgHBAIntegration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ar := newPostgresClusterClassAdmissionReview("uid-"+tt.name, admissionv1.Create, tt.obj, nil)
+			ar := newPostgresClusterClassAdmissionReview(t, "uid-"+tt.name, admissionv1.Create, tt.obj, nil)
 			resp := sendAdmissionReview(t, server, ar)
 
 			assert.Equal(t, tt.wantAllowed, resp.Allowed, "unexpected admission result")
@@ -529,7 +531,7 @@ func TestPostgresClusterClassPgHBAUpdateIntegration(t *testing.T) {
 			"hostssl all all 0.0.0.0/0 scram-sha-256",
 			"hostnossl all all 0.0.0.0/0 reject",
 		}
-		ar := newPostgresClusterClassAdmissionReview("uid-class-update-valid", admissionv1.Update, newObj, oldObj)
+		ar := newPostgresClusterClassAdmissionReview(t, "uid-class-update-valid", admissionv1.Update, newObj, oldObj)
 		resp := sendAdmissionReview(t, server, ar)
 		assert.True(t, resp.Allowed)
 	})
@@ -539,7 +541,7 @@ func TestPostgresClusterClassPgHBAUpdateIntegration(t *testing.T) {
 		newObj.Spec.Config.PgHBA = []string{
 			"host all all 0.0.0.0/0 bogus",
 		}
-		ar := newPostgresClusterClassAdmissionReview("uid-class-update-invalid", admissionv1.Update, newObj, oldObj)
+		ar := newPostgresClusterClassAdmissionReview(t, "uid-class-update-invalid", admissionv1.Update, newObj, oldObj)
 		resp := sendAdmissionReview(t, server, ar)
 		assert.False(t, resp.Allowed)
 		assert.Contains(t, resp.Result.Message, "unknown auth method")
