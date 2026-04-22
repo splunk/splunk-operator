@@ -43,3 +43,29 @@ kubectl-splunk-tests:
       coverage_report:
         coverage_format: cobertura
         path: kubectl-splunk-coverage.xml
+
+gosec-scan:
+  extends:
+    - .security-job
+    - .rules-qualification-lane
+  needs:
+    - format-and-vet
+  script:
+    - make code/sec | tee gosec-results.txt
+  artifacts:
+    when: always
+    paths:
+      - gosec-results.txt
+
+govulncheck-scan:
+  extends:
+    - .security-job
+    - .rules-qualification-lane
+  needs:
+    - format-and-vet
+  script:
+    - make code/vulncheck | tee govulncheck-results.txt
+  artifacts:
+    when: always
+    paths:
+      - govulncheck-results.txt

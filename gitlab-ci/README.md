@@ -2,15 +2,25 @@
 
 [`gitlab-ci/includes/base.yml`](includes/base.yml) defines shared job defaults and hidden reusable templates.
 
-[`gitlab-ci/includes/baseline.yml`](includes/baseline.yml) defines the repository verification and unit-test jobs.
+[`gitlab-ci/includes/baseline.yml`](includes/baseline.yml) defines the repository verification, unit-test, and qualification security-evidence jobs.
 
-[`gitlab-ci/includes/runtime.yml`](includes/runtime.yml) defines the staged image build, image scan, and EKS smoke jobs.
+[`gitlab-ci/includes/runtime.yml`](includes/runtime.yml) defines the staged image build, image scan, EKS smoke, nightly integration, and Helm validation jobs.
+
+[`gitlab-ci/includes/qualification.yml`](includes/qualification.yml) defines the qualification manifest, report, and compatibility publication jobs.
 
 [`gitlab-ci/build-test-push.sh`](build-test-push.sh) builds the operator image for the current commit and pushes it to the staging ECR target.
 
 [`gitlab-ci/build-test-push-trivy-scan.sh`](build-test-push-trivy-scan.sh) scans the staged image artifact with Trivy.
 
 [`gitlab-ci/int-test-workflow.sh`](int-test-workflow.sh) reuses the staged operator image, provisions an ephemeral EKS cluster, runs the bounded smoke profile, and writes runtime artifacts under `ci-output/`.
+
+[`gitlab-ci/helm-test-workflow.sh`](helm-test-workflow.sh) reuses the staged operator image, provisions an ephemeral EKS cluster, packages the Helm chart, and runs KUTTL-based Helm validation.
+
+[`gitlab-ci/qualification-manifest.py`](qualification-manifest.py) writes the qualification manifest and the required-evidence contract for a qualification run.
+
+[`gitlab-ci/qualification-report.py`](qualification-report.py) assembles the observed qualification evidence into the compatibility report.
+
+[`gitlab-ci/compatibility-publish.py`](compatibility-publish.py) writes the publish plan for the qualification compatibility result.
 
 [`gitlab-ci/lib/pipeline-common.sh`](lib/pipeline-common.sh) contains shared runtime helpers for registry resolution, environment loading, tool bootstrap, and artifact checks.
 

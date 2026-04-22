@@ -32,6 +32,7 @@ eks-smoke-validation:
       artifacts: true
     - job: scan-stage-image-trivy
   rules:
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -50,6 +51,28 @@ eks-smoke-validation:
       - ci-output/
     reports:
       junit: ci-output/int-test-workflow-inttest-junit.xml
+
+helm-eks-validation:
+  extends: .runtime-integration-job
+  timeout: 10h
+  needs:
+    - job: build-stage-image
+      artifacts: true
+    - job: scan-stage-image-trivy
+  rules:
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+  variables:
+    WORKFLOW_SLUG: helm-test-workflow
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
+    JOB_HELM_TEST_PROFILE: qualification
+    JOB_HELM_TEST_TIMEOUT: "7000"
+  script:
+    - gitlab-ci/helm-test-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/helm-test-workflow-kuttl-junit.xml
 
 nightly-eks-integration-validation:
   extends: .runtime-integration-job
