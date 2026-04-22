@@ -71,7 +71,7 @@ generated_kuttl_config="ci-output/${WORKFLOW_SLUG}-kuttl-suite.yaml"
 
 cluster_name_prefix="$(first_nonempty "${PIPELINE_HELM_CLUSTER_NAME_PREFIX:-}" "${JOB_HELM_CLUSTER_NAME_PREFIX:-}" "eks-helm-test-cluster")"
 helm_version="$(first_nonempty "${PIPELINE_HELM_VERSION:-}" "${JOB_HELM_VERSION:-}" "v3.8.2")"
-kuttl_version="$(first_nonempty "${PIPELINE_KUTTL_VERSION:-}" "${JOB_KUTTL_VERSION:-}" "v0.22.0")"
+kuttl_version="$(first_nonempty "${PIPELINE_KUTTL_VERSION:-}" "${JOB_KUTTL_VERSION:-}" "0.22.0")"
 
 export AWS_DEFAULT_REGION="${ECR_REGION}"
 export S3_REGION="${ECR_REGION}"
