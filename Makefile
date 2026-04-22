@@ -249,14 +249,18 @@ setup/kuttl:
 		exit 1; \
 	fi
 	@mkdir -p "${CI_BIN_DIR}"
-	@if [ ! -x "${CI_BIN_DIR}/kubectl-kuttl" ]; then \
-		tmp_archive="/tmp/kuttl_${KUTTL_VERSION#v}_linux_x86_64.tar.gz"; \
-		curl -fsSL -o "$$tmp_archive" "https://github.com/kudobuilder/kuttl/releases/download/v${KUTTL_VERSION}/kuttl_${KUTTL_VERSION#v}_linux_x86_64.tar.gz"; \
-		tar -xzf "$$tmp_archive" -C /tmp kubectl-kuttl; \
-		mv /tmp/kubectl-kuttl "${CI_BIN_DIR}/kubectl-kuttl"; \
-		chmod +x "${CI_BIN_DIR}/kubectl-kuttl"; \
-		rm -f "$$tmp_archive"; \
-	fi
+	@normalized_version="v$${KUTTL_VERSION#v}"; \
+	target="${CI_BIN_DIR}/kubectl-kuttl"; \
+	versioned="$${target}-$${normalized_version}"; \
+	[ -f "$$versioned" ] || { \
+		set -e; \
+		package="github.com/kudobuilder/kuttl/cmd/kubectl-kuttl@$${normalized_version}"; \
+		echo "Downloading $${package}"; \
+		rm -f "$$target" || true; \
+		GOBIN="${CI_BIN_DIR}" go install "$$package"; \
+		mv "$$target" "$$versioned"; \
+	}; \
+	ln -sf "$$versioned" "$$target"
 
 
 
