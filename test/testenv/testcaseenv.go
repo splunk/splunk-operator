@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -114,11 +114,6 @@ func (testenv *TestCaseEnv) GetName() string {
 // GetName returns the Splunk image of the testenv
 func (testenv *TestCaseEnv) GetSplunkImage() string {
 	return testenv.splunkImage
-}
-
-// IsOperatorInstalledClusterWide returns if operator is installed clusterwide
-func (testenv *TestCaseEnv) IsOperatorInstalledClusterWide() string {
-	return testenv.clusterWideOperator
 }
 
 func (testenv *TestCaseEnv) setup() error {
@@ -361,7 +356,7 @@ func (testenv *TestCaseEnv) attachPVCToOperator(name string) error {
 	operator := &appsv1.Deployment{}
 	err = testenv.GetKubeClient().Get(ctx, namespacedName, operator)
 	if err != nil {
-		testenv.Log.Error(err, "Unable to get operator", "operator name", testenv.operatorName)
+		testenv.Log.Error(err, "Unable to get operator", "operatorName", testenv.operatorName)
 		return err
 	}
 
@@ -386,7 +381,7 @@ func (testenv *TestCaseEnv) attachPVCToOperator(name string) error {
 	// update the operator deployment now
 	err = testenv.GetKubeClient().Update(ctx, operator)
 	if err != nil {
-		testenv.Log.Error(err, "Unable to update operator", "operator name", testenv.operatorName)
+		testenv.Log.Error(err, "Unable to update operator", "operatorName", testenv.operatorName)
 		return err
 	}
 
@@ -652,12 +647,18 @@ func (testenv *TestCaseEnv) GetLMConfigMap() string {
 	return testenv.licenseCMName
 }
 
-// NewDeployment creates a new deployment
-func (testenv *TestCaseEnv) NewDeployment(name string) (*Deployment, error) {
+// NewDeployment creates a new deployment. If timeout is non-nil it overrides
+// the default SpecifiedTestTimeout.
+func (testenv *TestCaseEnv) NewDeployment(name string, timeout *time.Duration) (*Deployment, error) {
+	t := time.Duration(SpecifiedTestTimeout) * time.Second
+	if timeout != nil {
+		t = *timeout
+	}
+
 	d := Deployment{
 		name:        testenv.GetName() + "-" + name,
 		testenv:     testenv,
-		testTimeout: time.Duration(SpecifiedTestTimeout) * time.Second,
+		testTimeout: t,
 	}
 
 	return &d, nil

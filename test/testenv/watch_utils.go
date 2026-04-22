@@ -119,7 +119,7 @@ func (testenv *TestCaseEnv) WatchForIngestorClusterPhase(ctx context.Context, de
 // WatchForAppPhaseChange uses optimized polling to wait for app phase changes on a CR
 func (testenv *TestCaseEnv) WatchForAppPhaseChange(ctx context.Context, deployment *Deployment, namespace, crName, crKind, appSourceName, appName string, expectedPhase enterpriseApi.AppPhaseType, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenv, crName, crKind, appSourceName, appName)
+		appDeploymentInfo, err := testenv.GetAppDeploymentInfo(ctx, deployment, crName, crKind, appSourceName, appName)
 		if err != nil {
 			testenv.Log.Info("Failed to get app deployment info", "app", appName, "error", err)
 			return false, nil
@@ -144,7 +144,7 @@ func (testenv *TestCaseEnv) WatchForAllAppsPhaseChange(ctx context.Context, depl
 				}
 			}
 
-			appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenv, crName, crKind, appSourceName, lookupAppName)
+			appDeploymentInfo, err := testenv.GetAppDeploymentInfo(ctx, deployment, crName, crKind, appSourceName, lookupAppName)
 			if err != nil {
 				testenv.Log.Info("Failed to get app deployment info", "app", appName, "error", err)
 				return false, nil
