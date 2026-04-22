@@ -226,6 +226,38 @@ setup/eksctl:
 		rm -f "$$tmp_archive"; \
 	fi
 
+.PHONY: setup/helm
+setup/helm:
+	@if [ -z "${HELM_VERSION}" ] || [ -z "${CI_BIN_DIR}" ]; then \
+		echo "Error: HELM_VERSION and CI_BIN_DIR are required"; \
+		exit 1; \
+	fi
+	@mkdir -p "${CI_BIN_DIR}"
+	@if [ ! -x "${CI_BIN_DIR}/helm" ]; then \
+		tmp_archive="/tmp/helm-${HELM_VERSION}-linux-amd64.tar.gz"; \
+		curl -fsSL -o "$$tmp_archive" "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"; \
+		tar -xzf "$$tmp_archive" -C /tmp linux-amd64/helm; \
+		mv /tmp/linux-amd64/helm "${CI_BIN_DIR}/helm"; \
+		chmod +x "${CI_BIN_DIR}/helm"; \
+		rm -rf /tmp/linux-amd64 "$$tmp_archive"; \
+	fi
+
+.PHONY: setup/kuttl
+setup/kuttl:
+	@if [ -z "${KUTTL_VERSION}" ] || [ -z "${CI_BIN_DIR}" ]; then \
+		echo "Error: KUTTL_VERSION and CI_BIN_DIR are required"; \
+		exit 1; \
+	fi
+	@mkdir -p "${CI_BIN_DIR}"
+	@if [ ! -x "${CI_BIN_DIR}/kubectl-kuttl" ]; then \
+		tmp_archive="/tmp/kuttl_${KUTTL_VERSION#v}_linux_x86_64.tar.gz"; \
+		curl -fsSL -o "$$tmp_archive" "https://github.com/kudobuilder/kuttl/releases/download/${KUTTL_VERSION}/kuttl_${KUTTL_VERSION#v}_linux_x86_64.tar.gz"; \
+		tar -xzf "$$tmp_archive" -C /tmp kubectl-kuttl; \
+		mv /tmp/kubectl-kuttl "${CI_BIN_DIR}/kubectl-kuttl"; \
+		chmod +x "${CI_BIN_DIR}/kubectl-kuttl"; \
+		rm -f "$$tmp_archive"; \
+	fi
+
 
 
 ##@ Deployment
@@ -260,6 +292,8 @@ $(LOCALBIN):
 KUSTOMIZE_VERSION ?= v5.4.3
 CONTROLLER_TOOLS_VERSION ?= v0.18.0
 GOLANGCI_LINT_VERSION ?= v2.1.0
+GOSEC_VERSION ?= v2.22.4
+GOVULNCHECK_VERSION ?= v1.1.4
 
 CONTROLLER_GEN = $(LOCALBIN)/controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
@@ -378,11 +412,24 @@ catalog-push: ## Push a catalog image.
 
 
 .PHONY: code/sec
-code/sec: $(GOBIN)/gosec ## Run gosec
-	gosec -severity medium --confidence medium -quiet ./...
+code/sec: setup/gosec ## Run gosec
+	$(LOCALBIN)/gosec -severity medium --confidence medium -quiet ./...
 
-$(GOBIN)/gosec:
-	go get -u github.com/securego/gosec/cmd/gosec
+.PHONY: setup/gosec
+setup/gosec: $(LOCALBIN)/gosec
+
+$(LOCALBIN)/gosec: $(LOCALBIN)
+	$(call go-install-tool,$(LOCALBIN)/gosec,github.com/securego/gosec/v2/cmd/gosec,$(GOSEC_VERSION))
+
+.PHONY: code/vulncheck
+code/vulncheck: setup/govulncheck ## Run govulncheck
+	$(LOCALBIN)/govulncheck ./...
+
+.PHONY: setup/govulncheck
+setup/govulncheck: $(LOCALBIN)/govulncheck
+
+$(LOCALBIN)/govulncheck: $(LOCALBIN)
+	$(call go-install-tool,$(LOCALBIN)/govulncheck,golang.org/x/vuln/cmd/govulncheck,$(GOVULNCHECK_VERSION))
 
 .PHONY: cluster-up
 cluster-up:
@@ -396,6 +443,20 @@ cluster-down:
 int-test:
 	@echo Run integration test
 	@test/run-tests.sh
+
+.PHONY: helm-package
+helm-package:
+	@rm -f helm-chart/splunk-enterprise/charts/splunk-operator-*.tgz
+	@helm package helm-chart/splunk-operator --destination .
+	@mv splunk-operator-*.tgz helm-chart/splunk-enterprise/charts/
+
+.PHONY: helm-kuttl-test
+helm-kuttl-test:
+	@if [ -z "${KUTTL_CONFIG}" ]; then \
+		echo "Error: KUTTL_CONFIG is required"; \
+		exit 1; \
+	fi
+	@kubectl kuttl test --config "${KUTTL_CONFIG}" --report xml
 
 lang:
 	@echo Running bias language linter
