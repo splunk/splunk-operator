@@ -71,7 +71,7 @@ func splunkdCurlExec(ctx context.Context, deployment *Deployment, podName string
 	return stdout, nil
 }
 
-// PerformSearchSync performs a syncronous search within splunk and returns the search results
+// PerformSearchSync performs a synchronous search within splunk and returns the search results
 func PerformSearchSync(ctx context.Context, deployment *Deployment, podName string, search string) (string, error) {
 	curlArgs := fmt.Sprintf("https://localhost:8089/services/search/jobs/export -d output_mode=json -d search=\"search %s\"", search)
 	resp, err := splunkdCurlExec(ctx, deployment, podName, curlArgs)

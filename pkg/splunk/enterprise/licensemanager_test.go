@@ -830,7 +830,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	mclient.AddHandler(wantRequest1, 200, string(response1), nil)
 	mclient.AddHandler(wantRequest2, 200, string(response2), nil)
 
-	// mock the verify RF peer funciton
+	// mock the verify RF peer function
 	savedVerifyRFPeers := VerifyRFPeers
 	defer func() { VerifyRFPeers = savedVerifyRFPeers }()
 	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
@@ -1001,7 +1001,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	// simulate create clustermanager instance before reconcilation
+	// simulate create clustermanager instance before reconciliation
 	err = c.Create(ctx, licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected create pod failed %v", err)
@@ -1184,7 +1184,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 		},
 	}
 
-	// simulate create clustermanager instance before reconcilation
+	// simulate create clustermanager instance before reconciliation
 	err = c.Create(ctx, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)

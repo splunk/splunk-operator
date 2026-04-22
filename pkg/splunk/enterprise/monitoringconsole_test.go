@@ -909,7 +909,7 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 	c.Create(ctx, service)
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
-	// simulate create clustermanager instance before reconcilation
+	// simulate create clustermanager instance before reconciliation
 	c.Create(ctx, monitoringconsole)
 	_, err := ApplyMonitoringConsole(ctx, c, monitoringconsole)
 	if err != nil {
