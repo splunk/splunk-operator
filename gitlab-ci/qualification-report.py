@@ -10,7 +10,7 @@ JOB_EVIDENCE = {
     "scan-stage-image-trivy": ["ci-output/scan-stage-image-trivy-trivy-results.txt"],
     "gosec-scan": ["gosec-results.txt"],
     "govulncheck-scan": ["govulncheck-results.txt"],
-    "eks-smoke-validation": ["ci-output/int-test-workflow-inttest-junit.xml"],
+    "eks-qualification-integration-validation": ["ci-output/qualification-int-test-workflow-inttest-junit.xml"],
     "helm-eks-validation": ["ci-output/helm-test-workflow-kuttl-junit.xml"],
 }
 

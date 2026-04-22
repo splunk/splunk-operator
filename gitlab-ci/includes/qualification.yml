@@ -28,7 +28,7 @@ qualification-report:
       artifacts: true
     - job: govulncheck-scan
       artifacts: true
-    - job: eks-smoke-validation
+    - job: eks-qualification-integration-validation
       artifacts: true
     - job: helm-eks-validation
       artifacts: true

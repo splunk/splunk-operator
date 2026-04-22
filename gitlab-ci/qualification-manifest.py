@@ -56,7 +56,7 @@ def main() -> int:
                 "scan-stage-image-trivy",
                 "gosec-scan",
                 "govulncheck-scan",
-                "eks-smoke-validation",
+                "eks-qualification-integration-validation",
                 "helm-eks-validation",
             ],
         },

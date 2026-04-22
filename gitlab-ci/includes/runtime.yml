@@ -33,6 +33,7 @@ eks-smoke-validation:
     - job: scan-stage-image-trivy
   rules:
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -51,6 +52,28 @@ eks-smoke-validation:
       - ci-output/
     reports:
       junit: ci-output/int-test-workflow-inttest-junit.xml
+
+eks-qualification-integration-validation:
+  extends: .runtime-integration-job
+  timeout: 10h
+  needs:
+    - job: build-stage-image
+      artifacts: true
+    - job: scan-stage-image-trivy
+  rules:
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+  variables:
+    WORKFLOW_SLUG: qualification-int-test-workflow
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
+    JOB_INT_TEST_PROFILE: full
+    JOB_INT_TEST_TIMEOUT: 8h
+  script:
+    - gitlab-ci/int-test-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/qualification-int-test-workflow-inttest-junit.xml
 
 helm-eks-validation:
   extends: .runtime-integration-job
