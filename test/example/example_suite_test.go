@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,9 +14,7 @@
 package example
 
 import (
-	"math/rand"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -29,12 +27,7 @@ var (
 	testSuiteName   = "example-" + testenv.RandomDNSName(3)
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 func TestExampleSuite(t *testing.T) {
-
 	RegisterFailHandler(Fail)
 
 	sc, _ := GinkgoConfiguration()
@@ -46,9 +39,11 @@ func TestExampleSuite(t *testing.T) {
 var _ = BeforeSuite(func() {
 	var err error
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
-	Expect(err).ToNot(HaveOccurred())
+	Expect(err).To(Succeed(), "Failed to initialize test environment")
 })
 
 var _ = AfterSuite(func() {
-	Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
+	if testenvInstance != nil {
+		Expect(testenvInstance.Teardown()).To(Succeed(), "Failed to teardown test environment")
+	}
 })

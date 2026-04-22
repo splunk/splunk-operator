@@ -17,21 +17,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
-)
-
-const (
-	// PollInterval specifies the polling interval
-	PollInterval = 5 * time.Second
-
-	// ConsistentPollInterval is the interval to use to consistently check a state is stable
-	ConsistentPollInterval = 200 * time.Millisecond
-	ConsistentDuration     = 2000 * time.Millisecond
 )
 
 var (
@@ -41,9 +31,6 @@ var (
 	appListV2             []string
 	testDataGcsBucket     = os.Getenv("TEST_BUCKET")
 	testGCSBucket         = os.Getenv("TEST_INDEXES_S3_BUCKET")
-	gcsAppDirV1           = testenv.AppLocationV1
-	gcsAppDirV2           = testenv.AppLocationV2
-	gcsPVTestApps         = testenv.PVTestAppsLocation
 	currDir, _            = os.Getwd()
 	downloadDirV1         = filepath.Join(currDir, "s1appfwV1-"+testenv.RandomDNSName(4))
 	downloadDirV2         = filepath.Join(currDir, "s1appfwV2-"+testenv.RandomDNSName(4))
@@ -52,7 +39,6 @@ var (
 
 // TestBasic is the main entry point
 func TestBasic(t *testing.T) {
-
 	RegisterFailHandler(Fail)
 
 	sc, _ := GinkgoConfiguration()
@@ -63,39 +49,10 @@ func TestBasic(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	var err error
-	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
+	testenvInstance, appListV1, appListV2, err = testenv.SetupGCPAppsSuite(testSuiteName, testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, testenv.AppLocationV2, downloadDirV2)
 	Expect(err).ToNot(HaveOccurred())
-
-	if testenv.ClusterProvider == "gcp" {
-		// Create a list of apps to upload to GCP
-		appListV1 = testenv.BasicApps
-		appFileList := testenv.GetAppFileList(appListV1)
-
-		// Download V1 Apps from GCP
-		err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V1 app files")
-
-		// Create a list of apps to upload to GCP after poll period
-		appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
-		appFileList = testenv.GetAppFileList(appListV2)
-
-		// Download V2 Apps from GCP
-		err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV2, downloadDirV2, appFileList)
-		Expect(err).To(Succeed(), "Unable to download V2 app files")
-	} else {
-		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenv.ClusterProvider)
-	}
-
 })
 
 var _ = AfterSuite(func() {
-	if testenvInstance != nil {
-		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
-	}
-
-	// Delete locally downloaded app files
-	err := os.RemoveAll(downloadDirV1)
-	Expect(err).To(Succeed(), "Unable to delete locally downloaded V1 app files")
-	err = os.RemoveAll(downloadDirV2)
-	Expect(err).To(Succeed(), "Unable to delete locally downloaded V2 app files")
+	Expect(testenv.CleanupLocalAppDownloads(testenvInstance, downloadDirV1, downloadDirV2)).To(Succeed())
 })

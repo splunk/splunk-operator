@@ -120,9 +120,9 @@ func CheckPrefixExistsOnGCP(prefix string) bool {
 			logf.Log.Error(err, "Error listing objects in GCP bucket")
 			return false
 		}
-		logf.Log.Info("CHECKING OBJECT", "OBJECT", objAttrs.Name)
+		logf.Log.Info("CHECKING OBJECT", "object", objAttrs.Name)
 		if strings.Contains(objAttrs.Name, prefix) {
-			logf.Log.Info("Prefix found in bucket", "Prefix", prefix, "Object", objAttrs.Name)
+			logf.Log.Info("Prefix found in bucket", "prefix", prefix, "object", objAttrs.Name)
 			return true
 		}
 	}
@@ -146,12 +146,12 @@ func CreateBucketAndPathIfNotExist(bucketName, path string) error {
 		// Create the bucket
 		err = client.Client.Bucket(bucketName).Create(ctx, gcpProjectID, nil)
 		if err != nil {
-			logf.Log.Error(err, "Failed to create bucket", "Bucket Name", bucketName)
+			logf.Log.Error(err, "Failed to create bucket", "bucketName", bucketName)
 			return err
 		}
-		logf.Log.Info("Bucket created", "Bucket Name", bucketName)
+		logf.Log.Info("Bucket created", "bucketName", bucketName)
 	} else if err != nil {
-		logf.Log.Error(err, "Error checking bucket attributes", "Bucket Name", bucketName)
+		logf.Log.Error(err, "Error checking bucket attributes", "bucketName", bucketName)
 		return err
 	}
 
@@ -161,16 +161,16 @@ func CreateBucketAndPathIfNotExist(bucketName, path string) error {
 		// Create a zero-length object to represent the path
 		wc := client.Client.Bucket(bucketName).Object(path).NewWriter(ctx)
 		if _, err := wc.Write([]byte{}); err != nil {
-			logf.Log.Error(err, "Failed to create path", "Path", path)
+			logf.Log.Error(err, "Failed to create path", "path", path)
 			return err
 		}
 		if err := wc.Close(); err != nil {
-			logf.Log.Error(err, "Failed to finalize path creation", "Path", path)
+			logf.Log.Error(err, "Failed to finalize path creation", "path", path)
 			return err
 		}
-		logf.Log.Info("Path created", "Path", path)
+		logf.Log.Info("Path created", "path", path)
 	} else if err != nil {
-		logf.Log.Error(err, "Error checking path attributes", "Path", path)
+		logf.Log.Error(err, "Error checking path attributes", "path", path)
 		return err
 	}
 
@@ -209,7 +209,7 @@ func DownloadFileFromGCP(bucketName, objectName, gcpFilePath, downloadDir string
 	objectPath := filepath.Join(gcpFilePath, objectName)
 	rc, err := client.Client.Bucket(bucketName).Object(objectPath).NewReader(ctx)
 	if err != nil {
-		logf.Log.Error(err, "Failed to create reader for object", "Object", objectName)
+		logf.Log.Error(err, "Failed to create reader for object", "object", objectName)
 		return "", err
 	}
 	defer rc.Close()
@@ -217,14 +217,14 @@ func DownloadFileFromGCP(bucketName, objectName, gcpFilePath, downloadDir string
 	localPath := filepath.Join(downloadDir, objectName)
 	file, err := os.Create(localPath)
 	if err != nil {
-		logf.Log.Error(err, "Failed to create local file", "Filename", localPath)
+		logf.Log.Error(err, "Failed to create local file", "filename", localPath)
 		return "", err
 	}
 	defer file.Close()
 
 	written, err := io.Copy(file, rc)
 	if err != nil {
-		logf.Log.Error(err, "Failed to download object", "Object", objectName)
+		logf.Log.Error(err, "Failed to download object", "object", objectName)
 		return "", err
 	}
 
@@ -319,18 +319,18 @@ func DeleteFileOnGCP(bucketName, objectName string) error {
 
 	err = client.Client.Bucket(bucketName).Object(objectName).Delete(ctx)
 	if err != nil && err != storage.ErrObjectNotExist {
-		logf.Log.Error(err, "Unable to delete object from bucket", "Object Name", objectName, "Bucket Name", bucketName)
+		logf.Log.Error(err, "Unable to delete object from bucket", "objectName", objectName, "bucketName", bucketName)
 		return err
 	}
 
 	// Optionally, verify deletion
 	_, err = client.Client.Bucket(bucketName).Object(objectName).Attrs(ctx)
 	if err == storage.ErrObjectNotExist {
-		logf.Log.Info("Deleted file on GCP", "File Name", objectName, "Bucket", bucketName)
+		logf.Log.Info("Deleted file on GCP", "fileName", objectName, "bucket", bucketName)
 		return nil
 	}
 	if err != nil {
-		logf.Log.Error(err, "Error verifying deletion of object", "Object Name", objectName, "Bucket Name", bucketName)
+		logf.Log.Error(err, "Error verifying deletion of object", "objectName", objectName, "bucketName", bucketName)
 		return err
 	}
 
@@ -342,12 +342,12 @@ func GetFilesInPathOnGCP(bucketName, path string) []string {
 	resp := GetFileListOnGCP(bucketName, path)
 	var files []string
 	for _, obj := range resp {
-		logf.Log.Info("CHECKING OBJECT", "OBJECT", obj.Name)
+		logf.Log.Info("CHECKING OBJECT", "object", obj.Name)
 		if strings.HasPrefix(obj.Name, path) {
 			filename := strings.TrimPrefix(obj.Name, path)
 			// This condition filters out directories as GCP returns objects with their full paths
 			if len(filename) > 1 && !strings.HasSuffix(filename, "/") {
-				logf.Log.Info("File found in bucket", "Path", path, "Object", obj.Name)
+				logf.Log.Info("File found in bucket", "path", path, "object", obj.Name)
 				files = append(files, filename)
 			}
 		}
@@ -358,10 +358,10 @@ func GetFilesInPathOnGCP(bucketName, path string) []string {
 // DownloadFilesFromGCP downloads a list of files from a GCP bucket to a local directory
 func DownloadFilesFromGCP(bucketName, gcpAppDir, downloadDir string, appList []string) error {
 	for _, key := range appList {
-		logf.Log.Info("Downloading file from GCP", "File name", key)
+		logf.Log.Info("Downloading file from GCP", "fileName", key)
 		_, err := DownloadFileFromGCP(bucketName, key, gcpAppDir, downloadDir)
 		if err != nil {
-			logf.Log.Error(err, "Unable to download file", "File Name", key)
+			logf.Log.Error(err, "Unable to download file", "fileName", key)
 			return err
 		}
 	}
@@ -372,22 +372,22 @@ func DownloadFilesFromGCP(bucketName, gcpAppDir, downloadDir string, appList []s
 func UploadFilesToGCP(bucketName, gcpTestDir string, appList []string, uploadDir string) ([]string, error) {
 	var uploadedFiles []string
 	for _, key := range appList {
-		logf.Log.Info("Uploading file to GCP", "File name", key)
-		logf.Log.Info("Using bucket", "Bucket", bucketName, "Path", gcpTestDir, "Upload Dir", uploadDir)
+		logf.Log.Info("Uploading file to GCP", "fileName", key)
+		logf.Log.Info("Using bucket", "bucket", bucketName, "path", gcpTestDir, "uploadDir", uploadDir)
 		fileLocation := filepath.Join(uploadDir, key)
 		fileBody, err := os.Open(fileLocation)
 		if err != nil {
-			logf.Log.Error(err, "Unable to open file", "File name", key)
+			logf.Log.Error(err, "Unable to open file", "fileName", key)
 			return nil, err
 		}
 		defer fileBody.Close()
 
 		objectPath, err := UploadFileToGCP(bucketName, key, gcpTestDir, fileBody)
 		if err != nil {
-			logf.Log.Error(err, "Unable to upload file", "File name", key)
+			logf.Log.Error(err, "Unable to upload file", "fileName", key)
 			return nil, err
 		}
-		logf.Log.Info("File uploaded to GCP", "File name", objectPath)
+		logf.Log.Info("File uploaded to GCP", "fileName", objectPath)
 		uploadedFiles = append(uploadedFiles, objectPath)
 	}
 	return uploadedFiles, nil

@@ -21,7 +21,6 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -48,44 +47,13 @@ var _ = Describe("c3appfw test", func() {
 	var filePresentOnOperator bool
 
 	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
-
 		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
-		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-		Expect(err).To(Succeed(), "Unable to create testcaseenv")
-		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
-		Expect(err).To(Succeed(), "Unable to create deployment")
-
-		// Validate test prerequisites early to fail fast
-		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
-		Expect(err).To(Succeed(), "Test prerequisites validation failed")
-
+		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
-		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
-			testcaseEnvInst.SkipTeardown = true
-		}
-		if deployment != nil {
-			deployment.Teardown()
-		}
-
-		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
-		}
-
-		// Delete files uploaded to S3
-		if !testcaseEnvInst.SkipTeardown {
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
-		}
-
-		if filePresentOnOperator {
-			//Delete files from app-directory
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
-			podDownloadPath := filepath.Join(testenv.AppDownloadVolume, "test_file.img")
-			testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
-		}
+		Expect(testenv.TeardownAppFrameworkTestCaseEnv(ctx, testcaseEnvInst, deployment, testenv.S3CloudCleanup(testS3Bucket, uploadedApps), filePresentOnOperator)).To(Succeed())
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
@@ -133,7 +101,7 @@ var _ = Describe("c3appfw test", func() {
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -153,7 +121,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
@@ -169,13 +137,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// get revision number of the resource
 			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
@@ -188,26 +156,16 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-			// wait for custom resource resource version to change
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)).To(Succeed(), "MC version not changed or not ready")
 
 			// Verify no SH in disconnected status is present on CM
-			testcaseEnvInst.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment)).To(Succeed(), "Disconnected SH found on CM")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -219,7 +177,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
 			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
 			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-			testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+			Expect(testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)).To(Succeed(), "Files not found in directory on pod")
 
 			//######### INITIAL VERIFICATIONS #############
 			var idxcPodNames, shcPodNames []string
@@ -232,15 +190,16 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			clusterManagerBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// get revision number of the resource
@@ -267,24 +226,15 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)).To(Succeed(), "MC version not changed or not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -300,10 +250,11 @@ var _ = Describe("c3appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV2
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 		})
 	})
@@ -320,15 +271,15 @@ var _ = Describe("c3appfw test", func() {
 				licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
 				Expect(err).To(Succeed(), "Unable to download license file from S3")
 				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+				Expect(testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)).To(Succeed(), "Failed to create license config map")
 			case "azure":
 				licenseFilePath, err := testenv.DownloadLicenseFromAzure(ctx, downloadDir)
 				Expect(err).To(Succeed(), "Unable to download license file from Azure")
 				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+				Expect(testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)).To(Succeed(), "Failed to create license config map")
 			default:
 				fmt.Printf("Unable to download license file")
-				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
+				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with provider set as %v", testenv.ClusterProvider))
 			}
 
 			// Upload V1 apps to S3 for Monitoring Console
@@ -360,22 +311,22 @@ var _ = Describe("c3appfw test", func() {
 			idxc, err := deployment.DeployIndexerCluster(ctx, idxName, lm.GetName(), 3, cm.GetName(), "", corev1.ObjectReference{}, corev1.ObjectReference{}, "")
 
 			// Wait for License Manager to be in READY phase
-			testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment)).To(Succeed(), "License Manager not ready")
 
 			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// // Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
 
 			// // Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// // Verify no SH in disconnected status is present on CM
-			testcaseEnvInst.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment)).To(Succeed(), "Disconnected SH found on CM")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -387,10 +338,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
 			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
 			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-			testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+			Expect(testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)).To(Succeed(), "Files not found in directory on pod")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE IMAGE ################
 
@@ -435,19 +386,19 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Timed out waiting for ClusterManager to reach Ready phase")
 
 			// Ensure Cluster Manager stays in Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Wait for License Manager to be in READY phase
-			testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment)).To(Succeed(), "License Manager not ready")
 
 			// // Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// // Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
 
 			// // Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 		})
 	})
 
@@ -493,10 +444,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Monitoring Console
+			// Create App Framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
 			// Monitoring Console AppFramework Spec
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
@@ -517,7 +468,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Upload V2 apps to S3 for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
@@ -533,13 +484,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc := "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc := "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// get revision number of the resource
 			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
@@ -552,23 +503,13 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-			// wait for custom resource resource version to change
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)).To(Succeed(), "MC version not changed or not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -584,15 +525,16 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: "V2", CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: "V2", CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			clusterManagerBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############## DOWNGRADE APPS ###############
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// get revision number of the resource
@@ -619,24 +561,15 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)).To(Succeed(), "MC version not changed or not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -652,10 +585,11 @@ var _ = Describe("c3appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV1
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -715,13 +649,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc := "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc := "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -731,17 +665,11 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -770,7 +698,8 @@ var _ = Describe("c3appfw test", func() {
 					Expect(err).To(Succeed(), "Timed out waiting for apps to reach Install phase on %s", appSource.CrName)
 				}
 			}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 			// Validate cluster-scoped apps also reached Install phase (bundle push already done by VerifyAppFrameworkState)
 			for _, appSource := range allAppSourceInfo {
 				if appSource.CrAppScope == enterpriseApi.ScopeCluster {
@@ -780,7 +709,7 @@ var _ = Describe("c3appfw test", func() {
 			}
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//Delete configMap Object
 			err = testenv.DeleteConfigMap(testcaseEnvInst.GetName(), ConfigMapName)
@@ -788,9 +717,7 @@ var _ = Describe("c3appfw test", func() {
 
 			//#############  SCALING UP ###################
 			// Get instance of current Search Head Cluster CR with latest config
-			err = deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)
-
-			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
+			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Scale up Search Head Cluster
 			defaultSHReplicas := shc.Spec.Replicas
@@ -803,13 +730,12 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale up Search Head Cluster")
 
 			// Ensure Search Head Cluster scales up and go to ScalingUp phase
-			testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp)).To(Succeed(), "Search Head Cluster phase mismatch")
 
 			// Get instance of current Indexer CR with latest config
 			idxcName := deployment.GetName() + "-idxc"
 			idxc := &enterpriseApi.IndexerCluster{}
-			err = deployment.GetInstance(ctx, idxcName, idxc)
-			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
+			Expect(deployment.GetInstance(ctx, idxcName, idxc)).To(Succeed(), "Failed to get instance of Indexer Cluster")
 			defaultIndexerReplicas := idxc.Spec.Replicas
 			scaledIndexerReplicas := defaultIndexerReplicas + 1
 			testcaseEnvInst.Log.Info("Scale up Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
@@ -820,10 +746,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale up Indexer Cluster")
 
 			// Ensure Indexer Cluster scales up and go to ScalingUp phase
-			testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp, idxcName)
+			Expect(testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp, idxcName)).To(Succeed(), "Indexer Cluster phase mismatch")
 
 			// Ensure Indexer Cluster go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
 
 			// Wait for ScaledUp event to confirm scaling completed successfully
 			err = testcaseEnvInst.WaitForScaledUp(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
@@ -835,23 +761,18 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testenv.CheckIndexerOnCM(ctx, deployment, indexerName)).To(Equal(true))
 
 			// Ingest data on Indexers
-			for i := 0; i < int(scaledIndexerReplicas); i++ {
-				podName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
-				logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
-				testenv.CreateMockLogfile(logFile, 2000)
-				testenv.IngestFileViaMonitor(ctx, logFile, "main", podName, deployment)
-			}
+			testenv.IngestDataOnIndexers(ctx, deployment, int(scaledIndexerReplicas))
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Search for data on newly added indexer
 			searchPod := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas-1)
 			searchString := fmt.Sprintf("index=%s host=%s | stats count by host", "main", indexerName)
-			searchResultsResp, err := testenv.PerformSearchSync(ctx, searchPod, searchString, deployment)
+			searchResultsResp, err := testenv.PerformSearchSync(ctx, deployment, searchPod, searchString)
 			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", searchPod, searchString)
 
 			// Verify result
@@ -869,7 +790,8 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", indexerName, resultLine["host"].(string))
 
 			//########## SCALING UP VERIFICATIONS #########
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// ############ Verify livenessProbe and readinessProbe config object and scripts############
 			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
@@ -877,19 +799,17 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
 			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
 			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-			testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+			Expect(testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)).To(Succeed(), "Files not found in directory on pod")
 
 			// Verify no pods reset by checking the pod age
 			shcPodNames = []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			shcPodNames = append(shcPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, shcPodNames)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, shcPodNames)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### SCALING DOWN ################
 			// Get instance of current Search Head Cluster CR with latest config
 			shc = &enterpriseApi.SearchHeadCluster{}
-			err = deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)
-
-			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
+			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Scale down Search Head Cluster
 			defaultSHReplicas = shc.Spec.Replicas
@@ -902,11 +822,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale down Search Head Cluster")
 
 			// Ensure Search Head Cluster scales down and go to ScalingDown phase
-			testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown)).To(Succeed(), "Search Head Cluster phase mismatch")
 
 			// Get instance of current Indexer CR with latest config
-			err = deployment.GetInstance(ctx, idxcName, idxc)
-			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
+			Expect(deployment.GetInstance(ctx, idxcName, idxc)).To(Succeed(), "Failed to get instance of Indexer Cluster")
 			defaultIndexerReplicas = idxc.Spec.Replicas
 			scaledIndexerReplicas = defaultIndexerReplicas - 1
 			testcaseEnvInst.Log.Info("Scaling down Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
@@ -917,25 +836,25 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to Scale down Indexer Cluster")
 
 			// Ensure Indexer Cluster scales down and go to ScalingDown phase
-			testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown, idxcName)
+			Expect(testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown, idxcName)).To(Succeed(), "Indexer Cluster phase mismatch")
 
 			// Ensure Indexer Cluster go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
 
 			// Wait for ScaledDown event to confirm scaling completed successfully
 			err = testcaseEnvInst.WaitForScaledDown(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for ScaledDown event on IndexerCluster")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Search for data from removed indexer
 			searchPod = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas-1)
 			searchString = fmt.Sprintf("index=%s host=%s | stats count by host", "main", indexerName)
-			searchResultsResp, err = testenv.PerformSearchSync(ctx, searchPod, searchString, deployment)
+			searchResultsResp, err = testenv.PerformSearchSync(ctx, deployment, searchPod, searchString)
 			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", searchPod, searchString)
 
 			// Verify result
@@ -952,10 +871,11 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", indexerName, resultLine["host"].(string))
 
 			//######## SCALING DOWN VERIFICATIONS #########
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, shcPodNames)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, shcPodNames)).To(Succeed(), "Unexpected pod reset detected")
 
 		})
 	})
@@ -1004,13 +924,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			indexerReplicas := 3
@@ -1020,17 +940,11 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1044,15 +958,16 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to S3
@@ -1067,19 +982,13 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1092,10 +1001,11 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -1167,7 +1077,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameLocalIdxc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameLocalShc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameClusterIdxc := "appframework-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
@@ -1177,9 +1087,9 @@ var _ = Describe("c3appfw test", func() {
 			appSourceVolumeNameIdxcCluster := "appframework-test-volume-idxc-cluster-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShcCluster := "appframework-test-volume-shc-cluster-" + testenv.RandomDNSName(3)
 
-			// Create App framework Spec for Cluster manager with scope local and append cluster scope
+			// Create App Framework Spec for Cluster manager with scope local and append cluster scope
 
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 60)
 			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
@@ -1190,8 +1100,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceSpecCluster := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterIdxc, s3TestDirIdxcCluster, appSourceClusterDefaultSpec)}
 			appFrameworkSpecIdxc.AppSources = append(appFrameworkSpecIdxc.AppSources, appSourceSpecCluster...)
 
-			// Create App framework Spec for Search head cluster with scope local and append cluster scope
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 60)
+			// Create App Framework Spec for Search Head cluster with scope local and append cluster scope
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 60)
 			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
@@ -1209,17 +1119,11 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1235,15 +1139,16 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListLocal, CrAppFileList: localappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListCluster, CrAppFileList: clusterappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			clusterManagerBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
@@ -1271,19 +1176,13 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1302,10 +1201,11 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoCluster.CrAppList = appListCluster
 			shcAppSourceInfoCluster.CrAppFileList = clusterappFileList
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 		})
 	})
@@ -1376,7 +1276,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameLocalIdxc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameLocalShc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameClusterIdxc := "appframework-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
@@ -1386,8 +1286,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceVolumeNameIdxcCluster := "appframework-test-volume-idxc-cluster-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShcCluster := "appframework-test-volume-shc-cluster-" + testenv.RandomDNSName(3)
 
-			// Create App framework Spec for Cluster manager with scope local and append cluster scope
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 60)
+			// Create App Framework Spec for Cluster manager with scope local and append cluster scope
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 60)
 			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
@@ -1397,8 +1297,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceSpecCluster := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterIdxc, s3TestDirIdxcCluster, appSourceClusterDefaultSpec)}
 			appFrameworkSpecIdxc.AppSources = append(appFrameworkSpecIdxc.AppSources, appSourceSpecCluster...)
 
-			// Create App framework Spec for Search head cluster with scope local and append cluster scope
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 60)
+			// Create App Framework Spec for Search Head cluster with scope local and append cluster scope
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 60)
 			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
@@ -1416,17 +1316,11 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1451,7 +1345,8 @@ var _ = Describe("c3appfw test", func() {
 					Expect(err).To(Succeed(), "Timed out waiting for apps to reach Install phase on %s", appSource.CrName)
 				}
 			}
-			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			clusterManagerBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 			// Validate cluster-scoped apps also reached Install phase (bundle push already done by VerifyAppFrameworkState)
 			for _, appSource := range allAppSourceInfo {
 				if appSource.CrAppScope == enterpriseApi.ScopeCluster {
@@ -1461,12 +1356,12 @@ var _ = Describe("c3appfw test", func() {
 			}
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############# DOWNGRADE APPS ################
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
@@ -1494,19 +1389,13 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1525,10 +1414,11 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoCluster.CrAppList = appListCluster
 			shcAppSourceInfoCluster.CrAppFileList = clusterappFileList
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 		})
 	})
@@ -1559,7 +1449,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Download apps from S3
 			testcaseEnvInst.Log.Info("Download bigger amount of apps from S3 for this test")
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
 			// Create consolidated list of app files
@@ -1578,13 +1468,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Create Single site Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
 			testcaseEnvInst.Log.Info("Create Single Site Indexer Cluster and Search Head Cluster")
@@ -1594,17 +1484,11 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1618,10 +1502,11 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -1672,7 +1557,7 @@ var _ = Describe("c3appfw test", func() {
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1692,7 +1577,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
@@ -1706,35 +1591,29 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 0)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 0)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 0)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 0)
 
 			// Create Single site Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
 			indexerReplicas := 3
 			shReplicas := 3
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster")
 			cm, _, shc, err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "")
-			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App Framework")
 
-			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1750,15 +1629,16 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			clusterManagerBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			// ############### UPGRADE APPS ################
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to S3 for C3
@@ -1781,24 +1661,18 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			//  ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
 			allPodNames := append(idxcPodNames, shcPodNames...)
-			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), allPodNames, appListV1, true, "enabled", false, true)).To(Succeed(), "App installation verification failed")
 
 			// ############ ENABLE MANUAL POLL ############
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
@@ -1811,10 +1685,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
 
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
 			config, err = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
@@ -1826,10 +1700,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
 			config, err = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
@@ -1841,7 +1715,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1863,10 +1737,11 @@ var _ = Describe("c3appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV2
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -1918,13 +1793,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 0)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 0)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 0)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 0)
 
 			// Deploy C3 CRD
 			indexerReplicas := 3
@@ -1933,17 +1808,11 @@ var _ = Describe("c3appfw test", func() {
 			cm, _, shc, err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1957,15 +1826,16 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to S3
@@ -1980,22 +1850,17 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			//  ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// ############ ENABLE MANUAL POLL ############
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
@@ -2009,10 +1874,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
 
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
 			config, err = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
@@ -2024,10 +1889,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2046,10 +1911,11 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -2119,7 +1985,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameLocalIdxc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameLocalShc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameClusterIdxc := "appframework-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
@@ -2129,8 +1995,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceVolumeNameIdxcCluster := "appframework-test-volume-idxc-cluster-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShcCluster := "appframework-test-volume-shc-cluster-" + testenv.RandomDNSName(3)
 
-			// Create App framework Spec for Cluster manager with scope local and append cluster scope
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 0)
+			// Create App Framework Spec for Cluster manager with scope local and append cluster scope
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 0)
 			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
@@ -2140,8 +2006,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceSpecCluster := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterIdxc, s3TestDirIdxcCluster, appSourceClusterDefaultSpec)}
 			appFrameworkSpecIdxc.AppSources = append(appFrameworkSpecIdxc.AppSources, appSourceSpecCluster...)
 
-			// Create App framework Spec for Search head cluster with scope local and append cluster scope
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 0)
+			// Create App Framework Spec for Search Head cluster with scope local and append cluster scope
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 0)
 			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
@@ -2158,17 +2024,11 @@ var _ = Describe("c3appfw test", func() {
 			cm, _, shc, err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2184,15 +2044,16 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListLocal, CrAppFileList: localappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListCluster, CrAppFileList: clusterappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			clusterManagerBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
@@ -2232,19 +2093,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2270,10 +2125,11 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfoCluster.CrAppList = appListCluster
 			shcAppSourceInfoCluster.CrAppFileList = clusterappFileList
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -2308,7 +2164,7 @@ var _ = Describe("c3appfw test", func() {
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -2328,12 +2184,12 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Download all apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload big-size app to S3 for Cluster Manager
@@ -2352,13 +2208,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2367,7 +2223,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify App installation is in progress on Cluster Manager
-			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Upload more apps to S3 for Cluster Manager
 			appList = testenv.ExtraApps
@@ -2384,7 +2240,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Wait for polling interval to pass
 			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
@@ -2393,16 +2249,16 @@ var _ = Describe("c3appfw test", func() {
 			appList = append(testenv.BigSingleApp, testenv.ExtraApps...)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Cluster Manager", appList))
-			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), cmPod, appList, true, "enabled", false, false)
+			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), cmPod, appList, true, "enabled", false, false)).To(Succeed(), "App installation verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify all apps are installed on Deployer
 			appList = append(testenv.BigSingleApp, testenv.ExtraApps...)
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Deployer", appList))
-			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), deployerPod, appList, true, "enabled", false, false)
+			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), deployerPod, appList, true, "enabled", false, false)).To(Succeed(), "App installation verification failed")
 		})
 	})
 	// Vivek need testing
@@ -2437,7 +2293,7 @@ var _ = Describe("c3appfw test", func() {
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -2457,12 +2313,12 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Download all apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload big-size app to S3 for Cluster Manager
@@ -2481,13 +2337,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2496,7 +2352,7 @@ var _ = Describe("c3appfw test", func() {
 			cm, _, shc, err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Upload more apps to S3 for Cluster Manager
 			appList = testenv.ExtraApps
@@ -2513,23 +2369,23 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Wait for polling interval to pass
 			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
 
 			// Verify all apps are installed on indexers
 			appList = append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
 			idxcPodNames := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on indexers", appList))
-			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), idxcPodNames, appList, true, "enabled", false, true)
+			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), idxcPodNames, appList, true, "enabled", false, true)).To(Succeed(), "App installation verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Wait for polling interval to pass
 			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
@@ -2537,7 +2393,7 @@ var _ = Describe("c3appfw test", func() {
 			// Verify all apps are installed on Search Heads
 			shcPodNames := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Search Heads", appList))
-			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), shcPodNames, appList, true, "enabled", false, true)
+			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), shcPodNames, appList, true, "enabled", false, true)).To(Succeed(), "App installation verification failed")
 
 		})
 	})
@@ -2565,7 +2421,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download all apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload V1 apps to S3 for Indexer Cluster
@@ -2583,13 +2439,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2599,22 +2455,16 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify App installation is in progress on Cluster Manager
-			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testenv.DeleteOperatorPod(testcaseEnvInst)
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
-			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2628,10 +2478,11 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 		})
 	})
@@ -2659,7 +2510,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download all apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload V1 apps to S3 for Indexer Cluster
@@ -2677,13 +2528,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2693,22 +2544,16 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify App Download is in progress on Cluster Manager
-			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testenv.DeleteOperatorPod(testcaseEnvInst)
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
-			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2722,10 +2567,11 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 		})
 	})
@@ -2768,13 +2614,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2783,17 +2629,11 @@ var _ = Describe("c3appfw test", func() {
 			cm, _, shc, err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2806,25 +2646,26 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify repo state on App to be disabled to be 1 (i.e app present on S3 bucket)
 			appName := appListV1[0]
 			appFileName := testenv.GetAppFileList([]string{appName})
-			testcaseEnvInst.VerifyAppRepoState(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])
+			Expect(testcaseEnvInst.VerifyAppRepoState(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])).To(Succeed(), "App repo state verification failed")
 
 			// Disable the app
 			err = testenv.DisableAppsToS3(downloadDirV1, appFileName, s3TestDirIdxc)
 			Expect(err).To(Succeed(), "Unable to disable apps on S3")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
 
 			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
 
 			// Wait for App state to update after config file change
 			testcaseEnvInst.WaitforAppInstallState(ctx, deployment, idxcPodNames, testcaseEnvInst.GetName(), appName, "disabled", true)
@@ -2835,7 +2676,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on S3 test directory", appFileName[0]))
 
 			// Verify repo state is set to 2 (i.e app deleted from S3 bucket)
-			testcaseEnvInst.VerifyAppRepoState(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, 2, appFileName[0])
+			Expect(testcaseEnvInst.VerifyAppRepoState(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, 2, appFileName[0])).To(Succeed(), "App repo state verification failed")
 
 		})
 	})
@@ -2872,7 +2713,7 @@ var _ = Describe("c3appfw test", func() {
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload V1 apps to S3 for Indexer Cluster
@@ -2889,13 +2730,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 120)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 120)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 120)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 120)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2905,7 +2746,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify App Download is in progress on Cluster Manager
-			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
@@ -2927,23 +2768,17 @@ var _ = Describe("c3appfw test", func() {
 
 			//######### VERIFICATIONS #############
 			appVersion = "V1"
-			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appListV1, false, "enabled", false, false)
+			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appListV1, false, "enabled", false, false)).To(Succeed(), "App installation verification failed")
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			appFileList = testenv.GetAppFileList(appListV2)
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			//############  UPGRADE VERIFICATIONS ############
 			appVersion = "V2"
@@ -2955,7 +2790,8 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 		})
 	})
@@ -2980,7 +2816,7 @@ var _ = Describe("c3appfw test", func() {
 
 			//################## SETUP ####################
 			// Create a large file on Operator pod
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			opPod := testcaseEnvInst.GetOperatorPodName()
 			err := testenv.CreateDummyFileOnOperator(ctx, deployment, opPod, testenv.AppDownloadVolume, "1G", "test_file.img")
 			Expect(err).To(Succeed(), "Unable to create file on operator")
 			filePresentOnOperator = true
@@ -2989,7 +2825,7 @@ var _ = Describe("c3appfw test", func() {
 			appVersion := "V1"
 			appList := testenv.PVTestApps
 			appFileList := testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3PVTestApps, downloadDirPVTestApps, appFileList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.PVTestAppsLocation, downloadDirPVTestApps, appFileList)
 			Expect(err).To(Succeed(), "Unable to download app files")
 
 			// Upload apps to S3 for Indexer Cluster
@@ -3000,7 +2836,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search head Cluster", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
 			s3TestDirShc := "c3appfw-shc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirPVTestApps)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
@@ -3009,14 +2845,14 @@ var _ = Describe("c3appfw test", func() {
 			// Maximum apps to be downloaded in parallel
 			maxConcurrentAppDownloads := 30
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc := "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc := "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
 			appFrameworkSpecIdxc.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 			appFrameworkSpecShc.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 
 			// Deploy C3 CRD
@@ -3027,17 +2863,11 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -3051,7 +2881,8 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 		})
 	})
 
@@ -3078,7 +2909,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download big size apps from S3
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload big size app to S3 for Indexer Cluster
@@ -3096,13 +2927,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big size to S3 test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -3112,25 +2943,19 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify App Download is completed on Cluster Manager
-			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			//Delete apps from app directory when app download is complete
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			opPod := testcaseEnvInst.GetOperatorPodName()
 			podDownloadPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc, testenv.AppInfo[appList[0]]["filename"])
 			err = testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
 			Expect(err).To(Succeed(), "Unable to delete file on pod")
 
-			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -3144,10 +2969,11 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 		})
 	})
@@ -3182,13 +3008,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -3198,23 +3024,19 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify IsDeploymentInProgress Flag is set to true for Cluster Manager CR
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag")
-			testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, cm.Name, cm.Kind)
+			Expect(testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, cm.Name, cm.Kind)).To(Succeed(), "IsDeploymentInProgress flag not set")
 
 			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Verify IsDeploymentInProgress Flag is set to true for SHC CR
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag")
-			testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, shc.Name, shc.Kind)
+			Expect(testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, shc.Name, shc.Kind)).To(Succeed(), "IsDeploymentInProgress flag not set")
 
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 		})
 	})
 
@@ -3255,16 +3077,16 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with clusterMasterRef")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			//  Ensure that the Standalone goes to Ready phase
-			testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -3275,7 +3097,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testenv.CheckSearchHeadOnCM(ctx, deployment, standalonePodName)).To(Equal(true))
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -3302,14 +3124,14 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Download ES app from S3")
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
 			appFileList := testenv.GetAppFileList(esApp)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app file from S3")
 
 			// Download Technology add-on app from S3
 			testcaseEnvInst.Log.Info("Download Technology add-on app from S3")
 			taApp := []string{"Splunk_TA_ForIndexers"}
 			appFileListIdxc := testenv.GetAppFileList(taApp)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileListIdxc)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileListIdxc)
 			Expect(err).To(Succeed(), "Unable to download ES app file from S3")
 
 			// Create directory for file upload  to S3
@@ -3328,10 +3150,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s Technology add-on app to S3 test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for SHC
+			// Create App Framework Spec for SHC
 			appSourceNameShc = "appframework-shc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopePremiumApps, appSourceNameShc, s3TestDirShc, 180)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopePremiumApps, appSourceNameShc, s3TestDirShc, 180)
 			appFrameworkSpecShc.AppSources[0].PremiumAppsProps = enterpriseApi.PremiumAppsProps{
 				Type: enterpriseApi.PremiumAppsTypeEs,
 				EsDefaults: enterpriseApi.EsDefaults{
@@ -3339,10 +3161,10 @@ var _ = Describe("c3appfw test", func() {
 				},
 			}
 
-			// Create App framework Spec for Indexer Cluster
+			// Create App Framework Spec for Indexer Cluster
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 180)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 180)
 
 			// Deploy C3 SVA
 			// Deploy the Cluster Manager
@@ -3385,17 +3207,11 @@ var _ = Describe("c3appfw test", func() {
 			shc, err := deployment.DeploySearchHeadClusterWithGivenSpec(ctx, deployment.GetName()+"-shc", shSpec)
 			Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
-
-			// Ensure Indexers go to Ready phase
-			testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)
+			// Ensure C3 cluster is ready
+			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -3405,19 +3221,21 @@ var _ = Describe("c3appfw test", func() {
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: esApp, CrAppFileList: appFileList, CrReplicas: int(shSpec.Replicas), CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			idxcPodNames := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: taApp, CrAppFileList: appFileListIdxc, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// //############### UPGRADE APPS ################
 			// // Download ES App from S3
 			// appVersion = "V2"
 			// testcaseEnvInst.Log.Info("Download updated ES app from S3")
-			// err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
+			// err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV2, downloadDirV2, appFileList)
 			// Expect(err).To(Succeed(), "Unable to download ES app")
 
 			// // Upload V2 ES app to S3 for Search Head Cluster
@@ -3427,7 +3245,7 @@ var _ = Describe("c3appfw test", func() {
 			// uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// // Check for changes in App phase to determine if next poll has been triggered
-			// testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
+			// testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
 
 			// // Ensure that the Cluster Manager goes to Ready phase
 			// testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
