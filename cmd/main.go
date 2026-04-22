@@ -348,6 +348,7 @@ func main() {
 			ReadTimeout:  readTimeout,
 			WriteTimeout: writeTimeout,
 			Client:       mgr.GetClient(),
+			Reader:       mgr.GetAPIReader(),
 		})
 
 		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {

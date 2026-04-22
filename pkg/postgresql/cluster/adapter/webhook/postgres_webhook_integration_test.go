@@ -24,10 +24,12 @@ import (
 	"testing"
 
 	admissionv1 "k8s.io/api/admission/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise/validation"
@@ -570,4 +572,167 @@ func TestPostgresClusterClassPgHBAUpdateIntegration(t *testing.T) {
 		assert.Equal(t, int32(http.StatusUnprocessableEntity), resp.Result.Code)
 		assert.Contains(t, resp.Result.Message, "unknown auth method")
 	})
+}
+
+func ptrBool(b bool) *bool       { return &b }
+func ptrString(s string) *string { return &s }
+func ptrInt32(i int32) *int32    { return &i }
+
+func ptrQuantity(s string) *resource.Quantity {
+	q := resource.MustParse(s)
+	return &q
+}
+
+func newFakeReader(objects ...runtime.Object) *fake.ClientBuilder {
+	s := runtime.NewScheme()
+	enterpriseApi.AddToScheme(s)
+	b := fake.NewClientBuilder().WithScheme(s)
+	for _, obj := range objects {
+		b = b.WithRuntimeObjects(obj)
+	}
+	return b
+}
+
+func TestCrossResourceValidationIntegration(t *testing.T) {
+	prodClass := &enterpriseApi.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod"},
+		Spec: enterpriseApi.PostgresClusterClassSpec{
+			Provisioner: "postgresql.cnpg.io",
+			Config: &enterpriseApi.PostgresClusterClassConfig{
+				Instances:               ptrInt32(3),
+				Storage:                 ptrQuantity("50Gi"),
+				PostgresVersion:         ptrString("17"),
+				ConnectionPoolerEnabled: ptrBool(false),
+			},
+		},
+	}
+
+	reader := newFakeReader(prodClass).Build()
+
+	server := validation.NewWebhookServer(validation.WebhookServerOptions{
+		Port:       9443,
+		Validators: validation.DefaultValidators,
+		Reader:     reader,
+	})
+
+	tests := []struct {
+		name        string
+		obj         *enterpriseApi.PostgresCluster
+		wantAllowed bool
+		wantMessage string
+	}{
+		{
+			name: "allowed - inherits all from class",
+			obj: &enterpriseApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec:       enterpriseApi.PostgresClusterSpec{Class: "prod"},
+			},
+			wantAllowed: true,
+		},
+		{
+			name: "rejected - class not found",
+			obj: &enterpriseApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec:       enterpriseApi.PostgresClusterSpec{Class: "nonexistent"},
+			},
+			wantAllowed: false,
+			wantMessage: "PostgresClusterClass not found",
+		},
+		{
+			name: "rejected - storage below class floor",
+			obj: &enterpriseApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class:   "prod",
+					Storage: ptrQuantity("10Gi"),
+				},
+			},
+			wantAllowed: false,
+			wantMessage: "storage cannot be lower than class default",
+		},
+		{
+			name: "rejected - version below class floor",
+			obj: &enterpriseApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class:           "prod",
+					PostgresVersion: ptrString("16"),
+				},
+			},
+			wantAllowed: false,
+			wantMessage: "postgresVersion cannot be lower than class default",
+		},
+		{
+			name: "rejected - pooler enabled when class disables",
+			obj: &enterpriseApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class:                   "prod",
+					ConnectionPoolerEnabled: ptrBool(true),
+				},
+			},
+			wantAllowed: false,
+			wantMessage: "connectionPoolerEnabled cannot be enabled",
+		},
+		{
+			name: "allowed - storage equal to class",
+			obj: &enterpriseApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class:   "prod",
+					Storage: ptrQuantity("50Gi"),
+				},
+			},
+			wantAllowed: true,
+		},
+		{
+			name: "allowed - higher version",
+			obj: &enterpriseApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class:           "prod",
+					PostgresVersion: ptrString("18"),
+				},
+			},
+			wantAllowed: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ar := newPostgresClusterAdmissionReview(t, "uid-xref-"+tt.name, admissionv1.Create, tt.obj, nil)
+			resp := sendAdmissionReview(t, server, ar)
+
+			assert.Equal(t, tt.wantAllowed, resp.Allowed, "unexpected admission result")
+			if tt.wantMessage != "" {
+				require.NotNil(t, resp.Result)
+				assert.Contains(t, resp.Result.Message, tt.wantMessage)
+			}
+		})
+	}
+}
+
+func TestCrossResourceValidationDisabledWithoutReader(t *testing.T) {
+	server := validation.NewWebhookServer(validation.WebhookServerOptions{
+		Port:       9443,
+		Validators: validation.DefaultValidators,
+	})
+
+	obj := &enterpriseApi.PostgresCluster{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec:       enterpriseApi.PostgresClusterSpec{Class: "nonexistent"},
+	}
+
+	ar := newPostgresClusterAdmissionReview(t, "uid-no-reader", admissionv1.Create, obj, nil)
+	resp := sendAdmissionReview(t, server, ar)
+
+	assert.True(t, resp.Allowed, "without a reader, cross-resource validation should be skipped")
 }

@@ -17,14 +17,18 @@ limitations under the License.
 package webhook
 
 import (
+	"context"
+	"strconv"
+
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	hba "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 )
 
 // ValidatePostgresClusterCreate validates a PostgresCluster on CREATE.
-func ValidatePostgresClusterCreate(obj *enterpriseApi.PostgresCluster) field.ErrorList {
+func ValidatePostgresClusterCreate(obj *enterpriseApi.PostgresCluster, reader client.Reader) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if len(obj.Spec.PgHBA) > 0 {
@@ -37,12 +41,106 @@ func ValidatePostgresClusterCreate(obj *enterpriseApi.PostgresCluster) field.Err
 		}
 	}
 
+	if reader != nil {
+		allErrs = append(allErrs, validateAgainstClass(obj, reader)...)
+	}
+
 	return allErrs
 }
 
 // ValidatePostgresClusterUpdate validates a PostgresCluster on UPDATE.
-func ValidatePostgresClusterUpdate(obj, oldObj *enterpriseApi.PostgresCluster) field.ErrorList {
-	return ValidatePostgresClusterCreate(obj)
+func ValidatePostgresClusterUpdate(obj, oldObj *enterpriseApi.PostgresCluster, reader client.Reader) field.ErrorList {
+	return ValidatePostgresClusterCreate(obj, reader)
+}
+
+func validateAgainstClass(obj *enterpriseApi.PostgresCluster, reader client.Reader) field.ErrorList {
+	var allErrs field.ErrorList
+
+	class := &enterpriseApi.PostgresClusterClass{}
+	if err := reader.Get(context.Background(), client.ObjectKey{Name: obj.Spec.Class}, class); err != nil {
+		allErrs = append(allErrs, field.Invalid(
+			field.NewPath("spec").Child("class"),
+			obj.Spec.Class,
+			"referenced PostgresClusterClass not found"))
+		return allErrs
+	}
+
+	classConfig := class.Spec.Config
+
+	mergedInstances := obj.Spec.Instances
+	mergedVersion := obj.Spec.PostgresVersion
+	mergedStorage := obj.Spec.Storage
+	if classConfig != nil {
+		if mergedInstances == nil {
+			mergedInstances = classConfig.Instances
+		}
+		if mergedVersion == nil {
+			mergedVersion = classConfig.PostgresVersion
+		}
+		if mergedStorage == nil {
+			mergedStorage = classConfig.Storage
+		}
+	}
+	specPath := field.NewPath("spec")
+	if mergedInstances == nil {
+		allErrs = append(allErrs, field.Required(specPath.Child("instances"),
+			"must be set in PostgresCluster or PostgresClusterClass"))
+	}
+	if mergedVersion == nil {
+		allErrs = append(allErrs, field.Required(specPath.Child("postgresVersion"),
+			"must be set in PostgresCluster or PostgresClusterClass"))
+	}
+	if mergedStorage == nil {
+		allErrs = append(allErrs, field.Required(specPath.Child("storage"),
+			"must be set in PostgresCluster or PostgresClusterClass"))
+	}
+
+	if classConfig == nil {
+		return allErrs
+	}
+
+	if obj.Spec.Storage != nil && classConfig.Storage != nil {
+		if obj.Spec.Storage.Cmp(*classConfig.Storage) < 0 {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec").Child("storage"),
+				obj.Spec.Storage.String(),
+				"storage cannot be lower than class default ("+classConfig.Storage.String()+")"))
+		}
+	}
+
+	if obj.Spec.PostgresVersion != nil && classConfig.PostgresVersion != nil {
+		clusterMajor := parseMajorVersion(*obj.Spec.PostgresVersion)
+		classMajor := parseMajorVersion(*classConfig.PostgresVersion)
+		if clusterMajor > 0 && classMajor > 0 && clusterMajor < classMajor {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec").Child("postgresVersion"),
+				*obj.Spec.PostgresVersion,
+				"postgresVersion cannot be lower than class default ("+*classConfig.PostgresVersion+")"))
+		}
+	}
+
+	if obj.Spec.ConnectionPoolerEnabled != nil && *obj.Spec.ConnectionPoolerEnabled {
+		classDisabled := classConfig.ConnectionPoolerEnabled == nil || !*classConfig.ConnectionPoolerEnabled
+		if classDisabled {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec").Child("connectionPoolerEnabled"),
+				true,
+				"connectionPoolerEnabled cannot be enabled when disabled in PostgresClusterClass"))
+		}
+	}
+
+	return allErrs
+}
+
+func parseMajorVersion(version string) int {
+	for i, ch := range version {
+		if ch == '.' {
+			v, _ := strconv.Atoi(version[:i])
+			return v
+		}
+	}
+	v, _ := strconv.Atoi(version)
+	return v
 }
 
 // GetPostgresClusterWarningsOnCreate returns warnings for PostgresCluster CREATE.

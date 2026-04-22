@@ -27,8 +27,13 @@ import (
 // ValidationContext provides context for validation operations that may need
 // to access Kubernetes resources
 type ValidationContext struct {
-	// Client is the Kubernetes client for resource lookups
+	// Client is the Kubernetes client for resource lookups (cached)
 	Client client.Client
+
+	// Reader is a live API reader that bypasses the cache.
+	// Use this for cross-resource lookups where eventual consistency
+	// could cause false rejections.
+	Reader client.Reader
 
 	// Namespace is the namespace of the object being validated
 	Namespace string
@@ -38,9 +43,10 @@ type ValidationContext struct {
 }
 
 // NewValidationContext creates a new ValidationContext
-func NewValidationContext(c client.Client, namespace string) *ValidationContext {
+func NewValidationContext(c client.Client, reader client.Reader, namespace string) *ValidationContext {
 	return &ValidationContext{
 		Client:    c,
+		Reader:    reader,
 		Namespace: namespace,
 		Ctx:       context.Background(),
 	}

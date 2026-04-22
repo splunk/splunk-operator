@@ -18,6 +18,7 @@ package validation
 
 import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	pgwebhook "github.com/splunk/splunk-operator/pkg/postgresql/cluster/adapter/webhook"
@@ -195,8 +196,18 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 	},
 
 	PostgresClusterGVR: &GenericValidator[*enterpriseApi.PostgresCluster]{
-		ValidateCreateFunc:   pgwebhook.ValidatePostgresClusterCreate,
-		ValidateUpdateFunc:   pgwebhook.ValidatePostgresClusterUpdate,
+		ValidateCreateFunc: func(obj *enterpriseApi.PostgresCluster) field.ErrorList {
+			return pgwebhook.ValidatePostgresClusterCreate(obj, nil)
+		},
+		ValidateUpdateFunc: func(obj, oldObj *enterpriseApi.PostgresCluster) field.ErrorList {
+			return pgwebhook.ValidatePostgresClusterUpdate(obj, oldObj, nil)
+		},
+		ValidateCreateWithContextFunc: func(obj *enterpriseApi.PostgresCluster, vc *ValidationContext) field.ErrorList {
+			return pgwebhook.ValidatePostgresClusterCreate(obj, vc.Reader)
+		},
+		ValidateUpdateWithContextFunc: func(obj *enterpriseApi.PostgresCluster, oldObj *enterpriseApi.PostgresCluster, vc *ValidationContext) field.ErrorList {
+			return pgwebhook.ValidatePostgresClusterUpdate(obj, oldObj, vc.Reader)
+		},
 		WarningsOnCreateFunc: pgwebhook.GetPostgresClusterWarningsOnCreate,
 		WarningsOnUpdateFunc: pgwebhook.GetPostgresClusterWarningsOnUpdate,
 		GroupKind: schema.GroupKind{
