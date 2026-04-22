@@ -46,6 +46,7 @@ var hbaAuthMethods = map[string]bool{
 	"ldap":          true,
 	"radius":        true,
 	"cert":          true,
+	"oauth":         true,
 }
 
 var hbaSpecialAddresses = map[string]bool{
@@ -57,24 +58,24 @@ var hbaSpecialAddresses = map[string]bool{
 // tokenPattern splits on whitespace while keeping double-quoted strings intact.
 var hbaTokenPattern = regexp.MustCompile(`(?:"+.*?"+|\S)+`)
 
-// hostnamePattern matches valid hostname characters.
-var hbaHostnamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+// hbaLabelPattern matches a valid DNS label sequence (hostname or domain suffix).
+var hbaLabelPattern = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$`)
+
+// RuleError describes a validation error for a single pg_hba.conf rule.
+type RuleError struct {
+	Index   int
+	Message string
+}
 
 // ValidateRules validates a slice of pg_hba.conf rule strings.
-// Returns nil if all rules are valid, or an error listing each invalid rule.
-func ValidateRules(rules []string) error {
-	var errs []string
+func ValidateRules(rules []string) []RuleError {
+	var errs []RuleError
 	for i, rule := range rules {
-		if ruleErrs := validateRule(rule); len(ruleErrs) > 0 {
-			for _, e := range ruleErrs {
-				errs = append(errs, fmt.Sprintf("rule %d: %s", i+1, e))
-			}
+		for _, msg := range validateRule(rule) {
+			errs = append(errs, RuleError{Index: i, Message: msg})
 		}
 	}
-	if len(errs) == 0 {
-		return nil
-	}
-	return fmt.Errorf("invalid pg_hba.conf rules:\n  %s", strings.Join(errs, "\n  "))
+	return errs
 }
 
 // validateRule parses and validates a single pg_hba rule.
@@ -98,40 +99,36 @@ func validateRule(rule string) []string {
 		return []string{fmt.Sprintf("unknown connection type %q", connType)}
 	}
 
-	// Separate common fields from auth options (tokens containing "=")
-	var commonFields []string
-	for _, t := range tokens {
-		if !strings.Contains(t, "=") {
-			commonFields = append(commonFields, t)
-		}
-	}
-
-	// Layer 1: field count
 	isLocal := connType == "local"
+	minFields := 5 // TYPE DATABASE USER ADDRESS METHOD
 	if isLocal {
-		// local DATABASE USER METHOD
-		if len(commonFields) < 4 {
-			return []string{fmt.Sprintf("too few fields: expected at least 4 (local DATABASE USER METHOD), got %d", len(commonFields))}
-		}
-	} else {
-		// host DATABASE USER ADDRESS METHOD  (or ADDRESS MASK METHOD)
-		if len(commonFields) < 5 {
-			return []string{fmt.Sprintf("too few fields: expected at least 5 (%s DATABASE USER ADDRESS METHOD), got %d", connType, len(commonFields))}
-		}
+		minFields = 4 // local DATABASE USER METHOD
+	}
+	if len(tokens) < minFields {
+		return []string{fmt.Sprintf("too few fields: expected at least %d (%s DATABASE USER %sMETHOD), got %d",
+			minFields, connType, map[bool]string{true: "", false: "ADDRESS "}[isLocal], len(tokens))}
 	}
 
-	// Layer 2: auth method (last common field)
-	method := commonFields[len(commonFields)-1]
+	methodIdx := 3 // local: tokens[3]
+	if !isLocal {
+		if len(tokens) > 5 && net.ParseIP(tokens[4]) != nil {
+			methodIdx = 5
+		} else {
+			methodIdx = 4
+		}
+	}
+	if methodIdx >= len(tokens) {
+		return []string{fmt.Sprintf("too few fields: missing auth method")}
+	}
+	method := tokens[methodIdx]
 	if !hbaAuthMethods[method] {
 		errs = append(errs, fmt.Sprintf("unknown auth method %q", method))
 	}
 
-	// Layer 3: address validation (for non-local types)
 	if !isLocal {
-		address := commonFields[3]
-		// 6+ common fields means IP + separate netmask format
-		if len(commonFields) >= 6 {
-			if addrErr := validateIPNetmask(commonFields[3], commonFields[4]); addrErr != "" {
+		address := tokens[3]
+		if methodIdx == 5 {
+			if addrErr := validateIPNetmask(tokens[3], tokens[4]); addrErr != "" {
 				errs = append(errs, addrErr)
 			}
 		} else {
@@ -183,7 +180,11 @@ func validateAddress(address string) string {
 
 	// Domain suffix match: .example.com
 	if strings.HasPrefix(address, ".") && len(address) > 1 {
-		return ""
+		suffix := address[1:]
+		if hbaLabelPattern.MatchString(suffix) {
+			return ""
+		}
+		return fmt.Sprintf("invalid domain suffix %q", address)
 	}
 
 	// CIDR notation
@@ -200,7 +201,7 @@ func validateAddress(address string) string {
 	}
 
 	// Hostname
-	if hbaHostnamePattern.MatchString(address) {
+	if hbaLabelPattern.MatchString(address) {
 		return ""
 	}
 

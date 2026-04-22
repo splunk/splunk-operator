@@ -290,7 +290,7 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 				},
 			},
 			wantAllowed:  false,
-			wantMessages: []string{"rule 2", "rule 3"},
+			wantMessages: []string{"spec.pgHBA[1]", "spec.pgHBA[2]"},
 		},
 		{
 			name: "valid - rules with auth options and comments",
@@ -321,6 +321,11 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 			resp := sendAdmissionReview(t, server, ar)
 
 			assert.Equal(t, tt.wantAllowed, resp.Allowed, "unexpected admission result")
+			if !tt.wantAllowed {
+				require.NotNil(t, resp.Result)
+				assert.Equal(t, metav1.StatusReasonInvalid, resp.Result.Reason)
+				assert.Equal(t, int32(http.StatusUnprocessableEntity), resp.Result.Code)
+			}
 			if tt.wantMessage != "" {
 				require.NotNil(t, resp.Result)
 				assert.Contains(t, resp.Result.Message, tt.wantMessage)
@@ -375,6 +380,8 @@ func TestPostgresClusterPgHBAUpdateIntegration(t *testing.T) {
 		ar := newPostgresClusterAdmissionReview(t, "uid-update-invalid", admissionv1.Update, newObj, oldObj)
 		resp := sendAdmissionReview(t, server, ar)
 		assert.False(t, resp.Allowed)
+		assert.Equal(t, metav1.StatusReasonInvalid, resp.Result.Reason)
+		assert.Equal(t, int32(http.StatusUnprocessableEntity), resp.Result.Code)
 		assert.Contains(t, resp.Result.Message, "unknown connection type")
 	})
 }
@@ -503,6 +510,11 @@ func TestPostgresClusterClassPgHBAIntegration(t *testing.T) {
 			resp := sendAdmissionReview(t, server, ar)
 
 			assert.Equal(t, tt.wantAllowed, resp.Allowed, "unexpected admission result")
+			if !tt.wantAllowed {
+				require.NotNil(t, resp.Result)
+				assert.Equal(t, metav1.StatusReasonInvalid, resp.Result.Reason)
+				assert.Equal(t, int32(http.StatusUnprocessableEntity), resp.Result.Code)
+			}
 			if tt.wantMessage != "" {
 				require.NotNil(t, resp.Result)
 				assert.Contains(t, resp.Result.Message, tt.wantMessage)
@@ -554,6 +566,8 @@ func TestPostgresClusterClassPgHBAUpdateIntegration(t *testing.T) {
 		ar := newPostgresClusterClassAdmissionReview(t, "uid-class-update-invalid", admissionv1.Update, newObj, oldObj)
 		resp := sendAdmissionReview(t, server, ar)
 		assert.False(t, resp.Allowed)
+		assert.Equal(t, metav1.StatusReasonInvalid, resp.Result.Reason)
+		assert.Equal(t, int32(http.StatusUnprocessableEntity), resp.Result.Code)
 		assert.Contains(t, resp.Result.Message, "unknown auth method")
 	})
 }

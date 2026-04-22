@@ -73,7 +73,7 @@ func TestValidatePostgresClusterCreate(t *testing.T) {
 				},
 			},
 			wantErrCount: 1,
-			wantErrField: "spec.pgHBA",
+			wantErrField: "spec.pgHBA[0]",
 		},
 		{
 			name: "invalid - bad CIDR",
@@ -86,7 +86,7 @@ func TestValidatePostgresClusterCreate(t *testing.T) {
 				},
 			},
 			wantErrCount: 1,
-			wantErrField: "spec.pgHBA",
+			wantErrField: "spec.pgHBA[0]",
 		},
 		{
 			name: "invalid - bad auth method",
@@ -99,7 +99,7 @@ func TestValidatePostgresClusterCreate(t *testing.T) {
 				},
 			},
 			wantErrCount: 1,
-			wantErrField: "spec.pgHBA",
+			wantErrField: "spec.pgHBA[0]",
 		},
 		{
 			name: "invalid - missing fields",
@@ -112,7 +112,7 @@ func TestValidatePostgresClusterCreate(t *testing.T) {
 				},
 			},
 			wantErrCount: 1,
-			wantErrField: "spec.pgHBA",
+			wantErrField: "spec.pgHBA[0]",
 		},
 	}
 

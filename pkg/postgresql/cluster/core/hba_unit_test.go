@@ -24,34 +24,33 @@ import (
 )
 
 func TestValidateRules(t *testing.T) {
-	t.Run("nil slice returns nil", func(t *testing.T) {
-		assert.NoError(t, ValidateRules(nil))
+	t.Run("nil slice returns empty", func(t *testing.T) {
+		assert.Empty(t, ValidateRules(nil))
 	})
 
-	t.Run("empty slice returns nil", func(t *testing.T) {
-		assert.NoError(t, ValidateRules([]string{}))
+	t.Run("empty slice returns empty", func(t *testing.T) {
+		assert.Empty(t, ValidateRules([]string{}))
 	})
 
-	t.Run("all valid rules returns nil", func(t *testing.T) {
+	t.Run("all valid rules returns empty", func(t *testing.T) {
 		rules := []string{
 			"local all all trust",
 			"host all all 0.0.0.0/0 scram-sha-256",
 			"hostssl all all 192.168.1.0/24 md5",
 		}
-		assert.NoError(t, ValidateRules(rules))
+		assert.Empty(t, ValidateRules(rules))
 	})
 
-	t.Run("mixed valid and invalid returns error with correct indices", func(t *testing.T) {
+	t.Run("mixed valid and invalid returns correct indices", func(t *testing.T) {
 		rules := []string{
 			"host all all 0.0.0.0/0 scram-sha-256",
 			"hostx all all 0.0.0.0/0 md5",
 			"host all all 0.0.0.0/0 md5",
 		}
-		err := ValidateRules(rules)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "rule 2:")
-		assert.NotContains(t, err.Error(), "rule 1:")
-		assert.NotContains(t, err.Error(), "rule 3:")
+		errs := ValidateRules(rules)
+		require.Len(t, errs, 1)
+		assert.Equal(t, 1, errs[0].Index)
+		assert.Contains(t, errs[0].Message, "unknown connection type")
 	})
 
 	t.Run("multiple errors in different rules", func(t *testing.T) {
@@ -59,10 +58,11 @@ func TestValidateRules(t *testing.T) {
 			"hostx all all 0.0.0.0/0 md5",
 			"host all all 192.168.0.0/33 bogus",
 		}
-		err := ValidateRules(rules)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "rule 1:")
-		assert.Contains(t, err.Error(), "rule 2:")
+		errs := ValidateRules(rules)
+		require.Len(t, errs, 3)
+		assert.Equal(t, 0, errs[0].Index)
+		assert.Equal(t, 1, errs[1].Index)
+		assert.Equal(t, 1, errs[2].Index)
 	})
 }
 
@@ -96,6 +96,7 @@ func TestValidateRule(t *testing.T) {
 		{"host auth options", "host all all 0.0.0.0/0 ldap ldapserver=ldap.example.com ldapport=389"},
 		{"host quoted option", "host all all 0.0.0.0/0 ident map=omicron"},
 		{"host quoted value", `host all all 0.0.0.0/0 ldap ldapprefix="cn="`},
+		{"quoted db with equals", `host "db=name" all 0.0.0.0/0 md5`},
 		{"comma-separated db", "host db1,db2 all 0.0.0.0/0 md5"},
 		{"comma-separated user", "host all user1,user2 0.0.0.0/0 md5"},
 		{"host hostname", "host all all myhost.example.com md5"},
@@ -103,6 +104,7 @@ func TestValidateRule(t *testing.T) {
 		{"host with ident", "host all all 0.0.0.0/0 ident"},
 		{"host with pam", "host all all 0.0.0.0/0 pam"},
 		{"host with radius", "host all all 0.0.0.0/0 radius"},
+		{"host with oauth (PG18)", "host all all 0.0.0.0/0 oauth"},
 		{"empty string", ""},
 		{"whitespace only", "   "},
 	}
@@ -208,10 +210,10 @@ func TestValidateRule(t *testing.T) {
 		assert.Contains(t, errs[0], "invalid IP address")
 	})
 
-	t.Run("layer3/garbage netmask", func(t *testing.T) {
+	t.Run("layer2/garbage where netmask expected", func(t *testing.T) {
 		errs := validateRule("host all all 10.0.0.1 notamask md5")
 		require.Len(t, errs, 1)
-		assert.Contains(t, errs[0], "invalid netmask")
+		assert.Contains(t, errs[0], "unknown auth method")
 	})
 
 	// === Multiple errors in one rule ===
@@ -345,6 +347,12 @@ func TestValidateAddress(t *testing.T) {
 		{"bad CIDR format", "999.999.999.999/32", "invalid CIDR"},
 		{"special chars", "host@name", "invalid address"},
 		{"spaces in addr", "my host", "invalid address"},
+		{"double dot hostname", "myhost..example.com", "invalid address"},
+		{"leading dash hostname", "-myhost", "invalid address"},
+		{"trailing dash hostname", "myhost-", "invalid address"},
+		{"double dot domain suffix", ".foo..bar", "invalid domain suffix"},
+		{"dash-prefixed domain suffix", ".-bad", "invalid domain suffix"},
+		{"trailing dash domain suffix", ".bad-", "invalid domain suffix"},
 	}
 
 	for _, tc := range invalidAddresses {

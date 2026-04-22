@@ -28,11 +28,12 @@ func ValidatePostgresClusterCreate(obj *enterpriseApi.PostgresCluster) field.Err
 	var allErrs field.ErrorList
 
 	if len(obj.Spec.PgHBA) > 0 {
-		if err := hba.ValidateRules(obj.Spec.PgHBA); err != nil {
+		pgHBAPath := field.NewPath("spec").Child("pgHBA")
+		for _, re := range hba.ValidateRules(obj.Spec.PgHBA) {
 			allErrs = append(allErrs, field.Invalid(
-				field.NewPath("spec").Child("pgHBA"),
-				obj.Spec.PgHBA,
-				err.Error()))
+				pgHBAPath.Index(re.Index),
+				obj.Spec.PgHBA[re.Index],
+				re.Message))
 		}
 	}
 

@@ -77,7 +77,7 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 				},
 			},
 			wantErrCount: 1,
-			wantErrField: "spec.config.pgHBA",
+			wantErrField: "spec.config.pgHBA[0]",
 		},
 		{
 			name: "invalid - bad CIDR in class",
@@ -92,7 +92,7 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 				},
 			},
 			wantErrCount: 1,
-			wantErrField: "spec.config.pgHBA",
+			wantErrField: "spec.config.pgHBA[0]",
 		},
 		{
 			name: "invalid - unknown auth method in class",
@@ -107,7 +107,7 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 				},
 			},
 			wantErrCount: 1,
-			wantErrField: "spec.config.pgHBA",
+			wantErrField: "spec.config.pgHBA[0]",
 		},
 	}
 
