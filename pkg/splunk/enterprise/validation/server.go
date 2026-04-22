@@ -25,15 +25,16 @@ import (
 	"net/http"
 	"time"
 
+	"log/slog"
+
 	"github.com/splunk/splunk-operator/pkg/logging"
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var serverLog = ctrl.Log.WithName("webhook-server")
+var serverLog = slog.Default().With("component", "webhook-server")
 
 // WebhookServerOptions contains configuration for the webhook server
 type WebhookServerOptions struct {
@@ -116,7 +117,7 @@ func (s *WebhookServer) Start(ctx context.Context) error {
 		WriteTimeout: writeTimeout,
 	}
 
-	serverLog.Info("Starting webhook server", "port", s.options.Port)
+	serverLog.InfoContext(ctx, "Starting webhook server", "port", s.options.Port)
 
 	// Start server in goroutine
 	errChan := make(chan error, 1)
@@ -131,7 +132,7 @@ func (s *WebhookServer) Start(ctx context.Context) error {
 	// Wait for context cancellation or server error
 	select {
 	case <-ctx.Done():
-		serverLog.Info("Shutting down webhook server")
+		serverLog.InfoContext(ctx, "Shutting down webhook server")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		return s.httpServer.Shutdown(shutdownCtx)
@@ -214,7 +215,7 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(responseReview); err != nil {
-		serverLog.Error(err, "Failed to encode response")
+		serverLog.ErrorContext(r.Context(), "Failed to encode response", "error", err)
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}

@@ -50,10 +50,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-var logt = logf.Log.WithName("splunk.enterprise.configValidation")
 
 func init() {
 	// Re-Assigning GetReadinessScriptLocation, GetLivenessScriptLocation, GetStartupScriptLocation to use absolute path for readinessScriptLocation, readinessScriptLocation

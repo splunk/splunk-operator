@@ -22,19 +22,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	//logf "sigs.k8s.io/controller-runtime/pkg/log"
-	//stdlog "log"
-	//"github.com/go-logr/stdr"
-
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
-
-// kubernetes logger used by splunk.reconcile package
-//var log = logf.Log.WithName("splunk.reconcile")
-
-// simple stdout logger, used for debugging
-//var log = stdr.New(stdlog.New(os.Stderr, "", stdlog.LstdFlags|stdlog.Lshortfile)).WithName("splunk.reconcile")
 
 // MergePodUpdates looks for material differences between a Pod's current
 // config and a revised config. It merges material changes from revised to

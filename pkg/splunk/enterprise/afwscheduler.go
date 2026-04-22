@@ -1716,7 +1716,7 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 			break
 		}
 		if !hasMeaningfulContent {
-			scopedLog.Info("SHC Bundle Push is still in progress (status file contains only informational messages)")
+			scopedLog.InfoContext(ctx, "SHC Bundle Push is still in progress (status file contains only informational messages)")
 			return false, nil
 		}
 
@@ -2107,7 +2107,7 @@ func handleEsappPostinstall(rctx context.Context, preCtx *premiumAppScopePlayboo
 	// banner and related informational messages to stderr on every invocation,
 	// so a non-empty stderr does not indicate failure.
 	if stdErr != "" {
-		scopedLog.Info("Post install command stderr output (informational only)", "stdout", stdOut, "stderr", stdErr, "post install command", command)
+		scopedLog.InfoContext(rctx, "Post install command stderr output (informational only)", "stdout", stdOut, "stderr", stdErr, "post install command", command)
 	}
 
 	if err != nil {

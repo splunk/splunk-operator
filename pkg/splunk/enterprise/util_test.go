@@ -51,7 +51,6 @@ import (
 )
 
 func init() {
-	fmt.Printf("init is called here from test")
 	initGlobalResourceTracker()
 }
 

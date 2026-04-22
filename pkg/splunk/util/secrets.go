@@ -510,7 +510,7 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 	err := client.Get(ctx, namespacedName, &current)
 	if err == nil {
 		// Validate existing secrets according to PasswordManagement documentation
-		err = validateNamespaceScopedSecrets(&current)
+		err = validateNamespaceScopedSecrets(ctx, &current)
 		if err != nil {
 			return nil, err
 		}
@@ -607,9 +607,9 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 // validateNamespaceScopedSecrets validates that all Splunk secret tokens that exist are not empty
 // and meet their specific requirements
 // Validates secrets documented in PasswordManagement: hec_token, password, pass4SymmKey, idxc_secret, shc_secret
-func validateNamespaceScopedSecrets(secret *corev1.Secret) error {
+func validateNamespaceScopedSecrets(ctx context.Context, secret *corev1.Secret) error {
 	if secret.Data == nil {
-		slog.Info("Secret data is nil for namespace scoped secret")
+		slog.InfoContext(ctx, "Secret data is nil for namespace scoped secret")
 		return nil
 	}
 
@@ -623,11 +623,11 @@ func validateNamespaceScopedSecrets(secret *corev1.Secret) error {
 			}
 
 			if err != nil {
-				slog.Error("Validation failed for secret", "secret", tokenType, "error", err)
+				slog.ErrorContext(ctx, "Validation failed for secret", "secret", tokenType, "error", err)
 				return fmt.Errorf("validation failed for secret %s: %w", tokenType, err)
 			}
 
-			slog.Info("Namespace scoped secret validation passed", "secret", tokenType)
+			slog.InfoContext(ctx, "Namespace scoped secret validation passed", "secret", tokenType)
 		}
 	}
 
