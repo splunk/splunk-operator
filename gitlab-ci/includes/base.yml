@@ -23,6 +23,12 @@ default:
       set -eu
       go version
 
+# CI variable contract:
+# - PIPELINE_* values come from project/group settings or manual pipeline inputs.
+# - JOB_* values are lane-local defaults defined in YAML.
+# Runtime scripts always prefer PIPELINE_* over JOB_* so operators can override
+# a lane without editing repo code.
+#
 # Shared nonprod AWS contract for the current develop, nightly, and
 # qualification lanes. The repo now uses only the neutral PIPELINE_* names.
 .aws-pipeline-env-job:

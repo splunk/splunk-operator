@@ -43,7 +43,7 @@ eks-smoke-validation:
     WORKFLOW_SLUG: int-test-workflow
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
     JOB_INT_TEST_PROFILE: smoke
-    PIPELINE_INT_TEST_FOCUS: "smoke, basic, s1"
+    JOB_INT_TEST_FOCUS: "smoke, basic, s1"
     JOB_INT_TEST_TIMEOUT: 3h
   script:
     - gitlab-ci/int-test-workflow.sh
@@ -55,6 +55,9 @@ eks-smoke-validation:
 
 eks-qualification-integration-validation:
   extends: .runtime-integration-job
+  # Qualification jobs must still publish evidence so the report/gate path can
+  # decide the final lane outcome instead of stopping at the first failed test.
+  allow_failure: true
   timeout: 10h
   needs:
     - job: build-stage-image
@@ -77,6 +80,7 @@ eks-qualification-integration-validation:
 
 helm-eks-validation:
   extends: .runtime-integration-job
+  allow_failure: true
   timeout: 10h
   needs:
     - job: build-stage-image

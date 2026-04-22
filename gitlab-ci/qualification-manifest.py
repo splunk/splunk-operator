@@ -20,13 +20,21 @@ def read_makefile_version(project_dir: Path) -> str:
     raise RuntimeError("Unable to resolve VERSION from Makefile")
 
 
+def normalize_helm_profile(raw_profile: str) -> str:
+    if raw_profile in {"", "qualification", "full"}:
+        return "full"
+    return raw_profile
+
+
 def main() -> int:
     project_dir = Path.cwd()
     output_dir = project_dir / "ci-output" / "release-controller"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     qualification_profile = os.environ.get("PIPELINE_QUALIFICATION_PROFILE", "monthly")
-    helm_profile = os.environ.get("PIPELINE_HELM_TEST_PROFILE") or os.environ.get("JOB_HELM_TEST_PROFILE") or "full"
+    helm_profile = normalize_helm_profile(
+        os.environ.get("PIPELINE_HELM_TEST_PROFILE") or os.environ.get("JOB_HELM_TEST_PROFILE") or "full"
+    )
     enterprise_image = (
         os.environ.get("PIPELINE_SPLUNK_ENTERPRISE_IMAGE")
         or os.environ.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE")

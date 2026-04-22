@@ -17,6 +17,7 @@ qualification-report:
   extends:
     - .python-qualification-job
     - .rules-qualification-lane
+  when: always
   needs:
     - job: qualification-manifest
       artifacts: true
@@ -44,6 +45,7 @@ compatibility-publish:
   extends:
     - .python-qualification-job
     - .rules-qualification-lane
+  when: always
   needs:
     - job: qualification-report
       artifacts: true
@@ -54,3 +56,16 @@ compatibility-publish:
     expire_in: 90 days
     paths:
       - ci-output/release-controller/
+
+qualification-gate:
+  extends:
+    - .python-qualification-job
+    - .rules-qualification-lane
+  # This is the authoritative go/no-go signal for the qualification lane after
+  # report generation and compatibility artifact publication have run.
+  when: always
+  needs:
+    - job: qualification-report
+      artifacts: true
+  script:
+    - python3 gitlab-ci/qualification-gate.py

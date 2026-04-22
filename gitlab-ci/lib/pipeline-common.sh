@@ -156,56 +156,56 @@ resolve_integration_profile() {
   case "${requested_profile}" in
     ""|managersecret)
       RESOLVED_INT_TEST_PROFILE="managersecret"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "managersecret")"
+      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "managersecret")"
       RESOLVED_INT_TEST_TO_SKIP_DEFAULT='^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
       RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_CLUSTER_NODES:-}" "1")"
       RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_CLUSTER_WORKERS:-}" "3")"
       ;;
     managersecret-smoke-s1)
       RESOLVED_INT_TEST_PROFILE="managersecret-smoke-s1"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "managersecret, smoke, s1")"
+      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "managersecret, smoke, s1")"
       RESOLVED_INT_TEST_TO_SKIP_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_SMOKE_S1_TEST_TO_SKIP:-}" "^$")"
       RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_SMOKE_S1_CLUSTER_NODES:-}" "1")"
       RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_SMOKE_S1_CLUSTER_WORKERS:-}" "2")"
       ;;
     managersecret-smoke-c3)
       RESOLVED_INT_TEST_PROFILE="managersecret-smoke-c3"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "managersecret, smoke, c3")"
+      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "managersecret, smoke, c3")"
       RESOLVED_INT_TEST_TO_SKIP_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_SMOKE_C3_TEST_TO_SKIP:-}" "^$")"
       RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_SMOKE_C3_CLUSTER_NODES:-}" "1")"
       RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_SMOKE_C3_CLUSTER_WORKERS:-}" "3")"
       ;;
     licensemanager-smoke-s1)
       RESOLVED_INT_TEST_PROFILE="licensemanager-smoke-s1"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "licensemanager, smoke, s1")"
+      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "licensemanager, smoke, s1")"
       RESOLVED_INT_TEST_TO_SKIP_DEFAULT="$(first_nonempty "${PIPELINE_INT_LICENSEMANAGER_SMOKE_S1_TEST_TO_SKIP:-}" "^$")"
       RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_LICENSEMANAGER_SMOKE_S1_CLUSTER_NODES:-}" "1")"
       RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_LICENSEMANAGER_SMOKE_S1_CLUSTER_WORKERS:-}" "2")"
       ;;
     smoke)
       RESOLVED_INT_TEST_PROFILE="smoke"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "smoke")"
+      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "smoke")"
       RESOLVED_INT_TEST_TO_SKIP_DEFAULT="$(first_nonempty "${PIPELINE_INT_SMOKE_TEST_TO_SKIP:-}" "^$")"
       RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_SMOKE_CLUSTER_NODES:-}" "1")"
       RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_SMOKE_CLUSTER_WORKERS:-}" "2")"
       ;;
     appframework)
       RESOLVED_INT_TEST_PROFILE="appframework"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "appframework")"
+      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "appframework")"
       RESOLVED_INT_TEST_TO_SKIP_DEFAULT="$(first_nonempty "${PIPELINE_INT_APPFRAMEWORK_TEST_TO_SKIP:-}" "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$")"
       RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_APPFRAMEWORK_CLUSTER_NODES:-}" "2")"
       RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_APPFRAMEWORK_CLUSTER_WORKERS:-}" "5")"
       ;;
     full)
       RESOLVED_INT_TEST_PROFILE="full"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "integration")"
+      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "integration")"
       RESOLVED_INT_TEST_TO_SKIP_DEFAULT="$(first_nonempty "${PIPELINE_INT_FULL_TEST_TO_SKIP:-}" "^$")"
       RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_FULL_CLUSTER_NODES:-}" "2")"
       RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_FULL_CLUSTER_WORKERS:-}" "5")"
       ;;
     *)
       RESOLVED_INT_TEST_PROFILE="${requested_profile}"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${requested_profile}")"
+      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "${requested_profile}")"
       RESOLVED_INT_TEST_TO_SKIP_DEFAULT="$(first_nonempty "${PIPELINE_INT_TEST_TO_SKIP_DEFAULT:-}" "^$")"
       RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_CLUSTER_NODES:-}" "1")"
       RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_CLUSTER_WORKERS:-}" "3")"
@@ -224,7 +224,9 @@ resolve_helm_test_profile() {
       RESOLVED_HELM_TEST_PARALLEL="$(first_nonempty "${PIPELINE_HELM_TEST_PARALLEL:-}" "${JOB_HELM_TEST_PARALLEL:-}" "1")"
       ;;
     qualification|full)
-      RESOLVED_HELM_TEST_PROFILE="qualification"
+      # `qualification` is a legacy alias; qualification and release both run
+      # the full Helm suite now, so normalize the effective profile to `full`.
+      RESOLVED_HELM_TEST_PROFILE="full"
       RESOLVED_HELM_TEST_DIRS="$(first_nonempty "${PIPELINE_HELM_TEST_DIRS:-}" "${JOB_HELM_TEST_DIRS:-}" "./kuttl/tests/helm")"
       RESOLVED_HELM_TEST_TIMEOUT="$(first_nonempty "${PIPELINE_HELM_TEST_TIMEOUT:-}" "${JOB_HELM_TEST_TIMEOUT:-}" "7000")"
       RESOLVED_HELM_TEST_PARALLEL="$(first_nonempty "${PIPELINE_HELM_TEST_PARALLEL:-}" "${JOB_HELM_TEST_PARALLEL:-}" "1")"

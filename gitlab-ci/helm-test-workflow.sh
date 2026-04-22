@@ -65,7 +65,7 @@ fi
 enterprise_image="$(first_nonempty "${PIPELINE_SPLUNK_ENTERPRISE_IMAGE:-}" "${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-}" "splunk/splunk:latest")"
 enterprise_image="$(strip_docker_io_prefix "${enterprise_image}")"
 
-requested_profile="$(first_nonempty "${PIPELINE_HELM_TEST_PROFILE:-}" "${JOB_HELM_TEST_PROFILE:-}" "qualification")"
+requested_profile="$(first_nonempty "${PIPELINE_HELM_TEST_PROFILE:-}" "${JOB_HELM_TEST_PROFILE:-}" "full")"
 resolve_helm_test_profile "${requested_profile}"
 generated_kuttl_config="ci-output/${WORKFLOW_SLUG}-kuttl-suite.yaml"
 
