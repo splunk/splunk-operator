@@ -36,9 +36,7 @@ def main() -> int:
         os.environ.get("PIPELINE_HELM_TEST_PROFILE") or os.environ.get("JOB_HELM_TEST_PROFILE") or "full"
     )
     enterprise_image = (
-        os.environ.get("PIPELINE_SPLUNK_ENTERPRISE_IMAGE")
-        or os.environ.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE")
-        or "splunk/splunk:latest"
+        os.environ.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE") or "splunk/splunk:latest"
     )
 
     manifest = {

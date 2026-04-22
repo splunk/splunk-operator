@@ -62,7 +62,7 @@ if [ -z "${ECR_REGION}" ]; then
   exit 1
 fi
 
-enterprise_image="$(first_nonempty "${PIPELINE_SPLUNK_ENTERPRISE_IMAGE:-}" "${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-}" "splunk/splunk:latest")"
+enterprise_image="$(first_nonempty "${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-}" "splunk/splunk:latest")"
 enterprise_image="$(strip_docker_io_prefix "${enterprise_image}")"
 
 requested_profile="$(first_nonempty "${PIPELINE_HELM_TEST_PROFILE:-}" "${JOB_HELM_TEST_PROFILE:-}" "full")"

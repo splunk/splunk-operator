@@ -57,9 +57,8 @@ if [ -z "${ECR_REGION}" ]; then
   exit 1
 fi
 
-# Enterprise image for the minimal develop lane — prefer an explicit pipeline
-# override and otherwise reuse the existing repo .env image pin.
-enterprise_image="$(first_nonempty "${PIPELINE_SPLUNK_ENTERPRISE_IMAGE:-}" "${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-}" "splunk/splunk:latest")"
+# Enterprise image comes from the repo-owned release image pin.
+enterprise_image="$(first_nonempty "${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-}" "splunk/splunk:latest")"
 enterprise_image="$(strip_docker_io_prefix "${enterprise_image}")"
 
 requested_profile="$(first_nonempty "${PIPELINE_INT_TEST_PROFILE:-}" "${JOB_INT_TEST_PROFILE:-}" "smoke")"
