@@ -2,8 +2,8 @@ qualification-manifest:
   extends:
     - .python-qualification-job
     - .rules-qualification-lane
-  stage: verify
   needs:
+    # needs lets this metadata job start as soon as format-and-vet completes.
     - format-and-vet
   script:
     - python3 gitlab-ci/qualification-manifest.py

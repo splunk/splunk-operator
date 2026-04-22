@@ -167,6 +167,7 @@ aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --use
 log_step "registry:ecr-login:complete"
 
 log_step "registry:enterprise-image:start"
+# get-private-registry-enterprise.sh is a bash script and uses source/bash-only semantics.
 PRIVATE_SPLUNK_ENTERPRISE_IMAGE="$(bash "${CI_PROJECT_DIR}/test/get-private-registry-enterprise.sh" | tail -n 1)"
 log_step "registry:enterprise-image:complete ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
 
@@ -178,6 +179,8 @@ kubectl get nodes -o wide 2>&1 | tee -a "${cluster_log}"
 log_step "cluster:snapshot:pods"
 kubectl get pods -A 2>&1 | tee -a "${cluster_log}"
 
+# TODO CSPL-4731: replace public GitHub URLs with internal mirror once
+# artifact mirroring is set up for the SOK staging environment.
 log_step "cluster:addons:metrics-server"
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml 2>&1 | tee -a "${cluster_log}"
 log_step "cluster:addons:metrics-server:complete"

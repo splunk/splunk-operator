@@ -105,6 +105,8 @@ nightly-eks-integration-validation:
       artifacts: true
     - job: scan-stage-image-trivy
   rules:
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
   variables:
     WORKFLOW_SLUG: nightly-int-test-workflow
