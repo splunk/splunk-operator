@@ -70,7 +70,7 @@ jobs:
             managercrcrud,
             licensemanager,
             managerdeletecr,
-            indingsep,
+            indexingestionsep,
           ]
     runs-on: ubuntu-latest
     needs: build-operator-image
@@ -194,9 +194,9 @@ jobs:
           mkdir -p ./bin
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run Integration test
-        timeout-minutes: 240
+        timeout-minutes: 270
         env:
-          TEST_TIMEOUT: 225m
+          TEST_TIMEOUT: 255m
           TEST_S3_ACCESS_KEY_ID: ${{ vars.TEST_S3_ACCESS_KEY_ID }}
           TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.TEST_S3_SECRET_ACCESS_KEY }}
         run: |

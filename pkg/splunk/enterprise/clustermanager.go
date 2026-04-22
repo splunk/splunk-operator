@@ -227,7 +227,8 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 		// Create podExecClient (use injected one if provided, otherwise create real one)
 		if podExecClient == nil {
-			podExecClient = splutil.GetPodExecClient(client, cr, "")
+			cmPodName := GetSplunkStatefulsetPodName(SplunkClusterManager, cr.GetName(), 0)
+			podExecClient = splutil.GetPodExecClient(client, cr, cmPodName)
 		}
 
 		// Add a splunk operator telemetry app

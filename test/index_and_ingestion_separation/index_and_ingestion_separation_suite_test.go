@@ -11,13 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package indingsep
+package indexingestionsep
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -26,18 +25,9 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-const (
-	// PollInterval specifies the polling interval
-	PollInterval = 5 * time.Second
-
-	// ConsistentPollInterval is the interval to use to consistently check a state is stable
-	ConsistentPollInterval = 200 * time.Millisecond
-	ConsistentDuration     = 2000 * time.Millisecond
-)
-
 var (
 	testenvInstance *testenv.TestEnv
-	testSuiteName   = "indingsep-" + testenv.RandomDNSName(3)
+	testSuiteName   = "idxingsep-" + testenv.RandomDNSName(3)
 
 	queue = enterpriseApi.QueueSpec{
 		Provider: "sqs",
@@ -100,32 +90,34 @@ var (
 	appSourceVolumeName = "appframework-test-volume-" + testenv.RandomDNSName(3)
 	s3TestDir           = "icappfw-" + testenv.RandomDNSName(4)
 	appListV1           = testenv.BasicApps
-	s3AppDirV1          = testenv.AppLocationV1
 )
 
-// TestBasic is the main entry point
-func TestBasic(t *testing.T) {
+// TestIndexIngestionSeparation is the main entry point
+func TestIndexIngestionSeparation(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecs(t, "Running "+testSuiteName)
+	sc, _ := GinkgoConfiguration()
+	sc.Timeout = testenv.ShortSuiteTimeout
+
+	RunSpecs(t, "Running "+testSuiteName, sc)
 }
 
 var _ = BeforeSuite(func() {
 	var err error
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
-	Expect(err).ToNot(HaveOccurred())
+	Expect(err).To(Succeed(), "Failed to initialize test environment")
 
 	appListV1 = testenv.BasicApps
 	appFileList := testenv.GetAppFileList(appListV1)
 
 	// Download V1 Apps from S3
-	err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+	err = testenv.DownloadFilesFromS3(testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 	Expect(err).To(Succeed(), "Unable to download V1 app files")
 })
 
 var _ = AfterSuite(func() {
 	if testenvInstance != nil {
-		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
+		Expect(testenvInstance.Teardown()).To(Succeed(), "Failed to teardown test environment")
 	}
 
 	err := os.RemoveAll(downloadDirV1)

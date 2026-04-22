@@ -3,7 +3,6 @@ package testenv
 import (
 	"context"
 	"errors"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,11 +32,6 @@ var (
 	s3deleteWaitTime          = 60
 )
 
-// GetSmartStoreIndexesBucet returns smartstore test bucket name
-func GetSmartStoreIndexesBucet() string {
-	return testIndexesS3Bucket
-}
-
 // GetDefaultS3Region returns default AWS Region
 func GetDefaultS3Region() string {
 	return s3Region
@@ -54,9 +48,9 @@ func CheckPrefixExistsOnS3(prefix string) bool {
 
 	resp := GetFileListOnS3(dataBucket, prefix)
 	for _, key := range resp {
-		logf.Log.Info("CHECKING KEY ", "KEY", *key.Key)
+		logf.Log.Info("Checking key", "key", *key.Key)
 		if strings.Contains(*key.Key, prefix) {
-			logf.Log.Info("Prefix found on bucket", "Prefix", prefix, "KEY", *key.Key)
+			logf.Log.Info("Prefix found on bucket", "prefix", prefix, "key", *key.Key)
 			return true
 		}
 	}
@@ -95,7 +89,7 @@ func DownloadFileFromS3(dataBucket string, filename string, s3FilePath string, d
 	// Create empty file on OS File System
 	file, err := os.Create(filepath.Join(downloadDir, filename))
 	if err != nil {
-		logf.Log.Error(err, "Failed to create file", "Filename", file)
+		logf.Log.Error(err, "Failed to create file", "filename", file)
 	}
 	defer file.Close()
 
@@ -113,7 +107,7 @@ func DownloadFileFromS3(dataBucket string, filename string, s3FilePath string, d
 		})
 
 	if err != nil {
-		logf.Log.Error(err, "Failed to download file", "Bucket", dataBucket, "Path", s3FilePath, "Filename", filename)
+		logf.Log.Error(err, "Failed to download file", "bucket", dataBucket, "path", s3FilePath, "filename", filename)
 		return "", err
 	}
 
@@ -175,7 +169,7 @@ func DeleteFileOnS3(bucket string, filename string) error {
 	svc := s3.NewFromConfig(*cfg)
 	_, err = svc.DeleteObject(context.TODO(), &s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: aws.String(filename)})
 	if err != nil {
-		logf.Log.Error(err, "Unable to delete object from bucket", "Object Name", filename, "Bucket Name", bucket)
+		logf.Log.Error(err, "Unable to delete object from bucket", "objectName", filename, "bucketName", bucket)
 	}
 
 	waiter := s3.NewObjectNotExistsWaiter(svc)
@@ -183,7 +177,7 @@ func DeleteFileOnS3(bucket string, filename string) error {
 		Bucket: aws.String(bucket),
 		Key:    aws.String(filename),
 	}, time.Duration(time.Duration(s3deleteWaitTime).Seconds()))
-	logf.Log.Info("Deleted file on S3", "File Name", filename, "Bucket", bucket)
+	logf.Log.Info("Deleted file on S3", "fileName", filename, "bucket", bucket)
 	return err
 }
 
@@ -192,12 +186,12 @@ func GetFilesInPathOnS3(bucket string, path string) []string {
 	resp := GetFileListOnS3(bucket, path)
 	var files []string
 	for _, key := range resp {
-		logf.Log.Info("CHECKING KEY ", "KEY", *key.Key)
+		logf.Log.Info("Checking key", "key", *key.Key)
 		if strings.Contains(*key.Key, path) {
 			filename := strings.Replace(*key.Key, path, "", -1)
 			// This condition filters out directories as GetFileListOnS3 returns files and directories with their absolute path's
 			if len(filename) > 1 {
-				logf.Log.Info("File found on bucket", "Prefix", path, "KEY", *key.Key)
+				logf.Log.Info("File found on bucket", "prefix", path, "key", *key.Key)
 				files = append(files, filename)
 			}
 		}
@@ -208,10 +202,10 @@ func GetFilesInPathOnS3(bucket string, path string) []string {
 // DownloadFilesFromS3 download given list of files from S3 to the given directory
 func DownloadFilesFromS3(testDataS3Bucket string, s3AppDir string, downloadDir string, appList []string) error {
 	for _, key := range appList {
-		logf.Log.Info("Downloading file from S3", "File name", key)
+		logf.Log.Info("Downloading file from S3", "fileName", key)
 		_, err := DownloadFileFromS3(testDataS3Bucket, key, s3AppDir, downloadDir)
 		if err != nil {
-			logf.Log.Error(err, "Unable to download file", "File Name", key)
+			logf.Log.Error(err, "Unable to download file", "fileName", key)
 			return err
 		}
 	}
@@ -222,26 +216,26 @@ func DownloadFilesFromS3(testDataS3Bucket string, s3AppDir string, downloadDir s
 func UploadFilesToS3(testS3Bucket string, s3TestDir string, applist []string, downloadDir string) ([]string, error) {
 	var uploadedFiles []string
 	for _, key := range applist {
-		logf.Log.Info("Uploading file to S3", "File name", key)
+		logf.Log.Info("Uploading file to S3", "fileName", key)
 		fileLocation := filepath.Join(downloadDir, key)
 		fileBody, err := os.Open(fileLocation)
 		if err != nil {
-			logf.Log.Error(err, "Unable to open file", "File name", key)
+			logf.Log.Error(err, "Unable to open file", "fileName", key)
 			return nil, err
 		}
 		fileName, err := UploadFileToS3(testS3Bucket, key, s3TestDir, fileBody)
 		if err != nil {
-			logf.Log.Error(err, "Unable to upload file", "File name", key)
+			logf.Log.Error(err, "Unable to upload file", "fileName", key)
 			return nil, err
 		}
-		logf.Log.Info("File upload to test S3", "File name", fileName)
+		logf.Log.Info("File upload to test S3", "fileName", fileName)
 		uploadedFiles = append(uploadedFiles, fileName)
 	}
 	return uploadedFiles, nil
 }
 
 // DisableAppsToS3 untar apps, modify their conf file to disable them, re-tar and upload the disabled version to S3
-func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string) ([]string, error) {
+func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string) error {
 
 	// Create a folder named 'untarred_apps' to store untarred apps folders
 	untarredAppsMainFolder := downloadDir + "/untarred_apps"
@@ -276,8 +270,7 @@ func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string)
 		appConfFile := untarredAppRootFolder + "/default/app.conf"
 		input, err := os.ReadFile(appConfFile)
 		if err != nil {
-			log.Fatalln(err)
-			return nil, err
+			return err
 		}
 		lines := strings.Split(string(input), "\n")
 		for i, line := range lines {
@@ -291,7 +284,7 @@ func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string)
 		output := strings.Join(lines, "\n")
 		err = os.WriteFile(appConfFile, []byte(output), 0644)
 		if err != nil {
-			log.Fatalln(err)
+			return err
 		}
 
 		// Tar disabled app folder
@@ -303,7 +296,7 @@ func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string)
 	}
 
 	// Upload disabled apps to S3
-	uploadedFiles, _ := UploadFilesToS3(testIndexesS3Bucket, s3TestDir, appFileList, disabledAppsFolder)
+	_, err := UploadFilesToS3(testIndexesS3Bucket, s3TestDir, appFileList, disabledAppsFolder)
 
-	return uploadedFiles, nil
+	return err
 }

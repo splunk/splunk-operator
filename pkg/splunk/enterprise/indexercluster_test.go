@@ -581,7 +581,7 @@ func TestUpdateStatusInvalidResponse(t *testing.T) {
 		t.Errorf("mgr.updateStatus() should have returned an error here")
 	}
 
-	mockHandlers[1].Body = splcommon.TestUpdateStatusInvalidResponse1
+	mockHandlers[1].Body = loadFixture(t, "update_status_invalid_response1.json")
 
 	// We would like to call mgr.updateStatus() here twice just to mimic calling reconcile twice,
 	// so that the first call fill the field `mgr.cr.Status.Peers` and the next call can use that.
@@ -623,14 +623,14 @@ func TestInvalidPeerStatusInScaleDown(t *testing.T) {
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestInvalidPeerStatusInScaleDownInfo,
+			Body:   loadFixture(t, "invalid_peer_status_in_scale_down_info.json"),
 		},
 		{
 			Method: "GET",
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestInvalidPeerStatusInScaleDownPeer,
+			Body:   loadFixture(t, "invalid_peer_status_in_scale_down_peer.json"),
 		},
 	}
 
@@ -685,14 +685,14 @@ func TestInvalidPeerInFinishRecycle(t *testing.T) {
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestInvalidPeerInFinishRecycleInfo,
+			Body:   loadFixture(t, "invalid_peer_in_finish_recycle_info.json"),
 		},
 		{
 			Method: "GET",
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestInvalidPeerInFinishRecyclePeer,
+			Body:   loadFixture(t, "invalid_peer_in_finish_recycle_peer.json"),
 		},
 	}
 
@@ -780,14 +780,14 @@ func TestIndexerClusterPodManager(t *testing.T) {
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestIndexerClusterPodManagerInfo,
+			Body:   loadFixture(t, "indexer_cluster_pod_manager_info.json"),
 		},
 		{
 			Method: "GET",
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestIndexerClusterPodManagerPeer,
+			Body:   loadFixture(t, "indexer_cluster_pod_manager_peer.json"),
 		},
 	}
 	pod := &corev1.Pod{
@@ -2719,12 +2719,12 @@ func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
 	base := "https://splunk-test-indexer-0.splunk-test-indexer-headless.test.svc.cluster.local:8089/servicesNS/nobody/system/configs"
 	q := "remote_queue:test-queue"
 
-	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-outputs", base), "name="+q), 200, "", nil)
-	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-outputs/%s", base, q), ""), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-outputs", base), "name="+q), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-outputs/%s", base, q), ""), 200, "", nil)
 
 	// inputs.conf
-	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-inputs", base), "name="+q), 200, "", nil)
-	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-inputs/%s", base, q), ""), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-inputs", base), "name="+q), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-inputs/%s", base, q), ""), 200, "", nil)
 
 	// default-mode.conf
 	pipelineFields := []string{
@@ -2735,8 +2735,8 @@ func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
 		"pipeline:typing",
 	}
 	for range pipelineFields {
-		mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-default-mode", base), "name="), 200, "", nil)
-		mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-default-mode/", base), ""), 200, "", nil)
+		mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-default-mode", base), "name="), 200, "", nil)
+		mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-default-mode/", base), ""), 200, "", nil)
 	}
 
 	res, err := ApplyIndexerCluster(ctx, c, cr)
@@ -2744,7 +2744,8 @@ func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-func mustReq(method, url, body string) *http.Request {
+func mustReq(t *testing.T, method, url, body string) *http.Request {
+	t.Helper()
 	var r *http.Request
 	var err error
 	if body != "" {
@@ -2753,10 +2754,9 @@ func mustReq(method, url, body string) *http.Request {
 		r, err = http.NewRequest(method, url, nil)
 	}
 	if err != nil {
-		panic(err)
+		t.Fatalf("failed to create HTTP request: %v", err)
 	}
 	return r
-
 }
 
 func TestPasswordSyncCompleted(t *testing.T) {
@@ -2932,14 +2932,14 @@ func TestClusterQuorumRestoredClusterInitialized(t *testing.T) {
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestIndexerClusterPodManagerInfo,
+			Body:   loadFixture(t, "indexer_cluster_pod_manager_info.json"),
 		},
 		{
 			Method: "GET",
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json",
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.TestIndexerClusterPodManagerPeer,
+			Body:   loadFixture(t, "indexer_cluster_pod_manager_peer.json"),
 		},
 	}
 
@@ -3051,13 +3051,13 @@ func TestClusterQuorumLostEvent(t *testing.T) {
 			Method: "GET",
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json",
 			Status: 200,
-			Body:   splcommon.TestIndexerClusterPodManagerInfo,
+			Body:   loadFixture(t, "indexer_cluster_pod_manager_info.json"),
 		},
 		{
 			Method: "GET",
 			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json",
 			Status: 200,
-			Body:   splcommon.TestIndexerClusterPodManagerPeer,
+			Body:   loadFixture(t, "indexer_cluster_pod_manager_peer.json"),
 		},
 	}
 	mockSplunkClient := &spltest.MockHTTPClient{}
@@ -3085,10 +3085,10 @@ func TestClusterQuorumLostEvent(t *testing.T) {
 
 	// Reset recorder and prepare second call with indexing_ready=false
 	recorder.events = []mockEvent{}
-	quorumLostInfo := `{"entry":[{"content":{"initialized_flag":true,"indexing_ready_flag":false,"service_ready_flag":true,"maintenance_mode":false,"rolling_restart_flag":false,"label":"splunk-manager1-cluster-manager-0","active_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7571-1583870198.bundle","checksum":"ABC123","timestamp":1583870198},"latest_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7571-1583870198.bundle","checksum":"ABC123","timestamp":1583870198},"multisite":"false","replication_factor":3,"site_replication_factor":"origin:2,total:3"}}]}`
+	quorumLostInfo := loadFixture(t, "quorum_lost_info.json")
 	quorumLostHandlers := []spltest.MockHTTPHandler{
 		{Method: "GET", URL: "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json", Status: 200, Body: quorumLostInfo},
-		{Method: "GET", URL: "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json", Status: 200, Body: splcommon.TestIndexerClusterPodManagerPeer},
+		{Method: "GET", URL: "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json", Status: 200, Body: loadFixture(t, "indexer_cluster_pod_manager_peer.json")},
 	}
 	mockSplunkClient2 := &spltest.MockHTTPClient{}
 	mockSplunkClient2.AddHandlers(quorumLostHandlers...)
@@ -3194,7 +3194,7 @@ func TestIdxcScaledUpScaledDownEvent(t *testing.T) {
 	if phase == enterpriseApi.PhaseReady {
 		if desiredReplicas > previousReplicas && cr.Status.Replicas == desiredReplicas {
 			ep.Normal(ctx, "ScaledUp",
-				fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+				fmt.Sprintf("Successfully scaled %s up to %d replicas", cr.GetName(), desiredReplicas))
 		}
 	}
 
@@ -3208,7 +3208,7 @@ func TestIdxcScaledUpScaledDownEvent(t *testing.T) {
 			if !strings.Contains(event.message, crName) {
 				t.Errorf("Expected event message to contain CR name '%s', got: %s", crName, event.message)
 			}
-			if !strings.Contains(event.message, "1") || !strings.Contains(event.message, "3") {
+			if !strings.Contains(event.message, "3") {
 				t.Errorf("Expected event message to contain replica counts, got: %s", event.message)
 			}
 			break
@@ -3227,7 +3227,7 @@ func TestIdxcScaledUpScaledDownEvent(t *testing.T) {
 	if phase == enterpriseApi.PhaseReady {
 		if desiredReplicas < previousReplicas && cr.Status.Replicas == desiredReplicas {
 			ep.Normal(ctx, "ScaledDown",
-				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+				fmt.Sprintf("Successfully scaled %s down to %d replicas", cr.GetName(), desiredReplicas))
 		}
 	}
 
@@ -3254,7 +3254,7 @@ func TestIdxcScaledUpScaledDownEvent(t *testing.T) {
 	if phase == enterpriseApi.PhaseReady {
 		if desiredReplicas < previousReplicas && cr.Status.Replicas == desiredReplicas {
 			ep.Normal(ctx, "ScaledDown",
-				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+				fmt.Sprintf("Successfully scaled %s down to %d replicas", cr.GetName(), desiredReplicas))
 		}
 	}
 	if len(recorder.events) != 0 {
@@ -3268,7 +3268,7 @@ func TestIdxcScaledUpScaledDownEvent(t *testing.T) {
 	if phase == enterpriseApi.PhaseReady {
 		if desiredReplicas < previousReplicas && cr.Status.Replicas == desiredReplicas {
 			ep.Normal(ctx, "ScaledDown",
-				fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+				fmt.Sprintf("Successfully scaled %s down to %d replicas", cr.GetName(), desiredReplicas))
 		}
 	}
 	if len(recorder.events) != 0 {

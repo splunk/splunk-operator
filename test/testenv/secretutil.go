@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,14 +46,14 @@ func GetSecretStruct(ctx context.Context, deployment *Deployment, ns string, sec
 	secretObject := &corev1.Secret{}
 	err := deployment.GetInstance(ctx, secretName, secretObject)
 	if err != nil {
-		deployment.testenv.Log.Error(err, "Unable to get secret object", "Secret Name", secretName, "Namespace", ns)
+		deployment.testenv.Log.Error(err, "Unable to get secret object", "secretName", secretName, "namespace", ns)
 	}
 	return secretObject, err
 }
 
 // ModifySecretObject Modifies the secret object with given data
 func ModifySecretObject(ctx context.Context, deployment *Deployment, ns string, secretName string, data map[string][]byte) error {
-	logf.Log.Info("Modify secret object", "Secret Name", secretName, "Data", data)
+	logf.Log.Info("Modify secret object", "secretName", secretName, "data", data)
 	secret := newSecretSpec(ns, secretName, data)
 
 	err := deployment.UpdateCR(ctx, secret)
@@ -66,7 +66,7 @@ func ModifySecretObject(ctx context.Context, deployment *Deployment, ns string, 
 
 // DeleteSecretObject Deletes the entire secret object
 func DeleteSecretObject(ctx context.Context, deployment *Deployment, ns string, secretName string) error {
-	logf.Log.Info("Delete secret object", "Secret Name", secretName, "Namespace", ns)
+	logf.Log.Info("Delete secret object", "secretName", secretName, "namespace", ns)
 	secret := newSecretSpec(ns, secretName, map[string][]byte{})
 	err := deployment.DeleteCR(ctx, secret)
 	if err != nil {
@@ -85,32 +85,32 @@ func GetMountedKey(ctx context.Context, deployment *Deployment, podName string, 
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return ""
 	}
-	logf.Log.Info("Key found on pod", "Pod Name", podName, "stdout", stdout, "stderr", stderr)
+	logf.Log.Info("Key found on pod", "podName", podName, "stdout", stdout, "stderr", stderr)
 	return stdout
 }
 
-// GetRandomeHECToken generates a random HEC token
-func GetRandomeHECToken() string {
+// GetRandomHECToken generates a random HEC token
+func GetRandomHECToken() string {
 	return fmt.Sprintf("%s-%s-%s-%s-%s", RandomHex(8), RandomHex(4), RandomHex(4), RandomHex(4), RandomHex(12))
 }
 
 // GetSecretFromServerConf gets give secret from server under given stanza
 func GetSecretFromServerConf(ctx context.Context, deployment *Deployment, podName string, ns string, configName string, stanza string) (string, string, error) {
 	filePath := "/opt/splunk/etc/system/local/server.conf"
-	confline, err := GetConfLineFromPod(podName, filePath, ns, configName, stanza, true)
+	confline, err := GetConfLineFromPod(ctx, podName, filePath, ns, configName, stanza, true)
 	if err != nil {
-		logf.Log.Error(err, "Failed to get secret from pod", "Pod Name", podName, "Secret Name", configName)
+		logf.Log.Error(err, "Failed to get secret from pod", "podName", podName, "secretName", configName)
 		return "", "", err
 	}
 
 	secretList := strings.Split(confline, "=")
 	key := strings.TrimSpace(secretList[0])
-	value := DecryptSplunkEncodedSecret(ctx, deployment, podName, ns, strings.TrimSpace(secretList[1]))
+	value := DecryptSplunkEncodedSecret(ctx, deployment, podName, strings.TrimSpace(secretList[1]))
 	return key, value, nil
 }
 
 // DecryptSplunkEncodedSecret Decrypt Splunk Secret like pass4SymmKey On Given Pod
-func DecryptSplunkEncodedSecret(ctx context.Context, deployment *Deployment, podName string, ns string, secretValue string) string {
+func DecryptSplunkEncodedSecret(ctx context.Context, deployment *Deployment, podName string, secretValue string) string {
 	stdin := fmt.Sprintf("/opt/splunk/bin/splunk show-decrypted --value '%s'", secretValue)
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
@@ -120,7 +120,7 @@ func DecryptSplunkEncodedSecret(ctx context.Context, deployment *Deployment, pod
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 
-	logf.Log.Info("Decrypted Key Value", "Decrypted Key", stdout)
+	logf.Log.Info("Decrypted Key Value", "decryptedKey", stdout)
 	return strings.TrimSuffix(stdout, "\n")
 }
 
@@ -157,7 +157,7 @@ func GetVersionedSecretNames(ns string, version int) []string {
 			}
 		}
 	}
-	logf.Log.Info("Versioned Secret Objects Found in Namespace", "NameSpace", ns, "Versioned Secrets", splunkSecrets)
+	logf.Log.Info("Versioned Secret Objects Found in Namespace", "namespace", ns, "versionedSecrets", splunkSecrets)
 	return splunkSecrets
 }
 
@@ -194,15 +194,27 @@ func CheckSecretViaAPI(ctx context.Context, deployment *Deployment, podName stri
 }
 
 // GetSecretFromInputsConf gets give secret from server under given stanza
-func GetSecretFromInputsConf(deployment *Deployment, podName string, ns string, configName string, stanza string) (string, string, error) {
+func GetSecretFromInputsConf(ctx context.Context, deployment *Deployment, podName string, ns string, configName string, stanza string) (string, string, error) {
 	filePath := "/opt/splunk/etc/apps/splunk_httpinput/local/inputs.conf"
-	confline, err := GetConfLineFromPod(podName, filePath, ns, configName, stanza, true)
+	confline, err := GetConfLineFromPod(ctx, podName, filePath, ns, configName, stanza, true)
 	if err != nil {
-		logf.Log.Error(err, "Failed to get secret from pod", "Pod Name", podName, "Secret Name", configName)
+		logf.Log.Error(err, "Failed to get secret from pod", "podName", podName, "secretName", configName)
 		return "", "", err
 	}
 	secretList := strings.Split(confline, "=")
 	key := strings.TrimSpace(secretList[0])
 	value := strings.TrimSpace(secretList[1])
 	return key, value, nil
+}
+
+// GenerateAndApplySecretUpdate creates randomized secret data and applies it to the namespace-scoped
+// secret object, returning the updated data map for subsequent verification.
+func GenerateAndApplySecretUpdate(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, namespaceScopedSecretName string) (map[string][]byte, error) {
+	modifiedHecToken := GetRandomHECToken()
+	modifiedValue := RandomDNSName(24)
+	updatedSecretData := GetSecretDataMap(modifiedHecToken, modifiedValue, modifiedValue, modifiedValue, modifiedValue)
+	if err := ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, updatedSecretData); err != nil {
+		return nil, fmt.Errorf("unable to update secret object: %w", err)
+	}
+	return updatedSecretData, nil
 }

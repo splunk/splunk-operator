@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,6 +27,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo/v2"
+	gomega "github.com/onsi/gomega"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
@@ -47,20 +48,17 @@ const (
 	defaultOperatorImage = "splunk/splunk-operator"
 	defaultSplunkImage   = "splunk/splunk:latest"
 
-	// defaultTestTimeout is the max timeout in seconds before async test failed.
-	defaultTestTimeout = 1000000
-
-	// PollInterval specifies the polling interval
+	// PollInterval specifies the polling interval for slow operations (waiting for full cluster readiness)
 	PollInterval = 5 * time.Second
+
+	// ShortPollInterval specifies the polling interval for fast-transitioning states
+	ShortPollInterval = 2 * time.Second
 
 	// ConsistentPollInterval is the interval to use to consistently check a state is stable
 	ConsistentPollInterval = 200 * time.Millisecond
 
 	// ConsistentDuration is use to check a state is stable
 	ConsistentDuration = 2000 * time.Millisecond
-
-	// DefaultTimeout is the max timeout before we failed.
-	DefaultTimeout = 2000 * time.Minute
 
 	// SearchHeadPod Template String for search head pod
 	SearchHeadPod = "splunk-%s-shc-search-head-%d"
@@ -71,10 +69,10 @@ const (
 	// StandalonePod Template String for standalone pod
 	StandalonePod = "splunk-%s-standalone-%d"
 
-	// LicenseManagerPod Template String for standalone pod
+	// LicenseManagerPod Template String for License Manager pod
 	LicenseManagerPod = "splunk-%s-license-manager-%d"
 
-	// LicenseMasterPod Template String for standalone pod
+	// LicenseMasterPod Template String for License Master pod
 	LicenseMasterPod = "splunk-%s-" + splcommon.LicenseManager + "-%d"
 
 	// IngestorPod Template String for ingestor pod
@@ -124,11 +122,17 @@ const (
 	// ClusterMasterServiceName Cluster Master Service Template String
 	ClusterMasterServiceName = "splunk-%s-cluster-master-service"
 
-	// DeployerServiceName Cluster Manager Service Template String
+	// DeployerServiceName Deployer Service Template String
 	DeployerServiceName = "splunk-%s-shc-deployer-service"
 
 	// CRUpdateRetryCount if CR Update fails retry these many time
 	CRUpdateRetryCount = 10
+
+	// LogLineCount is the default number of log lines to ingest for test data
+	LogLineCount = 2000
+
+	// DefaultIngestIndex is the default index name used for test data ingestion
+	DefaultIngestIndex = "main"
 )
 
 var (
@@ -286,9 +290,7 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	// use apireader instead of kubeclient when retrieving resources
 	go func() {
 		err := kubeManager.Start(signals.SetupSignalHandler())
-		if err != nil {
-			panic("Unable to start kube manager. Error: " + err.Error())
-		}
+		gomega.Expect(err).ToNot(gomega.HaveOccurred(), "Error starting kube manager")
 	}()
 
 	return testenv, nil

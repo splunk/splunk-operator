@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -339,7 +338,7 @@ func (client *AzureBlobClient) DownloadFileFromAzure(ctx context.Context, downlo
 		return "", err
 	}
 
-	logf.Log.Info("Download from Azure successful:", "File", downloadRequest.RemoteFile)
+	logf.Log.Info("Download from Azure successful", "file", downloadRequest.RemoteFile)
 
 	return localFile.Name(), err
 }
@@ -355,7 +354,7 @@ func DownloadFilesFromAzure(ctx context.Context, endPoint, accountKey, accountNa
 		}
 		_, err := azureBlobClient.DownloadFileFromAzure(ctx, downloadRequest, endPoint, StorageAccountKey, StorageAccount)
 		if err != nil {
-			logf.Log.Error(err, "Unable to download file", "File Name", key)
+			logf.Log.Error(err, "Unable to download file", "fileName", key)
 			return err
 		}
 	}
@@ -375,7 +374,7 @@ func DownloadLicenseFromAzure(ctx context.Context, downloadDir string) (string, 
 	azureBlobClient := &AzureBlobClient{}
 	filename, err := azureBlobClient.DownloadFileFromAzure(ctx, downloadRequest, GetAzureEndpoint(ctx), StorageAccountKey, StorageAccount)
 	if err != nil {
-		logf.Log.Error(err, "Unable to download license file", "File", filename)
+		logf.Log.Error(err, "Unable to download license file", "file", filename)
 	}
 	return filename, err
 }
@@ -432,7 +431,7 @@ func UploadFilesToAzure(ctx context.Context, accountName, accountKey, uploadFrom
 		fileFullPath := "https://" + StorageAccount + ".blob.core.windows.net" + "/" + azureIndexesContainer + "/" + containerName + "/" + key
 		fileName, err := UploadFileToAzure(ctx, accountName, accountKey, fileFullPath, fileLocation)
 		if err != nil {
-			logf.Log.Error(err, "Unable to upload file", "File name", key)
+			logf.Log.Error(err, "Unable to upload file", "fileName", key)
 			return nil, err
 		}
 		uploadedFiles = append(uploadedFiles, fileName)
@@ -533,7 +532,7 @@ func (client *AzureBlobClient) DeleteFilesOnAzure(ctx context.Context, endPoint,
 }
 
 // DisableAppsOnAzure untar apps, modify their conf file to disable them, re-tar and upload the disabled version to Azure
-func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []string, containerName string) ([]string, error) {
+func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []string, containerName string) error {
 
 	// Create a folder named 'untarred_apps' to store untarred apps folders
 	untarredAppsMainFolder := downloadDir + "/untarred_apps"
@@ -568,8 +567,7 @@ func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []s
 		appConfFile := untarredAppRootFolder + "/default/app.conf"
 		input, err := os.ReadFile(appConfFile)
 		if err != nil {
-			log.Fatalln(err)
-			return nil, err
+			return err
 		}
 		lines := strings.Split(string(input), "\n")
 		for i, line := range lines {
@@ -583,7 +581,7 @@ func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []s
 		output := strings.Join(lines, "\n")
 		err = os.WriteFile(appConfFile, []byte(output), 0644)
 		if err != nil {
-			log.Fatalln(err)
+			return err
 		}
 
 		// Tar disabled app folder
@@ -595,7 +593,7 @@ func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []s
 	}
 
 	// Upload disabled apps to Azure
-	uploadedFiles, _ := UploadFilesToAzure(ctx, StorageAccount, StorageAccountKey, disabledAppsFolder, containerName, appFileList)
+	_, err := UploadFilesToAzure(ctx, StorageAccount, StorageAccountKey, disabledAppsFolder, containerName, appFileList)
 
-	return uploadedFiles, nil
+	return err
 }

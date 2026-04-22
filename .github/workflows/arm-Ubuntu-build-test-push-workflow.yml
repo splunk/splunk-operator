@@ -135,7 +135,8 @@ jobs:
                 appframeworksS1,
                 managersecret,
                 managermc,
-                indingsep,
+                indexingestionsep,
+                licensemanager,
               ]
     runs-on: ubuntu-latest
     env:

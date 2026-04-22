@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,20 +17,15 @@ package testenv
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
 	"os/exec"
 	"path"
-	"reflect"
-	"sort"
 	"strings"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-
-	. "github.com/onsi/gomega"
 
 	"github.com/onsi/ginkgo/v2"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
@@ -337,7 +332,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName, ansibleConfi
 
 	new := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterManager",
+			Kind: "ClusterMaster",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,
@@ -752,7 +747,7 @@ func newStandaloneWithSpec(name, ns string, spec enterpriseApi.StandaloneSpec) *
 	return &new
 }
 
-// newMonitoringConsoleSpec returns MC Spec with given name, namespace and license manager Ref
+// newMonitoringConsoleSpec returns MC Spec with given name, namespace and License Manager Ref
 func newMonitoringConsoleSpec(name, ns, LicenseManagerRef, splunkImage string) *enterpriseApi.MonitoringConsole {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, LicenseManagerRef)
@@ -821,66 +816,8 @@ func DumpGetPods(ns string) []string {
 	return splunkPods
 }
 
-// DumpDescribePods prints and returns list of pods in the namespace
-func DumpDescribePods(ns string) []string {
-	output, err := exec.Command("kubectl", "describe", "pods", "-n", ns).Output()
-	var splunkPods []string
-	if err != nil {
-		//cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
-		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
-		return nil
-	}
-	for _, line := range strings.Split(string(output), "\n") {
-		logf.Log.Info(line)
-		if strings.HasPrefix(line, "splunk") && !strings.HasPrefix(line, "splunk-op") {
-			splunkPods = append(splunkPods, strings.Fields(line)[0])
-		}
-	}
-	return splunkPods
-}
-
-// DumpGetTopNodes prints and returns Node load information
-func DumpGetTopNodes() []string {
-	output, err := exec.Command("kubectl", "top", "nodes").Output()
-	var splunkNodes []string
-	if err != nil {
-		//cmd := "kubectl top nodes"
-		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
-		return nil
-	}
-	if len(output) > 0 {
-		for _, line := range strings.Split(string(output), "\n") {
-			if len(line) > 0 {
-				logf.Log.Info(line)
-				splunkNodes = append(splunkNodes, strings.Fields(line)[0])
-			}
-		}
-	}
-	return splunkNodes
-}
-
-// DumpGetTopPods prints and returns Node load information
-func DumpGetTopPods(ns string) []string {
-	output, err := exec.Command("kubectl", "top", "pods", "-n", ns).Output()
-	var splunkPods []string
-	if err != nil {
-		//cmd := fmt.Sprintf("kubectl top pods -n %s", ns)
-		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
-		return nil
-	}
-	if len(output) > 0 {
-		for _, line := range strings.Split(string(output), "\n") {
-			if len(line) > 0 {
-				logf.Log.Info(line)
-				splunkPods = append(splunkPods, strings.Fields(line)[0])
-			}
-		}
-	}
-	return splunkPods
-}
-
 // GetOperatorPodName returns name of operator pod in the namespace
-func GetOperatorPodName(testcaseEnvInst *TestCaseEnv) string {
+func (testcaseEnvInst *TestCaseEnv) GetOperatorPodName() string {
 	var ns string
 	if testcaseEnvInst.clusterWideOperator != "true" {
 		ns = testcaseEnvInst.GetName()
@@ -904,7 +841,7 @@ func GetOperatorPodName(testcaseEnvInst *TestCaseEnv) string {
 			return splunkPods
 		}
 	}
-	logf.Log.Info("Operator pod is set to ", "operatorPod", splunkPods)
+	logf.Log.Info("Operator pod is set to", "operatorPod", splunkPods)
 	return splunkPods
 }
 
@@ -927,13 +864,10 @@ func DumpGetPvcs(ns string) []string {
 }
 
 // GetConfLineFromPod gets given config from file on POD
-func GetConfLineFromPod(podName string, filePath string, ns string, configName string, stanza string, checkStanza bool) (string, error) {
+func GetConfLineFromPod(ctx context.Context, podName string, filePath string, ns string, configName string, stanza string, checkStanza bool) (string, error) {
 	var config string
-	var err error
-	output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "cat", filePath).Output()
+	fileContent, err := GetConfFile(podName, filePath, ns)
 	if err != nil {
-		cmd := fmt.Sprintf("kubectl exec -n %s %s -- cat %s", ns, podName, filePath)
-		logf.Log.Error(err, "Failed to execute command", "command", cmd)
 		return config, err
 	}
 
@@ -943,7 +877,7 @@ func GetConfLineFromPod(podName string, filePath string, ns string, configName s
 		stanzaFound = false
 		stanzaString = fmt.Sprintf("[%s]", stanza)
 	}
-	for _, line := range strings.Split(string(output), "\n") {
+	for _, line := range strings.Split(fileContent, "\n") {
 		// Check for empty lines to prevent an error in logic below
 		if len(line) == 0 {
 			continue
@@ -955,7 +889,7 @@ func GetConfLineFromPod(podName string, filePath string, ns string, configName s
 			}
 			continue
 		} else if strings.HasPrefix(line, configName) {
-			logf.Log.Info(fmt.Sprintf("Configuration %s found at line %s", configName, line))
+			logf.Log.Info("Configuration found", "configName", configName, "line", line)
 			config = line
 			break
 		}
@@ -974,7 +908,7 @@ func ExecuteCommandOnPod(ctx context.Context, deployment *Deployment, podName st
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return "", err
 	}
-	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	logf.Log.Info("Command executed", "onPod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 	return stdout, nil
 }
 
@@ -986,7 +920,7 @@ func ExecuteCommandOnOperatorPod(ctx context.Context, deployment *Deployment, po
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "shell", command, "command", stdin, "error", err.Error())
 		return "", err
 	}
-	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	logf.Log.Info("Command executed", "onPod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 	return stdout, nil
 }
 
@@ -995,7 +929,7 @@ func GetConfigMap(ctx context.Context, deployment *Deployment, ns string, config
 	configMap := &corev1.ConfigMap{}
 	err := deployment.GetInstance(ctx, configMapName, configMap)
 	if err != nil {
-		deployment.testenv.Log.Error(err, "Unable to get config map", "Config Map Name", configMap, "Namespace", ns)
+		deployment.testenv.Log.Error(err, "Unable to get config map", "configMapName", configMap, "namespace", ns)
 	}
 	return configMap, err
 }
@@ -1066,7 +1000,7 @@ func newLicenseManagerWithGivenSpec(name, ns string, spec enterpriseApi.LicenseM
 	return &new
 }
 
-// newLicenseMasterWithGivenSpec create and initializes CR for License Manager Kind with Given Spec
+// newLicenseMasterWithGivenSpec create and initializes CR for License Master Kind with Given Spec
 func newLicenseMasterWithGivenSpec(name, ns string, spec enterpriseApiV3.LicenseMasterSpec) *enterpriseApiV3.LicenseMaster {
 	new := enterpriseApiV3.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -1124,19 +1058,9 @@ func GetDirsOrFilesInPath(ctx context.Context, deployment *Deployment, podName s
 	return strings.Fields(stdout), err
 }
 
-// CompareStringSlices checks if two string slices are matching
-func CompareStringSlices(stringOne []string, stringTwo []string) bool {
-	if len(stringOne) != len(stringTwo) {
-		return false
-	}
-	sort.Strings(stringOne)
-	sort.Strings(stringTwo)
-	return reflect.DeepEqual(stringOne, stringTwo)
-}
-
 // CheckStringInSlice check if string is present in a slice
 func CheckStringInSlice(stringSlice []string, compString string) bool {
-	logf.Log.Info("Checking for string in slice", "String", compString, "String Slice", stringSlice)
+	logf.Log.Info("Checking for string in slice", "string", compString, "stringSlice", stringSlice)
 	for _, item := range stringSlice {
 		if strings.Contains(item, compString) {
 			return true
@@ -1162,36 +1086,24 @@ func GeneratePodNameSlice(formatString string, key string, count int, multisite 
 	return podNames
 }
 
-// GetPodsStartTime prints and returns list of pods in namespace and their respective start time
-func GetPodsStartTime(ns string) map[string]time.Time {
-	splunkPodsStartTime := make(map[string]time.Time)
+// GetPodUIDs returns list of pods in namespace and their respective UIDs
+func GetPodUIDs(ns string) map[string]string {
+	splunkPodUIDs := make(map[string]string)
 	splunkPods := DumpGetPods(ns)
 
 	for _, podName := range splunkPods {
-		output, _ := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
-		restResponse := PodDetailsStruct{}
-		err := json.Unmarshal([]byte(output), &restResponse)
+		podDetails, err := getPodDetails(ns, podName)
 		if err != nil {
-			logf.Log.Error(err, "Failed to parse splunk pods")
+			logf.Log.Error(err, "Failed to get pod details", "pod", podName)
+			continue
 		}
-		podStartTime, _ := time.Parse("2006-01-02T15:04:05Z", restResponse.Status.StartTime)
-		splunkPodsStartTime[podName] = podStartTime
+		splunkPodUIDs[podName] = podDetails.Metadata.UID
 	}
-	return splunkPodsStartTime
-}
-
-// DeletePod Delete pod in the namespace
-func DeletePod(ns string, podName string) error {
-	_, err := exec.Command("kubectl", "delete", "pod", "-n", ns, podName).Output()
-	if err != nil {
-		logf.Log.Error(err, "Failed to delete operator pod ", "PodName", podName, "Namespace", ns)
-		return err
-	}
-	return nil
+	return splunkPodUIDs
 }
 
 // DeleteOperatorPod Delete Operator Pod in the namespace
-func DeleteOperatorPod(testcaseEnvInst *TestCaseEnv) error {
+func (testcaseEnvInst *TestCaseEnv) DeleteOperatorPod() error {
 	var podName string
 	var ns string
 	if testcaseEnvInst.clusterWideOperator != "true" {
@@ -1199,11 +1111,11 @@ func DeleteOperatorPod(testcaseEnvInst *TestCaseEnv) error {
 	} else {
 		ns = "splunk-operator"
 	}
-	podName = GetOperatorPodName(testcaseEnvInst)
+	podName = testcaseEnvInst.GetOperatorPodName()
 
 	_, err := exec.Command("kubectl", "delete", "pod", "-n", ns, podName).Output()
 	if err != nil {
-		logf.Log.Error(err, "Failed to delete operator pod ", "PodName", podName, "Namespace", ns)
+		logf.Log.Error(err, "Failed to delete operator pod ", "podName", podName, "namespace", ns)
 		return err
 	}
 	return nil
@@ -1215,7 +1127,7 @@ func DeleteFilesOnOperatorPod(ctx context.Context, deployment *Deployment, podNa
 		cmd := fmt.Sprintf("rm -f %s", filepath)
 		_, err := ExecuteCommandOnOperatorPod(ctx, deployment, podName, cmd)
 		if err != nil {
-			logf.Log.Error(err, "Failed to delete file on pod ", "PodName", podName, "location", filepath, "command", cmd)
+			logf.Log.Error(err, "Failed to delete file on pod ", "podName", podName, "location", filepath, "command", cmd)
 			return err
 		}
 	}
@@ -1230,9 +1142,9 @@ func DumpGetSplunkVersion(ctx context.Context, ns string, deployment *Deployment
 		if strings.Contains(podName, filterString) {
 			stdout, err := ExecuteCommandOnPod(ctx, deployment, podName, cmd)
 			if err != nil {
-				logf.Log.Error(err, "Failed to get splunkd version on the pod", "Pod Name", podName)
+				logf.Log.Error(err, "Failed to get splunkd version on the pod", "podName", podName)
 			}
-			logf.Log.Info("Splunk Version Found", "Pod Name", podName, "Version", string(stdout))
+			logf.Log.Info("Splunk Version Found", "podName", podName, "version", string(stdout))
 		}
 	}
 }
@@ -1242,7 +1154,7 @@ func CreateDummyFileOnOperator(ctx context.Context, deployment *Deployment, podN
 	cmd := fmt.Sprintf("cd %s && dd if=/dev/zero of=./%s bs=4k iflag=fullblock,count_bytes count=%s", filepath, filename, size)
 	_, err := ExecuteCommandOnOperatorPod(ctx, deployment, podName, cmd)
 	if err != nil {
-		logf.Log.Error(err, "Failed to create file on the pod", "Pod Name", podName)
+		logf.Log.Error(err, "Failed to create file on the pod", "podName", podName)
 		return err
 	}
 	return nil
@@ -1250,10 +1162,10 @@ func CreateDummyFileOnOperator(ctx context.Context, deployment *Deployment, podN
 
 // DeleteConfigMap Delete configMap in the namespace
 func DeleteConfigMap(ns string, ConfigMapName string) error {
-	logf.Log.Info("Delete configMap", "configMap Name", ConfigMapName)
+	logf.Log.Info("Delete configMap", "configMapName", ConfigMapName)
 	_, err := exec.Command("kubectl", "delete", "configmap", "-n", ns, ConfigMapName).Output()
 	if err != nil {
-		logf.Log.Error(err, "Failed to delete config Map", "ConfigMap Name", ConfigMapName, "Namespace", ns)
+		logf.Log.Error(err, "Failed to delete config Map", "configMapName", ConfigMapName, "namespace", ns)
 		return err
 	}
 	return nil
@@ -1289,16 +1201,17 @@ func GetAWSEnv(podName, ns string) (string, error) {
 	return string(output), err
 }
 
-func ValidateContent(confFileContent string, listOfStringsForValidation []string, shouldContain bool) {
+func ValidateContent(confFileContent string, listOfStringsForValidation []string, shouldContain bool) error {
 	for _, str := range listOfStringsForValidation {
 		if shouldContain {
 			if !strings.Contains(confFileContent, str) {
-				Expect(confFileContent).To(ContainSubstring(str), "Failed to find string "+str+" in conf file")
+				return fmt.Errorf("failed to find string %q in conf file content", str)
 			}
 		} else {
 			if strings.Contains(confFileContent, str) {
-				Expect(confFileContent).ToNot(ContainSubstring(str), "Found string "+str+" in conf file, but it should not be there")
+				return fmt.Errorf("found string %q in conf file, but it should not be there", str)
 			}
 		}
 	}
+	return nil
 }

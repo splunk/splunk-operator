@@ -14,13 +14,11 @@
 package azures1appfw
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -39,47 +37,21 @@ var _ = Describe("s1appfw test", func() {
 	var appSourceVolumeName string
 	var filePresentOnOperator bool
 
-	ctx := context.TODO()
-
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
-		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-		Expect(err).To(Succeed(), "Unable to create testcaseenv")
-		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
-		Expect(err).To(Succeed(), "Unable to create deployment")
+		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+		Expect(err).ToNot(HaveOccurred())
+
 		azTestDir = "s1appfw-" + testenv.RandomDNSName(4)
 		appSourceVolumeName = "appframework-test-volume-" + testenv.RandomDNSName(3)
 	})
 
-	AfterEach(func() {
-		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
-			testcaseEnvInst.SkipTeardown = true
-		}
-		if deployment != nil {
-			deployment.Teardown()
-		}
-
-		// Delete files uploaded to Azure
-		if !testcaseEnvInst.SkipTeardown {
-			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
-		}
-		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
-		}
-
-		if filePresentOnOperator {
-			//Delete files from app-directory
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
-			podDownloadPath := filepath.Join(testenv.AppDownloadVolume, "test_file.img")
-			testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
-		}
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+		Expect(testenv.TeardownAppFrameworkTestCaseEnv(ctx, testcaseEnvInst, deployment, testenv.AzureCloudCleanup(ctx, uploadedApps), filePresentOnOperator)).To(Succeed())
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframeworkazure, azure_sanity: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", func() {
+		It("integration, s1azure, appframeworkazures1, appframeworkazure, azure_sanity: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -126,10 +98,10 @@ var _ = Describe("s1appfw test", func() {
 			// Maximum apps to be downloaded in parallel
 			maxConcurrentAppDownloads := 5
 
-			// Create App framework spec for Monitoring Console
+			// Create App Framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
 			appFrameworkSpecMC.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -149,7 +121,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// ################## SETUP FOR STANDALONE ####################
 			// Upload V1 apps to Azure for Standalone
@@ -159,9 +131,9 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -180,16 +152,16 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// ############ INITIAL VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
@@ -197,14 +169,15 @@ var _ = Describe("s1appfw test", func() {
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// ############## UPGRADE APPS #################
 
 			// Delete apps on Azure
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 
 			uploadedApps = nil
 			appVersion = "V2"
@@ -220,16 +193,16 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############ UPGRADE VERIFICATION ###########
 			standaloneAppSourceInfo.CrAppVersion = appVersion
@@ -239,13 +212,14 @@ var _ = Describe("s1appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV2
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smoke, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then downgrade them", func() {
+		It("smoke, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then downgrade them", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			################## SETUP ####################
@@ -295,10 +269,10 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Monitoring Console
+			// Create App Framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -317,11 +291,11 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
-			// Create App framework Spec for Standalone
+			// Create App Framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -339,16 +313,16 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############ INITIAL VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
@@ -356,17 +330,18 @@ var _ = Describe("s1appfw test", func() {
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// ############# DOWNGRADE APPS ################
 			// Delete apps on Azure
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 			uploadedApps = nil
 
 			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
 
 			// Upload V1 apps to Azure for Standalone and Monitoring Console
 			appVersion = "V1"
@@ -382,19 +357,19 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// wait for custom resource resource version to change
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+			Expect(testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)).To(Succeed(), "Custom resource version not changed")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## DOWNGRADE VERIFICATION ###########
 			standaloneAppSourceInfo.CrAppVersion = appVersion
@@ -404,13 +379,14 @@ var _ = Describe("s1appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV1
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
 			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("s1azure, integration, appframeworkazures1, appframework, azure_sanity: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", func() {
+		It("s1azure, integration, appframeworkazures1, appframework, azure_sanity: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			################## SETUP ####################
@@ -469,10 +445,10 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Monitoring Console
+			// Create App Framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -491,7 +467,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Upload apps to Azure for Standalone
 			azTestDir := "azures1appfw-" + testenv.RandomDNSName(4)
@@ -500,9 +476,9 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Standalone
+			// Create App Framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -520,16 +496,16 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## INITIAL VERIFICATION #############
 			scaledReplicaCount := 2
@@ -538,15 +514,15 @@ var _ = Describe("s1appfw test", func() {
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: scaledReplicaCount}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			//############### SCALING UP ##################
 			// Scale up Standalone instance
 			testcaseEnvInst.Log.Info("Scale up Standalone")
 
 			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(ctx, deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
+			Expect(deployment.GetInstance(ctx, deployment.GetName(), standalone)).To(Succeed(), "Failed to get instance of Standalone")
 
 			standalone.Spec.Replicas = int32(scaledReplicaCount)
 
@@ -554,45 +530,46 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale up Standalone")
 
 			// Ensure Standalone is scaling up
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseScalingUp)
+			Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseScalingUp)).To(Succeed(), "Standalone phase mismatch")
 
 			// Wait for Standalone to be in READY status
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseReady)
+			Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseReady)).To(Succeed(), "Standalone phase mismatch")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			//########### SCALING UP VERIFICATION #########
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			//############## SCALING DOWN #################
 			// Scale down Standalone instance
 			testcaseEnvInst.Log.Info("Scale down Standalone")
 			scaledReplicaCount = 1
 			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(ctx, deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone after scaling down")
+			Expect(deployment.GetInstance(ctx, deployment.GetName(), standalone)).To(Succeed(), "Failed to get instance of Standalone")
 
 			standalone.Spec.Replicas = int32(scaledReplicaCount)
 			err = deployment.UpdateCR(ctx, standalone)
 			Expect(err).To(Succeed(), "Failed to scale down Standalone")
 
 			// Ensure Standalone is scaling down
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseScalingDown)
+			Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseScalingDown)).To(Succeed(), "Standalone phase mismatch")
 
 			// Wait for Standalone to be in READY status
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseReady)
+			Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseReady)).To(Succeed(), "Standalone phase mismatch")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			//########### SCALING DOWN VERIFICATION #######
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("s1azure, integration, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, upgrade apps", func() {
+		It("s1azure, integration, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, upgrade apps", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			################## SETUP ####################
@@ -641,9 +618,9 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Standalone
+			// Create App Framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -658,28 +635,28 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//########## INITIAL VERIFICATION #############
 			scaledReplicaCount := 2
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: scaledReplicaCount}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			//############### SCALING UP ##################
 			// Scale up Standalone instance
 			testcaseEnvInst.Log.Info("Scale up Standalone")
 
 			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(ctx, deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
+			Expect(deployment.GetInstance(ctx, deployment.GetName(), standalone)).To(Succeed(), "Failed to get instance of Standalone")
 
 			standalone.Spec.Replicas = int32(scaledReplicaCount)
 
@@ -687,16 +664,16 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale up Standalone")
 
 			// Ensure Standalone is scaling up
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseScalingUp)
+			Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseScalingUp)).To(Succeed(), "Standalone phase mismatch")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// ############## UPGRADE APPS #################
 			// Delete apps on Azure
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to Azure for Standalone and Monitoring Console
@@ -709,13 +686,13 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############ SCALING UP/UPGRADE VERIFICATIONS ###########
 			standaloneAppSourceInfo.CrAppVersion = appVersion
@@ -723,13 +700,14 @@ var _ = Describe("s1appfw test", func() {
 			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			standaloneAppSourceInfo.CrPod = []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0), fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 1)}
 			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 		})
 	})
 
 	// ES App Installation not supported at the time. Will be added back at a later time.
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("s1azure, integration, appframeworkazures1, appframework: can deploy a Standalone and have ES app installed", func() {
+		It("s1azure, integration, appframeworkazures1, appframework: can deploy a Standalone and have ES app installed", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			################## SETUP ####################
@@ -746,7 +724,7 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info("Download ES app from Azure")
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
 			appFileList := testenv.GetAppFileList(esApp)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 
 			Expect(err).To(Succeed(), "Unable to download ES app")
@@ -757,9 +735,9 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload ES app to Azure test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopePremiumApps, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopePremiumApps, appSourceName, azTestDir, 60)
 			appFrameworkSpec.AppSources[0].PremiumAppsProps = enterpriseApi.PremiumAppsProps{
 				Type: enterpriseApi.PremiumAppsTypeEs,
 				EsDefaults: enterpriseApi.EsDefaults{
@@ -780,27 +758,28 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone with App Framework")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// ############ INITIAL VERIFICATION ###########
 			appVersion := "V1"
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: esApp, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// ############## UPGRADE APPS #################
 
 			// Delete apps on Azure
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 
 			// Download ES App from Azure
-			containerName = "/" + AzureDataContainer + "/" + AzureAppDirV2
+			containerName = "/" + AzureDataContainer + "/" + testenv.AppLocationV2
 			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app")
 
@@ -812,25 +791,26 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############ UPGRADE VERIFICATION ###########
 			standaloneAppSourceInfo.CrAppVersion = appVersion
 			standaloneAppSourceInfo.CrAppList = esApp
 			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(esApp)
 			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled and install around 350MB of apps at once", func() {
+		It("integration, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled and install around 350MB of apps at once", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -856,7 +836,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Download apps from Azure
 			testcaseEnvInst.Log.Info("Download bigger amount of apps from Azure for this test")
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
@@ -867,9 +847,9 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -887,21 +867,22 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############### VERIFICATION ################
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("s1azure, smoke, appframeworkazures1, appframework: can deploy a standalone instance with App Framework enabled for manual poll", func() {
+		It("s1azure, smoke, appframeworkazures1, appframework: can deploy a standalone instance with App Framework enabled for manual poll", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -947,10 +928,10 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Monitoring Console
+			// Create App Framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 0)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 0)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -969,16 +950,16 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Upload V1 apps to Azure
 			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 0)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 0)
 
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -996,28 +977,29 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create Standalone Deployment with App Framework
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance with App Framework")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############### VERIFICATION ################
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			//############### UPGRADE APPS ################
 
 			//Delete apps on Azure for new Apps
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 			uploadedApps = nil
 
 			//Upload new Versioned Apps to Azure
@@ -1033,17 +1015,18 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// ############ ENABLE MANUAL POLL ############
 			appVersion = "V2"
@@ -1059,13 +1042,13 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//Verify config map set back to off after poll trigger
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify config map set back to off after poll trigger for %s app", appVersion))
@@ -1077,12 +1060,13 @@ var _ = Describe("s1appfw test", func() {
 			standaloneAppSourceInfo.CrAppList = appListV2
 			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: can deploy Several standalone CRs in the same namespace with App Framework enabled", func() {
+		It("integration, s1azure, appframeworkazures1, appframework: can deploy Several standalone CRs in the same namespace with App Framework enabled", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1110,7 +1094,7 @@ var _ = Describe("s1appfw test", func() {
 			// Download apps from Azure
 			testcaseEnvInst.Log.Info("Download the extra apps from Azure for this test")
 			appFileList := testenv.GetAppFileList(testenv.RestartNeededApps)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
@@ -1129,9 +1113,9 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1143,10 +1127,10 @@ var _ = Describe("s1appfw test", func() {
 				AppFrameworkConfig: appFrameworkSpec,
 			}
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameStandalone2 := "appframework-2-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameStandalone2 := "appframework-test-volume-2-" + testenv.RandomDNSName(3)
-			appFrameworkSpecStandalone2 := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameStandalone2, enterpriseApi.ScopeLocal, appSourceNameStandalone2, azTestDirStandalone2, 60)
+			appFrameworkSpecStandalone2 := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameStandalone2, enterpriseApi.ScopeLocal, appSourceNameStandalone2, azTestDirStandalone2, 60)
 			specStandalone2 := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1168,11 +1152,11 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy 2nd Standalone instance")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone2, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone2)).To(Succeed(), "Standalone not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############### VERIFICATION ################
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
@@ -1180,12 +1164,13 @@ var _ = Describe("s1appfw test", func() {
 			standalone2Pod := []string{fmt.Sprintf(testenv.StandalonePod, standalone2Name, 0)}
 			standalone2AppSourceInfo := testenv.AppSourceInfo{CrKind: standalone2.Kind, CrName: standalone2Name, CrAppSourceName: appSourceNameStandalone2, CrPod: standalone2Pod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList2, CrAppFileList: appFileListStandalone2}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo, standalone2AppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: can add new apps to app source while install is in progress and have all apps installed", func() {
+		It("integration, s1azure, appframeworkazures1, appframework: can add new apps to app source while install is in progress and have all apps installed", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1213,10 +1198,10 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Monitoring Console
+			// Create App Framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1235,13 +1220,13 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// ################## SETUP FOR STANDALONE ####################
 			// Download all test apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -1253,9 +1238,9 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big-size app to Azure test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1273,10 +1258,10 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Verify App installation is in progress on Standalone
-			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Upload more apps to Azure for Standalone
 			appList = testenv.ExtraApps
@@ -1287,21 +1272,21 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Wait for polling interval to pass
-			testenv.WaitForAppInstall(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Verify all apps are installed on Standalone
 			appList = append(testenv.BigSingleApp, testenv.ExtraApps...)
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Standalone", appList))
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), []string{standalonePodName}, appList, true, "enabled", false, false)
+			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), []string{standalonePodName}, appList, true, "enabled", false, false)).To(Succeed(), "App installation verification failed")
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", func() {
+		It("integration, s1azure, appframeworkazures1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1321,7 +1306,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -1332,9 +1317,9 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big-size app to Azure test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1349,30 +1334,31 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Verify App installation is in progress on Standalone
-			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testenv.DeleteOperatorPod(testcaseEnvInst)
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// ############ VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", func() {
+		It("integration, s1azure, appframeworkazures1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1392,7 +1378,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -1403,9 +1389,9 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big-size app to Azure test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1420,30 +1406,31 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Verify App download is in progress on Standalone
-			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testenv.DeleteOperatorPod(testcaseEnvInst)
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// ############ VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", func() {
+		It("integration, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1477,9 +1464,9 @@ var _ = Describe("s1appfw test", func() {
 			// Maximum apps to be downloaded in parallel
 			maxConcurrentAppDownloads := 5
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1495,38 +1482,40 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// ############ VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify repo state on App to be disabled to be 1 (i.e app present on Azure bucket)
 			appName := appListV1[0]
 			appFileName := testenv.GetAppFileList([]string{appName})
-			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, standalone.Name, standalone.Kind, appSourceName, 1, appFileName[0])
+			Expect(testcaseEnvInst.VerifyAppRepoState(ctx, deployment, standalone.Name, standalone.Kind, appSourceName, 1, appFileName[0])).To(Succeed(), "App repo state verification failed")
 
 			// Disable the app
 			testcaseEnvInst.Log.Info("Download disabled version of apps from Azure for this test")
-			testenv.DisableAppsOnAzure(ctx, downloadDirV1, appFileName, azTestDir)
+			err = testenv.DisableAppsOnAzure(ctx, downloadDirV1, appFileName, azTestDir)
+			Expect(err).To(Succeed(), "Unable to disable apps on Azure")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileName)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileName)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Wait for App state to update after config file change
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.WaitforAppInstallState(ctx, deployment, testcaseEnvInst, []string{standalonePodName}, testcaseEnvInst.GetName(), appName, "disabled", false)
+			testcaseEnvInst.WaitforAppInstallState(ctx, deployment, []string{standalonePodName}, testcaseEnvInst.GetName(), appName, "disabled", false)
 
 			// Delete the file from Azure
 			azFilepath := "/" + AzureContainer + "/" + filepath.Join(azTestDir, appFileName[0])
@@ -1535,13 +1524,13 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on Azure test directory", appFileName[0]))
 
 			// Verify repo state is set to 2 (i.e app deleted from Azure bucket)
-			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, standalone.Name, standalone.Kind, appSourceName, 2, appFileName[0])
+			Expect(testcaseEnvInst.VerifyAppRepoState(ctx, deployment, standalone.Name, standalone.Kind, appSourceName, 2, appFileName[0])).To(Succeed(), "App repo state verification failed")
 
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, attempt to update using incorrect Azure credentials", func() {
+		It("integration, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, attempt to update using incorrect Azure credentials", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1558,7 +1547,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled  and version by running splunk cmd
 			   // ############  Modify secret key ###########
-			   * Create App framework volume with random credentials and apply to Spec
+			   * Create App Framework volume with random credentials and apply to Spec
 			   * Check for changes in App phase to determine if next poll has been triggered
 			   ############ UPGRADE V2 APPS ###########
 			   * Upload V2 apps to Azure App Source
@@ -1589,9 +1578,9 @@ var _ = Describe("s1appfw test", func() {
 			// Maximum apps to be downloaded in parallel
 			maxConcurrentAppDownloads := 5
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1608,26 +1597,27 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
 			secretref := standalone.Spec.AppFrameworkConfig.VolList[0].SecretRef
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			secretStruct, _ := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), secretref)
 			secretData := secretStruct.Data
 			modifiedSecretData := map[string][]byte{"azure_sa_name": []byte(testenv.RandomDNSName(5)), "azure_sa_secret_key": []byte(testenv.RandomDNSName(5))}
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// ############ INITIAL VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// ############  Modify secret key ###########
-			// Create App framework volume with invalid credentials and apply to Spec
+			// Create App Framework volume with invalid credentials and apply to Spec
 			testcaseEnvInst.Log.Info("Update Standalone spec with invalid credentials")
 			err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), secretref, modifiedSecretData)
 			Expect(err).To(Succeed(), "Unable to update secret Object")
@@ -1636,7 +1626,7 @@ var _ = Describe("s1appfw test", func() {
 			// Delete apps on Azure
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
 			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			Expect(azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)).To(Succeed(), "Azure file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to Azure for Standalone
@@ -1649,10 +1639,11 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Check no apps are updated as auth key is incorrect
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// ############  Modify secret key to correct one###########
 			// Apply spec with correct credentials
@@ -1660,26 +1651,27 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############ UPGRADE VERIFICATION ###########
 			standaloneAppSourceInfo.CrAppVersion = appVersion
 			standaloneAppSourceInfo.CrAppList = appListV2
 			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: Deploy a Standalone instance with App Framework enabled and update apps after app download is completed", func() {
+		It("integration, s1azure, appframeworkazures1, appframework: Deploy a Standalone instance with App Framework enabled and update apps after app download is completed", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			################## SETUP ####################
@@ -1701,7 +1693,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -1711,9 +1703,9 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload app to Azure test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 120)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 120)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1728,10 +1720,10 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Verify App download is in progress on Standalone
-			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Upload V2 apps to Azure for Standalone
 			appVersion = "V2"
@@ -1743,33 +1735,34 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//######### VERIFICATIONS #############
 			appVersion = "V1"
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}, appListV1, false, "enabled", false, false)
+			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}, appListV1, false, "enabled", false, false)).To(Succeed(), "App installation verification failed")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			//############ UPGRADE VERIFICATION ###########
 			appVersion = "V2"
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: []string{appListV2[0]}, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance and install a bigger volume of apps than the operator PV disk space", func() {
+		It("integration, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance and install a bigger volume of apps than the operator PV disk space", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1789,7 +1782,7 @@ var _ = Describe("s1appfw test", func() {
 
 			//################## SETUP ####################
 			// Create a large file on Operator pod
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			opPod := testcaseEnvInst.GetOperatorPodName()
 			err := testenv.CreateDummyFileOnOperator(ctx, deployment, opPod, testenv.AppDownloadVolume, "1G", "test_file.img")
 			Expect(err).To(Succeed(), "Unable to create file on operator")
 			filePresentOnOperator = true
@@ -1805,9 +1798,9 @@ var _ = Describe("s1appfw test", func() {
 			// Maximum apps to be downloaded in parallel
 			maxConcurrentAppDownloads := 15
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceName := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1826,21 +1819,22 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############### VERIFICATION ################
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: Deploy a Standalone instance with App Framework enabled and delete apps from app directory when app download is complete", func() {
+		It("integration, s1azure, appframeworkazures1, appframework: Deploy a Standalone instance with App Framework enabled and delete apps from app directory when app download is complete", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1860,7 +1854,7 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
 			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big app")
 
@@ -1870,9 +1864,9 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big-size app to Azure test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1887,33 +1881,34 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Verify App Download is completed on Standalone
-			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			//Delete apps from app-directory when app download is complete
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			opPod := testcaseEnvInst.GetOperatorPodName()
 			podDownloadPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), standalone.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceName, testenv.AppInfo[appList[0]]["filename"])
 			err = testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
 			Expect(err).To(Succeed(), "Unable to delete file on pod")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// ############ VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smoke, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, install apps and check isDeploymentInProgress is set for Standaloen and MC CR's", func() {
+		It("smoke, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, install apps and check isDeploymentInProgress is set for Standaloen and MC CR's", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1941,10 +1936,10 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Monitoring Console
+			// Create App Framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1964,10 +1959,10 @@ var _ = Describe("s1appfw test", func() {
 
 			// Verify IsDeploymentInProgress Flag is set to true for Monitroing Console CR
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgressFlag")
-			testenv.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, testcaseEnvInst, mcName, mc.Kind)
+			Expect(testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, mcName, mc.Kind)).To(Succeed(), "IsDeploymentInProgress flag not set")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// ################## SETUP FOR STANDALONE ####################
 			// Upload V1 apps to Azure for Standalone
@@ -1979,9 +1974,9 @@ var _ = Describe("s1appfw test", func() {
 			// Maximum apps to be downloaded in parallel
 			maxConcurrentAppDownloads := 5
 
-			// Create App framework spec for Standalone
+			// Create App Framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -2000,16 +1995,16 @@ var _ = Describe("s1appfw test", func() {
 			// Deploy Standalone
 			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 			// Verify IsDeploymentInProgress Flag is set to true for Standalone CR
-			testenv.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind)
+			Expect(testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, deployment.GetName(), standalone.Kind)).To(Succeed(), "IsDeploymentInProgress flag not set")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 		})
 	})
