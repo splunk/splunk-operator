@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package validation
+package webhook_test
 
 import (
 	"bytes"
@@ -30,9 +30,19 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/pkg/splunk/enterprise/validation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func mustMarshal(t *testing.T, obj interface{}) []byte {
+	t.Helper()
+	data, err := json.Marshal(obj)
+	if err != nil {
+		t.Fatalf("failed to marshal object: %v", err)
+	}
+	return data
+}
 
 func newPostgresClusterAdmissionReview(t *testing.T, uid string, op admissionv1.Operation, obj *enterpriseApi.PostgresCluster, oldObj *enterpriseApi.PostgresCluster) *admissionv1.AdmissionReview {
 	t.Helper()
@@ -105,7 +115,7 @@ func newPostgresClusterClassAdmissionReview(t *testing.T, uid string, op admissi
 	return ar
 }
 
-func sendAdmissionReview(t *testing.T, server *WebhookServer, ar *admissionv1.AdmissionReview) *admissionv1.AdmissionResponse {
+func sendAdmissionReview(t *testing.T, server *validation.WebhookServer, ar *admissionv1.AdmissionReview) *admissionv1.AdmissionResponse {
 	t.Helper()
 	body, err := json.Marshal(ar)
 	require.NoError(t, err)
@@ -114,7 +124,7 @@ func sendAdmissionReview(t *testing.T, server *WebhookServer, ar *admissionv1.Ad
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
-	server.handleValidate(rr, req)
+	server.HandleValidate(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code)
 
 	var response admissionv1.AdmissionReview
@@ -124,9 +134,9 @@ func sendAdmissionReview(t *testing.T, server *WebhookServer, ar *admissionv1.Ad
 }
 
 func TestPostgresClusterPgHBAIntegration(t *testing.T) {
-	server := NewWebhookServer(WebhookServerOptions{
+	server := validation.NewWebhookServer(validation.WebhookServerOptions{
 		Port:       9443,
-		Validators: DefaultValidators,
+		Validators: validation.DefaultValidators,
 	})
 
 	tests := []struct {
@@ -324,9 +334,9 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 }
 
 func TestPostgresClusterPgHBAUpdateIntegration(t *testing.T) {
-	server := NewWebhookServer(WebhookServerOptions{
+	server := validation.NewWebhookServer(validation.WebhookServerOptions{
 		Port:       9443,
-		Validators: DefaultValidators,
+		Validators: validation.DefaultValidators,
 	})
 
 	oldObj := &enterpriseApi.PostgresCluster{
@@ -370,9 +380,9 @@ func TestPostgresClusterPgHBAUpdateIntegration(t *testing.T) {
 }
 
 func TestPostgresClusterClassPgHBAIntegration(t *testing.T) {
-	server := NewWebhookServer(WebhookServerOptions{
+	server := validation.NewWebhookServer(validation.WebhookServerOptions{
 		Port:       9443,
-		Validators: DefaultValidators,
+		Validators: validation.DefaultValidators,
 	})
 
 	tests := []struct {
@@ -502,9 +512,9 @@ func TestPostgresClusterClassPgHBAIntegration(t *testing.T) {
 }
 
 func TestPostgresClusterClassPgHBAUpdateIntegration(t *testing.T) {
-	server := NewWebhookServer(WebhookServerOptions{
+	server := validation.NewWebhookServer(validation.WebhookServerOptions{
 		Port:       9443,
-		Validators: DefaultValidators,
+		Validators: validation.DefaultValidators,
 	})
 
 	oldObj := &enterpriseApi.PostgresClusterClass{
