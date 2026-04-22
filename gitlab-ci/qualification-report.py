@@ -22,6 +22,30 @@ def job_executed(project_dir: Path, job_name: str) -> bool:
     return False
 
 
+def load_optional_json(path: Path) -> dict | list | None:
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def read_optional_text(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8").strip()
+
+
+def count_trivy_findings(project_dir: Path) -> int:
+    sarif_path = project_dir / "ci-output" / "scan-stage-image-trivy-trivy-results.sarif"
+    sarif = load_optional_json(sarif_path)
+    if not isinstance(sarif, dict):
+        return 0
+
+    findings = 0
+    for run in sarif.get("runs", []):
+        findings += len(run.get("results", []))
+    return findings
+
+
 def main() -> int:
     project_dir = Path.cwd()
     output_dir = project_dir / "ci-output" / "release-controller"
@@ -32,8 +56,22 @@ def main() -> int:
 
     executed = [job for job in required_jobs if job_executed(project_dir, job)]
     missing = [job for job in required_jobs if job not in executed]
+    trivy_findings = count_trivy_findings(project_dir)
+    gosec_status = read_optional_text(project_dir / "gosec-status.txt")
+    govulncheck_status = read_optional_text(project_dir / "govulncheck-status.txt")
 
-    if missing:
+    security_blocked: list[str] = []
+    if trivy_findings > 0:
+        security_blocked.append("scan-stage-image-trivy")
+    if gosec_status == "failed":
+        security_blocked.append("gosec-scan")
+    if govulncheck_status == "failed":
+        security_blocked.append("govulncheck-scan")
+
+    if security_blocked:
+        disposition = "not qualified"
+        disposition_reason = "security evidence failed"
+    elif missing:
         disposition = "qualified with caveats"
         disposition_reason = "missing evidence jobs"
     else:
@@ -51,6 +89,12 @@ def main() -> int:
         "disposition_reason": disposition_reason,
         "executed_jobs": executed,
         "missing_jobs": missing,
+        "security_blocked_jobs": security_blocked,
+        "security_findings": {
+            "trivy_result_count": trivy_findings,
+            "gosec_status": gosec_status or "unknown",
+            "govulncheck_status": govulncheck_status or "unknown",
+        },
     }
 
     (output_dir / "compatibility-record.json").write_text(
@@ -68,9 +112,15 @@ def main() -> int:
                 f"- qualification_profile: {manifest['qualification']['profile']}",
                 f"- helm_profile: {manifest['qualification']['helm_profile']}",
                 f"- enterprise_image: {manifest['splunk']['enterprise_image']}",
+                f"- trivy_result_count: {trivy_findings}",
+                f"- gosec_status: {gosec_status or 'unknown'}",
+                f"- govulncheck_status: {govulncheck_status or 'unknown'}",
                 "",
                 "## Executed Jobs",
                 *([f"- {job}" for job in executed] or ["- none"]),
+                "",
+                "## Security Blocked Jobs",
+                *([f"- {job}" for job in security_blocked] or ["- none"]),
                 "",
                 "## Missing Jobs",
                 *([f"- {job}" for job in missing] or ["- none"]),

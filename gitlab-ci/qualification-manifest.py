@@ -26,7 +26,7 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     qualification_profile = os.environ.get("PIPELINE_QUALIFICATION_PROFILE", "monthly")
-    helm_profile = os.environ.get("JOB_HELM_TEST_PROFILE") or os.environ.get("PIPELINE_HELM_TEST_PROFILE") or "qualification"
+    helm_profile = os.environ.get("PIPELINE_HELM_TEST_PROFILE") or os.environ.get("JOB_HELM_TEST_PROFILE") or "qualification"
     enterprise_image = (
         os.environ.get("PIPELINE_SPLUNK_ENTERPRISE_IMAGE")
         or os.environ.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE")

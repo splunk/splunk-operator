@@ -51,11 +51,19 @@ gosec-scan:
   needs:
     - format-and-vet
   script:
-    - make code/sec | tee gosec-results.txt
+    - |
+      set -eu
+      status="passed"
+      if ! make code/sec > gosec-results.txt 2>&1; then
+        status="failed"
+      fi
+      printf '%s\n' "${status}" > gosec-status.txt
+      cat gosec-results.txt
   artifacts:
     when: always
     paths:
       - gosec-results.txt
+      - gosec-status.txt
 
 govulncheck-scan:
   extends:
@@ -64,8 +72,16 @@ govulncheck-scan:
   needs:
     - format-and-vet
   script:
-    - make code/vulncheck | tee govulncheck-results.txt
+    - |
+      set -eu
+      status="passed"
+      if ! make code/vulncheck > govulncheck-results.txt 2>&1; then
+        status="failed"
+      fi
+      printf '%s\n' "${status}" > govulncheck-status.txt
+      cat govulncheck-results.txt
   artifacts:
     when: always
     paths:
       - govulncheck-results.txt
+      - govulncheck-status.txt
