@@ -117,7 +117,7 @@ func (s *WebhookServer) Start(ctx context.Context) error {
 		WriteTimeout: writeTimeout,
 	}
 
-	serverLog.InfoContext(ctx, "Starting webhook server", "port", s.options.Port)
+	serverLog.InfoContext(ctx, "starting webhook server", "port", s.options.Port)
 
 	// Start server in goroutine
 	errChan := make(chan error, 1)
@@ -132,7 +132,7 @@ func (s *WebhookServer) Start(ctx context.Context) error {
 	// Wait for context cancellation or server error
 	select {
 	case <-ctx.Done():
-		serverLog.InfoContext(ctx, "Shutting down webhook server")
+		serverLog.InfoContext(ctx, "shutting down webhook server")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		return s.httpServer.Shutdown(shutdownCtx)

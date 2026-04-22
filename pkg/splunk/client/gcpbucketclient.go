@@ -133,11 +133,11 @@ func InitGCSClient(ctx context.Context, gcpCredentials string) (GCSClientInterfa
 	}
 
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Failed to initialize a GCS client.", "error", err)
+		scopedLog.ErrorContext(ctx, "failed to initialize a GCS client", "error", err)
 		return nil, err
 	}
 
-	scopedLog.InfoContext(ctx, "GCS Client initialization successful.")
+	scopedLog.InfoContext(ctx, "GCS client initialization successful")
 	return &GCSClientWrapper{Client: client}, nil
 }
 
@@ -176,7 +176,7 @@ func RegisterGCSClient() {
 func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
 	scopedLog := logging.FromContext(ctx).With("func", "GetAppsList")
 
-	scopedLog.InfoContext(ctx, "Getting Apps list", "GCS Bucket", gcsClient.BucketName)
+	scopedLog.InfoContext(ctx, "getting Apps list", "bucket", gcsClient.BucketName)
 	remoteDataClientResponse := RemoteDataListResponse{}
 
 	query := &storage.Query{
@@ -200,7 +200,7 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 			break
 		}
 		if err != nil {
-			scopedLog.ErrorContext(ctx, "Error fetching object from GCS", "GCS Bucket", gcsClient.BucketName, "error", err)
+			scopedLog.ErrorContext(ctx, "error fetching object from GCS", "bucket", gcsClient.BucketName, "error", err)
 			return remoteDataClientResponse, err
 		}
 
@@ -237,7 +237,7 @@ func (gcsClient *GCSClient) DownloadApp(ctx context.Context, downloadRequest Rem
 
 	file, err := os.Create(downloadRequest.LocalFile)
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Unable to open local file", "error", err)
+		scopedLog.ErrorContext(ctx, "unable to open local file", "error", err)
 		return false, err
 	}
 	defer file.Close()
@@ -245,18 +245,18 @@ func (gcsClient *GCSClient) DownloadApp(ctx context.Context, downloadRequest Rem
 	objHandle := gcsClient.BucketHandle.Object(downloadRequest.RemoteFile)
 	reader, err := objHandle.NewReader(ctx)
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Unable to download item", "RemoteFile", downloadRequest.RemoteFile, "error", err)
+		scopedLog.ErrorContext(ctx, "unable to download item", "RemoteFile", downloadRequest.RemoteFile, "error", err)
 		os.Remove(downloadRequest.LocalFile)
 		return false, err
 	}
 	defer reader.Close()
 
 	if _, err := io.Copy(file, reader); err != nil {
-		scopedLog.ErrorContext(ctx, "Unable to copy data to local file", "error", err)
+		scopedLog.ErrorContext(ctx, "unable to copy data to local file", "error", err)
 		return false, err
 	}
 
-	scopedLog.InfoContext(ctx, "File downloaded")
+	scopedLog.InfoContext(ctx, "file downloaded")
 
 	return true, nil
 }

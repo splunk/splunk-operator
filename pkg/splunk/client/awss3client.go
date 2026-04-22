@@ -104,7 +104,7 @@ func InitAWSClientConfig(ctx context.Context, regionWithEndpoint, accessKeyID, s
 	// Extract region and endpoint
 	regEndSl := strings.Split(regionWithEndpoint, awsRegionEndPointDelimiter)
 	if len(regEndSl) != 2 || strings.Count(regionWithEndpoint, awsRegionEndPointDelimiter) != 1 {
-		scopedLog.ErrorContext(ctx, "Unable to extract region and endpoint correctly for AWS client",
+		scopedLog.ErrorContext(ctx, "unable to extract region and endpoint correctly for AWS client",
 			"regWithEndpoint", regionWithEndpoint, "error", err)
 		return nil
 	}
@@ -122,7 +122,7 @@ func InitAWSClientConfig(ctx context.Context, regionWithEndpoint, accessKeyID, s
 				"")),            // token
 		)
 	} else {
-		scopedLog.InfoContext(ctx, "No valid access/secret keys.  Attempt to connect without them")
+		scopedLog.InfoContext(ctx, "no valid access/secret keys.  Attempt to connect without them")
 		cfg, err = config.LoadDefaultConfig(ctx,
 			config.WithRegion(region),
 			config.WithRetryMaxAttempts(3),
@@ -130,7 +130,7 @@ func InitAWSClientConfig(ctx context.Context, regionWithEndpoint, accessKeyID, s
 		)
 	}
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Failed to initialize an AWS S3 config.", "error", err)
+		scopedLog.ErrorContext(ctx, "failed to initialize an AWS S3 config", "error", err)
 		return nil
 	}
 	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
@@ -143,7 +143,7 @@ func InitAWSClientConfig(ctx context.Context, regionWithEndpoint, accessKeyID, s
 		tlsVersion = getTLSVersion(tr)
 	}
 
-	scopedLog.InfoContext(ctx, "AWS Client Config initialization successful.", "region", region, "TLS Version", tlsVersion)
+	scopedLog.InfoContext(ctx, "AWS client config initialization successful", "region", region, "tlsVersion", tlsVersion)
 	return s3Client
 }
 
@@ -212,7 +212,7 @@ func getTLSVersion(tr *http.Transport) string {
 func (awsclient *AWSS3Client) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
 	scopedLog := logging.FromContext(ctx).With("func", "GetAppsList")
 
-	scopedLog.InfoContext(ctx, "Getting Apps list", "AWS S3 Bucket", awsclient.BucketName)
+	scopedLog.InfoContext(ctx, "getting Apps list", "bucket", awsclient.BucketName)
 	remoteDataClientResponse := RemoteDataListResponse{}
 
 	options := &s3.ListObjectsV2Input{
@@ -226,7 +226,7 @@ func (awsclient *AWSS3Client) GetAppsList(ctx context.Context) (RemoteDataListRe
 	client := awsclient.Client
 	resp, err := client.ListObjectsV2(ctx, options)
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Unable to list items in bucket", "AWS S3 Bucket", awsclient.BucketName, "endpoint", awsclient.Endpoint, "error", err)
+		scopedLog.ErrorContext(ctx, "unable to list items in bucket", "bucket", awsclient.BucketName, "endpoint", awsclient.Endpoint, "error", err)
 		return remoteDataClientResponse, err
 	}
 
@@ -237,13 +237,13 @@ func (awsclient *AWSS3Client) GetAppsList(ctx context.Context) (RemoteDataListRe
 
 	tmp, err := json.Marshal(resp.Contents)
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Failed to marshal s3 response", "AWS S3 Bucket", awsclient.BucketName, "error", err)
+		scopedLog.ErrorContext(ctx, "failed to marshal s3 response", "bucket", awsclient.BucketName, "error", err)
 		return remoteDataClientResponse, err
 	}
 
 	err = json.Unmarshal(tmp, &(remoteDataClientResponse.Objects))
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Failed to unmarshal s3 response", "AWS S3 Bucket", awsclient.BucketName, "error", err)
+		scopedLog.ErrorContext(ctx, "failed to unmarshal s3 response", "bucket", awsclient.BucketName, "error", err)
 		return remoteDataClientResponse, err
 	}
 
@@ -258,7 +258,7 @@ func (awsclient *AWSS3Client) DownloadApp(ctx context.Context, downloadRequest R
 	var numBytes int64
 	file, err := os.Create(downloadRequest.LocalFile)
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Unable to open local file", "error", err)
+		scopedLog.ErrorContext(ctx, "unable to open local file", "error", err)
 		return false, err
 	}
 	defer file.Close()
@@ -271,12 +271,12 @@ func (awsclient *AWSS3Client) DownloadApp(ctx context.Context, downloadRequest R
 			IfMatch: aws.String(downloadRequest.Etag),
 		})
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Unable to download item", "RemoteFile", downloadRequest.RemoteFile, "error", err)
+		scopedLog.ErrorContext(ctx, "unable to download item", "RemoteFile", downloadRequest.RemoteFile, "error", err)
 		os.Remove(downloadRequest.RemoteFile)
 		return false, err
 	}
 
-	scopedLog.InfoContext(ctx, "File downloaded", "numBytes", numBytes)
+	scopedLog.InfoContext(ctx, "file downloaded", "numBytes", numBytes)
 
 	return true, err
 }

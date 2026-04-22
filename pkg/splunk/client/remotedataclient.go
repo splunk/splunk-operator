@@ -124,6 +124,6 @@ func RegisterRemoteDataClient(ctx context.Context, provider string) {
 	case "gcp":
 		RegisterGCSClient()
 	default:
-		scopedLog.ErrorContext(ctx, "Invalid provider specified", "provider", provider)
+		scopedLog.ErrorContext(ctx, "invalid provider specified", "provider", provider)
 	}
 }

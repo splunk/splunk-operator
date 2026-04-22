@@ -98,7 +98,7 @@ func (r splunkReconciler) Reconcile(ctx context.Context, request reconcile.Reque
 	instance := r.splctrl.GetInstance()
 	gvk := instance.GroupVersionKind()
 	scopedLog := logging.FromContext(ctx).With("func", "Reconcile", "Group", gvk.Group, "Version", gvk.Version, "Kind", gvk.Kind, "Namespace", request.Namespace, "Name", request.Name)
-	scopedLog.InfoContext(ctx, "Reconciling custom resource")
+	scopedLog.InfoContext(ctx, "reconciling custom resource")
 
 	// Fetch the custom resource instance
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
@@ -121,14 +121,14 @@ func (r splunkReconciler) Reconcile(ctx context.Context, request reconcile.Reque
 
 	// log what happens next
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Reconciliation requeued", "RequeueAfter", result.RequeueAfter, "error", err)
+		scopedLog.ErrorContext(ctx, "reconciliation requeued", "RequeueAfter", result.RequeueAfter, "error", err)
 		return result, nil
 	}
 	if result.Requeue {
-		scopedLog.InfoContext(ctx, "Reconciliation requeued", "RequeueAfter", result.RequeueAfter)
+		scopedLog.InfoContext(ctx, "reconciliation requeued", "RequeueAfter", result.RequeueAfter)
 		return result, nil
 	}
 
-	scopedLog.InfoContext(ctx, "Reconciliation complete")
+	scopedLog.InfoContext(ctx, "reconciliation complete")
 	return reconcile.Result{}, nil
 }

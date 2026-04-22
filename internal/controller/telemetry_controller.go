@@ -57,11 +57,11 @@ func (r *TelemetryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	logger := slog.Default().With("controller", "Telemetry", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 	ctx = logging.WithLogger(ctx, logger)
 
-	logger.InfoContext(ctx, "Reconciling telemetry")
+	logger.InfoContext(ctx, "reconciling telemetry")
 
 	defer func() {
 		if rec := recover(); rec != nil {
-			logger.ErrorContext(ctx, "Recovered from panic in TelemetryReconciler.Reconcile", "error", fmt.Errorf("panic: %v", rec))
+			logger.ErrorContext(ctx, "recovered from panic in TelemetryReconciler.Reconcile", "error", fmt.Errorf("panic: %v", rec))
 		}
 	}()
 
@@ -70,10 +70,10 @@ func (r *TelemetryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	err := r.Get(ctx, req.NamespacedName, cm)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			logger.InfoContext(ctx, "telemetry configmap not found; requeueing", "period(seconds)", int(telemetryRetryDelay/time.Second))
+			logger.InfoContext(ctx, "telemetry configmap not found; requeueing", "periodSeconds", int(telemetryRetryDelay/time.Second))
 			return ctrl.Result{Requeue: true, RequeueAfter: telemetryRetryDelay}, nil
 		}
-		logger.ErrorContext(ctx, "could not load telemetry configmap; requeueing", "error", err, "period(seconds)", int(telemetryRetryDelay/time.Second))
+		logger.ErrorContext(ctx, "could not load telemetry configmap; requeueing", "error", err, "periodSeconds", int(telemetryRetryDelay/time.Second))
 		return ctrl.Result{Requeue: true, RequeueAfter: telemetryRetryDelay}, nil
 	}
 
@@ -82,15 +82,15 @@ func (r *TelemetryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{Requeue: true, RequeueAfter: telemetryRetryDelay}, nil
 	}
 
-	logger.InfoContext(ctx, "start", "Telemetry configmap version", cm.GetResourceVersion())
+	logger.InfoContext(ctx, "start", "configmapVersion", cm.GetResourceVersion())
 
 	result, err := applyTelemetryFn(ctx, r.Client, cm)
 	if err != nil {
-		logger.ErrorContext(ctx, "Failed to send telemetry", "error", err)
+		logger.ErrorContext(ctx, "failed to send telemetry", "error", err)
 		return ctrl.Result{Requeue: true, RequeueAfter: telemetryRetryDelay}, nil
 	}
 	if result.Requeue && result.RequeueAfter != 0 {
-		logger.InfoContext(ctx, "Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
 	}
 
 	return result, err

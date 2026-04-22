@@ -168,7 +168,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			logger.ErrorContext(ctx, "Error in deleting automated monitoring console resource", "error", err)
+			logger.ErrorContext(ctx, "error in deleting automated monitoring console resource", "error", err)
 		}
 
 		// Add a splunk operator telemetry app
@@ -245,13 +245,13 @@ func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.Contro
 		var pod corev1.Pod
 		err := client.Get(ctx, namespacedName, &pod)
 		if err != nil {
-			logger.InfoContext(ctx, "Pod not found, skipping license check", "podName", podName)
+			logger.InfoContext(ctx, "pod not found, skipping license check", "podName", podName)
 			continue
 		}
 
 		// Only check license if pod is running
 		if pod.Status.Phase != corev1.PodRunning {
-			logger.InfoContext(ctx, "Pod not in running state, skipping license check", "podName", podName, "phase", pod.Status.Phase)
+			logger.InfoContext(ctx, "pod not in running state, skipping license check", "podName", podName, "phase", pod.Status.Phase)
 			continue
 		}
 
@@ -274,7 +274,7 @@ func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.Contro
 		// Get license information from Splunk API
 		licenses, err := splunkClient.GetLicenseInfo()
 		if err != nil {
-			logger.ErrorContext(ctx, "Failed to get license information from Splunk API", "error", err, "podName", podName)
+			logger.ErrorContext(ctx, "failed to get license information from Splunk API", "error", err, "podName", podName)
 			continue
 		}
 
@@ -283,7 +283,7 @@ func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.Contro
 			if licenseInfo.Status == "EXPIRED" {
 				eventPublisher.Warning(ctx, EventReasonLicenseExpired,
 					fmt.Sprintf("License '%s' has expired", licenseName))
-				logger.ErrorContext(ctx, "Detected expired license", "licenseName", licenseName, "title", licenseInfo.Title)
+				logger.ErrorContext(ctx, "detected expired license", "licenseName", licenseName, "title", licenseInfo.Title)
 			}
 		}
 	}
@@ -299,7 +299,7 @@ func getLicenseManagerList(ctx context.Context, c splcommon.ControllerClient, cr
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	if err != nil {
-		logger.ErrorContext(ctx, "LicenseManager types not found in namespace", "error", err, "namsespace", cr.GetNamespace())
+		logger.ErrorContext(ctx, "licenseManager types not found in namespace", "error", err, "namsespace", cr.GetNamespace())
 		return objectList, err
 	}
 

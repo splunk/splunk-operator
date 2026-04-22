@@ -184,7 +184,7 @@ func main() {
 	_ = logging.SetupLogger(logCfg)
 
 	// Log startup information using slog
-	slog.Info("Splunk Operator starting",
+	slog.Info("splunk Operator starting",
 		slog.String("log_level", logging.LevelToString(logCfg.Level)),
 		slog.String("log_format", logCfg.Format),
 		slog.Bool("log_add_source", logCfg.AddSource))

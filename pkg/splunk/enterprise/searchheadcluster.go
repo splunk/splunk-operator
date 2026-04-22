@@ -221,7 +221,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			logger.ErrorContext(ctx, "Error in deleting automated monitoring console resource", "error", err)
+			logger.ErrorContext(ctx, "error in deleting automated monitoring console resource", "error", err)
 		}
 
 		// Reset secrets related status structs
@@ -271,7 +271,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 	// If namespace scoped secret revision is the same ignore
 	if len(mgr.cr.Status.NamespaceSecretResourceVersion) == 0 {
 		// First time, set resource version in CR
-		logger.InfoContext(ctx, "Setting CrStatusNamespaceSecretResourceVersion for the first time")
+		logger.InfoContext(ctx, "setting CrStatusNamespaceSecretResourceVersion for the first time")
 		mgr.cr.Status.NamespaceSecretResourceVersion = namespaceSecret.ObjectMeta.ResourceVersion
 		return nil
 	} else if mgr.cr.Status.NamespaceSecretResourceVersion == namespaceSecret.ObjectMeta.ResourceVersion {
@@ -279,7 +279,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		return nil
 	}
 
-	logger.InfoContext(ctx, "Namespaced scoped secret revision has changed")
+	logger.InfoContext(ctx, "namespaced scoped secret revision has changed")
 
 	// Retrieve shc_secret password from secret data
 	nsShcSecret := string(namespaceSecret.Data["shc_secret"])
@@ -350,7 +350,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 				}
 				return err
 			}
-			podLogger.InfoContext(ctx, "Restarted Splunk")
+			podLogger.InfoContext(ctx, "restarted Splunk")
 
 			// Set the shc_secret changed flag to true
 			if i < int32(len(mgr.cr.Status.ShcSecretChanged)) {
@@ -385,13 +385,13 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			if err != nil {
 				return err
 			}
-			podLogger.InfoContext(ctx, "Restarted Splunk")
+			podLogger.InfoContext(ctx, "restarted Splunk")
 
 			// Set the adminSecretChanged changed flag to true
 			if i < int32(len(mgr.cr.Status.AdminSecretChanged)) {
 				mgr.cr.Status.AdminSecretChanged[i] = true
 			} else {
-				podLogger.InfoContext(ctx, "Appending to AdminSecretChanged")
+				podLogger.InfoContext(ctx, "appending to AdminSecretChanged")
 				mgr.cr.Status.AdminSecretChanged = append(mgr.cr.Status.AdminSecretChanged, true)
 			}
 
@@ -401,7 +401,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 				return err
 			}
 			mgr.cr.Status.AdminPasswordChangedSecrets[podSecret.GetName()] = true
-			podLogger.InfoContext(ctx, "Secret mounted on pod(to be changed) added to map")
+			podLogger.InfoContext(ctx, "secret mounted on pod(to be changed) added to map")
 		}
 	}
 
@@ -467,19 +467,19 @@ func setDeployerConfig(ctx context.Context, cr *enterpriseApi.SearchHeadCluster,
 	for i := range podTemplate.Spec.Containers {
 		if len(depRes.Requests) != 0 {
 			podTemplate.Spec.Containers[i].Resources.Requests = cr.Spec.DeployerResourceSpec.Requests
-			logger.InfoContext(ctx, "Setting deployer resources requests", "requests", cr.Spec.DeployerResourceSpec.Requests)
+			logger.InfoContext(ctx, "setting deployer resources requests", "requests", cr.Spec.DeployerResourceSpec.Requests)
 		}
 
 		if len(depRes.Limits) != 0 {
 			podTemplate.Spec.Containers[i].Resources.Limits = cr.Spec.DeployerResourceSpec.Limits
-			logger.InfoContext(ctx, "Setting deployer resources limits", "limits", cr.Spec.DeployerResourceSpec.Limits)
+			logger.InfoContext(ctx, "setting deployer resources limits", "limits", cr.Spec.DeployerResourceSpec.Limits)
 		}
 	}
 
 	// Add node affinity if configured
 	if cr.Spec.DeployerNodeAffinity != nil {
 		podTemplate.Spec.Affinity.NodeAffinity = cr.Spec.DeployerNodeAffinity
-		logger.InfoContext(ctx, "Setting deployer node affinity", "nodeAffinity", cr.Spec.DeployerNodeAffinity)
+		logger.InfoContext(ctx, "setting deployer node affinity", "nodeAffinity", cr.Spec.DeployerNodeAffinity)
 	}
 
 	return nil
@@ -528,7 +528,7 @@ func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient,
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	if err != nil {
-		logger.ErrorContext(ctx, "SearchHeadCluster types not found in namespace", "error", err, "namespace", cr.GetNamespace())
+		logger.ErrorContext(ctx, "searchHeadCluster types not found in namespace", "error", err, "namespace", cr.GetNamespace())
 		return objectList, err
 	}
 

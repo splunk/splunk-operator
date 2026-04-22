@@ -8,15 +8,17 @@ The operator uses Go's `log/slog` package for structured logging. The global log
 
 | Where | How |
 |---|---|
-| **Controller `Reconcile`** | `logger := slog.Default().With("controller", "Name", "name", req.Name, "namespace", req.Namespace)` |
+| **Controller `Reconcile`** | `logger := slog.Default().With("controller", "Name", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))` |
 | **Business logic (pkg)** | `logger := logging.FromContext(ctx).With("func", "FunctionName")` |
 
 Controllers inject the logger into context so downstream code can retrieve it:
 
 ```go
-logger := slog.Default().With("controller", "Standalone", "name", req.Name, "namespace", req.Namespace)
+logger := slog.Default().With("controller", "Standalone", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 ctx = logging.WithLogger(ctx, logger)
 ```
+
+The `reconcileID` is a unique identifier assigned by controller-runtime to each reconcile invocation. It is automatically propagated to all downstream log calls via context, making it possible to correlate every log line produced during a single reconcile pass — even across deeply nested function calls.
 
 ### Log Levels
 
@@ -47,7 +49,21 @@ logger.InfoContext(ctx, "error occurred")
 
 1. Always use `*Context(ctx, ...)` variants (`InfoContext`, `ErrorContext`, etc.).
 2. Always pass `"error", err` as a key-value pair — never as the message string.
-3. Use consistent key names across the codebase:
+3. Use consistent key names across the codebase. Key names **must** be `camelCase` — no spaces, no Title Case, no special characters like parentheses.
+
+```go
+// Good
+logger.InfoContext(ctx, "start", "crVersion", instance.GetResourceVersion())
+logger.InfoContext(ctx, "Requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
+logger.InfoContext(ctx, "Getting Apps list", "bucket", client.BucketName)
+
+// Bad - spaces and inconsistent casing in keys
+logger.InfoContext(ctx, "start", "CR version", instance.GetResourceVersion())
+logger.InfoContext(ctx, "Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+logger.InfoContext(ctx, "Getting Apps list", "AWS S3 Bucket", client.BucketName)
+```
+
+Common key names:
 
 | Key | Meaning |
 |---|---|
@@ -56,18 +72,64 @@ logger.InfoContext(ctx, "error occurred")
 | `"namespace"` | Kubernetes namespace |
 | `"controller"` | Controller name |
 | `"func"` | Function name (in pkg layer) |
+| `"reconcileID"` | Unique ID per reconcile pass (set by controller) |
 | `"replicas"` | Replica count |
 | `"phase"` | CR phase |
+| `"podName"` | Pod name |
+| `"appName"` | App name |
+| `"bucket"` | Storage bucket name (S3/GCS/Azure) |
+| `"crVersion"` | CR resource version |
+| `"periodSeconds"` | Requeue delay in seconds |
 
-4. **Don't log and return the same error.** controller-runtime automatically logs every non-nil error returned from `Reconcile()` via `log.Error(err, "Reconciler error")`. If you also log it in the business logic, the same error appears twice. Instead, wrap the error with context using `fmt.Errorf("description: %w", err)` so the single controller-runtime log line is descriptive:
-   ```go
-   // Good — wrap and return, no explicit log needed
-   return result, fmt.Errorf("validate standalone spec: %w", err)
+4. **Don't log and return the same error.** controller-runtime automatically logs every non-nil error returned from `Reconcile()` via `log.Error(err, "Reconciler error")`. If you also log it in the business logic, the same error appears twice. Instead, wrap the error with context using `fmt.Errorf("description: %w", err)` so the single controller-runtime log line is descriptive.
 
-   // Bad — double-logged: once here, once by controller-runtime
-   scopedLog.Error(err, "Failed to validate standalone spec")
-   return result, err
-   ```
+### Error Wrapping
+
+The `Apply*` functions in `pkg/splunk/enterprise/` wrap validation errors before returning them. This adds context about which resource type failed, producing a clear chain when controller-runtime logs the final error:
+
+```
+validate clustermanager spec: license not accepted, please adjust SPLUNK_GENERAL_TERMS ...
+```
+
+**Pattern:**
+
+```go
+err = validateClusterManagerSpec(ctx, client, cr)
+if err != nil {
+    eventPublisher.Warning(ctx, EventReasonValidateSpecFailed,
+        fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
+    return result, fmt.Errorf("validate clustermanager spec: %w", err)
+}
+```
+
+**Rules:**
+
+- Use `%w` (not `%v`) so callers can inspect the original error with `errors.Is` / `errors.Unwrap`.
+- The prefix should be lowercase and describe the operation that failed, e.g. `"validate standalone spec"`, `"apply splunk config"`.
+- Don't wrap and log the same error — pick one. Wrapping is preferred because it keeps context in the error chain and avoids double-logging.
+
+```go
+// Good — wrap and return, no explicit log needed
+return result, fmt.Errorf("validate standalone spec: %w", err)
+
+// Bad — double-logged: once here, once by controller-runtime
+scopedLog.Error(err, "Failed to validate standalone spec")
+return result, err
+```
+
+**When writing tests** that assert on wrapped errors, use `strings.Contains` rather than an exact match so the test doesn't break if the wrapping prefix changes:
+
+```go
+// Good — resilient to wrapping changes
+if !strings.Contains(err.Error(), "license not accepted") {
+    t.Errorf("Unexpected error: %v", err)
+}
+
+// Bad — brittle, breaks if wrapping prefix is renamed
+if err.Error() != "validate standalone spec: license not accepted, ..." {
+    t.Errorf("Unexpected error: %v", err)
+}
+```
 5. Sensitive data (passwords, tokens, secrets) is automatically redacted by the handler.
 
 ### Configuration

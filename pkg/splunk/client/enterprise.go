@@ -1043,14 +1043,14 @@ func (c *SplunkClient) UpdateConfFile(ctx context.Context, fileName, property st
 	endpoint := fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s", c.ManagementURI, fileName)
 	body := fmt.Sprintf("name=%s", property)
 
-	logger.InfoContext(ctx, "Creating conf file object if it does not exist", "fileName", fileName, "property", property)
+	logger.InfoContext(ctx, "creating conf file object if it does not exist", "fileName", fileName, "property", property)
 	request, err := http.NewRequest("POST", endpoint, strings.NewReader(body))
 	if err != nil {
-		logger.ErrorContext(ctx, "Failed to create conf file object if it does not exist", "fileName", fileName, "property", property, "error", err.Error())
+		logger.ErrorContext(ctx, "failed to create conf file object if it does not exist", "fileName", fileName, "property", property, "error", err.Error())
 		return err
 	}
 
-	logger.InfoContext(ctx, "Validating conf file object creation", "fileName", fileName, "property", property)
+	logger.InfoContext(ctx, "validating conf file object creation", "fileName", fileName, "property", property)
 	expectedStatus := []int{200, 201, 409}
 	err = c.Do(request, expectedStatus, nil)
 	if err != nil {
@@ -1068,14 +1068,14 @@ func (c *SplunkClient) UpdateConfFile(ctx context.Context, fileName, property st
 		body = body[:len(body)-1]
 	}
 
-	logger.InfoContext(ctx, "Updating conf file object", "fileName", fileName, "property", property)
+	logger.InfoContext(ctx, "updating conf file object", "fileName", fileName, "property", property)
 	request, err = http.NewRequest("POST", endpoint, strings.NewReader(body))
 	if err != nil {
-		logger.ErrorContext(ctx, "Failed to update conf file object", "fileName", fileName, "property", property, "error", err.Error())
+		logger.ErrorContext(ctx, "failed to update conf file object", "fileName", fileName, "property", property, "error", err.Error())
 		return err
 	}
 
-	logger.InfoContext(ctx, "Validating conf file object update", "fileName", fileName, "property", property)
+	logger.InfoContext(ctx, "validating conf file object update", "fileName", fileName, "property", property)
 	expectedStatus = []int{200, 201}
 	err = c.Do(request, expectedStatus, nil)
 	if err != nil {

@@ -220,7 +220,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			logger.ErrorContext(ctx, "Error in deleting automated monitoring console resource", "error", err)
+			logger.ErrorContext(ctx, "error in deleting automated monitoring console resource", "error", err)
 		}
 
 		// Create podExecClient (use injected one if provided, otherwise create real one)
@@ -337,7 +337,7 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.Con
 	if smartStoreConfigMap != nil {
 		tokenFromConfigMap := smartStoreConfigMap.Data[configToken]
 		if tokenFromConfigMap == stdOut {
-			logger.InfoContext(ctx, "Token Matched.", "on Pod=", stdOut, "from configMap=", tokenFromConfigMap)
+			logger.InfoContext(ctx, "token matched", "podToken", stdOut, "configMapToken", tokenFromConfigMap)
 			return nil
 		}
 		eventPublisher.Warning(ctx, EventReasonSmartStoreConfigPending, fmt.Sprintf("waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap))
@@ -366,7 +366,7 @@ var PerformCmBundlePush = func(ctx context.Context, c splcommon.ControllerClient
 		return fmt.Errorf("will re-attempt to push the bundle after the 5 seconds period passed from last check. LastCheckInterval=%d, current epoch=%d", cr.Status.BundlePushTracker.LastCheckInterval, currentEpoch)
 	}
 
-	logger.InfoContext(ctx, "Attempting to push the bundle")
+	logger.InfoContext(ctx, "attempting to push the bundle")
 	cr.Status.BundlePushTracker.LastCheckInterval = currentEpoch
 
 	// The amount of time it takes for the configMap update to Pod depends on
@@ -393,7 +393,7 @@ var PerformCmBundlePush = func(ctx context.Context, c splcommon.ControllerClient
 
 	err = PushManagerAppsBundle(ctx, c, cr)
 	if err == nil {
-		logger.InfoContext(ctx, "Bundle push success")
+		logger.InfoContext(ctx, "bundle push success")
 		cr.Status.BundlePushTracker.NeedToPushManagerApps = false
 	}
 
@@ -420,7 +420,7 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 		return fmt.Errorf("could not find admin password while trying to push the manager apps bundle")
 	}
 
-	logger.InfoContext(ctx, "Issuing REST call to push manager aps bundle")
+	logger.InfoContext(ctx, "issuing REST call to push manager aps bundle")
 
 	managerIdxcName := cr.GetName()
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterManager, managerIdxcName, false))
@@ -441,7 +441,7 @@ func getClusterManagerList(ctx context.Context, c splcommon.ControllerClient, cr
 	numOfObjects := len(objectList.Items)
 
 	if err != nil {
-		logger.ErrorContext(ctx, "ClusterManager types not found in namespace", "error", err, "namsespace", cr.GetNamespace())
+		logger.ErrorContext(ctx, "clusterManager types not found in namespace", "error", err, "namsespace", cr.GetNamespace())
 		return numOfObjects, err
 	}
 
@@ -460,7 +460,7 @@ var GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.Clus
 	cm := mgr.getClusterManagerClient(cr)
 	clusterInfo, err := cm.GetClusterInfo(false)
 	if err != nil {
-		logger.ErrorContext(ctx, "Failed to get cluster info from cluster manager pod, using basic environment variables", "error", err)
+		logger.ErrorContext(ctx, "failed to get cluster info from cluster manager pod, using basic environment variables", "error", err)
 		return extraEnv, err
 	}
 
@@ -528,13 +528,13 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 	image, err := getCurrentImage(ctx, c, cr, SplunkLicenseManager)
 	if err != nil {
 		eventPublisher.Warning(ctx, EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not get the LicenseManager Image. Reason %v", err))
-		logger.ErrorContext(ctx, "Get LicenseManager Image failed with", "error", err)
+		logger.ErrorContext(ctx, "get LicenseManager Image failed with", "error", err)
 		return err
 	}
 	err = changeAnnotations(ctx, c, image, clusterManagerInstance)
 	if err != nil {
 		eventPublisher.Warning(ctx, EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not update annotations. Reason %v", err))
-		logger.ErrorContext(ctx, "ClusterManager types update after changing annotations failed with", "error", err)
+		logger.ErrorContext(ctx, "clusterManager types update after changing annotations failed with", "error", err)
 		return err
 	}
 

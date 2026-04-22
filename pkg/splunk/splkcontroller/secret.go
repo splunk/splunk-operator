@@ -45,7 +45,7 @@ func ApplySecret(ctx context.Context, client splcommon.ControllerClient, secret 
 	namespacedName := types.NamespacedName{Namespace: secret.GetNamespace(), Name: secret.GetName()}
 	err := client.Get(ctx, namespacedName, &result)
 	if err == nil {
-		scopedLog.InfoContext(ctx, "Found existing Secret, update if needed")
+		scopedLog.InfoContext(ctx, "found existing Secret, update if needed")
 		if !reflect.DeepEqual(&result, secret) {
 			result = *secret
 			err = splutil.UpdateResource(ctx, client, &result)
@@ -55,7 +55,7 @@ func ApplySecret(ctx context.Context, client splcommon.ControllerClient, secret 
 			secret = &result
 		}
 	} else if k8serrors.IsNotFound(err) {
-		scopedLog.InfoContext(ctx, "Didn't find secret, creating one")
+		scopedLog.InfoContext(ctx, "didn't find secret, creating one")
 		err = splutil.CreateResource(ctx, client, secret)
 		if err != nil {
 			return nil, err
@@ -63,7 +63,7 @@ func ApplySecret(ctx context.Context, client splcommon.ControllerClient, secret 
 		gerr := client.Get(ctx, namespacedName, secret)
 		retryCount := 0
 		for ; gerr != nil; gerr = client.Get(ctx, namespacedName, secret) {
-			scopedLog.ErrorContext(ctx, "Newly created resource still not in cache sleeping for 10 micro second", "secret", namespacedName.Name, "error", gerr)
+			scopedLog.ErrorContext(ctx, "newly created resource still not in cache sleeping for 10 micro second", "secret", namespacedName.Name, "error", gerr)
 			time.Sleep(10 * time.Microsecond)
 
 			// Avoid infinite loop

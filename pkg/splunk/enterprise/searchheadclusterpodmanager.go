@@ -68,7 +68,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	// update CR status with SHC information
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.CaptainReady {
-		logger.InfoContext(ctx, "Search head cluster is not ready", "error", err)
+		logger.InfoContext(ctx, "search head cluster is not ready", "error", err)
 		return enterpriseApi.PhasePending, nil
 	}
 
@@ -110,7 +110,7 @@ func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n 
 
 	// pod is quarantined; decommission it
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
-	logger.WarnContext(ctx, "Member leaving search head cluster",
+	logger.WarnContext(ctx, "member leaving search head cluster",
 		"member", memberName,
 		"remaining_count", len(mgr.cr.Status.Members)-1)
 
@@ -132,7 +132,7 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 	switch mgr.cr.Status.Members[n].Status {
 	case "Up":
 		// Detain search head
-		logger.InfoContext(ctx, "Detaining search head cluster member", "memberName", memberName)
+		logger.InfoContext(ctx, "detaining search head cluster member", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
 
 		podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, getApplicablePodNameForK8Probes(mgr.cr, n))
@@ -143,14 +143,14 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 			// During the Recycle, our reconcile loop is entered multiple times. If the Pod is already down,
 			// there is a chance of readiness probe failing, in which case, even the podExec will not be successful.
 			// So, just log the message, and ignore the error.
-			logger.WarnContext(ctx, "Setting Probe level failed. Probably, the Pod is already down", "memberName", memberName)
+			logger.WarnContext(ctx, "setting Probe level failed. Probably, the Pod is already down", "memberName", memberName)
 		}
 
-		logger.InfoContext(ctx, "Initializes rolling upgrade process")
+		logger.InfoContext(ctx, "initializes rolling upgrade process")
 		err = c.InitiateUpgrade()
 
 		if err != nil {
-			logger.ErrorContext(ctx, "Initialization of rolling upgrade failed", "error", err)
+			logger.ErrorContext(ctx, "initialization of rolling upgrade failed", "error", err)
 			return false, err
 		}
 
@@ -181,14 +181,14 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 		// Wait until active searches have drained
 		searchesComplete := mgr.cr.Status.Members[n].ActiveHistoricalSearchCount+mgr.cr.Status.Members[n].ActiveRealtimeSearchCount == 0
 		if searchesComplete {
-			logger.InfoContext(ctx, "Detention complete", "memberName", memberName)
+			logger.InfoContext(ctx, "detention complete", "memberName", memberName)
 		} else {
-			logger.InfoContext(ctx, "Waiting for active searches to complete", "memberName", memberName)
+			logger.InfoContext(ctx, "waiting for active searches to complete", "memberName", memberName)
 		}
 		return searchesComplete, nil
 
 	case "": // this can happen after the member has already been recycled and we're just waiting for state to update
-		logger.InfoContext(ctx, "Member has empty Status", "memberName", memberName)
+		logger.InfoContext(ctx, "member has empty Status", "memberName", memberName)
 		return false, nil
 	}
 
@@ -208,7 +208,7 @@ func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int
 
 	case "ManualDetention":
 		// release from detention
-		logger.InfoContext(ctx, "Releasing search head cluster member from detention", "memberName", memberName)
+		logger.InfoContext(ctx, "releasing search head cluster member from detention", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
 		return false, c.SetSearchHeadDetention(false)
 	}
@@ -232,7 +232,7 @@ func (mgr *searchHeadClusterPodManager) FinishUpgrade(ctx context.Context, n int
 		// revert upgrade state status
 		mgr.cr.Status.UpgradePhase = enterpriseApi.UpgradePhaseUpgraded
 
-		logger.InfoContext(ctx, "Finalize Upgrade")
+		logger.InfoContext(ctx, "finalize Upgrade")
 		return c.FinalizeUpgrade()
 	}
 
@@ -252,7 +252,7 @@ func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) 
 	// Retrieve admin password from Pod
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
 	if err != nil {
-		logger.ErrorContext(ctx, "Couldn't retrieve the admin password from Pod", "member", memberName, "error", err)
+		logger.ErrorContext(ctx, "couldn't retrieve the admin password from Pod", "member", memberName, "error", err)
 	}
 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
@@ -297,7 +297,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 			memberStatus.ActiveHistoricalSearchCount = memberInfo.ActiveHistoricalSearchCount
 			memberStatus.ActiveRealtimeSearchCount = memberInfo.ActiveRealtimeSearchCount
 		} else {
-			shcLogger.ErrorContext(ctx, "Unable to retrieve search head cluster member info", "memberName", memberName, "error", err)
+			shcLogger.ErrorContext(ctx, "unable to retrieve search head cluster member info", "memberName", memberName, "error", err)
 		}
 
 		if err == nil && !gotCaptainInfo {
@@ -312,13 +312,13 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 				gotCaptainInfo = true
 
 				if previousCaptain != "" && previousCaptain != captainInfo.Label {
-					shcLogger.InfoContext(ctx, "Captain election completed",
+					shcLogger.InfoContext(ctx, "captain election completed",
 						"old_captain", previousCaptain,
 						"new_captain", captainInfo.Label)
 				}
 			} else {
 				mgr.cr.Status.CaptainReady = false
-				shcLogger.ErrorContext(ctx, "Captain election failed",
+				shcLogger.ErrorContext(ctx, "captain election failed",
 					"member", memberName,
 					"error", err)
 			}
@@ -338,11 +338,11 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 
 	newMemberCount := int32(len(mgr.cr.Status.Members))
 	if newMemberCount > previousMemberCount {
-		shcLogger.InfoContext(ctx, "Member joined search head cluster",
+		shcLogger.InfoContext(ctx, "member joined search head cluster",
 			"total_members", newMemberCount,
 			"previous_members", previousMemberCount)
 	} else if newMemberCount < previousMemberCount {
-		shcLogger.WarnContext(ctx, "Member left search head cluster",
+		shcLogger.WarnContext(ctx, "member left search head cluster",
 			"total_members", newMemberCount,
 			"previous_members", previousMemberCount)
 	}

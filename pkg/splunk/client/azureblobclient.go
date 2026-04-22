@@ -124,7 +124,7 @@ func NewAzureBlobClient(
 ) (RemoteDataClient, error) { // Matches GetRemoteDataClient signature
 	scopedLog := logging.FromContext(ctx).With("func", "NewAzureBlobClient")
 
-	scopedLog.InfoContext(ctx, "Initializing AzureBlobClient")
+	scopedLog.InfoContext(ctx, "initializing AzureBlobClient")
 
 	// Execute the initialization function if provided.
 	if initFunc != nil {
@@ -151,12 +151,12 @@ func NewAzureBlobClient(
 
 	if secretAccessKey != "" {
 		// Use Shared Key authentication.
-		scopedLog.InfoContext(ctx, "Using Shared Key authentication")
+		scopedLog.InfoContext(ctx, "using Shared Key authentication")
 
 		// Create a Shared Key Credential.
 		sharedKeyCredential, err := azblob.NewSharedKeyCredential(storageAccountName, secretAccessKey)
 		if err != nil {
-			scopedLog.ErrorContext(ctx, "Failed to create SharedKeyCredential", "error", err)
+			scopedLog.ErrorContext(ctx, "failed to create SharedKeyCredential", "error", err)
 			return nil, fmt.Errorf("failed to create SharedKeyCredential: %w", err)
 		}
 
@@ -167,7 +167,7 @@ func NewAzureBlobClient(
 			nil,
 		)
 		if err != nil {
-			scopedLog.ErrorContext(ctx, "Failed to create ContainerClient with SharedKeyCredential", "error", err)
+			scopedLog.ErrorContext(ctx, "failed to create ContainerClient with SharedKeyCredential", "error", err)
 			return nil, fmt.Errorf("failed to create ContainerClient with SharedKeyCredential: %w", err)
 		}
 
@@ -177,7 +177,7 @@ func NewAzureBlobClient(
 		credentialType = CredentialTypeSharedKey
 	} else {
 		// Use Azure AD authentication.
-		scopedLog.InfoContext(ctx, "Using Azure AD authentication")
+		scopedLog.InfoContext(ctx, "using Azure AD authentication")
 
 		// Create a Token Credential using DefaultAzureCredential.
 		// The Azure SDK uses environment variables to configure authentication when using DefaultAzureCredential.
@@ -199,7 +199,7 @@ func NewAzureBlobClient(
 
 		tokenCredential, err := azidentity.NewDefaultAzureCredential(nil)
 		if err != nil {
-			scopedLog.ErrorContext(ctx, "Failed to create DefaultAzureCredential", "error", err)
+			scopedLog.ErrorContext(ctx, "failed to create DefaultAzureCredential", "error", err)
 			return nil, fmt.Errorf("failed to create DefaultAzureCredential: %w", err)
 		}
 
@@ -210,7 +210,7 @@ func NewAzureBlobClient(
 			nil,
 		)
 		if err != nil {
-			scopedLog.ErrorContext(ctx, "Failed to create ContainerClient with TokenCredential", "error", err)
+			scopedLog.ErrorContext(ctx, "failed to create ContainerClient with TokenCredential", "error", err)
 			return nil, fmt.Errorf("failed to create ContainerClient with TokenCredential: %w", err)
 		}
 
@@ -220,7 +220,7 @@ func NewAzureBlobClient(
 		credentialType = CredentialTypeAzureAD
 	}
 
-	scopedLog.InfoContext(ctx, "AzureBlobClient initialized successfully",
+	scopedLog.InfoContext(ctx, "azureBlobClient initialized successfully",
 		"CredentialType", credentialType,
 		"BucketName", bucketName,
 		"StorageAccountName", storageAccountName,
@@ -241,7 +241,7 @@ func NewAzureBlobClient(
 func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
 	scopedLog := logging.FromContext(ctx).With("func", "AzureBlob:GetAppsList", "Bucket", client.BucketName)
 
-	scopedLog.InfoContext(ctx, "Fetching list of apps")
+	scopedLog.InfoContext(ctx, "fetching list of apps")
 
 	// Define options for listing blobs.
 	options := &container.ListBlobsFlatOptions{
@@ -260,7 +260,7 @@ func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListR
 	for pager.More() {
 		resp, err := pager.NextPage(ctx)
 		if err != nil {
-			scopedLog.ErrorContext(ctx, "Error listing blobs", "error", err)
+			scopedLog.ErrorContext(ctx, "error listing blobs", "error", err)
 			return RemoteDataListResponse{}, fmt.Errorf("error listing blobs: %w", err)
 		}
 
@@ -280,7 +280,7 @@ func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListR
 		}
 	}
 
-	scopedLog.InfoContext(ctx, "Successfully fetched list of apps", "TotalBlobs", len(blobs))
+	scopedLog.InfoContext(ctx, "successfully fetched list of apps", "TotalBlobs", len(blobs))
 
 	return RemoteDataListResponse{Objects: blobs}, nil
 }
@@ -293,7 +293,7 @@ func (client *AzureBlobClient) DownloadApp(ctx context.Context, downloadRequest 
 		"LocalFile", downloadRequest.LocalFile,
 	)
 
-	scopedLog.InfoContext(ctx, "Initiating blob download")
+	scopedLog.InfoContext(ctx, "initiating blob download")
 
 	// Create a blob client for the specific blob.
 	blobClient := client.ContainerClient.NewBlobClient(downloadRequest.RemoteFile)
@@ -301,7 +301,7 @@ func (client *AzureBlobClient) DownloadApp(ctx context.Context, downloadRequest 
 	// Download the blob content.
 	get, err := blobClient.DownloadStream(ctx, nil)
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Failed to download blob", "error", err)
+		scopedLog.ErrorContext(ctx, "failed to download blob", "error", err)
 		return false, fmt.Errorf("failed to download blob: %w", err)
 	}
 	defer get.Body.Close()
@@ -309,7 +309,7 @@ func (client *AzureBlobClient) DownloadApp(ctx context.Context, downloadRequest 
 	// Create or truncate the local file.
 	localFile, err := os.Create(downloadRequest.LocalFile)
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Failed to create local file", "error", err)
+		scopedLog.ErrorContext(ctx, "failed to create local file", "error", err)
 		return false, fmt.Errorf("failed to create local file: %w", err)
 	}
 	defer localFile.Close()
@@ -317,11 +317,11 @@ func (client *AzureBlobClient) DownloadApp(ctx context.Context, downloadRequest 
 	// Write the content to the local file.
 	_, err = io.Copy(localFile, get.Body)
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Failed to write blob content to local file", "error", err)
+		scopedLog.ErrorContext(ctx, "failed to write blob content to local file", "error", err)
 		return false, fmt.Errorf("failed to write blob content to local file: %w", err)
 	}
 
-	scopedLog.InfoContext(ctx, "Blob downloaded successfully")
+	scopedLog.InfoContext(ctx, "blob downloaded successfully")
 
 	return true, nil
 }

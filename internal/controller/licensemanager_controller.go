@@ -104,14 +104,14 @@ func (r *LicenseManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}
 
-	logger.InfoContext(ctx, "start", "CR version", instance.GetResourceVersion())
+	logger.InfoContext(ctx, "start", "crVersion", instance.GetResourceVersion())
 
 	// Pass event recorder through context
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
 	result, err := ApplyLicenseManager(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
-		logger.InfoContext(ctx, "Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
 	}
 
 	return result, err

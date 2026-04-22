@@ -72,7 +72,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		logger.InfoContext(ctx, "Scaling up ingestor cluster", "previousReplicas", cr.Status.Replicas, "newReplicas", cr.Spec.Replicas)
+		logger.InfoContext(ctx, "scaling up ingestor cluster", "previousReplicas", cr.Status.Replicas, "newReplicas", cr.Spec.Replicas)
 		cr.Status.CredentialSecretVersion = "0"
 		cr.Status.ServiceAccount = ""
 	}
@@ -228,12 +228,12 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		if err != nil {
 			return result, fmt.Errorf("resolve queue/object storage config: %w", err)
 		}
-		logger.DebugContext(ctx, "Resolved Queue/ObjectStorage config", "queue", qosCfg.Queue, "objectStorage", qosCfg.OS, "version", qosCfg.Version, "serviceAccount", cr.Spec.ServiceAccount)
+		logger.DebugContext(ctx, "resolved Queue/ObjectStorage config", "queue", qosCfg.Queue, "objectStorage", qosCfg.OS, "version", qosCfg.Version, "serviceAccount", cr.Spec.ServiceAccount)
 
 		secretChanged := cr.Status.CredentialSecretVersion != qosCfg.Version
 		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
 
-		logger.DebugContext(ctx, "Checking for changes", "previousCredentialSecretVersion", cr.Status.CredentialSecretVersion, "previousServiceAccount", cr.Status.ServiceAccount, "secretChanged", secretChanged, "serviceAccountChanged", serviceAccountChanged)
+		logger.DebugContext(ctx, "checking for changes", "previousCredentialSecretVersion", cr.Status.CredentialSecretVersion, "previousServiceAccount", cr.Status.ServiceAccount, "secretChanged", secretChanged, "serviceAccountChanged", serviceAccountChanged)
 
 		// If queue is updated
 		if secretChanged || serviceAccountChanged {
@@ -246,7 +246,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 			eventPublisher.Normal(ctx, "QueueConfigUpdated",
 				fmt.Sprintf("Queue/Pipeline configuration updated for %d ingestors", cr.Spec.Replicas))
-			logger.InfoContext(ctx, "Queue/Pipeline configuration updated", "readyReplicas", cr.Status.ReadyReplicas)
+			logger.InfoContext(ctx, "queue/Pipeline configuration updated", "readyReplicas", cr.Status.ReadyReplicas)
 
 			for i := int32(0); i < cr.Spec.Replicas; i++ {
 				ingClient := ingMgr.getClient(ctx, i)
@@ -254,7 +254,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 				if err != nil {
 					return result, err
 				}
-				logger.DebugContext(ctx, "Restarted splunk", "ingestor", i)
+				logger.DebugContext(ctx, "restarted splunk", "ingestor", i)
 			}
 
 			eventPublisher.Normal(ctx, "IngestorsRestarted",
@@ -263,7 +263,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			cr.Status.CredentialSecretVersion = qosCfg.Version
 			cr.Status.ServiceAccount = cr.Spec.ServiceAccount
 
-			logger.InfoContext(ctx, "Updated status", "credentialSecretVersion", cr.Status.CredentialSecretVersion, "serviceAccount", cr.Status.ServiceAccount)
+			logger.InfoContext(ctx, "updated status", "credentialSecretVersion", cr.Status.CredentialSecretVersion, "serviceAccount", cr.Status.ServiceAccount)
 		}
 
 		// Upgrade from automated MC to MC CRD
@@ -271,7 +271,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
 			eventPublisher.Warning(ctx, EventReasonMonitoringConsoleCleanupFailed, fmt.Sprintf("Failed to clean up automated monitoring console for %s — check operator logs", cr.GetName()))
-			logger.ErrorContext(ctx, "Delete of reference to automated MC failed", "error", err.Error())
+			logger.ErrorContext(ctx, "delete of reference to automated MC failed", "error", err.Error())
 		}
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), true)
@@ -320,7 +320,7 @@ func (mgr *ingestorClusterPodManager) getClient(ctx context.Context, n int32) *s
 	// Retrieve admin password from Pod
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
 	if err != nil {
-		logger.ErrorContext(ctx, "Couldn't retrieve the admin password from pod", "error", err.Error())
+		logger.ErrorContext(ctx, "couldn't retrieve the admin password from pod", "error", err.Error())
 	}
 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
@@ -378,7 +378,7 @@ func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Contex
 
 		for _, input := range queueInputs {
 			if !strings.Contains(input[0], "access_key") && !strings.Contains(input[0], "secret_key") {
-				logger.DebugContext(ctx, "Updating queue input in outputs.conf", "input", input)
+				logger.DebugContext(ctx, "updating queue input in outputs.conf", "input", input)
 			}
 			if err := splunkClient.UpdateConfFile(ctx, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{input}); err != nil {
 				updateErr = err
@@ -386,13 +386,13 @@ func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Contex
 		}
 
 		for _, input := range pipelineInputs {
-			logger.DebugContext(ctx, "Updating pipeline input in default-mode.conf", "input", input)
+			logger.DebugContext(ctx, "updating pipeline input in default-mode.conf", "input", input)
 			if err := splunkClient.UpdateConfFile(ctx, "default-mode", input[0], [][]string{{input[1], input[2]}}); err != nil {
 				updateErr = err
 			}
 		}
 
-		logger.InfoContext(ctx, "Updated conf files for pod", "pod", memberName)
+		logger.InfoContext(ctx, "updated conf files for pod", "pod", memberName)
 	}
 
 	return updateErr

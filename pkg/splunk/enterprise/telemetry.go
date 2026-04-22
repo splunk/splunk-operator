@@ -60,7 +60,7 @@ func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *
 	logger := logging.FromContext(ctx).With("func", "ApplyTelemetry")
 
 	for k, _ := range cm.Data {
-		logger.InfoContext(ctx, "Retrieved telemetry keys", "key", k)
+		logger.InfoContext(ctx, "retrieved telemetry keys", "key", k)
 	}
 
 	var data map[string]interface{}
@@ -104,15 +104,15 @@ func updateLastTransmissionTime(ctx context.Context, client splcommon.Controller
 	status.LastTransmission = time.Now().UTC().Format(time.RFC3339)
 	updated, err := json.MarshalIndent(status, "", "  ")
 	if err != nil {
-		logger.ErrorContext(ctx, "Failed to marshal telemetry status", "error", err)
+		logger.ErrorContext(ctx, "failed to marshal telemetry status", "error", err)
 		return
 	}
 	cm.Data[telStatusKey] = string(updated)
 	if err = client.Update(ctx, cm); err != nil {
-		logger.ErrorContext(ctx, "Failed to update telemetry status in configmap", "error", err)
+		logger.ErrorContext(ctx, "failed to update telemetry status in configmap", "error", err)
 		return
 	}
-	logger.InfoContext(ctx, "Updated last transmission time in configmap", "newStatus", cm.Data[telStatusKey])
+	logger.InfoContext(ctx, "updated last transmission time in configmap", "newStatus", cm.Data[telStatusKey])
 }
 
 func collectResourceTelData(resources corev1.ResourceRequirements) map[string]string {
@@ -182,7 +182,7 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 	var crWithTelAppList map[string][]splcommon.MetaObject
 	crWithTelAppList = make(map[string][]splcommon.MetaObject)
 
-	logger.InfoContext(ctx, "Start collecting deployment telemetry data")
+	logger.InfoContext(ctx, "start collecting deployment telemetry data")
 	// Define all CR handlers in a slice
 	handlers := []crListHandler{
 		{kind: "Standalone", handlerFunc: handleStandalones, checkTelApp: true},
@@ -199,7 +199,7 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 	for _, handler := range handlers {
 		data, crs, err := handler.handlerFunc(ctx, client)
 		if err != nil {
-			logger.ErrorContext(ctx, "Error processing CR type", "error", err, "kind", handler.kind)
+			logger.ErrorContext(ctx, "error processing CR type", "error", err, "kind", handler.kind)
 			continue
 		}
 		if handler.checkTelApp && crs != nil && len(crs) > 0 {
@@ -210,7 +210,7 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 		}
 	}
 
-	logger.InfoContext(ctx, "Successfully collected deployment telemetry data", "deploymentData", deploymentData)
+	logger.InfoContext(ctx, "successfully collected deployment telemetry data", "deploymentData", deploymentData)
 	return crWithTelAppList
 }
 
@@ -392,21 +392,21 @@ func handleMonitoringConsoles(ctx context.Context, client splcommon.ControllerCl
 
 func CollectCMTelData(ctx context.Context, cm *corev1.ConfigMap, data map[string]interface{}) {
 	logger := logging.FromContext(ctx).With("func", "collectCMTelData")
-	logger.InfoContext(ctx, "Start")
+	logger.InfoContext(ctx, "start")
 
 	for key, val := range cm.Data {
 		if key == telStatusKey {
 			continue
 		}
 		var compData interface{}
-		logger.InfoContext(ctx, "Processing telemetry input from other components", "key", key)
+		logger.InfoContext(ctx, "processing telemetry input from other components", "key", key)
 		err := json.Unmarshal([]byte(val), &compData)
 		if err != nil {
-			logger.InfoContext(ctx, "Not able to unmarshal. Will include the input as string", "key", key, "value", val)
+			logger.InfoContext(ctx, "not able to unmarshal. Will include the input as string", "key", key, "value", val)
 			data[key] = val
 		} else {
 			data[key] = compData
-			logger.InfoContext(ctx, "Got telemetry input", "key", key, "value", val)
+			logger.InfoContext(ctx, "got telemetry input", "key", key, "value", val)
 		}
 	}
 }
@@ -423,15 +423,15 @@ func getCurrentStatus(ctx context.Context, cm *corev1.ConfigMap) *TelemetryStatu
 		var status TelemetryStatus
 		err := json.Unmarshal([]byte(val), &status)
 		if err != nil {
-			logger.ErrorContext(ctx, "Failed to unmarshal telemetry status", "error", err, "value", val)
+			logger.ErrorContext(ctx, "failed to unmarshal telemetry status", "error", err, "value", val)
 			return defaultStatus
 		} else {
-			logger.InfoContext(ctx, "Got current telemetry status from configmap", "status", status)
+			logger.InfoContext(ctx, "got current telemetry status from configmap", "status", status)
 			return &status
 		}
 	}
 
-	logger.InfoContext(ctx, "No status set in configmap")
+	logger.InfoContext(ctx, "no status set in configmap")
 	return defaultStatus
 }
 
@@ -440,7 +440,7 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 		"name", cr.GetObjectMeta().GetName(),
 		"namespace", cr.GetObjectMeta().GetNamespace(),
 		"kind", cr.GetObjectKind().GroupVersionKind().Kind)
-	logger.InfoContext(ctx, "Start")
+	logger.InfoContext(ctx, "start")
 
 	var instanceID InstanceType
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
@@ -457,25 +457,25 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 	case "ClusterManager":
 		instanceID = SplunkClusterManager
 	default:
-		logger.ErrorContext(ctx, "Failed to determine instance type for telemetry", "error", fmt.Errorf("unknown CR kind"))
+		logger.ErrorContext(ctx, "failed to determine instance type for telemetry", "error", fmt.Errorf("unknown CR kind"))
 		return false
 	}
 
 	serviceName := GetSplunkServiceName(instanceID, cr.GetName(), false)
 	serviceFQDN := splcommon.GetServiceFQDN(cr.GetNamespace(), serviceName)
-	logger.InfoContext(ctx, "Got service FQDN", "serviceFQDN", serviceFQDN)
+	logger.InfoContext(ctx, "got service FQDN", "serviceFQDN", serviceFQDN)
 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), defaultSecretObjName)
 	if err != nil {
-		logger.ErrorContext(ctx, "Could not access default secret object", "error", err)
+		logger.ErrorContext(ctx, "could not access default secret object", "error", err)
 		return false
 	}
 
 	//Get the admin password from the secret object
 	adminPwd, foundSecret := defaultSecret.Data["password"]
 	if !foundSecret {
-		logger.InfoContext(ctx, "Failed to find admin password")
+		logger.InfoContext(ctx, "failed to find admin password")
 		return false
 	}
 	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", serviceFQDN), "admin", string(adminPwd))
@@ -483,7 +483,7 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 	var licenseInfo map[string]splclient.LicenseInfo
 	licenseInfo, err = splunkClient.GetLicenseInfo()
 	if err != nil {
-		logger.ErrorContext(ctx, "Failed to retrieve the license info", "error", err)
+		logger.ErrorContext(ctx, "failed to retrieve the license info", "error", err)
 		return false
 	} else {
 		data[telLicenseInfoKey] = licenseInfo
@@ -499,17 +499,17 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 	path := fmt.Sprintf("/servicesNS/nobody/%s/telemetry-metric", telAppNameStr)
 	bodyBytes, err := json.Marshal(telemetry)
 	if err != nil {
-		logger.ErrorContext(ctx, "Failed to marshal to bytes", "error", err)
+		logger.ErrorContext(ctx, "failed to marshal to bytes", "error", err)
 		return false
 	}
-	logger.InfoContext(ctx, "Sending request", "path", path)
+	logger.InfoContext(ctx, "sending request", "path", path)
 
 	response, err := splunkClient.SendTelemetry(path, bodyBytes)
 	if err != nil {
-		logger.ErrorContext(ctx, "Failed to send telemetry", "error", err)
+		logger.ErrorContext(ctx, "failed to send telemetry", "error", err)
 		return false
 	}
 
-	logger.InfoContext(ctx, "Successfully sent telemetry", "response", response)
+	logger.InfoContext(ctx, "successfully sent telemetry", "response", response)
 	return true
 }

@@ -77,7 +77,7 @@ LicenseManager:
 		lmImage, err := getCurrentImage(ctx, c, licenseManager, SplunkLicenseManager)
 		if err != nil {
 			eventPublisher.Warning(ctx, EventReasonUpgradeCheckFailed, fmt.Sprintf("Could not get the License Manager Image. Reason %v", err))
-			logger.ErrorContext(ctx, "Unable to get licenseManager current image", "error", err)
+			logger.ErrorContext(ctx, "unable to get licenseManager current image", "error", err)
 			return false, err
 		}
 		// if license manager status is ready and CR spec and current license manager image are not same
@@ -124,7 +124,7 @@ ClusterManager:
 		err := c.Get(ctx, namespacedName, clusterManager)
 		if err != nil {
 			eventPublisher.Warning(ctx, EventReasonUpgradeCheckFailed, fmt.Sprintf("Could not find the Cluster Manager. Reason %v", err))
-			logger.ErrorContext(ctx, "Unable to get clusterManager", "error", err)
+			logger.ErrorContext(ctx, "unable to get clusterManager", "error", err)
 			goto SearchHeadCluster
 		}
 
@@ -132,7 +132,7 @@ ClusterManager:
 		cmImage, err := getCurrentImage(ctx, c, clusterManager, SplunkClusterManager)
 		if err != nil {
 			eventPublisher.Warning(ctx, EventReasonUpgradeCheckFailed, fmt.Sprintf("Could not get the Cluster Manager Image. Reason %v", err))
-			logger.ErrorContext(ctx, "Unable to get clusterManager current image", "error", err)
+			logger.ErrorContext(ctx, "unable to get clusterManager current image", "error", err)
 			return false, err
 		}
 
@@ -254,7 +254,7 @@ SearchHeadCluster:
 		shcImage, err := getCurrentImage(ctx, c, &searchHeadClusterInstance, SplunkSearchHead)
 		if err != nil {
 			eventPublisher.Warning(ctx, EventReasonUpgradeCheckFailed, fmt.Sprintf("Could not get the Search Head Cluster Image. Reason %v", err))
-			logger.ErrorContext(ctx, "Unable to get SearchHeadCluster current image", "error", err)
+			logger.ErrorContext(ctx, "unable to get SearchHeadCluster current image", "error", err)
 			return false, err
 		}
 
@@ -277,7 +277,7 @@ MonitoringConsole:
 		err := c.List(ctx, clusterManagerList, listOpts...)
 		if err != nil && err.Error() != "NotFound" {
 			eventPublisher.Warning(ctx, EventReasonUpgradeCheckFailed, fmt.Sprintf("Could not find the Cluster Manager list. Reason %v", err))
-			logger.ErrorContext(ctx, "Unable to get clusterManager list", "error", err)
+			logger.ErrorContext(ctx, "unable to get clusterManager list", "error", err)
 			return false, err
 		}
 
@@ -295,7 +295,7 @@ MonitoringConsole:
 		err = c.List(ctx, searchHeadClusterList, listOpts...)
 		if err != nil && err.Error() != "NotFound" {
 			eventPublisher.Warning(ctx, EventReasonUpgradeCheckFailed, fmt.Sprintf("Could not find the Search Head Cluster list. Reason %v", err))
-			logger.ErrorContext(ctx, "Unable to get Search Head Cluster list", "error", err)
+			logger.ErrorContext(ctx, "unable to get Search Head Cluster list", "error", err)
 			return false, err
 		}
 
@@ -313,7 +313,7 @@ MonitoringConsole:
 		err = c.List(ctx, indexerClusterList, listOpts...)
 		if err != nil && err.Error() != "NotFound" {
 			eventPublisher.Warning(ctx, EventReasonUpgradeCheckFailed, fmt.Sprintf("Could not find the Indexer list. Reason %v", err))
-			logger.ErrorContext(ctx, "Unable to get indexer cluster list", "error", err)
+			logger.ErrorContext(ctx, "unable to get indexer cluster list", "error", err)
 			return false, err
 		}
 
@@ -331,7 +331,7 @@ MonitoringConsole:
 		err = c.List(ctx, standaloneList, listOpts...)
 		if err != nil && err.Error() != "NotFound" {
 			eventPublisher.Warning(ctx, EventReasonUpgradeCheckFailed, fmt.Sprintf("Could not find the Standalone list. Reason %v", err))
-			logger.ErrorContext(ctx, "Unable to get standalone list", "error", err)
+			logger.ErrorContext(ctx, "unable to get standalone list", "error", err)
 			return false, err
 		}
 

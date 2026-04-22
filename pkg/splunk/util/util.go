@@ -86,11 +86,11 @@ func CreateResource(ctx context.Context, client splcommon.ControllerClient, obj 
 	err := client.Create(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
-		scopedLog.ErrorContext(ctx, "Failed to create resource", "kind", obj.GetObjectKind(), "error", err)
+		scopedLog.ErrorContext(ctx, "failed to create resource", "kind", obj.GetObjectKind(), "error", err)
 		return err
 	}
 
-	scopedLog.InfoContext(ctx, "Created resource", "kind", obj.GetObjectKind())
+	scopedLog.InfoContext(ctx, "created resource", "kind", obj.GetObjectKind())
 
 	return nil
 }
@@ -103,10 +103,10 @@ func UpdateResource(ctx context.Context, client splcommon.ControllerClient, obj 
 	err := client.Update(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
-		scopedLog.ErrorContext(ctx, "Failed to update resource", "kind", obj.GetObjectKind(), "error", err)
+		scopedLog.ErrorContext(ctx, "failed to update resource", "kind", obj.GetObjectKind(), "error", err)
 		return err
 	}
-	scopedLog.InfoContext(ctx, "Updated resource", "kind", obj.GetObjectKind())
+	scopedLog.InfoContext(ctx, "updated resource", "kind", obj.GetObjectKind())
 
 	return nil
 }
@@ -119,11 +119,11 @@ func DeleteResource(ctx context.Context, client splcommon.ControllerClient, obj 
 	err := client.Delete(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
-		scopedLog.ErrorContext(ctx, "Failed to delete resource", "kind", obj.GetObjectKind(), "error", err)
+		scopedLog.ErrorContext(ctx, "failed to delete resource", "kind", obj.GetObjectKind(), "error", err)
 		return err
 	}
 
-	scopedLog.InfoContext(ctx, "Deleted resource", "kind", obj.GetObjectKind())
+	scopedLog.InfoContext(ctx, "deleted resource", "kind", obj.GetObjectKind())
 
 	return nil
 }

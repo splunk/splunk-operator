@@ -43,18 +43,18 @@ func CheckForDeletion(ctx context.Context, cr splcommon.MetaObject, c splcommon.
 
 	// sanity check: return early if missing GetDeletionTimestamp
 	if cr.GetObjectMeta().GetDeletionTimestamp() == nil {
-		scopedLog.InfoContext(ctx, "DeletionTimestamp is nil")
+		scopedLog.InfoContext(ctx, "deletionTimestamp is nil")
 		return false, nil
 	}
 
 	// just log warning if deletion time is in the future
 	if !cr.GetObjectMeta().GetDeletionTimestamp().Before(&currentTime) {
-		scopedLog.InfoContext(ctx, "DeletionTimestamp is in the future",
+		scopedLog.InfoContext(ctx, "deletionTimestamp is in the future",
 			"Now", currentTime,
 			"DeletionTimestamp", cr.GetObjectMeta().GetDeletionTimestamp())
 	}
 
-	scopedLog.InfoContext(ctx, "Deletion requested")
+	scopedLog.InfoContext(ctx, "deletion requested")
 
 	// process each finalizer
 	for _, finalizer := range cr.GetObjectMeta().GetFinalizers() {
@@ -65,7 +65,7 @@ func CheckForDeletion(ctx context.Context, cr splcommon.MetaObject, c splcommon.
 		}
 
 		// process finalizer callback
-		scopedLog.InfoContext(ctx, "Processing callback", "Finalizer", finalizer)
+		scopedLog.InfoContext(ctx, "processing callback", "Finalizer", finalizer)
 		err := callback(ctx, cr, c)
 		if err != nil {
 			return false, err
@@ -78,7 +78,7 @@ func CheckForDeletion(ctx context.Context, cr splcommon.MetaObject, c splcommon.
 		}
 	}
 
-	scopedLog.InfoContext(ctx, "Deletion complete")
+	scopedLog.InfoContext(ctx, "deletion complete")
 
 	return true, nil
 }
@@ -86,7 +86,7 @@ func CheckForDeletion(ctx context.Context, cr splcommon.MetaObject, c splcommon.
 // removeSplunkFinalizer removes a finalizer from a custom resource.
 func removeSplunkFinalizer(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient, finalizer string) error {
 	scopedLog := logging.FromContext(ctx).With("func", "RemoveFinalizer", "kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-	scopedLog.InfoContext(ctx, "Removing finalizer", "name", finalizer)
+	scopedLog.InfoContext(ctx, "removing finalizer", "name", finalizer)
 
 	// create new list of finalizers that doesn't include the one being removed
 	var newFinalizers []string

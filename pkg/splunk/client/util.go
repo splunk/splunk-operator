@@ -105,13 +105,13 @@ func ConvertRemoteDataListResponse(ctx context.Context, RemoteDataListResponse R
 
 	tmp, err := json.Marshal(RemoteDataListResponse)
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Unable to marshal s3 response", "error", err)
+		scopedLog.ErrorContext(ctx, "unable to marshal s3 response", "error", err)
 		return mockResponse, err
 	}
 
 	err = json.Unmarshal(tmp, &mockResponse)
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Unable to unmarshal s3 response", "error", err)
+		scopedLog.ErrorContext(ctx, "unable to unmarshal s3 response", "error", err)
 		return mockResponse, err
 	}
 
@@ -147,7 +147,7 @@ func GetAppSrcVolume(ctx context.Context, appSource enterpriseApi.AppSourceSpec,
 
 	index, err = CheckIfVolumeExists(appFrameworkRef.VolList, volName)
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Invalid volume name provided. Please specify a valid volume name.", "App source", appSource.Name, "Volume name", volName, "error", err)
+		scopedLog.ErrorContext(ctx, "invalid volume name provided. Please specify a valid volume name", "appSource", appSource.Name, "volumeName", volName, "error", err)
 		return vol, err
 	}
 

@@ -72,13 +72,13 @@ func ApplyDeployment(ctx context.Context, c splcommon.ControllerClient, revised 
 
 	// check if updates are in progress
 	if revised.Status.UpdatedReplicas < revised.Status.Replicas {
-		scopedLog.InfoContext(ctx, "Waiting for updates to complete")
+		scopedLog.InfoContext(ctx, "waiting for updates to complete")
 		return enterpriseApi.PhaseUpdating, nil
 	}
 
 	// check if replicas are not yet ready
 	if revised.Status.ReadyReplicas < desiredReplicas {
-		scopedLog.InfoContext(ctx, "Waiting for pods to become ready")
+		scopedLog.InfoContext(ctx, "waiting for pods to become ready")
 		if revised.Status.ReadyReplicas > 0 {
 			return enterpriseApi.PhaseScalingUp, nil
 		}
@@ -86,6 +86,6 @@ func ApplyDeployment(ctx context.Context, c splcommon.ControllerClient, revised 
 	}
 
 	// all is good!
-	scopedLog.InfoContext(ctx, "All pods are ready")
+	scopedLog.InfoContext(ctx, "all pods are ready")
 	return enterpriseApi.PhaseReady, nil
 }

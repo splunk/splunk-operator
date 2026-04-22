@@ -57,7 +57,7 @@ func DeleteSplunkPvc(ctx context.Context, cr splcommon.MetaObject, c splcommon.C
 	case "IngestorCluster":
 		components = append(components, "ingestor")
 	default:
-		logger.DebugContext(ctx, "Skipping PVC removal")
+		logger.DebugContext(ctx, "skipping PVC removal")
 		return nil
 	}
 
@@ -77,7 +77,7 @@ func DeleteSplunkPvc(ctx context.Context, cr splcommon.MetaObject, c splcommon.C
 
 		// delete each PVC
 		for _, pvc := range pvclist.Items {
-			logger.InfoContext(ctx, "Deleting PVC", "name", pvc.ObjectMeta.Name)
+			logger.InfoContext(ctx, "deleting PVC", "name", pvc.ObjectMeta.Name)
 			if err := c.Delete(context.Background(), &pvc); err != nil {
 				return err
 			}

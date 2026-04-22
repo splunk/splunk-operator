@@ -94,20 +94,20 @@ func InitMinioClientSession(ctx context.Context, appS3Endpoint string, accessKey
 	useSSL := true
 	if strings.HasPrefix(appS3Endpoint, "http://") {
 		// We should always use a secure SSL endpoint, so we won't set useSSL = false
-		scopedLog.InfoContext(ctx, "Using insecure endpoint, useSSL=false for Minio Client Session", "appS3Endpoint", appS3Endpoint)
+		scopedLog.InfoContext(ctx, "using insecure endpoint, useSSL=false for Minio Client Session", "appS3Endpoint", appS3Endpoint)
 		appS3Endpoint = strings.TrimPrefix(appS3Endpoint, "http://")
 		useSSL = false
 	} else if strings.HasPrefix(appS3Endpoint, "https://") {
 		appS3Endpoint = strings.TrimPrefix(appS3Endpoint, "https://")
 	} else {
 		// Unsupported endpoint
-		scopedLog.InfoContext(ctx, "Unsupported endpoint for Minio S3 client", "appS3Endpoint", appS3Endpoint)
+		scopedLog.InfoContext(ctx, "unsupported endpoint for Minio S3 client", "appS3Endpoint", appS3Endpoint)
 		return nil
 	}
 
 	// New returns an Minio compatible client object. API compatibility (v2 or v4) is automatically
 	// determined based on the Endpoint value.
-	scopedLog.InfoContext(ctx, "Connecting to Minio S3 for apps", "appS3Endpoint", appS3Endpoint)
+	scopedLog.InfoContext(ctx, "connecting to Minio S3 for apps", "appS3Endpoint", appS3Endpoint)
 	var s3Client *minio.Client
 	var err error
 
@@ -129,12 +129,12 @@ func InitMinioClientSession(ctx context.Context, appS3Endpoint string, accessKey
 	if accessKeyID != "" && secretAccessKey != "" {
 		options.Creds = credentials.NewStaticV4(accessKeyID, secretAccessKey, "")
 	} else {
-		scopedLog.InfoContext(ctx, "No Access/Secret Keys, attempt connection without them using IAM", "appS3Endpoint", appS3Endpoint)
+		scopedLog.InfoContext(ctx, "no Access/Secret Keys, attempt connection without them using IAM", "appS3Endpoint", appS3Endpoint)
 		options.Creds = credentials.NewIAM("")
 	}
 	s3Client, err = minio.New(appS3Endpoint, options)
 	if err != nil {
-		scopedLog.InfoContext(ctx, "Error creating new Minio Client Session", "err", err)
+		scopedLog.InfoContext(ctx, "error creating new Minio Client Session", "err", err)
 		return nil
 	}
 
@@ -145,7 +145,7 @@ func InitMinioClientSession(ctx context.Context, appS3Endpoint string, accessKey
 func (client *MinioClient) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
 	scopedLog := logging.FromContext(ctx).With("func", "GetAppsList")
 
-	scopedLog.InfoContext(ctx, "Getting Apps list", "S3 Bucket", client.BucketName, "Prefix", client.Prefix)
+	scopedLog.InfoContext(ctx, "getting Apps list", "bucket", client.BucketName, "prefix", client.Prefix)
 	remoteDataClientResponse := RemoteDataListResponse{}
 	s3Client := client.Client
 
@@ -162,7 +162,7 @@ func (client *MinioClient) GetAppsList(ctx context.Context) (RemoteDataListRespo
 			err := fmt.Errorf("got an object error: %v for bucket: %s", object.Err, client.BucketName)
 			return remoteDataClientResponse, err
 		}
-		scopedLog.InfoContext(ctx, "Got an object", "object", object)
+		scopedLog.InfoContext(ctx, "got an object", "object", object)
 
 		// Create a new object to add to append to the response
 		newETag := object.ETag
@@ -184,7 +184,7 @@ func (client *MinioClient) DownloadApp(ctx context.Context, downloadRequest Remo
 
 	file, err := os.Create(downloadRequest.LocalFile)
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Unable to create local file", "error", err)
+		scopedLog.ErrorContext(ctx, "unable to create local file", "error", err)
 		return false, err
 	}
 	defer file.Close()
@@ -194,17 +194,17 @@ func (client *MinioClient) DownloadApp(ctx context.Context, downloadRequest Remo
 	options := minio.GetObjectOptions{}
 	// set the option to match the specified etag on remote storage
 	if err = options.SetMatchETag(downloadRequest.Etag); err != nil {
-		scopedLog.ErrorContext(ctx, "Unable to set match etag", "error", err)
+		scopedLog.ErrorContext(ctx, "unable to set match etag", "error", err)
 		return false, err
 	}
 
 	err = s3Client.FGetObject(ctx, client.BucketName, downloadRequest.RemoteFile, downloadRequest.LocalFile, options)
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "Unable to download remote file", "error", err)
+		scopedLog.ErrorContext(ctx, "unable to download remote file", "error", err)
 		return false, err
 	}
 
-	scopedLog.InfoContext(ctx, "File downloaded")
+	scopedLog.InfoContext(ctx, "file downloaded")
 
 	return true, nil
 }

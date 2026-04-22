@@ -37,7 +37,7 @@ func ApplyServiceAccount(ctx context.Context, client splcommon.ControllerClient,
 	err := client.Get(ctx, namespacedName, &current)
 	if err == nil {
 		if !reflect.DeepEqual(serviceAccount, &current) {
-			scopedLog.InfoContext(ctx, "Updating service account")
+			scopedLog.InfoContext(ctx, "updating service account")
 			current = *serviceAccount
 			err = splutil.UpdateResource(ctx, client, &current)
 			if err != nil {
@@ -62,7 +62,7 @@ func GetServiceAccount(ctx context.Context, client splcommon.ControllerClient, n
 	if err != nil {
 		scopedLog := logging.FromContext(ctx).With("func", "GetServiceAccount", "serviceAccount", namespacedName.Name,
 			"namespace", namespacedName.Namespace, "error", err)
-		scopedLog.InfoContext(ctx, "ServiceAccount not found")
+		scopedLog.InfoContext(ctx, "serviceAccount not found")
 		return nil, err
 	}
 	return &serviceAccount, nil

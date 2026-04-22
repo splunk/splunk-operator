@@ -52,14 +52,14 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 		// from the data on the configMap passed as an argument to this function
 		dataDifferent := false
 		if !reflect.DeepEqual(configMap.Data, current.Data) {
-			scopedLog.InfoContext(ctx, "Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
+			scopedLog.InfoContext(ctx, "updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
 			current.Data = configMap.Data
 			updateNeeded = true
 			dataDifferent = true
 			configMap = &current
 		}
 		if !reflect.DeepEqual(configMap.GetOwnerReferences(), current.GetOwnerReferences()) {
-			scopedLog.InfoContext(ctx, "Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
+			scopedLog.InfoContext(ctx, "updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
 			current.OwnerReferences = configMap.OwnerReferences
 			updateNeeded = true
 			configMap = &current
@@ -76,7 +76,7 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 				}
 			}
 		} else {
-			scopedLog.InfoContext(ctx, "No changes for ConfigMap")
+			scopedLog.InfoContext(ctx, "no changes for ConfigMap")
 		}
 
 	} else if k8serrors.IsNotFound(err) {
@@ -86,7 +86,7 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 			retryCount := 0
 			gerr := client.Get(ctx, namespacedName, &current)
 			for ; gerr != nil; gerr = client.Get(ctx, namespacedName, &current) {
-				scopedLog.ErrorContext(ctx, "Newly created resource still not in cache sleeping for 10 micro second", "configmap", configMap.Name, "error", gerr)
+				scopedLog.ErrorContext(ctx, "newly created resource still not in cache sleeping for 10 micro second", "configmap", configMap.Name, "error", gerr)
 				time.Sleep(10 * time.Microsecond)
 				retryCount++
 				if retryCount > 20 {
