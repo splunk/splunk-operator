@@ -230,6 +230,18 @@ func TestValidateAgainstClass(t *testing.T) {
 		},
 	}
 
+	classWithMinorVersion := &enterpriseApi.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod-pinned"},
+		Spec: enterpriseApi.PostgresClusterClassSpec{
+			Provisioner: "postgresql.cnpg.io",
+			Config: &enterpriseApi.PostgresClusterClassConfig{
+				Instances:       ptrInt32(3),
+				Storage:         ptrQuantity("50Gi"),
+				PostgresVersion: ptrString("17.2"),
+			},
+		},
+	}
+
 	classWithPoolerEnabled := &enterpriseApi.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pooler-class"},
 		Spec: enterpriseApi.PostgresClusterClassSpec{
@@ -336,12 +348,80 @@ func TestValidateAgainstClass(t *testing.T) {
 			wantErrField: "spec.postgresVersion",
 		},
 		{
-			name:  "valid - minor version higher",
+			name:  "valid - minor version ignored when class has major only",
 			class: classWithDefaults,
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
 					Class:           "prod",
 					PostgresVersion: ptrString("17.2"),
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name:  "valid - lower minor ignored when class has major only",
+			class: classWithDefaults,
+			obj: &enterpriseApi.PostgresCluster{
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class:           "prod",
+					PostgresVersion: ptrString("17.0"),
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name:  "valid - cluster minor equal to class minor",
+			class: classWithMinorVersion,
+			obj: &enterpriseApi.PostgresCluster{
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class:           "prod-pinned",
+					PostgresVersion: ptrString("17.2"),
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name:  "valid - cluster minor higher than class minor",
+			class: classWithMinorVersion,
+			obj: &enterpriseApi.PostgresCluster{
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class:           "prod-pinned",
+					PostgresVersion: ptrString("17.5"),
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name:  "invalid - cluster minor lower than class minor",
+			class: classWithMinorVersion,
+			obj: &enterpriseApi.PostgresCluster{
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class:           "prod-pinned",
+					PostgresVersion: ptrString("17.1"),
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.postgresVersion",
+		},
+		{
+			name:  "invalid - cluster major lower even with higher minor",
+			class: classWithMinorVersion,
+			obj: &enterpriseApi.PostgresCluster{
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class:           "prod-pinned",
+					PostgresVersion: ptrString("16.9"),
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.postgresVersion",
+		},
+		{
+			name:  "valid - cluster major higher than class with minor",
+			class: classWithMinorVersion,
+			obj: &enterpriseApi.PostgresCluster{
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class:           "prod-pinned",
+					PostgresVersion: ptrString("18"),
 				},
 			},
 			wantErrCount: 0,

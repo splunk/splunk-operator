@@ -109,13 +109,17 @@ func validateAgainstClass(obj *enterpriseApi.PostgresCluster, reader client.Read
 	}
 
 	if obj.Spec.PostgresVersion != nil && classConfig.PostgresVersion != nil {
-		clusterMajor := parseMajorVersion(*obj.Spec.PostgresVersion)
-		classMajor := parseMajorVersion(*classConfig.PostgresVersion)
-		if clusterMajor > 0 && classMajor > 0 && clusterMajor < classMajor {
-			allErrs = append(allErrs, field.Invalid(
-				field.NewPath("spec").Child("postgresVersion"),
-				*obj.Spec.PostgresVersion,
-				"postgresVersion cannot be lower than class default ("+*classConfig.PostgresVersion+")"))
+		clusterMajor, clusterMinor := parseVersion(*obj.Spec.PostgresVersion)
+		classMajor, classMinor := parseVersion(*classConfig.PostgresVersion)
+		if clusterMajor > 0 && classMajor > 0 {
+			versionTooLow := clusterMajor < classMajor ||
+				(clusterMajor == classMajor && classMinor >= 0 && clusterMinor >= 0 && clusterMinor < classMinor)
+			if versionTooLow {
+				allErrs = append(allErrs, field.Invalid(
+					field.NewPath("spec").Child("postgresVersion"),
+					*obj.Spec.PostgresVersion,
+					"postgresVersion cannot be lower than class default ("+*classConfig.PostgresVersion+")"))
+			}
 		}
 	}
 
@@ -132,15 +136,16 @@ func validateAgainstClass(obj *enterpriseApi.PostgresCluster, reader client.Read
 	return allErrs
 }
 
-func parseMajorVersion(version string) int {
+func parseVersion(version string) (major, minor int) {
 	for i, ch := range version {
 		if ch == '.' {
-			v, _ := strconv.Atoi(version[:i])
-			return v
+			major, _ = strconv.Atoi(version[:i])
+			minor, _ = strconv.Atoi(version[i+1:])
+			return major, minor
 		}
 	}
-	v, _ := strconv.Atoi(version)
-	return v
+	major, _ = strconv.Atoi(version)
+	return major, -1
 }
 
 // GetPostgresClusterWarningsOnCreate returns warnings for PostgresCluster CREATE.
