@@ -127,8 +127,6 @@ const (
 	// error detection.
 	splunkSSLCertWarnStr = "WARNING: Server Certificate"
 
-	applyIdxcBundleCmdStr = "/opt/splunk/bin/splunk apply cluster-bundle -auth admin:`cat /mnt/splunk-secrets/password` --skip-validation --answer-yes"
-
 	idxcShowClusterBundleStatusStr = "/opt/splunk/bin/splunk show cluster-bundle-status -auth admin:%s"
 
 	idxcBundleAlreadyPresentStr = "No new bundle will be pushed. The cluster manager and peers already have this bundle"
