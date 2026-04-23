@@ -78,8 +78,16 @@ func ValidateRules(rules []string) []RuleError {
 	return errs
 }
 
-// validateRule parses and validates a single pg_hba rule.
-// Returns a list of validation errors (empty means valid).
+// validateRule validates a single pg_hba rule using positional parsing.
+// pg_hba.conf has two formats:
+//
+//	local  DATABASE USER                    METHOD [OPTIONS]
+//	host*  DATABASE USER ADDRESS            METHOD [OPTIONS]
+//	host*  DATABASE USER IP-ADDRESS NETMASK METHOD [OPTIONS]
+//
+// Validation order: connection type → minimum field count → auth method
+// (at a fixed positional index) → address for host* types. The IP+netmask
+// form is detected by checking whether tokens[4] parses as a valid IP.
 func validateRule(rule string) []string {
 	trimmed := strings.TrimSpace(rule)
 	if trimmed == "" {
@@ -93,7 +101,6 @@ func validateRule(rule string) []string {
 
 	var errs []string
 
-	// Layer 0: connection type
 	connType := tokens[0]
 	if !hbaConnectionTypes[connType] {
 		return []string{fmt.Sprintf("unknown connection type %q", connType)}
