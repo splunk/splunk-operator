@@ -27,11 +27,30 @@ load_repo_dotenv() {
 strip_docker_io_prefix() {
   image_ref="$1"
   case "${image_ref}" in
+    registry-1.docker.io/*)
+      printf '%s' "${image_ref#registry-1.docker.io/}"
+      ;;
+    index.docker.io/*)
+      printf '%s' "${image_ref#index.docker.io/}"
+      ;;
     docker.io/*)
       printf '%s' "${image_ref#docker.io/}"
       ;;
     *)
       printf '%s' "${image_ref}"
+      ;;
+  esac
+}
+
+registry_host_from_image_ref() {
+  image_ref="$1"
+  first_component="$(printf '%s' "${image_ref}" | cut -d/ -f1)"
+  case "${first_component}" in
+    *.*|*:*|localhost)
+      printf '%s' "${first_component}"
+      ;;
+    *)
+      printf '%s' "docker.io"
       ;;
   esac
 }
@@ -262,7 +281,13 @@ append_operator_runtime_context() {
 mirror_operator_image_to_ecr_if_needed() {
   if [ "${RUNTIME_OPERATOR_SOURCE_KIND}" = "official-release" ]; then
     RUNTIME_OPERATOR_FULL_IMAGE_REF="${RUNTIME_ECR_REGISTRY}/${RUNTIME_OPERATOR_MIRROR_PATH}"
+    source_registry="$(registry_host_from_image_ref "${RUNTIME_OPERATOR_SOURCE_IMAGE}")"
+    source_username="$(first_nonempty "${PIPELINE_RELEASED_OPERATOR_REGISTRY_USERNAME:-}" "${PIPELINE_RELEASE_REGISTRY_USERNAME:-}" "${PIPELINE_DOCKER_USERNAME:-}" "")"
+    source_password="$(first_nonempty "${PIPELINE_RELEASED_OPERATOR_REGISTRY_PASSWORD:-}" "${PIPELINE_RELEASE_REGISTRY_PASSWORD:-}" "${PIPELINE_DOCKER_PASSWORD:-}" "")"
     log_step "registry:mirror-operator:start ${RUNTIME_OPERATOR_SOURCE_IMAGE}"
+    if [ -n "${source_username}" ] || [ -n "${source_password}" ] || printf '%s' "${source_registry}" | grep -Eq '\.dkr\.ecr\..*\.amazonaws\.com$'; then
+      docker_login_registry "${source_registry}" "${source_username}" "${source_password}"
+    fi
     docker pull "${RUNTIME_OPERATOR_SOURCE_IMAGE}"
     docker tag "${RUNTIME_OPERATOR_SOURCE_IMAGE}" "${RUNTIME_OPERATOR_FULL_IMAGE_REF}"
     docker push "${RUNTIME_OPERATOR_FULL_IMAGE_REF}"
@@ -490,7 +515,7 @@ ensure_pipeline_aws_env() {
   fi
 }
 
-docker_login_registry() {
+registry_login_password_for_host() {
   registry_host="$1"
   username="$2"
   password="$3"
@@ -498,7 +523,8 @@ docker_login_registry() {
   if [ -n "${username}" ] || [ -n "${password}" ]; then
     require_nonempty "${username}" "registry username for ${registry_host}"
     require_nonempty "${password}" "registry password for ${registry_host}"
-    printf '%s' "${password}" | docker login --username "${username}" --password-stdin "${registry_host}"
+    REGISTRY_LOGIN_USERNAME="${username}"
+    REGISTRY_LOGIN_PASSWORD="${password}"
     return 0
   fi
 
@@ -507,13 +533,33 @@ docker_login_registry() {
       ensure_pipeline_aws_env
       resolve_ecr_region "${registry_host}"
       require_nonempty "${RESOLVED_ECR_REGION}" "ECR region for ${registry_host}"
-      aws ecr get-login-password --region "${RESOLVED_ECR_REGION}" | docker login --username AWS --password-stdin "${registry_host}"
+      REGISTRY_LOGIN_USERNAME="AWS"
+      REGISTRY_LOGIN_PASSWORD="$(aws ecr get-login-password --region "${RESOLVED_ECR_REGION}")"
+      return 0
       ;;
     *)
       echo "Registry ${registry_host} requires explicit PIPELINE_* credentials" >&2
       return 1
       ;;
   esac
+}
+
+docker_login_registry() {
+  registry_host="$1"
+  username="$2"
+  password="$3"
+
+  registry_login_password_for_host "${registry_host}" "${username}" "${password}"
+  printf '%s' "${REGISTRY_LOGIN_PASSWORD}" | docker login --username "${REGISTRY_LOGIN_USERNAME}" --password-stdin "${registry_host}"
+}
+
+helm_login_registry() {
+  registry_host="$1"
+  username="$2"
+  password="$3"
+
+  registry_login_password_for_host "${registry_host}" "${username}" "${password}"
+  printf '%s' "${REGISTRY_LOGIN_PASSWORD}" | helm registry login "${registry_host}" --username "${REGISTRY_LOGIN_USERNAME}" --password-stdin
 }
 
 ensure_operator_sdk() {

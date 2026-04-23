@@ -203,10 +203,27 @@ if [ "${RUNTIME_OPERATOR_SOURCE_KIND}" = "official-release" ]; then
   rm -rf "${released_helm_root}"
   mkdir -p "${released_helm_root}"
   log_step "helm:pull-released:start version=${RELEASED_ENTERPRISE_CHART_VERSION}"
-  helm repo add splunk "${RELEASED_HELM_REPO_URL}" >> "${kuttl_log}" 2>&1
-  helm repo update >> "${kuttl_log}" 2>&1
-  helm pull splunk/splunk-enterprise --version "${RELEASED_ENTERPRISE_CHART_VERSION}" --untar --untardir "${released_helm_root}" >> "${kuttl_log}" 2>&1
-  helm pull splunk/splunk-operator --version "${RELEASED_OPERATOR_CHART_VERSION}" --untar --untardir "${released_helm_root}" >> "${kuttl_log}" 2>&1
+  case "${RELEASED_HELM_REPO_URL}" in
+    oci://*)
+      released_chart_path="${RELEASED_HELM_REPO_URL#oci://}"
+      released_chart_registry="${released_chart_path%%/*}"
+      chart_username="$(first_nonempty "${PIPELINE_CHART_RELEASE_USERNAME:-}" "${PIPELINE_DOCKER_USERNAME:-}" "")"
+      chart_password="$(first_nonempty "${PIPELINE_CHART_RELEASE_PASSWORD:-}" "${PIPELINE_DOCKER_PASSWORD:-}" "")"
+      if [ -n "${chart_username}" ] || [ -n "${chart_password}" ] || printf '%s' "${released_chart_registry}" | grep -Eq '\.dkr\.ecr\..*\.amazonaws\.com$'; then
+        helm_login_registry "${released_chart_registry}" "${chart_username}" "${chart_password}" >> "${kuttl_log}" 2>&1
+      else
+        log_step "helm:pull-released:registry-login:skipped"
+      fi
+      helm pull "${RELEASED_HELM_REPO_URL}/splunk-enterprise" --version "${RELEASED_ENTERPRISE_CHART_VERSION}" --untar --untardir "${released_helm_root}" >> "${kuttl_log}" 2>&1
+      helm pull "${RELEASED_HELM_REPO_URL}/splunk-operator" --version "${RELEASED_OPERATOR_CHART_VERSION}" --untar --untardir "${released_helm_root}" >> "${kuttl_log}" 2>&1
+      ;;
+    *)
+      helm repo add splunk "${RELEASED_HELM_REPO_URL}" >> "${kuttl_log}" 2>&1
+      helm repo update >> "${kuttl_log}" 2>&1
+      helm pull splunk/splunk-enterprise --version "${RELEASED_ENTERPRISE_CHART_VERSION}" --untar --untardir "${released_helm_root}" >> "${kuttl_log}" 2>&1
+      helm pull splunk/splunk-operator --version "${RELEASED_OPERATOR_CHART_VERSION}" --untar --untardir "${released_helm_root}" >> "${kuttl_log}" 2>&1
+      ;;
+  esac
   export HELM_REPO_PATH="${released_helm_root}"
   log_step "helm:pull-released:complete"
 else
