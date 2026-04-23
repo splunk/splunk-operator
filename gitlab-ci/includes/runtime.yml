@@ -93,25 +93,102 @@ scan-released-operator-image-trivy:
     reports:
       junit: ci-output/*-inttest-junit.xml
 
-# Qualification keeps a single full integration run for now because the
-# manifest/report/gate path still aggregates one integration evidence job.
-eks-qualification-integration-validation:
+# Qualification integration now mirrors the nightly fan-out shape: one suite
+# per job, one EKS cluster per suite, and released-SOK runtime input instead of
+# the staged branch image.
+.runtime-qualification-integration-suite-job:
   extends: .runtime-released-sok-validation-job
   # Qualification jobs must still publish evidence so the report/gate path can
   # decide the final lane outcome instead of stopping at the first failed test.
   allow_failure: true
-  timeout: 10h
+  timeout: 4h
   variables:
-    WORKFLOW_SLUG: qualification-int-test-workflow
     JOB_INT_TEST_PROFILE: full
-    JOB_INT_TEST_TIMEOUT: 8h
+    JOB_INT_TEST_TIMEOUT: 225m
+    JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
+    JOB_EKS_CLUSTER_TEST_TYPE: integration
+    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: qualification
+    JOB_INT_CLUSTER_NODES: "1"
+    JOB_INT_CLUSTER_WORKERS: "3"
   script:
     - gitlab-ci/int-test-workflow.sh
   artifacts:
     paths:
       - ci-output/
     reports:
-      junit: ci-output/qualification-int-test-workflow-inttest-junit.xml
+      junit: ci-output/*-inttest-junit.xml
+
+qualification-appframeworks-s1-validation:
+  extends:
+    - .runtime-qualification-integration-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-appframeworks-s1-validation
+    JOB_INT_TEST_FOCUS: appframeworksS1
+
+qualification-managerappframework-c3-validation:
+  extends:
+    - .runtime-qualification-integration-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-managerappframework-c3-validation
+    JOB_INT_TEST_FOCUS: managerappframeworkc3
+
+qualification-managerappframework-m4-validation:
+  extends:
+    - .runtime-qualification-integration-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-managerappframework-m4-validation
+    JOB_INT_TEST_FOCUS: managerappframeworkm4
+
+qualification-managersecret-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-managersecret-validation
+    JOB_INT_TEST_FOCUS: managersecret
+
+qualification-managersmartstore-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-managersmartstore-validation
+    JOB_INT_TEST_FOCUS: managersmartstore
+
+qualification-managermc1-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-managermc1-validation
+    JOB_INT_TEST_FOCUS: managermc1
+
+qualification-managermc2-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-managermc2-validation
+    JOB_INT_TEST_FOCUS: managermc2
+
+qualification-managerscaling-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-managerscaling-validation
+    JOB_INT_TEST_FOCUS: managerscaling
+
+qualification-managercrcrud-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-managercrcrud-validation
+    JOB_INT_TEST_FOCUS: managercrcrud
+
+qualification-licensemanager-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-licensemanager-validation
+    JOB_INT_TEST_FOCUS: licensemanager
+
+qualification-indingsep-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-indingsep-validation
+    JOB_INT_TEST_FOCUS: indingsep
 
 helm-eks-validation:
   extends: .runtime-released-sok-validation-job

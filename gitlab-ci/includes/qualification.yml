@@ -19,6 +19,9 @@ qualification-manifest:
   extends:
     - .python-qualification-job
     - .rules-qualification-lane
+  # Generate the required-job contract early so the report can rely on normal
+  # stage ordering instead of a long same-file `needs` list.
+  stage: verify
   needs:
     - job: released-sok-contract
       artifacts: true
@@ -35,21 +38,8 @@ qualification-report:
     - .python-qualification-job
     - .rules-qualification-lane
   when: always
-  needs:
-    - job: qualification-manifest
-      artifacts: true
-    - job: released-sok-contract
-      artifacts: true
-    - job: scan-released-operator-image-trivy
-      artifacts: true
-    - job: gosec-scan
-      artifacts: true
-    - job: govulncheck-scan
-      artifacts: true
-    - job: eks-qualification-integration-validation
-      artifacts: true
-    - job: helm-eks-validation
-      artifacts: true
+  # All required evidence jobs are in earlier stages now, so qualification
+  # report can use stage ordering and collect artifacts without per-suite needs.
   script:
     - python3 gitlab-ci/qualification-report.py
   artifacts:

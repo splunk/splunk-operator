@@ -5,20 +5,10 @@ import json
 from pathlib import Path
 from xml.etree import ElementTree
 
+from qualification_jobs import qualification_job_evidence, qualification_job_junit_evidence
 
-JOB_EVIDENCE = {
-    "released-sok-contract": ["ci-output/release-controller/released-sok-contract.json"],
-    "scan-released-operator-image-trivy": ["ci-output/scan-released-operator-image-trivy-trivy-results.txt"],
-    "gosec-scan": ["gosec-results.txt"],
-    "govulncheck-scan": ["govulncheck-results.txt"],
-    "eks-qualification-integration-validation": ["ci-output/qualification-int-test-workflow-inttest-junit.xml"],
-    "helm-eks-validation": ["ci-output/helm-test-workflow-kuttl-junit.xml"],
-}
-
-JOB_JUNIT_EVIDENCE = {
-    "eks-qualification-integration-validation": "ci-output/qualification-int-test-workflow-inttest-junit.xml",
-    "helm-eks-validation": "ci-output/helm-test-workflow-kuttl-junit.xml",
-}
+JOB_EVIDENCE = qualification_job_evidence()
+JOB_JUNIT_EVIDENCE = qualification_job_junit_evidence()
 
 
 def job_executed(project_dir: Path, job_name: str) -> bool:
