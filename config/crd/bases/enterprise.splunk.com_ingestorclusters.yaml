@@ -33,7 +33,7 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    - description: Auxillary message describing CR status
+    - description: Auxiliary message describing CR status
       jsonPath: .status.message
       name: Message
       type: string
@@ -4707,7 +4707,7 @@ spec:
                   is updated
                 type: string
               message:
-                description: Auxillary message describing CR status
+                description: Auxiliary message describing CR status
                 type: string
               phase:
                 description: Phase of the ingestor pods

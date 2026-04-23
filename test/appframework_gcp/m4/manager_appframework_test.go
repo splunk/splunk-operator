@@ -498,7 +498,7 @@ var _ = Describe("m4appfw test", func() {
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
-			   * Verify bundle push is sucessful
+			   * Verify bundle push is successful
 			   * Verify apps are copied and installed on Monitoring Console and also on Search Heads and Indexers pods
 			   ############### SCALING UP ################
 			   * Scale up Indexers and Search Head Cluster
@@ -509,7 +509,7 @@ var _ = Describe("m4appfw test", func() {
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
-			   * Verify bundle push is sucessful
+			   * Verify bundle push is successful
 			   * Verify apps are copied and installed on new Search Heads and Indexers pods
 			   ############### SCALING DOWN ##############
 			   * Scale down Indexers and Search Head Cluster
@@ -520,7 +520,7 @@ var _ = Describe("m4appfw test", func() {
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
-			   * Verify bundle push is sucessful
+			   * Verify bundle push is successful
 			   * Verify apps are still copied and installed on all Search Heads and Indexers pods
 			*/
 

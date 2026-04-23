@@ -1604,7 +1604,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Upload V2 apps to S3 App Source
 			   * Check no apps are updated as auth key is incorrect
 			   ############  Modify secret key to correct one###########
-			   * Apply spec with correct credentails
+			   * Apply spec with correct credentials
 			   * Wait for the pod to be ready
 			   ############ V2 APP VERIFICATION###########
 			   * Verify Apps Downloaded in App Deployment Info
@@ -1732,7 +1732,7 @@ var _ = Describe("s1appfw test", func() {
 			* While app download is completed, upload new versions of the apps
 			############## VERIFICATIONS ################
 			* Verify App download is in completed on Standalone
-			* Upload updated app to S3 as pervious app download is complete
+			* Upload updated app to S3 as previous app download is complete
 			* Verify app is installed on Standalone
 			############## UPGRADE VERIFICATIONS ################
 			* Wait for next poll to trigger on Standalone

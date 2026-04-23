@@ -208,7 +208,7 @@ func TestSetVolumeDefault(t *testing.T) {
 		},
 	}
 
-	// Make sure the default mode is set correcty
+	// Make sure the default mode is set correctly
 	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
 	if cr.Spec.CommonSplunkSpec.Volumes == nil {
 		t.Errorf("setVolumeDefaults() returns nil for Volumes")
@@ -1414,7 +1414,7 @@ func TestAddStorageVolumes(t *testing.T) {
 	client := spltest.NewMockClient()
 	err := addStorageVolumes(ctx, &cr, client, spec, statefulSet, labels)
 	if err == nil {
-		t.Errorf("Unable to idenitfy incorrect EtcVolumeStorageConfig resource quantity")
+		t.Errorf("Unable to identify incorrect EtcVolumeStorageConfig resource quantity")
 	}
 
 	// Define invalid VarVolumeStorageConfig
@@ -1425,7 +1425,7 @@ func TestAddStorageVolumes(t *testing.T) {
 	}
 	err = addStorageVolumes(ctx, &cr, client, spec, statefulSet, labels)
 	if err == nil {
-		t.Errorf("Unable to idenitfy incorrect VarVolumeStorageConfig resource quantity")
+		t.Errorf("Unable to identify incorrect VarVolumeStorageConfig resource quantity")
 	}
 
 	// test if adminManagedPV logic works

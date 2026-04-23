@@ -1748,7 +1748,7 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 		},
 	}
 
-	// simulate create clustermanager instance before reconcilation
+	// simulate create clustermanager instance before reconciliation
 	c.Create(ctx, clustermanager)
 
 	// simulate Ready state
@@ -1936,7 +1936,7 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
 
-	// simulate create clustermanager instance before reconcilation
+	// simulate create clustermanager instance before reconciliation
 	c.Create(ctx, indexercluster)
 
 	GetClusterInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager, mockCall bool) (*splclient.ClusterInfo, error) {
