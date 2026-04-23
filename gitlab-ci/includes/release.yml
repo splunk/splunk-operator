@@ -1,12 +1,15 @@
-.release-validation-integration-suite-job:
+.release-validation-runtime-job:
   extends:
     - .runtime-integration-job
     - .rules-release-validation-lane
-  timeout: 5h
   needs:
     - job: build-stage-image
       artifacts: true
     - job: scan-stage-image-trivy
+
+.release-validation-integration-suite-job:
+  extends: .release-validation-runtime-job
+  timeout: 5h
   variables:
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
     JOB_INT_TEST_PROFILE: full
@@ -97,14 +100,8 @@ release-indingsep-validation:
     JOB_INT_TEST_FOCUS: indingsep
 
 release-helm-validation:
-  extends:
-    - .runtime-integration-job
-    - .rules-release-validation-lane
+  extends: .release-validation-runtime-job
   timeout: 10h
-  needs:
-    - job: build-stage-image
-      artifacts: true
-    - job: scan-stage-image-trivy
   variables:
     WORKFLOW_SLUG: release-helm-validation
     JOB_HELM_TEST_PROFILE: full
@@ -117,13 +114,33 @@ release-helm-validation:
     reports:
       junit: ci-output/release-helm-validation-kuttl-junit.xml
 
+release-validation-gate:
+  extends:
+    - .release-artifact-job
+    - .rules-release-validation-lane
+  needs:
+    - job: release-appframeworks-s1-validation
+    - job: release-managerappframework-c3-validation
+    - job: release-managerappframework-m4-validation
+    - job: release-managersecret-validation
+    - job: release-managersmartstore-validation
+    - job: release-managermc1-validation
+    - job: release-managermc2-validation
+    - job: release-managercrcrud-validation
+    - job: release-licensemanager-validation
+    - job: release-managerdeletecr-validation
+    - job: release-indingsep-validation
+    - job: release-helm-validation
+  script:
+    - true
+
 release-candidate-packaging:
   extends:
     - .release-artifact-job
     - .aws-pipeline-env-job
     - .rules-release-validation-lane
   needs:
-    - job: scan-stage-image-trivy
+    - job: release-validation-gate
   variables:
     WORKFLOW_SLUG: release-candidate-packaging
   script:
@@ -136,6 +153,8 @@ release-psr-qualification-plan:
   extends:
     - .release-artifact-job
     - .rules-release-validation-lane
+  # Intentionally relies on normal stage ordering only. This job records the
+  # PSR plan and does not consume runtime validation artifacts.
   variables:
     WORKFLOW_SLUG: release-psr-qualification-plan
   script:

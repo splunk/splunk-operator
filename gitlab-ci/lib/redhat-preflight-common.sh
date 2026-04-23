@@ -30,6 +30,8 @@ install_preflight_release_binary() {
       ;;
   esac
 
+  # TODO CSPL-4731: replace public GitHub URLs with internal mirror once
+  # artifact mirroring is set up for the SOK staging environment.
   curl -fsSL \
     "https://github.com/redhat-openshift-ecosystem/openshift-preflight/releases/download/${preflight_version}/preflight-${os_name}-${arch_name}" \
     -o "${preflight_bin_dir}/preflight"
