@@ -6,10 +6,13 @@ workflow:
     - if: '$CI_PIPELINE_SOURCE =~ /^(web|api|schedule)$/ && $SOK_PIPELINE_MODE == "github_intake"'
     - if: '$CI_PIPELINE_SOURCE =~ /^(web|api|schedule)$/ && $SOK_PIPELINE_MODE == "github_mirror_health"'
     - if: '$CI_PIPELINE_SOURCE =~ /^(web|api)$/ && $SOK_PIPELINE_MODE == "qualification_lane"'
+    - if: '$CI_PIPELINE_SOURCE =~ /^(web|api)$/ && $SOK_PIPELINE_MODE == "release_publish"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH && $CI_COMMIT_TITLE =~ /^Merge /'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^release([\/-]).+$/'
     - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"'
       when: never
+    - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
     - when: never
 
@@ -19,6 +22,7 @@ include:
   - local: gitlab-ci/includes/runtime.yml
   - local: gitlab-ci/includes/qualification.yml
   - local: gitlab-ci/includes/admin.yml
+  - local: gitlab-ci/includes/release.yml
   - project: 'ci-cd/templates'
     ref: main
     file: '/prodsec/.oss-scan.yml'
@@ -31,7 +35,9 @@ oss-scan:
     - when: on_success
   needs:
     - format-and-vet
-  extends: .oss-scan
+  extends:
+    - .oss-scan
+    - .rules-default-validation-lane
   # The shared prodsec scanner image should run with its own bootstrap only.
   # Inheriting the repo default before_script causes the job to execute Go setup
   # inside the scanner container before FOSSA starts.
