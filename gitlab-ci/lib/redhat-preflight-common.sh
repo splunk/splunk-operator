@@ -36,19 +36,6 @@ install_preflight_release_binary() {
   chmod 0755 "${preflight_bin_dir}/preflight"
 }
 
-registry_host_from_image_ref() {
-  image_ref="$1"
-  first_component="$(printf '%s' "${image_ref}" | cut -d/ -f1)"
-  case "${first_component}" in
-    *.*|*:*|localhost)
-      printf '%s' "${first_component}"
-      ;;
-    *)
-      printf '%s' "docker.io"
-      ;;
-  esac
-}
-
 prepare_preflight_dockerconfig() {
   dockerconfig_path="$1"
   shift
@@ -64,11 +51,11 @@ prepare_preflight_dockerconfig() {
     registry_host="$(registry_host_from_image_ref "${image_ref}")"
     username="$(first_nonempty "${PIPELINE_PREFLIGHT_REGISTRY_USERNAME:-}" "${PIPELINE_DOCKER_USERNAME:-}" "")"
     password="$(first_nonempty "${PIPELINE_PREFLIGHT_REGISTRY_PASSWORD:-}" "${PIPELINE_DOCKER_PASSWORD:-}" "")"
-    if [ -n "${username}" ] && [ -n "${password}" ]; then
-      auth_b64="$(printf '%s:%s' "${username}" "${password}" | base64 | tr -d '\n')"
+    if registry_login_password_for_host "${registry_host}" "${username}" "${password}"; then
+      auth_b64="$(printf '%s:%s' "${REGISTRY_LOGIN_USERNAME}" "${REGISTRY_LOGIN_PASSWORD}" | base64 | tr -d '\n')"
       jq --arg host "${registry_host}" \
-         --arg user "${username}" \
-         --arg pass "${password}" \
+         --arg user "${REGISTRY_LOGIN_USERNAME}" \
+         --arg pass "${REGISTRY_LOGIN_PASSWORD}" \
          --arg auth "${auth_b64}" \
          '.auths[$host] = {username:$user,password:$pass,auth:$auth}' \
          "${dockerconfig_path}" > "${dockerconfig_path}.tmp"

@@ -20,7 +20,7 @@ mkdir -p "ci-output" "${output_dir}"
 load_repo_dotenv "${CI_PROJECT_DIR}/.env"
 resolve_release_version "${CI_PROJECT_DIR}/Makefile"
 
-chart_repo="$(first_nonempty "${PIPELINE_CHART_RELEASE_REPOSITORY:-}" "")"
+chart_repo="$(first_nonempty "${PIPELINE_CHART_RELEASE_REPOSITORY:-}" "${PIPELINE_RELEASED_HELM_REPO_URL:-}" "")"
 require_nonempty "${chart_repo}" "PIPELINE_CHART_RELEASE_REPOSITORY"
 case "${chart_repo}" in
   oci://*)
@@ -35,8 +35,6 @@ esac
 
 chart_username="$(first_nonempty "${PIPELINE_CHART_RELEASE_USERNAME:-}" "${PIPELINE_DOCKER_USERNAME:-}" "")"
 chart_password="$(first_nonempty "${PIPELINE_CHART_RELEASE_PASSWORD:-}" "${PIPELINE_DOCKER_PASSWORD:-}" "")"
-require_nonempty "${chart_username}" "chart registry username"
-require_nonempty "${chart_password}" "chart registry password"
 
 ci_bin_dir="${CI_PROJECT_DIR}/bin"
 ensure_ci_bin_path "${ci_bin_dir}"
@@ -44,7 +42,7 @@ make setup/helm \
   HELM_VERSION="$(first_nonempty "${PIPELINE_HELM_VERSION:-}" "${HELM_VERSION:-}" "v3.8.2")" \
   CI_BIN_DIR="${ci_bin_dir}"
 
-printf '%s' "${chart_password}" | helm registry login "${chart_registry}" --username "${chart_username}" --password-stdin
+helm_login_registry "${chart_registry}" "${chart_username}" "${chart_password}"
 
 make helm-package
 helm package "${CI_PROJECT_DIR}/helm-chart/splunk-operator" --destination "${output_dir}"
