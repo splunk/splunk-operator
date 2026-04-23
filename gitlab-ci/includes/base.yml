@@ -6,6 +6,8 @@ stages:
   - security
   - integration
   - qualification
+  - release
+  - publish
 
 variables:
   GIT_DEPTH: "0"
@@ -74,6 +76,14 @@ default:
   extends: .runtime-artifact-job
   stage: qualification
 
+.release-artifact-job:
+  extends: .runtime-artifact-job
+  stage: release
+
+.release-publish-job:
+  extends: .runtime-artifact-job
+  stage: publish
+
 .python-venv-job:
   before_script:
     - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
@@ -103,3 +113,39 @@ default:
 .rules-qualification-lane:
   rules:
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+
+.rules-default-validation-lane:
+  rules:
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
+      when: never
+    - when: on_success
+
+# Release validation runs on release branches and on the merged main commit.
+# Support both release/<version> and release-<version> naming.
+.rules-release-validation-lane:
+  rules:
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^release([\/-]).+$/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^release([\/-]).+$/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+
+# Publish remains manually gated on main, but operators can re-run just the
+# publish/certification path through a dedicated main-branch web/api pipeline.
+.rules-main-release-publish:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE =~ /^(web|api)$/ && $SOK_PIPELINE_MODE == "release_publish" && $CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+      when: manual
+
+# Release publish contract:
+# - PIPELINE_RELEASE_VERSION defaults to Makefile VERSION.
+# - PIPELINE_RELEASE_OPERATOR_TAG defaults to PIPELINE_RELEASE_VERSION.
+# - PIPELINE_RELEASE_IMAGE_REPOSITORY defaults to docker.io/splunk/splunk-operator.
+# - PIPELINE_DOCKER_USERNAME / PIPELINE_DOCKER_PASSWORD provide generic OCI auth.
+# - PIPELINE_BUNDLE_REGISTRY is the bundle/catalog target registry.
+# - PIPELINE_CHART_RELEASE_REPOSITORY must be an OCI repo like oci://...
+# - PIPELINE_PYXIS_API_TOKEN and PIPELINE_PYXIS_CERTIFICATION_COMPONENT_ID
+#   unlock Red Hat preflight submission.

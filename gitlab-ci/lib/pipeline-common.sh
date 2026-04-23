@@ -62,6 +62,56 @@ first_nonempty() {
   return 0
 }
 
+load_optional_env_file() {
+  dotenv_path="$1"
+  if [ -f "${dotenv_path}" ]; then
+    set -a
+    . "${dotenv_path}"
+    set +a
+  fi
+}
+
+require_nonempty() {
+  value="$1"
+  description="$2"
+  if [ -z "${value}" ]; then
+    echo "Missing required value: ${description}" >&2
+    return 1
+  fi
+}
+
+require_commands() {
+  for command_name in "$@"; do
+    if ! command -v "${command_name}" >/dev/null 2>&1; then
+      echo "Missing required command: ${command_name}" >&2
+      return 1
+    fi
+  done
+}
+
+require_envs() {
+  for env_name in "$@"; do
+    eval "env_value=\${${env_name}:-}"
+    if [ -z "${env_value}" ]; then
+      echo "Missing required environment variable: ${env_name}" >&2
+      return 1
+    fi
+  done
+}
+
+materialize_file_secret() {
+  secret_value="$1"
+  output_path="$2"
+
+  mkdir -p "$(dirname "${output_path}")"
+  if [ -f "${secret_value}" ]; then
+    cp "${secret_value}" "${output_path}"
+  else
+    printf '%s' "${secret_value}" | base64 -d > "${output_path}"
+  fi
+  chmod 0600 "${output_path}"
+}
+
 install_os_packages() {
   if ! command -v apt-get >/dev/null 2>&1; then
     echo "GitLab CI expects Debian-based runners with apt-get available" >&2
@@ -76,6 +126,13 @@ ensure_python_venv_tooling() {
   install_os_packages python3 python3-pip python3-venv
 }
 
+ensure_jq() {
+  if command -v jq >/dev/null 2>&1; then
+    return 0
+  fi
+
+  install_os_packages jq
+}
 
 require_file() {
   path="$1"
@@ -119,6 +176,27 @@ resolve_ecr_region() {
 resolve_enterprise_release_image() {
   requested_enterprise_image="$(first_nonempty "${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-}" "splunk/splunk:latest")"
   RESOLVED_ENTERPRISE_IMAGE="$(strip_docker_io_prefix "${requested_enterprise_image}")"
+}
+
+resolve_makefile_version() {
+  makefile_path="$1"
+  RESOLVED_MAKEFILE_VERSION="$(awk '/^VERSION[[:space:]]*\?/ {print $3; exit}' "${makefile_path}")"
+  require_nonempty "${RESOLVED_MAKEFILE_VERSION}" "Makefile VERSION"
+}
+
+resolve_release_version() {
+  makefile_path="$1"
+  resolve_makefile_version "${makefile_path}"
+  RESOLVED_RELEASE_VERSION="$(first_nonempty "${PIPELINE_RELEASE_VERSION:-}" "${RESOLVED_MAKEFILE_VERSION}")"
+  RESOLVED_RELEASE_OPERATOR_TAG="$(first_nonempty "${PIPELINE_RELEASE_OPERATOR_TAG:-}" "${RESOLVED_RELEASE_VERSION}")"
+  RESOLVED_RELEASE_CANDIDATE_NUMBER="$(first_nonempty "${PIPELINE_RELEASE_CANDIDATE_NUMBER:-}" "1")"
+}
+
+resolve_release_image_repository() {
+  release_target="$(first_nonempty "${PIPELINE_RELEASE_IMAGE_REPOSITORY:-}" "docker.io/splunk/splunk-operator")"
+  resolve_pipeline_image_repository "${release_target}" "splunk/splunk-operator"
+  RESOLVED_RELEASE_IMAGE_REGISTRY="${RESOLVED_ECR_REGISTRY}"
+  RESOLVED_RELEASE_IMAGE_REPOSITORY="${RESOLVED_IMAGE_REPOSITORY}"
 }
 
 # Resolve the operator under test for runtime jobs.
@@ -410,4 +488,60 @@ ensure_pipeline_aws_env() {
     AWS_DEFAULT_REGION="$(first_nonempty "${PIPELINE_AWS_DEFAULT_REGION:-}" "")"
     export AWS_DEFAULT_REGION
   fi
+}
+
+docker_login_registry() {
+  registry_host="$1"
+  username="$2"
+  password="$3"
+
+  if [ -n "${username}" ] || [ -n "${password}" ]; then
+    require_nonempty "${username}" "registry username for ${registry_host}"
+    require_nonempty "${password}" "registry password for ${registry_host}"
+    printf '%s' "${password}" | docker login --username "${username}" --password-stdin "${registry_host}"
+    return 0
+  fi
+
+  case "${registry_host}" in
+    *.dkr.ecr.*.amazonaws.com)
+      ensure_pipeline_aws_env
+      resolve_ecr_region "${registry_host}"
+      require_nonempty "${RESOLVED_ECR_REGION}" "ECR region for ${registry_host}"
+      aws ecr get-login-password --region "${RESOLVED_ECR_REGION}" | docker login --username AWS --password-stdin "${registry_host}"
+      ;;
+    *)
+      echo "Registry ${registry_host} requires explicit PIPELINE_* credentials" >&2
+      return 1
+      ;;
+  esac
+}
+
+ensure_operator_sdk() {
+  ci_bin_dir="$1"
+  operator_sdk_version="$2"
+
+  require_nonempty "${operator_sdk_version}" "OPERATOR_SDK_VERSION"
+
+  mkdir -p "${ci_bin_dir}"
+  PATH="${ci_bin_dir}:${PATH}"
+  export PATH
+
+  if [ -x "${ci_bin_dir}/operator-sdk" ]; then
+    return 0
+  fi
+
+  os_name="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch_name="$(uname -m)"
+  case "${arch_name}" in
+    x86_64|amd64)
+      arch_name="amd64"
+      ;;
+    aarch64|arm64)
+      arch_name="arm64"
+      ;;
+  esac
+
+  curl -fsSL -o "${ci_bin_dir}/operator-sdk" \
+    "https://github.com/operator-framework/operator-sdk/releases/download/${operator_sdk_version}/operator-sdk_${os_name}_${arch_name}"
+  chmod 0755 "${ci_bin_dir}/operator-sdk"
 }

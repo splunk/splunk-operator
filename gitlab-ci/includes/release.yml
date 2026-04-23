@@ -1,0 +1,252 @@
+.release-validation-integration-suite-job:
+  extends:
+    - .runtime-integration-job
+    - .rules-release-validation-lane
+  timeout: 5h
+  needs:
+    - job: build-stage-image
+      artifacts: true
+    - job: scan-stage-image-trivy
+  variables:
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
+    JOB_INT_TEST_PROFILE: full
+    JOB_INT_TEST_TIMEOUT: 255m
+    JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
+    JOB_EKS_CLUSTER_TEST_TYPE: integration
+    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: release
+    JOB_INT_CLUSTER_NODES: "1"
+    JOB_INT_CLUSTER_WORKERS: "3"
+  script:
+    - gitlab-ci/int-test-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/*-inttest-junit.xml
+
+release-appframeworks-s1-validation:
+  extends:
+    - .release-validation-integration-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: release-appframeworks-s1-validation
+    JOB_INT_TEST_FOCUS: appframeworksS1
+
+release-managerappframework-c3-validation:
+  extends:
+    - .release-validation-integration-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: release-managerappframework-c3-validation
+    JOB_INT_TEST_FOCUS: managerappframeworkc3
+
+release-managerappframework-m4-validation:
+  extends:
+    - .release-validation-integration-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: release-managerappframework-m4-validation
+    JOB_INT_TEST_FOCUS: managerappframeworkm4
+
+release-managersecret-validation:
+  extends: .release-validation-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: release-managersecret-validation
+    JOB_INT_TEST_FOCUS: managersecret
+
+release-managersmartstore-validation:
+  extends: .release-validation-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: release-managersmartstore-validation
+    JOB_INT_TEST_FOCUS: managersmartstore
+
+release-managermc1-validation:
+  extends: .release-validation-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: release-managermc1-validation
+    JOB_INT_TEST_FOCUS: managermc1
+
+release-managermc2-validation:
+  extends: .release-validation-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: release-managermc2-validation
+    JOB_INT_TEST_FOCUS: managermc2
+
+release-managercrcrud-validation:
+  extends: .release-validation-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: release-managercrcrud-validation
+    JOB_INT_TEST_FOCUS: managercrcrud
+
+release-licensemanager-validation:
+  extends: .release-validation-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: release-licensemanager-validation
+    JOB_INT_TEST_FOCUS: licensemanager
+
+release-managerdeletecr-validation:
+  extends: .release-validation-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: release-managerdeletecr-validation
+    JOB_INT_TEST_FOCUS: managerdeletecr
+
+release-indingsep-validation:
+  extends: .release-validation-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: release-indingsep-validation
+    JOB_INT_TEST_FOCUS: indingsep
+
+release-helm-validation:
+  extends:
+    - .runtime-integration-job
+    - .rules-release-validation-lane
+  timeout: 10h
+  needs:
+    - job: build-stage-image
+      artifacts: true
+    - job: scan-stage-image-trivy
+  variables:
+    WORKFLOW_SLUG: release-helm-validation
+    JOB_HELM_TEST_PROFILE: full
+    JOB_HELM_TEST_TIMEOUT: "7000"
+  script:
+    - gitlab-ci/helm-test-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/release-helm-validation-kuttl-junit.xml
+
+release-artifacts-validation:
+  extends:
+    - .release-artifact-job
+    - .rules-release-validation-lane
+  dependencies:
+    - build-stage-image
+  variables:
+    WORKFLOW_SLUG: release-artifacts-validation
+  script:
+    - gitlab-ci/release-candidate-artifacts.sh
+  artifacts:
+    paths:
+      - ci-output/release-artifacts-validation-*
+
+release-psr-qualification-plan:
+  extends:
+    - .release-artifact-job
+    - .rules-release-validation-lane
+  variables:
+    WORKFLOW_SLUG: release-psr-qualification-plan
+  script:
+    - gitlab-ci/psr-release-qualification.sh
+  artifacts:
+    paths:
+      - ci-output/release-psr-qualification-plan-*
+
+publish-release-images:
+  extends:
+    - .release-publish-job
+    - .rules-main-release-publish
+  variables:
+    WORKFLOW_SLUG: publish-release-images
+  script:
+    - gitlab-ci/release-publish-images.sh
+  artifacts:
+    paths:
+      - ci-output/publish-release-images-*
+
+publish-release-artifacts:
+  extends:
+    - .release-publish-job
+    - .rules-main-release-publish
+  needs:
+    - job: publish-release-images
+      artifacts: true
+  variables:
+    WORKFLOW_SLUG: publish-release-artifacts
+  script:
+    - gitlab-ci/release-publish-artifacts.sh
+  artifacts:
+    paths:
+      - ci-output/publish-release-artifacts-*
+
+publish-release-bundle:
+  extends:
+    - .release-publish-job
+    - .rules-main-release-publish
+  needs:
+    - job: publish-release-images
+      artifacts: true
+  variables:
+    WORKFLOW_SLUG: publish-release-bundle
+  script:
+    - gitlab-ci/release-publish-bundle.sh
+  artifacts:
+    paths:
+      - ci-output/publish-release-bundle-*
+
+publish-release-charts:
+  extends:
+    - .release-publish-job
+    - .rules-main-release-publish
+  needs:
+    - job: publish-release-images
+      artifacts: true
+  variables:
+    WORKFLOW_SLUG: publish-release-charts
+  script:
+    - gitlab-ci/release-publish-charts.sh
+  artifacts:
+    paths:
+      - ci-output/publish-release-charts-*
+
+preflight-certification:
+  extends:
+    - .release-publish-job
+    - .rules-main-release-publish
+  needs:
+    - job: publish-release-images
+      artifacts: true
+    - job: publish-release-bundle
+      artifacts: true
+  variables:
+    WORKFLOW_SLUG: preflight-certification
+  script:
+    - gitlab-ci/preflight-certification.sh
+  artifacts:
+    paths:
+      - ci-output/preflight-certification-*
+
+prepare-certified-operators-submission:
+  extends:
+    - .release-publish-job
+    - .rules-main-release-publish
+  needs:
+    - job: publish-release-bundle
+      artifacts: true
+    - job: preflight-certification
+      artifacts: true
+  variables:
+    WORKFLOW_SLUG: prepare-certified-operators-submission
+  script:
+    - gitlab-ci/certified-operators-submission.sh
+  artifacts:
+    paths:
+      - ci-output/prepare-certified-operators-submission-*
+
+prepare-community-operators-submission:
+  extends:
+    - .release-publish-job
+    - .rules-main-release-publish
+  needs:
+    - job: publish-release-bundle
+      artifacts: true
+    - job: preflight-certification
+      artifacts: true
+  variables:
+    WORKFLOW_SLUG: prepare-community-operators-submission
+  script:
+    - gitlab-ci/community-operators-submission.sh
+  artifacts:
+    paths:
+      - ci-output/prepare-community-operators-submission-*

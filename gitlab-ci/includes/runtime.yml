@@ -3,6 +3,8 @@ build-stage-image:
   rules:
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
       when: never
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
+      when: never
     - when: on_success
   needs:
     - unit-tests
@@ -19,6 +21,8 @@ scan-stage-image-trivy:
   extends: .runtime-image-scan-job
   rules:
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
       when: never
     - when: on_success
   needs:
@@ -71,6 +75,14 @@ scan-released-operator-image-trivy:
     - job: scan-stage-image-trivy
   rules:
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH =~ /^release([\/-]).+$/'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^release([\/-]).+$/'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
       when: never
