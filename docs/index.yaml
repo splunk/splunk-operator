@@ -56,6 +56,34 @@ entries:
     - https://splunk.github.io/splunk-operator/splunk-enterprise-3.1.0.tgz
     version: 3.1.0
   - apiVersion: v2
+    appVersion: 3.0.0
+    created: "2026-04-08T03:35:00Z"
+    dependencies:
+    - condition: splunk-operator.enabled
+      name: splunk-operator
+      repository: file://splunk-operator/helm-chart/splunk-operator
+      version: 3.0.0
+    description: A Helm chart for Splunk Enterprise managed by the Splunk Operator
+    digest: ae82f6c8edee4d827817fe6c9c6447c422a03c59595a0f6e779cef847a83b611
+    maintainers:
+    - email: vivekr@splunk.com
+      name: Vivek Reddy
+    - email: rlieberman@splunk.com
+      name: Raizel Lieberman
+    - email: patrykw@splunk.com
+      name: Patryk Wasielewski
+    - email: igorg@splunk.com
+      name: Igor Grzankowski
+    - email: kkoziol@splunk.com
+      name: Kasia Kozioł
+    - email: jbuczak@splunk.com
+      name: Jakub Buczak
+    name: splunk-enterprise
+    type: application
+    urls:
+    - https://splunk.github.io/splunk-operator/splunk-enterprise-3.0.0.tgz
+    version: 3.0.0
+  - apiVersion: v2
     appVersion: 2.8.1
     created: "2026-03-02T17:02:33.789329656Z"
     dependencies:
@@ -381,6 +409,29 @@ entries:
     urls:
     - https://splunk.github.io/splunk-operator/splunk-operator-3.1.0.tgz
     version: 3.1.0
+  - apiVersion: v2
+    appVersion: 3.0.0
+    created: "2026-04-08T03:35:00Z"
+    description: A Helm chart for the Splunk Operator for Kubernetes
+    digest: bd318b1f4022421a3fd429b186ca344c61d04a3c2bbdd5cc535d960773558e44
+    maintainers:
+    - email: vivekr@splunk.com
+      name: Vivek Reddy
+    - email: rlieberman@splunk.com
+      name: Raizel Lieberman
+    - email: patrykw@splunk.com
+      name: Patryk Wasielewski
+    - email: igorg@splunk.com
+      name: Igor Grzankowski
+    - email: kkoziol@splunk.com
+      name: Kasia Kozioł
+    - email: jbuczak@splunk.com
+      name: Jakub Buczak
+    name: splunk-operator
+    type: application
+    urls:
+    - https://splunk.github.io/splunk-operator/splunk-operator-3.0.0.tgz
+    version: 3.0.0
   - apiVersion: v2
     appVersion: 2.8.1
     created: "2026-03-02T17:02:33.967789812Z"
