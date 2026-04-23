@@ -221,7 +221,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			logger.ErrorContext(ctx, "error in deleting automated monitoring console resource", "error", err)
+			logger.ErrorContext(ctx, "error in deleting automated MonitoringConsole resource", "error", err)
 		}
 
 		// Reset secrets related status structs
@@ -528,7 +528,7 @@ func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient,
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	if err != nil {
-		logger.ErrorContext(ctx, "searchHeadCluster types not found in namespace", "error", err, "namespace", cr.GetNamespace())
+		logger.ErrorContext(ctx, "SearchHeadCluster types not found in namespace", "error", err, "namespace", cr.GetNamespace())
 		return objectList, err
 	}
 

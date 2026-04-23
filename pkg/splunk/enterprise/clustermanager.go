@@ -220,7 +220,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			logger.ErrorContext(ctx, "error in deleting automated monitoring console resource", "error", err)
+			logger.ErrorContext(ctx, "error in deleting automated MonitoringConsole resource", "error", err)
 		}
 
 		// Create podExecClient (use injected one if provided, otherwise create real one)
@@ -441,7 +441,7 @@ func getClusterManagerList(ctx context.Context, c splcommon.ControllerClient, cr
 	numOfObjects := len(objectList.Items)
 
 	if err != nil {
-		logger.ErrorContext(ctx, "clusterManager types not found in namespace", "error", err, "namsespace", cr.GetNamespace())
+		logger.ErrorContext(ctx, "ClusterManager types not found in namespace", "error", err, "namespace", cr.GetNamespace())
 		return numOfObjects, err
 	}
 
@@ -460,7 +460,7 @@ var GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.Clus
 	cm := mgr.getClusterManagerClient(cr)
 	clusterInfo, err := cm.GetClusterInfo(false)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to get cluster info from cluster manager pod, using basic environment variables", "error", err)
+		logger.ErrorContext(ctx, "failed to get cluster info from ClusterManager pod, using basic environment variables", "error", err)
 		return extraEnv, err
 	}
 
@@ -534,7 +534,7 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 	err = changeAnnotations(ctx, c, image, clusterManagerInstance)
 	if err != nil {
 		eventPublisher.Warning(ctx, EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not update annotations. Reason %v", err))
-		logger.ErrorContext(ctx, "clusterManager types update after changing annotations failed with", "error", err)
+		logger.ErrorContext(ctx, "ClusterManager types update after changing annotations failed with", "error", err)
 		return err
 	}
 

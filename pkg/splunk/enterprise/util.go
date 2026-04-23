@@ -1090,7 +1090,7 @@ func checkCmRemainingReferences(ctx context.Context, c splcommon.ControllerClien
 	}
 	for _, item := range idxcList.Items {
 		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
-			scopedLog.ErrorContext(ctx, fmt.Sprintf(`IndexerCluster %s still has a reference for clusterManager %s,
+			scopedLog.ErrorContext(ctx, fmt.Sprintf(`IndexerCluster %s still has a reference for ClusterManager %s,
 				please backup if needed and delete the IndexerCluster`, item.GetName(), cmCr.GetName()))
 			return fmt.Errorf("ClusterManager has stale references to an indexerCluster")
 		}
@@ -1106,7 +1106,7 @@ func checkCmRemainingReferences(ctx context.Context, c splcommon.ControllerClien
 	}
 	for _, item := range shcList.Items {
 		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
-			scopedLog.ErrorContext(ctx, fmt.Sprintf(`SearchHeadCluster %s still has a reference for clusterManager %s,
+			scopedLog.ErrorContext(ctx, fmt.Sprintf(`SearchHeadCluster %s still has a reference for ClusterManager %s,
 				please backup if needed and delete the SearchHeadCluster`, item.GetName(), cmCr.GetName()))
 			return fmt.Errorf("ClusterManager has stale references to a searchHeadCluster")
 		}
@@ -1122,7 +1122,7 @@ func checkCmRemainingReferences(ctx context.Context, c splcommon.ControllerClien
 	}
 	for _, item := range lmList.Items {
 		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
-			scopedLog.ErrorContext(ctx, fmt.Sprintf(`LicenseManager %s still has a reference for clusterManager %s,
+			scopedLog.ErrorContext(ctx, fmt.Sprintf(`LicenseManager %s still has a reference for ClusterManager %s,
 				please backup if needed and delete the LicenseManager`, item.GetName(), cmCr.GetName()))
 			return fmt.Errorf("ClusterManager has stale references to a LicenseManager")
 		}
@@ -1138,7 +1138,7 @@ func checkCmRemainingReferences(ctx context.Context, c splcommon.ControllerClien
 	}
 	for _, item := range mcList.Items {
 		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
-			scopedLog.ErrorContext(ctx, fmt.Sprintf(`MonitoringConsole %s still has a reference for clusterManager %s,
+			scopedLog.ErrorContext(ctx, fmt.Sprintf(`MonitoringConsole %s still has a reference for ClusterManager %s,
 				please backup if needed and delete the MonitoringConsole`, item.GetName(), cmCr.GetName()))
 			return fmt.Errorf("ClusterManager has stale references to a MonitoringConsole")
 		}

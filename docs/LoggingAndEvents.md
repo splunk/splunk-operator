@@ -1,3 +1,9 @@
+---
+title: Logging and Events
+parent: Reference
+nav_order: 6
+---
+
 # Logging & Events
 
 ## Logging
@@ -33,7 +39,17 @@ Configure at runtime via `LOG_LEVEL` env var or `--log-level` flag. Values: `deb
 
 ### Writing Log Messages
 
-**Message format:** short, lowercase, past tense or present participle. Describe *what happened*, not the function name.
+**Message format:** short, lowercase, past tense or present participle. Describe *what happened*, not the function name. Use **PascalCase** for CRD type names in messages — `ClusterManager`, `IndexerCluster`, `SearchHeadCluster`, `LicenseManager`, `LicenseMaster`, `ClusterMaster`, `MonitoringConsole`, `Standalone`.
+
+```go
+// Good
+logger.InfoContext(ctx, "ClusterManager types not found in namespace", "error", err)
+logger.InfoContext(ctx, "scaling up IndexerCluster", "replicas", replicas)
+
+// Bad - inconsistent casing
+logger.InfoContext(ctx, "clusterManager types not found")
+logger.InfoContext(ctx, "scaling up indexer cluster")
+```
 
 ```go
 // Good
@@ -194,7 +210,7 @@ All event reasons are defined as constants in `pkg/splunk/enterprise/event_reaso
 | `EventReasonSecretMissing` | `SecretMissing` | Required secret not found |
 | `EventReasonUpgradeCheckFailed` | `UpgradeCheckFailed` | Upgrade path validation errors |
 
-See `event_reasons.go` for the full list.
+See [`event_reasons.go`](https://github.com/splunk/splunk-operator/blob/main/pkg/splunk/enterprise/event_reasons.go) for the full list.
 
 To add a new event reason: add a constant to `event_reasons.go`, then use it in the code.
 

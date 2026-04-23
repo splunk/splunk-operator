@@ -68,7 +68,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	// update CR status with SHC information
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.CaptainReady {
-		logger.InfoContext(ctx, "search head cluster is not ready", "error", err)
+		logger.InfoContext(ctx, "SearchHeadCluster is not ready", "error", err)
 		return enterpriseApi.PhasePending, nil
 	}
 
@@ -110,7 +110,7 @@ func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n 
 
 	// pod is quarantined; decommission it
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
-	logger.WarnContext(ctx, "member leaving search head cluster",
+	logger.WarnContext(ctx, "member leaving SearchHeadCluster",
 		"member", memberName,
 		"remaining_count", len(mgr.cr.Status.Members)-1)
 
@@ -132,7 +132,7 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 	switch mgr.cr.Status.Members[n].Status {
 	case "Up":
 		// Detain search head
-		logger.InfoContext(ctx, "detaining search head cluster member", "memberName", memberName)
+		logger.InfoContext(ctx, "detaining SearchHeadCluster member", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
 
 		podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, getApplicablePodNameForK8Probes(mgr.cr, n))
@@ -208,7 +208,7 @@ func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int
 
 	case "ManualDetention":
 		// release from detention
-		logger.InfoContext(ctx, "releasing search head cluster member from detention", "memberName", memberName)
+		logger.InfoContext(ctx, "releasing SearchHeadCluster member from detention", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
 		return false, c.SetSearchHeadDetention(false)
 	}
@@ -297,7 +297,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 			memberStatus.ActiveHistoricalSearchCount = memberInfo.ActiveHistoricalSearchCount
 			memberStatus.ActiveRealtimeSearchCount = memberInfo.ActiveRealtimeSearchCount
 		} else {
-			shcLogger.ErrorContext(ctx, "unable to retrieve search head cluster member info", "memberName", memberName, "error", err)
+			shcLogger.ErrorContext(ctx, "unable to retrieve SearchHeadCluster member info", "memberName", memberName, "error", err)
 		}
 
 		if err == nil && !gotCaptainInfo {
@@ -338,11 +338,11 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 
 	newMemberCount := int32(len(mgr.cr.Status.Members))
 	if newMemberCount > previousMemberCount {
-		shcLogger.InfoContext(ctx, "member joined search head cluster",
+		shcLogger.InfoContext(ctx, "member joined SearchHeadCluster",
 			"total_members", newMemberCount,
 			"previous_members", previousMemberCount)
 	} else if newMemberCount < previousMemberCount {
-		shcLogger.WarnContext(ctx, "member left search head cluster",
+		shcLogger.WarnContext(ctx, "member left SearchHeadCluster",
 			"total_members", newMemberCount,
 			"previous_members", previousMemberCount)
 	}

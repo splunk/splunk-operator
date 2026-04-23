@@ -121,11 +121,11 @@ func (r splunkReconciler) Reconcile(ctx context.Context, request reconcile.Reque
 
 	// log what happens next
 	if err != nil {
-		scopedLog.ErrorContext(ctx, "reconciliation requeued", "RequeueAfter", result.RequeueAfter, "error", err)
+		scopedLog.ErrorContext(ctx, "reconciliation requeued", "requeueAfter", result.RequeueAfter, "error", err)
 		return result, nil
 	}
 	if result.Requeue {
-		scopedLog.InfoContext(ctx, "reconciliation requeued", "RequeueAfter", result.RequeueAfter)
+		scopedLog.InfoContext(ctx, "reconciliation requeued", "requeueAfter", result.RequeueAfter)
 		return result, nil
 	}
 

@@ -76,7 +76,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// updates status after function completes
 	cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		logger.InfoContext(ctx, "scaling up Indexer Cluster", "previousReplicas", cr.Status.Replicas, "newReplicas", cr.Spec.Replicas)
+		logger.InfoContext(ctx, "scaling up IndexerCluster", "previousReplicas", cr.Status.Replicas, "newReplicas", cr.Spec.Replicas)
 		cr.Status.CredentialSecretVersion = "0"
 		cr.Status.ServiceAccount = ""
 	}
@@ -114,7 +114,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			cr.Status.ClusterManagerPhase = managerIdxCluster.Status.Phase
 		}
 	} else {
-		logger.WarnContext(ctx, "the configured clusterMasterRef doesn't exist", "clusterManagerRef", cr.Spec.ClusterManagerRef.Name)
+		logger.WarnContext(ctx, "the configured ClusterMasterRef doesn't exist", "ClusterManagerRef", cr.Spec.ClusterManagerRef.Name)
 		cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
 	}
 
@@ -307,7 +307,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				}
 			}
 			if len(cr.Spec.MonitoringConsoleRef.Name) > 0 && (cr.Spec.MonitoringConsoleRef.Name != cmMonitoringConsoleConfigRef) {
-				logger.WarnContext(ctx, "indexer Cluster CR should not specify monitoringConsoleRef and if specified, should be similar to Cluster Manager spec")
+				logger.WarnContext(ctx, "IndexerCluster CR should not specify MonitoringConsoleRef and if specified, should be similar to ClusterManager spec")
 			}
 		}
 		if len(cr.Status.IndexerSecretChanged) > 0 {
@@ -334,7 +334,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 		result.Requeue = false
 		// Set indexer cluster CR as owner reference for clustermanager
-		logger.DebugContext(ctx, "setting Indexer Cluster as owner for Cluster Manager")
+		logger.DebugContext(ctx, "setting IndexerCluster as owner for ClusterManager")
 		if len(cr.Spec.ClusterManagerRef.Name) > 0 {
 			namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterManager, cr.Spec.ClusterManagerRef.Name)}
 		}
@@ -377,7 +377,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		logger.InfoContext(ctx, "scaling up Indexer Cluster", "previousReplicas", cr.Status.Replicas, "newReplicas", cr.Spec.Replicas)
+		logger.InfoContext(ctx, "scaling up IndexerCluster", "previousReplicas", cr.Status.Replicas, "newReplicas", cr.Spec.Replicas)
 		cr.Status.CredentialSecretVersion = "0"
 		cr.Status.ServiceAccount = ""
 	}
@@ -610,7 +610,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 				}
 			}
 			if len(cr.Spec.MonitoringConsoleRef.Name) > 0 && (cr.Spec.MonitoringConsoleRef.Name != cmMonitoringConsoleConfigRef) {
-				logger.WarnContext(ctx, "indexer Cluster CR should not specify monitoringConsoleRef and if specified, should be similar to Cluster Master spec")
+				logger.WarnContext(ctx, "IndexerCluster CR should not specify MonitoringConsoleRef and if specified, should be similar to ClusterMaster spec")
 			}
 		}
 
@@ -621,7 +621,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 		result.Requeue = false
 		// Set indexer cluster CR as owner reference for clustermaster
-		logger.DebugContext(ctx, "setting Indexer Cluster as owner for Cluster Master")
+		logger.DebugContext(ctx, "setting IndexerCluster as owner for ClusterMaster")
 		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterMaster, cr.Spec.ClusterMasterRef.Name)}
 		err = splctrl.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
 		if err != nil {
@@ -910,7 +910,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 			return enterpriseApi.PhaseError, err
 		}
 	} else {
-		mgr.log.InfoContext(ctx, "cluster Manager is not ready yet", "error", err)
+		mgr.log.InfoContext(ctx, "ClusterManager is not ready yet", "error", err)
 		return enterpriseApi.PhaseError, err
 	}
 
@@ -926,7 +926,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	// update CR status with IDXC information
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.IndexingReady || !mgr.cr.Status.ServiceReady {
-		mgr.log.InfoContext(ctx, "indexer Cluster is not ready", "error ", err)
+		mgr.log.InfoContext(ctx, "IndexerCluster is not ready", "error ", err)
 		return enterpriseApi.PhasePending, nil
 	}
 
@@ -971,7 +971,7 @@ func (mgr *indexerClusterPodManager) PrepareScaleDown(ctx context.Context, n int
 	c := mgr.getClusterManagerClient(ctx)
 	peerName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
 	remainingPeers := int32(len(mgr.cr.Status.Peers)) - 1
-	mgr.log.InfoContext(ctx, "deregistering peer from cluster manager", "peerName", peerName, "remainingPeers", remainingPeers)
+	mgr.log.InfoContext(ctx, "deregistering peer from ClusterManager", "peerName", peerName, "remainingPeers", remainingPeers)
 	return true, c.RemoveIndexerClusterPeer(mgr.cr.Status.Peers[n].ID)
 }
 
@@ -1007,7 +1007,7 @@ func (mgr *indexerClusterPodManager) decommission(ctx context.Context, n int32, 
 			mgr.log.WarnContext(ctx, "unable to lower the liveness probe level", "peerName", peerName, "enforceCounts", enforceCounts)
 		}
 
-		mgr.log.InfoContext(ctx, "decommissioning indexer cluster peer", "peerName", peerName, "enforceCounts", enforceCounts)
+		mgr.log.InfoContext(ctx, "decommissioning IndexerCluster peer", "peerName", peerName, "enforceCounts", enforceCounts)
 		c := mgr.getClient(ctx, n)
 		return false, c.DecommissionIndexerClusterPeer(enforceCounts)
 
@@ -1070,7 +1070,7 @@ func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context
 		managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
 		cm = SplunkClusterMaster
 	} else {
-		mgr.log.InfoContext(ctx, "empty cluster manager reference")
+		mgr.log.InfoContext(ctx, "empty ClusterManager reference")
 	}
 
 	// Get Fully Qualified Domain Name
@@ -1184,12 +1184,12 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 			peerStatus.ActiveBundleID = peerInfo.ActiveBundleID
 			peerStatus.BucketCount = peerInfo.BucketCount
 			peerStatus.Searchable = peerInfo.Searchable
-			slog.InfoContext(ctx, "peer registered with cluster manager",
+			slog.InfoContext(ctx, "peer registered with ClusterManager",
 				"peerName", peerName,
 				"clusterName", clusterName,
 				"totalPeerCount", totalPeerCount)
 		} else {
-			mgr.log.InfoContext(ctx, "peer is not known by Cluster Manager", "peerName", peerName)
+			mgr.log.InfoContext(ctx, "peer is not known by ClusterManager", "peerName", peerName)
 		}
 		if n < int32(len(mgr.cr.Status.Peers)) {
 			mgr.cr.Status.Peers[n] = peerStatus

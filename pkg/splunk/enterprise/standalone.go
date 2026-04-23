@@ -258,7 +258,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
 			eventPublisher.Warning(ctx, EventReasonMonitoringConsoleCleanupFailed, fmt.Sprintf("Failed to clean up automated monitoring console for %s — check operator logs", cr.GetName()))
-			logger.ErrorContext(ctx, "error in deleting automated monitoring console resource", "error", err)
+			logger.ErrorContext(ctx, "error in deleting automated MonitoringConsole resource", "error", err)
 		}
 
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
@@ -338,7 +338,7 @@ func getStandaloneList(ctx context.Context, c splcommon.ControllerClient, cr spl
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	if err != nil {
-		logger.ErrorContext(ctx, "standalone types not found in namespace", "namespace", cr.GetNamespace(), "error", err)
+		logger.ErrorContext(ctx, "Standalone types not found in namespace", "namespace", cr.GetNamespace(), "error", err)
 		return objectList, err
 	}
 

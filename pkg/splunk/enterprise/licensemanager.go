@@ -168,7 +168,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			logger.ErrorContext(ctx, "error in deleting automated monitoring console resource", "error", err)
+			logger.ErrorContext(ctx, "error in deleting automated MonitoringConsole resource", "error", err)
 		}
 
 		// Add a splunk operator telemetry app
@@ -299,7 +299,7 @@ func getLicenseManagerList(ctx context.Context, c splcommon.ControllerClient, cr
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	if err != nil {
-		logger.ErrorContext(ctx, "licenseManager types not found in namespace", "error", err, "namsespace", cr.GetNamespace())
+		logger.ErrorContext(ctx, "LicenseManager types not found in namespace", "error", err, "namespace", cr.GetNamespace())
 		return objectList, err
 	}
 

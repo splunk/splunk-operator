@@ -1917,7 +1917,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) isBundlePushComplete(ctx context
 	streamOptions := splutil.NewStreamOptionsObject(idxcShowClusterBundleStatusStr)
 	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 	if err == nil && strings.Contains(stdOut, "cluster_status=None") && !strings.Contains(stdOut, "last_bundle_validation_status=failure") {
-		scopedLog.InfoContext(ctx, "indexerCluster Bundle push complete")
+		scopedLog.InfoContext(ctx, "IndexerCluster Bundle push complete")
 		return true
 	}
 
@@ -1926,7 +1926,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) isBundlePushComplete(ctx context
 		return false
 	}
 
-	scopedLog.InfoContext(ctx, "indexerCluster Bundle push is still in progress")
+	scopedLog.InfoContext(ctx, "IndexerCluster Bundle push is still in progress")
 	return false
 }
 
@@ -2037,7 +2037,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) runPlaybook(ctx context.Context)
 			setInstallStateForClusterScopedApps(ctx, appDeployContext)
 			idxcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelDefault)
 		} else {
-			scopedLog.InfoContext(ctx, "indexerCluster Bundle Push is still in progress, will check back again in next reconcile")
+			scopedLog.InfoContext(ctx, "IndexerCluster Bundle Push is still in progress, will check back again in next reconcile")
 		}
 
 	case enterpriseApi.BundlePushPending:

@@ -209,7 +209,7 @@ func getMonitoringConsoleList(ctx context.Context, c splcommon.ControllerClient,
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	if err != nil {
-		logger.ErrorContext(ctx, "monitoringConsole types not found in namespace", "error", err, "namsespace", cr.GetNamespace())
+		logger.ErrorContext(ctx, "MonitoringConsole types not found in namespace", "error", err, "namespace", cr.GetNamespace())
 		return objectList, err
 	}
 
@@ -427,7 +427,7 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 	err = changeAnnotations(ctx, client, image, monitoringConsoleInstance)
 	if err != nil {
 		eventPublisher.Warning(ctx, EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not update annotations. Reason %v", err))
-		logger.ErrorContext(ctx, "monitoringConsole types update after changing annotations failed with", "error", err)
+		logger.ErrorContext(ctx, "MonitoringConsole types update after changing annotations failed with", "error", err)
 		return err
 	}
 
