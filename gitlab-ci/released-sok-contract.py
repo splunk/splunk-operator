@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,6 +11,8 @@ from pathlib import Path
 GITHUB_RELEASE_URL = "https://api.github.com/repos/splunk/splunk-operator/releases/latest"
 HELM_INDEX_URL = "https://splunk.github.io/splunk-operator/index.yaml"
 HELM_REPO_URL = "https://splunk.github.io/splunk-operator"
+DOCKER_AUTH_URL = "https://auth.docker.io/token"
+DOCKER_REGISTRY_URL = "https://registry-1.docker.io"
 
 
 def utc_now() -> str:
@@ -32,6 +35,12 @@ def fetch_json(url: str) -> dict:
     return json.loads(fetch_text(url))
 
 
+def fetch_json_with_headers(url: str, headers: dict[str, str]) -> dict:
+    request = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
 def normalize_version(raw_version: str) -> str:
     return raw_version.strip().removeprefix("v")
 
@@ -49,12 +58,60 @@ def require_chart_release(helm_index: str, chart_name: str, version: str) -> str
     return chart_url
 
 
+def fetch_docker_registry_token(repository: str) -> str:
+    query = urllib.parse.urlencode(
+        {
+            "service": "registry.docker.io",
+            "scope": f"repository:{repository}:pull",
+        }
+    )
+    payload = fetch_json_with_headers(f"{DOCKER_AUTH_URL}?{query}", {"User-Agent": "sok-gitlab-qualification"})
+    token = payload.get("token", "")
+    if not token:
+        raise RuntimeError(f"Unable to get Docker registry token for {repository}")
+    return token
+
+
+def require_operator_image_release(repository: str, version: str) -> str:
+    token = fetch_docker_registry_token(repository)
+    manifest_url = f"{DOCKER_REGISTRY_URL}/v2/{repository}/manifests/{version}"
+    request = urllib.request.Request(
+        manifest_url,
+        headers={
+            "Accept": ",".join(
+                [
+                    "application/vnd.oci.image.index.v1+json",
+                    "application/vnd.docker.distribution.manifest.list.v2+json",
+                    "application/vnd.oci.image.manifest.v1+json",
+                    "application/vnd.docker.distribution.manifest.v2+json",
+                ]
+            ),
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "sok-gitlab-qualification",
+        },
+        method="HEAD",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            if response.status != 200:
+                raise RuntimeError(
+                    f"Released operator image is not available for {repository}:{version}: HTTP {response.status}"
+                )
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(
+            f"Released operator image is not available for {repository}:{version}: HTTP {exc.code}"
+        ) from exc
+    return f"docker.io/{repository}:{version}"
+
+
 def build_contract() -> dict:
     release = fetch_json(GITHUB_RELEASE_URL)
     released_version = normalize_version(release["tag_name"])
     helm_index = fetch_text(HELM_INDEX_URL)
+    operator_repository = "splunk/splunk-operator"
     enterprise_chart_url = require_chart_release(helm_index, "splunk-enterprise", released_version)
     operator_chart_url = require_chart_release(helm_index, "splunk-operator", released_version)
+    operator_image_source = require_operator_image_release(operator_repository, released_version)
 
     return {
         "schema_version": "v1alpha1",
@@ -64,10 +121,11 @@ def build_contract() -> dict:
             "github_release_html": release.get("html_url", ""),
             "helm_repo_index": HELM_INDEX_URL,
             "helm_repo_url": HELM_REPO_URL,
+            "docker_registry": DOCKER_REGISTRY_URL,
         },
         "released_sok": {
             "version": released_version,
-            "operator_image_source": f"docker.io/splunk/splunk-operator:{released_version}",
+            "operator_image_source": operator_image_source,
             "operator_image_mirror_path": f"splunk/splunk-operator:{released_version}",
             "enterprise_chart_version": released_version,
             "operator_chart_version": released_version,
