@@ -2,8 +2,8 @@
 set -eu
 
 # Runtime contract
-# - Purpose: scan the staged operator image emitted by build-stage-image.
-# - Inputs: build artifact containing the image ref plus pipeline AWS credentials.
+# - Purpose: scan either the staged operator image or an explicit released operator image ref.
+# - Inputs: build artifact or direct target image ref plus pipeline AWS credentials when needed.
 # - Outputs: SARIF and human-readable Trivy reports under ci-output/.
 # - Guardrails: read-only access to nonprod ECR, severity limited to CRITICAL for the current migration slice.
 
@@ -15,6 +15,9 @@ mkdir -p "ci-output"
 
 TRIVY_RELEASE="$(first_nonempty "${PIPELINE_TRIVY_RELEASE:-}" "v0.69.3")"
 TRIVY_ASSET_URL="$(first_nonempty "${PIPELINE_TRIVY_ASSET_URL:-}" "")"
+TRIVY_SCANNERS="$(first_nonempty "${PIPELINE_TRIVY_SCANNERS:-}" "vuln")"
+TRIVY_SCAN_TIMEOUT="$(first_nonempty "${PIPELINE_TRIVY_SCAN_TIMEOUT:-}" "30m")"
+TRIVY_PLATFORM="$(first_nonempty "${PIPELINE_TRIVY_PLATFORM:-}" "linux/amd64")"
 trivy_resolution_mode="direct-url"
 
 install_os_packages bash curl jq tar
@@ -51,47 +54,96 @@ install /tmp/trivy /usr/local/bin/trivy
 trivy --version
 aws --version
 
-require_file "ci-output/build-test-push-workflow-image-ref.txt" "build image reference artifact"
-IMAGE_REF="$(cat ci-output/build-test-push-workflow-image-ref.txt)"
-ECR_REGISTRY="${IMAGE_REF%%/*}"
-ECR_REGION="$(first_nonempty "${AWS_REGION:-}" "${AWS_DEFAULT_REGION:-}" "${PIPELINE_AWS_DEFAULT_REGION:-}" "$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)")"
+target_image_ref_file="$(first_nonempty "${TARGET_IMAGE_REF_FILE:-}" "ci-output/build-test-push-workflow-image-ref.txt")"
+target_image_ref="$(first_nonempty "${TARGET_IMAGE_REF:-}" "")"
 
-if [ -z "${ECR_REGION}" ]; then
-  echo "Unable to determine ECR region — set AWS_REGION, AWS_DEFAULT_REGION, or PIPELINE_AWS_DEFAULT_REGION" >&2
+if [ -f "${target_image_ref_file}" ]; then
+  require_file "${target_image_ref_file}" "target image reference artifact"
+  IMAGE_REF="$(cat "${target_image_ref_file}")"
+  append_context "${context_file}" "input_artifact" "${target_image_ref_file}"
+elif [ -n "${target_image_ref}" ]; then
+  IMAGE_REF="${target_image_ref}"
+  append_context "${context_file}" "input_artifact" "direct-target-image-ref"
+else
+  echo "Missing target image reference: set TARGET_IMAGE_REF_FILE or TARGET_IMAGE_REF" >&2
   exit 1
 fi
 
-export AWS_DEFAULT_REGION="${ECR_REGION}"
+ECR_REGISTRY="${IMAGE_REF%%/*}"
+resolve_ecr_region "${ECR_REGISTRY}"
+ECR_REGION="${RESOLVED_ECR_REGION}"
 
-# ECR_PASSWORD is consumed only by the trivy --password flag below.
-# It is not echoed or written to disk; GitLab masked-variable protection
-# covers the aws ecr get-login-password output in job traces.
-ECR_PASSWORD="$(aws ecr get-login-password --region "${ECR_REGION}")"
-
-append_context "${context_file}" "input_artifact" "ci-output/build-test-push-workflow-image-ref.txt"
 append_context "${context_file}" "ecr_registry" "${ECR_REGISTRY}"
 append_context "${context_file}" "ecr_region" "${ECR_REGION}"
 append_context "${context_file}" "trivy_release_selector" "${TRIVY_RELEASE}"
 append_context "${context_file}" "trivy_resolution_mode" "${trivy_resolution_mode}"
 append_context "${context_file}" "trivy_tag" "${TRIVY_TAG}"
 append_context "${context_file}" "trivy_asset_url" "${TRIVY_ASSET_URL}"
+append_context "${context_file}" "trivy_scanners" "${TRIVY_SCANNERS}"
+append_context "${context_file}" "trivy_scan_timeout" "${TRIVY_SCAN_TIMEOUT}"
+append_context "${context_file}" "trivy_platform" "${TRIVY_PLATFORM}"
+append_context "${context_file}" "target_image" "${IMAGE_REF}"
 
 printf '%s\n' "${IMAGE_REF}" > "ci-output/${WORKFLOW_SLUG}-image-ref.txt"
+echo "Trivy target image: ${IMAGE_REF}"
 
-trivy image \
-  --username AWS \
-  --password "${ECR_PASSWORD}" \
-  --severity CRITICAL \
-  --ignore-unfixed \
-  --format sarif \
-  --output "ci-output/${WORKFLOW_SLUG}-trivy-results.sarif" \
-  "${IMAGE_REF}"
+if printf '%s' "${ECR_REGISTRY}" | grep -q 'amazonaws.com'; then
+  if [ -z "${ECR_REGION}" ]; then
+    echo "Unable to determine ECR region — set AWS_REGION, AWS_DEFAULT_REGION, or PIPELINE_AWS_DEFAULT_REGION" >&2
+    exit 1
+  fi
 
-# --skip-db-update reuses the DB already downloaded by the SARIF pass above.
-trivy image \
-  --username AWS \
-  --password "${ECR_PASSWORD}" \
-  --severity CRITICAL \
-  --ignore-unfixed \
-  --skip-db-update \
-  "${IMAGE_REF}" | tee "ci-output/${WORKFLOW_SLUG}-trivy-results.txt"
+  export AWS_DEFAULT_REGION="${ECR_REGION}"
+
+  # ECR_PASSWORD is consumed only by the trivy --password flag below.
+  # It is not echoed or written to disk; GitLab masked-variable protection
+  # covers the aws ecr get-login-password output in job traces.
+  ECR_PASSWORD="$(aws ecr get-login-password --region "${ECR_REGION}")"
+
+  trivy image \
+    --username AWS \
+    --password "${ECR_PASSWORD}" \
+    --scanners "${TRIVY_SCANNERS}" \
+    --timeout "${TRIVY_SCAN_TIMEOUT}" \
+    --platform "${TRIVY_PLATFORM}" \
+    --skip-version-check \
+    --severity CRITICAL \
+    --ignore-unfixed \
+    --format sarif \
+    --output "ci-output/${WORKFLOW_SLUG}-trivy-results.sarif" \
+    "${IMAGE_REF}"
+
+  # --skip-db-update reuses the DB already downloaded by the SARIF pass above.
+  trivy image \
+    --username AWS \
+    --password "${ECR_PASSWORD}" \
+    --scanners "${TRIVY_SCANNERS}" \
+    --timeout "${TRIVY_SCAN_TIMEOUT}" \
+    --platform "${TRIVY_PLATFORM}" \
+    --skip-version-check \
+    --severity CRITICAL \
+    --ignore-unfixed \
+    --skip-db-update \
+    "${IMAGE_REF}" | tee "ci-output/${WORKFLOW_SLUG}-trivy-results.txt"
+else
+  trivy image \
+    --scanners "${TRIVY_SCANNERS}" \
+    --timeout "${TRIVY_SCAN_TIMEOUT}" \
+    --platform "${TRIVY_PLATFORM}" \
+    --skip-version-check \
+    --severity CRITICAL \
+    --ignore-unfixed \
+    --format sarif \
+    --output "ci-output/${WORKFLOW_SLUG}-trivy-results.sarif" \
+    "${IMAGE_REF}"
+
+  trivy image \
+    --scanners "${TRIVY_SCANNERS}" \
+    --timeout "${TRIVY_SCAN_TIMEOUT}" \
+    --platform "${TRIVY_PLATFORM}" \
+    --skip-version-check \
+    --severity CRITICAL \
+    --ignore-unfixed \
+    --skip-db-update \
+    "${IMAGE_REF}" | tee "ci-output/${WORKFLOW_SLUG}-trivy-results.txt"
+fi

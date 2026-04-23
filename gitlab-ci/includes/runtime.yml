@@ -1,5 +1,9 @@
 build-stage-image:
   extends: .runtime-build-job
+  rules:
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
+    - when: on_success
   needs:
     - unit-tests
     - kubectl-splunk-tests
@@ -13,6 +17,10 @@ build-stage-image:
 
 scan-stage-image-trivy:
   extends: .runtime-image-scan-job
+  rules:
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
+    - when: on_success
   needs:
     - job: build-stage-image
       artifacts: true
@@ -24,6 +32,34 @@ scan-stage-image-trivy:
     paths:
       - ci-output/scan-stage-image-trivy-*
 
+scan-released-operator-image-trivy:
+  extends: .runtime-image-scan-job
+  timeout: 2h
+  needs:
+    - job: released-sok-contract
+      artifacts: true
+  rules:
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+  variables:
+    WORKFLOW_SLUG: scan-released-operator-image-trivy
+    TARGET_IMAGE_REF_FILE: ci-output/release-controller/released-operator-image-source.txt
+  script:
+    - gitlab-ci/build-test-push-trivy-scan.sh
+  artifacts:
+    paths:
+      - ci-output/scan-released-operator-image-trivy-*
+
+.runtime-released-sok-validation-job:
+  extends: .runtime-integration-job
+  needs:
+    - job: released-sok-contract
+      artifacts: true
+    - job: scan-released-operator-image-trivy
+  rules:
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+  variables:
+    RELEASED_SOK_CONTRACT_FILE: ci-output/release-controller/released-sok-contract.env
+
 eks-smoke-validation:
   extends: .runtime-integration-job
   timeout: 10h
@@ -32,6 +68,8 @@ eks-smoke-validation:
       artifacts: true
     - job: scan-stage-image-trivy
   rules:
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -41,7 +79,7 @@ eks-smoke-validation:
     WORKFLOW_SLUG: int-test-workflow
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
     JOB_INT_TEST_PROFILE: smoke
-    PIPELINE_INT_TEST_FOCUS: "smoke, basic, s1"
+    JOB_INT_TEST_FOCUS: "smoke, basic, s1"
     JOB_INT_TEST_TIMEOUT: 3h
   script:
     - gitlab-ci/int-test-workflow.sh
@@ -51,6 +89,40 @@ eks-smoke-validation:
     reports:
       junit: ci-output/int-test-workflow-inttest-junit.xml
 
+eks-qualification-integration-validation:
+  extends: .runtime-released-sok-validation-job
+  # Qualification jobs must still publish evidence so the report/gate path can
+  # decide the final lane outcome instead of stopping at the first failed test.
+  allow_failure: true
+  timeout: 10h
+  variables:
+    WORKFLOW_SLUG: qualification-int-test-workflow
+    JOB_INT_TEST_PROFILE: full
+    JOB_INT_TEST_TIMEOUT: 8h
+  script:
+    - gitlab-ci/int-test-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/qualification-int-test-workflow-inttest-junit.xml
+
+helm-eks-validation:
+  extends: .runtime-released-sok-validation-job
+  allow_failure: true
+  timeout: 10h
+  variables:
+    WORKFLOW_SLUG: helm-test-workflow
+    JOB_HELM_TEST_PROFILE: full
+    JOB_HELM_TEST_TIMEOUT: "7000"
+  script:
+    - gitlab-ci/helm-test-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/helm-test-workflow-kuttl-junit.xml
+
 nightly-eks-integration-validation:
   extends: .runtime-integration-job
   timeout: 10h
@@ -59,6 +131,8 @@ nightly-eks-integration-validation:
       artifacts: true
     - job: scan-stage-image-trivy
   rules:
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
   variables:
     WORKFLOW_SLUG: nightly-int-test-workflow

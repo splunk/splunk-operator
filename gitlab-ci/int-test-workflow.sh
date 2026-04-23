@@ -2,8 +2,8 @@
 set -eu
 
 # Runtime contract
-# - Purpose: execute the primary nonprod EKS integration path against the operator image built in GitLab.
-# - Inputs: build artifact image ref, pipeline AWS/EKS/S3 variables, focus selector, and repo .env defaults.
+# - Purpose: execute the primary nonprod EKS integration path against either the staged branch image or the latest official released SOK image.
+# - Inputs: build artifact or released-SOK contract, pipeline AWS/EKS/S3 variables, focus selector, and repo .env defaults.
 # - Outputs: runtime context, cluster logs, cleanup log, copied pod logs, and JUnit output under ci-output/.
 # - Guardrails: ephemeral cluster naming, nonprod registries and buckets, cleanup on success, failure, or signal.
 
@@ -42,25 +42,19 @@ ci_bin_dir="${CI_PROJECT_DIR}/bin"
 ensure_ci_bin_path "${ci_bin_dir}"
 
 BUILD_IMAGE_REF_FILE="${BUILD_IMAGE_REF_FILE:-ci-output/build-test-push-workflow-image-ref.txt}"
-require_file "${BUILD_IMAGE_REF_FILE}" "build image reference"
-
-IMAGE_REF="$(cat "${BUILD_IMAGE_REF_FILE}")"
-IMAGE_REPOSITORY="${IMAGE_REF%:*}"
-IMAGE_TAG="${IMAGE_REF##*:}"
-ECR_REGISTRY="${IMAGE_REPOSITORY%%/*}"
-OPERATOR_REPOSITORY_PATH="${IMAGE_REPOSITORY#${ECR_REGISTRY}/}"
-
-ECR_REGION="$(first_nonempty "${AWS_REGION:-}" "${AWS_DEFAULT_REGION:-}" "${PIPELINE_AWS_DEFAULT_REGION:-}" "$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)")"
+RELEASED_SOK_CONTRACT_FILE="${RELEASED_SOK_CONTRACT_FILE:-}"
+resolve_operator_runtime_source "${BUILD_IMAGE_REF_FILE}" "${RELEASED_SOK_CONTRACT_FILE}" "splunk/splunk-operator"
+ECR_REGISTRY="${RUNTIME_ECR_REGISTRY}"
+ECR_REGION="${RUNTIME_ECR_REGION}"
 
 if [ -z "${ECR_REGION}" ]; then
   echo "Unable to determine ECR region — set AWS_REGION, AWS_DEFAULT_REGION, or PIPELINE_AWS_DEFAULT_REGION" >&2
   exit 1
 fi
 
-# Enterprise image for the minimal develop lane — prefer an explicit pipeline
-# override and otherwise reuse the existing repo .env image pin.
-enterprise_image="$(first_nonempty "${PIPELINE_SPLUNK_ENTERPRISE_IMAGE:-}" "${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-}" "splunk/splunk:latest")"
-enterprise_image="$(strip_docker_io_prefix "${enterprise_image}")"
+# Enterprise image comes from the repo-owned release image pin.
+resolve_enterprise_release_image
+enterprise_image="${RESOLVED_ENTERPRISE_IMAGE}"
 
 requested_profile="$(first_nonempty "${PIPELINE_INT_TEST_PROFILE:-}" "${JOB_INT_TEST_PROFILE:-}" "smoke")"
 resolve_integration_profile "${requested_profile}"
@@ -82,7 +76,7 @@ export S3_REGION="${ECR_REGION}"
 export ECR_REGISTRY
 export ECR_REPOSITORY="${ECR_REGISTRY}"
 export PRIVATE_REGISTRY="${ECR_REGISTRY}"
-export SPLUNK_OPERATOR_IMAGE="${OPERATOR_REPOSITORY_PATH}:${IMAGE_TAG}"
+export SPLUNK_OPERATOR_IMAGE="${RUNTIME_OPERATOR_REPO_IMAGE}"
 export SPLUNK_ENTERPRISE_IMAGE="${enterprise_image}"
 normalize_testenv_commit_hash "${CI_COMMIT_SHORT_SHA:-${CI_COMMIT_SHA}}" 8
 export COMMIT_HASH="${NORMALIZED_TESTENV_COMMIT_HASH}"
@@ -111,7 +105,7 @@ export EKSCTL_VERSION="$(first_nonempty "${PIPELINE_EKSCTL_VERSION:-}" "${EKSCTL
 export KUBECTL_VERSION="$(first_nonempty "${PIPELINE_KUBECTL_VERSION:-}" "${KUBECTL_VERSION:-}" "")"
 export EKS_CLUSTER_K8_VERSION="$(first_nonempty "${PIPELINE_EKS_CLUSTER_K8_VERSION:-}" "${EKS_CLUSTER_K8_VERSION:-}" "")"
 
-append_context "${context_file}" "input_artifact" "${BUILD_IMAGE_REF_FILE}"
+append_operator_runtime_context "${context_file}"
 append_context "${context_file}" "ecr_registry" "${ECR_REGISTRY}"
 append_context "${context_file}" "ecr_region" "${ECR_REGION}"
 append_context "${context_file}" "test_profile" "${RESOLVED_INT_TEST_PROFILE}"
@@ -189,6 +183,8 @@ log_step "versions:complete"
 log_step "registry:ecr-login ${ECR_REGISTRY}"
 aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
 log_step "registry:ecr-login:complete"
+
+mirror_operator_image_to_ecr_if_needed
 
 if [ "${use_existing_cluster}" = "true" ]; then
   log_step "cluster:use-existing ${TEST_CLUSTER_NAME}"

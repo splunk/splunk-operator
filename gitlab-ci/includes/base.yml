@@ -3,7 +3,9 @@ stages:
   - test
   - build
   - image_scan
+  - security
   - integration
+  - qualification
 
 variables:
   GIT_DEPTH: "0"
@@ -21,9 +23,14 @@ default:
       set -eu
       go version
 
-# Current minimal-lane contract: prefer neutral pipeline variables for the
-# shared AWS environment and keep the old STAGING_* names only as script-level
-# fallback during the transition window.
+# CI variable contract:
+# - PIPELINE_* values come from project/group settings or manual pipeline inputs.
+# - JOB_* values are lane-local defaults defined in YAML.
+# Runtime scripts always prefer PIPELINE_* over JOB_* so operators can override
+# a lane without editing repo code.
+#
+# Shared nonprod AWS contract for the current develop, nightly, and
+# qualification lanes. The repo now uses only the neutral PIPELINE_* names.
 .aws-pipeline-env-job:
   variables:
     AWS_ACCESS_KEY_ID: $PIPELINE_AWS_ACCESS_KEY_ID
@@ -60,11 +67,23 @@ default:
   stage: integration
   interruptible: false
 
+.security-job:
+  stage: security
+
+.qualification-job:
+  extends: .runtime-artifact-job
+  stage: qualification
+
 .python-venv-job:
   before_script:
     - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
     - ensure_python_venv_tooling
     - python3 --version
+
+.python-qualification-job:
+  extends:
+    - .qualification-job
+    - .python-venv-job
 
 .kubectl-splunk-python-job:
   extends: .python-venv-job
@@ -80,3 +99,7 @@ default:
     - pip install coverage pytest
     - pip install -r tools/kubectl-splunk/requirements.txt
     - pip install -e tools/kubectl-splunk
+
+.rules-qualification-lane:
+  rules:
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'

@@ -1,0 +1,88 @@
+released-sok-contract:
+  extends:
+    - .python-venv-job
+    - .rules-qualification-lane
+  # Qualification runtime jobs in image_scan/integration consume this contract,
+  # so it must exist before those stages begin.
+  stage: verify
+  needs:
+    - format-and-vet
+  script:
+    - python3 gitlab-ci/released-sok-contract.py
+  artifacts:
+    when: always
+    expire_in: 90 days
+    paths:
+      - ci-output/release-controller/
+
+qualification-manifest:
+  extends:
+    - .python-qualification-job
+    - .rules-qualification-lane
+  needs:
+    - job: released-sok-contract
+      artifacts: true
+  script:
+    - python3 gitlab-ci/qualification-manifest.py
+  artifacts:
+    when: always
+    expire_in: 90 days
+    paths:
+      - ci-output/release-controller/
+
+qualification-report:
+  extends:
+    - .python-qualification-job
+    - .rules-qualification-lane
+  when: always
+  needs:
+    - job: qualification-manifest
+      artifacts: true
+    - job: released-sok-contract
+      artifacts: true
+    - job: scan-released-operator-image-trivy
+      artifacts: true
+    - job: gosec-scan
+      artifacts: true
+    - job: govulncheck-scan
+      artifacts: true
+    - job: eks-qualification-integration-validation
+      artifacts: true
+    - job: helm-eks-validation
+      artifacts: true
+  script:
+    - python3 gitlab-ci/qualification-report.py
+  artifacts:
+    when: always
+    expire_in: 90 days
+    paths:
+      - ci-output/release-controller/
+
+compatibility-publish:
+  extends:
+    - .python-qualification-job
+    - .rules-qualification-lane
+  when: always
+  needs:
+    - job: qualification-report
+      artifacts: true
+  script:
+    - python3 gitlab-ci/compatibility-publish.py
+  artifacts:
+    when: always
+    expire_in: 90 days
+    paths:
+      - ci-output/release-controller/
+
+qualification-gate:
+  extends:
+    - .python-qualification-job
+    - .rules-qualification-lane
+  # This is the authoritative go/no-go signal for the qualification lane after
+  # report generation and compatibility artifact publication have run.
+  when: always
+  needs:
+    - job: qualification-report
+      artifacts: true
+  script:
+    - python3 gitlab-ci/qualification-gate.py
