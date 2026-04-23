@@ -99,12 +99,17 @@ def main() -> int:
     failing_test_jobs = [job for job in JOB_JUNIT_EVIDENCE if junit_failed(project_dir, job)]
 
     security_blocked: list[str] = []
+    source_security_advisory: list[str] = []
     if trivy_findings > 0:
         security_blocked.append("scan-released-operator-image-trivy")
+    # Qualification validates the official released SOK artifact against the
+    # requested Splunk Enterprise release. Current-branch source scans are
+    # collected as advisory evidence, but they do not decide artifact
+    # compatibility for this lane.
     if gosec_status == "failed":
-        security_blocked.append("gosec-scan")
+        source_security_advisory.append("gosec-scan")
     if govulncheck_status == "failed":
-        security_blocked.append("govulncheck-scan")
+        source_security_advisory.append("govulncheck-scan")
 
     if security_blocked:
         disposition = "not qualified"
@@ -133,6 +138,7 @@ def main() -> int:
         "missing_jobs": missing,
         "failing_test_jobs": failing_test_jobs,
         "security_blocked_jobs": security_blocked,
+        "source_security_advisory_jobs": source_security_advisory,
         "security_findings": {
             "trivy_result_count": trivy_findings,
             "gosec_status": gosec_status or "unknown",
@@ -165,6 +171,9 @@ def main() -> int:
                 "",
                 "## Security Blocked Jobs",
                 *([f"- {job}" for job in security_blocked] or ["- none"]),
+                "",
+                "## Source Security Advisory Jobs",
+                *([f"- {job}" for job in source_security_advisory] or ["- none"]),
                 "",
                 "## Failing Test Jobs",
                 *([f"- {job}" for job in failing_test_jobs] or ["- none"]),

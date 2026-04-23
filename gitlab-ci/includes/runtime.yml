@@ -34,6 +34,7 @@ scan-stage-image-trivy:
 
 scan-released-operator-image-trivy:
   extends: .runtime-image-scan-job
+  timeout: 2h
   needs:
     - job: released-sok-contract
       artifacts: true

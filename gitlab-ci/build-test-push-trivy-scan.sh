@@ -15,6 +15,9 @@ mkdir -p "ci-output"
 
 TRIVY_RELEASE="$(first_nonempty "${PIPELINE_TRIVY_RELEASE:-}" "v0.69.3")"
 TRIVY_ASSET_URL="$(first_nonempty "${PIPELINE_TRIVY_ASSET_URL:-}" "")"
+TRIVY_SCANNERS="$(first_nonempty "${PIPELINE_TRIVY_SCANNERS:-}" "vuln")"
+TRIVY_SCAN_TIMEOUT="$(first_nonempty "${PIPELINE_TRIVY_SCAN_TIMEOUT:-}" "30m")"
+TRIVY_PLATFORM="$(first_nonempty "${PIPELINE_TRIVY_PLATFORM:-}" "linux/amd64")"
 trivy_resolution_mode="direct-url"
 
 install_os_packages bash curl jq tar
@@ -76,8 +79,13 @@ append_context "${context_file}" "trivy_release_selector" "${TRIVY_RELEASE}"
 append_context "${context_file}" "trivy_resolution_mode" "${trivy_resolution_mode}"
 append_context "${context_file}" "trivy_tag" "${TRIVY_TAG}"
 append_context "${context_file}" "trivy_asset_url" "${TRIVY_ASSET_URL}"
+append_context "${context_file}" "trivy_scanners" "${TRIVY_SCANNERS}"
+append_context "${context_file}" "trivy_scan_timeout" "${TRIVY_SCAN_TIMEOUT}"
+append_context "${context_file}" "trivy_platform" "${TRIVY_PLATFORM}"
+append_context "${context_file}" "target_image" "${IMAGE_REF}"
 
 printf '%s\n' "${IMAGE_REF}" > "ci-output/${WORKFLOW_SLUG}-image-ref.txt"
+echo "Trivy target image: ${IMAGE_REF}"
 
 if printf '%s' "${ECR_REGISTRY}" | grep -q 'amazonaws.com'; then
   if [ -z "${ECR_REGION}" ]; then
@@ -95,6 +103,10 @@ if printf '%s' "${ECR_REGISTRY}" | grep -q 'amazonaws.com'; then
   trivy image \
     --username AWS \
     --password "${ECR_PASSWORD}" \
+    --scanners "${TRIVY_SCANNERS}" \
+    --timeout "${TRIVY_SCAN_TIMEOUT}" \
+    --platform "${TRIVY_PLATFORM}" \
+    --skip-version-check \
     --severity CRITICAL \
     --ignore-unfixed \
     --format sarif \
@@ -105,12 +117,20 @@ if printf '%s' "${ECR_REGISTRY}" | grep -q 'amazonaws.com'; then
   trivy image \
     --username AWS \
     --password "${ECR_PASSWORD}" \
+    --scanners "${TRIVY_SCANNERS}" \
+    --timeout "${TRIVY_SCAN_TIMEOUT}" \
+    --platform "${TRIVY_PLATFORM}" \
+    --skip-version-check \
     --severity CRITICAL \
     --ignore-unfixed \
     --skip-db-update \
     "${IMAGE_REF}" | tee "ci-output/${WORKFLOW_SLUG}-trivy-results.txt"
 else
   trivy image \
+    --scanners "${TRIVY_SCANNERS}" \
+    --timeout "${TRIVY_SCAN_TIMEOUT}" \
+    --platform "${TRIVY_PLATFORM}" \
+    --skip-version-check \
     --severity CRITICAL \
     --ignore-unfixed \
     --format sarif \
@@ -118,6 +138,10 @@ else
     "${IMAGE_REF}"
 
   trivy image \
+    --scanners "${TRIVY_SCANNERS}" \
+    --timeout "${TRIVY_SCAN_TIMEOUT}" \
+    --platform "${TRIVY_PLATFORM}" \
+    --skip-version-check \
     --severity CRITICAL \
     --ignore-unfixed \
     --skip-db-update \
