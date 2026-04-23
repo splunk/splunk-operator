@@ -566,24 +566,33 @@ registry_login_password_for_host() {
   username="$2"
   password="$3"
 
-  if [ -n "${username}" ] || [ -n "${password}" ]; then
-    require_nonempty "${username}" "registry username for ${registry_host}"
-    require_nonempty "${password}" "registry password for ${registry_host}"
-    REGISTRY_LOGIN_USERNAME="${username}"
-    REGISTRY_LOGIN_PASSWORD="${password}"
-    return 0
-  fi
-
   case "${registry_host}" in
     *.dkr.ecr.*.amazonaws.com)
       ensure_pipeline_aws_env
       resolve_ecr_region "${registry_host}"
       require_nonempty "${RESOLVED_ECR_REGION}" "ECR region for ${registry_host}"
-      REGISTRY_LOGIN_USERNAME="AWS"
-      REGISTRY_LOGIN_PASSWORD="$(aws ecr get-login-password --region "${RESOLVED_ECR_REGION}")"
-      return 0
+      if REGISTRY_LOGIN_PASSWORD="$(aws ecr get-login-password --region "${RESOLVED_ECR_REGION}" 2>/dev/null)"; then
+        REGISTRY_LOGIN_USERNAME="AWS"
+        return 0
+      fi
+      if [ -n "${username}" ] || [ -n "${password}" ]; then
+        require_nonempty "${username}" "registry username for ${registry_host}"
+        require_nonempty "${password}" "registry password for ${registry_host}"
+        REGISTRY_LOGIN_USERNAME="${username}"
+        REGISTRY_LOGIN_PASSWORD="${password}"
+        return 0
+      fi
+      echo "Registry ${registry_host} requires AWS credentials or explicit PIPELINE_* credentials" >&2
+      return 1
       ;;
     *)
+      if [ -n "${username}" ] || [ -n "${password}" ]; then
+        require_nonempty "${username}" "registry username for ${registry_host}"
+        require_nonempty "${password}" "registry password for ${registry_host}"
+        REGISTRY_LOGIN_USERNAME="${username}"
+        REGISTRY_LOGIN_PASSWORD="${password}"
+        return 0
+      fi
       echo "Registry ${registry_host} requires explicit PIPELINE_* credentials" >&2
       return 1
       ;;
