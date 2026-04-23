@@ -110,6 +110,8 @@ require_commands() {
 
 require_envs() {
   for env_name in "$@"; do
+    # POSIX sh does not support ${!name}; keep env_name sourced from fixed call
+    # sites rather than dynamic user input when using this indirection.
     eval "env_value=\${${env_name}:-}"
     if [ -z "${env_value}" ]; then
       echo "Missing required environment variable: ${env_name}" >&2
@@ -642,6 +644,8 @@ ensure_operator_sdk() {
       ;;
   esac
 
+  # TODO CSPL-4731: replace public GitHub URLs with internal mirror once
+  # artifact mirroring is set up for the SOK staging environment.
   curl -fsSL -o "${ci_bin_dir}/operator-sdk" \
     "https://github.com/operator-framework/operator-sdk/releases/download/${operator_sdk_version}/operator-sdk_${os_name}_${arch_name}"
   chmod 0755 "${ci_bin_dir}/operator-sdk"
