@@ -20,12 +20,21 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 	hba "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 )
 
 // ValidatePostgresClusterClassCreate validates a PostgresClusterClass on CREATE.
 func ValidatePostgresClusterClassCreate(obj *enterpriseApi.PostgresClusterClass) field.ErrorList {
 	var allErrs field.ErrorList
+
+	if !config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec"),
+			"the PostgresController feature is not enabled; set --feature-gates=PostgresController=true to activate"))
+
+		return allErrs
+	}
 
 	if obj.Spec.Config != nil && len(obj.Spec.Config.PgHBA) > 0 {
 		pgHBAPath := field.NewPath("spec").Child("config").Child("pgHBA")

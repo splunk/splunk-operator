@@ -302,25 +302,28 @@ func main() {
 	}
 	pgFleetMetricsCollector := pgprometheus.NewFleetCollector()
 
-	if err := (&controller.PostgresDatabaseReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		Recorder:       mgr.GetEventRecorderFor("postgresdatabase-controller"),
-		Metrics:        pgMetricsRecorder,
-		FleetCollector: pgFleetMetricsCollector,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PostgresDatabase")
-		os.Exit(1)
-	}
-	if err := (&controller.PostgresClusterReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		Recorder:       mgr.GetEventRecorderFor("postgrescluster-controller"),
-		Metrics:        pgMetricsRecorder,
-		FleetCollector: pgFleetMetricsCollector,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PostgresCluster")
-		os.Exit(1)
+	if config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
+		if err := (&controller.PostgresDatabaseReconciler{
+			Client:         mgr.GetClient(),
+			Scheme:         mgr.GetScheme(),
+			Recorder:       mgr.GetEventRecorderFor("postgresdatabase-controller"),
+			Metrics:        pgMetricsRecorder,
+			FleetCollector: pgFleetMetricsCollector,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "PostgresDatabase")
+			os.Exit(1)
+		}
+
+		if err := (&controller.PostgresClusterReconciler{
+			Client:         mgr.GetClient(),
+			Scheme:         mgr.GetScheme(),
+			Recorder:       mgr.GetEventRecorderFor("postgrescluster-controller"),
+			Metrics:        pgMetricsRecorder,
+			FleetCollector: pgFleetMetricsCollector,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "PostgresCluster")
+			os.Exit(1)
+		}
 	}
 
 	if _, ok := os.LookupEnv("ENABLE_VALIDATION_WEBHOOK"); ok {

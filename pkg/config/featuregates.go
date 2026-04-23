@@ -35,14 +35,16 @@ const (
 	// When enabled, the operator runs a validating webhook that enforces
 	// CR schema rules at admission time.
 	// Replaces the legacy ENABLE_VALIDATION_WEBHOOK env var.
-	ValidationWebhook featuregate.Feature = "ValidationWebhook"
+	ValidationWebhook  featuregate.Feature = "ValidationWebhook"
+	PostgresController featuregate.Feature = "PostgresController"
 )
 
 // defaultFeatureGates is the authoritative registry of all feature gates and
 // their default state / maturity. Each entry here automatically becomes
 // available via --feature-gates on the operator binary.
 var defaultFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
-	ValidationWebhook: {Default: false, PreRelease: featuregate.Alpha},
+	ValidationWebhook:  {Default: false, PreRelease: featuregate.Alpha},
+	PostgresController: {Default: false, PreRelease: featuregate.Alpha},
 }
 
 var DefaultMutableFeatureGate featuregate.MutableFeatureGate = featuregate.NewFeatureGate()

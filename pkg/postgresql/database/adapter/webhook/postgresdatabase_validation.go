@@ -21,11 +21,10 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/pkg/config"
-	hba "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 )
 
-// ValidatePostgresClusterCreate validates a PostgresCluster on CREATE.
-func ValidatePostgresClusterCreate(obj *enterpriseApi.PostgresCluster) field.ErrorList {
+// ValidatePostgresDatabaseCreate validates a PostgresDatabase on CREATE.
+func ValidatePostgresDatabaseCreate(obj *enterpriseApi.PostgresDatabase) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if !config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
@@ -36,30 +35,20 @@ func ValidatePostgresClusterCreate(obj *enterpriseApi.PostgresCluster) field.Err
 		return allErrs
 	}
 
-	if len(obj.Spec.PgHBA) > 0 {
-		pgHBAPath := field.NewPath("spec").Child("pgHBA")
-		for _, re := range hba.ValidateRules(obj.Spec.PgHBA) {
-			allErrs = append(allErrs, field.Invalid(
-				pgHBAPath.Index(re.Index),
-				obj.Spec.PgHBA[re.Index],
-				re.Message))
-		}
-	}
-
 	return allErrs
 }
 
-// ValidatePostgresClusterUpdate validates a PostgresCluster on UPDATE.
-func ValidatePostgresClusterUpdate(obj, oldObj *enterpriseApi.PostgresCluster) field.ErrorList {
-	return ValidatePostgresClusterCreate(obj)
+// ValidatePostgresDatabaseUpdate validates a PostgresDatabase on UPDATE.
+func ValidatePostgresDatabaseUpdate(obj, oldObj *enterpriseApi.PostgresDatabase) field.ErrorList {
+	return ValidatePostgresDatabaseCreate(obj)
 }
 
-// GetPostgresClusterWarningsOnCreate returns warnings for PostgresCluster CREATE.
-func GetPostgresClusterWarningsOnCreate(obj *enterpriseApi.PostgresCluster) []string {
+// GetPostgresDatabaseWarningsOnCreate returns warnings for PostgresDatabase CREATE.
+func GetPostgresDatabaseWarningsOnCreate(obj *enterpriseApi.PostgresDatabase) []string {
 	return nil
 }
 
-// GetPostgresClusterWarningsOnUpdate returns warnings for PostgresCluster UPDATE.
-func GetPostgresClusterWarningsOnUpdate(obj, oldObj *enterpriseApi.PostgresCluster) []string {
+// GetPostgresDatabaseWarningsOnUpdate returns warnings for PostgresDatabase UPDATE.
+func GetPostgresDatabaseWarningsOnUpdate(obj, oldObj *enterpriseApi.PostgresDatabase) []string {
 	return nil
 }

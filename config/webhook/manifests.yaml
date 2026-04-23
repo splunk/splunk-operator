@@ -30,4 +30,5 @@ webhooks:
     - monitoringconsoles
     - postgresclusters
     - postgresclusterclasses
+    - postgresdatabases
   sideEffects: None

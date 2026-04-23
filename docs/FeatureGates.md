@@ -49,7 +49,8 @@ When running the operator binary directly, pass feature gates at startup:
 
 | Gate                  | Default | Stage | Since   | Description                                              |
 |-----------------------|---------|-------|---------|----------------------------------------------------------|
-| `ValidationWebhook`  | `false` | Alpha | v3.2.0  | Centralized validation webhook server for CR admission   |
+| `ValidationWebhook`   | `false` | Alpha | v3.2.0  | Centralized validation webhook server for CR admission   |
+| `PostgresController`  | `false` | Alpha | ?       | PostgresCluster, PostgresClusterClass, and PostgresDatabase controllers and CRDs |
 
 ## Adding a New Feature Gate
 
@@ -128,6 +129,20 @@ metadata:
     splunk.com/feature-stage: Alpha
   labels:
     splunk.com/feature-stage: alpha
+```
+
+### d. Enable the gate in tests
+
+Validators and controllers gated behind a feature flag will reject all operations in tests unless the gate is explicitly enabled. Enable it via `SetFromMap` before your tests run:
+
+```go
+func init() {
+    if err := config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{
+        string(config.MyNewFeature): true,
+    }); err != nil {
+        panic(err)
+    }
+}
 ```
 
 ## Promoting a Gate
