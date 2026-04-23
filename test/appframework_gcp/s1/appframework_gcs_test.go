@@ -60,13 +60,10 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to gcs for Monitoring Console
-			   * Create app source for Monitoring Console
-			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
 			   * Upload V1 apps to gcs for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
-			   ############ V1 APP VERIFICATION FOR STANDALONE AND MONITORING CONSOLE ###########
+			   ############ V1 APP VERIFICATION FOR STANDALONE ###########
 			   * Verify Apps Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
 			   * Verify App Package is deleted from Operator Pod
@@ -77,7 +74,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify App enabled  and version by running splunk cmd
 			   ############ UPGRADE V2 APPS ###########
 			   * Upload V2 apps to gcs App Source
-			   ############ V2 APP VERIFICATION FOR STANDALONE AND MONITORING CONSOLE  ###########
+			   ############ V2 APP VERIFICATION FOR STANDALONE  ###########
 			   * Verify Apps Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
 			   * Verify App Package is deleted from Operator Pod
@@ -88,46 +85,12 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify App enabled  and version by running splunk cmd
 			*/
 
-			// ################## SETUP FOR MONITORING CONSOLE ####################
-
-			// Upload V1 apps to gcs for Monitoring Console
-			appVersion := "V1"
-			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Monitoring Console", appVersion))
-
-			gcsTestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Monitoring Console %s", appVersion, testGCSBucket))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App Framework spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, gcsTestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
-
 			// ################## SETUP FOR STANDALONE ####################
 			// Upload V1 apps to gcs for Standalone
+			appVersion := "V1"
+			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -145,9 +108,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -159,9 +119,6 @@ var _ = Describe("s1appfw test", func() {
 
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -177,10 +134,8 @@ var _ = Describe("s1appfw test", func() {
 
 			// ############ INITIAL VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -191,17 +146,13 @@ var _ = Describe("s1appfw test", func() {
 			Expect(testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
-			// Upload V2 apps to gcs for Standalone and Monitoring Console
+			// Upload V2 apps to gcs for Standalone
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone and Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone", appVersion))
 			appFileList = testenv.GetAppFileList(appListV2)
 
 			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Standalone", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Monitoring Console %s", appVersion, testGCSBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -210,9 +161,6 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
@@ -220,10 +168,7 @@ var _ = Describe("s1appfw test", func() {
 			standaloneAppSourceInfo.CrAppVersion = appVersion
 			standaloneAppSourceInfo.CrAppList = appListV2
 			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			mcAppSourceInfo.CrAppVersion = appVersion
-			mcAppSourceInfo.CrAppList = appListV2
-			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -235,13 +180,10 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V2 apps to gcs for Monitoring Console
-			   * Create app source for Monitoring Console
-			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
 			   * Upload V2 apps to gcs for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
-			   ############ INITIAL VERIFICATION FOR STANDALONE AND MONITORING CONSOLE ###########
+			   ############ INITIAL VERIFICATION FOR STANDALONE ###########
 			   * Verify Apps Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
 			   * Verify App Package is deleted from Operator Pod
@@ -252,8 +194,8 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify App enabled  and version by running splunk cmd
 			   ############# DOWNGRADE APPS ################
 			   * Upload V1 apps on gcs
-			   * Wait for Monitoring Console and Standalone pods to be ready
-			   ########## DOWNGRADE VERIFICATION FOR STANDALONE AND MONITORING CONSOLE ###########
+			   * Wait for Standalone pods to be ready
+			   ########## DOWNGRADE VERIFICATION FOR STANDALONE ###########
 			   * Verify Apps Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
 			   * Verify App Package is deleted from Operator Pod
@@ -267,7 +209,7 @@ var _ = Describe("s1appfw test", func() {
 			//################## SETUP ####################
 			// Upload V2 apps to gcs
 			appVersion := "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone and Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone", appVersion))
 			appFileList := testenv.GetAppFileList(appListV2)
 			gcsTestDir = "s1appfw-" + testenv.RandomDNSName(4)
 
@@ -275,36 +217,6 @@ var _ = Describe("s1appfw test", func() {
 			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Monitoring Console", appVersion))
-			gcsTestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Monitoring Console %s", appVersion, testGCSBucket))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App Framework Spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, gcsTestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Create App Framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
@@ -316,9 +228,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -331,18 +240,13 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############ INITIAL VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -352,20 +256,13 @@ var _ = Describe("s1appfw test", func() {
 			Expect(testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
-			// get revision number of the resource
-			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
-
-			// Upload V1 apps to gcs for Standalone and Monitoring Console
+			// Upload V1 apps to gcs for Standalone
 			appVersion = "V1"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone and Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone", appVersion))
 			appFileList = testenv.GetAppFileList(appListV1)
 
 			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Standalone", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Monitoring Console %s", appVersion, testGCSBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -374,12 +271,6 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
 
-			// wait for custom resource resource version to change
-			Expect(testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)).To(Succeed(), "Custom resource version not changed")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
@@ -387,10 +278,7 @@ var _ = Describe("s1appfw test", func() {
 			standaloneAppSourceInfo.CrAppVersion = appVersion
 			standaloneAppSourceInfo.CrAppList = appListV1
 			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
-			mcAppSourceInfo.CrAppVersion = appVersion
-			mcAppSourceInfo.CrAppList = appListV1
-			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
-			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -403,8 +291,7 @@ var _ = Describe("s1appfw test", func() {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload apps on gcs
-			   * Create 2 app sources for Monitoring Console and Standalone
-			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
+			   * Create app source for Standalone
 			   * Prepare and deploy Standalone CRD with app framework and wait for the pod to be ready
 			   ########## INITIAL VERIFICATION #############
 			   * Verify Apps Downloaded in App Deployment Info
@@ -417,7 +304,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify App enabled  and version by running splunk cmd
 			   ############### SCALING UP ##################
 			   * Scale up Standalone
-			   * Wait for Monitoring Console and  Standalone to be ready
+			   * Wait for Standalone to be ready
 			   ########### SCALING UP VERIFICATION #########
 			   * Verify Apps Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
@@ -429,7 +316,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify App enabled  and version by running splunk cmd
 			   ############## SCALING DOWN #################
 			   * Scale down Standalone
-			   * Wait for Monitoring Console and Standalone to be ready
+			   * Wait for Standalone to be ready
 			   ########### SCALING DOWN VERIFICATION #######
 			   * Verify Apps Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
@@ -442,47 +329,13 @@ var _ = Describe("s1appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to gcs for Standalone and Monitoring Console
+			// Upload V1 apps to gcs for Standalone
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone and Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone", appVersion))
 
-			gcsTestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Monitoring Console %s", appVersion, testGCSBucket))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Standalone", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App Framework Spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, gcsTestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
-			// Upload apps to gcs for Standalone
-			gcsTestDir := "s1appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to gcs test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App Framework Spec for Standalone
@@ -495,9 +348,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -509,9 +359,6 @@ var _ = Describe("s1appfw test", func() {
 
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -525,10 +372,8 @@ var _ = Describe("s1appfw test", func() {
 			//########## INITIAL VERIFICATION #############
 			scaledReplicaCount := 2
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: scaledReplicaCount}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -553,9 +398,6 @@ var _ = Describe("s1appfw test", func() {
 
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseReady)).To(Succeed(), "Standalone phase mismatch")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			//########### SCALING UP VERIFICATION #########
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
@@ -585,9 +427,6 @@ var _ = Describe("s1appfw test", func() {
 
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseReady)).To(Succeed(), "Standalone phase mismatch")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			//########### SCALING DOWN VERIFICATION #######
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
@@ -911,9 +750,7 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to GCS for Monitoring Console
-			   * Create app source for Monitoring Console
-			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
+			   * Upload V1 apps to GCS for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework(MANUAL POLL) and wait for the pod to be ready
 			   ############### VERIFICATION ################
@@ -931,7 +768,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify Apps are not updated
 			   ############ ENABLE MANUAL POLL ############
 			   * Verify Manual Poll disabled after the check
-			   ############ V2 APP VERIFICATION FOR STANDALONE AND MONITORING CONSOLE  ###########
+			   ############ V2 APP VERIFICATION FOR STANDALONE  ###########
 			   * Verify Apps Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
 			   * Verify App Package is deleted from Operator Pod
@@ -944,42 +781,12 @@ var _ = Describe("s1appfw test", func() {
 
 			//################## SETUP ####################
 
-			// Upload V1 apps to GCS for Monitoring Console
+			// Upload V1 apps to GCS for Standalone
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Monitoring Console", appVersion))
-			gcsTestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Monitoring Console %s", appVersion, testGCSBucket))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App Framework spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, gcsTestDirMC, 0)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
-
-			// Upload V1 apps to GCS
-			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Standalone", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App Framework Spec
@@ -993,9 +800,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -1006,9 +810,6 @@ var _ = Describe("s1appfw test", func() {
 
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1034,18 +835,11 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Monitoring Console %s", appVersion, testGCSBucket))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
 			// Check for changes in App phase to determine if next poll has been triggered
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
@@ -1061,15 +855,11 @@ var _ = Describe("s1appfw test", func() {
 
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
 			config.Data["Standalone"] = strings.Replace(config.Data["Standalone"], "off", "on", 1)
-			config.Data["MonitoringConsole"] = strings.Replace(config.Data["Standalone"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1077,7 +867,7 @@ var _ = Describe("s1appfw test", func() {
 			//Verify config map set back to off after poll trigger
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify config map set back to off after poll trigger for %s app", appVersion))
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["Standalone"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["Standalone"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//############### VERIFICATION FOR UPGRADE ################
 			standaloneAppSourceInfo.CrAppVersion = appVersion
@@ -1198,9 +988,6 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 				################## SETUP ####################
-				* Upload V1 apps to GCS for Monitoring Console
-			    * Create app source for Monitoring Console
-			   	* Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
 				* Upload big-size app to GCS for Standalone
 				* Create app source for Standalone
 				* Prepare and deploy Standalone
@@ -1211,52 +998,18 @@ var _ = Describe("s1appfw test", func() {
 			    * Verify all apps are installed on Standalone
 			*/
 
-			// ################## SETUP FOR MONITORING CONSOLE ####################
-			// Upload V1 apps to GCS for Monitoring Console
-			appVersion := "V1"
-			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Monitoring Console", appVersion))
-			gcsTestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Monitoring Console %s", appVersion, testGCSBucket))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App Framework spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, gcsTestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
-
 			// ################## SETUP FOR STANDALONE ####################
 			// Download all test apps from GCS
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
-			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
+			appFileList := testenv.GetAppFileList(appList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to GCS for Standalone
 			appList = testenv.BigSingleApp
 			appFileList = testenv.GetAppFileList(appList)
 			testcaseEnvInst.Log.Info("Upload big-size app to GCS for Standalone")
-			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload big-size app to GCS test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1270,9 +1023,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -1946,66 +1696,23 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smokegcp, s1gcp, s1_gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps and check isDeploymentInProgress is set for Standaloen and MC CR's", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("smokegcp, s1gcp, s1_gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps and check isDeploymentInProgress is set for Standalone CR", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to GCS for Monitoring Console
-			   * Create app source for Monitoring Console
-			   * Prepare and deploy Monitoring Console with app framework
-			   * Check isDeploymentInProgress is set for Monitoring Console CR
-			   * Wait for the pod to be ready
 			   * Upload V1 apps to GCS for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework
-			   * Check isDeploymentInProgress is set for Monitoring Console CR
+			   * Check isDeploymentInProgress is set for Standalone CR
 			   * Wait for the pod to be ready
 			*/
 
-			// ################## SETUP FOR MONITORING CONSOLE ####################
-
-			// Upload V1 apps to GCS for Monitoring Console
-			appVersion := "V1"
-			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Monitoring Console", appVersion))
-
-			gcsTestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Monitoring Console %s", appVersion, testGCSBucket))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App Framework spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, gcsTestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify IsDeploymentInProgress Flag is set to true for Monitroing Console CR
-			testcaseEnvInst.Log.Info("Checking isDeploymentInProgressFlag")
-			Expect(testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, mcName, mc.Kind)).To(Succeed(), "IsDeploymentInProgress flag not set")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
-
 			// ################## SETUP FOR STANDALONE ####################
 			// Upload V1 apps to GCS for Standalone
+			appVersion := "V1"
+			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Standalone", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -2023,9 +1730,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -2040,9 +1744,6 @@ var _ = Describe("s1appfw test", func() {
 
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 		})
 	})
