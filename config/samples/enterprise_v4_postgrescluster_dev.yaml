@@ -14,8 +14,8 @@ spec:
   clusterDeletionPolicy: Retain
   instances: 3
   # Storage and PostgreSQL version are overridden from the ClusterClass defaults. Validation rules on the PostgresCluster resource will prevent removing these fields or setting them to lower values than the original overrides.
-  storage: 1Gi
-  postgresVersion: "15.10"
+  storage: 20Gi
+  postgresVersion: "18.10"
   resources:
     requests:
       cpu: "250m"

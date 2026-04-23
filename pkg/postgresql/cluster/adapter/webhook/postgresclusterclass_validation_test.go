@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -171,6 +172,22 @@ func TestValidatePostgresClusterClassUpdate(t *testing.T) {
 			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 		})
 	}
+}
+
+func TestValidatePostgresClusterClassCreateFeatureGateDisabled(t *testing.T) {
+	config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.PostgresController): false})
+	t.Cleanup(func() {
+		config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.PostgresController): true})
+	})
+
+	obj := &enterpriseApi.PostgresClusterClass{
+		Spec: enterpriseApi.PostgresClusterClassSpec{Provisioner: "postgresql.cnpg.io"},
+	}
+
+	errs := ValidatePostgresClusterClassCreate(obj)
+	assert.Len(t, errs, 1)
+	assert.Equal(t, "spec", errs[0].Field)
+	assert.Equal(t, "the PostgresController feature is not enabled; set --feature-gates=PostgresController=true to activate", errs[0].Detail)
 }
 
 func TestGetPostgresClusterClassWarningsOnCreate(t *testing.T) {
