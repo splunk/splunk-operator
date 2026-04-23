@@ -30,6 +30,7 @@ def main() -> int:
     project_dir = Path.cwd()
     output_dir = project_dir / "ci-output" / "release-controller"
     output_dir.mkdir(parents=True, exist_ok=True)
+    released_contract = json.loads((output_dir / "released-sok-contract.json").read_text(encoding="utf-8"))
 
     qualification_profile = os.environ.get("PIPELINE_QUALIFICATION_PROFILE", "monthly")
     helm_profile = normalize_helm_profile(
@@ -49,7 +50,9 @@ def main() -> int:
             "commit_sha": os.environ.get("CI_COMMIT_SHA", ""),
         },
         "sok": {
-            "baseline_version": read_makefile_version(project_dir),
+            "candidate_version": read_makefile_version(project_dir),
+            "latest_released_version": released_contract["released_sok"]["version"],
+            "released_operator_image_source": released_contract["released_sok"]["operator_image_source"],
         },
         "splunk": {
             "enterprise_image": enterprise_image,
@@ -58,8 +61,8 @@ def main() -> int:
             "profile": qualification_profile,
             "helm_profile": helm_profile,
             "required_jobs": [
-                "build-stage-image",
-                "scan-stage-image-trivy",
+                "released-sok-contract",
+                "scan-released-operator-image-trivy",
                 "gosec-scan",
                 "govulncheck-scan",
                 "eks-qualification-integration-validation",
@@ -77,7 +80,8 @@ def main() -> int:
             [
                 f"SOK_QUALIFICATION_PROFILE={qualification_profile}",
                 f"SOK_HELM_PROFILE={helm_profile}",
-                f"SOK_BASELINE_VERSION={manifest['sok']['baseline_version']}",
+                f"SOK_CANDIDATE_VERSION={manifest['sok']['candidate_version']}",
+                f"SOK_RELEASED_VERSION={manifest['sok']['latest_released_version']}",
                 f"SOK_ENTERPRISE_IMAGE={enterprise_image}",
             ]
         )
@@ -91,7 +95,9 @@ def main() -> int:
                 "",
                 f"- profile: {qualification_profile}",
                 f"- helm_profile: {helm_profile}",
-                f"- baseline_version: {manifest['sok']['baseline_version']}",
+                f"- candidate_version: {manifest['sok']['candidate_version']}",
+                f"- latest_released_version: {manifest['sok']['latest_released_version']}",
+                f"- released_operator_image_source: {manifest['sok']['released_operator_image_source']}",
                 f"- enterprise_image: {enterprise_image}",
                 f"- pipeline_id: {manifest['pipeline']['id']}",
                 f"- pipeline_source: {manifest['pipeline']['source']}",

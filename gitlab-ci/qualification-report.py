@@ -7,8 +7,8 @@ from xml.etree import ElementTree
 
 
 JOB_EVIDENCE = {
-    "build-stage-image": ["ci-output/build-test-push-workflow-image-ref.txt"],
-    "scan-stage-image-trivy": ["ci-output/scan-stage-image-trivy-trivy-results.txt"],
+    "released-sok-contract": ["ci-output/release-controller/released-sok-contract.json"],
+    "scan-released-operator-image-trivy": ["ci-output/scan-released-operator-image-trivy-trivy-results.txt"],
     "gosec-scan": ["gosec-results.txt"],
     "govulncheck-scan": ["govulncheck-results.txt"],
     "eks-qualification-integration-validation": ["ci-output/qualification-int-test-workflow-inttest-junit.xml"],
@@ -48,7 +48,7 @@ def read_int(value: str | None) -> int:
 
 
 def count_trivy_findings(project_dir: Path) -> int:
-    sarif_path = project_dir / "ci-output" / "scan-stage-image-trivy-trivy-results.sarif"
+    sarif_path = project_dir / "ci-output" / "scan-released-operator-image-trivy-trivy-results.sarif"
     sarif = load_optional_json(sarif_path)
     if not isinstance(sarif, dict):
         return 0
@@ -100,7 +100,7 @@ def main() -> int:
 
     security_blocked: list[str] = []
     if trivy_findings > 0:
-        security_blocked.append("scan-stage-image-trivy")
+        security_blocked.append("scan-released-operator-image-trivy")
     if gosec_status == "failed":
         security_blocked.append("gosec-scan")
     if govulncheck_status == "failed":
@@ -122,7 +122,8 @@ def main() -> int:
     compatibility = {
         "schema_version": "v1alpha1",
         "generated_at_utc": manifest["generated_at_utc"],
-        "baseline_version": manifest["sok"]["baseline_version"],
+        "candidate_version": manifest["sok"]["candidate_version"],
+        "latest_released_version": manifest["sok"]["latest_released_version"],
         "enterprise_image": manifest["splunk"]["enterprise_image"],
         "qualification_profile": manifest["qualification"]["profile"],
         "helm_profile": manifest["qualification"]["helm_profile"],
@@ -150,7 +151,8 @@ def main() -> int:
                 "",
                 f"- disposition: {disposition}",
                 f"- disposition_reason: {disposition_reason}",
-                f"- baseline_version: {manifest['sok']['baseline_version']}",
+                f"- candidate_version: {manifest['sok']['candidate_version']}",
+                f"- latest_released_version: {manifest['sok']['latest_released_version']}",
                 f"- qualification_profile: {manifest['qualification']['profile']}",
                 f"- helm_profile: {manifest['qualification']['helm_profile']}",
                 f"- enterprise_image: {manifest['splunk']['enterprise_image']}",

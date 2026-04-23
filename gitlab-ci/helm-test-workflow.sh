@@ -2,8 +2,8 @@
 set -eu
 
 # Runtime contract
-# - Purpose: package the Helm chart and run KUTTL-backed Helm validation on an ephemeral nonprod EKS cluster.
-# - Inputs: staged operator image artifact, pipeline AWS/EKS/S3 variables, Helm/KUTTL selectors, and repo .env defaults.
+# - Purpose: run KUTTL-backed Helm validation on an ephemeral nonprod EKS cluster against either the staged branch image/chart or the latest official released SOK charts.
+# - Inputs: build artifact or released-SOK contract, pipeline AWS/EKS/S3 variables, Helm/KUTTL selectors, and repo .env defaults.
 # - Outputs: runtime context, cluster logs, cleanup log, KUTTL artifacts, and JUnit XML under ci-output/.
 # - Guardrails: nonprod ECR only, repo-owned Make targets for setup/package/test, cleanup on success, failure, or signal.
 
@@ -48,13 +48,32 @@ ci_bin_dir="${CI_PROJECT_DIR}/bin"
 ensure_ci_bin_path "${ci_bin_dir}"
 
 BUILD_IMAGE_REF_FILE="${BUILD_IMAGE_REF_FILE:-ci-output/build-test-push-workflow-image-ref.txt}"
-require_file "${BUILD_IMAGE_REF_FILE}" "build image reference"
+RELEASED_SOK_CONTRACT_FILE="${RELEASED_SOK_CONTRACT_FILE:-}"
+operator_image_source="branch-build"
 
-IMAGE_REF="$(cat "${BUILD_IMAGE_REF_FILE}")"
-IMAGE_REPOSITORY="${IMAGE_REF%:*}"
-IMAGE_TAG="${IMAGE_REF##*:}"
-ECR_REGISTRY="${IMAGE_REPOSITORY%%/*}"
-OPERATOR_REPOSITORY_PATH="${IMAGE_REPOSITORY#${ECR_REGISTRY}/}"
+if [ -n "${RELEASED_SOK_CONTRACT_FILE}" ]; then
+  require_file "${RELEASED_SOK_CONTRACT_FILE}" "released SOK contract"
+  load_repo_dotenv "${RELEASED_SOK_CONTRACT_FILE}"
+  operator_image_source="official-release"
+  resolve_pipeline_image_repository "$(first_nonempty "${PIPELINE_ECR_REPOSITORY:-}" "")" "splunk/splunk-operator"
+  ECR_REGISTRY="${RESOLVED_ECR_REGISTRY}"
+  OPERATOR_SOURCE_IMAGE="$(first_nonempty "${SOK_RELEASED_OPERATOR_IMAGE_SOURCE:-}" "")"
+  OPERATOR_MIRROR_PATH="$(first_nonempty "${SOK_RELEASED_OPERATOR_IMAGE_MIRROR_PATH:-}" "")"
+  RELEASED_HELM_REPO_URL="$(first_nonempty "${SOK_RELEASED_HELM_REPO_URL:-}" "")"
+  RELEASED_ENTERPRISE_CHART_VERSION="$(first_nonempty "${SOK_RELEASED_ENTERPRISE_CHART_VERSION:-}" "")"
+  RELEASED_OPERATOR_CHART_VERSION="$(first_nonempty "${SOK_RELEASED_OPERATOR_CHART_VERSION:-}" "")"
+  if [ -z "${OPERATOR_SOURCE_IMAGE}" ] || [ -z "${OPERATOR_MIRROR_PATH}" ] || [ -z "${RELEASED_HELM_REPO_URL}" ] || [ -z "${RELEASED_ENTERPRISE_CHART_VERSION}" ] || [ -z "${RELEASED_OPERATOR_CHART_VERSION}" ]; then
+    echo "Released SOK contract is missing operator image or chart fields" >&2
+    exit 1
+  fi
+else
+  require_file "${BUILD_IMAGE_REF_FILE}" "build image reference"
+  IMAGE_REF="$(cat "${BUILD_IMAGE_REF_FILE}")"
+  IMAGE_REPOSITORY="${IMAGE_REF%:*}"
+  IMAGE_TAG="${IMAGE_REF##*:}"
+  ECR_REGISTRY="${IMAGE_REPOSITORY%%/*}"
+  OPERATOR_REPOSITORY_PATH="${IMAGE_REPOSITORY#${ECR_REGISTRY}/}"
+fi
 ECR_REGION="$(first_nonempty "${AWS_REGION:-}" "${AWS_DEFAULT_REGION:-}" "${PIPELINE_AWS_DEFAULT_REGION:-}" "$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)")"
 
 if [ -z "${ECR_REGION}" ]; then
@@ -78,13 +97,16 @@ export S3_REGION="${ECR_REGION}"
 export ECR_REGISTRY
 export ECR_REPOSITORY="${ECR_REGISTRY}"
 export PRIVATE_REGISTRY="${ECR_REGISTRY}"
-export SPLUNK_OPERATOR_IMAGE="${OPERATOR_REPOSITORY_PATH}:${IMAGE_TAG}"
+if [ "${operator_image_source}" = "official-release" ]; then
+  export SPLUNK_OPERATOR_IMAGE="${OPERATOR_MIRROR_PATH}"
+else
+  export SPLUNK_OPERATOR_IMAGE="${OPERATOR_REPOSITORY_PATH}:${IMAGE_TAG}"
+fi
 export SPLUNK_ENTERPRISE_IMAGE="${enterprise_image}"
 export TEST_CLUSTER_PLATFORM="eks"
 export TEST_CLUSTER_NAME="${cluster_name_prefix}-${CI_JOB_ID}"
 export CLUSTER_WIDE="$(first_nonempty "${PIPELINE_HELM_CLUSTER_WIDE:-}" "${JOB_HELM_CLUSTER_WIDE:-}" "true")"
 export DEPLOYMENT_TYPE="helm"
-export HELM_REPO_PATH="${CI_PROJECT_DIR}/helm-chart"
 export INSTALL_OPERATOR="true"
 export TEST_BUCKET="$(first_nonempty "${PIPELINE_TEST_BUCKET:-}" "${TEST_BUCKET:-}" "")"
 export TEST_S3_BUCKET="${TEST_BUCKET}"
@@ -96,8 +118,14 @@ export EKSCTL_VERSION="$(first_nonempty "${PIPELINE_EKSCTL_VERSION:-}" "${EKSCTL
 export KUBECTL_VERSION="$(first_nonempty "${PIPELINE_KUBECTL_VERSION:-}" "${KUBECTL_VERSION:-}" "")"
 export EKS_CLUSTER_K8_VERSION="$(first_nonempty "${PIPELINE_EKS_CLUSTER_K8_VERSION:-}" "${EKS_CLUSTER_K8_VERSION:-}" "")"
 
-append_context "${context_file}" "input_artifact" "${BUILD_IMAGE_REF_FILE}"
-append_context "${context_file}" "operator_image" "${IMAGE_REF}"
+if [ "${operator_image_source}" = "official-release" ]; then
+  append_context "${context_file}" "input_artifact" "${RELEASED_SOK_CONTRACT_FILE}"
+  append_context "${context_file}" "released_operator_image_source" "${OPERATOR_SOURCE_IMAGE}"
+else
+  append_context "${context_file}" "input_artifact" "${BUILD_IMAGE_REF_FILE}"
+  append_context "${context_file}" "operator_image" "${IMAGE_REF}"
+fi
+append_context "${context_file}" "operator_image_source" "${operator_image_source}"
 append_context "${context_file}" "ecr_region" "${ECR_REGION}"
 append_context "${context_file}" "cluster_name" "${TEST_CLUSTER_NAME}"
 append_context "${context_file}" "helm_test_profile" "${RESOLVED_HELM_TEST_PROFILE}"
@@ -166,6 +194,15 @@ log_step "registry:ecr-login ${ECR_REGISTRY}"
 aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
 log_step "registry:ecr-login:complete"
 
+if [ "${operator_image_source}" = "official-release" ]; then
+  MIRRORED_OPERATOR_IMAGE="${ECR_REGISTRY}/${OPERATOR_MIRROR_PATH}"
+  log_step "registry:mirror-operator:start ${OPERATOR_SOURCE_IMAGE}"
+  docker pull "${OPERATOR_SOURCE_IMAGE}"
+  docker tag "${OPERATOR_SOURCE_IMAGE}" "${MIRRORED_OPERATOR_IMAGE}"
+  docker push "${MIRRORED_OPERATOR_IMAGE}"
+  log_step "registry:mirror-operator:complete ${MIRRORED_OPERATOR_IMAGE}"
+fi
+
 log_step "registry:enterprise-image:start"
 # get-private-registry-enterprise.sh is a bash script and uses source/bash-only semantics.
 PRIVATE_SPLUNK_ENTERPRISE_IMAGE="$(bash "${CI_PROJECT_DIR}/test/get-private-registry-enterprise.sh" | tail -n 1)"
@@ -193,12 +230,30 @@ log_step "cluster:crds-install:start"
 make install 2>&1 | tee -a "${cluster_log}"
 log_step "cluster:crds-install:complete"
 
-log_step "helm:package:start"
-make helm-package
-log_step "helm:package:complete"
+if [ "${operator_image_source}" = "official-release" ]; then
+  released_helm_root="${CI_PROJECT_DIR}/ci-output/released-helm"
+  rm -rf "${released_helm_root}"
+  mkdir -p "${released_helm_root}"
+  log_step "helm:pull-released:start version=${RELEASED_ENTERPRISE_CHART_VERSION}"
+  helm repo add splunk "${RELEASED_HELM_REPO_URL}" >> "${kuttl_log}" 2>&1
+  helm repo update >> "${kuttl_log}" 2>&1
+  helm pull splunk/splunk-enterprise --version "${RELEASED_ENTERPRISE_CHART_VERSION}" --untar --untardir "${released_helm_root}" >> "${kuttl_log}" 2>&1
+  helm pull splunk/splunk-operator --version "${RELEASED_OPERATOR_CHART_VERSION}" --untar --untardir "${released_helm_root}" >> "${kuttl_log}" 2>&1
+  export HELM_REPO_PATH="${released_helm_root}"
+  log_step "helm:pull-released:complete"
+else
+  export HELM_REPO_PATH="${CI_PROJECT_DIR}/helm-chart"
+  log_step "helm:package:start"
+  make helm-package
+  log_step "helm:package:complete"
+fi
 
 export KUTTL_SPLUNK_ENTERPRISE_IMAGE="${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
-export KUTTL_SPLUNK_OPERATOR_IMAGE="${IMAGE_REF}"
+if [ "${operator_image_source}" = "official-release" ]; then
+  export KUTTL_SPLUNK_OPERATOR_IMAGE="${MIRRORED_OPERATOR_IMAGE}"
+else
+  export KUTTL_SPLUNK_OPERATOR_IMAGE="${IMAGE_REF}"
+fi
 
 write_kuttl_testsuite_config "${generated_kuttl_config}" "${RESOLVED_HELM_TEST_DIRS}" "${RESOLVED_HELM_TEST_PARALLEL}" "${RESOLVED_HELM_TEST_TIMEOUT}" "kuttl-artifacts"
 
@@ -206,6 +261,7 @@ append_context "${context_file}" "private_splunk_enterprise_image" "${PRIVATE_SP
 append_context "${context_file}" "kuttl_operator_image" "${KUTTL_SPLUNK_OPERATOR_IMAGE}"
 append_context "${context_file}" "kuttl_enterprise_image" "${KUTTL_SPLUNK_ENTERPRISE_IMAGE}"
 append_context "${context_file}" "generated_kuttl_config" "${generated_kuttl_config}"
+append_context "${context_file}" "helm_repo_path" "${HELM_REPO_PATH}"
 
 log_step "tests:helm-kuttl:start"
 make helm-kuttl-test KUTTL_CONFIG="${generated_kuttl_config}" 2>&1 | tee -a "${kuttl_log}"

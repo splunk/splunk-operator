@@ -1,10 +1,25 @@
+released-sok-contract:
+  extends:
+    - .python-venv-job
+    - .rules-qualification-lane
+  stage: verify
+  needs:
+    - format-and-vet
+  script:
+    - python3 gitlab-ci/released-sok-contract.py
+  artifacts:
+    when: always
+    expire_in: 90 days
+    paths:
+      - ci-output/release-controller/
+
 qualification-manifest:
   extends:
     - .python-qualification-job
     - .rules-qualification-lane
   needs:
-    # needs lets this metadata job start as soon as format-and-vet completes.
-    - format-and-vet
+    - job: released-sok-contract
+      artifacts: true
   script:
     - python3 gitlab-ci/qualification-manifest.py
   artifacts:
@@ -21,9 +36,9 @@ qualification-report:
   needs:
     - job: qualification-manifest
       artifacts: true
-    - job: build-stage-image
+    - job: released-sok-contract
       artifacts: true
-    - job: scan-stage-image-trivy
+    - job: scan-released-operator-image-trivy
       artifacts: true
     - job: gosec-scan
       artifacts: true
