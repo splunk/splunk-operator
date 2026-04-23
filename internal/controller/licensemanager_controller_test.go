@@ -95,7 +95,7 @@ var _ = Describe("LicenseManager Controller", func() {
 			// econcile for the first time err is resource not found
 			_, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
-			// create resource first adn then reconcile for the first time
+			// create resource first and then reconcile for the first time
 			ssSpec := testutils.NewLicenseManager("test", namespace, "image")
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 			// reconcile with updated annotations for pause

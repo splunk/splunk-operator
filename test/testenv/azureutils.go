@@ -419,7 +419,7 @@ func UploadFileToAzure(ctx context.Context, accountName, accountKey, fileFullPat
 	defer respAppDownload.Body.Close()
 
 	fmt.Println("App upload", "Resp Status", respAppDownload.Status)
-	fmt.Println("File successfuly uploaded to Azure Storage Container: " + fileFullPath)
+	fmt.Println("File successfully uploaded to Azure Storage Container: " + fileFullPath)
 	return localFileName, err
 }
 

@@ -1221,7 +1221,7 @@ func TestGetAvailableDiskSpaceShouldFail(t *testing.T) {
 	}
 }
 
-func TestIsAppExtentionValid(t *testing.T) {
+func TestIsAppExtensionValid(t *testing.T) {
 	if !isAppExtensionValid("testapp.spl") || !isAppExtensionValid("testapp.tgz") || !isAppExtensionValid("testapp.tar.gz") {
 		t.Errorf("failed to detect valid app extension")
 	}
@@ -2134,7 +2134,7 @@ func TestUpdateStorageTracker(t *testing.T) {
 	}
 }
 
-func TestIsPersistantVolConfigured(t *testing.T) {
+func TestIsPersistentVolConfigured(t *testing.T) {
 	// when the resource tracker not initialized, should return false
 	operatorResourceTracker = nil
 	if isPersistentVolConfigured() {
@@ -2668,7 +2668,7 @@ func TestUpdateCRStatus(t *testing.T) {
 	updateCRStatus(ctx, c, standalone, nil)
 
 	// Creating a standalone, and updating the CR will cover the happy path
-	// simulate create standalone instance before reconcilation
+	// simulate create standalone instance before reconciliation
 	err := c.Create(ctx, standalone)
 	if err != nil {
 		t.Errorf("standalone CR creation failed.")

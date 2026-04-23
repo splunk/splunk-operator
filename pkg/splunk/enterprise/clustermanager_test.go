@@ -1908,7 +1908,7 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	c.Create(ctx, statefulset)
 
 	clustermanager.Kind = "ClusterManager"
-	// simulate create clustermanager instance before reconcilation
+	// simulate create clustermanager instance before reconciliation
 	c.Create(ctx, clustermanager)
 
 	_, err := ApplyClusterManager(ctx, c, clustermanager, nil)

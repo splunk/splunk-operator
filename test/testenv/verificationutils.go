@@ -729,8 +729,8 @@ func (testenv *TestCaseEnv) VerifySecretsOnPods(ctx context.Context, deployment 
 		for secretKey, secretValue := range data {
 			found := false
 			currentValue := GetMountedKey(ctx, deployment, pod, secretKey)
-			comparsion := bytes.Compare([]byte(currentValue), secretValue)
-			if comparsion == 0 {
+			comparison := bytes.Compare([]byte(currentValue), secretValue)
+			if comparison == 0 {
 				found = true
 				testenv.Log.Info("Secret Values on POD Match", "matchExpected", match, "podName", pod, "secretKey", secretKey, "givenValue", string(secretValue), "foundValue", currentValue)
 			} else {
@@ -755,8 +755,8 @@ func (testenv *TestCaseEnv) VerifySecretsOnSecretObjects(ctx context.Context, de
 		for secretKey, secretValue := range data {
 			found := false
 			secretValueOnSecretObject := currentSecretData.Data[secretKey]
-			comparsion := bytes.Compare(secretValueOnSecretObject, secretValue)
-			if comparsion == 0 {
+			comparison := bytes.Compare(secretValueOnSecretObject, secretValue)
+			if comparison == 0 {
 				testenv.Log.Info("Secret Values on Secret Object Match", "matchExpected", match, "secretObjectName", secretName, "secretKey", secretKey, "givenValue", string(secretValue), "foundValue", string(secretValueOnSecretObject))
 				found = true
 			} else {
@@ -783,8 +783,8 @@ func (testenv *TestCaseEnv) VerifySplunkServerConfSecrets(ctx context.Context, d
 			if err != nil {
 				return fmt.Errorf("secret %s not found in conf file on pod %s: %w", secretName, podName, err)
 			}
-			comparsion := strings.Compare(value, string(data[secretName]))
-			if comparsion == 0 {
+			comparison := strings.Compare(value, string(data[secretName]))
+			if comparison == 0 {
 				testenv.Log.Info("Secret Values on server.conf Match", "matchExpected", match, "podName", podName, "secretKey", secretName, "givenValue", string(data[secretName]), "foundValue", value)
 				found = true
 			} else {
@@ -811,8 +811,8 @@ func (testenv *TestCaseEnv) VerifySplunkInputConfSecrets(ctx context.Context, de
 			if err != nil {
 				return fmt.Errorf("secret %s not found in input.conf on pod %s: %w", secretName, podName, err)
 			}
-			comparsion := strings.Compare(value, string(data[secretName]))
-			if comparsion == 0 {
+			comparison := strings.Compare(value, string(data[secretName]))
+			if comparison == 0 {
 				testenv.Log.Info("Secret Values on input.conf Match", "matchExpected", match, "podName", podName, "secretKey", secretName, "givenValue", string(data[secretName]), "foundValue", value)
 				found = true
 			} else {

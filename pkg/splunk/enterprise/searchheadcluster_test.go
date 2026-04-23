@@ -1641,7 +1641,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	mclient.AddHandler(wantRequest8, 200, string(response1), nil)
 	mclient.AddHandler(wantRequest9, 200, string(response3), nil)
 
-	// mock the verify RF peer funciton
+	// mock the verify RF peer function
 	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
 		return nil
 	}
@@ -1751,7 +1751,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
 
-	// simulate create clustermanager instance before reconcilation
+	// simulate create clustermanager instance before reconciliation
 	c.Create(ctx, searchheadcluster)
 
 	_, err := ApplySearchHeadCluster(ctx, c, searchheadcluster)
