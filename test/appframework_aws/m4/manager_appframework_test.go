@@ -95,7 +95,6 @@ var _ = Describe("m4appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1)
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-
 			// Deploy Monitoring Console
 
 			// Verify Monitoring Console is ready and stays in ready state
@@ -788,7 +787,6 @@ var _ = Describe("m4appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1)
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-
 			// Deploy Monitoring Console
 
 			// Verify Monitoring Console is ready and stays in ready state
@@ -1352,7 +1350,6 @@ var _ = Describe("m4appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1)
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-
 			// Deploy Monitoring Console
 
 			// Verify Monitoring Console is ready and stays in ready state
@@ -1461,7 +1458,6 @@ var _ = Describe("m4appfw test", func() {
 			//################## SETUP ####################
 			appFileList := testenv.GetAppFileList(appListV1)
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-
 
 			// Deploy Monitoring Console
 

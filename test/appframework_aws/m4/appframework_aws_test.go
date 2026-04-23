@@ -131,8 +131,6 @@ var _ = Describe("m4appfw test", func() {
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
@@ -193,8 +191,6 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
-
-
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -279,7 +275,6 @@ var _ = Describe("m4appfw test", func() {
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
@@ -330,7 +325,6 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
-
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -808,7 +802,6 @@ var _ = Describe("m4appfw test", func() {
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
@@ -860,7 +853,6 @@ var _ = Describe("m4appfw test", func() {
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
 			allPodNames := append(idxcPodNames, shcPodNames...)
@@ -911,7 +903,6 @@ var _ = Describe("m4appfw test", func() {
 			// Wait for Monitoring Console to reach Ready phase
 			Expect(err).To(Succeed(), "Timed out waiting for MonitoringConsole to reach Ready phase")
 
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
@@ -920,7 +911,6 @@ var _ = Describe("m4appfw test", func() {
 			// Verify config map set back to off after poll trigger
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify config map set back to off after poll trigger for %s app", appVersion))
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-
 
 			//############# UPGRADE APPS ################
 			appVersion = "V2"

@@ -139,7 +139,6 @@ var _ = Describe("c3appfw test", func() {
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-
 			// Verify no SH in disconnected status is present on CM
 			Expect(testcaseEnvInst.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment)).To(Succeed(), "Disconnected SH found on CM")
 
@@ -198,7 +197,6 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
-
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -300,7 +298,6 @@ var _ = Describe("c3appfw test", func() {
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
@@ -325,7 +322,6 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
-
 			// Upload V1 apps to S3 for Indexer Cluster
 			appVersion = "V1"
 			appFileList = testenv.GetAppFileList(appListV1)
@@ -348,7 +344,6 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
-
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1355,7 +1350,6 @@ var _ = Describe("c3appfw test", func() {
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
@@ -1446,7 +1440,6 @@ var _ = Describe("c3appfw test", func() {
 			config.Data["MonitoringConsole"] = strings.Replace(config.Data["MonitoringConsole"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
-
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())

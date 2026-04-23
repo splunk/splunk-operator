@@ -87,10 +87,7 @@ var _ = Describe("c3appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 
-
-
 			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
@@ -129,7 +126,6 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
-
 
 			// Verify no SH in disconnected status is present on CM
 			Expect(testcaseEnvInst.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment)).To(Succeed(), "Disconnected SH found on CM")
@@ -195,7 +191,6 @@ var _ = Describe("c3appfw test", func() {
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
@@ -244,7 +239,6 @@ var _ = Describe("c3appfw test", func() {
 
 			lm, err := deployment.DeployLicenseManager(ctx, deployment.GetName())
 			cm, err := deployment.DeployClusterManager(ctx, deployment.GetName(), lm.GetName(), "", "")
-
 
 			shcName := fmt.Sprintf("%s-shc", deployment.GetName())
 			idxName := fmt.Sprintf("%s-idxc", deployment.GetName())
@@ -298,7 +292,6 @@ var _ = Describe("c3appfw test", func() {
 			cm.Spec.Image = newImage
 			err = deployment.UpdateCR(ctx, cm)
 			Expect(err).To(Succeed(), "Failed upgrade Cluster Manager image")
-
 
 			testcaseEnvInst.Log.Info("Upgrading the Monitoring Console Image", "Current Image", oldImage, "New Image", newImage)
 
@@ -418,7 +411,6 @@ var _ = Describe("c3appfw test", func() {
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
@@ -469,7 +461,6 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
-
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1441,10 +1432,7 @@ var _ = Describe("c3appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 
-
-
 			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
@@ -1478,7 +1466,6 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
-
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1573,7 +1560,6 @@ var _ = Describe("c3appfw test", func() {
 			config.Data["MonitoringConsole"] = strings.Replace(config.Data["MonitoringConsole"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
-
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2006,10 +1992,7 @@ var _ = Describe("c3appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 
-
-
 			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-
 
 			// Download all apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
@@ -2107,10 +2090,7 @@ var _ = Describe("c3appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 
-
-
 			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-
 
 			// Download all apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
