@@ -2,12 +2,13 @@
 set -eu
 
 # Runtime contract
-# - Purpose: build the promotable release-candidate set on the release branch.
-# - Inputs: release version, internal candidate registries, and OCI auth.
+# - Purpose: prepare the promotable release-candidate set on the release branch.
+# - Inputs: validated staged image artifacts, release version, internal
+#   candidate registries, and OCI auth.
 # - Outputs: candidate image refs, release manifests, packaged charts, and a
 #   single release-candidate contract under ci-output/.
-# - Guardrails: publish only release-candidate tags on internal registries; the
-#   main-branch publish lane promotes these validated artifacts without rebuilds.
+# - Guardrails: publish only release-candidate tags on internal registries and
+#   promote the exact staged images already consumed by validation.
 
 . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
 
@@ -18,11 +19,19 @@ contract_file="${candidate_dir}/release-candidate-contract.env"
 manifest_file="${candidate_dir}/artifact-manifest.txt"
 summary_file="${candidate_dir}/summary.txt"
 chart_inventory_file="${candidate_dir}/chart-inventory.txt"
+build_image_ref_file="${BUILD_IMAGE_REF_FILE:-ci-output/build-test-push-workflow-image-ref.txt}"
+build_image_digest_file="${BUILD_IMAGE_DIGEST_FILE:-ci-output/build-test-push-workflow-digest.txt}"
+build_distroless_image_ref_file="${BUILD_DISTROLESS_IMAGE_REF_FILE:-ci-output/build-test-push-workflow-distroless-image-ref.txt}"
+build_distroless_image_digest_file="${BUILD_DISTROLESS_IMAGE_DIGEST_FILE:-ci-output/build-test-push-workflow-distroless-digest.txt}"
 
 mkdir -p "ci-output" "${output_dir}" "${candidate_dir}"
 : > "${context_file}"
 
 load_repo_dotenv "${CI_PROJECT_DIR}/.env"
+require_file "${build_image_ref_file}" "validated staged operator image reference"
+require_file "${build_image_digest_file}" "validated staged operator image digest"
+require_file "${build_distroless_image_ref_file}" "validated staged distroless image reference"
+require_file "${build_distroless_image_digest_file}" "validated staged distroless image digest"
 resolve_release_version "${CI_PROJECT_DIR}/Makefile"
 resolve_release_image_repository
 resolve_enterprise_release_image
@@ -39,7 +48,6 @@ export AWS_DEFAULT_REGION="${candidate_region}"
 
 release_version="${RESOLVED_RELEASE_VERSION}"
 release_candidate_number="${RESOLVED_RELEASE_CANDIDATE_NUMBER}"
-release_build_platforms="$(first_nonempty "${PIPELINE_RELEASE_BUILD_PLATFORMS:-}" "${PIPELINE_BUILD_PLATFORMS:-}" "linux/amd64,linux/arm64")"
 candidate_tag="v${release_version}-rc.${release_candidate_number}"
 candidate_image="${candidate_repository}:${candidate_tag}"
 candidate_distroless_image="${candidate_repository}:${candidate_tag}-distroless"
@@ -50,6 +58,20 @@ release_dir_name="release-${release_version}"
 release_dir="${CI_PROJECT_DIR}/${release_dir_name}"
 release_archive_name="${release_dir_name}.tgz"
 release_archive_path="${candidate_dir}/${release_archive_name}"
+build_image_ref="$(cat "${build_image_ref_file}")"
+build_image_digest="$(cat "${build_image_digest_file}")"
+build_image_repository="${build_image_ref%:*}"
+build_distroless_image_ref="$(cat "${build_distroless_image_ref_file}")"
+build_distroless_image_digest="$(cat "${build_distroless_image_digest_file}")"
+build_distroless_image_repository="${build_distroless_image_ref%:*}"
+build_image_source="${build_image_ref}"
+build_distroless_image_source="${build_distroless_image_ref}"
+if [ -n "${build_image_digest}" ] && [ "${build_image_digest}" != "None" ] && [ "${build_image_digest}" != "null" ]; then
+  build_image_source="${build_image_repository}@${build_image_digest}"
+fi
+if [ -n "${build_distroless_image_digest}" ] && [ "${build_distroless_image_digest}" != "None" ] && [ "${build_distroless_image_digest}" != "null" ]; then
+  build_distroless_image_source="${build_distroless_image_repository}@${build_distroless_image_digest}"
+fi
 
 append_context "${context_file}" "release_source_ref" "${CI_COMMIT_REF_NAME}"
 append_context "${context_file}" "release_version" "${release_version}"
@@ -57,22 +79,15 @@ append_context "${context_file}" "release_candidate_number" "${release_candidate
 append_context "${context_file}" "candidate_registry" "${candidate_registry}"
 append_context "${context_file}" "candidate_image" "${candidate_image}"
 append_context "${context_file}" "candidate_distroless_image" "${candidate_distroless_image}"
+append_context "${context_file}" "validated_stage_image" "${build_image_source}"
+append_context "${context_file}" "validated_stage_distroless_image" "${build_distroless_image_source}"
 append_context "${context_file}" "release_image" "${release_image}"
 append_context "${context_file}" "release_distroless_image" "${release_distroless_image}"
-append_context "${context_file}" "release_build_platforms" "${release_build_platforms}"
 append_context "${context_file}" "enterprise_image" "${enterprise_image}"
 
 docker_login_registry "${candidate_registry}" "" ""
-
-make docker-buildx \
-  IMG="${candidate_image}" \
-  PLATFORMS="${release_build_platforms}"
-
-make docker-buildx \
-  IMG="${candidate_distroless_image}" \
-  PLATFORMS="${release_build_platforms}" \
-  BASE_IMAGE="gcr.io/distroless/static" \
-  BASE_IMAGE_VERSION="latest"
+docker buildx imagetools create -t "${candidate_image}" "${build_image_source}"
+docker buildx imagetools create -t "${candidate_distroless_image}" "${build_distroless_image_source}"
 
 candidate_image_digest="$(aws ecr describe-images \
   --region "${candidate_region}" \
