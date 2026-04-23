@@ -81,7 +81,9 @@ default:
   stage: release
 
 .release-publish-job:
-  extends: .runtime-artifact-job
+  extends:
+    - .runtime-artifact-job
+    - .aws-pipeline-env-job
   stage: publish
 
 .python-venv-job:
@@ -143,7 +145,12 @@ default:
 # Release publish contract:
 # - PIPELINE_RELEASE_VERSION defaults to Makefile VERSION.
 # - PIPELINE_RELEASE_OPERATOR_TAG defaults to PIPELINE_RELEASE_VERSION.
+# - PIPELINE_RELEASE_CANDIDATE_NUMBER defaults to 1 and becomes the rc tag suffix.
+# - PIPELINE_RELEASE_BUILD_PLATFORMS defaults to PIPELINE_BUILD_PLATFORMS, then linux/amd64,linux/arm64.
 # - PIPELINE_RELEASE_IMAGE_REPOSITORY defaults to docker.io/splunk/splunk-operator.
+# - PIPELINE_RELEASE_SOURCE_REF optionally pins which retained release branch the main publish jobs fetch.
+# - PIPELINE_RELEASE_SOURCE_PIPELINE_ID optionally pins the exact validated release pipeline to promote.
+# - PIPELINE_RELEASE_CANDIDATE_JOB_NAME defaults to release-candidate-packaging.
 # - PIPELINE_DOCKER_USERNAME / PIPELINE_DOCKER_PASSWORD provide generic OCI auth.
 # - PIPELINE_BUNDLE_REGISTRY is the bundle/catalog target registry.
 # - PIPELINE_CHART_RELEASE_REPOSITORY must be an OCI repo like oci://...
