@@ -26,7 +26,6 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	testenv "github.com/splunk/splunk-operator/test/testenv"
-	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("m4appfw test", func() {
@@ -63,6 +62,8 @@ var _ = Describe("m4appfw test", func() {
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("smoke, m4azure, managerappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
+			var uploadedFiles []string
+			var err error
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -93,38 +94,14 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			//################## SETUP ##################
-			// Upload V1 apps to Azure for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
-			azTestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App Framework Spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
 
 			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Upload V1 apps to Azure for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
@@ -145,14 +122,13 @@ var _ = Describe("m4appfw test", func() {
 			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, azTestDirShc, 60)
 
 			// get revision number of the resource
-			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
 			siteCount := 3
 			shReplicas := 3
 			indexersPerSite := 1
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "",  "")
 
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App Framework")
 
@@ -162,7 +138,6 @@ var _ = Describe("m4appfw test", func() {
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-			Expect(testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)).To(Succeed(), "MC version not changed or not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -173,11 +148,9 @@ var _ = Describe("m4appfw test", func() {
 			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			clusterManagerBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -205,12 +178,6 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps for Monitoring Console
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
 			// Check for changes in App phase to determine if next poll has been triggered
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
@@ -221,10 +188,8 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify MC is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -236,10 +201,7 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo.CrAppVersion = appVersion
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			mcAppSourceInfo.CrAppVersion = appVersion
-			mcAppSourceInfo.CrAppList = appListV2
-			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -251,6 +213,9 @@ var _ = Describe("m4appfw test", func() {
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled, install apps and downgrade them", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+
+			var uploadedFiles []string
+			var err error
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -285,34 +250,14 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V2"
 			appFileList := testenv.GetAppFileList(appListV2)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
-			azTestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirMC, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App Framework Spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
 
 			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Upload V2 apps to Azure for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
@@ -337,7 +282,7 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			shReplicas := 3
 			indexersPerSite := 1
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "",  "")
 
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App Framework")
 
@@ -348,7 +293,6 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -359,11 +303,9 @@ var _ = Describe("m4appfw test", func() {
 			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			clusterManagerBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -392,12 +334,6 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to Azure for Monitoring Console
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
 			// Check for changes in App phase to determine if next poll has been triggered
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
@@ -408,7 +344,6 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -420,10 +355,7 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo.CrAppVersion = appVersion
 			shcAppSourceInfo.CrAppList = appListV1
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
-			mcAppSourceInfo.CrAppVersion = appVersion
-			mcAppSourceInfo.CrAppList = appListV1
-			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
-			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -435,6 +367,9 @@ var _ = Describe("m4appfw test", func() {
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
+
+			var uploadedFiles []string
+			var err error
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -478,7 +413,7 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -685,6 +620,9 @@ var _ = Describe("m4appfw test", func() {
 	Context("Multi Site Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure: can deploy a M4 SVA and have apps installed locally on Cluster Manager and Deployer", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
+			var uploadedFiles []string
+			var err error
+
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload V1 apps to Azure
@@ -714,7 +652,7 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -808,6 +746,9 @@ var _ = Describe("m4appfw test", func() {
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled for manual poll", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
+			var uploadedFiles []string
+			var err error
+
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload V1 apps to Azure for Monitoring Console
@@ -845,34 +786,14 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
-			azTestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App Framework Spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 0)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
 
 			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Upload V1 apps to Azure for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
@@ -896,7 +817,7 @@ var _ = Describe("m4appfw test", func() {
 			shReplicas := 3
 			indexersPerSite := 1
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster")
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "",  "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster with App Framework")
 
 			// Ensure M4 cluster is ready
@@ -906,7 +827,6 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -917,11 +837,9 @@ var _ = Describe("m4appfw test", func() {
 			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			clusterManagerBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -944,12 +862,6 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps to Azure for Monitoring Console
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
 			// Check for changes in App phase to determine if next poll has been triggered
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
@@ -960,7 +872,6 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
@@ -1010,11 +921,7 @@ var _ = Describe("m4appfw test", func() {
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
-			// Wait for Monitoring Console to reach Ready phase
-			err = testcaseEnvInst.WaitForMonitoringConsolePhase(ctx, deployment, testcaseEnvInst.GetName(), mc.Name, enterpriseApi.PhaseReady, 10*time.Minute)
-			Expect(err).To(Succeed(), "Timed out waiting for MonitoringConsole to reach Ready phase")
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1035,10 +942,7 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo.CrAppVersion = appVersion
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			mcAppSourceInfo.CrAppVersion = appVersion
-			mcAppSourceInfo.CrAppList = appListV2
-			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -1049,6 +953,9 @@ var _ = Describe("m4appfw test", func() {
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure: can deploy a M4 SVA and have apps installed and updated locally on Cluster Manager and Deployer via manual poll", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+
+			var uploadedFiles []string
+			var err error
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1083,7 +990,7 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1225,6 +1132,9 @@ var _ = Describe("m4appfw test", func() {
 	Context("Multi Site Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("m4azure, integration, managerappframeworkazurem4, appframeworkazure: can deploy a m4 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
+			var uploadedFiles []string
+			var err error
+
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Split Applist into clusterlist and local list
@@ -1262,7 +1172,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for local install (local scope)", appVersion))
 			azTestDirIdxcLocal = "m4appfw-" + testenv.RandomDNSName(4)
 			localappFileList := testenv.GetAppFileList(appListLocal)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxcLocal, localappFileList)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxcLocal, localappFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to Azure test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1441,6 +1351,9 @@ var _ = Describe("m4appfw test", func() {
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) and App Framework", func() {
 		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, azure_sanity: can deploy a M4, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
+			var uploadedFiles []string
+			var err error
+
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload V1 apps to Azure for Monitoring Console
@@ -1460,35 +1373,12 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
-			azTestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Prepare Monitoring Console spec with its own app source
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
-
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
 			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Download all test apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
@@ -1525,7 +1415,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
 			siteCount := 3
 			indexersPerSite := 1
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "",  "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App Framework")
 
 			// Verify App installation is in progress on Cluster Manager
@@ -1578,6 +1468,9 @@ var _ = Describe("m4appfw test", func() {
 	Context("Single Site Indexer Cluster with Search Head Cluster (M4) and App Framework", func() {
 		It("smoke, m4azure, managerappframeworkazurem4, appframeworkazure: can deploy a M4, add new apps to app source while install is in progress and have all apps installed cluster-wide", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
+			var uploadedFiles []string
+			var err error
+
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload V1 apps to Azure for Monitoring Console
@@ -1598,35 +1491,12 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
-			azTestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Prepare Monitoring Console spec with its own app source
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
-
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
 			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Download all test apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
@@ -1664,7 +1534,7 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			shReplicas := 3
 			indexersPerSite := 1
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "",  "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App Framework")
 
 			// Verify App installation is in progress
@@ -1717,6 +1587,9 @@ var _ = Describe("m4appfw test", func() {
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, azure_sanity: can deploy a M4 SVA with App Framework enabled and reset operator pod while app install is in progress", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
+			var uploadedFiles []string
+			var err error
+
 			/* Test Steps
 			   ################## SETUP ##################
 			   * Upload V1 apps to Azure for Indexer Cluster and Search Head Cluster
@@ -1737,13 +1610,13 @@ var _ = Describe("m4appfw test", func() {
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
 			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
-			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
+			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload V1 apps to Azure for Indexer Cluster
 			appVersion := "V1"
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1802,6 +1675,9 @@ var _ = Describe("m4appfw test", func() {
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, azure_sanity: can deploy a M4 SVA with App Framework enabled and reset operator pod while app download is in progress", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
+			var uploadedFiles []string
+			var err error
+
 			/* Test Steps
 			   ################## SETUP ##################
 			   * Upload V1 apps to Azure for Indexer Cluster and Search Head Cluster
@@ -1822,13 +1698,13 @@ var _ = Describe("m4appfw test", func() {
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
 			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
-			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
+			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload V1 apps to Azure for Indexer Cluster
 			appVersion := "V1"
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1887,6 +1763,9 @@ var _ = Describe("m4appfw test", func() {
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
+			var uploadedFiles []string
+			var err error
+
 			/* Test Steps
 			   ################## SETUP ##################
 			   * Upload V1 apps to Azure for Indexer Cluster and Search Head Cluster
@@ -1911,7 +1790,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Upload V1 apps to Azure for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1994,6 +1873,9 @@ var _ = Describe("m4appfw test", func() {
 	Context("Multi Site Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure: can deploy a M4 SVA, install apps via manual polling, switch to periodic polling, verify apps are not updated before the end of AppsRepoPollInterval, then updated after", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
+			var uploadedFiles []string
+			var err error
+
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload V1 apps to Azure
@@ -2023,7 +1905,7 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -2175,6 +2057,9 @@ var _ = Describe("m4appfw test", func() {
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, azure_sanity: can deploy a M4 SVA with App Framework enabled and update apps after app download is completed", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
+			var uploadedFiles []string
+			var err error
+
 			/* Test Steps
 			   ################## SETUP ##################
 			   * Upload V1 apps to Azure for Indexer Cluster and Search Head Cluster
@@ -2205,12 +2090,12 @@ var _ = Describe("m4appfw test", func() {
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
 			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
-			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
+			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload V1 apps to Azure for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -2287,6 +2172,9 @@ var _ = Describe("m4appfw test", func() {
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("m4azure, integration, managerappframeworkazurem4, appframeworkazure, azure_sanity: can deploy a M4 SVA and install a bigger volume of apps than the operator PV disk space", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
+			var uploadedFiles []string
+			var err error
+
 			/* Test Steps
 			   ################## SETUP ####################
 			    * Create a file on operator to utilize over 1G of space
@@ -2306,7 +2194,7 @@ var _ = Describe("m4appfw test", func() {
 			//################## SETUP ####################
 			// Create a large file on Operator pod
 			opPod := testcaseEnvInst.GetOperatorPodName()
-			err := testenv.CreateDummyFileOnOperator(ctx, deployment, opPod, testenv.AppDownloadVolume, "1G", "test_file.img")
+			err = testenv.CreateDummyFileOnOperator(ctx, deployment, opPod, testenv.AppDownloadVolume, "1G", "test_file.img")
 			Expect(err).To(Succeed(), "Unable to create file on operator")
 			filePresentOnOperator = true
 
@@ -2315,7 +2203,7 @@ var _ = Describe("m4appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
 			azTestDirIdxc := "m4appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
 			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory for Indexer Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -2370,6 +2258,9 @@ var _ = Describe("m4appfw test", func() {
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, azure_sanity: can deploy a M4 SVA with App Framework enabled and delete apps from app directory when download is complete", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
+			var uploadedFiles []string
+			var err error
+
 			/* Test Steps
 			   ################## SETUP ##################
 			   * Upload big-size app to Azure for Indexer Cluster and Search Head Cluster
@@ -2390,13 +2281,13 @@ var _ = Describe("m4appfw test", func() {
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
 			containerName := "/" + AzureDataContainer + "/" + testenv.AppLocationV1
-			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
+			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload big size app to Azure for Indexer Cluster
 			appVersion := "V1"
 			testcaseEnvInst.Log.Info("Upload big size app to Azure for Indexer Cluster")
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
 			Expect(err).To(Succeed(), "Unable to upload big size to Azure test directory for Indexer Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -2458,6 +2349,9 @@ var _ = Describe("m4appfw test", func() {
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("smoke, m4azure, managerappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled, install apps and check IsDeploymentInProgress for CM and SHC CR's", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
+			var uploadedFiles []string
+			var err error
+
 			/* Test Steps
 			   ################## SETUP ##################
 			   * Upload V1 apps to Azure for Indexer Cluster and Search Head Cluster
@@ -2472,7 +2366,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Upload V1 apps to Azure for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
