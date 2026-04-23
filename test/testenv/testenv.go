@@ -60,6 +60,10 @@ const (
 	// ConsistentDuration is use to check a state is stable
 	ConsistentDuration = 2000 * time.Millisecond
 
+	// StabilizationTimeout is the max time to retry a Consistently check
+	// when transient phase changes are expected (e.g., during app framework operations).
+	StabilizationTimeout = 30 * time.Second
+
 	// SearchHeadPod Template String for search head pod
 	SearchHeadPod = "splunk-%s-shc-search-head-%d"
 

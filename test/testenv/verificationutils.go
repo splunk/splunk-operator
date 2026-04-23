@@ -89,11 +89,14 @@ func (testenv *TestCaseEnv) VerifyMonitoringConsoleReady(ctx context.Context, de
 	DumpGetPods(testenv.GetName())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, mcName, monitoringConsole)
-		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "monitoring-console")
-		return monitoringConsole.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	// Use Eventually-Consistently to handle transient phase changes during app framework operations
+	gomega.Eventually(func(g gomega.Gomega) {
+		g.Consistently(func() enterpriseApi.Phase {
+			_ = deployment.GetInstance(ctx, mcName, monitoringConsole)
+			DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "monitoring-console")
+			return monitoringConsole.Status.Phase
+		}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	}, StabilizationTimeout, PollInterval).Should(gomega.Succeed())
 }
 
 // VerifyStandaloneReady verify Standalone is in ReadyStatus and does not flip-flop
@@ -109,11 +112,14 @@ func (testenv *TestCaseEnv) VerifyStandaloneReady(ctx context.Context, deploymen
 	DumpGetPods(testenv.GetName())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, standalone.Name, standalone)
-		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "standalone")
-		return standalone.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	// Use Eventually-Consistently to handle transient phase changes during app framework operations
+	gomega.Eventually(func(g gomega.Gomega) {
+		g.Consistently(func() enterpriseApi.Phase {
+			_ = deployment.GetInstance(ctx, standalone.Name, standalone)
+			DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "standalone")
+			return standalone.Status.Phase
+		}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	}, StabilizationTimeout, PollInterval).Should(gomega.Succeed())
 }
 
 // VerifySearchHeadClusterReady verify SHC is in READY status and does not flip-flop
@@ -131,12 +137,15 @@ func (testenv *TestCaseEnv) VerifySearchHeadClusterReady(ctx context.Context, de
 	DumpGetPods(testenv.GetName())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), shc)
-		testenv.Log.Info("Check for Consistency Search Head Cluster phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
-		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-shc-")
-		return shc.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	// Use Eventually-Consistently to handle transient phase changes during app framework operations
+	gomega.Eventually(func(g gomega.Gomega) {
+		g.Consistently(func() enterpriseApi.Phase {
+			_ = deployment.GetInstance(ctx, instanceName, shc)
+			testenv.Log.Info("Check for Consistency Search Head Cluster phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
+			DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-shc-")
+			return shc.Status.Phase
+		}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	}, StabilizationTimeout, PollInterval).Should(gomega.Succeed())
 }
 
 // VerifySingleSiteIndexersReady verify single site indexers go to ready state
@@ -154,12 +163,15 @@ func (testenv *TestCaseEnv) VerifySingleSiteIndexersReady(ctx context.Context, d
 	DumpGetPods(testenv.GetName())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, instanceName, idc)
-		testenv.Log.Info("Check for Consistency indexer instance's phase to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
-		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-idxc-indexer-")
-		return idc.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	// Use Eventually-Consistently to handle transient phase changes during app framework operations
+	gomega.Eventually(func(g gomega.Gomega) {
+		g.Consistently(func() enterpriseApi.Phase {
+			_ = deployment.GetInstance(ctx, instanceName, idc)
+			testenv.Log.Info("Check for Consistency indexer instance's phase to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
+			DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-idxc-indexer-")
+			return idc.Status.Phase
+		}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	}, StabilizationTimeout, PollInterval).Should(gomega.Succeed())
 }
 
 // IngestorsReady verify ingestors go to ready state
@@ -177,14 +189,17 @@ func (testenv *TestCaseEnv) VerifyIngestorReady(ctx context.Context, deployment 
 	DumpGetPods(testenv.GetName())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, instanceName, ingest)
+	// Use Eventually-Consistently to handle transient phase changes during app framework operations
+	gomega.Eventually(func(g gomega.Gomega) {
+		g.Consistently(func() enterpriseApi.Phase {
+			_ = deployment.GetInstance(ctx, instanceName, ingest)
 
-		testenv.Log.Info("Check for Consistency ingestor instance's phase to be ready", "instance", instanceName, "phase", ingest.Status.Phase)
-		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-ingest-")
+			testenv.Log.Info("Check for Consistency ingestor instance's phase to be ready", "instance", instanceName, "phase", ingest.Status.Phase)
+			DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-ingest-")
 
-		return ingest.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+			return ingest.Status.Phase
+		}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	}, StabilizationTimeout, PollInterval).Should(gomega.Succeed())
 }
 
 // VerifyClusterManagerReady verify Cluster Manager Instance is in ready status
@@ -201,13 +216,16 @@ func (testenv *TestCaseEnv) VerifyClusterManagerReady(ctx context.Context, deplo
 	DumpGetPods(testenv.GetName())
 
 	// In a steady state, cluster-manager should stay in Ready and not flip-flop around
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), cm)
-		testenv.Log.Info("Check for Consistency "+splcommon.ClusterManager+" phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
-		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "cluster-manager")
-		testenv.Log.Info("Check for Consistency cluster-manager phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
-		return cm.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	// Use Eventually-Consistently to handle transient phase changes during app framework operations
+	gomega.Eventually(func(g gomega.Gomega) {
+		g.Consistently(func() enterpriseApi.Phase {
+			_ = deployment.GetInstance(ctx, deployment.GetName(), cm)
+			testenv.Log.Info("Check for Consistency "+splcommon.ClusterManager+" phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
+			DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "cluster-manager")
+			testenv.Log.Info("Check for Consistency cluster-manager phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
+			return cm.Status.Phase
+		}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	}, StabilizationTimeout, PollInterval).Should(gomega.Succeed())
 }
 
 // VerifyClusterMasterReady verify Cluster Master Instance is in ready status
@@ -224,11 +242,14 @@ func (testenv *TestCaseEnv) VerifyClusterMasterReady(ctx context.Context, deploy
 	DumpGetPods(testenv.GetName())
 
 	// In a steady state, cluster-master should stay in Ready and not flip-flop around
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), cm)
-		testenv.Log.Info("Check for Consistency cluster-master phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
-		return cm.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	// Use Eventually-Consistently to handle transient phase changes during app framework operations
+	gomega.Eventually(func(g gomega.Gomega) {
+		g.Consistently(func() enterpriseApi.Phase {
+			_ = deployment.GetInstance(ctx, deployment.GetName(), cm)
+			testenv.Log.Info("Check for Consistency cluster-master phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
+			return cm.Status.Phase
+		}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	}, StabilizationTimeout, PollInterval).Should(gomega.Succeed())
 }
 
 // VerifyIndexersReady verify indexers of all sites go to ready state
@@ -252,12 +273,15 @@ func (testenv *TestCaseEnv) VerifyIndexersReady(ctx context.Context, deployment 
 		}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
 		// In a steady state, we should stay in Ready and not flip-flop around
-		gomega.Consistently(func() enterpriseApi.Phase {
-			_ = deployment.GetInstance(ctx, instanceName, idc)
-			testenv.Log.Info("Check for Consistency indexer site instance phase to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
-			DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-idxc-indexer-")
-			return idc.Status.Phase
-		}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+		// Use Eventually-Consistently to handle transient phase changes during app framework operations
+		gomega.Eventually(func(g gomega.Gomega) {
+			g.Consistently(func() enterpriseApi.Phase {
+				_ = deployment.GetInstance(ctx, instanceName, idc)
+				testenv.Log.Info("Check for Consistency indexer site instance phase to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
+				DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-idxc-indexer-")
+				return idc.Status.Phase
+			}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+		}, StabilizationTimeout, PollInterval).Should(gomega.Succeed())
 	}
 }
 
@@ -342,10 +366,13 @@ func (testenv *TestCaseEnv) VerifyLicenseManagerReady(ctx context.Context, deplo
 	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
 	// In a steady state, we should stay in Ready and not flip-flop around
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
-		return LicenseManager.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	// Use Eventually-Consistently to handle transient phase changes during app framework operations
+	gomega.Eventually(func(g gomega.Gomega) {
+		g.Consistently(func() enterpriseApi.Phase {
+			_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
+			return LicenseManager.Status.Phase
+		}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	}, StabilizationTimeout, PollInterval).Should(gomega.Succeed())
 }
 
 // VerifyLicenseMasterReady verify LM is in ready status and does not flip flop
@@ -366,10 +393,13 @@ func (testenv *TestCaseEnv) VerifyLicenseMasterReady(ctx context.Context, deploy
 	}, deployment.GetTimeout(), PollInterval).WithContext(ctx).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
 	// In a steady state, we should stay in Ready and not flip-flop around
-	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseMaster)
-		return LicenseMaster.Status.Phase
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	// Use Eventually-Consistently to handle transient phase changes during app framework operations
+	gomega.Eventually(func(g gomega.Gomega) {
+		g.Consistently(func() enterpriseApi.Phase {
+			_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseMaster)
+			return LicenseMaster.Status.Phase
+		}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+	}, StabilizationTimeout, PollInterval).Should(gomega.Succeed())
 }
 
 // VerifyLMConfiguredOnPod verify LM is configured on given POD
