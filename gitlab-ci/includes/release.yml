@@ -114,33 +114,13 @@ release-helm-validation:
     reports:
       junit: ci-output/release-helm-validation-kuttl-junit.xml
 
-release-validation-gate:
-  extends:
-    - .release-artifact-job
-    - .rules-release-validation-lane
-  needs:
-    - job: release-appframeworks-s1-validation
-    - job: release-managerappframework-c3-validation
-    - job: release-managerappframework-m4-validation
-    - job: release-managersecret-validation
-    - job: release-managersmartstore-validation
-    - job: release-managermc1-validation
-    - job: release-managermc2-validation
-    - job: release-managercrcrud-validation
-    - job: release-licensemanager-validation
-    - job: release-managerdeletecr-validation
-    - job: release-indingsep-validation
-    - job: release-helm-validation
-  script:
-    - true
-
 release-candidate-packaging:
   extends:
     - .release-artifact-job
     - .aws-pipeline-env-job
     - .rules-release-validation-lane
-  needs:
-    - job: release-validation-gate
+  # Intentionally relies on stage ordering only. This job runs in `release`
+  # after the release validation jobs finish in `integration`.
   variables:
     WORKFLOW_SLUG: release-candidate-packaging
   script:
