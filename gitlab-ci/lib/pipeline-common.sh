@@ -162,6 +162,52 @@ require_file() {
   fi
 }
 
+urlencode() {
+  python3 - "$1" <<'PY'
+import sys
+import urllib.parse
+
+print(urllib.parse.quote(sys.argv[1], safe=""))
+PY
+}
+
+require_gitlab_job_token() {
+  require_envs CI_API_V4_URL CI_PROJECT_ID CI_JOB_TOKEN
+}
+
+download_gitlab_job_artifacts_archive_by_ref() {
+  ref_name="$1"
+  job_name="$2"
+  output_path="$3"
+
+  require_gitlab_job_token
+  encoded_ref="$(urlencode "${ref_name}")"
+  curl --fail --location --silent --show-error \
+    --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+    "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/artifacts/${encoded_ref}/download?job=${job_name}" \
+    -o "${output_path}"
+}
+
+download_gitlab_job_artifacts_archive_by_pipeline() {
+  pipeline_id="$1"
+  job_name="$2"
+  output_path="$3"
+
+  require_gitlab_job_token
+  ensure_jq
+
+  jobs_json="$(curl --fail --location --silent --show-error \
+    --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+    "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/pipelines/${pipeline_id}/jobs?scope[]=success&per_page=100")"
+  job_id="$(printf '%s' "${jobs_json}" | jq -r --arg job_name "${job_name}" '.[] | select(.name == $job_name) | .id' | head -n 1)"
+  require_nonempty "${job_id}" "successful ${job_name} job in pipeline ${pipeline_id}"
+
+  curl --fail --location --silent --show-error \
+    --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+    "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${job_id}/artifacts" \
+    -o "${output_path}"
+}
+
 resolve_pipeline_image_repository() {
   pipeline_target="$1"
   default_repo_path="$2"

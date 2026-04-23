@@ -32,7 +32,7 @@ For a one-off manual intake run, trigger a pipeline with `SOK_PIPELINE_MODE=gith
 
 [`gitlab-ci/mirror-health-check.sh`](mirror-health-check.sh) performs a read-only branch parity check against the configured GitHub mirror repository.
 
-[`gitlab-ci/release-candidate-artifacts.sh`](release-candidate-artifacts.sh), [`gitlab-ci/release-publish-images.sh`](release-publish-images.sh), [`gitlab-ci/release-publish-artifacts.sh`](release-publish-artifacts.sh), [`gitlab-ci/release-publish-bundle.sh`](release-publish-bundle.sh), and [`gitlab-ci/release-publish-charts.sh`](release-publish-charts.sh) implement the checked-in release publish path with Makefile-owned build/package steps.
+[`gitlab-ci/release-candidate-artifacts.sh`](release-candidate-artifacts.sh), [`gitlab-ci/fetch-release-candidate.sh`](fetch-release-candidate.sh), [`gitlab-ci/release-publish-images.sh`](release-publish-images.sh), [`gitlab-ci/release-publish-artifacts.sh`](release-publish-artifacts.sh), [`gitlab-ci/release-publish-bundle.sh`](release-publish-bundle.sh), and [`gitlab-ci/release-publish-charts.sh`](release-publish-charts.sh) implement the checked-in release path: package once on the release branch, then promote/publish those validated outputs on `main`.
 
 [`gitlab-ci/preflight-certification.sh`](preflight-certification.sh), [`gitlab-ci/certified-operators-submission.sh`](certified-operators-submission.sh), and [`gitlab-ci/community-operators-submission.sh`](community-operators-submission.sh) capture the Red Hat certification and operator-catalog submission-prep path.
 

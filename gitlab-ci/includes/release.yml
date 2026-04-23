@@ -117,19 +117,20 @@ release-helm-validation:
     reports:
       junit: ci-output/release-helm-validation-kuttl-junit.xml
 
-release-artifacts-validation:
+release-candidate-packaging:
   extends:
     - .release-artifact-job
+    - .aws-pipeline-env-job
     - .rules-release-validation-lane
-  dependencies:
-    - build-stage-image
+  needs:
+    - job: scan-stage-image-trivy
   variables:
-    WORKFLOW_SLUG: release-artifacts-validation
+    WORKFLOW_SLUG: release-candidate-packaging
   script:
     - gitlab-ci/release-candidate-artifacts.sh
   artifacts:
     paths:
-      - ci-output/release-artifacts-validation-*
+      - ci-output/release-candidate-packaging-*
 
 release-psr-qualification-plan:
   extends:
@@ -143,10 +144,25 @@ release-psr-qualification-plan:
     paths:
       - ci-output/release-psr-qualification-plan-*
 
+fetch-release-candidate:
+  extends:
+    - .release-publish-job
+    - .rules-main-release-publish
+  variables:
+    WORKFLOW_SLUG: fetch-release-candidate
+  script:
+    - gitlab-ci/fetch-release-candidate.sh
+  artifacts:
+    paths:
+      - ci-output/fetch-release-candidate-*
+
 publish-release-images:
   extends:
     - .release-publish-job
     - .rules-main-release-publish
+  needs:
+    - job: fetch-release-candidate
+      artifacts: true
   variables:
     WORKFLOW_SLUG: publish-release-images
   script:
@@ -160,6 +176,8 @@ publish-release-artifacts:
     - .release-publish-job
     - .rules-main-release-publish
   needs:
+    - job: fetch-release-candidate
+      artifacts: true
     - job: publish-release-images
       artifacts: true
   variables:
@@ -175,6 +193,8 @@ publish-release-bundle:
     - .release-publish-job
     - .rules-main-release-publish
   needs:
+    - job: fetch-release-candidate
+      artifacts: true
     - job: publish-release-images
       artifacts: true
   variables:
@@ -190,7 +210,7 @@ publish-release-charts:
     - .release-publish-job
     - .rules-main-release-publish
   needs:
-    - job: publish-release-images
+    - job: fetch-release-candidate
       artifacts: true
   variables:
     WORKFLOW_SLUG: publish-release-charts
