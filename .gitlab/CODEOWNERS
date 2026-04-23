@@ -1,0 +1,4 @@
+# This CODEOWNERS file was generated as a result of compliance remediation.
+# All projects under http://go/gitlab/compliance-projects must have a CODEOWNERS file with a valid okta-group configured.
+# Please update this file with an appropriate okta-group for this project and remove okta-groups/sg-cloud-gitlab-admin.
+* @okta-groups/sg-cloud-gitlab-admin @okta-groups/sg-cloud-sok-developer-platform
