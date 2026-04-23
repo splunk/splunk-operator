@@ -82,7 +82,9 @@ export ECR_REPOSITORY="${ECR_REGISTRY}"
 export PRIVATE_REGISTRY="${ECR_REGISTRY}"
 export SPLUNK_OPERATOR_IMAGE="${RUNTIME_OPERATOR_REPO_IMAGE}"
 export SPLUNK_ENTERPRISE_IMAGE="${enterprise_image}"
-normalize_testenv_commit_hash "${CI_COMMIT_SHORT_SHA:-${CI_COMMIT_SHA}}" 8
+# Some legacy suites append their own random suffixes and enforce a 24-character
+# namespace limit. Keep the GitLab commit prefix short enough for those suites.
+normalize_testenv_commit_hash "${CI_COMMIT_SHORT_SHA:-${CI_COMMIT_SHA}}" 4
 export COMMIT_HASH="${NORMALIZED_TESTENV_COMMIT_HASH}"
 export TEST_FOCUS="${test_focus}"
 export TEST_TO_SKIP="$(first_nonempty "${PIPELINE_INT_TEST_TO_SKIP:-}" "${JOB_INT_TEST_TO_SKIP:-}" "${RESOLVED_INT_TEST_TO_SKIP_DEFAULT}")"
@@ -120,6 +122,10 @@ export EKS_VPC_PUBLIC_SUBNET_STRING="$(first_nonempty "${PIPELINE_EKS_VPC_PUBLIC
 export EKS_VPC_PRIVATE_SUBNET_STRING="$(first_nonempty "${PIPELINE_EKS_VPC_PRIVATE_SUBNET_STRING:-}" "${EKS_VPC_PRIVATE_SUBNET_STRING:-}" "")"
 export TEST_BUCKET="$(first_nonempty "${PIPELINE_TEST_BUCKET:-}" "${TEST_BUCKET:-}" "")"
 export TEST_INDEXES_S3_BUCKET="$(first_nonempty "${PIPELINE_TEST_INDEXES_S3_BUCKET:-}" "${TEST_INDEXES_S3_BUCKET:-}" "")"
+export TEST_S3_ACCESS_KEY_ID="$(first_nonempty "${PIPELINE_TEST_S3_ACCESS_KEY_ID:-}" "${TEST_S3_ACCESS_KEY_ID:-}" "${AWS_ACCESS_KEY_ID:-}" "")"
+export TEST_S3_SECRET_ACCESS_KEY="$(first_nonempty "${PIPELINE_TEST_S3_SECRET_ACCESS_KEY:-}" "${TEST_S3_SECRET_ACCESS_KEY:-}" "${AWS_SECRET_ACCESS_KEY:-}" "")"
+export AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID="$(first_nonempty "${PIPELINE_AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID:-}" "${AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID:-}" "${AWS_ACCESS_KEY_ID:-}" "")"
+export AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY="$(first_nonempty "${PIPELINE_AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY:-}" "${AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY:-}" "${AWS_SECRET_ACCESS_KEY:-}" "")"
 export EKSCTL_VERSION="$(first_nonempty "${PIPELINE_EKSCTL_VERSION:-}" "${EKSCTL_VERSION:-}" "")"
 export KUBECTL_VERSION="$(first_nonempty "${PIPELINE_KUBECTL_VERSION:-}" "${KUBECTL_VERSION:-}" "")"
 export EKS_CLUSTER_K8_VERSION="$(first_nonempty "${PIPELINE_EKS_CLUSTER_K8_VERSION:-}" "${EKS_CLUSTER_K8_VERSION:-}" "")"
