@@ -6,6 +6,8 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+from qualification_jobs import QUALIFICATION_REQUIRED_JOBS
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -60,14 +62,7 @@ def main() -> int:
         "qualification": {
             "profile": qualification_profile,
             "helm_profile": helm_profile,
-            "required_jobs": [
-                "released-sok-contract",
-                "scan-released-operator-image-trivy",
-                "gosec-scan",
-                "govulncheck-scan",
-                "eks-qualification-integration-validation",
-                "helm-eks-validation",
-            ],
+            "required_jobs": QUALIFICATION_REQUIRED_JOBS,
         },
     }
 

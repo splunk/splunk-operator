@@ -93,25 +93,102 @@ scan-released-operator-image-trivy:
     reports:
       junit: ci-output/*-inttest-junit.xml
 
-# Qualification keeps a single full integration run for now because the
-# manifest/report/gate path still aggregates one integration evidence job.
-eks-qualification-integration-validation:
+# Qualification integration now mirrors the nightly fan-out shape: one suite
+# per job, one EKS cluster per suite, and released-SOK runtime input instead of
+# the staged branch image.
+.runtime-qualification-integration-suite-job:
   extends: .runtime-released-sok-validation-job
   # Qualification jobs must still publish evidence so the report/gate path can
   # decide the final lane outcome instead of stopping at the first failed test.
   allow_failure: true
-  timeout: 10h
+  timeout: 4h
   variables:
-    WORKFLOW_SLUG: qualification-int-test-workflow
     JOB_INT_TEST_PROFILE: full
-    JOB_INT_TEST_TIMEOUT: 8h
+    JOB_INT_TEST_TIMEOUT: 225m
+    JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
+    JOB_EKS_CLUSTER_TEST_TYPE: integration
+    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: qualification
+    JOB_INT_CLUSTER_NODES: "1"
+    JOB_INT_CLUSTER_WORKERS: "3"
   script:
     - gitlab-ci/int-test-workflow.sh
   artifacts:
     paths:
       - ci-output/
     reports:
-      junit: ci-output/qualification-int-test-workflow-inttest-junit.xml
+      junit: ci-output/*-inttest-junit.xml
+
+qualification-eks-integration-appframeworks-s1-validation:
+  extends:
+    - .runtime-qualification-integration-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-eks-integration-appframeworks-s1-validation
+    JOB_INT_TEST_FOCUS: appframeworksS1
+
+qualification-eks-integration-managerappframework-c3-validation:
+  extends:
+    - .runtime-qualification-integration-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-eks-integration-managerappframework-c3-validation
+    JOB_INT_TEST_FOCUS: managerappframeworkc3
+
+qualification-eks-integration-managerappframework-m4-validation:
+  extends:
+    - .runtime-qualification-integration-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-eks-integration-managerappframework-m4-validation
+    JOB_INT_TEST_FOCUS: managerappframeworkm4
+
+qualification-eks-integration-managersecret-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-eks-integration-managersecret-validation
+    JOB_INT_TEST_FOCUS: managersecret
+
+qualification-eks-integration-managersmartstore-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-eks-integration-managersmartstore-validation
+    JOB_INT_TEST_FOCUS: managersmartstore
+
+qualification-eks-integration-managermc1-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-eks-integration-managermc1-validation
+    JOB_INT_TEST_FOCUS: managermc1
+
+qualification-eks-integration-managermc2-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-eks-integration-managermc2-validation
+    JOB_INT_TEST_FOCUS: managermc2
+
+qualification-eks-integration-managerscaling-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-eks-integration-managerscaling-validation
+    JOB_INT_TEST_FOCUS: managerscaling
+
+qualification-eks-integration-managercrcrud-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-eks-integration-managercrcrud-validation
+    JOB_INT_TEST_FOCUS: managercrcrud
+
+qualification-eks-integration-licensemanager-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-eks-integration-licensemanager-validation
+    JOB_INT_TEST_FOCUS: licensemanager
+
+qualification-eks-integration-indingsep-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-eks-integration-indingsep-validation
+    JOB_INT_TEST_FOCUS: indingsep
 
 helm-eks-validation:
   extends: .runtime-released-sok-validation-job
