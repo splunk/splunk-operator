@@ -1223,7 +1223,7 @@ func TestStandaloneWitAppFramework(t *testing.T) {
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
 
-	// simulate create standalone instance before reconcilation
+	// simulate create standalone instance before reconciliation
 	c.Create(ctx, standalone)
 
 	// call reconciliation
@@ -1383,7 +1383,7 @@ func TestStandaloneWithReadyState(t *testing.T) {
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
 
-	// simulate create standalone instance before reconcilation
+	// simulate create standalone instance before reconciliation
 	c.Create(ctx, &standalone)
 
 	_, err = ApplyStandalone(ctx, c, &standalone)
