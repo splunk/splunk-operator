@@ -28,7 +28,6 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	testenv "github.com/splunk/splunk-operator/test/testenv"
-	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("m4appfw test", func() {
