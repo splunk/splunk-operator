@@ -2,6 +2,8 @@ released-sok-contract:
   extends:
     - .python-venv-job
     - .rules-qualification-lane
+  # Qualification runtime jobs in image_scan/integration consume this contract,
+  # so it must exist before those stages begin.
   stage: verify
   needs:
     - format-and-vet

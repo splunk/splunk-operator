@@ -43,30 +43,9 @@ ensure_ci_bin_path "${ci_bin_dir}"
 
 BUILD_IMAGE_REF_FILE="${BUILD_IMAGE_REF_FILE:-ci-output/build-test-push-workflow-image-ref.txt}"
 RELEASED_SOK_CONTRACT_FILE="${RELEASED_SOK_CONTRACT_FILE:-}"
-operator_image_source="branch-build"
-
-if [ -n "${RELEASED_SOK_CONTRACT_FILE}" ]; then
-  require_file "${RELEASED_SOK_CONTRACT_FILE}" "released SOK contract"
-  load_repo_dotenv "${RELEASED_SOK_CONTRACT_FILE}"
-  operator_image_source="official-release"
-  resolve_pipeline_image_repository "$(first_nonempty "${PIPELINE_ECR_REPOSITORY:-}" "")" "splunk/splunk-operator"
-  ECR_REGISTRY="${RESOLVED_ECR_REGISTRY}"
-  OPERATOR_SOURCE_IMAGE="$(first_nonempty "${SOK_RELEASED_OPERATOR_IMAGE_SOURCE:-}" "")"
-  OPERATOR_MIRROR_PATH="$(first_nonempty "${SOK_RELEASED_OPERATOR_IMAGE_MIRROR_PATH:-}" "")"
-  if [ -z "${OPERATOR_SOURCE_IMAGE}" ] || [ -z "${OPERATOR_MIRROR_PATH}" ]; then
-    echo "Released SOK contract is missing operator image fields" >&2
-    exit 1
-  fi
-else
-  require_file "${BUILD_IMAGE_REF_FILE}" "build image reference"
-  IMAGE_REF="$(cat "${BUILD_IMAGE_REF_FILE}")"
-  IMAGE_REPOSITORY="${IMAGE_REF%:*}"
-  IMAGE_TAG="${IMAGE_REF##*:}"
-  ECR_REGISTRY="${IMAGE_REPOSITORY%%/*}"
-  OPERATOR_REPOSITORY_PATH="${IMAGE_REPOSITORY#${ECR_REGISTRY}/}"
-fi
-
-ECR_REGION="$(first_nonempty "${AWS_REGION:-}" "${AWS_DEFAULT_REGION:-}" "${PIPELINE_AWS_DEFAULT_REGION:-}" "$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)")"
+resolve_operator_runtime_source "${BUILD_IMAGE_REF_FILE}" "${RELEASED_SOK_CONTRACT_FILE}" "splunk/splunk-operator"
+ECR_REGISTRY="${RUNTIME_ECR_REGISTRY}"
+ECR_REGION="${RUNTIME_ECR_REGION}"
 
 if [ -z "${ECR_REGION}" ]; then
   echo "Unable to determine ECR region — set AWS_REGION, AWS_DEFAULT_REGION, or PIPELINE_AWS_DEFAULT_REGION" >&2
@@ -74,8 +53,8 @@ if [ -z "${ECR_REGION}" ]; then
 fi
 
 # Enterprise image comes from the repo-owned release image pin.
-enterprise_image="$(first_nonempty "${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-}" "splunk/splunk:latest")"
-enterprise_image="$(strip_docker_io_prefix "${enterprise_image}")"
+resolve_enterprise_release_image
+enterprise_image="${RESOLVED_ENTERPRISE_IMAGE}"
 
 requested_profile="$(first_nonempty "${PIPELINE_INT_TEST_PROFILE:-}" "${JOB_INT_TEST_PROFILE:-}" "smoke")"
 resolve_integration_profile "${requested_profile}"
@@ -97,11 +76,7 @@ export S3_REGION="${ECR_REGION}"
 export ECR_REGISTRY
 export ECR_REPOSITORY="${ECR_REGISTRY}"
 export PRIVATE_REGISTRY="${ECR_REGISTRY}"
-if [ "${operator_image_source}" = "official-release" ]; then
-  export SPLUNK_OPERATOR_IMAGE="${OPERATOR_MIRROR_PATH}"
-else
-  export SPLUNK_OPERATOR_IMAGE="${OPERATOR_REPOSITORY_PATH}:${IMAGE_TAG}"
-fi
+export SPLUNK_OPERATOR_IMAGE="${RUNTIME_OPERATOR_REPO_IMAGE}"
 export SPLUNK_ENTERPRISE_IMAGE="${enterprise_image}"
 normalize_testenv_commit_hash "${CI_COMMIT_SHORT_SHA:-${CI_COMMIT_SHA}}" 8
 export COMMIT_HASH="${NORMALIZED_TESTENV_COMMIT_HASH}"
@@ -130,13 +105,7 @@ export EKSCTL_VERSION="$(first_nonempty "${PIPELINE_EKSCTL_VERSION:-}" "${EKSCTL
 export KUBECTL_VERSION="$(first_nonempty "${PIPELINE_KUBECTL_VERSION:-}" "${KUBECTL_VERSION:-}" "")"
 export EKS_CLUSTER_K8_VERSION="$(first_nonempty "${PIPELINE_EKS_CLUSTER_K8_VERSION:-}" "${EKS_CLUSTER_K8_VERSION:-}" "")"
 
-if [ "${operator_image_source}" = "official-release" ]; then
-  append_context "${context_file}" "input_artifact" "${RELEASED_SOK_CONTRACT_FILE}"
-  append_context "${context_file}" "released_operator_image_source" "${OPERATOR_SOURCE_IMAGE}"
-else
-  append_context "${context_file}" "input_artifact" "${BUILD_IMAGE_REF_FILE}"
-fi
-append_context "${context_file}" "operator_image_source" "${operator_image_source}"
+append_operator_runtime_context "${context_file}"
 append_context "${context_file}" "ecr_registry" "${ECR_REGISTRY}"
 append_context "${context_file}" "ecr_region" "${ECR_REGION}"
 append_context "${context_file}" "test_profile" "${RESOLVED_INT_TEST_PROFILE}"
@@ -215,14 +184,7 @@ log_step "registry:ecr-login ${ECR_REGISTRY}"
 aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
 log_step "registry:ecr-login:complete"
 
-if [ "${operator_image_source}" = "official-release" ]; then
-  MIRRORED_OPERATOR_IMAGE="${ECR_REGISTRY}/${OPERATOR_MIRROR_PATH}"
-  log_step "registry:mirror-operator:start ${OPERATOR_SOURCE_IMAGE}"
-  docker pull "${OPERATOR_SOURCE_IMAGE}"
-  docker tag "${OPERATOR_SOURCE_IMAGE}" "${MIRRORED_OPERATOR_IMAGE}"
-  docker push "${MIRRORED_OPERATOR_IMAGE}"
-  log_step "registry:mirror-operator:complete ${MIRRORED_OPERATOR_IMAGE}"
-fi
+mirror_operator_image_to_ecr_if_needed
 
 if [ "${use_existing_cluster}" = "true" ]; then
   log_step "cluster:use-existing ${TEST_CLUSTER_NAME}"

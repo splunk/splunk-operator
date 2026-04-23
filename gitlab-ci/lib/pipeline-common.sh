@@ -111,6 +111,87 @@ resolve_pipeline_image_repository() {
   esac
 }
 
+resolve_ecr_region() {
+  registry="$1"
+  RESOLVED_ECR_REGION="$(first_nonempty "${AWS_REGION:-}" "${AWS_DEFAULT_REGION:-}" "${PIPELINE_AWS_DEFAULT_REGION:-}" "$(printf '%s' "${registry}" | cut -d. -f4)")"
+}
+
+resolve_enterprise_release_image() {
+  requested_enterprise_image="$(first_nonempty "${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-}" "splunk/splunk:latest")"
+  RESOLVED_ENTERPRISE_IMAGE="$(strip_docker_io_prefix "${requested_enterprise_image}")"
+}
+
+# Resolve the operator under test for runtime jobs.
+# - branch-build mode consumes the staged build artifact from this pipeline.
+# - official-release mode consumes the released-SOK contract and mirrors the
+#   released operator image into nonprod ECR before tests run.
+resolve_operator_runtime_source() {
+  build_image_ref_file="$1"
+  released_sok_contract_file="$2"
+  default_repo_path="$3"
+
+  RUNTIME_INPUT_ARTIFACT=""
+  RUNTIME_OPERATOR_SOURCE_KIND="branch-build"
+  RUNTIME_OPERATOR_SOURCE_IMAGE=""
+  RUNTIME_OPERATOR_MIRROR_PATH=""
+  RUNTIME_OPERATOR_FULL_IMAGE_REF=""
+  RUNTIME_OPERATOR_REPO_IMAGE=""
+  RUNTIME_ECR_REGISTRY=""
+  RUNTIME_ECR_REGION=""
+
+  if [ -n "${released_sok_contract_file}" ]; then
+    require_file "${released_sok_contract_file}" "released SOK contract"
+    load_repo_dotenv "${released_sok_contract_file}"
+    RUNTIME_OPERATOR_SOURCE_KIND="official-release"
+    RUNTIME_INPUT_ARTIFACT="${released_sok_contract_file}"
+    resolve_pipeline_image_repository "$(first_nonempty "${PIPELINE_ECR_REPOSITORY:-}" "")" "${default_repo_path}"
+    RUNTIME_ECR_REGISTRY="${RESOLVED_ECR_REGISTRY}"
+    RUNTIME_OPERATOR_SOURCE_IMAGE="$(first_nonempty "${SOK_RELEASED_OPERATOR_IMAGE_SOURCE:-}" "")"
+    RUNTIME_OPERATOR_MIRROR_PATH="$(first_nonempty "${SOK_RELEASED_OPERATOR_IMAGE_MIRROR_PATH:-}" "")"
+    if [ -z "${RUNTIME_OPERATOR_SOURCE_IMAGE}" ] || [ -z "${RUNTIME_OPERATOR_MIRROR_PATH}" ]; then
+      echo "Released SOK contract is missing operator image fields" >&2
+      return 1
+    fi
+    RUNTIME_OPERATOR_REPO_IMAGE="${RUNTIME_OPERATOR_MIRROR_PATH}"
+  else
+    require_file "${build_image_ref_file}" "build image reference"
+    runtime_build_image_ref="$(cat "${build_image_ref_file}")"
+    runtime_image_repository="${runtime_build_image_ref%:*}"
+    runtime_image_tag="${runtime_build_image_ref##*:}"
+    RUNTIME_ECR_REGISTRY="${runtime_image_repository%%/*}"
+    runtime_operator_repository_path="${runtime_image_repository#${RUNTIME_ECR_REGISTRY}/}"
+    RUNTIME_INPUT_ARTIFACT="${build_image_ref_file}"
+    RUNTIME_OPERATOR_FULL_IMAGE_REF="${runtime_build_image_ref}"
+    RUNTIME_OPERATOR_REPO_IMAGE="${runtime_operator_repository_path}:${runtime_image_tag}"
+  fi
+
+  resolve_ecr_region "${RUNTIME_ECR_REGISTRY}"
+  RUNTIME_ECR_REGION="${RESOLVED_ECR_REGION}"
+}
+
+append_operator_runtime_context() {
+  context_file="$1"
+
+  append_context "${context_file}" "input_artifact" "${RUNTIME_INPUT_ARTIFACT}"
+  if [ "${RUNTIME_OPERATOR_SOURCE_KIND}" = "official-release" ]; then
+    append_context "${context_file}" "released_operator_image_source" "${RUNTIME_OPERATOR_SOURCE_IMAGE}"
+  else
+    append_context "${context_file}" "operator_image" "${RUNTIME_OPERATOR_FULL_IMAGE_REF}"
+  fi
+  append_context "${context_file}" "operator_image_source" "${RUNTIME_OPERATOR_SOURCE_KIND}"
+}
+
+mirror_operator_image_to_ecr_if_needed() {
+  if [ "${RUNTIME_OPERATOR_SOURCE_KIND}" = "official-release" ]; then
+    RUNTIME_OPERATOR_FULL_IMAGE_REF="${RUNTIME_ECR_REGISTRY}/${RUNTIME_OPERATOR_MIRROR_PATH}"
+    log_step "registry:mirror-operator:start ${RUNTIME_OPERATOR_SOURCE_IMAGE}"
+    docker pull "${RUNTIME_OPERATOR_SOURCE_IMAGE}"
+    docker tag "${RUNTIME_OPERATOR_SOURCE_IMAGE}" "${RUNTIME_OPERATOR_FULL_IMAGE_REF}"
+    docker push "${RUNTIME_OPERATOR_FULL_IMAGE_REF}"
+    log_step "registry:mirror-operator:complete ${RUNTIME_OPERATOR_FULL_IMAGE_REF}"
+  fi
+}
+
 ensure_ci_bin_path() {
   ci_bin_dir="$1"
   mkdir -p "$ci_bin_dir"

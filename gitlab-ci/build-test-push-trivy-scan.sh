@@ -67,7 +67,8 @@ else
 fi
 
 ECR_REGISTRY="${IMAGE_REF%%/*}"
-ECR_REGION="$(first_nonempty "${AWS_REGION:-}" "${AWS_DEFAULT_REGION:-}" "${PIPELINE_AWS_DEFAULT_REGION:-}" "$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)")"
+resolve_ecr_region "${ECR_REGISTRY}"
+ECR_REGION="${RESOLVED_ECR_REGION}"
 
 append_context "${context_file}" "ecr_registry" "${ECR_REGISTRY}"
 append_context "${context_file}" "ecr_region" "${ECR_REGION}"

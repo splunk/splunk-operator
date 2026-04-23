@@ -19,7 +19,8 @@ resolve_pipeline_image_repository "$(first_nonempty "${PIPELINE_ECR_REPOSITORY:-
 
 ECR_REGISTRY="$(first_nonempty "${PIPELINE_ECR_REGISTRY:-}" "${RESOLVED_ECR_REGISTRY}")"
 IMAGE_REPOSITORY="${RESOLVED_IMAGE_REPOSITORY}"
-ECR_REGION="$(first_nonempty "${AWS_REGION:-}" "${AWS_DEFAULT_REGION:-}" "${PIPELINE_AWS_DEFAULT_REGION:-}" "$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)")"
+resolve_ecr_region "${ECR_REGISTRY}"
+ECR_REGION="${RESOLVED_ECR_REGION}"
 
 if [ -z "${ECR_REGION}" ]; then
   echo "Unable to determine ECR region — set AWS_REGION, AWS_DEFAULT_REGION, or PIPELINE_AWS_DEFAULT_REGION" >&2
