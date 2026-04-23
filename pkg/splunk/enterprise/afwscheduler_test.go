@@ -3227,12 +3227,12 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 func TestCanAppScopeHaveInstallWorker(t *testing.T) {
 	scope := enterpriseApi.ScopeLocal
 	if !canAppScopeHaveInstallWorker(scope) {
-		t.Errorf("Shouldn't recieve error, local scope is valid")
+		t.Errorf("Shouldn't receive error, local scope is valid")
 	}
 
 	scope = enterpriseApi.ScopePremiumApps
 	if !canAppScopeHaveInstallWorker(scope) {
-		t.Errorf("Shouldn't recieve error, premium apps scope is valid")
+		t.Errorf("Shouldn't receive error, premium apps scope is valid")
 	}
 
 	scope = "invalidScope"
@@ -3447,7 +3447,7 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 	if err == nil {
 		t.Errorf("Expected app install succeeded but es post install failed")
 	}
-	// Test6: es post install is successfull but remove archive fails
+	// Test6: es post install is successful but remove archive fails
 
 	mockPodExecReturnContexts[4].StdErr = "" //no error for es post install
 

@@ -89,7 +89,7 @@ type QueueStatus struct {
 	// Resource revision tracker
 	ResourceRevMap map[string]string `json:"resourceRevMap"`
 
-	// Auxillary message describing CR status
+	// Auxiliary message describing CR status
 	Message string `json:"message"`
 }
 
@@ -102,7 +102,7 @@ type QueueStatus struct {
 // +kubebuilder:resource:path=queues,scope=Namespaced,shortName=queue
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of queue"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of queue resource"
-// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
+// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxiliary message describing CR status"
 // +kubebuilder:storageversion
 
 // Queue is the Schema for the queues API

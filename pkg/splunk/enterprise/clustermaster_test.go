@@ -1344,7 +1344,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
 
-	// simulate create clustermaster instance before reconcilation
+	// simulate create clustermaster instance before reconciliation
 	c.Create(ctx, clustermaster)
 
 	_, err := ApplyClusterMaster(ctx, c, clustermaster)

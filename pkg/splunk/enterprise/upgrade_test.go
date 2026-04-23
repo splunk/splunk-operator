@@ -301,7 +301,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("ApplySearchHeadCluster should not have returned error; err=%v", err)
 	}
 
-	// mock the verify RF peer funciton
+	// mock the verify RF peer function
 	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
 		return nil
 	}
@@ -359,7 +359,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("shc is not in ready state")
 	}
 
-	// mock the verify RF peer funciton
+	// mock the verify RF peer function
 	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
 		return nil
 	}

@@ -73,7 +73,7 @@ type IngestorClusterStatus struct {
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
 
-	// Auxillary message describing CR status
+	// Auxiliary message describing CR status
 	Message string `json:"message"`
 
 	// Credential secret version to track changes to the secret and trigger rolling restart of indexer cluster peers when the secret is updated
@@ -95,7 +95,7 @@ type IngestorClusterStatus struct {
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Number of desired ingestor cluster pods"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready ingestor cluster pods"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of ingestor cluster resource"
-// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
+// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxiliary message describing CR status"
 // +kubebuilder:storageversion
 
 // IngestorCluster is the Schema for the ingestorclusters API

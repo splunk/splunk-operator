@@ -124,7 +124,7 @@ func DecryptSplunkEncodedSecret(ctx context.Context, deployment *Deployment, pod
 	return strings.TrimSuffix(stdout, "\n")
 }
 
-// GetKeysToMatch retuns slice of secrets in server conf based on pod name
+// GetKeysToMatch returns slice of secrets in server conf based on pod name
 func GetKeysToMatch(podName string) []string {
 	var keysToMatch []string
 	if strings.Contains(podName, "standalone") || strings.Contains(podName, "license-manager") || strings.Contains(podName, "monitoring-console") || strings.Contains(podName, splcommon.LicenseManager) {
@@ -137,7 +137,7 @@ func GetKeysToMatch(podName string) []string {
 	return keysToMatch
 }
 
-// GetVersionedSecretNames retuns list of versioned secrets of given namespace and version
+// GetVersionedSecretNames returns list of versioned secrets of given namespace and version
 func GetVersionedSecretNames(ns string, version int) []string {
 	output, err := exec.Command("kubectl", "get", "secrets", "-n", ns).Output()
 	var splunkSecrets []string
