@@ -118,76 +118,76 @@ scan-released-operator-image-trivy:
     reports:
       junit: ci-output/*-inttest-junit.xml
 
-qualification-eks-integration-appframeworks-s1-validation:
+qualification-appframeworks-s1-validation:
   extends:
     - .runtime-qualification-integration-suite-job
     - .runtime-appframework-suite-job
   variables:
-    WORKFLOW_SLUG: qualification-eks-integration-appframeworks-s1-validation
+    WORKFLOW_SLUG: qualification-appframeworks-s1-validation
     JOB_INT_TEST_FOCUS: appframeworksS1
 
-qualification-eks-integration-managerappframework-c3-validation:
+qualification-managerappframework-c3-validation:
   extends:
     - .runtime-qualification-integration-suite-job
     - .runtime-appframework-suite-job
   variables:
-    WORKFLOW_SLUG: qualification-eks-integration-managerappframework-c3-validation
+    WORKFLOW_SLUG: qualification-managerappframework-c3-validation
     JOB_INT_TEST_FOCUS: managerappframeworkc3
 
-qualification-eks-integration-managerappframework-m4-validation:
+qualification-managerappframework-m4-validation:
   extends:
     - .runtime-qualification-integration-suite-job
     - .runtime-appframework-suite-job
   variables:
-    WORKFLOW_SLUG: qualification-eks-integration-managerappframework-m4-validation
+    WORKFLOW_SLUG: qualification-managerappframework-m4-validation
     JOB_INT_TEST_FOCUS: managerappframeworkm4
 
-qualification-eks-integration-managersecret-validation:
+qualification-managersecret-validation:
   extends: .runtime-qualification-integration-suite-job
   variables:
-    WORKFLOW_SLUG: qualification-eks-integration-managersecret-validation
+    WORKFLOW_SLUG: qualification-managersecret-validation
     JOB_INT_TEST_FOCUS: managersecret
 
-qualification-eks-integration-managersmartstore-validation:
+qualification-managersmartstore-validation:
   extends: .runtime-qualification-integration-suite-job
   variables:
-    WORKFLOW_SLUG: qualification-eks-integration-managersmartstore-validation
+    WORKFLOW_SLUG: qualification-managersmartstore-validation
     JOB_INT_TEST_FOCUS: managersmartstore
 
-qualification-eks-integration-managermc1-validation:
+qualification-managermc1-validation:
   extends: .runtime-qualification-integration-suite-job
   variables:
-    WORKFLOW_SLUG: qualification-eks-integration-managermc1-validation
+    WORKFLOW_SLUG: qualification-managermc1-validation
     JOB_INT_TEST_FOCUS: managermc1
 
-qualification-eks-integration-managermc2-validation:
+qualification-managermc2-validation:
   extends: .runtime-qualification-integration-suite-job
   variables:
-    WORKFLOW_SLUG: qualification-eks-integration-managermc2-validation
+    WORKFLOW_SLUG: qualification-managermc2-validation
     JOB_INT_TEST_FOCUS: managermc2
 
-qualification-eks-integration-managerscaling-validation:
+qualification-managerscaling-validation:
   extends: .runtime-qualification-integration-suite-job
   variables:
-    WORKFLOW_SLUG: qualification-eks-integration-managerscaling-validation
+    WORKFLOW_SLUG: qualification-managerscaling-validation
     JOB_INT_TEST_FOCUS: managerscaling
 
-qualification-eks-integration-managercrcrud-validation:
+qualification-managercrcrud-validation:
   extends: .runtime-qualification-integration-suite-job
   variables:
-    WORKFLOW_SLUG: qualification-eks-integration-managercrcrud-validation
+    WORKFLOW_SLUG: qualification-managercrcrud-validation
     JOB_INT_TEST_FOCUS: managercrcrud
 
-qualification-eks-integration-licensemanager-validation:
+qualification-licensemanager-validation:
   extends: .runtime-qualification-integration-suite-job
   variables:
-    WORKFLOW_SLUG: qualification-eks-integration-licensemanager-validation
+    WORKFLOW_SLUG: qualification-licensemanager-validation
     JOB_INT_TEST_FOCUS: licensemanager
 
-qualification-eks-integration-indingsep-validation:
+qualification-indingsep-validation:
   extends: .runtime-qualification-integration-suite-job
   variables:
-    WORKFLOW_SLUG: qualification-eks-integration-indingsep-validation
+    WORKFLOW_SLUG: qualification-indingsep-validation
     JOB_INT_TEST_FOCUS: indingsep
 
 helm-eks-validation:

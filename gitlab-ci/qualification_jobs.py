@@ -11,48 +11,48 @@ QUALIFICATION_HELM_JOB = "helm-eks-validation"
 
 QUALIFICATION_INTEGRATION_JOBS = [
     (
-        "qualification-eks-integration-appframeworks-s1-validation",
-        "qualification-eks-integration-appframeworks-s1-validation",
+        "qualification-appframeworks-s1-validation",
+        "qualification-appframeworks-s1-validation",
     ),
     (
-        "qualification-eks-integration-managerappframework-c3-validation",
-        "qualification-eks-integration-managerappframework-c3-validation",
+        "qualification-managerappframework-c3-validation",
+        "qualification-managerappframework-c3-validation",
     ),
     (
-        "qualification-eks-integration-managerappframework-m4-validation",
-        "qualification-eks-integration-managerappframework-m4-validation",
+        "qualification-managerappframework-m4-validation",
+        "qualification-managerappframework-m4-validation",
     ),
     (
-        "qualification-eks-integration-managersecret-validation",
-        "qualification-eks-integration-managersecret-validation",
+        "qualification-managersecret-validation",
+        "qualification-managersecret-validation",
     ),
     (
-        "qualification-eks-integration-managersmartstore-validation",
-        "qualification-eks-integration-managersmartstore-validation",
+        "qualification-managersmartstore-validation",
+        "qualification-managersmartstore-validation",
     ),
     (
-        "qualification-eks-integration-managermc1-validation",
-        "qualification-eks-integration-managermc1-validation",
+        "qualification-managermc1-validation",
+        "qualification-managermc1-validation",
     ),
     (
-        "qualification-eks-integration-managermc2-validation",
-        "qualification-eks-integration-managermc2-validation",
+        "qualification-managermc2-validation",
+        "qualification-managermc2-validation",
     ),
     (
-        "qualification-eks-integration-managerscaling-validation",
-        "qualification-eks-integration-managerscaling-validation",
+        "qualification-managerscaling-validation",
+        "qualification-managerscaling-validation",
     ),
     (
-        "qualification-eks-integration-managercrcrud-validation",
-        "qualification-eks-integration-managercrcrud-validation",
+        "qualification-managercrcrud-validation",
+        "qualification-managercrcrud-validation",
     ),
     (
-        "qualification-eks-integration-licensemanager-validation",
-        "qualification-eks-integration-licensemanager-validation",
+        "qualification-licensemanager-validation",
+        "qualification-licensemanager-validation",
     ),
     (
-        "qualification-eks-integration-indingsep-validation",
-        "qualification-eks-integration-indingsep-validation",
+        "qualification-indingsep-validation",
+        "qualification-indingsep-validation",
     ),
 ]
 
