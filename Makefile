@@ -254,11 +254,10 @@ setup/kuttl:
 	versioned="$${target}-$${normalized_version}"; \
 	[ -f "$$versioned" ] || { \
 		set -e; \
-		package="github.com/kudobuilder/kuttl/cmd/kubectl-kuttl@$${normalized_version}"; \
-		echo "Downloading $${package}"; \
-		rm -f "$$target" || true; \
-		GOBIN="${CI_BIN_DIR}" go install "$$package"; \
-		mv "$$target" "$$versioned"; \
+		asset_url="https://github.com/kudobuilder/kuttl/releases/download/$${normalized_version}/kubectl-kuttl_$${normalized_version#v}_linux_x86_64"; \
+		echo "Downloading $$asset_url"; \
+		curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL -o "$$versioned" "$$asset_url"; \
+		chmod +x "$$versioned"; \
 	}; \
 	ln -sf "$$versioned" "$$target"
 
