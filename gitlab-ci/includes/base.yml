@@ -146,7 +146,6 @@ default:
 # - PIPELINE_RELEASE_VERSION defaults to Makefile VERSION.
 # - PIPELINE_RELEASE_OPERATOR_TAG defaults to PIPELINE_RELEASE_VERSION.
 # - PIPELINE_RELEASE_CANDIDATE_NUMBER defaults to 1 and becomes the rc tag suffix.
-# - PIPELINE_RELEASE_BUILD_PLATFORMS defaults to PIPELINE_BUILD_PLATFORMS, then linux/amd64,linux/arm64.
 # - PIPELINE_RELEASE_IMAGE_REPOSITORY defaults to docker.io/splunk/splunk-operator.
 # - PIPELINE_RELEASE_SOURCE_REF optionally pins which retained release branch the main publish jobs fetch.
 # - PIPELINE_RELEASE_SOURCE_PIPELINE_ID optionally pins the exact validated release pipeline to promote.

@@ -121,6 +121,8 @@ release-candidate-packaging:
     - .rules-release-validation-lane
   # Intentionally relies on stage ordering only. This job runs in `release`
   # after the release validation jobs finish in `integration`.
+  dependencies:
+    - build-stage-image
   variables:
     WORKFLOW_SLUG: release-candidate-packaging
   script:
