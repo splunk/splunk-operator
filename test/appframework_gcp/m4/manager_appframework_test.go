@@ -92,6 +92,8 @@ var _ = Describe("m4appfw test", func() {
 
 			//################## SETUP ##################
 			// Upload V1 apps to GCP for Indexer Cluster
+			var uploadedFiles []string
+			var err error
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
@@ -250,6 +252,8 @@ var _ = Describe("m4appfw test", func() {
 
 			//################## SETUP ##################
 			// Upload V2 version of apps to GCP for Indexer Cluster
+			var uploadedFiles []string
+			var err error
 			appVersion := "V2"
 			appFileList := testenv.GetAppFileList(appListV2)
 
