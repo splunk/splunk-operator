@@ -60,9 +60,11 @@ scan-released-operator-image-trivy:
   variables:
     RELEASED_SOK_CONTRACT_FILE: ci-output/release-controller/released-sok-contract.env
 
-eks-smoke-validation:
+# Smoke validation now mirrors the old GitHub smoke matrix: one suite per job,
+# one EKS cluster per job, and shared runtime logic through int-test-workflow.sh.
+.runtime-smoke-suite-job:
   extends: .runtime-integration-job
-  timeout: 10h
+  timeout: 4h
   needs:
     - job: build-stage-image
       artifacts: true
@@ -76,19 +78,23 @@ eks-smoke-validation:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH && $CI_COMMIT_TITLE =~ /^Merge /'
     - if: '$CI_COMMIT_BRANCH == "develop"'
   variables:
-    WORKFLOW_SLUG: int-test-workflow
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
     JOB_INT_TEST_PROFILE: smoke
-    JOB_INT_TEST_FOCUS: "smoke, basic, s1"
-    JOB_INT_TEST_TIMEOUT: 3h
+    JOB_INT_TEST_TIMEOUT: 225m
+    JOB_INT_TEST_TO_SKIP: '^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$'
+    JOB_EKS_CLUSTER_TEST_TYPE: smoke
+    JOB_INT_CLUSTER_NODES: "1"
+    JOB_INT_CLUSTER_WORKERS: "3"
   script:
     - gitlab-ci/int-test-workflow.sh
   artifacts:
     paths:
       - ci-output/
     reports:
-      junit: ci-output/int-test-workflow-inttest-junit.xml
+      junit: ci-output/*-inttest-junit.xml
 
+# Qualification keeps a single full integration run for now because the
+# manifest/report/gate path still aggregates one integration evidence job.
 eks-qualification-integration-validation:
   extends: .runtime-released-sok-validation-job
   # Qualification jobs must still publish evidence so the report/gate path can
@@ -123,9 +129,11 @@ helm-eks-validation:
     reports:
       junit: ci-output/helm-test-workflow-kuttl-junit.xml
 
-nightly-eks-integration-validation:
+# Nightly integration fan-out follows the old GitHub nightly integration matrix:
+# one suite per job and one EKS cluster per suite instead of a single large run.
+.runtime-nightly-integration-suite-job:
   extends: .runtime-integration-job
-  timeout: 10h
+  timeout: 4h
   needs:
     - job: build-stage-image
       artifacts: true
@@ -135,14 +143,143 @@ nightly-eks-integration-validation:
       when: never
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
   variables:
-    WORKFLOW_SLUG: nightly-int-test-workflow
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
     JOB_INT_TEST_PROFILE: full
-    JOB_INT_TEST_TIMEOUT: 8h
+    JOB_INT_TEST_TIMEOUT: 225m
+    JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
+    JOB_EKS_CLUSTER_TEST_TYPE: integration
+    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: nightly
+    JOB_INT_CLUSTER_NODES: "1"
+    JOB_INT_CLUSTER_WORKERS: "3"
   script:
     - gitlab-ci/int-test-workflow.sh
   artifacts:
     paths:
       - ci-output/
     reports:
-      junit: ci-output/nightly-int-test-workflow-inttest-junit.xml
+      junit: ci-output/*-inttest-junit.xml
+
+.runtime-appframework-suite-job:
+  variables:
+    JOB_INT_CLUSTER_NODES: "2"
+    JOB_INT_CLUSTER_WORKERS: "5"
+
+eks-smoke-basic-validation:
+  extends: .runtime-smoke-suite-job
+  variables:
+    WORKFLOW_SLUG: eks-smoke-basic-validation
+    JOB_INT_TEST_FOCUS: basic
+
+eks-smoke-appframeworks-s1-validation:
+  extends: .runtime-smoke-suite-job
+  variables:
+    WORKFLOW_SLUG: eks-smoke-appframeworks-s1-validation
+    JOB_INT_TEST_FOCUS: appframeworksS1
+
+eks-smoke-managerappframework-c3-validation:
+  extends: .runtime-smoke-suite-job
+  variables:
+    WORKFLOW_SLUG: eks-smoke-managerappframework-c3-validation
+    JOB_INT_TEST_FOCUS: managerappframeworkc3
+
+eks-smoke-managerappframework-m4-validation:
+  extends: .runtime-smoke-suite-job
+  variables:
+    WORKFLOW_SLUG: eks-smoke-managerappframework-m4-validation
+    JOB_INT_TEST_FOCUS: managerappframeworkm4
+
+eks-smoke-managersecret-validation:
+  extends: .runtime-smoke-suite-job
+  variables:
+    WORKFLOW_SLUG: eks-smoke-managersecret-validation
+    JOB_INT_TEST_FOCUS: managersecret
+
+eks-smoke-managermc-validation:
+  extends: .runtime-smoke-suite-job
+  variables:
+    WORKFLOW_SLUG: eks-smoke-managermc-validation
+    JOB_INT_TEST_FOCUS: managermc
+
+eks-smoke-indingsep-validation:
+  extends: .runtime-smoke-suite-job
+  variables:
+    WORKFLOW_SLUG: eks-smoke-indingsep-validation
+    JOB_INT_TEST_FOCUS: indingsep
+
+eks-smoke-licensemanager-validation:
+  extends: .runtime-smoke-suite-job
+  variables:
+    WORKFLOW_SLUG: eks-smoke-licensemanager-validation
+    JOB_INT_TEST_FOCUS: licensemanager
+
+nightly-eks-integration-appframeworks-s1-validation:
+  extends:
+    - .runtime-nightly-integration-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: nightly-eks-integration-appframeworks-s1-validation
+    JOB_INT_TEST_FOCUS: appframeworksS1
+
+nightly-eks-integration-managerappframework-c3-validation:
+  extends:
+    - .runtime-nightly-integration-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: nightly-eks-integration-managerappframework-c3-validation
+    JOB_INT_TEST_FOCUS: managerappframeworkc3
+
+nightly-eks-integration-managerappframework-m4-validation:
+  extends:
+    - .runtime-nightly-integration-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: nightly-eks-integration-managerappframework-m4-validation
+    JOB_INT_TEST_FOCUS: managerappframeworkm4
+
+nightly-eks-integration-managersecret-validation:
+  extends: .runtime-nightly-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: nightly-eks-integration-managersecret-validation
+    JOB_INT_TEST_FOCUS: managersecret
+
+nightly-eks-integration-managersmartstore-validation:
+  extends: .runtime-nightly-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: nightly-eks-integration-managersmartstore-validation
+    JOB_INT_TEST_FOCUS: managersmartstore
+
+nightly-eks-integration-managermc1-validation:
+  extends: .runtime-nightly-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: nightly-eks-integration-managermc1-validation
+    JOB_INT_TEST_FOCUS: managermc1
+
+nightly-eks-integration-managermc2-validation:
+  extends: .runtime-nightly-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: nightly-eks-integration-managermc2-validation
+    JOB_INT_TEST_FOCUS: managermc2
+
+nightly-eks-integration-managerscaling-validation:
+  extends: .runtime-nightly-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: nightly-eks-integration-managerscaling-validation
+    JOB_INT_TEST_FOCUS: managerscaling
+
+nightly-eks-integration-managercrcrud-validation:
+  extends: .runtime-nightly-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: nightly-eks-integration-managercrcrud-validation
+    JOB_INT_TEST_FOCUS: managercrcrud
+
+nightly-eks-integration-licensemanager-validation:
+  extends: .runtime-nightly-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: nightly-eks-integration-licensemanager-validation
+    JOB_INT_TEST_FOCUS: licensemanager
+
+nightly-eks-integration-indingsep-validation:
+  extends: .runtime-nightly-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: nightly-eks-integration-indingsep-validation
+    JOB_INT_TEST_FOCUS: indingsep

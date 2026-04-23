@@ -231,6 +231,53 @@ normalize_testenv_commit_hash() {
   NORMALIZED_TESTENV_COMMIT_HASH="$(printf '%s' "${sanitized_hash}" | cut -c1-"${max_length}")"
 }
 
+shorten_eks_test_name() {
+  case "$1" in
+    managerappframeworkc3)
+      printf '%s' "mgr-appfw-c3"
+      ;;
+    managerappframeworkm4)
+      printf '%s' "mgr-appfw-m4"
+      ;;
+    appframeworksS1)
+      printf '%s' "appfw-s1"
+      ;;
+    managersecret)
+      printf '%s' "mgr-secret"
+      ;;
+    managermc)
+      printf '%s' "mgr-mc"
+      ;;
+    *)
+      printf '%s' "$1"
+      ;;
+  esac
+}
+
+build_eks_test_cluster_name() {
+  test_type="$1"
+  platform_suffix="$2"
+  test_name="$3"
+  run_id="$4"
+
+  shortened_test_name="$(shorten_eks_test_name "${test_name}")"
+  safe_test_type="$(sanitize_slug "${test_type}")"
+  safe_platform_suffix="$(sanitize_slug "${platform_suffix}")"
+  safe_test_name="$(sanitize_slug "${shortened_test_name}")"
+  safe_run_id="$(printf '%s' "${run_id}" | tr -cd '[:alnum:]')"
+
+  if [ -z "${safe_test_type}" ] || [ -z "${safe_test_name}" ] || [ -z "${safe_run_id}" ]; then
+    echo "EKS cluster naming requires non-empty test_type, test_name, and run_id" >&2
+    return 1
+  fi
+
+  if [ -n "${safe_platform_suffix}" ]; then
+    GENERATED_EKS_TEST_CLUSTER_NAME="eks-test-${safe_test_type}-${safe_platform_suffix}-${safe_test_name}-${safe_run_id}"
+  else
+    GENERATED_EKS_TEST_CLUSTER_NAME="eks-test-${safe_test_type}-${safe_test_name}-${safe_run_id}"
+  fi
+}
+
 resolve_integration_profile() {
   requested_profile="$1"
 

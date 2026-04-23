@@ -61,7 +61,11 @@ resolve_integration_profile "${requested_profile}"
 test_focus="${RESOLVED_INT_TEST_FOCUS}"
 safe_test_focus="$(sanitize_slug "${test_focus}")"
 
-cluster_name_prefix="$(first_nonempty "${PIPELINE_EKS_CLUSTER_NAME_PREFIX:-}" "${JOB_EKS_CLUSTER_NAME_PREFIX:-}" "eks-int-test-cluster")"
+cluster_name_prefix="$(first_nonempty "${PIPELINE_EKS_CLUSTER_NAME_PREFIX:-}" "${JOB_EKS_CLUSTER_NAME_PREFIX:-}" "")"
+cluster_test_type="$(first_nonempty "${PIPELINE_EKS_CLUSTER_TEST_TYPE:-}" "${JOB_EKS_CLUSTER_TEST_TYPE:-}" "")"
+cluster_platform_suffix="$(first_nonempty "${PIPELINE_EKS_CLUSTER_PLATFORM_SUFFIX:-}" "${JOB_EKS_CLUSTER_PLATFORM_SUFFIX:-}" "")"
+cluster_test_name="$(first_nonempty "${PIPELINE_EKS_CLUSTER_TEST_NAME:-}" "${JOB_EKS_CLUSTER_TEST_NAME:-}" "${test_focus}")"
+cluster_run_id="$(first_nonempty "${PIPELINE_EKS_CLUSTER_RUN_ID:-}" "${JOB_EKS_CLUSTER_RUN_ID:-}" "${CI_PIPELINE_ID:-${CI_JOB_ID:-}}")"
 cluster_nodes="$(first_nonempty "${PIPELINE_INT_CLUSTER_NODES:-}" "${JOB_INT_CLUSTER_NODES:-}" "${RESOLVED_INT_CLUSTER_NODES_DEFAULT}")"
 cluster_workers="$(first_nonempty "${PIPELINE_INT_CLUSTER_WORKERS:-}" "${JOB_INT_CLUSTER_WORKERS:-}" "${RESOLVED_INT_CLUSTER_WORKERS_DEFAULT}")"
 
@@ -90,7 +94,22 @@ if [ "${use_existing_cluster}" = "true" ]; then
   fi
   export TEST_CLUSTER_NAME="${existing_cluster_name}"
 else
-  export TEST_CLUSTER_NAME="${cluster_name_prefix}-${safe_test_focus}-${CI_JOB_ID}"
+  if [ -n "${cluster_name_prefix}" ]; then
+    export TEST_CLUSTER_NAME="${cluster_name_prefix}-${safe_test_focus}-${CI_JOB_ID}"
+  else
+    if [ -z "${cluster_test_type}" ]; then
+      case "${RESOLVED_INT_TEST_PROFILE}" in
+        smoke|managersecret-smoke-s1|managersecret-smoke-c3|licensemanager-smoke-s1)
+          cluster_test_type="smoke"
+          ;;
+        *)
+          cluster_test_type="integration"
+          ;;
+      esac
+    fi
+    build_eks_test_cluster_name "${cluster_test_type}" "${cluster_platform_suffix}" "${cluster_test_name}" "${cluster_run_id}"
+    export TEST_CLUSTER_NAME="${GENERATED_EKS_TEST_CLUSTER_NAME}"
+  fi
 fi
 export CLUSTER_WIDE="$(first_nonempty "${PIPELINE_INT_CLUSTER_WIDE:-}" "${JOB_INT_CLUSTER_WIDE:-}" "true")"
 export DEPLOYMENT_TYPE="$(first_nonempty "${PIPELINE_INT_DEPLOYMENT_TYPE:-}" "${JOB_INT_DEPLOYMENT_TYPE:-}" "")"
@@ -111,6 +130,8 @@ append_context "${context_file}" "ecr_region" "${ECR_REGION}"
 append_context "${context_file}" "test_profile" "${RESOLVED_INT_TEST_PROFILE}"
 append_context "${context_file}" "test_focus" "${TEST_FOCUS}"
 append_context "${context_file}" "test_to_skip" "${TEST_TO_SKIP}"
+append_context "${context_file}" "cluster_test_type" "${cluster_test_type}"
+append_context "${context_file}" "cluster_platform_suffix" "${cluster_platform_suffix}"
 append_context "${context_file}" "cluster_name" "${TEST_CLUSTER_NAME}"
 append_context "${context_file}" "existing_cluster" "${use_existing_cluster}"
 append_context "${context_file}" "cluster_workers" "${CLUSTER_WORKERS}"
