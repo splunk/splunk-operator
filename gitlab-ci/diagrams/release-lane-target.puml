@@ -21,19 +21,39 @@ rectangle "Push to release/<version> or release-<version>\nor MR from release br
 rectangle "Baseline\nverify and test jobs" as baseline
 rectangle "Build\nstaged multi-arch and distroless release images" as build
 rectangle "Image scan\nscan-stage-image-trivy" as scan
-rectangle "Release runtime validation\n11 integration suites\nplus Helm validation" as runtime #eefbf1
+rectangle "Release EKS runtime\n11-suite integration fanout" as runtime_eks #eefbf1
+rectangle "Release Azure runtime\nazure_sanity" as runtime_azure #eefbf1
+rectangle "Release GCP runtime\n5-suite sanity fanout" as runtime_gcp #eefbf1
+rectangle "Release distroless runtime\n11-suite EKS fanout" as runtime_distroless #eefbf1
+rectangle "Release Graviton runtime\n9-suite arm64 fanout" as runtime_graviton #eefbf1
+rectangle "Release Helm runtime\nfull chart validation" as runtime_helm #eefbf1
 rectangle "Release candidate packaging\npromote validated RC artifacts once" as packaging #f7f7ff
 rectangle "PSR plan\nrelease-psr-qualification-plan" as psr #f7f7ff
 
 trigger --> baseline
 baseline --> build
 build --> scan
-scan --> runtime
-runtime --> packaging
+scan --> runtime_eks
+scan --> runtime_azure
+scan --> runtime_gcp
+scan --> runtime_distroless
+scan --> runtime_graviton
+scan --> runtime_helm
+runtime_eks --> packaging
+runtime_azure --> packaging
+runtime_gcp --> packaging
+runtime_distroless --> packaging
+runtime_graviton --> packaging
+runtime_helm --> packaging
 packaging --> psr
 
 note bottom of packaging
 The release branch builds the candidate once.
 Main later promotes those validated outputs instead of rebuilding them.
+end note
+
+note bottom of runtime_graviton
+The arm64 suite set follows the existing splunk-operator-cicd
+Graviton release validation matrix.
 end note
 @enduml

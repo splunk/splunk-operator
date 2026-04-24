@@ -19,8 +19,8 @@ qualification-manifest:
   extends:
     - .python-qualification-job
     - .rules-qualification-lane
-  # Generate the required-job contract early so the report can rely on normal
-  # stage ordering instead of a long same-file `needs` list.
+  # The manifest is metadata only. Running it in verify keeps the later report
+  # job free of a long hardcoded integration-needs list.
   stage: verify
   needs:
     - job: released-sok-contract

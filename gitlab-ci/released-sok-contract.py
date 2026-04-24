@@ -126,9 +126,9 @@ def fetch_docker_registry_token(repository: str) -> str:
     return token
 
 
-def require_operator_image_release(repository: str, version: str) -> str:
+def require_image_tag_release(repository: str, tag: str) -> str:
     token = fetch_docker_registry_token(repository)
-    manifest_url = f"{DOCKER_REGISTRY_URL}/v2/{repository}/manifests/{version}"
+    manifest_url = f"{DOCKER_REGISTRY_URL}/v2/{repository}/manifests/{tag}"
     request = urllib.request.Request(
         manifest_url,
         headers={
@@ -149,24 +149,24 @@ def require_operator_image_release(repository: str, version: str) -> str:
         with urllib.request.urlopen(request, timeout=30) as response:
             if response.status != 200:
                 raise RuntimeError(
-                    f"Released operator image is not available for {repository}:{version}: HTTP {response.status}"
+                    f"Released operator image is not available for {repository}:{tag}: HTTP {response.status}"
                 )
     except urllib.error.HTTPError as exc:
         raise RuntimeError(
-            f"Released operator image is not available for {repository}:{version}: HTTP {exc.code}"
+            f"Released operator image is not available for {repository}:{tag}: HTTP {exc.code}"
         ) from exc
-    return f"docker.io/{repository}:{version}"
+    return f"docker.io/{repository}:{tag}"
 
 
-def require_released_operator_image(registry: str, repository_path: str, version: str) -> str:
+def require_released_operator_image(registry: str, repository_path: str, tag: str) -> str:
     if registry in {"docker.io", "registry-1.docker.io", "index.docker.io"}:
-        return require_operator_image_release(repository_path, version)
+        return require_image_tag_release(repository_path, tag)
 
     # Non-Docker Hub repositories are configuration-driven. The release lane
     # and the released-SOK contract now share the same repository variable
     # contract, so downstream official-release consumers can follow the same
     # published location even when the official registry path changes.
-    return build_image_ref(registry, repository_path, version)
+    return build_image_ref(registry, repository_path, tag)
 
 
 def build_contract() -> dict:
@@ -179,6 +179,11 @@ def build_contract() -> dict:
     enterprise_chart_url = require_chart_release(helm_repo_url, helm_index, "splunk-enterprise", released_version)
     operator_chart_url = require_chart_release(helm_repo_url, helm_index, "splunk-operator", released_version)
     operator_image_source = require_released_operator_image(operator_registry, operator_repository_path, released_version)
+    distroless_image_source = require_released_operator_image(
+        operator_registry,
+        operator_repository_path,
+        f"{released_version}-distroless",
+    )
 
     return {
         "schema_version": "v1alpha1",
@@ -194,6 +199,8 @@ def build_contract() -> dict:
             "version": released_version,
             "operator_image_source": operator_image_source,
             "operator_image_mirror_path": f"{operator_repository_path}:{released_version}",
+            "distroless_image_source": distroless_image_source,
+            "distroless_image_mirror_path": f"{operator_repository_path}:{released_version}-distroless",
             "enterprise_chart_version": released_version,
             "operator_chart_version": released_version,
             "enterprise_chart_url": enterprise_chart_url,
@@ -215,6 +222,8 @@ def write_contract_artifacts(output_dir: Path, contract: dict) -> None:
                 f"SOK_RELEASED_VERSION={released_version}",
                 f"SOK_RELEASED_OPERATOR_IMAGE_SOURCE={contract['released_sok']['operator_image_source']}",
                 f"SOK_RELEASED_OPERATOR_IMAGE_MIRROR_PATH={contract['released_sok']['operator_image_mirror_path']}",
+                f"SOK_RELEASED_DISTROLESS_IMAGE_SOURCE={contract['released_sok']['distroless_image_source']}",
+                f"SOK_RELEASED_DISTROLESS_IMAGE_MIRROR_PATH={contract['released_sok']['distroless_image_mirror_path']}",
                 f"SOK_RELEASED_ENTERPRISE_CHART_VERSION={released_version}",
                 f"SOK_RELEASED_OPERATOR_CHART_VERSION={released_version}",
                 f"SOK_RELEASED_HELM_REPO_URL={contract['release_source']['helm_repo_url']}",
@@ -229,6 +238,10 @@ def write_contract_artifacts(output_dir: Path, contract: dict) -> None:
         contract["released_sok"]["operator_image_source"] + "\n",
         encoding="utf-8",
     )
+    (output_dir / "released-distroless-image-source.txt").write_text(
+        contract["released_sok"]["distroless_image_source"] + "\n",
+        encoding="utf-8",
+    )
     (output_dir / "released-sok-contract.md").write_text(
         "\n".join(
             [
@@ -237,6 +250,8 @@ def write_contract_artifacts(output_dir: Path, contract: dict) -> None:
                 f"- released_version: {released_version}",
                 f"- operator_image_source: {contract['released_sok']['operator_image_source']}",
                 f"- operator_image_mirror_path: {contract['released_sok']['operator_image_mirror_path']}",
+                f"- distroless_image_source: {contract['released_sok']['distroless_image_source']}",
+                f"- distroless_image_mirror_path: {contract['released_sok']['distroless_image_mirror_path']}",
                 f"- enterprise_chart_version: {released_version}",
                 f"- operator_chart_version: {released_version}",
                 f"- github_release_html: {contract['release_source']['github_release_html']}",

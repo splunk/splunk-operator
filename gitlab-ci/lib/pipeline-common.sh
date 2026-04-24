@@ -90,6 +90,11 @@ load_optional_env_file() {
   fi
 }
 
+load_optional_release_controller_env() {
+  controller_env_path="$1"
+  load_optional_env_file "${controller_env_path}"
+}
+
 require_nonempty() {
   value="$1"
   description="$2"
@@ -245,6 +250,17 @@ resolve_enterprise_release_image() {
   RESOLVED_ENTERPRISE_IMAGE="$(strip_docker_io_prefix "${requested_enterprise_image}")"
 }
 
+resolve_runtime_enterprise_image() {
+  requested_enterprise_image="$(first_nonempty \
+    "${PIPELINE_RUNTIME_ENTERPRISE_IMAGE:-}" \
+    "${JOB_RUNTIME_ENTERPRISE_IMAGE:-}" \
+    "${PIPELINE_INT_ENTERPRISE_IMAGE:-}" \
+    "${JOB_INT_ENTERPRISE_IMAGE:-}" \
+    "${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-}" \
+    "splunk/splunk:latest")"
+  RESOLVED_ENTERPRISE_IMAGE="$(strip_docker_io_prefix "${requested_enterprise_image}")"
+}
+
 resolve_makefile_version() {
   makefile_path="$1"
   RESOLVED_MAKEFILE_VERSION="$(awk '/^VERSION[[:space:]]*\?/ {print $3; exit}' "${makefile_path}")"
@@ -276,6 +292,7 @@ resolve_operator_runtime_source() {
   default_repo_path="$3"
 
   RUNTIME_INPUT_ARTIFACT=""
+  RUNTIME_OPERATOR_IMAGE_VARIANT="$(first_nonempty "${PIPELINE_RUNTIME_IMAGE_VARIANT:-}" "${JOB_RUNTIME_IMAGE_VARIANT:-}" "standard")"
   RUNTIME_OPERATOR_SOURCE_KIND="branch-build"
   RUNTIME_OPERATOR_SOURCE_IMAGE=""
   RUNTIME_OPERATOR_MIRROR_PATH=""
@@ -291,10 +308,18 @@ resolve_operator_runtime_source() {
     RUNTIME_INPUT_ARTIFACT="${released_sok_contract_file}"
     resolve_pipeline_image_repository "$(first_nonempty "${PIPELINE_ECR_REPOSITORY:-}" "")" "${default_repo_path}"
     RUNTIME_ECR_REGISTRY="${RESOLVED_ECR_REGISTRY}"
-    RUNTIME_OPERATOR_SOURCE_IMAGE="$(first_nonempty "${SOK_RELEASED_OPERATOR_IMAGE_SOURCE:-}" "")"
-    RUNTIME_OPERATOR_MIRROR_PATH="$(first_nonempty "${SOK_RELEASED_OPERATOR_IMAGE_MIRROR_PATH:-}" "")"
+    case "${RUNTIME_OPERATOR_IMAGE_VARIANT}" in
+      distroless)
+        RUNTIME_OPERATOR_SOURCE_IMAGE="$(first_nonempty "${SOK_RELEASED_DISTROLESS_IMAGE_SOURCE:-}" "")"
+        RUNTIME_OPERATOR_MIRROR_PATH="$(first_nonempty "${SOK_RELEASED_DISTROLESS_IMAGE_MIRROR_PATH:-}" "")"
+        ;;
+      *)
+        RUNTIME_OPERATOR_SOURCE_IMAGE="$(first_nonempty "${SOK_RELEASED_OPERATOR_IMAGE_SOURCE:-}" "")"
+        RUNTIME_OPERATOR_MIRROR_PATH="$(first_nonempty "${SOK_RELEASED_OPERATOR_IMAGE_MIRROR_PATH:-}" "")"
+        ;;
+    esac
     if [ -z "${RUNTIME_OPERATOR_SOURCE_IMAGE}" ] || [ -z "${RUNTIME_OPERATOR_MIRROR_PATH}" ]; then
-      echo "Released SOK contract is missing operator image fields" >&2
+      echo "Released SOK contract is missing ${RUNTIME_OPERATOR_IMAGE_VARIANT} operator image fields" >&2
       return 1
     fi
     RUNTIME_OPERATOR_REPO_IMAGE="${RUNTIME_OPERATOR_MIRROR_PATH}"
@@ -318,6 +343,7 @@ append_operator_runtime_context() {
   context_file="$1"
 
   append_context "${context_file}" "input_artifact" "${RUNTIME_INPUT_ARTIFACT}"
+  append_context "${context_file}" "operator_image_variant" "${RUNTIME_OPERATOR_IMAGE_VARIANT}"
   if [ "${RUNTIME_OPERATOR_SOURCE_KIND}" = "official-release" ]; then
     append_context "${context_file}" "released_operator_image_source" "${RUNTIME_OPERATOR_SOURCE_IMAGE}"
   else
@@ -341,6 +367,31 @@ mirror_operator_image_to_ecr_if_needed() {
     docker push "${RUNTIME_OPERATOR_FULL_IMAGE_REF}"
     log_step "registry:mirror-operator:complete ${RUNTIME_OPERATOR_FULL_IMAGE_REF}"
   fi
+}
+
+login_source_registry_for_image() {
+  source_image_ref="$1"
+  source_registry="$(registry_host_from_image_ref "${source_image_ref}")"
+  source_username="$(first_nonempty "${PIPELINE_DOCKER_USERNAME:-}" "")"
+  source_password="$(first_nonempty "${PIPELINE_DOCKER_PASSWORD:-}" "")"
+
+  if printf '%s' "${source_registry}" | grep -Eq '\.dkr\.ecr\..*\.amazonaws\.com$'; then
+    docker_login_registry "${source_registry}" "" ""
+    return 0
+  fi
+
+  if [ -n "${source_username}" ] || [ -n "${source_password}" ]; then
+    docker_login_registry "${source_registry}" "${source_username}" "${source_password}"
+  fi
+}
+
+promote_image_to_private_registry() {
+  source_image_ref="$1"
+  target_image_ref="$2"
+
+  docker pull "${source_image_ref}"
+  docker tag "${source_image_ref}" "${target_image_ref}"
+  docker push "${target_image_ref}"
 }
 
 ensure_ci_bin_path() {

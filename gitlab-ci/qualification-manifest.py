@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from qualification_jobs import QUALIFICATION_REQUIRED_JOBS
+from qualification_jobs import REQUIRED_QUALIFICATION_JOBS
 
 
 def utc_now() -> str:
@@ -62,7 +62,7 @@ def main() -> int:
         "qualification": {
             "profile": qualification_profile,
             "helm_profile": helm_profile,
-            "required_jobs": QUALIFICATION_REQUIRED_JOBS,
+            "required_jobs": REQUIRED_QUALIFICATION_JOBS,
         },
     }
 

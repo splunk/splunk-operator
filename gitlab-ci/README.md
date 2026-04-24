@@ -107,6 +107,10 @@ What the qualification automation does:
 - resolves the released-SOK contract
 - scans the released operator image with Trivy
 - runs the qualification EKS integration validation
+- runs Azure validation against the released operator path
+- runs the GCP validation suite set against the released operator path
+- runs distroless runtime validation against the released distroless image
+- runs the Graviton or arm64 runtime suite set from the existing `splunk-operator-cicd` arm64 matrix against the released multi-arch operator image
 - runs Helm validation against the released chart path
 - writes the qualification manifest, report, gate result, and compatibility publish plan
 
@@ -129,7 +133,11 @@ What the release validation automation does:
 - builds the release candidate images once on the release branch
 - builds both multi-arch and distroless staged images for the release path
 - scans the staged release image
-- runs the full release integration fanout
+- runs the full release EKS integration fanout
+- runs Azure validation against the staged release candidate
+- runs the GCP validation suite set against the staged release candidate
+- runs distroless runtime validation against the staged distroless candidate image
+- runs the Graviton or arm64 runtime suite set from the existing `splunk-operator-cicd` arm64 matrix against the staged multi-arch candidate image
 - runs the release Helm validation job
 - packages the release-candidate artifacts only after validation
 - records the PSR qualification plan
@@ -213,6 +221,14 @@ The most important operator-facing rules are:
 - treat `release_publish` as a manual `main`-branch action only
 - never assume `main` publish should rebuild the product
 
+The main variable families for the expanded runtime coverage are:
+
+- `PIPELINE_AWS_*`, `PIPELINE_EKS_*`, `PIPELINE_TEST_BUCKET`, and `PIPELINE_TEST_INDEXES_S3_BUCKET` for EKS-based runtime jobs
+- `PIPELINE_AZURE_*` for AKS and Azure storage validation
+- `PIPELINE_GCP_*` for GKE, Artifact Registry, and GCS validation
+- `PIPELINE_GRAVITON_ENTERPRISE_IMAGE` when Graviton or arm64 runtime validation must use an arm-compatible Splunk Enterprise image
+- `PIPELINE_RUNTIME_ENTERPRISE_IMAGE` when a lane needs to override the default runtime enterprise image pin intentionally
+
 ## What GitLab Collects Automatically
 
 The pipeline is designed to collect operator-facing evidence by default instead of making users reconstruct state from raw logs alone.
@@ -233,6 +249,7 @@ The pipeline is designed to collect operator-facing evidence by default instead 
 ### Runtime integration and Helm jobs
 
 - integration jobs write `ci-output/*-cluster.log`, `ci-output/*-cleanup.log`, copied pod logs, and `ci-output/*-inttest-junit.xml`
+- Azure and GCP runtime jobs write the same runtime-context, cluster, cleanup, pod-log, and JUnit artifacts as the EKS jobs
 - Helm jobs write `ci-output/*-cluster.log`, `ci-output/*-cleanup.log`, `ci-output/*-kuttl.log`, `ci-output/*-kuttl-artifacts/`, and `ci-output/*-kuttl-junit.xml`
 - GitLab surfaces the JUnit XML through the pipeline **Tests** tab, so users do not need to parse XML manually first
 

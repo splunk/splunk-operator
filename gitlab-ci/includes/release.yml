@@ -114,6 +114,214 @@ release-helm-validation:
     reports:
       junit: ci-output/release-helm-validation-kuttl-junit.xml
 
+.release-validation-azure-job:
+  extends: .release-validation-runtime-job
+  timeout: 10h
+  script:
+    - gitlab-ci/int-test-azure-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/*-inttest-junit.xml
+
+.release-validation-gcp-job:
+  extends: .release-validation-runtime-job
+  timeout: 10h
+  script:
+    - gitlab-ci/int-test-gcp-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/*-inttest-junit.xml
+
+.release-validation-distroless-suite-job:
+  extends: .release-validation-integration-suite-job
+  variables:
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-distroless-image-ref.txt
+    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: release-distroless
+
+.release-validation-graviton-suite-job:
+  extends: .release-validation-integration-suite-job
+  variables:
+    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: release-arm64
+    JOB_USE_ARM64_CLUSTER: "true"
+    JOB_GRAVITON_TESTING: "true"
+    JOB_INT_ENTERPRISE_IMAGE: $PIPELINE_GRAVITON_ENTERPRISE_IMAGE
+
+release-azure-validation:
+  extends: .release-validation-azure-job
+  variables:
+    WORKFLOW_SLUG: release-azure-validation
+    JOB_CLOUD_TEST_FOCUS: azure_sanity
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+
+release-gcp-c3-validation:
+  extends: .release-validation-gcp-job
+  variables:
+    WORKFLOW_SLUG: release-gcp-c3-validation
+    JOB_CLOUD_TEST_FOCUS: c3_gcp_sanity
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+
+release-gcp-c3-manager-validation:
+  extends: .release-validation-gcp-job
+  variables:
+    WORKFLOW_SLUG: release-gcp-c3-manager-validation
+    JOB_CLOUD_TEST_FOCUS: c3_mgr_gcp_sanity
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+
+release-gcp-m4-validation:
+  extends: .release-validation-gcp-job
+  variables:
+    WORKFLOW_SLUG: release-gcp-m4-validation
+    JOB_CLOUD_TEST_FOCUS: m4_gcp_sanity
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+
+release-gcp-m4-manager-validation:
+  extends: .release-validation-gcp-job
+  variables:
+    WORKFLOW_SLUG: release-gcp-m4-manager-validation
+    JOB_CLOUD_TEST_FOCUS: m4_mgr_gcp_sanity
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+
+release-gcp-s1-validation:
+  extends: .release-validation-gcp-job
+  variables:
+    WORKFLOW_SLUG: release-gcp-s1-validation
+    JOB_CLOUD_TEST_FOCUS: s1_gcp_sanity
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+
+release-distroless-appframeworks-s1-validation:
+  extends:
+    - .release-validation-distroless-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: release-distroless-appframeworks-s1-validation
+    JOB_INT_TEST_FOCUS: appframeworksS1
+
+release-distroless-managerappframework-c3-validation:
+  extends:
+    - .release-validation-distroless-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: release-distroless-managerappframework-c3-validation
+    JOB_INT_TEST_FOCUS: managerappframeworkc3
+
+release-distroless-managerappframework-m4-validation:
+  extends:
+    - .release-validation-distroless-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: release-distroless-managerappframework-m4-validation
+    JOB_INT_TEST_FOCUS: managerappframeworkm4
+
+release-distroless-managersecret-validation:
+  extends: .release-validation-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: release-distroless-managersecret-validation
+    JOB_INT_TEST_FOCUS: managersecret
+
+release-distroless-managersmartstore-validation:
+  extends: .release-validation-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: release-distroless-managersmartstore-validation
+    JOB_INT_TEST_FOCUS: managersmartstore
+
+release-distroless-managermc1-validation:
+  extends: .release-validation-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: release-distroless-managermc1-validation
+    JOB_INT_TEST_FOCUS: managermc1
+
+release-distroless-managermc2-validation:
+  extends: .release-validation-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: release-distroless-managermc2-validation
+    JOB_INT_TEST_FOCUS: managermc2
+
+release-distroless-managercrcrud-validation:
+  extends: .release-validation-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: release-distroless-managercrcrud-validation
+    JOB_INT_TEST_FOCUS: managercrcrud
+
+release-distroless-licensemanager-validation:
+  extends: .release-validation-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: release-distroless-licensemanager-validation
+    JOB_INT_TEST_FOCUS: licensemanager
+
+release-distroless-managerdeletecr-validation:
+  extends: .release-validation-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: release-distroless-managerdeletecr-validation
+    JOB_INT_TEST_FOCUS: managerdeletecr
+
+release-distroless-indingsep-validation:
+  extends: .release-validation-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: release-distroless-indingsep-validation
+    JOB_INT_TEST_FOCUS: indingsep
+
+# Keep the arm64 suite set aligned with the existing splunk-operator-cicd
+# release validation matrix instead of drifting from the operational baseline.
+release-graviton-appframeworks-s1-validation:
+  extends:
+    - .release-validation-graviton-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: release-graviton-appframeworks-s1-validation
+    JOB_INT_TEST_FOCUS: appframeworksS1
+
+release-graviton-managersecret-validation:
+  extends: .release-validation-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: release-graviton-managersecret-validation
+    JOB_INT_TEST_FOCUS: managersecret
+
+release-graviton-managersmartstore-validation:
+  extends: .release-validation-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: release-graviton-managersmartstore-validation
+    JOB_INT_TEST_FOCUS: managersmartstore
+
+release-graviton-managermc1-validation:
+  extends: .release-validation-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: release-graviton-managermc1-validation
+    JOB_INT_TEST_FOCUS: managermc1
+
+release-graviton-managermc2-validation:
+  extends: .release-validation-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: release-graviton-managermc2-validation
+    JOB_INT_TEST_FOCUS: managermc2
+
+release-graviton-managercrcrud-validation:
+  extends: .release-validation-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: release-graviton-managercrcrud-validation
+    JOB_INT_TEST_FOCUS: managercrcrud
+
+release-graviton-licensemanager-validation:
+  extends: .release-validation-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: release-graviton-licensemanager-validation
+    JOB_INT_TEST_FOCUS: licensemanager
+
+release-graviton-managerdeletecr-validation:
+  extends: .release-validation-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: release-graviton-managerdeletecr-validation
+    JOB_INT_TEST_FOCUS: managerdeletecr
+
+release-graviton-indingsep-validation:
+  extends: .release-validation-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: release-graviton-indingsep-validation
+    JOB_INT_TEST_FOCUS: indingsep
+
 release-candidate-packaging:
   extends:
     - .release-artifact-job

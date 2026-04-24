@@ -53,7 +53,7 @@ if [ -z "${ECR_REGION}" ]; then
 fi
 
 # Enterprise image comes from the repo-owned release image pin.
-resolve_enterprise_release_image
+resolve_runtime_enterprise_image
 enterprise_image="${RESOLVED_ENTERPRISE_IMAGE}"
 
 requested_profile="$(first_nonempty "${PIPELINE_INT_TEST_PROFILE:-}" "${JOB_INT_TEST_PROFILE:-}" "smoke")"
@@ -68,6 +68,27 @@ cluster_test_name="$(first_nonempty "${PIPELINE_EKS_CLUSTER_TEST_NAME:-}" "${JOB
 cluster_run_id="$(first_nonempty "${PIPELINE_EKS_CLUSTER_RUN_ID:-}" "${JOB_EKS_CLUSTER_RUN_ID:-}" "${CI_PIPELINE_ID:-${CI_JOB_ID:-}}")"
 cluster_nodes="$(first_nonempty "${PIPELINE_INT_CLUSTER_NODES:-}" "${JOB_INT_CLUSTER_NODES:-}" "${RESOLVED_INT_CLUSTER_NODES_DEFAULT}")"
 cluster_workers="$(first_nonempty "${PIPELINE_INT_CLUSTER_WORKERS:-}" "${JOB_INT_CLUSTER_WORKERS:-}" "${RESOLVED_INT_CLUSTER_WORKERS_DEFAULT}")"
+runtime_eks_instance_type="$(first_nonempty "${PIPELINE_EKS_INSTANCE_TYPE:-}" "${JOB_EKS_INSTANCE_TYPE:-}" "")"
+use_arm64_cluster="false"
+if bool_is_true "$(first_nonempty "${PIPELINE_USE_ARM64_CLUSTER:-}" "${JOB_USE_ARM64_CLUSTER:-}" "false")"; then
+  use_arm64_cluster="true"
+fi
+graviton_testing="false"
+if bool_is_true "$(first_nonempty "${PIPELINE_GRAVITON_TESTING:-}" "${JOB_GRAVITON_TESTING:-}" "${use_arm64_cluster}")"; then
+  graviton_testing="true"
+fi
+explicit_runtime_enterprise_image="$(first_nonempty \
+  "${PIPELINE_RUNTIME_ENTERPRISE_IMAGE:-}" \
+  "${JOB_RUNTIME_ENTERPRISE_IMAGE:-}" \
+  "${PIPELINE_INT_ENTERPRISE_IMAGE:-}" \
+  "${JOB_INT_ENTERPRISE_IMAGE:-}" \
+  "${PIPELINE_GRAVITON_ENTERPRISE_IMAGE:-}" \
+  "")"
+if [ "${graviton_testing}" = "true" ] && [ -z "${explicit_runtime_enterprise_image}" ]; then
+  echo "Graviton runtime validation requires an explicit arm-compatible enterprise image override" >&2
+  echo "Set PIPELINE_GRAVITON_ENTERPRISE_IMAGE or a runtime enterprise-image override for this job" >&2
+  exit 1
+fi
 
 use_existing_cluster="false"
 if bool_is_true "$(first_nonempty "${PIPELINE_INT_USE_EXISTING_CLUSTER:-}" "${JOB_USE_EXISTING_CLUSTER:-}" "false")"; then
@@ -117,6 +138,22 @@ export CLUSTER_WIDE="$(first_nonempty "${PIPELINE_INT_CLUSTER_WIDE:-}" "${JOB_IN
 export DEPLOYMENT_TYPE="$(first_nonempty "${PIPELINE_INT_DEPLOYMENT_TYPE:-}" "${JOB_INT_DEPLOYMENT_TYPE:-}" "")"
 export CLUSTER_NODES="${cluster_nodes}"
 export CLUSTER_WORKERS="${cluster_workers}"
+if [ -z "${runtime_eks_instance_type}" ] && [ "${use_arm64_cluster}" = "true" ]; then
+  runtime_eks_instance_type="$(first_nonempty "${PIPELINE_EKS_INSTANCE_TYPE_ARM64:-}" "${EKS_INSTANCE_TYPE_ARM64:-}" "")"
+fi
+if [ -n "${runtime_eks_instance_type}" ]; then
+  export EKS_INSTANCE_TYPE="${runtime_eks_instance_type}"
+fi
+if [ "${use_arm64_cluster}" = "true" ]; then
+  export ARM64="true"
+else
+  export ARM64="false"
+fi
+if [ "${graviton_testing}" = "true" ]; then
+  export GRAVITON_TESTING="true"
+else
+  export GRAVITON_TESTING="false"
+fi
 export TEST_TIMEOUT="$(first_nonempty "${PIPELINE_INT_TEST_TIMEOUT:-}" "${JOB_INT_TEST_TIMEOUT:-}" "7h")"
 export EKS_VPC_PUBLIC_SUBNET_STRING="$(first_nonempty "${PIPELINE_EKS_VPC_PUBLIC_SUBNET_STRING:-}" "${EKS_VPC_PUBLIC_SUBNET_STRING:-}" "")"
 export EKS_VPC_PRIVATE_SUBNET_STRING="$(first_nonempty "${PIPELINE_EKS_VPC_PRIVATE_SUBNET_STRING:-}" "${EKS_VPC_PRIVATE_SUBNET_STRING:-}" "")"
@@ -143,6 +180,9 @@ append_context "${context_file}" "existing_cluster" "${use_existing_cluster}"
 append_context "${context_file}" "cluster_workers" "${CLUSTER_WORKERS}"
 append_context "${context_file}" "cluster_nodes" "${CLUSTER_NODES}"
 append_context "${context_file}" "cluster_wide" "${CLUSTER_WIDE}"
+append_context "${context_file}" "use_arm64_cluster" "${use_arm64_cluster}"
+append_context "${context_file}" "graviton_testing" "${graviton_testing}"
+append_context "${context_file}" "eks_instance_type" "${EKS_INSTANCE_TYPE:-}"
 append_context "${context_file}" "test_timeout" "${TEST_TIMEOUT}"
 append_context "${context_file}" "operator_image" "${SPLUNK_OPERATOR_IMAGE}"
 append_context "${context_file}" "enterprise_image" "${SPLUNK_ENTERPRISE_IMAGE}"

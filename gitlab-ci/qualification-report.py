@@ -5,10 +5,7 @@ import json
 from pathlib import Path
 from xml.etree import ElementTree
 
-from qualification_jobs import qualification_job_evidence, qualification_job_junit_evidence
-
-JOB_EVIDENCE = qualification_job_evidence()
-JOB_JUNIT_EVIDENCE = qualification_job_junit_evidence()
+from qualification_jobs import JOB_EVIDENCE, JOB_JUNIT_EVIDENCE
 
 
 def job_executed(project_dir: Path, job_name: str) -> bool:

@@ -21,17 +21,37 @@ rectangle "Manual web or API trigger\nSOK_PIPELINE_MODE=qualification_lane" as t
 rectangle "Baseline\nverify and test jobs" as baseline
 rectangle "Released SOK contract\nresolve released image and chart inputs" as contract
 rectangle "Released image scan\nscan-released-operator-image-trivy" as scan
-rectangle "Qualification runtime\nfull EKS validation\nplus Helm validation" as runtime #eefbf1
+rectangle "Qualification EKS runtime\nfull validation in one cluster" as runtime_eks #eefbf1
+rectangle "Qualification Azure runtime\nazure_sanity" as runtime_azure #eefbf1
+rectangle "Qualification GCP runtime\n5-suite sanity fanout" as runtime_gcp #eefbf1
+rectangle "Qualification distroless runtime\n11-suite EKS fanout" as runtime_distroless #eefbf1
+rectangle "Qualification Graviton runtime\n9-suite arm64 fanout" as runtime_graviton #eefbf1
+rectangle "Qualification Helm runtime\nfull chart validation" as runtime_helm #eefbf1
 rectangle "Decision outputs\nmanifest, report, gate,\ncompatibility publish plan" as report #f7f7ff
 
 trigger --> baseline
 baseline --> contract
 contract --> scan
-scan --> runtime
-runtime --> report
+scan --> runtime_eks
+scan --> runtime_azure
+scan --> runtime_gcp
+scan --> runtime_distroless
+scan --> runtime_graviton
+scan --> runtime_helm
+runtime_eks --> report
+runtime_azure --> report
+runtime_gcp --> report
+runtime_distroless --> report
+runtime_graviton --> report
+runtime_helm --> report
 
 note bottom of contract
 Qualification tests the current released SOK baseline.
 It is a compatibility lane, not a develop-branch build lane.
+end note
+
+note bottom of runtime_graviton
+The Graviton suite set stays aligned with the existing
+splunk-operator-cicd arm64 validation matrix.
 end note
 @enduml
