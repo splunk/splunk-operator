@@ -149,6 +149,21 @@ docs-preview: ## Preview documentation locally with Jekyll (requires Ruby and bu
 	@cd docs && bundle exec jekyll serve --livereload
 	@echo "Documentation available at http://localhost:4000/splunk-operator"
 
+##@ Helm
+
+HELM_OPERATOR_CHART = helm-chart/splunk-operator
+
+.PHONY: helm-lint
+helm-lint: ## Lint Helm charts
+	helm lint $(HELM_OPERATOR_CHART)
+
+.PHONY: helm-test
+helm-test: setup/helm-unittest ## Run Helm chart unit tests
+	helm unittest $(HELM_OPERATOR_CHART)
+
+.PHONY: helm-check
+helm-check: helm-lint helm-test ## Run Helm lint and unit tests
+
 ##@ Build
 
 build: setup/ginkgo manifests generate fmt vet ## Build manager binary.
@@ -165,8 +180,14 @@ docker-push: ## Push docker image with the manager.
 
 # Docker-buildx is used to build the image for multiple OS/platforms
 # IMG is a mandatory argument to specify the image name
+# Defaults:
+#   Build Platform: linux/amd64,linux/arm64
+#   Build Base OS: registry.access.redhat.com/ubi8/ubi-minimal
+#   Build Base OS Version: 8.10-1776645784
 # Pass only what is required, the rest will use the Dockerfile defaults
 PLATFORMS ?= linux/amd64,linux/arm64
+BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal
+BASE_IMAGE_VERSION ?= 8.10-1776645784
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
@@ -300,6 +321,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.18.0
 GOLANGCI_LINT_VERSION ?= v2.1.0
 GOSEC_VERSION ?= v2.22.4
 GOVULNCHECK_VERSION ?= v1.1.4
+HELM_UNITTEST_VERSION ?= v1.0.3
 
 CONTROLLER_GEN = $(LOCALBIN)/controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
@@ -560,6 +582,11 @@ cleanup:
 setup/ginkgo:
 	@echo Installing ginkgo
 	@go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@$(shell go list -m -f '{{.Version}}' github.com/onsi/ginkgo/v2)
+
+.PHONY: setup/helm-unittest
+setup/helm-unittest:
+	@helm plugin list 2>/dev/null | grep -q unittest || \
+		helm plugin install https://github.com/helm-unittest/helm-unittest.git --version $(HELM_UNITTEST_VERSION)
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize

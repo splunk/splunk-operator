@@ -208,7 +208,7 @@ func TestSetVolumeDefault(t *testing.T) {
 		},
 	}
 
-	// Make sure the default mode is set correcty
+	// Make sure the default mode is set correctly
 	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
 	if cr.Spec.CommonSplunkSpec.Volumes == nil {
 		t.Errorf("setVolumeDefaults() returns nil for Volumes")
@@ -1357,7 +1357,7 @@ func TestAddStorageVolumes(t *testing.T) {
 	}
 
 	// Test defaults - PVCs for etc & var with 10Gi and 100Gi storage capacity
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "add_storage_volumes_default.json"))
 	// Define PVCs for etc & var with storage capacity and storage class name defined
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
@@ -1369,7 +1369,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp3",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"storageClassName":"gp3"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "add_storage_volumes_custom_storage.json"))
 	// Define PVCs for etc & ephemeral for var
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
@@ -1380,7 +1380,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			EphemeralStorage: true,
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-var","emptyDir":{}},{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "add_storage_volumes_ephemeral_var.json"))
 	// Define ephemeral for etc & PVCs for var
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
@@ -1391,7 +1391,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp2",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}},{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "add_storage_volumes_ephemeral_etc.json"))
 	// Define ephemeral for etc & var(should ignore storage capacity & storage class name)
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
@@ -1403,7 +1403,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp2",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}},{"name":"mnt-splunk-var","emptyDir":{}},{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "add_storage_volumes_ephemeral_both.json"))
 	// Define invalid EtcVolumeStorageConfig
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
@@ -1414,7 +1414,7 @@ func TestAddStorageVolumes(t *testing.T) {
 	client := spltest.NewMockClient()
 	err := addStorageVolumes(ctx, &cr, client, spec, statefulSet, labels)
 	if err == nil {
-		t.Errorf("Unable to idenitfy incorrect EtcVolumeStorageConfig resource quantity")
+		t.Errorf("Unable to identify incorrect EtcVolumeStorageConfig resource quantity")
 	}
 
 	// Define invalid VarVolumeStorageConfig
@@ -1425,7 +1425,7 @@ func TestAddStorageVolumes(t *testing.T) {
 	}
 	err = addStorageVolumes(ctx, &cr, client, spec, statefulSet, labels)
 	if err == nil {
-		t.Errorf("Unable to idenitfy incorrect VarVolumeStorageConfig resource quantity")
+		t.Errorf("Unable to identify incorrect VarVolumeStorageConfig resource quantity")
 	}
 
 	// test if adminManagedPV logic works
@@ -1487,7 +1487,7 @@ func TestAddStorageVolumes(t *testing.T) {
 		},
 	}
 
-	test(`{"apiVersion":"apps/v1","kind":"StatefulSet","metadata":{"annotations":{"enterprise.splunk.com/admin-managed-pv":"true"},"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-CM-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager"},"name":"test-statefulset","namespace":"test"},"spec":{"replicas":1,"selector":null,"serviceName":"","template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"image":"test","name":"splunk","resources":{},"volumeMounts":[{"mountPath":"/opt/splunk/etc","name":"pvc-etc"},{"mountPath":"/opt/splunk/var","name":"pvc-var"},{"mountPath":"/mnt/probes","name":"splunk-test-probe-configmap"}]}],"volumes":[{"configMap":{"defaultMode":365,"name":"splunk-test-probe-configmap"},"name":"splunk-test-probe-configmap"}]}},"updateStrategy":{},"volumeClaimTemplates":[{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-CM-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager"},"name":"pvc-etc","namespace":"test"},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"selector":{"matchLabels":{"app.kubernetes.io/instance":"splunk-CM-cluster-manager","app.kubernetes.io/name":"cluster-manager"}}},"status":{}},{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-CM-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager"},"name":"pvc-var","namespace":"test"},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"selector":{"matchLabels":{"app.kubernetes.io/instance":"splunk-CM-cluster-manager","app.kubernetes.io/name":"cluster-manager"}}},"status":{}}]},"status":{"availableReplicas":0,"replicas":0}}`)
+	test(loadFixture(t, "add_storage_volumes_admin_managed_pv.json"))
 }
 
 func TestGetVolumeSourceMountFromConfigMapData(t *testing.T) {
@@ -1509,7 +1509,7 @@ func TestGetVolumeSourceMountFromConfigMapData(t *testing.T) {
 
 	}
 
-	test(cm, &mode, `{"configMap":{"name":"testConfgMap","items":[{"key":"a","path":"a","mode":755},{"key":"b","path":"b","mode":755},{"key":"z","path":"z","mode":755}],"defaultMode":755}}`)
+	test(cm, &mode, loadFixture(t, "get_volume_source_mount_from_configmap.json"))
 }
 
 func TestGetLivenessProbe(t *testing.T) {
@@ -1593,7 +1593,7 @@ func TestGetProbe(t *testing.T) {
 
 	}
 
-	test(command, 100, 10, 10, `{"exec":{"command":["grep","ready","file.txt"]},"initialDelaySeconds":100,"timeoutSeconds":10,"periodSeconds":10}`)
+	test(command, 100, 10, 10, loadFixture(t, "get_probe.json"))
 }
 
 func TestCreateOrUpdateAppUpdateConfigMapShouldNotFail(t *testing.T) {

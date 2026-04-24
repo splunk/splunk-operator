@@ -16,9 +16,7 @@
 package enterprise
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -31,7 +29,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -2588,24 +2585,6 @@ func changeAnnotations(ctx context.Context, c splcommon.ControllerClient, image 
 	cr.SetAnnotations(annotations)
 	err := c.Update(ctx, cr)
 	return err
-}
-
-// loadFixture loads a JSON fixture file from the testdata/fixtures directory
-// and returns it as compact JSON (minified, single-line)
-func loadFixture(t *testing.T, filename string) string {
-	t.Helper()
-	path := filepath.Join("testdata", "fixtures", filename)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("Failed to load fixture %s: %v", filename, err)
-	}
-
-	// Compact the JSON to match the output from json.Marshal
-	var compactJSON bytes.Buffer
-	if err := json.Compact(&compactJSON, data); err != nil {
-		t.Fatalf("Failed to compact JSON from fixture %s: %v", filename, err)
-	}
-	return compactJSON.String()
 }
 
 // QueueOSConfig holds resolved Queue and ObjectStorage specs with credentials

@@ -60,7 +60,7 @@ func TestApplyClusterMaster(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.ConfigMap-test-splunk-cluster-master-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
-		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerService},
+		{MetaName: "*v1." + testStack1ClusterManagerService},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
@@ -69,8 +69,8 @@ func TestApplyClusterMaster(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-stack1-cluster-master-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
-		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
-		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
+		{MetaName: "*v1." + testStack1ClusterManagerStatefulSet},
+		{MetaName: "*v1." + testStack1ClusterManagerStatefulSet},
 		{MetaName: "*v3.ClusterMaster-test-stack1"},
 		{MetaName: "*v3.ClusterMaster-test-stack1"},
 	}
@@ -79,16 +79,16 @@ func TestApplyClusterMaster(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.ConfigMap-test-splunk-cluster-master-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
-		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerService},
+		{MetaName: "*v1." + testStack1ClusterManagerService},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-cluster-master-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
-		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
-		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
-		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
+		{MetaName: "*v1." + testStack1ClusterManagerStatefulSet},
+		{MetaName: "*v1." + testStack1ClusterManagerStatefulSet},
+		{MetaName: "*v1." + testStack1ClusterManagerStatefulSet},
 		{MetaName: "*v3.ClusterMaster-test-stack1"},
 		{MetaName: "*v3.ClusterMaster-test-stack1"},
 	}
@@ -266,9 +266,9 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerConfigMapSmartStore},
-		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerConfigMapSmartStore},
-		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerConfigMapSmartStore},
+		{MetaName: "*v1." + testStack1ClusterManagerConfigMapSmartStore},
+		{MetaName: "*v1." + testStack1ClusterManagerConfigMapSmartStore},
+		{MetaName: "*v1." + testStack1ClusterManagerConfigMapSmartStore},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.ConfigMap-test-splunk-cluster-master-stack1-configmap"},
@@ -293,8 +293,8 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerConfigMapSmartStore},
-		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerConfigMapSmartStore},
+		{MetaName: "*v1." + testStack1ClusterManagerConfigMapSmartStore},
+		{MetaName: "*v1." + testStack1ClusterManagerConfigMapSmartStore},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.ConfigMap-test-splunk-cluster-master-stack1-configmap"},
@@ -389,7 +389,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 
 	smartstoreConfigMap := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      splcommon.TestStack1ClusterManagerSmartStore,
+			Name:      testStack1ClusterManagerSmartStore,
 			Namespace: "test",
 		},
 		Data: map[string]string{"a": "b"},
@@ -408,7 +408,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf(splcommon.TestStack1ClusterManagerID, "0"),
+			Name:      fmt.Sprintf(testStack1ClusterManagerID, "0"),
 			Namespace: "test",
 			Labels: map[string]string{
 				"controller-revision-hash": "v1",
@@ -496,7 +496,7 @@ func TestPerformCmasterBundlePush(t *testing.T) {
 
 	smartstoreConfigMap := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      splcommon.TestStack1ClusterManagerSmartStore,
+			Name:      testStack1ClusterManagerSmartStore,
 			Namespace: "test",
 		},
 		Data: map[string]string{configToken: ""},
@@ -1143,7 +1143,7 @@ func TestCheckIfMastersmartstoreConfigMapUpdatedToPod(t *testing.T) {
 
 	smartstoreConfigMap := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      splcommon.TestStack1ClusterManagerSmartStore,
+			Name:      testStack1ClusterManagerSmartStore,
 			Namespace: "test",
 		},
 		Data: map[string]string{"a": "b"},
@@ -1344,7 +1344,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
 
-	// simulate create clustermaster instance before reconcilation
+	// simulate create clustermaster instance before reconciliation
 	c.Create(ctx, clustermaster)
 
 	_, err := ApplyClusterMaster(ctx, c, clustermaster)

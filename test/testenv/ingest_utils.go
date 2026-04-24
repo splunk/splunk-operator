@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -90,7 +90,7 @@ func CreateMockLogfile(logFile string, totalLines int) error {
 }
 
 // CreateAnIndexStandalone creates an index on a standalone instance using the CLI
-func CreateAnIndexStandalone(ctx context.Context, indexName string, podName string, deployment *Deployment) error {
+func CreateAnIndexStandalone(ctx context.Context, deployment *Deployment, indexName string, podName string) error {
 
 	var addIndexCmd strings.Builder
 	splunkBin := "/opt/splunk/bin/splunk"
@@ -120,10 +120,10 @@ func CreateAnIndexStandalone(ctx context.Context, indexName string, podName stri
 }
 
 // IngestFileViaOneshot ingests a file into an instance using the oneshot CLI
-func IngestFileViaOneshot(ctx context.Context, logFile string, indexName string, podName string, deployment *Deployment) error {
+func IngestFileViaOneshot(ctx context.Context, deployment *Deployment, logFile string, indexName string, podName string) error {
 
 	// Send it to the instance
-	resp, stderr, cpErr := CopyFileToPod(ctx, podName, logFile, logFile, deployment)
+	resp, stderr, cpErr := CopyFileToPod(ctx, deployment, podName, logFile, logFile)
 	if cpErr != nil {
 		logf.Log.Error(cpErr, "Failed File Copy to pod", "logFile", logFile, "podName", podName, "stderr", stderr)
 		return cpErr
@@ -158,7 +158,7 @@ func IngestFileViaOneshot(ctx context.Context, logFile string, indexName string,
 }
 
 // CopyFileToPod copies a file locally from srcPath to the destPath on the pod specified in podName
-func CopyFileToPod(ctx context.Context, podName string, srcPath string, destPath string, deployment *Deployment) (string, string, error) {
+func CopyFileToPod(ctx context.Context, deployment *Deployment, podName string, srcPath string, destPath string) (string, string, error) {
 	// Create tar file stream
 	reader, writer := io.Pipe()
 	if destPath != "/" && strings.HasSuffix(string(destPath[len(destPath)-1]), "/") {
@@ -224,10 +224,10 @@ func CopyFileToPod(ctx context.Context, podName string, srcPath string, destPath
 }
 
 // IngestFileViaMonitor ingests a file into an instance using the monitor CLI
-func IngestFileViaMonitor(ctx context.Context, logFile string, indexName string, podName string, deployment *Deployment) error {
+func IngestFileViaMonitor(ctx context.Context, deployment *Deployment, logFile string, indexName string, podName string) error {
 
 	// Send it to the instance
-	resp, stderr, cpErr := CopyFileToPod(ctx, podName, logFile, logFile, deployment)
+	resp, stderr, cpErr := CopyFileToPod(ctx, deployment, podName, logFile, logFile)
 	if cpErr != nil {
 		logf.Log.Error(cpErr, "Failed File Copy to pod", "logFile", logFile, "podName", podName, "stderr", stderr)
 		return cpErr

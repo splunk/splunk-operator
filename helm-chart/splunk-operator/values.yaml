@@ -146,6 +146,16 @@ splunkOperator:
   # Mandatory acknowledgment mechanism for the Splunk General Terms (SGT) 
   splunkGeneralTerms: ""
 
+  # Feature gates to enable or disable on the operator.
+  # Each key is a gate name and the value is a boolean (true/false).
+  # The map is formatted into a single --feature-gates arg automatically.
+  # Adding a new gate requires no chart changes — just add an entry here.
+  # reference: https://splunk.github.io/splunk-operator/FeatureGates
+  featureGates: {}
+  # featureGates:
+  #   ValidationWebhook: true
+  #   MyNewFeature: false
+
 # Array with extra yaml to deploy with the chart. Evaluated as a template
 extraManifests: []
 # extraManifests:

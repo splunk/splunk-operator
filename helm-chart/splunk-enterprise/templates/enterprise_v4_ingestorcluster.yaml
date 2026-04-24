@@ -1,3 +1,4 @@
+{{- if .Values.ingestorCluster }}
 {{- if .Values.ingestorCluster.enabled }}
 apiVersion: enterprise.splunk.com/v4
 kind: IngestorCluster
@@ -134,4 +135,5 @@ spec:
   {{- if .Values.ingestorCluster.defaultsUrlApps }}
     defaultsUrlApps: {{ .Values.ingestorCluster.defaultsUrlApps }}
   {{- end }}
+{{- end }}
 {{- end }}
