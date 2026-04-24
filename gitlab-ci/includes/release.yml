@@ -586,6 +586,12 @@ gitlab-release-record:
       artifacts: true
     - job: publish-release-charts
       artifacts: true
+    - job: release-psr-qualification-plan
+      artifacts: true
+      optional: true
+    - job: psr-release-qualification-collect
+      artifacts: true
+      optional: true
     - job: preflight-certification
       artifacts: true
       optional: true
