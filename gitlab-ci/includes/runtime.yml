@@ -165,6 +165,8 @@ helm-eks-validation:
   rules:
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
       when: never
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
   variables:
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
