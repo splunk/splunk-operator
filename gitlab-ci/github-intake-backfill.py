@@ -530,7 +530,7 @@ def main() -> int:
             elif existing_issue:
                 gitlab_iid = existing_issue["iid"]
                 gitlab_kind = "issue"
-            elif branch_pair_mr:
+            elif same_repo and branch_pair_mr:
                 gitlab_iid = branch_pair_mr["iid"]
                 gitlab_kind = "mr"
                 action = "branch-pair-conflict"
