@@ -1,6 +1,8 @@
 build-stage-image:
   extends: .runtime-build-job
   rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
       when: never
     - when: on_success
@@ -18,6 +20,8 @@ build-stage-image:
 scan-stage-image-trivy:
   extends: .runtime-image-scan-job
   rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
       when: never
     - when: on_success

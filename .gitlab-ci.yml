@@ -2,6 +2,9 @@ workflow:
   auto_cancel:
     on_new_commit: conservative
   rules:
+    - if: '$CI_PIPELINE_SOURCE =~ /^(web|api|schedule)$/ && $SOK_PIPELINE_MODE == "github_admin_daily"'
+    - if: '$CI_PIPELINE_SOURCE =~ /^(web|api|schedule)$/ && $SOK_PIPELINE_MODE == "github_intake"'
+    - if: '$CI_PIPELINE_SOURCE =~ /^(web|api|schedule)$/ && $SOK_PIPELINE_MODE == "github_mirror_health"'
     - if: '$CI_PIPELINE_SOURCE =~ /^(web|api)$/ && $SOK_PIPELINE_MODE == "qualification_lane"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH && $CI_COMMIT_TITLE =~ /^Merge /'
@@ -15,12 +18,17 @@ include:
   - local: gitlab-ci/includes/baseline.yml
   - local: gitlab-ci/includes/runtime.yml
   - local: gitlab-ci/includes/qualification.yml
+  - local: gitlab-ci/includes/admin.yml
   - project: 'ci-cd/templates'
     ref: main
     file: '/prodsec/.oss-scan.yml'
 
 oss-scan:
   stage: test
+  rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
+    - when: on_success
   needs:
     - format-and-vet
   extends: .oss-scan

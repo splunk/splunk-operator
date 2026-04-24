@@ -6,6 +6,7 @@ stages:
   - security
   - integration
   - qualification
+  - publish
 
 variables:
   GIT_DEPTH: "0"
@@ -39,9 +40,17 @@ default:
 
 .go-verify-job:
   stage: verify
+  rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
+    - when: on_success
 
 .go-test-job:
   stage: test
+  rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
+    - when: on_success
 
 .runtime-artifact-job:
   artifacts:
@@ -74,6 +83,10 @@ default:
   extends: .runtime-artifact-job
   stage: qualification
 
+.admin-job:
+  extends: .runtime-artifact-job
+  stage: publish
+
 .python-venv-job:
   before_script:
     - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
@@ -83,6 +96,11 @@ default:
 .python-qualification-job:
   extends:
     - .qualification-job
+    - .python-venv-job
+
+.python-admin-job:
+  extends:
+    - .admin-job
     - .python-venv-job
 
 .kubectl-splunk-python-job:
@@ -103,3 +121,15 @@ default:
 .rules-qualification-lane:
   rules:
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+
+.rules-github-intake-lane:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE =~ /^(web|api|schedule)$/ && $SOK_PIPELINE_MODE == "github_intake"'
+
+.rules-github-mirror-health-lane:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE =~ /^(web|api|schedule)$/ && $SOK_PIPELINE_MODE == "github_mirror_health"'
+
+.rules-github-admin-daily-lane:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE =~ /^(web|api|schedule)$/ && $SOK_PIPELINE_MODE == "github_admin_daily"'
