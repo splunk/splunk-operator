@@ -504,6 +504,16 @@ func (c MockClient) Status() client.StatusWriter {
 	return c.StatusWriter
 }
 
+// Apply applies the given apply configuration to the mock client's state.
+// Required by client.Client in controller-runtime v0.22+ (k8s v0.34+).
+func (c MockClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorApply]; ok && value != nil {
+		return value
+	}
+	c.Calls["Apply"] = append(c.Calls["Apply"], MockFuncCall{CTX: ctx})
+	return nil
+}
+
 // ResetCalls resets the function call tracker
 func (c *MockClient) ResetCalls() {
 	c.Calls = make(map[string][]MockFuncCall)

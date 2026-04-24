@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	pgwebhook "github.com/splunk/splunk-operator/pkg/postgresql/cluster/adapter/webhook"
 )
 
 // GVR constants for all Splunk Enterprise CRDs
@@ -70,6 +71,18 @@ var (
 		Group:    "enterprise.splunk.com",
 		Version:  "v4",
 		Resource: "monitoringconsoles",
+	}
+
+	PostgresClusterGVR = schema.GroupVersionResource{
+		Group:    "enterprise.splunk.com",
+		Version:  "v4",
+		Resource: "postgresclusters",
+	}
+
+	PostgresClusterClassGVR = schema.GroupVersionResource{
+		Group:    "enterprise.splunk.com",
+		Version:  "v4",
+		Resource: "postgresclusterclasses",
 	}
 )
 
@@ -178,6 +191,28 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 		GroupKind: schema.GroupKind{
 			Group: "enterprise.splunk.com",
 			Kind:  "MonitoringConsole",
+		},
+	},
+
+	PostgresClusterGVR: &GenericValidator[*enterpriseApi.PostgresCluster]{
+		ValidateCreateFunc:   pgwebhook.ValidatePostgresClusterCreate,
+		ValidateUpdateFunc:   pgwebhook.ValidatePostgresClusterUpdate,
+		WarningsOnCreateFunc: pgwebhook.GetPostgresClusterWarningsOnCreate,
+		WarningsOnUpdateFunc: pgwebhook.GetPostgresClusterWarningsOnUpdate,
+		GroupKind: schema.GroupKind{
+			Group: "enterprise.splunk.com",
+			Kind:  "PostgresCluster",
+		},
+	},
+
+	PostgresClusterClassGVR: &GenericValidator[*enterpriseApi.PostgresClusterClass]{
+		ValidateCreateFunc:   pgwebhook.ValidatePostgresClusterClassCreate,
+		ValidateUpdateFunc:   pgwebhook.ValidatePostgresClusterClassUpdate,
+		WarningsOnCreateFunc: pgwebhook.GetPostgresClusterClassWarningsOnCreate,
+		WarningsOnUpdateFunc: pgwebhook.GetPostgresClusterClassWarningsOnUpdate,
+		GroupKind: schema.GroupKind{
+			Group: "enterprise.splunk.com",
+			Kind:  "PostgresClusterClass",
 		},
 	},
 }

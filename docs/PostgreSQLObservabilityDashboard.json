@@ -1,0 +1,1057 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "count(count by (pod) (cnpg_pg_postmaster_start_time{namespace=\"$namespace\",pod=~\"$cluster-[0-9]+\"}))",
+          "legendFormat": "postgres pods",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "PostgreSQL Targets",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "index": 0,
+                  "text": "Down"
+                },
+                "1": {
+                  "index": 1,
+                  "text": "Up"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "max(1 - clamp_max(cnpg_pgbouncer_last_collection_error{namespace=\"$namespace\",pod=~\"$cluster-pooler-rw-.*\"}, 1))",
+          "legendFormat": "rw",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "RW Pooler",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "index": 0,
+                  "text": "Down"
+                },
+                "1": {
+                  "index": 1,
+                  "text": "Up"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "max(1 - clamp_max(cnpg_pgbouncer_last_collection_error{namespace=\"$namespace\",pod=~\"$cluster-pooler-ro-.*\"}, 1))",
+          "legendFormat": "ro",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "RO Pooler",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(cnpg_pg_stat_archiver_archived_count{namespace=\"$namespace\",pod=~\"$cluster-[0-9]+\"}[5m]))",
+          "legendFormat": "archive rate",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Archive Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(splunk_operator_postgres_databases{phase=\"Failed\"})",
+          "legendFormat": "failed",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Failed Databases",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 4
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (datname) (cnpg_pg_database_size_bytes{namespace=\"$namespace\",pod=~\"$cluster-[0-9]+\"})",
+          "legendFormat": "{{datname}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Database Size by Database",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 4
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (pooler) (label_replace(cnpg_pgbouncer_pools_cl_active{namespace=\"$namespace\",pod=~\"$cluster-pooler-(rw|ro)-.*\"}, \"pooler\", \"$1\", \"pod\", \".*-pooler-(rw|ro)-.*\"))",
+          "legendFormat": "{{pooler}} active",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum by (pooler) (label_replace(cnpg_pgbouncer_pools_cl_waiting{namespace=\"$namespace\",pod=~\"$cluster-pooler-(rw|ro)-.*\"}, \"pooler\", \"$1\", \"pod\", \".*-pooler-(rw|ro)-.*\"))",
+          "legendFormat": "{{pooler}} waiting",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "PgBouncer Client Load",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.25
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 4
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(cnpg_pg_stat_archiver_archived_count{namespace=\"$namespace\",pod=~\"$cluster-[0-9]+\"}[5m]))",
+          "legendFormat": "archived WAL / sec",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(cnpg_collector_pg_wal{namespace=\"$namespace\",pod=~\"$cluster-[0-9]+\",value=\"count\"})",
+          "legendFormat": "wal files total",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "WAL Activity",
+      "type": "timeseries"
+    },
+    {
+      "gridPos": {
+        "h": 2,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 100,
+      "options": {
+        "content": "## Controller-Runtime (built-in, zero code)\nReconcile count, duration, errors \u2014 provided automatically by the framework.",
+        "mode": "markdown"
+      },
+      "title": "",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "ops"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 14
+      },
+      "id": 9,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "rate(controller_runtime_reconcile_total{controller=~\"postgresCluster|postgresdatabase\"}[1m])",
+          "legendFormat": "{{controller}} / {{result}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Reconcile Rate (per second)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 14
+      },
+      "id": 10,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (controller, le) (rate(controller_runtime_reconcile_time_seconds_bucket{controller=~\"postgresCluster|postgresdatabase\"}[5m])))",
+          "legendFormat": "p99 {{controller}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum by (controller, le) (rate(controller_runtime_reconcile_time_seconds_bucket{controller=~\"postgresCluster|postgresdatabase\"}[5m])))",
+          "legendFormat": "p50 {{controller}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Reconcile Duration p50 / p99",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "red",
+            "mode": "fixed"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "ops"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 14
+      },
+      "id": 13,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "rate(controller_runtime_reconcile_errors_total{controller=~\"postgresCluster|postgresdatabase\"}[1m])",
+          "legendFormat": "{{controller}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Reconcile Errors",
+      "type": "timeseries"
+    },
+    {
+      "gridPos": {
+        "h": 2,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "id": 200,
+      "options": {
+        "content": "## Domain Metrics (custom, `splunk_operator_postgres_*`)\nFleet state gauges (collected every reconcile) and status transitions (emitted on condition changes).\n\nRuntime PostgreSQL and PgBouncer panels above assume annotation-based pod scraping and filter by `pod`, not dedicated metrics Services.\n\nIf you validate through OpenTelemetry Collector, keep the Grafana datasource as Prometheus and have Prometheus scrape only the OTel Collector exporter for these metrics to avoid duplicate series.",
+        "mode": "markdown"
+      },
+      "title": "",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 24
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value"]
+        },
+        "pieType": "donut"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "splunk_operator_postgres_databases",
+          "legendFormat": "{{phase}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Databases by Phase",
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 24
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value"]
+        },
+        "pieType": "donut"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "splunk_operator_postgres_clusters",
+          "legendFormat": "{{phase}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Clusters by Phase",
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 24
+      },
+      "id": 16,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "splunk_operator_postgres_managed_users",
+          "legendFormat": "{{state}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Managed Users",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "ops"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/False/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 24
+      },
+      "id": 17,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (controller, reason) (rate(splunk_operator_postgres_status_transitions_total{status=\"False\"}[5m]))",
+          "legendFormat": "{{controller}} / {{reason}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Failures by Reason (per second)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["postgresql", "cnpg", "pgbouncer", "splunk-operator", "reference"],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "test",
+          "value": "test"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(kube_pod_labels{label_cnpg_io_cluster!=\"\"}, namespace)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Namespace",
+        "multi": false,
+        "name": "namespace",
+        "options": [],
+        "query": {
+          "query": "label_values(kube_pod_labels{label_cnpg_io_cluster!=\"\"}, namespace)",
+          "refId": "Prometheus-namespace"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(kube_pod_labels{label_cnpg_io_cluster!=\"\", namespace=\"$namespace\"}, label_cnpg_io_cluster)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Cluster",
+        "multi": false,
+        "name": "cluster",
+        "options": [],
+        "query": {
+          "query": "label_values(kube_pod_labels{label_cnpg_io_cluster!=\"\", namespace=\"$namespace\"}, label_cnpg_io_cluster)",
+          "refId": "Prometheus-cluster"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query",
+        "allValue": ".*"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "PostgreSQL Observability Reference",
+  "uid": "postgresql-observability-reference",
+  "version": 1,
+  "weekStart": ""
+}

@@ -55,6 +55,8 @@ rules:
   - licensemasters
   - monitoringconsoles
   - objectstorages
+  - postgresclusters
+  - postgresdatabases
   - queues
   - searchheadclusters
   - standalones
@@ -77,6 +79,8 @@ rules:
   - licensemasters/finalizers
   - monitoringconsoles/finalizers
   - objectstorages/finalizers
+  - postgresclusters/finalizers
+  - postgresdatabases/finalizers
   - queues/finalizers
   - searchheadclusters/finalizers
   - standalones/finalizers
@@ -93,6 +97,8 @@ rules:
   - licensemasters/status
   - monitoringconsoles/status
   - objectstorages/status
+  - postgresclusters/status
+  - postgresdatabases/status
   - queues/status
   - searchheadclusters/status
   - standalones/status
@@ -100,3 +106,32 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - postgresclusterclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - postgresql.cnpg.io
+  resources:
+  - clusters
+  - databases
+  - poolers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - postgresql.cnpg.io
+  resources:
+  - clusters/status
+  - poolers/status
+  verbs:
+  - get

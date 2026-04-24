@@ -80,7 +80,7 @@ func (s *WebhookServer) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 
 	// Register validation endpoint
-	mux.HandleFunc("/validate", s.handleValidate)
+	mux.HandleFunc("/validate", s.HandleValidate)
 
 	// Register health check endpoint
 	mux.HandleFunc("/readyz", s.handleReadyz)
@@ -140,8 +140,8 @@ func (s *WebhookServer) Start(ctx context.Context) error {
 	}
 }
 
-// handleValidate handles validation requests
-func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
+// HandleValidate handles validation requests
+func (s *WebhookServer) HandleValidate(w http.ResponseWriter, r *http.Request) {
 	reqLog := log.FromContext(r.Context()).WithName("webhook-server")
 	reqLog.V(1).Info("Received validation request", "method", r.Method, "path", r.URL.Path)
 
