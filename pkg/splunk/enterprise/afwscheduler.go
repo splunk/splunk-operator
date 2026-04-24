@@ -179,6 +179,12 @@ var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImp
 	// Create pod exec client
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, podExecClient.GetClient(), podExecClient.GetTargetPodName(), cr.GetNamespace(), "password")
+	if err != nil {
+		scopedLog.Error(err, "failed to retrieve admin password from pod secret")
+		return err
+	}
+
 	// Commands to run on pods
 	var command1, command2 string
 
@@ -188,14 +194,14 @@ var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImp
 		command1 = fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString)
 
 		// App reload
-		command2 = telAppReloadString
+		command2 = fmt.Sprintf(telAppReloadString, adminPwd)
 
 	} else {
 		// Create dir on pods
 		command1 = fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer)
 
 		// Bundle push
-		command2 = fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false), "/tmp/status.txt")
+		command2 = fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false), adminPwd, "/tmp/status.txt")
 	}
 
 	// Run the commands on Splunk pods
@@ -741,10 +747,16 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 		worker.appDeployInfo.AppPackageTopFolder = appTopFolder
 	}
 
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(rctx, worker.client, localCtx.podExecClient.GetTargetPodName(), cr.GetNamespace(), "password")
+	if err != nil {
+		scopedLog.Error(err, "failed to retrieve admin password from pod secret")
+		return err
+	}
+
 	var command string
 	if worker.appDeployInfo.IsUpdate {
 		// App was already installed, update scenario
-		command = fmt.Sprintf("/opt/splunk/bin/splunk install app %s -update 1 -auth admin:`cat /mnt/splunk-secrets/password`", appPkgPathOnPod)
+		command = fmt.Sprintf("/opt/splunk/bin/splunk install app %s -update 1 -auth admin:%s", appPkgPathOnPod, adminPwd)
 	} else {
 		// install the app only if it was not already installed
 		// we can come to this block if post installation failed
@@ -763,7 +775,7 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 			return nil
 		}
 
-		command = fmt.Sprintf("/opt/splunk/bin/splunk install app %s -auth admin:`cat /mnt/splunk-secrets/password`", appPkgPathOnPod)
+		command = fmt.Sprintf("/opt/splunk/bin/splunk install app %s -auth admin:%s", appPkgPathOnPod, adminPwd)
 	}
 
 	streamOptions := splutil.NewStreamOptionsObject(command)
@@ -795,7 +807,13 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 
 	scopedLog.Info("check app's installation state")
 
-	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s -auth admin:`cat /mnt/splunk-secrets/password`| grep ENABLED", appTopFolder)
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, podExecClient.GetClient(), podExecClient.GetTargetPodName(), cr.GetNamespace(), "password")
+	if err != nil {
+		scopedLog.Error(err, "failed to retrieve admin password from pod secret")
+		return false, err
+	}
+
+	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s -auth admin:%s| grep ENABLED", appTopFolder, adminPwd)
 
 	streamOptions := splutil.NewStreamOptionsObject(command)
 
@@ -1768,7 +1786,12 @@ func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Cont
 	shcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
 
 	// Trigger bundle push
-	cmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlaybookContext.searchHeadCaptainURL, shcBundlePushStatusCheckFile)
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, shcPlaybookContext.client, shcPlaybookContext.podExecClient.GetTargetPodName(), shcPlaybookContext.cr.GetNamespace(), "password")
+	if err != nil {
+		scopedLog.Error(err, "failed to retrieve admin password from pod secret")
+		return err
+	}
+	cmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlaybookContext.searchHeadCaptainURL, adminPwd, shcBundlePushStatusCheckFile)
 	scopedLog.Info("Triggering bundle push", "command", cmd)
 	streamOptions := splutil.NewStreamOptionsObject(cmd)
 	stdOut, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
@@ -1921,7 +1944,12 @@ func (idxcPlaybookContext *IdxcPlaybookContext) isBundlePushComplete(ctx context
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("isBundlePushComplete").WithValues("crName", idxcPlaybookContext.cr.GetName(), "namespace", idxcPlaybookContext.cr.GetNamespace())
 
-	streamOptions := splutil.NewStreamOptionsObject(idxcShowClusterBundleStatusStr)
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, idxcPlaybookContext.client, idxcPlaybookContext.podExecClient.GetTargetPodName(), idxcPlaybookContext.cr.GetNamespace(), "password")
+	if err != nil {
+		scopedLog.Error(err, "failed to retrieve admin password from pod secret")
+		return false
+	}
+	streamOptions := splutil.NewStreamOptionsObject(fmt.Sprintf(idxcShowClusterBundleStatusStr, adminPwd))
 	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 	if err == nil && strings.Contains(stdOut, "cluster_status=None") && !strings.Contains(stdOut, "last_bundle_validation_status=failure") {
 		scopedLog.Info("IndexerCluster Bundle push complete")
@@ -1944,7 +1972,12 @@ func (idxcPlaybookContext *IdxcPlaybookContext) triggerBundlePush(ctx context.Co
 
 	// Reduce the liveness probe level
 	idxcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
-	streamOptions := splutil.NewStreamOptionsObject(applyIdxcBundleCmdStr)
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, idxcPlaybookContext.client, idxcPlaybookContext.podExecClient.GetTargetPodName(), idxcPlaybookContext.cr.GetNamespace(), "password")
+	if err != nil {
+		scopedLog.Error(err, "failed to retrieve admin password from pod secret")
+		return err
+	}
+	streamOptions := splutil.NewStreamOptionsObject(fmt.Sprintf(applyIdxcBundleCmdStr, adminPwd))
 	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 
 	// If the error is due to a bundle which is already present, don't do anything.
@@ -2100,12 +2133,17 @@ func handleEsappPostinstall(rctx context.Context, preCtx *premiumAppScopePlayboo
 	var command string
 
 	// Create CLI command
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(rctx, preCtx.client, preCtx.localCtx.podExecClient.GetTargetPodName(), cr.GetNamespace(), "password")
+	if err != nil {
+		scopedLog.Error(err, "failed to retrieve admin password from pod secret")
+		return err
+	}
 	sslEn := getSslCliOption(appSrcSpec)
 	if cr.GetObjectKind().GroupVersionKind().Kind != "SearchHeadCluster" {
-		command = fmt.Sprintf("/opt/splunk/bin/splunk search '| essinstall --ssl_enablement %s' -auth admin:`cat /mnt/splunk-secrets/password`", sslEn)
+		command = fmt.Sprintf("/opt/splunk/bin/splunk search '| essinstall --ssl_enablement %s' -auth admin:%s", sslEn, adminPwd)
 	} else {
 		// Pass an extra parameter for SHC deployer in post install command
-		command = fmt.Sprintf("/opt/splunk/bin/splunk search '| essinstall --ssl_enablement %s --deployment_type shc_deployer' -auth admin:`cat /mnt/splunk-secrets/password`", sslEn)
+		command = fmt.Sprintf("/opt/splunk/bin/splunk search '| essinstall --ssl_enablement %s --deployment_type shc_deployer' -auth admin:%s", sslEn, adminPwd)
 	}
 
 	streamOptions := splutil.NewStreamOptionsObject(command)
