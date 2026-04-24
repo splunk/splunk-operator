@@ -2,6 +2,7 @@ workflow:
   auto_cancel:
     on_new_commit: conservative
   rules:
+    - if: '$CI_PIPELINE_SOURCE =~ /^(web|api|schedule)$/ && $SOK_PIPELINE_MODE == "github_admin_daily"'
     - if: '$CI_PIPELINE_SOURCE =~ /^(web|api|schedule)$/ && $SOK_PIPELINE_MODE == "github_intake"'
     - if: '$CI_PIPELINE_SOURCE =~ /^(web|api|schedule)$/ && $SOK_PIPELINE_MODE == "github_mirror_health"'
     - if: '$CI_PIPELINE_SOURCE =~ /^(web|api)$/ && $SOK_PIPELINE_MODE == "qualification_lane"'

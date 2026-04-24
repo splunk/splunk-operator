@@ -148,6 +148,23 @@ def gh_pull(repo: str, number: int) -> dict[str, Any]:
     return response
 
 
+def paged_github_get(path: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    headers = github_headers()
+    page = 1
+    rows: list[dict[str, Any]] = []
+    base_params = dict(params or {})
+    while True:
+        query = {**base_params, "per_page": 100, "page": page}
+        response = api_request_json("GET", github_api_url(path) + "?" + urllib.parse.urlencode(query, doseq=True), headers)
+        if not isinstance(response, list) or not response:
+            break
+        rows.extend(response)
+        if len(response) < 100:
+            break
+        page += 1
+    return rows
+
+
 def marker_issue(repo: str, number: int) -> str:
     return f"github-intake:issue:{repo}#{number}"
 
@@ -164,12 +181,10 @@ def find_issue_by_marker(marker: str) -> dict[str, Any] | None:
     return None
 
 
-def find_matching_mr(source_branch: str, target_branch: str, marker: str) -> dict[str, Any] | None:
-    rows = paged_gitlab_get("/merge_requests", {"state": "all"})
+def find_mr_by_marker(marker: str) -> dict[str, Any] | None:
+    rows = paged_gitlab_get("/merge_requests", {"state": "all", "search": marker})
     for row in rows:
         if marker in (row.get("description") or ""):
-            return row
-        if row.get("source_branch") == source_branch and row.get("target_branch") == target_branch:
             return row
     return None
 
@@ -281,8 +296,14 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines = ["# GitHub Intake Backfill", ""]
     lines.append(f"- repository: `{report['github_repo']}`")
     lines.append(f"- apply: `{report['apply']}`")
-    lines.append(f"- requested issues: `{len(report['issues'])}`")
-    lines.append(f"- requested PRs: `{len(report['prs'])}`")
+    lines.append(f"- auto discover: `{report['auto_discover']}`")
+    lines.append(f"- lookback days: `{report['lookback_days']}`")
+    lines.append(f"- requested issues: `{len(report['requested_issues'])}`")
+    lines.append(f"- requested PRs: `{len(report['requested_prs'])}`")
+    lines.append(f"- discovered issues: `{len(report['discovered_issues'])}`")
+    lines.append(f"- discovered PRs: `{len(report['discovered_prs'])}`")
+    lines.append(f"- effective issues: `{len(report['issues'])}`")
+    lines.append(f"- effective PRs: `{len(report['prs'])}`")
     lines.append(f"- overall status: `{report['status']}`")
     lines.append("")
     lines.append("| Kind | GitHub | Action | GitLab | Detail |")
@@ -309,7 +330,13 @@ def write_outputs(report: dict[str, Any]) -> None:
             [
                 f"github_repo={report['github_repo']}",
                 f"apply={str(report['apply']).lower()}",
+                f"auto_discover={str(report['auto_discover']).lower()}",
+                f"lookback_days={report['lookback_days']}",
                 f"status={report['status']}",
+                f"requested_issue_inputs={len(report['requested_issues'])}",
+                f"requested_pr_inputs={len(report['requested_prs'])}",
+                f"discovered_issues={len(report['discovered_issues'])}",
+                f"discovered_prs={len(report['discovered_prs'])}",
                 f"requested_issues={len(report['issues'])}",
                 f"requested_prs={len(report['prs'])}",
             ]
@@ -323,8 +350,14 @@ def write_outputs(report: dict[str, Any]) -> None:
                 f"observed_at_utc={report['observed_at_utc']}",
                 f"github_repo={report['github_repo']}",
                 f"apply={str(report['apply']).lower()}",
+                f"auto_discover={str(report['auto_discover']).lower()}",
+                f"lookback_days={report['lookback_days']}",
                 f"gitlab_auth_mode={report['gitlab_auth_mode']}",
                 f"github_token_present={str(report['github_token_present']).lower()}",
+                f"requested_issue_inputs={','.join(str(item) for item in report['requested_issues']) or 'none'}",
+                f"requested_pr_inputs={','.join(str(item) for item in report['requested_prs']) or 'none'}",
+                f"discovered_issue_numbers={','.join(str(item) for item in report['discovered_issues']) or 'none'}",
+                f"discovered_pr_numbers={','.join(str(item) for item in report['discovered_prs']) or 'none'}",
                 f"requested_issues={','.join(str(item) for item in report['issues']) or 'none'}",
                 f"requested_prs={','.join(str(item) for item in report['prs']) or 'none'}",
             ]
@@ -342,14 +375,84 @@ def gitlab_auth_mode() -> str:
     return "missing"
 
 
+def int_env(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    return int(raw)
+
+
+def github_since_iso(lookback_days: int) -> str:
+    cutoff = datetime.now(timezone.utc).timestamp() - (lookback_days * 86400)
+    return datetime.fromtimestamp(cutoff, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def discover_issue_numbers(repo: str, since_iso: str) -> list[int]:
+    rows = paged_github_get(
+        f"/repos/{repo}/issues",
+        {"state": "all", "sort": "updated", "direction": "desc", "since": since_iso},
+    )
+    results: list[int] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if row.get("pull_request"):
+            continue
+        updated_at = str(row.get("updated_at") or "")
+        if updated_at and updated_at < since_iso:
+            continue
+        results.append(int(row["number"]))
+    return results
+
+
+def discover_pr_numbers(repo: str, since_iso: str) -> list[int]:
+    rows = paged_github_get(
+        f"/repos/{repo}/pulls",
+        {"state": "all", "sort": "updated", "direction": "desc"},
+    )
+    results: list[int] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        updated_at = str(row.get("updated_at") or "")
+        if updated_at and updated_at < since_iso:
+            continue
+        results.append(int(row["number"]))
+    return results
+
+
+def find_branch_pair_mr(source_branch: str, target_branch: str) -> dict[str, Any] | None:
+    rows = paged_gitlab_get("/merge_requests", {"state": "opened", "source_branch": source_branch, "target_branch": target_branch})
+    for row in rows:
+        if row.get("source_branch") == source_branch and row.get("target_branch") == target_branch:
+            return row
+    return None
+
+
 def main() -> int:
     repo = os.getenv("PIPELINE_GITHUB_INTAKE_REPOSITORY", "splunk/splunk-operator").strip()
-    issues = csv_ints("PIPELINE_GITHUB_INTAKE_ISSUES")
-    prs = csv_ints("PIPELINE_GITHUB_INTAKE_PRS")
+    requested_issues = csv_ints("PIPELINE_GITHUB_INTAKE_ISSUES")
+    requested_prs = csv_ints("PIPELINE_GITHUB_INTAKE_PRS")
+    auto_discover = bool_env("PIPELINE_GITHUB_INTAKE_AUTO_DISCOVER", False)
+    lookback_days = int_env("PIPELINE_GITHUB_INTAKE_LOOKBACK_DAYS", 7)
+    discovered_issues: list[int] = []
+    discovered_prs: list[int] = []
+    if auto_discover:
+        since_iso = github_since_iso(lookback_days)
+        discovered_issues = discover_issue_numbers(repo, since_iso)
+        discovered_prs = discover_pr_numbers(repo, since_iso)
+    issues = sorted({*requested_issues, *discovered_issues})
+    prs = sorted({*requested_prs, *discovered_prs})
     apply_changes = not bool_env("PIPELINE_GITHUB_INTAKE_DRY_RUN", False)
     report: dict[str, Any] = {
         "observed_at_utc": utc_now(),
         "github_repo": repo,
+        "requested_issues": requested_issues,
+        "requested_prs": requested_prs,
+        "auto_discover": auto_discover,
+        "lookback_days": lookback_days,
+        "discovered_issues": discovered_issues,
+        "discovered_prs": discovered_prs,
         "issues": issues,
         "prs": prs,
         "apply": apply_changes,
@@ -413,8 +516,9 @@ def main() -> int:
                 and pr.get("base", {}).get("repo") is not None
                 and pr["base"]["repo"]["full_name"] == repo
             )
-            existing_mr = find_matching_mr(source_branch, target_branch, marker)
+            existing_mr = find_mr_by_marker(marker)
             existing_issue = find_issue_by_marker(marker)
+            branch_pair_mr = find_branch_pair_mr(source_branch, target_branch)
             gitlab_iid = None
             gitlab_kind = None
             action = "already-present"
@@ -426,6 +530,14 @@ def main() -> int:
             elif existing_issue:
                 gitlab_iid = existing_issue["iid"]
                 gitlab_kind = "issue"
+            elif branch_pair_mr:
+                gitlab_iid = branch_pair_mr["iid"]
+                gitlab_kind = "mr"
+                action = "branch-pair-conflict"
+                detail = (
+                    f"GitLab MR !{branch_pair_mr['iid']} already uses "
+                    f"{source_branch}->{target_branch} without the GitHub intake marker"
+                )
             elif same_repo and branch_exists(target_branch):
                 action = "push-branch-and-create-mr" if not branch_exists(source_branch) else "create-mr"
                 if apply_changes:
@@ -492,7 +604,10 @@ def main() -> int:
         if repo_dir_created and repo_dir:
             shutil.rmtree(repo_dir, ignore_errors=True)
 
-    report["status"] = "apply-complete" if apply_changes else "dry-run-complete"
+    if any(row["action"] == "branch-pair-conflict" for row in report["rows"]):
+        report["status"] = "apply-complete-with-attention" if apply_changes else "dry-run-complete-with-attention"
+    else:
+        report["status"] = "apply-complete" if apply_changes else "dry-run-complete"
     write_outputs(report)
     print(ci_output_path("result.md"))
     return 0
@@ -505,6 +620,12 @@ if __name__ == "__main__":
         report = {
             "observed_at_utc": utc_now(),
             "github_repo": os.getenv("PIPELINE_GITHUB_INTAKE_REPOSITORY", "splunk/splunk-operator").strip(),
+            "requested_issues": csv_ints("PIPELINE_GITHUB_INTAKE_ISSUES"),
+            "requested_prs": csv_ints("PIPELINE_GITHUB_INTAKE_PRS"),
+            "auto_discover": bool_env("PIPELINE_GITHUB_INTAKE_AUTO_DISCOVER", False),
+            "lookback_days": int_env("PIPELINE_GITHUB_INTAKE_LOOKBACK_DAYS", 7),
+            "discovered_issues": [],
+            "discovered_prs": [],
             "issues": csv_ints("PIPELINE_GITHUB_INTAKE_ISSUES"),
             "prs": csv_ints("PIPELINE_GITHUB_INTAKE_PRS"),
             "apply": not bool_env("PIPELINE_GITHUB_INTAKE_DRY_RUN", False),

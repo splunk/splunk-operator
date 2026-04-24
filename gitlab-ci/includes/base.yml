@@ -121,3 +121,7 @@ default:
 .rules-github-mirror-health-lane:
   rules:
     - if: '$CI_PIPELINE_SOURCE =~ /^(web|api|schedule)$/ && $SOK_PIPELINE_MODE == "github_mirror_health"'
+
+.rules-github-admin-daily-lane:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE =~ /^(web|api|schedule)$/ && $SOK_PIPELINE_MODE == "github_admin_daily"'

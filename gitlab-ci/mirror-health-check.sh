@@ -18,7 +18,7 @@ mirror_repo="${PIPELINE_GITHUB_MIRROR_REPO:-}"
 mirror_compare_refs="${PIPELINE_GITHUB_MIRROR_COMPARE_REFS:-main,develop}"
 mirror_token_present="false"
 mirror_url="https://github.com/${mirror_repo}.git"
-source_remote="${CI_REPOSITORY_URL:-origin}"
+source_remote="origin"
 
 if [ -n "${PIPELINE_GITHUB_MIRROR_TOKEN:-}" ]; then
   mirror_token_present="true"
