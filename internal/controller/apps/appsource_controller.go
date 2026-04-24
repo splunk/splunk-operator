@@ -78,7 +78,7 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// initialize conditions if needed
 	if len(appSourceInstance.Status.Conditions) == 0 {
-		// initialize alll the conditions
+		// initialize all the conditions
 		for _, conditionType := range []string{
 			appsv1alpha1.AppSourceConditionReady,
 			appsv1alpha1.AppSourceConditionSecretValid,
