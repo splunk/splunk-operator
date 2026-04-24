@@ -767,7 +767,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 				TopologySpreadConstraints: spec.TopologySpreadConstraints,
 				SchedulerName:             spec.SchedulerName,
 				ImagePullSecrets:          spec.ImagePullSecrets,
-				InitContainers:            getAppRuntimeSidecar(instanceType),
+				InitContainers:            getAppRuntimeSidecar(instanceType, cr.GetName(), spec.Image),
 				Containers: []corev1.Container{
 					{
 						Image:           spec.Image,
@@ -786,8 +786,12 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 		return statefulSet, err
 	}
 
-	// Add containerd and Splunk library volumes for the AppRuntime sidecar
 	addAppRuntimeVolumes(statefulSet, spec.Image)
+
+	// Set serviceAccountName for AppRuntime supervisor (needs K8s API access to create app pods)
+	if len(statefulSet.Spec.Template.Spec.InitContainers) > 0 {
+		statefulSet.Spec.Template.Spec.ServiceAccountName = "appruntime-supervisor"
+	}
 
 	// add serviceaccount if configured
 	if spec.ServiceAccount != "" {
@@ -819,12 +823,12 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 
 // getAppRuntimeSidecar returns the AppRuntime sidecar init container for Standalone, Indexer, and SearchHead.
 // Returns nil for other instance types.
-func getAppRuntimeSidecar(instanceType InstanceType) []corev1.Container {
+// In pod-per-app mode the sidecar runs the supervisor (no containerd), and creates app pods via the K8s API.
+func getAppRuntimeSidecar(instanceType InstanceType, instanceName string, splunkImage string) []corev1.Container {
 	if instanceType != SplunkStandalone && instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
 		return nil
 	}
 	restartAlways := corev1.ContainerRestartPolicyAlways
-	privileged := true
 	runAsUser := int64(0)
 	runAsNonRoot := false
 	return []corev1.Container{
@@ -832,20 +836,22 @@ func getAppRuntimeSidecar(instanceType InstanceType) []corev1.Container {
 			Image:           getAppRuntimeImage(),
 			ImagePullPolicy: corev1.PullAlways,
 			Name:            "appruntime",
-			Command:         []string{"/usr/local/bin/entrypoint.sh"},
+			Command:         []string{"/usr/bin/splunk-eps"},
 			RestartPolicy:   &restartAlways,
-			VolumeMounts: []corev1.VolumeMount{
-				{
-					Name:      "containerd-data",
-					MountPath: "/var/lib/containerd-nested",
-				},
-				{
-					Name:      "containerd-run",
-					MountPath: "/var/run/containerd-nested",
-				},
+			Env: []corev1.EnvVar{
+				{Name: "APPRUNTIME_K8S_ENABLED", Value: "true"},
+				{Name: "APPRUNTIME_K8S_NAMESPACE", ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"}}},
+				{Name: "APPRUNTIME_K8S_NODE_NAME", ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
+				{Name: "APPRUNTIME_K8S_POD_NAME", ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
+				{Name: "APPRUNTIME_K8S_INSTANCE_NAME", Value: instanceName},
+				{Name: "APPRUNTIME_K8S_INSTANCE_TYPE", Value: instanceType.ToKind()},
+				{Name: "APPRUNTIME_K8S_SPLUNK_IMAGE", Value: splunkImage},
+				{Name: "APPRUNTIME_K8S_WORKER_IMAGE", Value: getAppRuntimeImage()},
 			},
 			SecurityContext: &corev1.SecurityContext{
-				Privileged:   &privileged,
 				RunAsUser:    &runAsUser,
 				RunAsNonRoot: &runAsNonRoot,
 			},
@@ -853,61 +859,13 @@ func getAppRuntimeSidecar(instanceType InstanceType) []corev1.Container {
 	}
 }
 
-// addAppRuntimeVolumes adds containerd and Splunk library volumes to the StatefulSet
-// for the AppRuntime sidecar. It also adds an init container that copies /opt/splunk/lib
-// and /opt/splunk/bin from the Splunk image into emptyDir volumes mounted only on the sidecar.
+// addAppRuntimeVolumes adds volumes to the StatefulSet for the AppRuntime sidecar.
+// In pod-per-app mode, no containerd volumes are needed since the supervisor creates
+// separate pods for each app via the K8s API.
 func addAppRuntimeVolumes(statefulSet *appsv1.StatefulSet, splunkImage string) {
 	if len(statefulSet.Spec.Template.Spec.InitContainers) == 0 {
 		return
 	}
-	statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes,
-		corev1.Volume{
-			Name:         "containerd-data",
-			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-		},
-		corev1.Volume{
-			Name:         "containerd-run",
-			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-		},
-		corev1.Volume{
-			Name:         "splunk-lib",
-			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-		},
-		corev1.Volume{
-			Name:         "splunk-bin",
-			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-		},
-	)
-
-	// Init container copies Splunk lib and bin into the shared volumes.
-	statefulSet.Spec.Template.Spec.InitContainers = append(statefulSet.Spec.Template.Spec.InitContainers, corev1.Container{
-		Name:            "copy-splunk-dirs",
-		Image:           splunkImage,
-		ImagePullPolicy: corev1.PullIfNotPresent,
-		Command:         []string{"sh", "-c", "cp -r /opt/splunk/lib/. /mnt/splunk-lib/ && cp -r /opt/splunk/bin/. /mnt/splunk-bin/"},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "splunk-lib",
-				MountPath: "/mnt/splunk-lib",
-			},
-			{
-				Name:      "splunk-bin",
-				MountPath: "/mnt/splunk-bin",
-			},
-		},
-	})
-
-	// Mount splunk-lib and splunk-bin only on the sidecar (InitContainers[0]).
-	statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts,
-		corev1.VolumeMount{
-			Name:      "splunk-lib",
-			MountPath: "/opt/splunk/lib",
-		},
-		corev1.VolumeMount{
-			Name:      "splunk-bin",
-			MountPath: "/opt/splunk/bin",
-		},
-	)
 }
 
 // getAppRuntimeImage returns the AppRuntime container image from env or a default.

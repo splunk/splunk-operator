@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: appruntime-supervisor
+  namespace: splunk-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: appruntime-supervisor
+  namespace: splunk-operator
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["create", "delete", "get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: appruntime-supervisor
+  namespace: splunk-operator
+subjects:
+- kind: ServiceAccount
+  name: appruntime-supervisor
+  namespace: splunk-operator
+roleRef:
+  kind: Role
+  name: appruntime-supervisor
+  apiGroup: rbac.authorization.k8s.io
