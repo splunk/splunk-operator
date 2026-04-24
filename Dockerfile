@@ -1,6 +1,4 @@
 # Setup defaults for build arguments
-ARG PLATFORMS=linux/amd64,linux/arm64
-
 ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal
 ARG BASE_IMAGE_VERSION=8.10-1775152441
 ARG BUILDER_IMAGE=golang:1.25.8
