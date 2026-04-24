@@ -14,7 +14,7 @@ summary_file="ci-output/${WORKFLOW_SLUG}-summary.txt"
 report_file="ci-output/${WORKFLOW_SLUG}-health.md"
 refs_file="ci-output/${WORKFLOW_SLUG}-ref-compare.tsv"
 
-mirror_repo="${PIPELINE_GITHUB_MIRROR_REPO:-}"
+mirror_repo="${PIPELINE_GITHUB_MIRROR_REPO:-splunk/splunk-operator}"
 mirror_compare_refs="${PIPELINE_GITHUB_MIRROR_COMPARE_REFS:-main,develop}"
 mirror_token_present="false"
 mirror_url="https://github.com/${mirror_repo}.git"
