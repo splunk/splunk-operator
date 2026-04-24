@@ -1,6 +1,7 @@
 # Adds namespace to all resources.
-# Namespace-scoped deployment WITH webhook enabled (opt-in)
-# Requires cert-manager to be installed in the cluster
+# Namespace-scoped deployment with enterprise validation webhooks enabled (opt-in).
+# The standalone App webhook is enabled by default via config/default.
+# Requires cert-manager to be installed in the cluster.
 namespace: splunk-operator 
 
 # Value of this field is prepended to the
@@ -20,7 +21,7 @@ bases:
 - ../persistent-volume
 - ../service
 - ../manager
-# [WEBHOOK] Enabled for opt-in webhook deployment
+# [WEBHOOK] Enabled for enterprise validation webhooks
 - ../webhook
 # [CERTMANAGER] Required for webhook TLS
 - ../certmanager
@@ -34,7 +35,7 @@ patchesStrategicMerge:
 # through a ComponentConfig type
 #- manager_config_patch.yaml
 
-# [WEBHOOK] Enabled for webhook deployment
+# [WEBHOOK] Enabled for enterprise validation webhooks
 - manager_webhook_patch.yaml
 
 # [CERTMANAGER] Enabled for CA injection in the admission webhooks

@@ -50,11 +50,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	appsv1alpha1 "github.com/splunk/splunk-operator/api/apps/v1alpha1"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	appscontroller "github.com/splunk/splunk-operator/internal/controller/apps"
+	webhookappsv1alpha1 "github.com/splunk/splunk-operator/internal/webhook/apps/v1alpha1"
 	//+kubebuilder:scaffold:imports
 	//extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
@@ -63,6 +65,8 @@ var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
+
+const appWebhookPort = 9444
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -189,6 +193,7 @@ func main() {
 		LeaderElectionID:       "270bec8c.splunk.com",
 		LeaseDuration:          &leaseDuration,
 		RenewDeadline:          &renewDeadline,
+		WebhookServer:          ctrlwebhook.NewServer(ctrlwebhook.Options{Port: appWebhookPort}),
 	}
 
 	// Apply namespace-specific configuration
@@ -331,6 +336,10 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "App")
+		os.Exit(1)
+	}
+	if err := webhookappsv1alpha1.SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "App")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
