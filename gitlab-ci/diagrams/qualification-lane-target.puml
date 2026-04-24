@@ -23,9 +23,9 @@ rectangle "Released SOK contract\nresolve released image and chart inputs" as co
 rectangle "Released image scan\nscan-released-operator-image-trivy" as scan
 rectangle "Qualification EKS runtime\nfull validation in one cluster" as runtime_eks #eefbf1
 rectangle "Qualification Azure runtime\nazure_sanity" as runtime_azure #eefbf1
-rectangle "Qualification GCP runtime\n5-suite sanity fanout" as runtime_gcp #eefbf1
-rectangle "Qualification distroless runtime\n11-suite EKS fanout" as runtime_distroless #eefbf1
-rectangle "Qualification Graviton runtime\n9-suite arm64 fanout" as runtime_graviton #eefbf1
+rectangle "Qualification GCP runtime\nGCP sanity fanout" as runtime_gcp #eefbf1
+rectangle "Qualification distroless runtime\ndistroless EKS fanout" as runtime_distroless #eefbf1
+rectangle "Qualification Graviton runtime\narm64 fanout" as runtime_graviton #eefbf1
 rectangle "Qualification Helm runtime\nfull chart validation" as runtime_helm #eefbf1
 rectangle "Decision outputs\nmanifest, report, gate,\ncompatibility publish plan" as report #f7f7ff
 

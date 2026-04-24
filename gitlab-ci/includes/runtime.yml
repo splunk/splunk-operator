@@ -9,15 +9,12 @@ build-stage-image:
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^release([\/-]).+$/'
       variables:
-        JOB_BUILD_PLATFORMS: linux/amd64,linux/arm64
         JOB_BUILD_DISTROLESS: "true"
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^release([\/-]).+$/'
       variables:
-        JOB_BUILD_PLATFORMS: linux/amd64,linux/arm64
         JOB_BUILD_DISTROLESS: "true"
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
       variables:
-        JOB_BUILD_PLATFORMS: linux/amd64,linux/arm64
         JOB_BUILD_DISTROLESS: "true"
     - when: on_success
   needs:
@@ -301,6 +298,7 @@ helm-eks-validation:
     JOB_INT_CLUSTER_WORKERS: "3"
     JOB_USE_ARM64_CLUSTER: "true"
     JOB_GRAVITON_TESTING: "true"
+    # Keep the arm runtime contract explicit like the old GitHub arm workflows.
     JOB_INT_ENTERPRISE_IMAGE: $PIPELINE_GRAVITON_ENTERPRISE_IMAGE
   script:
     - gitlab-ci/int-test-workflow.sh

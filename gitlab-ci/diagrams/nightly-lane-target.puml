@@ -21,7 +21,7 @@ rectangle "Schedule on develop" as trigger
 rectangle "Baseline\nverify and test jobs" as baseline
 rectangle "Build\nbuild-stage-image" as build
 rectangle "Image scan\nscan-stage-image-trivy" as scan
-rectangle "Nightly integration fanout\n11 full suites in parallel" as nightly #eefbf1
+rectangle "Nightly integration fanout\nall full suites in parallel" as nightly #eefbf1
 rectangle "Nightly evidence\nsuite logs and junit artifacts" as evidence #f7f7ff
 
 trigger --> baseline

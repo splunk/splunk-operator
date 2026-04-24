@@ -90,6 +90,19 @@ if [ "${graviton_testing}" = "true" ] && [ -z "${explicit_runtime_enterprise_ima
   exit 1
 fi
 
+requested_graviton_enterprise_image="$(first_nonempty \
+  "${PIPELINE_RUNTIME_ENTERPRISE_IMAGE:-}" \
+  "${JOB_RUNTIME_ENTERPRISE_IMAGE:-}" \
+  "${PIPELINE_INT_ENTERPRISE_IMAGE:-}" \
+  "${JOB_INT_ENTERPRISE_IMAGE:-}" \
+  "")"
+
+if [ "${graviton_testing}" = "true" ] && [ -z "${requested_graviton_enterprise_image}" ]; then
+  echo "Graviton or arm64 runtime validation requires an explicit enterprise image override." >&2
+  echo "Set PIPELINE_GRAVITON_ENTERPRISE_IMAGE to the arm-compatible enterprise image that matches the release under test." >&2
+  exit 1
+fi
+
 use_existing_cluster="false"
 if bool_is_true "$(first_nonempty "${PIPELINE_INT_USE_EXISTING_CLUSTER:-}" "${JOB_USE_EXISTING_CLUSTER:-}" "false")"; then
   use_existing_cluster="true"

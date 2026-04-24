@@ -43,6 +43,23 @@ The important rule is that ordinary feature-branch pushes do not run their own G
 Branch validation is MR-driven.
 GitLab also suppresses duplicate push pipelines once a branch already has an open MR.
 
+## Monitoring And Ownership
+
+The regular monitoring split is:
+
+- the MR author owns the MR pipeline until the merge request is green
+- the integrating developer owns `develop` failures caused by their merge
+- the team reviews the nightly schedule each workday and triages the first failed runtime job
+- the person running qualification owns the qualification report, gate, and any missing inputs for that run
+- the release driver owns the release branch and `main` publish path until the release is complete
+
+The operational check is simple:
+
+- start from the pipeline graph
+- open the first failed job, not a skipped downstream job
+- use the **Tests** tab plus `ci-output/` artifacts as the primary evidence
+- treat repeated nightly failures as an operational item, not as something to rediscover ad hoc
+
 ## Merge Request Lane
 
 ![Merge request lane](diagrams/merge-request-lane.png)
@@ -120,6 +137,15 @@ What the user needs to do:
 2. Review the report and gate output.
 3. Decide whether the cycle stops at compatibility or needs to escalate into a product release.
 
+Qualification inputs:
+
+- required trigger: `SOK_PIPELINE_MODE=qualification_lane`
+- EKS runtime inputs: `PIPELINE_AWS_*`, `PIPELINE_EKS_VPC_PUBLIC_SUBNET_STRING`, `PIPELINE_EKS_VPC_PRIVATE_SUBNET_STRING`, `PIPELINE_TEST_BUCKET`, and `PIPELINE_TEST_INDEXES_S3_BUCKET`
+- Azure runtime inputs: either GitLab OIDC with `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`, or `PIPELINE_AZURE_CREDENTIALS`, plus `PIPELINE_AZURE_ACR_LOGIN_SERVER`, `PIPELINE_AZURE_REGION`, `PIPELINE_AZURE_RESOURCE_GROUP_NAME`, `PIPELINE_AZURE_STORAGE_ACCOUNT`, `PIPELINE_AZURE_STORAGE_ACCOUNT_KEY`, `PIPELINE_AZURE_TEST_CONTAINER`, and `PIPELINE_AZURE_INDEXES_CONTAINER`
+- GCP runtime inputs: either GitLab OIDC with `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT_EMAIL`, or `PIPELINE_GCP_SERVICE_ACCOUNT_KEY`, plus `PIPELINE_GCP_ARTIFACT_REGISTRY`, `PIPELINE_GCP_PROJECT_ID`, `PIPELINE_GCP_REGION`, and `PIPELINE_GCP_ZONE`
+- Graviton runtime input: `PIPELINE_GRAVITON_ENTERPRISE_IMAGE` must point to the arm-compatible enterprise repo:tag for the cycle under test
+- optional released-SOK overrides: `PIPELINE_RELEASED_OPERATOR_IMAGE_REPOSITORY`, `PIPELINE_RELEASED_OPERATOR_IMAGE_TAG`, `PIPELINE_RELEASED_HELM_REPO_URL`, and `PIPELINE_RELEASED_HELM_CHART_VERSION` when the default latest-release discovery is not the intended source
+
 Qualification runtime inventory:
 
 - EKS full validation: one full released-SOK integration run in one EKS cluster
@@ -149,13 +175,14 @@ What the release validation automation does:
 - runs the Graviton or arm64 runtime suite set from the existing `splunk-operator-cicd` arm64 matrix against the staged multi-arch candidate image
 - runs the release Helm validation job
 - packages the release-candidate artifacts only after validation
-- records the PSR qualification plan
+- records the PSR qualification plan only; it does not dispatch PSR automatically
 
 What it does not do:
 
 - it does not publish GA images from the release branch
 - it does not create the MR to `main`
 - it does not auto-merge anything
+- it does not push the bundle into the PSR repo or trigger downstream PSR automatically
 
 Release runtime inventory:
 
@@ -186,6 +213,8 @@ What the publish automation does on `main`:
 
 The important guardrail is that `main` promotes validated outputs.
 It does not rebuild the product from source for publication.
+Helm publication also moves forward on OCI only.
+This lane publishes newly validated charts; it does not backfill historical chart versions into the OCI repository.
 
 ## End-To-End Operator Process
 

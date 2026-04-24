@@ -5,7 +5,8 @@ set -eu
 # - Purpose: publish the validated Helm chart archives to the approved OCI repo.
 # - Inputs: release-candidate contract, chart OCI target, and Helm registry auth.
 # - Outputs: packaged chart archives and push evidence under ci-output/.
-# - Guardrails: OCI-only publication; no chart repackaging on main.
+# - Guardrails: OCI-only publication, no chart repackaging on main, and no
+#   historical chart backfill in this job.
 
 . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
 

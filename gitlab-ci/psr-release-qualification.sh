@@ -5,7 +5,8 @@ set -eu
 # - Purpose: capture the PSR release-qualification plan for the release branch/main candidate.
 # - Inputs: release version, optional base version override, and enterprise image.
 # - Outputs: PSR trigger matrix and operator-facing summary under ci-output/.
-# - Guardrails: plan only; no downstream PSR dispatch in this lane yet.
+# - Guardrails: plan only; no downstream PSR dispatch in this lane yet because
+#   bundle handoff into the PSR repo still stays manual outside this job.
 
 . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
 
@@ -59,4 +60,5 @@ Prepared the PSR release-qualification plan.
 - target_version: ${target_version}
 - base_version: ${base_version:-unset}
 - matrix_file: ${matrix_file}
+- downstream_dispatch: manual-only
 EOF

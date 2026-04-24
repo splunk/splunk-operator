@@ -156,6 +156,7 @@ release-helm-validation:
     JOB_EKS_CLUSTER_PLATFORM_SUFFIX: release-arm64
     JOB_USE_ARM64_CLUSTER: "true"
     JOB_GRAVITON_TESTING: "true"
+    # Keep the arm runtime contract explicit like the old GitHub arm workflows.
     JOB_INT_ENTERPRISE_IMAGE: $PIPELINE_GRAVITON_ENTERPRISE_IMAGE
 
 release-azure-validation:
