@@ -13,6 +13,10 @@ set -eu
 
 . "${CI_PROJECT_DIR}/gitlab-ci/lib/cloud-pipeline-common.sh"
 
+if [ -z "${GITLAB_OIDC_TOKEN:-}" ] && [ -n "${AZURE_GITLAB_OIDC_TOKEN:-}" ]; then
+  export GITLAB_OIDC_TOKEN="${AZURE_GITLAB_OIDC_TOKEN}"
+fi
+
 context_file="ci-output/${WORKFLOW_SLUG}-runtime-context.txt"
 cleanup_log="ci-output/${WORKFLOW_SLUG}-cleanup.log"
 cluster_log="ci-output/${WORKFLOW_SLUG}-cluster.log"

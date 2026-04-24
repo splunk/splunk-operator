@@ -249,10 +249,12 @@ The main variable families for the expanded runtime coverage are:
 
 For the cloud-runtime jobs:
 
-- Azure supports GitLab OIDC when `GITLAB_OIDC_TOKEN`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` are present
+- Azure validation jobs request a GitLab ID token automatically and use the platform-foundations Azure audience `api://AzureADTokenExchange`
+- Azure supports GitLab OIDC when that token plus `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` are present
 - Azure also supports `PIPELINE_AZURE_CREDENTIALS` as the service-principal fallback and `PIPELINE_AKS_KUBECONFIG` for an existing-cluster path
-- GCP supports GitLab OIDC when `GITLAB_OIDC_TOKEN`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, and `GCP_SERVICE_ACCOUNT_EMAIL` are present
-- GCP also supports `PIPELINE_GCP_SERVICE_ACCOUNT_KEY` as the credential fallback and `PIPELINE_GKE_KUBECONFIG` for an existing-cluster path
+- GCP validation jobs request a GitLab ID token automatically and use the platform-foundations GCP audience `https://cd.splunkdev.com`
+- GCP supports GitLab OIDC when that token plus `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT_EMAIL` are present
+- GCP also supports `PIPELINE_GCP_SERVICE_ACCOUNT_KEY` as the service-account fallback and `PIPELINE_GKE_KUBECONFIG` for an existing-cluster path
 
 ## What GitLab Collects Automatically
 

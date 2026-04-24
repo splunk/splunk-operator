@@ -1,6 +1,55 @@
 #!/bin/sh
 set -eu
 
+fetch_merge_request_description() {
+  python3 - <<'PY'
+import json
+import os
+import sys
+from urllib import request
+
+api_root = os.environ.get("CI_API_V4_URL", "")
+project_id = os.environ.get("CI_PROJECT_ID", "")
+mr_iid = os.environ.get("CI_MERGE_REQUEST_IID", "")
+job_token = os.environ.get("CI_JOB_TOKEN", "")
+
+if not all((api_root, project_id, mr_iid, job_token)):
+    missing = [
+        name
+        for name, value in (
+            ("CI_API_V4_URL", api_root),
+            ("CI_PROJECT_ID", project_id),
+            ("CI_MERGE_REQUEST_IID", mr_iid),
+            ("CI_JOB_TOKEN", job_token),
+        )
+        if not value
+    ]
+    print(
+        "Unable to fetch full merge request description; missing: "
+        + ", ".join(missing),
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+url = f"{api_root}/projects/{project_id}/merge_requests/{mr_iid}"
+req = request.Request(url, headers={"JOB-TOKEN": job_token})
+
+try:
+    with request.urlopen(req) as response:
+        payload = json.load(response)
+except Exception as exc:
+    print(f"Unable to fetch full merge request description: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+description = payload.get("description", "")
+if not isinstance(description, str):
+    print("Merge request description payload is not a string", file=sys.stderr)
+    sys.exit(1)
+
+sys.stdout.write(description)
+PY
+}
+
 pipeline_source="${CI_PIPELINE_SOURCE:-}"
 if [ "${pipeline_source}" != "merge_request_event" ]; then
   echo "merge-request-description-check only applies to merge request pipelines"
@@ -8,6 +57,9 @@ if [ "${pipeline_source}" != "merge_request_event" ]; then
 fi
 
 description="${CI_MERGE_REQUEST_DESCRIPTION:-}"
+if [ "${CI_MERGE_REQUEST_DESCRIPTION_IS_TRUNCATED:-false}" = "true" ]; then
+  description="$(fetch_merge_request_description)"
+fi
 source_branch="${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME:-}"
 target_branch="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}"
 
@@ -53,4 +105,3 @@ if [ -n "${missing_headings}" ]; then
 fi
 
 echo "Merge request description contains the required headings for ${template_path}."
-

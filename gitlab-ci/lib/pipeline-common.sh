@@ -372,8 +372,8 @@ mirror_operator_image_to_ecr_if_needed() {
 login_source_registry_for_image() {
   source_image_ref="$1"
   source_registry="$(registry_host_from_image_ref "${source_image_ref}")"
-  source_username="$(first_nonempty "${PIPELINE_DOCKER_USERNAME:-}" "")"
-  source_password="$(first_nonempty "${PIPELINE_DOCKER_PASSWORD:-}" "")"
+  source_username="$(first_nonempty "${PIPELINE_RELEASED_OPERATOR_REGISTRY_USERNAME:-}" "${PIPELINE_RELEASE_REGISTRY_USERNAME:-}" "${PIPELINE_DOCKER_USERNAME:-}" "")"
+  source_password="$(first_nonempty "${PIPELINE_RELEASED_OPERATOR_REGISTRY_PASSWORD:-}" "${PIPELINE_RELEASE_REGISTRY_PASSWORD:-}" "${PIPELINE_DOCKER_PASSWORD:-}" "")"
 
   if printf '%s' "${source_registry}" | grep -Eq '\.dkr\.ecr\..*\.amazonaws\.com$'; then
     docker_login_registry "${source_registry}" "" ""

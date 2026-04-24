@@ -117,6 +117,10 @@ release-helm-validation:
 .release-validation-azure-job:
   extends: .release-validation-runtime-job
   timeout: 10h
+  # Match the platform-foundations Azure federated credential audience.
+  id_tokens:
+    AZURE_GITLAB_OIDC_TOKEN:
+      aud: api://AzureADTokenExchange
   script:
     - gitlab-ci/int-test-azure-workflow.sh
   artifacts:
@@ -128,6 +132,10 @@ release-helm-validation:
 .release-validation-gcp-job:
   extends: .release-validation-runtime-job
   timeout: 10h
+  # Match the platform-foundations GCP workload identity provider audience.
+  id_tokens:
+    GCP_GITLAB_OIDC_TOKEN:
+      aud: https://cd.splunkdev.com
   script:
     - gitlab-ci/int-test-gcp-workflow.sh
   artifacts:

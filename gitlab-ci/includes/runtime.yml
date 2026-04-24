@@ -238,6 +238,10 @@ helm-eks-validation:
   extends: .runtime-released-sok-validation-job
   allow_failure: true
   timeout: 10h
+  # Match the platform-foundations Azure federated credential audience.
+  id_tokens:
+    AZURE_GITLAB_OIDC_TOKEN:
+      aud: api://AzureADTokenExchange
   script:
     - gitlab-ci/int-test-azure-workflow.sh
   artifacts:
@@ -250,6 +254,10 @@ helm-eks-validation:
   extends: .runtime-released-sok-validation-job
   allow_failure: true
   timeout: 10h
+  # Match the platform-foundations GCP workload identity provider audience.
+  id_tokens:
+    GCP_GITLAB_OIDC_TOKEN:
+      aud: https://cd.splunkdev.com
   script:
     - gitlab-ci/int-test-gcp-workflow.sh
   artifacts:

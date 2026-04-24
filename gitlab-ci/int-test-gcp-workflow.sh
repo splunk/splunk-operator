@@ -13,6 +13,10 @@ set -eu
 
 . "${CI_PROJECT_DIR}/gitlab-ci/lib/cloud-pipeline-common.sh"
 
+if [ -z "${GITLAB_OIDC_TOKEN:-}" ] && [ -n "${GCP_GITLAB_OIDC_TOKEN:-}" ]; then
+  export GITLAB_OIDC_TOKEN="${GCP_GITLAB_OIDC_TOKEN}"
+fi
+
 context_file="ci-output/${WORKFLOW_SLUG}-runtime-context.txt"
 cleanup_log="ci-output/${WORKFLOW_SLUG}-cleanup.log"
 cluster_log="ci-output/${WORKFLOW_SLUG}-cluster.log"
@@ -31,6 +35,7 @@ cluster_created="false"
 build_image_ref_file="${BUILD_IMAGE_REF_FILE:-ci-output/build-test-push-workflow-image-ref.txt}"
 build_image_digest_file="${BUILD_IMAGE_DIGEST_FILE:-ci-output/build-test-push-workflow-digest.txt}"
 released_sok_contract_file="${RELEASED_SOK_CONTRACT_FILE:-}"
+gcp_service_account_key_prepared="false"
 
 cleanup_and_exit() {
   rc="$1"
@@ -79,10 +84,18 @@ require_commands bash aws gcloud docker make kubectl go jq base64
 
 require_envs \
   PIPELINE_GCP_ARTIFACT_REGISTRY \
-  PIPELINE_GCP_PROJECT_ID \
-  PIPELINE_GCP_SERVICE_ACCOUNT_KEY
-materialize_json_secret "${PIPELINE_GCP_SERVICE_ACCOUNT_KEY}" "${gcp_key_file}"
-export GCP_SERVICE_ACCOUNT_KEY="$(base64 < "${gcp_key_file}" | tr -d '\n')"
+  PIPELINE_GCP_PROJECT_ID
+
+prepare_gcp_service_account_key() {
+  if [ "${gcp_service_account_key_prepared}" = "true" ]; then
+    return 0
+  fi
+
+  require_envs PIPELINE_GCP_SERVICE_ACCOUNT_KEY
+  materialize_json_secret "${PIPELINE_GCP_SERVICE_ACCOUNT_KEY}" "${gcp_key_file}"
+  export GCP_SERVICE_ACCOUNT_KEY="$(base64 < "${gcp_key_file}" | tr -d '\n')"
+  gcp_service_account_key_prepared="true"
+}
 
 gcp_auth_mode="service-account-key"
 if gcp_oidc_ready; then
@@ -157,6 +170,7 @@ require_nonempty "${TEST_BUCKET}" "PIPELINE_TEST_BUCKET or PIPELINE_GCP_TEST_CON
 require_nonempty "${TEST_INDEXES_S3_BUCKET}" "PIPELINE_TEST_INDEXES_S3_BUCKET or PIPELINE_GCP_INDEXES_CONTAINER for GCP validation"
 
 gcp_login_service_account_key() {
+  prepare_gcp_service_account_key
   gcloud auth activate-service-account --key-file="${gcp_key_file}" >/dev/null
 }
 
@@ -167,6 +181,7 @@ configure_gcp_application_default_credentials() {
       export CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${gcp_oidc_cred_file}"
       ;;
     *)
+      prepare_gcp_service_account_key
       export GOOGLE_APPLICATION_CREDENTIALS="${gcp_key_file}"
       unset CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE
       ;;
@@ -213,6 +228,10 @@ if [ "${gcp_auth_mode}" = "oidc" ]; then
   if gcp_auth_with_oidc; then
     :
   else
+    if ! env_present PIPELINE_GCP_SERVICE_ACCOUNT_KEY; then
+      echo "GCP OIDC auth failed and PIPELINE_GCP_SERVICE_ACCOUNT_KEY is not set for fallback" >&2
+      exit 1
+    fi
     log_step "gcp:auth:oidc-fallback service-account-key" | tee -a "${run_log}" >/dev/null
     gcp_auth_mode="service-account-key"
     gcp_auth_with_service_account_key
