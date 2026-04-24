@@ -120,6 +120,15 @@ What the user needs to do:
 2. Review the report and gate output.
 3. Decide whether the cycle stops at compatibility or needs to escalate into a product release.
 
+Qualification runtime inventory:
+
+- EKS full validation: one full released-SOK integration run in one EKS cluster
+- Azure validation: `azure_sanity`
+- GCP validation: `c3_gcp_sanity`, `c3_mgr_gcp_sanity`, `m4_gcp_sanity`, `m4_mgr_gcp_sanity`, `s1_gcp_sanity`
+- Distroless validation: `appframeworksS1`, `managerappframeworkc3`, `managerappframeworkm4`, `managersecret`, `managersmartstore`, `managermc1`, `managermc2`, `managercrcrud`, `licensemanager`, `managerdeletecr`, `indingsep`
+- Graviton validation: `appframeworksS1`, `managersecret`, `managersmartstore`, `managermc1`, `managermc2`, `managercrcrud`, `licensemanager`, `managerdeletecr`, `indingsep`
+- Helm validation: full Helm chart path
+
 ## Release Validation Lane
 
 ![Release validation lane](diagrams/release-lane-target.png)
@@ -147,6 +156,15 @@ What it does not do:
 - it does not publish GA images from the release branch
 - it does not create the MR to `main`
 - it does not auto-merge anything
+
+Release runtime inventory:
+
+- EKS integration fanout: `appframeworksS1`, `managerappframeworkc3`, `managerappframeworkm4`, `managersecret`, `managersmartstore`, `managermc1`, `managermc2`, `managercrcrud`, `licensemanager`, `managerdeletecr`, `indingsep`
+- Azure validation: `azure_sanity`
+- GCP validation: `c3_gcp_sanity`, `c3_mgr_gcp_sanity`, `m4_gcp_sanity`, `m4_mgr_gcp_sanity`, `s1_gcp_sanity`
+- Distroless validation: `appframeworksS1`, `managerappframeworkc3`, `managerappframeworkm4`, `managersecret`, `managersmartstore`, `managermc1`, `managermc2`, `managercrcrud`, `licensemanager`, `managerdeletecr`, `indingsep`
+- Graviton validation: `appframeworksS1`, `managersecret`, `managersmartstore`, `managermc1`, `managermc2`, `managercrcrud`, `licensemanager`, `managerdeletecr`, `indingsep`
+- Helm validation: full Helm chart path
 
 ## Main Release Publish Lane
 
@@ -228,6 +246,13 @@ The main variable families for the expanded runtime coverage are:
 - `PIPELINE_GCP_*` for GKE, Artifact Registry, and GCS validation
 - `PIPELINE_GRAVITON_ENTERPRISE_IMAGE` when Graviton or arm64 runtime validation must use an arm-compatible Splunk Enterprise image
 - `PIPELINE_RUNTIME_ENTERPRISE_IMAGE` when a lane needs to override the default runtime enterprise image pin intentionally
+
+For the cloud-runtime jobs:
+
+- Azure supports GitLab OIDC when `GITLAB_OIDC_TOKEN`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` are present
+- Azure also supports `PIPELINE_AZURE_CREDENTIALS` as the service-principal fallback and `PIPELINE_AKS_KUBECONFIG` for an existing-cluster path
+- GCP supports GitLab OIDC when `GITLAB_OIDC_TOKEN`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, and `GCP_SERVICE_ACCOUNT_EMAIL` are present
+- GCP also supports `PIPELINE_GCP_SERVICE_ACCOUNT_KEY` as the credential fallback and `PIPELINE_GKE_KUBECONFIG` for an existing-cluster path
 
 ## What GitLab Collects Automatically
 
