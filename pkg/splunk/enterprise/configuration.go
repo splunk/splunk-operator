@@ -699,10 +699,16 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	}
 	affinity := splcommon.AppendPodAntiAffinity(&spec.Affinity, cr.GetName(), instanceType.ToString())
 
-	// start with same labels as selector; note that this object gets modified by splcommon.AppendParentMeta()
-	labels := make(map[string]string)
+	// Create separate label maps for StatefulSet ObjectMeta and Pod Template
+	// to prevent SyncParentMetaToStatefulSet from modifying Template labels via shared reference
+	stsLabels := make(map[string]string)
 	for k, v := range selectLabels {
-		labels[k] = v
+		stsLabels[k] = v
+	}
+
+	templateLabels := make(map[string]string)
+	for k, v := range selectLabels {
+		templateLabels[k] = v
 	}
 
 	namespacedName := types.NamespacedName{
@@ -725,7 +731,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      GetSplunkStatefulsetName(instanceType, cr.GetName()),
 				Namespace: cr.GetNamespace(),
-				Labels:    labels,
+				Labels:    stsLabels,
 			},
 		}
 	}
@@ -742,7 +748,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 		},
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels:      labels,
+				Labels:      templateLabels,
 				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
@@ -764,7 +770,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	}
 
 	// Add storage volumes
-	err = addStorageVolumes(ctx, cr, client, spec, statefulSet, labels)
+	err = addStorageVolumes(ctx, cr, client, spec, statefulSet, templateLabels)
 	if err != nil {
 		return statefulSet, err
 	}
@@ -779,8 +785,14 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 		}
 	}
 
-	// append labels and annotations from parent
-	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
+	// sync labels and annotations from parent to Pod Template
+	// Pass selectLabels as protectedLabels to prevent CR labels from overwriting selector labels
+	// Pass empty slices for previousManaged since Pod Template is rebuilt fresh each reconcile
+	splcommon.SyncParentMetaToPodTemplate(ctx, statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta(), selectLabels, nil, nil)
+
+	// sync labels and annotations from parent to StatefulSet ObjectMeta
+	// Pass selectLabels to protect selector labels from removal
+	splcommon.SyncParentMetaToStatefulSet(ctx, statefulSet.GetObjectMeta(), cr.GetObjectMeta(), selectLabels)
 
 	// retrieve the secret to upload to the statefulSet pod
 	statefulSetSecret, err := splutil.GetLatestVersionedSecret(ctx, client, cr, cr.GetNamespace(), statefulSet.GetName())
