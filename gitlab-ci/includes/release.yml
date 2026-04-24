@@ -159,6 +159,35 @@ release-helm-validation:
     # Keep the arm runtime contract explicit like the old GitHub arm workflows.
     JOB_INT_ENTERPRISE_IMAGE: $PIPELINE_GRAVITON_ENTERPRISE_IMAGE
 
+.release-validation-fips-job:
+  extends: .runtime-integration-job
+  timeout: 5h
+  needs:
+    - job: build-stage-image
+      artifacts: true
+    - job: scan-stage-image-trivy
+  rules:
+    - if: '$PIPELINE_FIPS_EKS_CLUSTER_NAME == ""'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^release([\/-]).+$/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^release([\/-]).+$/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+  variables:
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
+    JOB_USE_EXISTING_CLUSTER: "true"
+    JOB_EXISTING_CLUSTER_NAME: $PIPELINE_FIPS_EKS_CLUSTER_NAME
+  script:
+    - gitlab-ci/int-test-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/*-inttest-junit.xml
+
 release-azure-validation:
   extends: .release-validation-azure-job
   variables:
@@ -200,6 +229,20 @@ release-gcp-s1-validation:
     WORKFLOW_SLUG: release-gcp-s1-validation
     JOB_CLOUD_TEST_FOCUS: s1_gcp_sanity
     JOB_CLOUD_TEST_TIMEOUT: 225m
+
+release-fips-smoke-validation:
+  extends: .release-validation-fips-job
+  variables:
+    WORKFLOW_SLUG: release-fips-smoke-validation
+    JOB_INT_TEST_PROFILE: smoke
+    JOB_INT_TEST_TIMEOUT: 225m
+
+release-fips-integration-validation:
+  extends: .release-validation-fips-job
+  variables:
+    WORKFLOW_SLUG: release-fips-integration-validation
+    JOB_INT_TEST_PROFILE: managersecret
+    JOB_INT_TEST_TIMEOUT: 255m
 
 release-distroless-appframeworks-s1-validation:
   extends:
@@ -361,6 +404,44 @@ release-psr-qualification-plan:
   artifacts:
     paths:
       - ci-output/release-psr-qualification-plan-*
+    reports:
+      dotenv: ci-output/release-psr-qualification-plan-output/psr-plan.env
+
+psr-release-qualification-dispatch:
+  stage: release
+  needs:
+    - job: release-psr-qualification-plan
+      artifacts: true
+  rules:
+    - when: never
+  variables:
+    TEST_TYPE: $SOK_PSR_TRIGGER_TEST_TYPE
+    BASE_VERSION: $SOK_PSR_BASE_VERSION
+    TARGET_VERSION: $SOK_PSR_TARGET_VERSION
+    IMAGE_SPLUNK_ENTERPRISE: $SOK_ENTERPRISE_IMAGE
+  trigger:
+    project: $SOK_PSR_PROJECT_PATH
+    branch: main
+    strategy: depend
+    forward:
+      pipeline_variables: true
+
+psr-release-qualification-collect:
+  extends:
+    - .python-venv-job
+    - .release-artifact-job
+    - .rules-release-validation-lane
+  when: always
+  needs:
+    - job: release-psr-qualification-plan
+      artifacts: true
+    - job: psr-release-qualification-dispatch
+      optional: true
+  script:
+    - python3 gitlab-ci/psr-release-qualification-collect.py
+  artifacts:
+    paths:
+      - ci-output/release-controller/
 
 fetch-release-candidate:
   extends:
@@ -488,3 +569,36 @@ prepare-community-operators-submission:
   artifacts:
     paths:
       - ci-output/prepare-community-operators-submission-*
+
+gitlab-release-record:
+  extends:
+    - .release-publish-job
+    - .rules-main-release-publish
+  when: manual
+  needs:
+    - job: fetch-release-candidate
+      artifacts: true
+    - job: publish-release-images
+      artifacts: true
+    - job: publish-release-artifacts
+      artifacts: true
+    - job: publish-release-bundle
+      artifacts: true
+    - job: publish-release-charts
+      artifacts: true
+    - job: preflight-certification
+      artifacts: true
+      optional: true
+    - job: prepare-certified-operators-submission
+      artifacts: true
+      optional: true
+    - job: prepare-community-operators-submission
+      artifacts: true
+      optional: true
+  variables:
+    WORKFLOW_SLUG: gitlab-release-record
+  script:
+    - python3 gitlab-ci/gitlab-release-record.py
+  artifacts:
+    paths:
+      - ci-output/gitlab-release-record-output/*

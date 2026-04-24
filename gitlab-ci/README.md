@@ -124,6 +124,7 @@ What the qualification automation does:
 - resolves the released-SOK contract
 - scans the released operator image with Trivy
 - runs the qualification EKS integration validation
+- runs qualification FIPS smoke and managersecret validation on the approved existing FIPS EKS cluster when `PIPELINE_FIPS_EKS_CLUSTER_NAME` is configured
 - runs Azure validation against the released operator path
 - runs the GCP validation suite set against the released operator path
 - runs distroless runtime validation against the released distroless image
@@ -141,6 +142,7 @@ Qualification inputs:
 
 - required trigger: `SOK_PIPELINE_MODE=qualification_lane`
 - EKS runtime inputs: `PIPELINE_AWS_*`, `PIPELINE_EKS_VPC_PUBLIC_SUBNET_STRING`, `PIPELINE_EKS_VPC_PRIVATE_SUBNET_STRING`, `PIPELINE_TEST_BUCKET`, and `PIPELINE_TEST_INDEXES_S3_BUCKET`
+- FIPS existing-cluster input: `PIPELINE_FIPS_EKS_CLUSTER_NAME` when FIPS qualification is part of the cycle
 - Azure runtime inputs: either GitLab OIDC with `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`, or `PIPELINE_AZURE_CREDENTIALS`, plus `PIPELINE_AZURE_ACR_LOGIN_SERVER`, `PIPELINE_AZURE_REGION`, `PIPELINE_AZURE_RESOURCE_GROUP_NAME`, `PIPELINE_AZURE_STORAGE_ACCOUNT`, `PIPELINE_AZURE_STORAGE_ACCOUNT_KEY`, `PIPELINE_AZURE_TEST_CONTAINER`, and `PIPELINE_AZURE_INDEXES_CONTAINER`
 - GCP runtime inputs: either GitLab OIDC with `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT_EMAIL`, or `PIPELINE_GCP_SERVICE_ACCOUNT_KEY`, plus `PIPELINE_GCP_ARTIFACT_REGISTRY`, `PIPELINE_GCP_PROJECT_ID`, `PIPELINE_GCP_REGION`, and `PIPELINE_GCP_ZONE`
 - Graviton runtime input: `PIPELINE_GRAVITON_ENTERPRISE_IMAGE` must point to the arm-compatible enterprise repo:tag for the cycle under test
@@ -149,6 +151,7 @@ Qualification inputs:
 Qualification runtime inventory:
 
 - EKS full validation: one full released-SOK integration run in one EKS cluster
+- FIPS existing-cluster validation: `smoke`, `managersecret`
 - Azure validation: `azure_sanity`
 - GCP validation: `c3_gcp_sanity`, `c3_mgr_gcp_sanity`, `m4_gcp_sanity`, `m4_mgr_gcp_sanity`, `s1_gcp_sanity`
 - Distroless validation: `appframeworksS1`, `managerappframeworkc3`, `managerappframeworkm4`, `managersecret`, `managersmartstore`, `managermc1`, `managermc2`, `managercrcrud`, `licensemanager`, `managerdeletecr`, `indingsep`
@@ -169,6 +172,7 @@ What the release validation automation does:
 - builds both multi-arch and distroless staged images for the release path
 - scans the staged release image
 - runs the full release EKS integration fanout
+- runs release FIPS smoke and managersecret validation on the approved existing FIPS EKS cluster when `PIPELINE_FIPS_EKS_CLUSTER_NAME` is configured
 - runs Azure validation against the staged release candidate
 - runs the GCP validation suite set against the staged release candidate
 - runs distroless runtime validation against the staged distroless candidate image
@@ -187,6 +191,7 @@ What it does not do:
 Release runtime inventory:
 
 - EKS integration fanout: `appframeworksS1`, `managerappframeworkc3`, `managerappframeworkm4`, `managersecret`, `managersmartstore`, `managermc1`, `managermc2`, `managercrcrud`, `licensemanager`, `managerdeletecr`, `indingsep`
+- FIPS existing-cluster validation: `smoke`, `managersecret`
 - Azure validation: `azure_sanity`
 - GCP validation: `c3_gcp_sanity`, `c3_mgr_gcp_sanity`, `m4_gcp_sanity`, `m4_mgr_gcp_sanity`, `s1_gcp_sanity`
 - Distroless validation: `appframeworksS1`, `managerappframeworkc3`, `managerappframeworkm4`, `managersecret`, `managersmartstore`, `managermc1`, `managermc2`, `managercrcrud`, `licensemanager`, `managerdeletecr`, `indingsep`
@@ -210,11 +215,13 @@ What the publish automation does on `main`:
 - pushes the validated Helm charts to the approved OCI repository
 - runs Red Hat preflight checks
 - prepares the certified-operators and community-operators submission payloads
+- creates the GitLab Release record and uploads stable release assets to the Generic Package Registry
 
 The important guardrail is that `main` promotes validated outputs.
 It does not rebuild the product from source for publication.
 Helm publication also moves forward on OCI only.
 This lane publishes newly validated charts; it does not backfill historical chart versions into the OCI repository.
+If the project `CI_JOB_TOKEN` is not allowed to create releases, set `PIPELINE_GITLAB_RELEASE_API_TOKEN` for the final release-record job.
 
 ## End-To-End Operator Process
 
@@ -246,7 +253,8 @@ This lane publishes newly validated charts; it does not backfill historical char
 7. Get review and approval.
 8. Merge to `main`.
 9. Start the manual publish jobs on `main`, or start a dedicated `release_publish` pipeline on `main` if the publish path must be re-run intentionally.
-10. Complete any external release steps that stay outside GitLab, such as the actual upstream PR submission or partner-portal approval.
+10. Run the final GitLab release-record job after the publish jobs finish.
+11. Complete any external release steps that stay outside GitLab, such as the actual upstream PR submission or partner-portal approval.
 
 ### Patch release later
 

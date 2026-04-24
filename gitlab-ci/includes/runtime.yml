@@ -77,6 +77,25 @@ scan-released-operator-image-trivy:
   variables:
     RELEASED_SOK_CONTRACT_FILE: ci-output/release-controller/released-sok-contract.env
 
+.runtime-released-sok-fips-job:
+  extends: .runtime-released-sok-validation-job
+  allow_failure: true
+  timeout: 5h
+  rules:
+    - if: '$PIPELINE_FIPS_EKS_CLUSTER_NAME == ""'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+  variables:
+    JOB_USE_EXISTING_CLUSTER: "true"
+    JOB_EXISTING_CLUSTER_NAME: $PIPELINE_FIPS_EKS_CLUSTER_NAME
+  script:
+    - gitlab-ci/int-test-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/*-inttest-junit.xml
+
 # Smoke validation now mirrors the old GitHub smoke matrix: one suite per job,
 # one EKS cluster per job, and shared runtime logic through int-test-workflow.sh.
 .runtime-smoke-suite-job:
@@ -230,6 +249,20 @@ helm-eks-validation:
       - ci-output/
     reports:
       junit: ci-output/helm-test-workflow-kuttl-junit.xml
+
+qualification-fips-smoke-validation:
+  extends: .runtime-released-sok-fips-job
+  variables:
+    WORKFLOW_SLUG: qualification-fips-smoke-validation
+    JOB_INT_TEST_PROFILE: smoke
+    JOB_INT_TEST_TIMEOUT: 225m
+
+qualification-fips-integration-validation:
+  extends: .runtime-released-sok-fips-job
+  variables:
+    WORKFLOW_SLUG: qualification-fips-integration-validation
+    JOB_INT_TEST_PROFILE: managersecret
+    JOB_INT_TEST_TIMEOUT: 255m
 
 .runtime-released-sok-azure-validation-job:
   extends: .runtime-released-sok-validation-job

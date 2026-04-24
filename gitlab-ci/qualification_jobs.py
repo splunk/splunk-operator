@@ -17,6 +17,11 @@ BASE_REQUIRED_QUALIFICATION_JOBS = [
     "qualification-gcp-s1-validation",
 ]
 
+FIPS_QUALIFICATION_JOBS = [
+    "qualification-fips-smoke-validation",
+    "qualification-fips-integration-validation",
+]
+
 DISTROLESS_QUALIFICATION_SUITE_JOBS = [
     "qualification-distroless-appframeworks-s1-validation",
     "qualification-distroless-managerappframework-c3-validation",
@@ -45,9 +50,20 @@ GRAVITON_QUALIFICATION_SUITE_JOBS = [
 
 REQUIRED_QUALIFICATION_JOBS = (
     BASE_REQUIRED_QUALIFICATION_JOBS
+    + FIPS_QUALIFICATION_JOBS
     + DISTROLESS_QUALIFICATION_SUITE_JOBS
     + GRAVITON_QUALIFICATION_SUITE_JOBS
 )
+
+
+def qualification_jobs_for_environment(*, include_fips: bool) -> list[str]:
+    jobs = list(BASE_REQUIRED_QUALIFICATION_JOBS)
+    if include_fips:
+        jobs.extend(FIPS_QUALIFICATION_JOBS)
+    jobs.extend(DISTROLESS_QUALIFICATION_SUITE_JOBS)
+    jobs.extend(GRAVITON_QUALIFICATION_SUITE_JOBS)
+    return jobs
+
 
 JOB_EVIDENCE = {
     "released-sok-contract": ["ci-output/release-controller/released-sok-contract.json"],
@@ -56,6 +72,8 @@ JOB_EVIDENCE = {
     "govulncheck-scan": ["govulncheck-results.txt"],
     "eks-qualification-integration-validation": ["ci-output/qualification-int-test-workflow-inttest-junit.xml"],
     "helm-eks-validation": ["ci-output/helm-test-workflow-kuttl-junit.xml"],
+    "qualification-fips-smoke-validation": ["ci-output/qualification-fips-smoke-validation-inttest-junit.xml"],
+    "qualification-fips-integration-validation": ["ci-output/qualification-fips-integration-validation-inttest-junit.xml"],
     "qualification-azure-validation": ["ci-output/qualification-azure-validation-inttest-junit.xml"],
     "qualification-gcp-c3-validation": ["ci-output/qualification-gcp-c3-validation-inttest-junit.xml"],
     "qualification-gcp-c3-manager-validation": ["ci-output/qualification-gcp-c3-manager-validation-inttest-junit.xml"],

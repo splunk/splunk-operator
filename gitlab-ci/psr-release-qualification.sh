@@ -14,6 +14,7 @@ context_file="ci-output/${WORKFLOW_SLUG}-runtime-context.txt"
 output_dir="ci-output/${WORKFLOW_SLUG}-output"
 matrix_file="${output_dir}/psr-trigger-matrix.md"
 summary_file="${output_dir}/summary.txt"
+dotenv_file="${output_dir}/psr-plan.env"
 
 mkdir -p "ci-output" "${output_dir}"
 : > "${context_file}"
@@ -27,6 +28,7 @@ base_version="$(first_nonempty "${PIPELINE_PSR_BASE_VERSION:-}" "")"
 test_types="$(first_nonempty "${PIPELINE_PSR_TEST_TYPES:-}" "upgrade,app_framework,perf")"
 clouds="$(first_nonempty "${PIPELINE_PSR_CLOUDS:-}" "aws,azure")"
 psr_project="$(first_nonempty "${PIPELINE_PSR_PROJECT_PATH:-}" "psr/k8s-operator")"
+trigger_test_type="$(printf '%s' "${test_types}" | cut -d, -f1 | tr -d ' ')"
 
 append_context "${context_file}" "target_version" "${target_version}"
 append_context "${context_file}" "base_version" "${base_version}"
@@ -34,6 +36,16 @@ append_context "${context_file}" "test_types" "${test_types}"
 append_context "${context_file}" "clouds" "${clouds}"
 append_context "${context_file}" "psr_project" "${psr_project}"
 append_context "${context_file}" "enterprise_image" "${RESOLVED_ENTERPRISE_IMAGE}"
+
+cat > "${dotenv_file}" <<EOF
+SOK_PSR_PROJECT_PATH=${psr_project}
+SOK_PSR_TARGET_VERSION=${target_version}
+SOK_PSR_BASE_VERSION=${base_version}
+SOK_PSR_TRIGGER_TEST_TYPES=${test_types}
+SOK_PSR_TRIGGER_TEST_TYPE=${trigger_test_type}
+SOK_PSR_CLOUDS=${clouds}
+SOK_ENTERPRISE_IMAGE=${RESOLVED_ENTERPRISE_IMAGE}
+EOF
 
 cat > "${matrix_file}" <<EOF
 # PSR Release Qualification Plan
@@ -43,6 +55,7 @@ cat > "${matrix_file}" <<EOF
 - base_version: ${base_version:-unset}
 - enterprise_image: ${RESOLVED_ENTERPRISE_IMAGE}
 - test_types: ${test_types}
+- trigger_test_type: ${trigger_test_type}
 - clouds: ${clouds}
 
 ## Release policy
@@ -60,5 +73,6 @@ Prepared the PSR release-qualification plan.
 - target_version: ${target_version}
 - base_version: ${base_version:-unset}
 - matrix_file: ${matrix_file}
+- dotenv_file: ${dotenv_file}
 - downstream_dispatch: manual-only
 EOF
