@@ -47,6 +47,20 @@ type AppSourceGitSpec struct {
 	Ref string `json:"ref,omitempty"`
 }
 
+type AppSourceSplunkbaseSpec struct {
+	// Enabled indicates whether Splunkbase integration is enabled
+	// +optional
+	// +kubebuilder:default=true
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Limit is the maximum number of apps to sync from Splunkbase
+	// +optional
+	// +kubebuilder:default=10
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1000
+	Limit int32 `json:"limit,omitempty"`
+}
+
 type AppSourceAuth struct {
 	// +required
 	SecretRef corev1.LocalObjectReference `json:"secretRef"`
@@ -54,15 +68,16 @@ type AppSourceAuth struct {
 
 // +kubebuilder:validation:XValidation:rule="self.type != 's3' || has(self.s3)",message="s3 configuration is required when type is s3"
 // +kubebuilder:validation:XValidation:rule="self.type != 'git' || has(self.git)",message="git configuration is required when type is git"
-// +kubebuilder:validation:XValidation:rule="[has(self.s3), has(self.git)].filter(x, x == true).size() == 1",message="exactly one of s3 or git must be specified"
+// +kubebuilder:validation:XValidation:rule="self.type != 'splunkbase' || has(self.splunkbase)",message="splunkbase configuration is required when type is splunkbase"
+// +kubebuilder:validation:XValidation:rule="[has(self.s3), has(self.git), has(self.splunkbase)].filter(x, x == true).size() == 1",message="exactly one of s3, git, or splunkbase must be specified"
 // AppSourceSpec defines the desired state of AppSource.
 type AppSourceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Type of the App Source
-	// Valid values are "git", "s3", "gcp", "azure"
-	// +kubebuilder:validation:Enum="git";"s3";"gcp";"azure"
+	// Valid values are "git", "s3", "gcp", "azure", "splunkbase"
+	// +kubebuilder:validation:Enum="git";"s3";"gcp";"azure";"splunkbase"
 	// +required
 	Type string `json:"type"`
 
@@ -77,7 +92,9 @@ type AppSourceSpec struct {
 	// GCP and Azure specific configuration
 	// TODO: Add GCP and Azure specific configuration
 
-	// TODO: Add SplunkBase support
+	// SplunkBase specific configuration
+	// +optional
+	SplunkBase *AppSourceSplunkbaseSpec `json:"splunkbase,omitempty"`
 
 	// Authentication configuration
 	// +required

@@ -114,15 +114,33 @@ spec:
                 required:
                 - endpoint
                 type: object
+              splunkbase:
+                description: SplunkBase specific configuration
+                properties:
+                  enabled:
+                    default: true
+                    description: Enabled indicates whether Splunkbase integration
+                      is enabled
+                    type: boolean
+                  limit:
+                    default: 10
+                    description: Limit is the maximum number of apps to sync from
+                      Splunkbase
+                    format: int32
+                    maximum: 1000
+                    minimum: 1
+                    type: integer
+                type: object
               type:
                 description: |-
                   Type of the App Source
-                  Valid values are "git", "s3", "gcp", "azure"
+                  Valid values are "git", "s3", "gcp", "azure", "splunkbase"
                 enum:
                 - git
                 - s3
                 - gcp
                 - azure
+                - splunkbase
                 type: string
             required:
             - auth
@@ -133,9 +151,11 @@ spec:
               rule: self.type != 's3' || has(self.s3)
             - message: git configuration is required when type is git
               rule: self.type != 'git' || has(self.git)
-            - message: exactly one of s3 or git must be specified
-              rule: '[has(self.s3), has(self.git)].filter(x, x == true).size() ==
-                1'
+            - message: splunkbase configuration is required when type is splunkbase
+              rule: self.type != 'splunkbase' || has(self.splunkbase)
+            - message: exactly one of s3, git, or splunkbase must be specified
+              rule: '[has(self.s3), has(self.git), has(self.splunkbase)].filter(x,
+                x == true).size() == 1'
           status:
             description: AppSourceStatus defines the observed state of AppSource.
             properties:
