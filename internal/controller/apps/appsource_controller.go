@@ -154,13 +154,51 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		Message:            "secret exists and accessible",
 	})
 
+	// Handle different backend types
+	var discoveredApps []appsv1alpha1.DiscoveredApp
+	var reconcileErr error
+
+	switch appSourceInstance.Spec.Type {
+	case "s3":
+		discoveredApps, reconcileErr = r.reconcileS3(ctx, appSourceInstance, secret)
+	case "splunkbase":
+		discoveredApps, reconcileErr = r.reconcileSplunkBase(ctx, appSourceInstance, secret)
+	default:
+		reconcileErr = fmt.Errorf("unsupported backend type: %s", appSourceInstance.Spec.Type)
+	}
+
+	if reconcileErr != nil {
+		return ctrl.Result{}, reconcileErr
+	}
+
+	// Update status with discovered apps
+	appSourceInstance.Status.DiscoveredApps = discoveredApps
+	now := metav1.Now()
+	appSourceInstance.Status.LastPolledTime = &now
+	appSourceInstance.Status.ObservedGeneration = appSourceInstance.Generation
+
+	meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
+		Type:               appsv1alpha1.AppSourceConditionReady,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: appSourceInstance.Generation,
+		Reason:             "Available",
+		Message:            fmt.Sprintf("all checks passed, %d apps discovered", len(discoveredApps)),
+	})
+
 	if err := r.Status().Update(ctx, appSourceInstance); err != nil {
 		logger.Error(err, "Failed to update AppSource status")
 		return ctrl.Result{}, err
 	}
 
-	// TODO: check remote storage is accessible using the secret. we need to gothrough
-	// the custom client code to validate how to use or if we should just use gocloud.dev pacakge
+	logger.Info("AppSource reconciled successfully", "discoveredApps", len(discoveredApps))
+
+	// requeue for next poll
+	requeueAfter := time.Duration(*appSourceInstance.Spec.PollIntervalSeconds) * time.Second
+	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+}
+
+func (r *AppSourceReconciler) reconcileS3(ctx context.Context, appSourceInstance *appsv1alpha1.AppSource, secret *corev1.Secret) ([]appsv1alpha1.DiscoveredApp, error) {
+	logger := logf.FromContext(ctx)
 
 	// get bucket, region, and path
 	bucket := appSourceInstance.Spec.S3.Bucket
@@ -195,9 +233,9 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		appSourceInstance.Status.ObservedGeneration = appSourceInstance.Generation
 		if err := r.Status().Update(ctx, appSourceInstance); err != nil {
 			logger.Error(err, "Failed to update AppSource status")
-			return ctrl.Result{}, err
+			return nil, err
 		}
-		return ctrl.Result{}, fmt.Errorf("AWS credentials (s3_access_key and s3_secret_key) not found in secret %s", appSourceInstance.Spec.Auth.SecretRef.Name)
+		return nil, fmt.Errorf("AWS credentials (s3_access_key and s3_secret_key) not found in secret %s", appSourceInstance.Spec.Auth.SecretRef.Name)
 	}
 
 	bucketURL := fmt.Sprintf("s3://%s?region=%s", bucket, region)
@@ -235,10 +273,10 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		appSourceInstance.Status.ObservedGeneration = appSourceInstance.Generation
 		if err := r.Status().Update(ctx, appSourceInstance); err != nil {
 			logger.Error(err, "Failed to update AppSource status")
-			return ctrl.Result{}, err
+			return nil, err
 		}
 
-		return ctrl.Result{}, err
+		return nil, err
 	}
 
 	awsClient := s3.NewFromConfig(cfg)
@@ -263,10 +301,10 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		appSourceInstance.Status.ObservedGeneration = appSourceInstance.Generation
 		if err := r.Status().Update(ctx, appSourceInstance); err != nil {
 			logger.Error(err, "Failed to update AppSource status")
-			return ctrl.Result{}, err
+			return nil, err
 		}
 
-		return ctrl.Result{}, err
+		return nil, err
 	}
 	defer bkt.Close()
 
@@ -305,10 +343,10 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		if err := r.Status().Update(ctx, appSourceInstance); err != nil {
 			logger.Error(err, "Failed to update AppSource status")
-			return ctrl.Result{}, err
+			return nil, err
 		}
 
-		return ctrl.Result{}, nil
+		return nil, nil
 	} else if err != nil {
 		logger.Error(err, "Failed to list objects")
 
@@ -330,10 +368,10 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		if err := r.Status().Update(ctx, appSourceInstance); err != nil {
 			logger.Error(err, "Failed to update AppSource status")
-			return ctrl.Result{}, err
+			return nil, err
 		}
 
-		return ctrl.Result{}, nil
+		return nil, nil
 	}
 
 	// list the apps in the bucket
@@ -372,10 +410,10 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			appSourceInstance.Status.ObservedGeneration = appSourceInstance.Generation
 			if err := r.Status().Update(ctx, appSourceInstance); err != nil {
 				logger.Error(err, "Failed to update AppSource status")
-				return ctrl.Result{}, err
+				return nil, err
 			}
 
-			return ctrl.Result{}, err
+			return nil, err
 		}
 		// check if the object is .tgz, .spl, or .tar.gz
 		if !strings.HasSuffix(obj.Key, ".tgz") && !strings.HasSuffix(obj.Key, ".spl") && !strings.HasSuffix(obj.Key, ".tar.gz") {
@@ -402,31 +440,13 @@ func (r *AppSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		Message:            fmt.Sprintf("discovered %d apps", len(discoveredApps)),
 	})
 
-	// everything works update the status
-	// update the AppSource status with the discovered apps
-	appSourceInstance.Status.DiscoveredApps = discoveredApps
-	now := metav1.Now()
-	appSourceInstance.Status.LastPolledTime = &now
-	appSourceInstance.Status.ObservedGeneration = appSourceInstance.Generation
+	return discoveredApps, nil
+}
 
-	meta.SetStatusCondition(&appSourceInstance.Status.Conditions, metav1.Condition{
-		Type:               appsv1alpha1.AppSourceConditionReady,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: appSourceInstance.Generation,
-		Reason:             "Available",
-		Message:            fmt.Sprintf("all checks passed, %d apps discovered", len(discoveredApps)),
-	})
+func (r *AppSourceReconciler) reconcileSplunkBase(ctx context.Context, appSourceInstance *appsv1alpha1.AppSource, secret *corev1.Secret) ([]appsv1alpha1.DiscoveredApp, error) {
+	// logger := logf.FromContext(ctx)
 
-	if err := r.Status().Update(ctx, appSourceInstance); err != nil {
-		logger.Error(err, "Failed to update AppSource status")
-		return ctrl.Result{}, err
-	}
-
-	logger.Info("AppSource reconciled successfully", "discoveredApps", len(discoveredApps))
-
-	// reque for next poll
-	requeueAfter := time.Duration(*appSourceInstance.Spec.PollIntervalSeconds) * time.Second
-	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+	return nil, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
