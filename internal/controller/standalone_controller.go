@@ -18,10 +18,12 @@ package controller
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -39,7 +41,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -82,8 +83,8 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "Standalone")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "Standalone")
 
-	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("standalone", req.NamespacedName)
+	logger := slog.Default().With("controller", "Standalone", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
+	ctx = logging.WithLogger(ctx, logger)
 
 	// Fetch the Standalone
 	instance := &enterpriseApi.Standalone{}
@@ -108,14 +109,14 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+	logger.InfoContext(ctx, "start", "crVersion", instance.GetResourceVersion())
 
 	// Pass event recorder through context
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
 	result, err := ApplyStandalone(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
-		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
 	}
 
 	return result, err

@@ -21,18 +21,18 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/spf13/pflag"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 
 	intController "github.com/splunk/splunk-operator/internal/controller"
 	"github.com/splunk/splunk-operator/internal/controller/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise/validation"
-	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -46,14 +46,15 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	"github.com/splunk/splunk-operator/internal/controller"
 	//+kubebuilder:scaffold:imports
 	//extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
@@ -77,8 +78,11 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var pprofActive bool
-	var logEncoder string
-	var logLevel int
+
+	// Structured logging flags
+	var logLevel string
+	var logFormat string
+	var logAddSource bool
 
 	var leaseDuration time.Duration
 	var renewDeadline time.Duration
@@ -87,16 +91,18 @@ func main() {
 
 	var tlsOpts []func(*tls.Config)
 
-	// TLS certificate configuration for metrics
 	var metricsCertPath, metricsCertName, metricsCertKey string
 
-	pflag.StringVar(&logEncoder, "log-encoder", "json", "log encoding ('json' or 'console')")
 	pflag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	pflag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	pflag.BoolVar(&pprofActive, "pprof", true, "Enable pprof endpoint")
-	pflag.IntVar(&logLevel, "log-level", int(zapcore.InfoLevel), "set log level")
+
+	// Structured logging flags (can also be set via LOG_LEVEL, LOG_FORMAT, LOG_ADD_SOURCE env vars)
+	pflag.StringVar(&logLevel, "log-level", "", "log level: debug, info, warn, error (overrides LOG_LEVEL env var)")
+	pflag.StringVar(&logFormat, "log-format", "", "log output format: json, text (overrides LOG_FORMAT env var)")
+	pflag.BoolVar(&logAddSource, "log-add-source", false, "add source file:line to log output (overrides LOG_ADD_SOURCE env var)")
 	pflag.IntVar(&leaseDurationSecond, "lease-duration", leaseDurationSecond, "manager lease duration in seconds")
 	pflag.IntVar(&renewDeadlineSecond, "renew-duration", renewDeadlineSecond, "manager renew duration in seconds")
 	pflag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metrics endpoint binds to. "+
@@ -167,6 +173,21 @@ func main() {
 	} else {
 		renewDeadline = time.Duration(renewDeadlineSecond) * time.Second
 	}
+
+	// Initialize structured logging infrastructure
+	// Flags take precedence over environment variables
+	var addSourcePtr *bool
+	if logAddSource {
+		addSourcePtr = &logAddSource
+	}
+	logCfg := logging.LoadConfigWithFlags(logLevel, logFormat, addSourcePtr)
+	_ = logging.SetupLogger(logCfg)
+
+	// Log startup information using slog
+	slog.Info("splunk Operator starting",
+		slog.String("log_level", logging.LevelToString(logCfg.Level)),
+		slog.String("log_format", logCfg.Format),
+		slog.Bool("log_add_source", logCfg.AddSource))
 
 	// Configure metrics certificate watcher if metrics certs are provided
 	var metricsCertWatcher *certwatcher.CertWatcher
@@ -275,7 +296,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Standalone")
 		os.Exit(1)
 	}
-	if err := (&controller.IngestorClusterReconciler{
+	if err := (&intController.IngestorClusterReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("ingestorcluster-controller"),

@@ -18,10 +18,12 @@ package controller
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	"github.com/pkg/errors"
@@ -36,7 +38,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -77,8 +78,8 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "SearchHeadCluster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "SearchHeadCluster")
 
-	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("searchheadcluster", req.NamespacedName)
+	logger := slog.Default().With("controller", "SearchHeadCluster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
+	ctx = logging.WithLogger(ctx, logger)
 
 	// Fetch the SearchHeadCluster
 	instance := &enterpriseApi.SearchHeadCluster{}
@@ -103,14 +104,14 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+	logger.InfoContext(ctx, "start", "crVersion", instance.GetResourceVersion())
 
 	// Pass event recorder through context
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
 	result, err := ApplySearchHeadCluster(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
-		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
 	}
 
 	return result, err
