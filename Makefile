@@ -165,39 +165,42 @@ docker-push: ## Push docker image with the manager.
 
 # Docker-buildx is used to build the image for multiple OS/platforms
 # IMG is a mandatory argument to specify the image name
-# Defaults:
-#   Build Platform: linux/amd64,linux/arm64
-#   Build Base OS: registry.access.redhat.com/ubi8/ubi-minimal
-#   Build Base OS Version: 8.10-1775152441
-# Pass only what is required, the rest will be defaulted
-# Setup defaults for build arguments
+# Pass only what is required, the rest will use the Dockerfile defaults
 PLATFORMS ?= linux/amd64,linux/arm64
-BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal
-BASE_IMAGE_VERSION ?= 8.10-1775152441
-BUILDER_IMAGE ?=
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
-            echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
-            exit 1; \
-        fi; \
-        	docker buildx inspect project-v3-builder >/dev/null 2>&1 || docker buildx create --name project-v3-builder; \
-        	docker buildx use project-v3-builder; \
-        if echo "${BASE_IMAGE}" | grep -q "distroless"; then \
-            DOCKERFILE="Dockerfile.distroless"; \
-        else \
-            DOCKERFILE="Dockerfile"; \
-            if [ -n "${BUILDER_IMAGE}" ]; then \
-                BUILDER_IMAGE_ARG="--build-arg BUILDER_IMAGE=${BUILDER_IMAGE}"; \
-            else \
-                BUILDER_IMAGE_ARG=""; \
-            fi; \
-        fi; \
-        docker buildx build --push --platform="${PLATFORMS}" \
-            --build-arg BASE_IMAGE="${BASE_IMAGE}" \
-            --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
-            $$BUILDER_IMAGE_ARG \
-            --tag "${IMG}" -f "$$DOCKERFILE" .
+	        echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
+	        exit 1; \
+	    fi; \
+	    docker buildx inspect project-v3-builder >/dev/null 2>&1 || docker buildx create --name project-v3-builder; \
+	    docker buildx use project-v3-builder; \
+	    if echo "${BASE_IMAGE}" | grep -q "distroless"; then \
+	        DOCKERFILE="Dockerfile.distroless"; \
+	    else \
+	        DOCKERFILE="Dockerfile"; \
+	        if [ -n "${BUILDER_IMAGE}" ]; then \
+	            BUILDER_IMAGE_ARG="--build-arg BUILDER_IMAGE=${BUILDER_IMAGE}"; \
+	        else \
+	            BUILDER_IMAGE_ARG=""; \
+	        fi; \
+	    fi; \
+	    if [ -n "${BASE_IMAGE}" ]; then \
+	        BASE_IMAGE_ARG="--build-arg BASE_IMAGE=${BASE_IMAGE}"; \
+	    else \
+	        BASE_IMAGE_ARG=""; \
+	    fi; \
+	    if [ -n "${BASE_IMAGE_VERSION}" ]; then \
+	        BASE_IMAGE_VERSION_ARG="--build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION}"; \
+	    else \
+	        BASE_IMAGE_VERSION_ARG=""; \
+	    fi; \
+	    docker buildx build --push \
+	        --platform="${PLATFORMS}" \
+	        $$BASE_IMAGE_ARG \
+	        $$BASE_IMAGE_VERSION_ARG \
+	        $$BUILDER_IMAGE_ARG \
+	        --tag "${IMG}" -f "$$DOCKERFILE" .
 
 .PHONY: setup/kubectl
 setup/kubectl:
