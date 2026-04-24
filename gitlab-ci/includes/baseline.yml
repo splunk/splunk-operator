@@ -1,3 +1,10 @@
+merge-request-description-check:
+  extends:
+    - .go-verify-job
+    - .rules-merge-request-event
+  script:
+    - sh gitlab-ci/validate-merge-request-description.sh
+
 format-and-vet:
   extends:
     - .go-verify-job

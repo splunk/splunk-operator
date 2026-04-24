@@ -1,33 +1,39 @@
 @startuml
-title Release Lane Target
-start
-:Release trigger on reviewed branch or tag;
-:Prepare release metadata;
-
-partition Baseline {
-  :Reuse proven verification and test gates;
+title Release Validation Lane
+left to right direction
+skinparam Shadowing false
+skinparam DefaultFontName DejaVu Sans
+skinparam BackgroundColor white
+skinparam ArrowColor #1d4f73
+skinparam Rectangle {
+  BorderColor #1d4f73
+  BackgroundColor #eef6fb
+  FontColor #0f172a
+  RoundCorner 12
+}
+skinparam Note {
+  BorderColor #8b6f2f
+  BackgroundColor #fff7d6
+  FontColor #3f3420
 }
 
-partition Artifact {
-  :Stage release operator images;
-  :Run release image scanning;
-}
+rectangle "Push to release/<version> or release-<version>\nor MR from release branch to main" as trigger
+rectangle "Baseline\nverify and test jobs" as baseline
+rectangle "Build\nstaged multi-arch and distroless release images" as build
+rectangle "Image scan\nscan-stage-image-trivy" as scan
+rectangle "Release runtime validation\n11 integration suites\nplus Helm validation" as runtime #eefbf1
+rectangle "Release candidate packaging\npromote validated RC artifacts once" as packaging #f7f7ff
+rectangle "PSR plan\nrelease-psr-qualification-plan" as psr #f7f7ff
 
-partition Validation {
-  :Run release validation and FIPS slices;
-  :Run Helm release validation;
-}
+trigger --> baseline
+baseline --> build
+build --> scan
+scan --> runtime
+runtime --> packaging
+packaging --> psr
 
-partition PSR {
-  :Prepare PSR release qualification request;
-  :Record PSR gate status;
-}
-
-partition Publish {
-  :Package and publish Helm charts;
-  :Publish release bundles;
-  :Write GitLab release record;
-}
-
-stop
+note bottom of packaging
+The release branch builds the candidate once.
+Main later promotes those validated outputs instead of rebuilding them.
+end note
 @enduml

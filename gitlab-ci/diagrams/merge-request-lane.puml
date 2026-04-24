@@ -1,5 +1,5 @@
 @startuml
-title Develop Lane
+title Merge Request Validation Lane
 left to right direction
 skinparam Shadowing false
 skinparam DefaultFontName DejaVu Sans
@@ -17,23 +17,25 @@ skinparam Note {
   FontColor #3f3420
 }
 
-rectangle "Push or merge to develop" as trigger
-rectangle "Verify\nformat-and-vet" as verify
+rectangle "Feature branch push" as push
+rectangle "Plain branch push does not run CI" as no_push #fff4e5
+rectangle "Open or update merge request" as mr
+rectangle "Verify\nmerge-request-description-check\nformat-and-vet" as verify
 rectangle "Test\nunit-tests\nkubectl-splunk-tests\noss-scan (advisory)" as test
 rectangle "Build\nbuild-stage-image" as build
 rectangle "Image scan\nscan-stage-image-trivy" as scan
 rectangle "Smoke fanout on disposable EKS\n8 smoke suites in parallel" as smoke #eefbf1
-rectangle "Merged-branch evidence\nci-output and test reports" as evidence #f7f7ff
 
-trigger --> verify
+push --> no_push
+push --> mr
+mr --> verify
 verify --> test
 test --> build
 build --> scan
 scan --> smoke
-smoke --> evidence
 
-note bottom of build
-The develop lane reuses the same staged-image contract
-as the MR lane and validates the merged branch tip.
+note bottom of no_push
+GitLab uses the MR as the normal branch-validation trigger
+and suppresses duplicate push pipelines once the MR exists.
 end note
 @enduml
