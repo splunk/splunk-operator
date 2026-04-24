@@ -1,0 +1,27 @@
+github-intake-backfill:
+  extends:
+    - .python-admin-job
+    - .rules-github-intake-lane
+  variables:
+    WORKFLOW_SLUG: github-intake-backfill
+  script:
+    - sh gitlab-ci/github-intake-automation.sh
+  artifacts:
+    paths:
+      - ci-output/
+
+github-mirror-health-check:
+  extends:
+    - .admin-job
+    - .rules-github-mirror-health-lane
+  variables:
+    WORKFLOW_SLUG: github-mirror-health-check
+  before_script:
+    - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
+    - install_os_packages git
+    - git --version
+  script:
+    - sh gitlab-ci/mirror-health-check.sh
+  artifacts:
+    paths:
+      - ci-output/

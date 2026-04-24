@@ -8,6 +8,8 @@
 
 [`gitlab-ci/includes/qualification.yml`](includes/qualification.yml) defines the qualification manifest, report, and compatibility publication jobs.
 
+[`gitlab-ci/includes/admin.yml`](includes/admin.yml) defines the manual and scheduled GitHub intake backfill and GitHub mirror health-check jobs.
+
 [`gitlab-ci/build-test-push.sh`](build-test-push.sh) builds the operator image for the current commit and pushes it to the staging ECR target.
 
 [`gitlab-ci/build-test-push-trivy-scan.sh`](build-test-push-trivy-scan.sh) scans the staged image artifact with Trivy.
@@ -21,6 +23,10 @@
 [`gitlab-ci/qualification-report.py`](qualification-report.py) assembles the observed qualification evidence into the compatibility report.
 
 [`gitlab-ci/compatibility-publish.py`](compatibility-publish.py) writes the publish plan for the qualification compatibility result.
+
+[`gitlab-ci/github-intake-backfill.py`](github-intake-backfill.py) backfills selected GitHub issues and PRs into GitLab issue and MR records.
+
+[`gitlab-ci/mirror-health-check.sh`](mirror-health-check.sh) performs a read-only branch parity check against the configured GitHub mirror repository.
 
 [`gitlab-ci/lib/pipeline-common.sh`](lib/pipeline-common.sh) contains shared runtime helpers for registry resolution, environment loading, tool bootstrap, and artifact checks.
 
