@@ -70,6 +70,10 @@ def github_headers() -> dict[str, str]:
     return headers
 
 
+def github_token_present() -> bool:
+    return bool(os.getenv("PIPELINE_GITHUB_INTAKE_TOKEN", "").strip())
+
+
 def api_request_json(method: str, url: str, headers: dict[str, str], payload: dict | None = None) -> dict | list:
     data = None
     request_headers = dict(headers)
@@ -437,6 +441,14 @@ def ensure_gitlab_write_token() -> None:
     )
 
 
+def ensure_github_discovery_token() -> None:
+    if github_token_present():
+        return
+    raise RuntimeError(
+        "PIPELINE_GITHUB_INTAKE_TOKEN is required for auto-discovery; unauthenticated GitHub API access is too rate-limited for the daily intake lane"
+    )
+
+
 def main() -> int:
     repo = os.getenv("PIPELINE_GITHUB_INTAKE_REPOSITORY", "splunk/splunk-operator").strip()
     requested_issues = csv_ints("PIPELINE_GITHUB_INTAKE_ISSUES")
@@ -446,6 +458,7 @@ def main() -> int:
     discovered_issues: list[int] = []
     discovered_prs: list[int] = []
     if auto_discover:
+        ensure_github_discovery_token()
         since_iso = github_since_iso(lookback_days)
         discovered_issues = discover_issue_numbers(repo, since_iso)
         discovered_prs = discover_pr_numbers(repo, since_iso)
@@ -465,7 +478,7 @@ def main() -> int:
         "prs": prs,
         "apply": apply_changes,
         "gitlab_auth_mode": gitlab_auth_mode(),
-        "github_token_present": bool(os.getenv("PIPELINE_GITHUB_INTAKE_TOKEN", "").strip()),
+        "github_token_present": github_token_present(),
         "status": "no-input",
         "rows": [],
     }
@@ -641,7 +654,7 @@ if __name__ == "__main__":
             "prs": csv_ints("PIPELINE_GITHUB_INTAKE_PRS"),
             "apply": not bool_env("PIPELINE_GITHUB_INTAKE_DRY_RUN", False),
             "gitlab_auth_mode": gitlab_auth_mode(),
-            "github_token_present": bool(os.getenv("PIPELINE_GITHUB_INTAKE_TOKEN", "").strip()),
+            "github_token_present": github_token_present(),
             "status": "failed",
             "rows": [],
             "error": str(exc),
