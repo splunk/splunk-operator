@@ -444,6 +444,10 @@ def main() -> int:
     issues = sorted({*requested_issues, *discovered_issues})
     prs = sorted({*requested_prs, *discovered_prs})
     apply_changes = not bool_env("PIPELINE_GITHUB_INTAKE_DRY_RUN", False)
+    if apply_changes and not os.getenv("PIPELINE_GITLAB_API_TOKEN", "").strip():
+        raise RuntimeError(
+            "PIPELINE_GITLAB_API_TOKEN is required for apply mode; CI_JOB_TOKEN is not sufficient for GitLab intake writes"
+        )
     report: dict[str, Any] = {
         "observed_at_utc": utc_now(),
         "github_repo": repo,

@@ -8,7 +8,7 @@
 
 [`gitlab-ci/includes/qualification.yml`](includes/qualification.yml) defines the qualification manifest, report, and compatibility publication jobs.
 
-[`gitlab-ci/includes/admin.yml`](includes/admin.yml) defines the one-off admin jobs and the daily scheduled GitHub intake backfill and GitHub mirror health-check jobs. The daily lane defaults to the public `splunk/splunk-operator` GitHub repository, so the schedule only needs `SOK_PIPELINE_MODE=github_admin_daily` unless a different mirror target is required.
+[`gitlab-ci/includes/admin.yml`](includes/admin.yml) defines the one-off admin jobs and the daily scheduled GitHub intake backfill and GitHub mirror health-check jobs. The daily lane defaults to the public `splunk/splunk-operator` GitHub repository, so the schedule only needs `SOK_PIPELINE_MODE=github_admin_daily` unless a different mirror target is required. The intake writer still requires `PIPELINE_GITLAB_API_TOKEN` because GitLab issue and merge-request creation is not authorized with `CI_JOB_TOKEN`.
 
 [`gitlab-ci/build-test-push.sh`](build-test-push.sh) builds the operator image for the current commit and pushes it to the staging ECR target.
 
