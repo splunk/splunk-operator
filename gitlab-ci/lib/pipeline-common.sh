@@ -27,11 +27,30 @@ load_repo_dotenv() {
 strip_docker_io_prefix() {
   image_ref="$1"
   case "${image_ref}" in
+    registry-1.docker.io/*)
+      printf '%s' "${image_ref#registry-1.docker.io/}"
+      ;;
+    index.docker.io/*)
+      printf '%s' "${image_ref#index.docker.io/}"
+      ;;
     docker.io/*)
       printf '%s' "${image_ref#docker.io/}"
       ;;
     *)
       printf '%s' "${image_ref}"
+      ;;
+  esac
+}
+
+registry_host_from_image_ref() {
+  image_ref="$1"
+  first_component="$(printf '%s' "${image_ref}" | cut -d/ -f1)"
+  case "${first_component}" in
+    *.*|*:*|localhost)
+      printf '%s' "${first_component}"
+      ;;
+    *)
+      printf '%s' "docker.io"
       ;;
   esac
 }
@@ -62,6 +81,63 @@ first_nonempty() {
   return 0
 }
 
+load_optional_env_file() {
+  dotenv_path="$1"
+  if [ -f "${dotenv_path}" ]; then
+    set -a
+    . "${dotenv_path}"
+    set +a
+  fi
+}
+
+load_optional_release_controller_env() {
+  controller_env_path="$1"
+  load_optional_env_file "${controller_env_path}"
+}
+
+require_nonempty() {
+  value="$1"
+  description="$2"
+  if [ -z "${value}" ]; then
+    echo "Missing required value: ${description}" >&2
+    return 1
+  fi
+}
+
+require_commands() {
+  for command_name in "$@"; do
+    if ! command -v "${command_name}" >/dev/null 2>&1; then
+      echo "Missing required command: ${command_name}" >&2
+      return 1
+    fi
+  done
+}
+
+require_envs() {
+  for env_name in "$@"; do
+    # POSIX sh does not support ${!name}; keep env_name sourced from fixed call
+    # sites rather than dynamic user input when using this indirection.
+    eval "env_value=\${${env_name}:-}"
+    if [ -z "${env_value}" ]; then
+      echo "Missing required environment variable: ${env_name}" >&2
+      return 1
+    fi
+  done
+}
+
+materialize_file_secret() {
+  secret_value="$1"
+  output_path="$2"
+
+  mkdir -p "$(dirname "${output_path}")"
+  if [ -f "${secret_value}" ]; then
+    cp "${secret_value}" "${output_path}"
+  else
+    printf '%s' "${secret_value}" | base64 -d > "${output_path}"
+  fi
+  chmod 0600 "${output_path}"
+}
+
 install_os_packages() {
   if ! command -v apt-get >/dev/null 2>&1; then
     echo "GitLab CI expects Debian-based runners with apt-get available" >&2
@@ -76,6 +152,13 @@ ensure_python_venv_tooling() {
   install_os_packages python3 python3-pip python3-venv
 }
 
+ensure_jq() {
+  if command -v jq >/dev/null 2>&1; then
+    return 0
+  fi
+
+  install_os_packages jq
+}
 
 require_file() {
   path="$1"
@@ -84,6 +167,52 @@ require_file() {
     echo "Missing required file: ${description} (${path})" >&2
     return 1
   fi
+}
+
+urlencode() {
+  python3 - "$1" <<'PY'
+import sys
+import urllib.parse
+
+print(urllib.parse.quote(sys.argv[1], safe=""))
+PY
+}
+
+require_gitlab_job_token() {
+  require_envs CI_API_V4_URL CI_PROJECT_ID CI_JOB_TOKEN
+}
+
+download_gitlab_job_artifacts_archive_by_ref() {
+  ref_name="$1"
+  job_name="$2"
+  output_path="$3"
+
+  require_gitlab_job_token
+  encoded_ref="$(urlencode "${ref_name}")"
+  curl --fail --location --silent --show-error \
+    --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+    "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/artifacts/${encoded_ref}/download?job=${job_name}" \
+    -o "${output_path}"
+}
+
+download_gitlab_job_artifacts_archive_by_pipeline() {
+  pipeline_id="$1"
+  job_name="$2"
+  output_path="$3"
+
+  require_gitlab_job_token
+  ensure_jq
+
+  jobs_json="$(curl --fail --location --silent --show-error \
+    --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+    "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/pipelines/${pipeline_id}/jobs?scope[]=success&per_page=100")"
+  job_id="$(printf '%s' "${jobs_json}" | jq -r --arg job_name "${job_name}" '.[] | select(.name == $job_name) | .id' | head -n 1)"
+  require_nonempty "${job_id}" "successful ${job_name} job in pipeline ${pipeline_id}"
+
+  curl --fail --location --silent --show-error \
+    --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+    "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${job_id}/artifacts" \
+    -o "${output_path}"
 }
 
 resolve_pipeline_image_repository() {
@@ -121,6 +250,38 @@ resolve_enterprise_release_image() {
   RESOLVED_ENTERPRISE_IMAGE="$(strip_docker_io_prefix "${requested_enterprise_image}")"
 }
 
+resolve_runtime_enterprise_image() {
+  requested_enterprise_image="$(first_nonempty \
+    "${PIPELINE_RUNTIME_ENTERPRISE_IMAGE:-}" \
+    "${JOB_RUNTIME_ENTERPRISE_IMAGE:-}" \
+    "${PIPELINE_INT_ENTERPRISE_IMAGE:-}" \
+    "${JOB_INT_ENTERPRISE_IMAGE:-}" \
+    "${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-}" \
+    "splunk/splunk:latest")"
+  RESOLVED_ENTERPRISE_IMAGE="$(strip_docker_io_prefix "${requested_enterprise_image}")"
+}
+
+resolve_makefile_version() {
+  makefile_path="$1"
+  RESOLVED_MAKEFILE_VERSION="$(awk '/^VERSION[[:space:]]*\?/ {print $3; exit}' "${makefile_path}")"
+  require_nonempty "${RESOLVED_MAKEFILE_VERSION}" "Makefile VERSION"
+}
+
+resolve_release_version() {
+  makefile_path="$1"
+  resolve_makefile_version "${makefile_path}"
+  RESOLVED_RELEASE_VERSION="$(first_nonempty "${PIPELINE_RELEASE_VERSION:-}" "${RESOLVED_MAKEFILE_VERSION}")"
+  RESOLVED_RELEASE_OPERATOR_TAG="$(first_nonempty "${PIPELINE_RELEASE_OPERATOR_TAG:-}" "${RESOLVED_RELEASE_VERSION}")"
+  RESOLVED_RELEASE_CANDIDATE_NUMBER="$(first_nonempty "${PIPELINE_RELEASE_CANDIDATE_NUMBER:-}" "1")"
+}
+
+resolve_release_image_repository() {
+  release_target="$(first_nonempty "${PIPELINE_RELEASE_IMAGE_REPOSITORY:-}" "docker.io/splunk/splunk-operator")"
+  resolve_pipeline_image_repository "${release_target}" "splunk/splunk-operator"
+  RESOLVED_RELEASE_IMAGE_REGISTRY="${RESOLVED_ECR_REGISTRY}"
+  RESOLVED_RELEASE_IMAGE_REPOSITORY="${RESOLVED_IMAGE_REPOSITORY}"
+}
+
 # Resolve the operator under test for runtime jobs.
 # - branch-build mode consumes the staged build artifact from this pipeline.
 # - official-release mode consumes the released-SOK contract and mirrors the
@@ -131,6 +292,7 @@ resolve_operator_runtime_source() {
   default_repo_path="$3"
 
   RUNTIME_INPUT_ARTIFACT=""
+  RUNTIME_OPERATOR_IMAGE_VARIANT="$(first_nonempty "${PIPELINE_RUNTIME_IMAGE_VARIANT:-}" "${JOB_RUNTIME_IMAGE_VARIANT:-}" "standard")"
   RUNTIME_OPERATOR_SOURCE_KIND="branch-build"
   RUNTIME_OPERATOR_SOURCE_IMAGE=""
   RUNTIME_OPERATOR_MIRROR_PATH=""
@@ -146,10 +308,18 @@ resolve_operator_runtime_source() {
     RUNTIME_INPUT_ARTIFACT="${released_sok_contract_file}"
     resolve_pipeline_image_repository "$(first_nonempty "${PIPELINE_ECR_REPOSITORY:-}" "")" "${default_repo_path}"
     RUNTIME_ECR_REGISTRY="${RESOLVED_ECR_REGISTRY}"
-    RUNTIME_OPERATOR_SOURCE_IMAGE="$(first_nonempty "${SOK_RELEASED_OPERATOR_IMAGE_SOURCE:-}" "")"
-    RUNTIME_OPERATOR_MIRROR_PATH="$(first_nonempty "${SOK_RELEASED_OPERATOR_IMAGE_MIRROR_PATH:-}" "")"
+    case "${RUNTIME_OPERATOR_IMAGE_VARIANT}" in
+      distroless)
+        RUNTIME_OPERATOR_SOURCE_IMAGE="$(first_nonempty "${SOK_RELEASED_DISTROLESS_IMAGE_SOURCE:-}" "")"
+        RUNTIME_OPERATOR_MIRROR_PATH="$(first_nonempty "${SOK_RELEASED_DISTROLESS_IMAGE_MIRROR_PATH:-}" "")"
+        ;;
+      *)
+        RUNTIME_OPERATOR_SOURCE_IMAGE="$(first_nonempty "${SOK_RELEASED_OPERATOR_IMAGE_SOURCE:-}" "")"
+        RUNTIME_OPERATOR_MIRROR_PATH="$(first_nonempty "${SOK_RELEASED_OPERATOR_IMAGE_MIRROR_PATH:-}" "")"
+        ;;
+    esac
     if [ -z "${RUNTIME_OPERATOR_SOURCE_IMAGE}" ] || [ -z "${RUNTIME_OPERATOR_MIRROR_PATH}" ]; then
-      echo "Released SOK contract is missing operator image fields" >&2
+      echo "Released SOK contract is missing ${RUNTIME_OPERATOR_IMAGE_VARIANT} operator image fields" >&2
       return 1
     fi
     RUNTIME_OPERATOR_REPO_IMAGE="${RUNTIME_OPERATOR_MIRROR_PATH}"
@@ -173,6 +343,7 @@ append_operator_runtime_context() {
   context_file="$1"
 
   append_context "${context_file}" "input_artifact" "${RUNTIME_INPUT_ARTIFACT}"
+  append_context "${context_file}" "operator_image_variant" "${RUNTIME_OPERATOR_IMAGE_VARIANT}"
   if [ "${RUNTIME_OPERATOR_SOURCE_KIND}" = "official-release" ]; then
     append_context "${context_file}" "released_operator_image_source" "${RUNTIME_OPERATOR_SOURCE_IMAGE}"
   else
@@ -184,12 +355,43 @@ append_operator_runtime_context() {
 mirror_operator_image_to_ecr_if_needed() {
   if [ "${RUNTIME_OPERATOR_SOURCE_KIND}" = "official-release" ]; then
     RUNTIME_OPERATOR_FULL_IMAGE_REF="${RUNTIME_ECR_REGISTRY}/${RUNTIME_OPERATOR_MIRROR_PATH}"
+    source_registry="$(registry_host_from_image_ref "${RUNTIME_OPERATOR_SOURCE_IMAGE}")"
+    source_username="$(first_nonempty "${PIPELINE_RELEASED_OPERATOR_REGISTRY_USERNAME:-}" "${PIPELINE_RELEASE_REGISTRY_USERNAME:-}" "${PIPELINE_DOCKER_USERNAME:-}" "")"
+    source_password="$(first_nonempty "${PIPELINE_RELEASED_OPERATOR_REGISTRY_PASSWORD:-}" "${PIPELINE_RELEASE_REGISTRY_PASSWORD:-}" "${PIPELINE_DOCKER_PASSWORD:-}" "")"
     log_step "registry:mirror-operator:start ${RUNTIME_OPERATOR_SOURCE_IMAGE}"
+    if [ -n "${source_username}" ] || [ -n "${source_password}" ] || printf '%s' "${source_registry}" | grep -Eq '\.dkr\.ecr\..*\.amazonaws\.com$'; then
+      docker_login_registry "${source_registry}" "${source_username}" "${source_password}"
+    fi
     docker pull "${RUNTIME_OPERATOR_SOURCE_IMAGE}"
     docker tag "${RUNTIME_OPERATOR_SOURCE_IMAGE}" "${RUNTIME_OPERATOR_FULL_IMAGE_REF}"
     docker push "${RUNTIME_OPERATOR_FULL_IMAGE_REF}"
     log_step "registry:mirror-operator:complete ${RUNTIME_OPERATOR_FULL_IMAGE_REF}"
   fi
+}
+
+login_source_registry_for_image() {
+  source_image_ref="$1"
+  source_registry="$(registry_host_from_image_ref "${source_image_ref}")"
+  source_username="$(first_nonempty "${PIPELINE_RELEASED_OPERATOR_REGISTRY_USERNAME:-}" "${PIPELINE_RELEASE_REGISTRY_USERNAME:-}" "${PIPELINE_DOCKER_USERNAME:-}" "")"
+  source_password="$(first_nonempty "${PIPELINE_RELEASED_OPERATOR_REGISTRY_PASSWORD:-}" "${PIPELINE_RELEASE_REGISTRY_PASSWORD:-}" "${PIPELINE_DOCKER_PASSWORD:-}" "")"
+
+  if printf '%s' "${source_registry}" | grep -Eq '\.dkr\.ecr\..*\.amazonaws\.com$'; then
+    docker_login_registry "${source_registry}" "" ""
+    return 0
+  fi
+
+  if [ -n "${source_username}" ] || [ -n "${source_password}" ]; then
+    docker_login_registry "${source_registry}" "${source_username}" "${source_password}"
+  fi
+}
+
+promote_image_to_private_registry() {
+  source_image_ref="$1"
+  target_image_ref="$2"
+
+  docker pull "${source_image_ref}"
+  docker tag "${source_image_ref}" "${target_image_ref}"
+  docker push "${target_image_ref}"
 }
 
 ensure_ci_bin_path() {
@@ -410,4 +612,92 @@ ensure_pipeline_aws_env() {
     AWS_DEFAULT_REGION="$(first_nonempty "${PIPELINE_AWS_DEFAULT_REGION:-}" "")"
     export AWS_DEFAULT_REGION
   fi
+}
+
+registry_login_password_for_host() {
+  registry_host="$1"
+  username="$2"
+  password="$3"
+
+  case "${registry_host}" in
+    *.dkr.ecr.*.amazonaws.com)
+      ensure_pipeline_aws_env
+      resolve_ecr_region "${registry_host}"
+      require_nonempty "${RESOLVED_ECR_REGION}" "ECR region for ${registry_host}"
+      if REGISTRY_LOGIN_PASSWORD="$(aws ecr get-login-password --region "${RESOLVED_ECR_REGION}" 2>/dev/null)"; then
+        REGISTRY_LOGIN_USERNAME="AWS"
+        return 0
+      fi
+      if [ -n "${username}" ] || [ -n "${password}" ]; then
+        require_nonempty "${username}" "registry username for ${registry_host}"
+        require_nonempty "${password}" "registry password for ${registry_host}"
+        REGISTRY_LOGIN_USERNAME="${username}"
+        REGISTRY_LOGIN_PASSWORD="${password}"
+        return 0
+      fi
+      echo "Registry ${registry_host} requires AWS credentials or explicit PIPELINE_* credentials" >&2
+      return 1
+      ;;
+    *)
+      if [ -n "${username}" ] || [ -n "${password}" ]; then
+        require_nonempty "${username}" "registry username for ${registry_host}"
+        require_nonempty "${password}" "registry password for ${registry_host}"
+        REGISTRY_LOGIN_USERNAME="${username}"
+        REGISTRY_LOGIN_PASSWORD="${password}"
+        return 0
+      fi
+      echo "Registry ${registry_host} requires explicit PIPELINE_* credentials" >&2
+      return 1
+      ;;
+  esac
+}
+
+docker_login_registry() {
+  registry_host="$1"
+  username="$2"
+  password="$3"
+
+  registry_login_password_for_host "${registry_host}" "${username}" "${password}"
+  printf '%s' "${REGISTRY_LOGIN_PASSWORD}" | docker login --username "${REGISTRY_LOGIN_USERNAME}" --password-stdin "${registry_host}"
+}
+
+helm_login_registry() {
+  registry_host="$1"
+  username="$2"
+  password="$3"
+
+  registry_login_password_for_host "${registry_host}" "${username}" "${password}"
+  printf '%s' "${REGISTRY_LOGIN_PASSWORD}" | helm registry login "${registry_host}" --username "${REGISTRY_LOGIN_USERNAME}" --password-stdin
+}
+
+ensure_operator_sdk() {
+  ci_bin_dir="$1"
+  operator_sdk_version="$2"
+
+  require_nonempty "${operator_sdk_version}" "OPERATOR_SDK_VERSION"
+
+  mkdir -p "${ci_bin_dir}"
+  PATH="${ci_bin_dir}:${PATH}"
+  export PATH
+
+  if [ -x "${ci_bin_dir}/operator-sdk" ]; then
+    return 0
+  fi
+
+  os_name="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch_name="$(uname -m)"
+  case "${arch_name}" in
+    x86_64|amd64)
+      arch_name="amd64"
+      ;;
+    aarch64|arm64)
+      arch_name="arm64"
+      ;;
+  esac
+
+  # TODO CSPL-4731: replace public GitHub URLs with internal mirror once
+  # artifact mirroring is set up for the SOK staging environment.
+  curl -fsSL -o "${ci_bin_dir}/operator-sdk" \
+    "https://github.com/operator-framework/operator-sdk/releases/download/${operator_sdk_version}/operator-sdk_${os_name}_${arch_name}"
+  chmod 0755 "${ci_bin_dir}/operator-sdk"
 }

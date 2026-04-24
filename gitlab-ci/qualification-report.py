@@ -5,10 +5,7 @@ import json
 from pathlib import Path
 from xml.etree import ElementTree
 
-from qualification_jobs import qualification_job_evidence, qualification_job_junit_evidence
-
-JOB_EVIDENCE = qualification_job_evidence()
-JOB_JUNIT_EVIDENCE = qualification_job_junit_evidence()
+from qualification_jobs import JOB_EVIDENCE, JOB_JUNIT_EVIDENCE
 
 
 def job_executed(project_dir: Path, job_name: str) -> bool:
@@ -122,6 +119,8 @@ def main() -> int:
         "enterprise_image": manifest["splunk"]["enterprise_image"],
         "qualification_profile": manifest["qualification"]["profile"],
         "helm_profile": manifest["qualification"]["helm_profile"],
+        "fips_enabled": manifest["qualification"].get("fips_enabled", False),
+        "fips_cluster_name": manifest["qualification"].get("fips_cluster_name", ""),
         "disposition": disposition,
         "disposition_reason": disposition_reason,
         "executed_jobs": executed,
@@ -151,6 +150,8 @@ def main() -> int:
                 f"- latest_released_version: {manifest['sok']['latest_released_version']}",
                 f"- qualification_profile: {manifest['qualification']['profile']}",
                 f"- helm_profile: {manifest['qualification']['helm_profile']}",
+                f"- fips_enabled: {manifest['qualification'].get('fips_enabled', False)}",
+                f"- fips_cluster_name: {manifest['qualification'].get('fips_cluster_name') or 'not-configured'}",
                 f"- enterprise_image: {manifest['splunk']['enterprise_image']}",
                 f"- trivy_result_count: {trivy_findings}",
                 f"- gosec_status: {gosec_status or 'unknown'}",

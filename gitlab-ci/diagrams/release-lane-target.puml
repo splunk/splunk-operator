@@ -1,33 +1,64 @@
 @startuml
-title Release Lane Target
-start
-:Release trigger on reviewed branch or tag;
-:Prepare release metadata;
-
-partition Baseline {
-  :Reuse proven verification and test gates;
+title Release Validation Lane
+left to right direction
+skinparam Shadowing false
+skinparam DefaultFontName DejaVu Sans
+skinparam BackgroundColor white
+skinparam ArrowColor #1d4f73
+skinparam Rectangle {
+  BorderColor #1d4f73
+  BackgroundColor #eef6fb
+  FontColor #0f172a
+  RoundCorner 12
+}
+skinparam Note {
+  BorderColor #8b6f2f
+  BackgroundColor #fff7d6
+  FontColor #3f3420
 }
 
-partition Artifact {
-  :Stage release operator images;
-  :Run release image scanning;
-}
+rectangle "Push to release/<version> or release-<version>\nor MR from release branch to main" as trigger
+rectangle "Baseline\nverify and test jobs" as baseline
+rectangle "Build\nstaged multi-arch and distroless release images" as build
+rectangle "Image scan\nscan-stage-image-trivy" as scan
+rectangle "Release EKS runtime\nintegration fanout" as runtime_eks #eefbf1
+rectangle "Release FIPS runtime\nexisting-cluster smoke + managersecret" as runtime_fips #eefbf1
+rectangle "Release Azure runtime\nazure_sanity" as runtime_azure #eefbf1
+rectangle "Release GCP runtime\nGCP sanity fanout" as runtime_gcp #eefbf1
+rectangle "Release distroless runtime\ndistroless EKS fanout" as runtime_distroless #eefbf1
+rectangle "Release Graviton runtime\narm64 fanout" as runtime_graviton #eefbf1
+rectangle "Release Helm runtime\nfull chart validation" as runtime_helm #eefbf1
+rectangle "Release candidate packaging\npromote validated RC artifacts once" as packaging #f7f7ff
+rectangle "PSR plan and verdict\nplan now, dispatch-ready later" as psr #f7f7ff
+rectangle "GitLab Release record\nmanual final publish step on main" as release_record #f7f7ff
 
-partition Validation {
-  :Run release validation and FIPS slices;
-  :Run Helm release validation;
-}
+trigger --> baseline
+baseline --> build
+build --> scan
+scan --> runtime_eks
+scan --> runtime_fips
+scan --> runtime_azure
+scan --> runtime_gcp
+scan --> runtime_distroless
+scan --> runtime_graviton
+scan --> runtime_helm
+runtime_eks --> packaging
+runtime_fips --> packaging
+runtime_azure --> packaging
+runtime_gcp --> packaging
+runtime_distroless --> packaging
+runtime_graviton --> packaging
+runtime_helm --> packaging
+packaging --> psr
+psr --> release_record
 
-partition PSR {
-  :Prepare PSR release qualification request;
-  :Record PSR gate status;
-}
+note bottom of packaging
+The release branch builds the candidate once.
+Main later promotes those validated outputs instead of rebuilding them.
+end note
 
-partition Publish {
-  :Package and publish Helm charts;
-  :Publish release bundles;
-  :Write GitLab release record;
-}
-
-stop
+note bottom of runtime_graviton
+The arm64 suite set follows the existing splunk-operator-cicd
+Graviton release validation matrix.
+end note
 @enduml

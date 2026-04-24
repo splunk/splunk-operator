@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from qualification_jobs import QUALIFICATION_REQUIRED_JOBS
+from qualification_jobs import qualification_jobs_for_environment
 
 
 def utc_now() -> str:
@@ -41,6 +41,8 @@ def main() -> int:
     enterprise_image = (
         os.environ.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE") or "splunk/splunk:latest"
     )
+    fips_cluster_name = os.environ.get("PIPELINE_FIPS_EKS_CLUSTER_NAME", "").strip()
+    qualification_jobs = qualification_jobs_for_environment(include_fips=bool(fips_cluster_name))
 
     manifest = {
         "schema_version": "v1alpha1",
@@ -62,7 +64,9 @@ def main() -> int:
         "qualification": {
             "profile": qualification_profile,
             "helm_profile": helm_profile,
-            "required_jobs": QUALIFICATION_REQUIRED_JOBS,
+            "fips_cluster_name": fips_cluster_name,
+            "fips_enabled": bool(fips_cluster_name),
+            "required_jobs": qualification_jobs,
         },
     }
 
@@ -78,6 +82,8 @@ def main() -> int:
                 f"SOK_CANDIDATE_VERSION={manifest['sok']['candidate_version']}",
                 f"SOK_RELEASED_VERSION={manifest['sok']['latest_released_version']}",
                 f"SOK_ENTERPRISE_IMAGE={enterprise_image}",
+                f"SOK_FIPS_ENABLED={'true' if fips_cluster_name else 'false'}",
+                f"SOK_FIPS_CLUSTER_NAME={fips_cluster_name}",
             ]
         )
         + "\n",
@@ -94,6 +100,8 @@ def main() -> int:
                 f"- latest_released_version: {manifest['sok']['latest_released_version']}",
                 f"- released_operator_image_source: {manifest['sok']['released_operator_image_source']}",
                 f"- enterprise_image: {enterprise_image}",
+                f"- fips_enabled: {'true' if fips_cluster_name else 'false'}",
+                f"- fips_cluster_name: {fips_cluster_name or 'not-configured'}",
                 f"- pipeline_id: {manifest['pipeline']['id']}",
                 f"- pipeline_source: {manifest['pipeline']['source']}",
                 f"- ref: {manifest['pipeline']['ref']}",

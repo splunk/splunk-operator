@@ -90,6 +90,7 @@ splunk-operator-*.tar.gz
 clair-scanner
 clair-scanner-logs
 release-*
+!gitlab-ci/release-*.sh
 deploy/olm-certified
 report-junit*.xml
 unit_test*.xml
@@ -103,5 +104,7 @@ kubeconfig
 .devcontainer/devcontainer.json
 kuttl-artifacts/*
 ci-output/
+
+# Python bytecode caches
 __pycache__/
 *.pyc

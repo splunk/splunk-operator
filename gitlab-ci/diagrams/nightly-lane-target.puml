@@ -1,26 +1,37 @@
 @startuml
-title Nightly Lane Target
-start
-:Scheduled nightly trigger on develop;
-:Reuse proven develop verification gates;
-
-partition Artifact {
-  :Stage operator image;
-  :Run image scan on staged artifact;
+title Nightly Lane
+left to right direction
+skinparam Shadowing false
+skinparam DefaultFontName DejaVu Sans
+skinparam BackgroundColor white
+skinparam ArrowColor #1d4f73
+skinparam Rectangle {
+  BorderColor #1d4f73
+  BackgroundColor #eef6fb
+  FontColor #0f172a
+  RoundCorner 12
+}
+skinparam Note {
+  BorderColor #8b6f2f
+  BackgroundColor #fff7d6
+  FontColor #3f3420
 }
 
-partition Validation {
-  :Run nightly EKS integration validation;
-  :Run Helm validation;
-}
+rectangle "Schedule on develop" as trigger
+rectangle "Baseline\nverify and test jobs" as baseline
+rectangle "Build\nbuild-stage-image" as build
+rectangle "Image scan\nscan-stage-image-trivy" as scan
+rectangle "Nightly integration fanout\nall full suites in parallel" as nightly #eefbf1
+rectangle "Nightly evidence\nsuite logs and junit artifacts" as evidence #f7f7ff
 
-partition Security {
-  :Run expanded nightly security checks;
-}
+trigger --> baseline
+baseline --> build
+build --> scan
+scan --> nightly
+nightly --> evidence
 
-partition Reporting {
-  :Collect nightly evidence and artifacts;
-}
-
-stop
+note bottom of nightly
+Nightly reuses one staged image and fans the runtime suites out
+across separate EKS jobs instead of one large cluster run.
+end note
 @enduml

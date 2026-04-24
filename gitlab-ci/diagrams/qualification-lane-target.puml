@@ -1,37 +1,60 @@
 @startuml
-title Qualification Lane Target
-start
-:Web or schedule trigger for qualification;
-:Resolve qualification inputs;
-
-partition Baseline {
-  :Repository verification and test jobs;
+title Qualification Lane
+left to right direction
+skinparam Shadowing false
+skinparam DefaultFontName DejaVu Sans
+skinparam BackgroundColor white
+skinparam ArrowColor #1d4f73
+skinparam Rectangle {
+  BorderColor #1d4f73
+  BackgroundColor #eef6fb
+  FontColor #0f172a
+  RoundCorner 12
+}
+skinparam Note {
+  BorderColor #8b6f2f
+  BackgroundColor #fff7d6
+  FontColor #3f3420
 }
 
-partition Artifact {
-  :Stage operator image;
-  :Run image scan on staged artifact;
-}
+rectangle "Manual web or API trigger\nSOK_PIPELINE_MODE=qualification_lane" as trigger
+rectangle "Baseline\nverify and test jobs" as baseline
+rectangle "Released SOK contract\nresolve released image and chart inputs" as contract
+rectangle "Released image scan\nscan-released-operator-image-trivy" as scan
+rectangle "Qualification EKS runtime\nfull validation in one cluster" as runtime_eks #eefbf1
+rectangle "Qualification FIPS runtime\nexisting-cluster smoke + managersecret" as runtime_fips #eefbf1
+rectangle "Qualification Azure runtime\nazure_sanity" as runtime_azure #eefbf1
+rectangle "Qualification GCP runtime\nGCP sanity fanout" as runtime_gcp #eefbf1
+rectangle "Qualification distroless runtime\ndistroless EKS fanout" as runtime_distroless #eefbf1
+rectangle "Qualification Graviton runtime\narm64 fanout" as runtime_graviton #eefbf1
+rectangle "Qualification Helm runtime\nfull chart validation" as runtime_helm #eefbf1
+rectangle "Decision outputs\nmanifest, report, gate,\ncompatibility publish plan" as report #f7f7ff
 
-partition Runtime {
-  :Execute qualification runtime suites;
-  :Run Helm qualification validation;
-  note right
-    Qualification uses selected released
-    Splunk Enterprise version inputs.
-    It is not tied to the moving develop
-    default enterprise image.
-  end note
-  note right
-    EKS, Helm, and related qualification slices
-    stay explicit in their own MR.
-  end note
-}
+trigger --> baseline
+baseline --> contract
+contract --> scan
+scan --> runtime_eks
+scan --> runtime_fips
+scan --> runtime_azure
+scan --> runtime_gcp
+scan --> runtime_distroless
+scan --> runtime_graviton
+scan --> runtime_helm
+runtime_eks --> report
+runtime_fips --> report
+runtime_azure --> report
+runtime_gcp --> report
+runtime_distroless --> report
+runtime_graviton --> report
+runtime_helm --> report
 
-partition Reporting {
-  :Collect compatibility evidence;
-  :Publish qualification report;
-}
+note bottom of contract
+Qualification tests the current released SOK baseline.
+It is a compatibility lane, not a develop-branch build lane.
+end note
 
-stop
+note bottom of runtime_graviton
+The Graviton suite set stays aligned with the existing
+splunk-operator-cicd arm64 validation matrix.
+end note
 @enduml

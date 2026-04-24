@@ -1,0 +1,37 @@
+@startuml
+title Main Release Publish Lane
+left to right direction
+skinparam Shadowing false
+skinparam DefaultFontName DejaVu Sans
+skinparam BackgroundColor white
+skinparam ArrowColor #1d4f73
+skinparam Rectangle {
+  BorderColor #1d4f73
+  BackgroundColor #eef6fb
+  FontColor #0f172a
+  RoundCorner 12
+}
+skinparam Note {
+  BorderColor #8b6f2f
+  BackgroundColor #fff7d6
+  FontColor #3f3420
+}
+
+rectangle "Merge release branch to main" as merge
+rectangle "Main push pipeline\nre-runs validation\nand exposes manual publish jobs" as main_pipeline
+rectangle "Manual publish start\nor web/api pipeline with\nSOK_PIPELINE_MODE=release_publish" as trigger
+rectangle "Fetch retained release candidate\nfetch-release-candidate" as fetch
+rectangle "Promote validated outputs\npublish-release-images\npublish-release-artifacts\npublish-release-bundle\npublish-release-charts" as publish #eefbf1
+rectangle "Certification and submission prep\npreflight-certification\nprepare-certified-operators-submission\nprepare-community-operators-submission" as downstream #f7f7ff
+
+merge --> main_pipeline
+main_pipeline --> trigger
+trigger --> fetch
+fetch --> publish
+publish --> downstream
+
+note bottom of trigger
+Publication is intentionally manual on main.
+The release branch merge does not auto-publish externally.
+end note
+@enduml

@@ -5,6 +5,17 @@ build-stage-image:
       when: never
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
       when: never
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^release([\/-]).+$/'
+      variables:
+        JOB_BUILD_DISTROLESS: "true"
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^release([\/-]).+$/'
+      variables:
+        JOB_BUILD_DISTROLESS: "true"
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+      variables:
+        JOB_BUILD_DISTROLESS: "true"
     - when: on_success
   needs:
     - unit-tests
@@ -23,6 +34,8 @@ scan-stage-image-trivy:
     - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
       when: never
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
       when: never
     - when: on_success
   needs:
@@ -64,6 +77,25 @@ scan-released-operator-image-trivy:
   variables:
     RELEASED_SOK_CONTRACT_FILE: ci-output/release-controller/released-sok-contract.env
 
+.runtime-released-sok-fips-job:
+  extends: .runtime-released-sok-validation-job
+  allow_failure: true
+  timeout: 5h
+  rules:
+    - if: '$PIPELINE_FIPS_EKS_CLUSTER_NAME == ""'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+  variables:
+    JOB_USE_EXISTING_CLUSTER: "true"
+    JOB_EXISTING_CLUSTER_NAME: $PIPELINE_FIPS_EKS_CLUSTER_NAME
+  script:
+    - gitlab-ci/int-test-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/*-inttest-junit.xml
+
 # Smoke validation now mirrors the old GitHub smoke matrix: one suite per job,
 # one EKS cluster per job, and shared runtime logic through int-test-workflow.sh.
 .runtime-smoke-suite-job:
@@ -75,6 +107,14 @@ scan-released-operator-image-trivy:
     - job: scan-stage-image-trivy
   rules:
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH =~ /^release([\/-]).+$/'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^release([\/-]).+$/'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
       when: never
@@ -210,6 +250,269 @@ helm-eks-validation:
     reports:
       junit: ci-output/helm-test-workflow-kuttl-junit.xml
 
+qualification-fips-smoke-validation:
+  extends: .runtime-released-sok-fips-job
+  variables:
+    WORKFLOW_SLUG: qualification-fips-smoke-validation
+    JOB_INT_TEST_PROFILE: smoke
+    JOB_INT_TEST_TIMEOUT: 225m
+
+qualification-fips-integration-validation:
+  extends: .runtime-released-sok-fips-job
+  variables:
+    WORKFLOW_SLUG: qualification-fips-integration-validation
+    JOB_INT_TEST_PROFILE: managersecret
+    JOB_INT_TEST_TIMEOUT: 255m
+
+.runtime-released-sok-azure-validation-job:
+  extends: .runtime-released-sok-validation-job
+  allow_failure: true
+  timeout: 10h
+  # Match the platform-foundations Azure federated credential audience.
+  id_tokens:
+    AZURE_GITLAB_OIDC_TOKEN:
+      aud: api://AzureADTokenExchange
+  script:
+    - gitlab-ci/int-test-azure-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/*-inttest-junit.xml
+
+.runtime-released-sok-gcp-validation-job:
+  extends: .runtime-released-sok-validation-job
+  allow_failure: true
+  timeout: 10h
+  # Match the platform-foundations GCP workload identity provider audience.
+  id_tokens:
+    GCP_GITLAB_OIDC_TOKEN:
+      aud: https://cd.splunkdev.com
+  script:
+    - gitlab-ci/int-test-gcp-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/*-inttest-junit.xml
+
+.runtime-released-sok-distroless-suite-job:
+  extends: .runtime-released-sok-validation-job
+  allow_failure: true
+  timeout: 5h
+  variables:
+    JOB_RUNTIME_IMAGE_VARIANT: distroless
+    JOB_INT_TEST_PROFILE: full
+    JOB_INT_TEST_TIMEOUT: 255m
+    JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
+    JOB_EKS_CLUSTER_TEST_TYPE: integration
+    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: qualification-distroless
+    JOB_INT_CLUSTER_NODES: "1"
+    JOB_INT_CLUSTER_WORKERS: "3"
+  script:
+    - gitlab-ci/int-test-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/*-inttest-junit.xml
+
+.runtime-released-sok-graviton-suite-job:
+  extends: .runtime-released-sok-validation-job
+  allow_failure: true
+  timeout: 5h
+  variables:
+    JOB_INT_TEST_PROFILE: full
+    JOB_INT_TEST_TIMEOUT: 255m
+    JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
+    JOB_EKS_CLUSTER_TEST_TYPE: integration
+    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: qualification-arm64
+    JOB_INT_CLUSTER_NODES: "1"
+    JOB_INT_CLUSTER_WORKERS: "3"
+    JOB_USE_ARM64_CLUSTER: "true"
+    JOB_GRAVITON_TESTING: "true"
+    # Keep the arm runtime contract explicit like the old GitHub arm workflows.
+    JOB_INT_ENTERPRISE_IMAGE: $PIPELINE_GRAVITON_ENTERPRISE_IMAGE
+  script:
+    - gitlab-ci/int-test-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/*-inttest-junit.xml
+
+qualification-azure-validation:
+  extends: .runtime-released-sok-azure-validation-job
+  variables:
+    WORKFLOW_SLUG: qualification-azure-validation
+    JOB_CLOUD_TEST_FOCUS: azure_sanity
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+
+qualification-gcp-c3-validation:
+  extends: .runtime-released-sok-gcp-validation-job
+  variables:
+    WORKFLOW_SLUG: qualification-gcp-c3-validation
+    JOB_CLOUD_TEST_FOCUS: c3_gcp_sanity
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+
+qualification-gcp-c3-manager-validation:
+  extends: .runtime-released-sok-gcp-validation-job
+  variables:
+    WORKFLOW_SLUG: qualification-gcp-c3-manager-validation
+    JOB_CLOUD_TEST_FOCUS: c3_mgr_gcp_sanity
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+
+qualification-gcp-m4-validation:
+  extends: .runtime-released-sok-gcp-validation-job
+  variables:
+    WORKFLOW_SLUG: qualification-gcp-m4-validation
+    JOB_CLOUD_TEST_FOCUS: m4_gcp_sanity
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+
+qualification-gcp-m4-manager-validation:
+  extends: .runtime-released-sok-gcp-validation-job
+  variables:
+    WORKFLOW_SLUG: qualification-gcp-m4-manager-validation
+    JOB_CLOUD_TEST_FOCUS: m4_mgr_gcp_sanity
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+
+qualification-gcp-s1-validation:
+  extends: .runtime-released-sok-gcp-validation-job
+  variables:
+    WORKFLOW_SLUG: qualification-gcp-s1-validation
+    JOB_CLOUD_TEST_FOCUS: s1_gcp_sanity
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+
+qualification-distroless-appframeworks-s1-validation:
+  extends:
+    - .runtime-released-sok-distroless-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-distroless-appframeworks-s1-validation
+    JOB_INT_TEST_FOCUS: appframeworksS1
+
+qualification-distroless-managerappframework-c3-validation:
+  extends:
+    - .runtime-released-sok-distroless-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-distroless-managerappframework-c3-validation
+    JOB_INT_TEST_FOCUS: managerappframeworkc3
+
+qualification-distroless-managerappframework-m4-validation:
+  extends:
+    - .runtime-released-sok-distroless-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-distroless-managerappframework-m4-validation
+    JOB_INT_TEST_FOCUS: managerappframeworkm4
+
+qualification-distroless-managersecret-validation:
+  extends: .runtime-released-sok-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-distroless-managersecret-validation
+    JOB_INT_TEST_FOCUS: managersecret
+
+qualification-distroless-managersmartstore-validation:
+  extends: .runtime-released-sok-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-distroless-managersmartstore-validation
+    JOB_INT_TEST_FOCUS: managersmartstore
+
+qualification-distroless-managermc1-validation:
+  extends: .runtime-released-sok-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-distroless-managermc1-validation
+    JOB_INT_TEST_FOCUS: managermc1
+
+qualification-distroless-managermc2-validation:
+  extends: .runtime-released-sok-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-distroless-managermc2-validation
+    JOB_INT_TEST_FOCUS: managermc2
+
+qualification-distroless-managercrcrud-validation:
+  extends: .runtime-released-sok-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-distroless-managercrcrud-validation
+    JOB_INT_TEST_FOCUS: managercrcrud
+
+qualification-distroless-licensemanager-validation:
+  extends: .runtime-released-sok-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-distroless-licensemanager-validation
+    JOB_INT_TEST_FOCUS: licensemanager
+
+qualification-distroless-managerdeletecr-validation:
+  extends: .runtime-released-sok-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-distroless-managerdeletecr-validation
+    JOB_INT_TEST_FOCUS: managerdeletecr
+
+qualification-distroless-indingsep-validation:
+  extends: .runtime-released-sok-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-distroless-indingsep-validation
+    JOB_INT_TEST_FOCUS: indingsep
+
+# Keep the arm64 suite set aligned with the proven splunk-operator-cicd
+# Graviton matrix instead of widening it independently in this repo.
+qualification-graviton-appframeworks-s1-validation:
+  extends:
+    - .runtime-released-sok-graviton-suite-job
+    - .runtime-appframework-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-graviton-appframeworks-s1-validation
+    JOB_INT_TEST_FOCUS: appframeworksS1
+
+qualification-graviton-managersecret-validation:
+  extends: .runtime-released-sok-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-graviton-managersecret-validation
+    JOB_INT_TEST_FOCUS: managersecret
+
+qualification-graviton-managersmartstore-validation:
+  extends: .runtime-released-sok-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-graviton-managersmartstore-validation
+    JOB_INT_TEST_FOCUS: managersmartstore
+
+qualification-graviton-managermc1-validation:
+  extends: .runtime-released-sok-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-graviton-managermc1-validation
+    JOB_INT_TEST_FOCUS: managermc1
+
+qualification-graviton-managermc2-validation:
+  extends: .runtime-released-sok-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-graviton-managermc2-validation
+    JOB_INT_TEST_FOCUS: managermc2
+
+qualification-graviton-managercrcrud-validation:
+  extends: .runtime-released-sok-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-graviton-managercrcrud-validation
+    JOB_INT_TEST_FOCUS: managercrcrud
+
+qualification-graviton-licensemanager-validation:
+  extends: .runtime-released-sok-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-graviton-licensemanager-validation
+    JOB_INT_TEST_FOCUS: licensemanager
+
+qualification-graviton-managerdeletecr-validation:
+  extends: .runtime-released-sok-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-graviton-managerdeletecr-validation
+    JOB_INT_TEST_FOCUS: managerdeletecr
+
+qualification-graviton-indingsep-validation:
+  extends: .runtime-released-sok-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-graviton-indingsep-validation
+    JOB_INT_TEST_FOCUS: indingsep
+
 # Nightly integration fan-out follows the old GitHub nightly integration matrix:
 # one suite per job and one EKS cluster per suite instead of a single large run.
 .runtime-nightly-integration-suite-job:
@@ -221,6 +524,8 @@ helm-eks-validation:
     - job: scan-stage-image-trivy
   rules:
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
   variables:

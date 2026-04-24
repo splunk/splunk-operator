@@ -6,6 +6,7 @@ stages:
   - security
   - integration
   - qualification
+  - release
   - publish
 
 variables:
@@ -87,6 +88,16 @@ default:
   extends: .runtime-artifact-job
   stage: publish
 
+.release-artifact-job:
+  extends: .runtime-artifact-job
+  stage: release
+
+.release-publish-job:
+  extends:
+    - .runtime-artifact-job
+    - .aws-pipeline-env-job
+  stage: publish
+
 .python-venv-job:
   before_script:
     - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
@@ -133,3 +144,62 @@ default:
 .rules-github-admin-daily-lane:
   rules:
     - if: '$CI_PIPELINE_SOURCE =~ /^(web|api|schedule)$/ && $SOK_PIPELINE_MODE == "github_admin_daily"'
+
+.rules-default-validation-lane:
+  rules:
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
+      when: never
+    - when: on_success
+
+.rules-merge-request-event:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# Release validation runs on release branches and on the merged main commit.
+# Support both release/<version> and release-<version> naming.
+.rules-release-validation-lane:
+  rules:
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^release([\/-]).+$/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^release([\/-]).+$/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+
+# Publish remains manually gated on main, but operators can re-run just the
+# publish/certification path through a dedicated main-branch web/api pipeline.
+.rules-main-release-publish:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE =~ /^(web|api)$/ && $SOK_PIPELINE_MODE == "release_publish" && $CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+      when: manual
+
+# Release publish contract:
+# - PIPELINE_RELEASE_VERSION defaults to Makefile VERSION.
+# - PIPELINE_RELEASE_OPERATOR_TAG defaults to PIPELINE_RELEASE_VERSION.
+# - PIPELINE_RELEASE_CANDIDATE_NUMBER defaults to 1 and becomes the rc tag suffix.
+# - PIPELINE_RELEASE_IMAGE_REPOSITORY defaults to docker.io/splunk/splunk-operator.
+# - PIPELINE_RELEASE_SOURCE_REF optionally pins which retained release branch the main publish jobs fetch.
+# - PIPELINE_RELEASE_SOURCE_PIPELINE_ID optionally pins the exact validated release pipeline to promote.
+# - PIPELINE_RELEASE_CANDIDATE_JOB_NAME defaults to release-candidate-packaging.
+# - PIPELINE_DOCKER_USERNAME / PIPELINE_DOCKER_PASSWORD provide generic OCI auth.
+# - PIPELINE_BUNDLE_REGISTRY is the bundle/catalog target registry.
+# - PIPELINE_CHART_RELEASE_REPOSITORY must be an OCI repo like oci://...
+# - PIPELINE_PYXIS_API_TOKEN and PIPELINE_PYXIS_CERTIFICATION_COMPONENT_ID
+#   unlock Red Hat preflight submission.
+#
+# Expanded runtime validation contract:
+# - PIPELINE_RUNTIME_ENTERPRISE_IMAGE overrides the default runtime enterprise
+#   image pin for any lane that needs a specific enterprise image.
+# - PIPELINE_GRAVITON_ENTERPRISE_IMAGE is required for Graviton or arm64
+#   runtime validation because those jobs must not silently fall back to the
+#   default amd64 enterprise image.
+# - PIPELINE_FIPS_EKS_CLUSTER_NAME points qualification/release FIPS jobs at the
+#   approved existing EKS cluster. Those jobs are skipped entirely when it is unset.
+# - PIPELINE_AZURE_* configures AKS, ACR, and Azure storage validation.
+# - PIPELINE_GCP_* configures GKE, Artifact Registry, and GCS validation.
+# - PIPELINE_GITLAB_RELEASE_API_TOKEN optionally overrides CI_JOB_TOKEN for
+#   GitLab Release and Generic Package Registry writes.
+# - PIPELINE_GITLAB_RELEASE_PACKAGE_NAME overrides the package name used for
+#   stable release-record assets.

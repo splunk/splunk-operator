@@ -1,12 +1,23 @@
+merge-request-description-check:
+  extends:
+    - .go-verify-job
+    - .rules-merge-request-event
+  script:
+    - sh gitlab-ci/validate-merge-request-description.sh
+
 format-and-vet:
-  extends: .go-verify-job
+  extends:
+    - .go-verify-job
+    - .rules-default-validation-lane
   script:
     - make fmt
     - make vet
     - git diff --exit-code
 
 unit-tests:
-  extends: .go-test-job
+  extends:
+    - .go-test-job
+    - .rules-default-validation-lane
   needs:
     - format-and-vet
   variables:
@@ -29,6 +40,7 @@ kubectl-splunk-tests:
   extends:
     - .go-test-job
     - .kubectl-splunk-python-job
+    - .rules-default-validation-lane
   script:
     - cd tools/kubectl-splunk
     - coverage run -m unittest discover -s tests
