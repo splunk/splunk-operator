@@ -3,6 +3,7 @@ package testenv
 import (
 	"context"
 	"encoding/json"
+	"os"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
@@ -60,19 +61,6 @@ func GetIndexOnPod(ctx context.Context, deployment *Deployment, podName string, 
 	return indexFound, indexData
 }
 
-// RestartSplunk Restart splunk inside the container
-func RestartSplunk(ctx context.Context, deployment *Deployment, podName string) bool {
-	stdin := "/opt/splunk/bin/splunk restart -auth admin:$(cat /mnt/splunk-secrets/password)"
-	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
-	if err != nil {
-		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
-		return false
-	}
-	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
-	return true
-}
-
 // RollHotToWarm rolls hot buckets to warm for a given index and pod
 func RollHotToWarm(ctx context.Context, deployment *Deployment, podName string, indexName string) bool {
 	stdin := "/opt/splunk/bin/splunk _internal call /data/indexes/" + indexName + "/roll-hot-buckets admin:$(cat /mnt/splunk-secrets/password)"
@@ -127,6 +115,27 @@ func GenerateIndexVolumeSpecAzureManagedID(volumeName string, endpoint string, p
 		Path:     azureIndexesContainer,
 		Provider: provider,
 		Type:     storageType,
+	}
+}
+
+// GenerateVolumeSpecForProvider returns a VolumeSpec slice appropriate for the
+// current ClusterProvider (eks, azure, gcp). For Azure it respects the
+// AZURE_MANAGED_ID_ENABLED environment variable.
+func (testenvInstance *TestCaseEnv) GenerateVolumeSpecForProvider(ctx context.Context, volumeName string) []enterpriseApi.VolumeSpec {
+	secretName := testenvInstance.GetIndexSecretName()
+	switch ClusterProvider {
+	case "eks":
+		return []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), secretName, "aws", "s3", GetDefaultS3Region())}
+	case "azure":
+		if os.Getenv("AZURE_MANAGED_ID_ENABLED") == "false" {
+			return []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpecAzure(volumeName, GetAzureEndpoint(ctx), secretName, "azure", "blob")}
+		}
+		return []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpecAzureManagedID(volumeName, GetAzureEndpoint(ctx), "azure", "blob")}
+	case "gcp":
+		return []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetGCPEndpoint(), secretName, "gcp", "gcs", GetDefaultS3Region())}
+	default:
+		testenvInstance.Log.Info("Failed to identify provider: Should be 'eks' or 'azure' or 'gcp'")
+		return nil
 	}
 }
 

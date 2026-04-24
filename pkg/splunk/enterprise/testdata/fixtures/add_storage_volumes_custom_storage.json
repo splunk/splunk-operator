@@ -1,0 +1,96 @@
+{
+  "kind": "StatefulSet",
+  "apiVersion": "apps/v1",
+  "metadata": {
+    "name": "test-statefulset",
+    "namespace": "test",
+    "creationTimestamp": null
+  },
+  "spec": {
+    "replicas": 1,
+    "selector": null,
+    "template": {
+      "metadata": {
+        "creationTimestamp": null
+      },
+      "spec": {
+        "volumes": [
+          {
+            "name": "splunk-test-probe-configmap",
+            "configMap": {
+              "name": "splunk-test-probe-configmap",
+              "defaultMode": 365
+            }
+          }
+        ],
+        "containers": [
+          {
+            "name": "splunk",
+            "image": "test",
+            "resources": {},
+            "volumeMounts": [
+              {
+                "name": "pvc-etc",
+                "mountPath": "/opt/splunk/etc"
+              },
+              {
+                "name": "pvc-var",
+                "mountPath": "/opt/splunk/var"
+              },
+              {
+                "name": "splunk-test-probe-configmap",
+                "mountPath": "/mnt/probes"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "volumeClaimTemplates": [
+      {
+        "metadata": {
+          "name": "pvc-etc",
+          "namespace": "test",
+          "creationTimestamp": null
+        },
+        "spec": {
+          "accessModes": [
+            "ReadWriteOnce"
+          ],
+          "resources": {
+            "requests": {
+              "storage": "25Gi"
+            }
+          },
+          "storageClassName": "gp2"
+        },
+        "status": {}
+      },
+      {
+        "metadata": {
+          "name": "pvc-var",
+          "namespace": "test",
+          "creationTimestamp": null
+        },
+        "spec": {
+          "accessModes": [
+            "ReadWriteOnce"
+          ],
+          "resources": {
+            "requests": {
+              "storage": "35Gi"
+            }
+          },
+          "storageClassName": "gp3"
+        },
+        "status": {}
+      }
+    ],
+    "serviceName": "",
+    "updateStrategy": {}
+  },
+  "status": {
+    "replicas": 0,
+    "availableReplicas": 0
+  }
+}

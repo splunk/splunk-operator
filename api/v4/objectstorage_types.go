@@ -60,7 +60,7 @@ type ObjectStorageStatus struct {
 	// Resource revision tracker
 	ResourceRevMap map[string]string `json:"resourceRevMap"`
 
-	// Auxillary message describing CR status
+	// Auxiliary message describing CR status
 	Message string `json:"message"`
 }
 
@@ -73,7 +73,7 @@ type ObjectStorageStatus struct {
 // +kubebuilder:resource:path=objectstorages,scope=Namespaced,shortName=os
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of object storage"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of object storage resource"
-// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
+// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxiliary message describing CR status"
 // +kubebuilder:storageversion
 
 // ObjectStorage is the Schema for the objectstorages API

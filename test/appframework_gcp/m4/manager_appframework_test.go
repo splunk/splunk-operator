@@ -21,7 +21,6 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -50,15 +49,8 @@ var _ = Describe("m4appfw test", func() {
 
 	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
-		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-		Expect(err).To(Succeed(), "Unable to create testcaseenv")
-		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
-		Expect(err).To(Succeed(), "Unable to create deployment")
-
-		// Validate test prerequisites early to fail fast
-		err = testcaseEnvInst.ValidateTestPrerequisites(ctx, deployment)
-		Expect(err).To(Succeed(), "Test prerequisites validation failed")
+		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+		Expect(err).ToNot(HaveOccurred())
 
 		s3TestDirIdxc = "m4appfw-idxc-" + testenv.RandomDNSName(4)
 		s3TestDirShc = "m4appfw-shc-" + testenv.RandomDNSName(4)
@@ -67,30 +59,10 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
-		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
-			testcaseEnvInst.SkipTeardown = true
-		}
-		if deployment != nil {
-			deployment.Teardown()
-		}
-		// Delete files uploaded to GCP
-		if !testcaseEnvInst.SkipTeardown {
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
-		}
-		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
-		}
-
-		if filePresentOnOperator {
-			//Delete files from app-directory
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
-			podDownloadPath := filepath.Join(testenv.AppDownloadVolume, "test_file.img")
-			testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
-		}
+		Expect(testenv.TeardownAppFrameworkTestCaseEnv(ctx, testcaseEnvInst, deployment, testenv.GCPCloudCleanup(testGcsBucket, uploadedApps), filePresentOnOperator)).To(Succeed())
 	})
 
-	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It(" m4gcp,   m4_mgr_gcp_sanity: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
@@ -131,10 +103,10 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Monitoring Console %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Monitoring Console
+			// Create App Framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -153,7 +125,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Upload V1 apps to GCP for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
@@ -167,11 +139,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for M4
+			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// get revision number of the resource
 			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
@@ -183,28 +155,28 @@ var _ = Describe("m4appfw test", func() {
 			indexersPerSite := 1
 			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
 
-			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App Framework")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// wait for custom resource resource version to change
-			testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)
+			Expect(testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)).To(Succeed(), "Custom resource version not changed")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -216,7 +188,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
 			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
 			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-			testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+			Expect(testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)).To(Succeed(), "Files not found in directory on pod")
 
 			//########## INITIAL VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
@@ -229,15 +201,16 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			clusterManagerBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############# UPGRADE APPS ################
 			// Delete apps on GCP
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCP", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// get revision number of the resource
@@ -264,28 +237,28 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify MC is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -301,10 +274,11 @@ var _ = Describe("m4appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV2
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 		})
 	})
@@ -350,10 +324,10 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Monitoring Console %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Monitoring Console
+			// Create App Framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -372,7 +346,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Upload V2 apps to GCP for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
@@ -386,11 +360,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for M4
+			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -399,25 +373,25 @@ var _ = Describe("m4appfw test", func() {
 			indexersPerSite := 1
 			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
 
-			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App Framework")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -433,16 +407,17 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			clusterManagerBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############# DOWNGRADE APPS ################
 			// Delete V2 apps on GCP
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCP", appVersion))
 
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Upload V1 apps to GCP for Indexer Cluster
@@ -466,25 +441,25 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -500,10 +475,11 @@ var _ = Describe("m4appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV1
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 		})
 	})
@@ -522,7 +498,7 @@ var _ = Describe("m4appfw test", func() {
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
-			   * Verify bundle push is sucessful
+			   * Verify bundle push is successful
 			   * Verify apps are copied and installed on Monitoring Console and also on Search Heads and Indexers pods
 			   ############### SCALING UP ################
 			   * Scale up Indexers and Search Head Cluster
@@ -533,7 +509,7 @@ var _ = Describe("m4appfw test", func() {
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
-			   * Verify bundle push is sucessful
+			   * Verify bundle push is successful
 			   * Verify apps are copied and installed on new Search Heads and Indexers pods
 			   ############### SCALING DOWN ##############
 			   * Scale down Indexers and Search Head Cluster
@@ -544,7 +520,7 @@ var _ = Describe("m4appfw test", func() {
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
-			   * Verify bundle push is sucessful
+			   * Verify bundle push is successful
 			   * Verify apps are still copied and installed on all Search Heads and Indexers pods
 			*/
 
@@ -563,11 +539,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for M4
+			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -579,19 +555,19 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -600,8 +576,8 @@ var _ = Describe("m4appfw test", func() {
 			for i := 1; i <= siteCount; i++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
 				logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
-				testenv.CreateMockLogfile(logFile, 2000)
-				testenv.IngestFileViaMonitor(ctx, logFile, "main", podName, deployment)
+				Expect(testenv.CreateMockLogfile(logFile, 2000)).To(Succeed(), "Failed to create mock logfile")
+				Expect(testenv.IngestFileViaMonitor(ctx, deployment, logFile, "main", podName)).To(Succeed(), "Failed to ingest file via monitor")
 			}
 
 			// ############ Verify livenessProbe and readinessProbe config object and scripts############
@@ -619,10 +595,11 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//Delete configMap Object
 			err = testenv.DeleteConfigMap(testcaseEnvInst.GetName(), ConfigMapName)
@@ -630,9 +607,7 @@ var _ = Describe("m4appfw test", func() {
 
 			//############### SCALING UP ################
 			// Get instance of current Search Head Cluster CR with latest config
-			err = deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)
-
-			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
+			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Scale up Search Head Cluster
 			defaultSHReplicas := shc.Spec.Replicas
@@ -645,13 +620,12 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale up Search Head Cluster")
 
 			// Ensure Search Head Cluster scales up and go to ScalingUp phase
-			testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp)).To(Succeed(), "Search Head Cluster phase mismatch")
 
 			// Get instance of current Indexer CR with latest config
 			idxcName := deployment.GetName() + "-" + "site1"
 			idxc := &enterpriseApi.IndexerCluster{}
-			err = deployment.GetInstance(ctx, idxcName, idxc)
-			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
+			Expect(deployment.GetInstance(ctx, idxcName, idxc)).To(Succeed(), "Failed to get instance of Indexer Cluster")
 			defaultIndexerReplicas := idxc.Spec.Replicas
 			scaledIndexerReplicas := defaultIndexerReplicas + 1
 			testcaseEnvInst.Log.Info("Scale up Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
@@ -662,28 +636,28 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to Scale Up Indexer Cluster")
 
 			// Ensure Indexer cluster scales up and go to ScalingUp phase
-			testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp, idxcName)
+			Expect(testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp, idxcName)).To(Succeed(), "Indexer Cluster phase mismatch")
 
 			// Ensure Indexer cluster go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ingest data on  new Indexers
 			podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 1)
 			logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
-			testenv.CreateMockLogfile(logFile, 2000)
-			testenv.IngestFileViaMonitor(ctx, logFile, "main", podName, deployment)
+			Expect(testenv.CreateMockLogfile(logFile, 2000)).To(Succeed(), "Failed to create mock logfile")
+			Expect(testenv.IngestFileViaMonitor(ctx, deployment, logFile, "main", podName)).To(Succeed(), "Failed to ingest file via monitor")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Search for data on newly added indexer
 			searchPod := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 0)
 			indexerName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 1)
 			searchString := fmt.Sprintf("index=%s host=%s | stats count by host", "main", indexerName)
-			searchResultsResp, err := testenv.PerformSearchSync(ctx, searchPod, searchString, deployment)
+			searchResultsResp, err := testenv.PerformSearchSync(ctx, deployment, searchPod, searchString)
 			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", searchPod, searchString)
 
 			// Verify result.
@@ -701,7 +675,8 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", indexerName, resultLine["host"].(string))
 
 			//######### SCALING UP VERIFICATIONS ########
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// ############ Verify livenessProbe and readinessProbe config object and scripts############
 			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
@@ -709,20 +684,18 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
 			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
 			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
-			testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+			Expect(testcaseEnvInst.VerifyFilesInDirectoryOnPod(ctx, deployment, allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)).To(Succeed(), "Files not found in directory on pod")
 
 			// Listing the Search Head cluster pods to exclude them from the 'no pod reset' test as they are expected to be reset after scaling
 			shcPodNames = []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			shcPodNames = append(shcPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, shcPodNames)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, shcPodNames)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### SCALING DOWN ##############
 			// Get instance of current Search Head Cluster CR with latest config
-			err = deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)
-
-			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
+			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Scale down Search Head Cluster
 			defaultSHReplicas = shc.Spec.Replicas
@@ -735,11 +708,10 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale down Search Head Cluster")
 
 			// Ensure Search Head Cluster scales down and go to ScalingDown phase
-			testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown)).To(Succeed(), "Search Head Cluster phase mismatch")
 
 			// Get instance of current Indexer CR with latest config
-			err = deployment.GetInstance(ctx, idxcName, idxc)
-			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
+			Expect(deployment.GetInstance(ctx, idxcName, idxc)).To(Succeed(), "Failed to get instance of Indexer Cluster")
 			defaultIndexerReplicas = idxc.Spec.Replicas
 			scaledIndexerReplicas = defaultIndexerReplicas - 1
 			testcaseEnvInst.Log.Info("Scaling down Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
@@ -750,20 +722,20 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to Scale down Indexer Cluster")
 
 			// Ensure Indexer cluster scales down and go to ScalingDown phase
-			testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown, idxcName)
+			Expect(testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown, idxcName)).To(Succeed(), "Indexer Cluster phase mismatch")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexer cluster go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Search for data from removed indexer
 			searchString = fmt.Sprintf("index=%s host=%s | stats count by host", "main", indexerName)
-			searchResultsResp, err = testenv.PerformSearchSync(ctx, searchPod, searchString, deployment)
+			searchResultsResp, err = testenv.PerformSearchSync(ctx, deployment, searchPod, searchString)
 			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", searchPod, searchString)
 
 			// Verify result.
@@ -780,10 +752,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", indexerName, resultLine["host"].(string))
 
 			//######### SCALING DOWN VERIFICATIONS ######
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, shcPodNames)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, shcPodNames)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -829,11 +802,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy Multisite Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
 			siteCount := 3
@@ -845,13 +818,13 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -865,15 +838,16 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on GCP
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCP", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to GCP for Indexer Cluster
@@ -891,16 +865,16 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -913,10 +887,11 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -964,10 +939,10 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Monitoring Console %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Monitoring Console
+			// Create App Framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -986,7 +961,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Upload V1 apps to GCP for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
@@ -1000,36 +975,36 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 0)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 0)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 0)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 0)
 
 			siteCount := 3
 			shReplicas := 3
 			indexersPerSite := 1
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster")
 			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
-			Expect(err).To(Succeed(), "Unable to deploy Multi Site Indexer Cluster with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster with App Framework")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure cluster configured as multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1045,10 +1020,11 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			clusterManagerBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			// ############### UPGRADE APPS ################
 
@@ -1073,30 +1049,30 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure cluster configured as multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
 			allPodNames := append(idxcPodNames, shcPodNames...)
-			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), allPodNames, appListV1, true, "enabled", false, true)).To(Succeed(), "App installation verification failed")
 
 			// ############ ENABLE MANUAL POLL ############
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
@@ -1109,13 +1085,13 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer cluster configured as multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
 			config, err = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
@@ -1127,10 +1103,10 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
 			config, err = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
@@ -1142,11 +1118,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Wait for Monitoring Console to reach Ready phase
-			err = testcaseEnvInst.WaitForMonitoringConsolePhase(ctx, deployment, testcaseEnvInst.GetName(), mc.Name, enterpriseApi.PhaseReady, 2*time.Minute)
+			err = testcaseEnvInst.WaitForMonitoringConsolePhase(ctx, deployment, testcaseEnvInst.GetName(), mc.Name, enterpriseApi.PhaseReady, 10*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for MonitoringConsole to reach Ready phase")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1171,10 +1147,11 @@ var _ = Describe("m4appfw test", func() {
 			mcAppSourceInfo.CrAppList = appListV2
 			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -1224,11 +1201,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 0)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 0)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 0)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 0)
 
 			// Deploy Multisite Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
 			siteCount := 3
@@ -1239,13 +1216,13 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1259,15 +1236,16 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on GCP
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCP", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to GCP for Indexer Cluster
@@ -1285,20 +1263,21 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// ############ ENABLE MANUAL POLL ############
 			appVersion = "V2"
@@ -1312,13 +1291,13 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer cluster configured as multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
 			config, err = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
@@ -1330,10 +1309,10 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1354,10 +1333,11 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -1427,7 +1407,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to GCP test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameLocalIdxc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameLocalShc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameClusterIdxc := "appframework-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
@@ -1437,9 +1417,9 @@ var _ = Describe("m4appfw test", func() {
 			appSourceVolumeNameIdxcCluster := "appframework-test-volume-idxc-cluster-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShcCluster := "appframework-test-volume-shc-cluster-" + testenv.RandomDNSName(3)
 
-			// Create App framework Spec for Cluster manager with scope local and append cluster scope
+			// Create App Framework Spec for Cluster manager with scope local and append cluster scope
 
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 0)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 0)
 			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetGCPEndpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultGCPRegion())}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
@@ -1449,8 +1429,8 @@ var _ = Describe("m4appfw test", func() {
 			appSourceSpecCluster := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterIdxc, s3TestDirIdxcCluster, appSourceClusterDefaultSpec)}
 			appFrameworkSpecIdxc.AppSources = append(appFrameworkSpecIdxc.AppSources, appSourceSpecCluster...)
 
-			// Create App framework Spec for Search head cluster with scope local and append cluster scope
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 0)
+			// Create App Framework Spec for Search Head cluster with scope local and append cluster scope
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 0)
 			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetGCPEndpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultGCPRegion())}
 
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
@@ -1470,19 +1450,19 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1498,15 +1478,16 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListLocal, CrAppFileList: localappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListCluster, CrAppFileList: clusterappFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			clusterManagerBundleHash := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			clusterManagerBundleHash, err := testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
 			// Delete apps on GCP
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCP", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
@@ -1547,22 +1528,22 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// ########## Verify Manual Poll config map disabled after the poll is triggered #################
 
@@ -1585,10 +1566,11 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfoCluster.CrAppList = appListCluster
 			shcAppSourceInfoCluster.CrAppFileList = clusterappFileList
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, clusterManagerBundleHash)
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -1622,7 +1604,7 @@ var _ = Describe("m4appfw test", func() {
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1642,12 +1624,12 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Download all test apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to GCP for Cluster Manager
@@ -1666,23 +1648,23 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big-size app to GCP test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for M4
+			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
 			siteCount := 3
 			indexersPerSite := 1
 			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
-			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App Framework")
 
 			// Verify App installation is in progress on Cluster Manager
-			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Upload more apps to GCP for Cluster Manager
 			appList = testenv.ExtraApps
@@ -1699,7 +1681,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Wait for polling interval to pass
 			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
@@ -1709,10 +1691,10 @@ var _ = Describe("m4appfw test", func() {
 			appFileList = testenv.GetAppFileList(appList)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Cluster Manager", appList))
-			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), cmPod, appList, true, "enabled", false, false)
+			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), cmPod, appList, true, "enabled", false, false)).To(Succeed(), "App installation verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Wait for SearchHeadCluster to reach Ready phase
 			err = testcaseEnvInst.WaitForSearchHeadClusterPhase(ctx, deployment, testcaseEnvInst.GetName(), shc.Name, enterpriseApi.PhaseReady, 60*time.Second)
@@ -1723,7 +1705,7 @@ var _ = Describe("m4appfw test", func() {
 			// Verify all apps are installed on Deployer
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Deployer", appList))
-			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), deployerPod, appList, true, "enabled", false, false)
+			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), deployerPod, appList, true, "enabled", false, false)).To(Succeed(), "App installation verification failed")
 		})
 	})
 
@@ -1758,7 +1740,7 @@ var _ = Describe("m4appfw test", func() {
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1778,12 +1760,12 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)
+			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
 
 			// Download all test apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to GCP for Cluster Manager
@@ -1802,13 +1784,13 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big-size app to GCP test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for M4
+			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -1816,10 +1798,10 @@ var _ = Describe("m4appfw test", func() {
 			shReplicas := 3
 			indexersPerSite := 1
 			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
-			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App Framework")
 
 			// Verify App installation is in progress
-			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Upload more apps to GCP for Cluster Manager
 			appList = testenv.ExtraApps
@@ -1836,23 +1818,23 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Wait for polling interval to pass
 			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Verify all apps are installed on indexers
 			appList = append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
 			idxcPodNames := testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), indexersPerSite, true, siteCount)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on indexers", appList))
-			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), idxcPodNames, appList, true, "enabled", false, true)
+			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), idxcPodNames, appList, true, "enabled", false, true)).To(Succeed(), "App installation verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Wait for polling interval to pass
 			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
@@ -1860,7 +1842,7 @@ var _ = Describe("m4appfw test", func() {
 			// Verify all apps are installed on Search Heads
 			shcPodNames := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Search Heads", appList))
-			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), shcPodNames, appList, true, "enabled", false, true)
+			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), shcPodNames, appList, true, "enabled", false, true)).To(Succeed(), "App installation verification failed")
 
 		})
 	})
@@ -1887,7 +1869,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload V1 apps to GCP for Indexer Cluster
@@ -1903,11 +1885,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for M4
+			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -1915,28 +1897,28 @@ var _ = Describe("m4appfw test", func() {
 			shReplicas := 3
 			indexersPerSite := 1
 			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
-			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App Framework")
 
 			// Verify App installation is in progress on Cluster Manager
-			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testenv.DeleteOperatorPod(testcaseEnvInst)
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1950,10 +1932,11 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -1979,7 +1962,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download all apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload V1 apps to GCP for Indexer Cluster
@@ -1995,11 +1978,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for M4
+			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -2007,28 +1990,28 @@ var _ = Describe("m4appfw test", func() {
 			shReplicas := 3
 			indexersPerSite := 1
 			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
-			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App Framework")
 
 			// Verify App Download is in progress on Cluster Manager
-			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Delete Operator pod while Install in progress
-			testenv.DeleteOperatorPod(testcaseEnvInst)
+			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2042,10 +2025,11 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -2085,11 +2069,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for M4
+			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -2097,22 +2081,22 @@ var _ = Describe("m4appfw test", func() {
 			shReplicas := 3
 			indexersPerSite := 1
 			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
-			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App Framework")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2125,28 +2109,29 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify repo state on App to be disabled to be 1 (i.e app present on GCP bucket)
 			appName := appListV1[0]
 			appFileName := testenv.GetAppFileList([]string{appName})
-			testcaseEnvInst.VerifyAppRepoState(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])
+			Expect(testcaseEnvInst.VerifyAppRepoState(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])).To(Succeed(), "App repo state verification failed")
 
 			// Disable the app
 			err = testenv.DisableAppsToGCP(downloadDirV1, appFileName, s3TestDirIdxc)
 			Expect(err).To(Succeed(), "Unable to disable apps on GCS")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
 
 			// Ensure Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Wait for App state to update after config file change
 			testcaseEnvInst.WaitforAppInstallState(ctx, deployment, idxcPodNames, testcaseEnvInst.GetName(), appName, "disabled", true)
@@ -2157,7 +2142,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on GCP test directory", appFileName))
 
 			// Verify repo state is set to 2 (i.e app deleted from GCP bucket)
-			testcaseEnvInst.VerifyAppRepoState(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, 2, appFileName[0])
+			Expect(testcaseEnvInst.VerifyAppRepoState(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, 2, appFileName[0])).To(Succeed(), "App repo state verification failed")
 		})
 	})
 
@@ -2203,11 +2188,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec
+			// Create App Framework Spec
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 0)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 0)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 0)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 0)
 
 			// Deploy Multisite Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
 			siteCount := 3
@@ -2218,13 +2203,13 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2238,10 +2223,11 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			// Verify status is 'OFF' in config map for Cluster Manager and Search Head Cluster
 			testcaseEnvInst.Log.Info("Verify status is 'OFF' in config map for Cluster Manager and Search Head Cluster")
@@ -2251,8 +2237,7 @@ var _ = Describe("m4appfw test", func() {
 			//######### SWITCH FROM MANUAL TO PERIODIC POLLING ############
 			// Get instance of current Cluster Manager CR with latest config
 			cm = &enterpriseApi.ClusterManager{}
-			err = deployment.GetInstance(ctx, deployment.GetName(), cm)
-			Expect(err).To(Succeed(), "Failed to edit Cluster Manager")
+			Expect(deployment.GetInstance(ctx, deployment.GetName(), cm)).To(Succeed(), "Failed to get instance of Cluster Manager")
 
 			// Set AppsRepoPollInterval for Cluster Manager to 180 seconds
 			testcaseEnvInst.Log.Info("Set AppsRepoPollInterval for Cluster Manager to 180 seconds")
@@ -2262,8 +2247,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Get instance of current Search Head Cluster CR with latest config
 			shc = &enterpriseApi.SearchHeadCluster{}
-			err = deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)
-			Expect(err).To(Succeed(), "Failed to edit Search Head Cluster")
+			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Set AppsRepoPollInterval for Search Head Cluster to 180 seconds
 			testcaseEnvInst.Log.Info("Set AppsRepoPollInterval for Search Head Cluster to 180 seconds")
@@ -2298,7 +2282,7 @@ var _ = Describe("m4appfw test", func() {
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on GCP
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCP", appVersion))
-			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
+			Expect(testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)).To(Succeed(), "GCP file deletion failed")
 			uploadedApps = nil
 
 			// Upload V2 apps to GCP for Indexer Cluster
@@ -2321,7 +2305,8 @@ var _ = Describe("m4appfw test", func() {
 			//########## UPGRADE VERIFICATIONS ############
 			testcaseEnvInst.Log.Info("Verify apps are not updated before the end of AppsRepoPollInterval duration")
 			appVersion = "V1"
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Wait for app repo state to change, indicating poll interval has completed
 			testcaseEnvInst.Log.Info("Wait for app repo state to change after AppsRepoPollInterval")
@@ -2339,10 +2324,11 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
 			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -2378,7 +2364,7 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload V1 apps to GCP for Indexer Cluster
@@ -2393,11 +2379,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for M4
+			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 120)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 120)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 120)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 120)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -2405,10 +2391,10 @@ var _ = Describe("m4appfw test", func() {
 			shReplicas := 3
 			indexersPerSite := 1
 			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
-			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App Framework")
 
 			// Verify App Download is in progress on Cluster Manager
-			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			// Upload V2 apps to GCP for Indexer Cluster
 			appVersion = "V2"
@@ -2430,26 +2416,26 @@ var _ = Describe("m4appfw test", func() {
 
 			//########## VERIFICATIONS ##########
 			appVersion = "V1"
-			testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appListV1, false, "enabled", false, false)
+			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appListV1, false, "enabled", false, false)).To(Succeed(), "App installation verification failed")
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			appFileList = testenv.GetAppFileList(appListV2)
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			//############  UPGRADE VERIFICATIONS ############
 			appVersion = "V2"
@@ -2461,7 +2447,8 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 		})
 	})
 
@@ -2485,7 +2472,7 @@ var _ = Describe("m4appfw test", func() {
 
 			//################## SETUP ####################
 			// Create a large file on Operator pod
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			opPod := testcaseEnvInst.GetOperatorPodName()
 			err := testenv.CreateDummyFileOnOperator(ctx, deployment, opPod, testenv.AppDownloadVolume, "1G", "test_file.img")
 			Expect(err).To(Succeed(), "Unable to create file on operator")
 			filePresentOnOperator = true
@@ -2494,7 +2481,7 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appList := testenv.PVTestApps
 			appFileList := testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsPVTestApps, downloadDirPVTestApps, appFileList)
+			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.PVTestAppsLocation, downloadDirPVTestApps, appFileList)
 			Expect(err).To(Succeed(), "Unable to download app files")
 
 			// Upload apps to GCP for Indexer Cluster
@@ -2505,7 +2492,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload apps to GCP for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search head Cluster", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
 			s3TestDirShc := "m4appfw-shc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirPVTestApps)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
@@ -2514,14 +2501,14 @@ var _ = Describe("m4appfw test", func() {
 			// Maximum apps to be downloaded in parallel
 			maxConcurrentAppDownloads := 30
 
-			// Create App framework Spec for C3
+			// Create App Framework Spec for C3
 			appSourceNameIdxc := "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc := "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
 			appFrameworkSpecIdxc.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 			appFrameworkSpecShc.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 
 			// Deploy Multisite Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
@@ -2533,13 +2520,13 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2553,7 +2540,8 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 		})
 	})
 
@@ -2579,7 +2567,7 @@ var _ = Describe("m4appfw test", func() {
 			// Download big size apps from GCP
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
 			// Upload big size app to GCP for Indexer Cluster
@@ -2595,11 +2583,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload big size to GCP test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for M4
+			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -2607,31 +2595,31 @@ var _ = Describe("m4appfw test", func() {
 			shReplicas := 3
 			indexersPerSite := 1
 			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
-			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App Framework")
 
 			// Verify App Download is completed on Cluster Manager
-			testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending)
+			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
 			//Delete apps from app directory when app download is complete
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			opPod := testcaseEnvInst.GetOperatorPodName()
 			podDownloadPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc, testenv.AppInfo[appList[0]]["filename"])
 			err = testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
 			Expect(err).To(Succeed(), "Unable to delete file on pod")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2645,10 +2633,11 @@ var _ = Describe("m4appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
-			testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
+			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
 			// Verify no pods reset by checking the pod age
-			testcaseEnvInst.VerifyNoPodResetByUID(ctx, deployment, splunkPodUIDs, nil)
+			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 		})
 	})
 
@@ -2679,11 +2668,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for M4
+			// Create App Framework Spec for M4
 			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -2691,30 +2680,30 @@ var _ = Describe("m4appfw test", func() {
 			indexersPerSite := 1
 			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 
-			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App Framework")
 
 			// Verify IsDeploymentInProgress Flag is set to true for Cluster Master CR
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag for Cluster Manager")
-			testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, cm.Name, cm.Kind)
+			Expect(testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, cm.Name, cm.Kind)).To(Succeed(), "IsDeploymentInProgress flag not set")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
 
 			// Verify IsDeploymentInProgress Flag is set to true for SHC CR
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag for SHC")
-			testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, shc.Name, shc.Kind)
+			Expect(testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, shc.Name, shc.Kind)).To(Succeed(), "IsDeploymentInProgress flag not set")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer Cluster configured as Multisite
-			testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)
+			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
-			testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
+			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 		})
 	})
 })

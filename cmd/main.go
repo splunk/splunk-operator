@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/spf13/pflag"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 
 	intController "github.com/splunk/splunk-operator/internal/controller"
@@ -89,24 +90,44 @@ func main() {
 	// TLS certificate configuration for metrics
 	var metricsCertPath, metricsCertName, metricsCertKey string
 
-	flag.StringVar(&logEncoder, "log-encoder", "json", "log encoding ('json' or 'console')")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
+	pflag.StringVar(&logEncoder, "log-encoder", "json", "log encoding ('json' or 'console')")
+	pflag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	pflag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.BoolVar(&pprofActive, "pprof", true, "Enable pprof endpoint")
-	flag.IntVar(&logLevel, "log-level", int(zapcore.InfoLevel), "set log level")
-	flag.IntVar(&leaseDurationSecond, "lease-duration", leaseDurationSecond, "manager lease duration in seconds")
-	flag.IntVar(&renewDeadlineSecond, "renew-duration", renewDeadlineSecond, "manager renew duration in seconds")
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metrics endpoint binds to. "+
+	pflag.BoolVar(&pprofActive, "pprof", true, "Enable pprof endpoint")
+	pflag.IntVar(&logLevel, "log-level", int(zapcore.InfoLevel), "set log level")
+	pflag.IntVar(&leaseDurationSecond, "lease-duration", leaseDurationSecond, "manager lease duration in seconds")
+	pflag.IntVar(&renewDeadlineSecond, "renew-duration", renewDeadlineSecond, "manager renew duration in seconds")
+	pflag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
-	flag.BoolVar(&secureMetrics, "metrics-secure", false,
+	pflag.BoolVar(&secureMetrics, "metrics-secure", false,
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 
 	// TLS certificate flags for metrics server
-	flag.StringVar(&metricsCertPath, "metrics-cert-path", "", "The directory that contains the metrics server certificate.")
-	flag.StringVar(&metricsCertName, "metrics-cert-name", "tls.crt", "The name of the metrics server certificate file.")
-	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
+	pflag.StringVar(&metricsCertPath, "metrics-cert-path", "", "The directory that contains the metrics server certificate.")
+	pflag.StringVar(&metricsCertName, "metrics-cert-name", "tls.crt", "The name of the metrics server certificate file.")
+	pflag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
+
+	config.DefaultMutableFeatureGate.AddFlag(pflag.CommandLine)
+
+	opts := zap.Options{
+		Development: true,
+		TimeEncoder: zapcore.RFC3339NanoTimeEncoder,
+	}
+	opts.BindFlags(flag.CommandLine)
+	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
+	pflag.Parse()
+
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	if allGates := config.DefaultMutableFeatureGate.GetAll(); len(allGates) > 0 {
+		effectiveStates := make(map[string]bool, len(allGates))
+		for gate := range allGates {
+			effectiveStates[string(gate)] = config.DefaultMutableFeatureGate.Enabled(gate)
+		}
+		setupLog.Info("Feature gates initialized", "gates", effectiveStates)
+	}
 
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
 	// More info:
@@ -146,16 +167,6 @@ func main() {
 	} else {
 		renewDeadline = time.Duration(renewDeadlineSecond) * time.Second
 	}
-
-	opts := zap.Options{
-		Development: true,
-		TimeEncoder: zapcore.RFC3339NanoTimeEncoder,
-	}
-	opts.BindFlags(flag.CommandLine)
-	flag.Parse()
-
-	// Logging setup
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	// Configure metrics certificate watcher if metrics certs are provided
 	var metricsCertWatcher *certwatcher.CertWatcher
@@ -280,10 +291,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup centralized validation webhook server (opt-in via ENABLE_VALIDATION_WEBHOOK env var, defaults to false)
-	enableWebhooks := os.Getenv("ENABLE_VALIDATION_WEBHOOK")
-	if enableWebhooks == "true" {
-		// Parse optional timeout configurations from environment
+	if _, ok := os.LookupEnv("ENABLE_VALIDATION_WEBHOOK"); ok {
+		setupLog.Info("DEPRECATED: ENABLE_VALIDATION_WEBHOOK env var is deprecated and will be removed in a future release; use --feature-gates=ValidationWebhook=true instead")
+	}
+
+	if config.DefaultMutableFeatureGate.Enabled(config.ValidationWebhook) {
 		readTimeout := 10 * time.Second
 		if val := os.Getenv("WEBHOOK_READ_TIMEOUT"); val != "" {
 			if d, err := time.ParseDuration(val); err == nil {
@@ -306,16 +318,15 @@ func main() {
 			Client:       mgr.GetClient(),
 		})
 
-		// Add webhook server as a runnable to the manager
 		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 			return webhookServer.Start(ctx)
 		})); err != nil {
 			setupLog.Error(err, "unable to add webhook server to manager")
 			os.Exit(1)
 		}
-		setupLog.Info("Validation webhook enabled via ENABLE_VALIDATION_WEBHOOK=true")
+		setupLog.Info("Validation webhook enabled")
 	} else {
-		setupLog.Info("Validation webhook disabled (set ENABLE_VALIDATION_WEBHOOK=true to enable)")
+		setupLog.Info("Validation webhook disabled (set --feature-gates=ValidationWebhook=true to enable)")
 	}
 	//+kubebuilder:scaffold:builder
 

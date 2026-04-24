@@ -68,8 +68,8 @@ func TestApplyLicenseMaster(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.ConfigMap-test-splunk-license-master-stack1-configmap"},
-		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerServiceTestService},
-		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerStatefulSet},
+		{MetaName: "*v1." + testStack1LicenseManagerServiceTestService},
+		{MetaName: "*v1." + testStack1LicenseManagerStatefulSet},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
@@ -843,7 +843,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	mclient.AddHandler(wantRequest1, 200, string(response1), nil)
 	mclient.AddHandler(wantRequest2, 200, string(response2), nil)
 
-	// mock the verify RF peer funciton
+	// mock the verify RF peer function
 	savedVerifyRFPeers := VerifyRFPeers
 	defer func() { VerifyRFPeers = savedVerifyRFPeers }()
 	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
@@ -1023,7 +1023,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	// simulate create clustermanager instance before reconcilation
+	// simulate create clustermanager instance before reconciliation
 	err = c.Create(ctx, licensemaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for indexer cluster %v", err)
@@ -1202,7 +1202,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 	clustermanager.Kind = "ClusterManager"
 
-	// simulate create clustermanager instance before reconcilation
+	// simulate create clustermanager instance before reconciliation
 	err = c.Create(ctx, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)

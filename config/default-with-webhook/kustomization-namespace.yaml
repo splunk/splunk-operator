@@ -1,7 +1,7 @@
 # Adds namespace to all resources.
 # Namespace-scoped deployment WITH webhook enabled (opt-in)
 # Requires cert-manager to be installed in the cluster
-namespace: splunk-operator 
+namespace: splunk-operator
 
 # Value of this field is prepended to the
 # names of all resources, e.g. a deployment named
@@ -115,7 +115,7 @@ patches:
   patch: |-
     - op: add
       path: /spec/template/spec/containers/0/env
-      value: 
+      value:
       - name: WATCH_NAMESPACE
         valueFrom:
           fieldRef:
@@ -126,12 +126,13 @@ patches:
         value: splunk-operator
       - name: SPLUNK_GENERAL_TERMS
         value: SPLUNK_GENERAL_TERMS_VALUE
-      - name: ENABLE_VALIDATION_WEBHOOK
-        value: "true"
       - name: POD_NAME
         valueFrom:
           fieldRef:
             fieldPath: metadata.name
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --feature-gates=ValidationWebhook=true
 # [METRICS] The following patch will enable the metrics endpoint using HTTPS and the port :8443.
 # More info: https://book.kubebuilder.io/reference/metrics
 - path: manager_metrics_patch.yaml

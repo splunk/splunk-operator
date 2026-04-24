@@ -1,0 +1,23 @@
+{
+  "configMap": {
+    "name": "testConfgMap",
+    "items": [
+      {
+        "key": "a",
+        "path": "a",
+        "mode": 755
+      },
+      {
+        "key": "b",
+        "path": "b",
+        "mode": 755
+      },
+      {
+        "key": "z",
+        "path": "z",
+        "mode": 755
+      }
+    ],
+    "defaultMode": 755
+  }
+}

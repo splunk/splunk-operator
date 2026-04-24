@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,13 +17,15 @@ package testenv
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
+	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -52,30 +54,7 @@ func getMCSts(ns string) string {
 	return strings.Split(string(output), "\n")[1]
 }
 
-// CheckMCPodReady check if monitoring pod is ready. Checking status of MC pod and Stateful set.
-func CheckMCPodReady(ns string) bool {
-	// Check Status of monitoring console statefulset
-	stsLine := getMCSts(ns)
-	if len(stsLine) == 0 {
-		return false
-	}
-	stsSlice := strings.Fields(stsLine)
-	logf.Log.Info("MC statefulset found", "POD", stsSlice[0], "READY", stsSlice[1])
-	stsReady := strings.Contains(stsSlice[1], "1/1")
-
-	// Check Status of monitoring console pod
-	podLine := getMCPod(ns)
-	if len(podLine) == 0 {
-		return false
-	}
-	podSlice := strings.Fields(podLine)
-	logf.Log.Info("MC Pod Found", "POD", podSlice[0], "READY", podSlice[1])
-	podReady := strings.Contains(podSlice[1], "1/1") && strings.Contains(podSlice[2], "Running")
-
-	return stsReady && podReady
-}
-
-// GetConfiguredPeers get list of Peers Configured on Montioring Console
+// GetConfiguredPeers get list of Peers Configured on Monitoring Console
 func GetConfiguredPeers(ns string, mcName string) []string {
 	podName := fmt.Sprintf(MonitoringConsolePod, mcName)
 	var peerList []string
@@ -100,20 +79,8 @@ func GetConfiguredPeers(ns string, mcName string) []string {
 			}
 		}
 	}
-	logf.Log.Info("Peer List found on MC Pod", "MC POD", podName, "Configured Peers", peerList)
+	logf.Log.Info("Peer List found on MC Pod", "mcPod", podName, "configuredPeers", peerList)
 	return peerList
-}
-
-// DeleteMCPod delete monitoring console deployment
-func DeleteMCPod(ns string) {
-	mcSts := fmt.Sprintf(MonitoringConsoleSts, ns)
-	output, err := exec.Command("kubectl", "delete", "sts", "-n", ns, mcSts).Output()
-	if err != nil {
-		cmd := fmt.Sprintf("kubectl delete sts -n %s %s", ns, mcSts)
-		logf.Log.Error(err, "Failed to execute command", "command", cmd)
-	} else {
-		logf.Log.Info("Monitoring Console Stateful Set deleted", "Statefulset", mcSts, "stdout", output)
-	}
 }
 
 // CheckPodNameOnMC Check given pod is configured on Monitoring console pod
@@ -124,7 +91,7 @@ func CheckPodNameOnMC(ns string, mcName string, podName string) bool {
 	found := false
 	for _, peer := range peerList {
 		if strings.Contains(peer, podName) {
-			logf.Log.Info("Check Peer matches on pod", "Pod Name", podName, "Peer in peer list", peer)
+			logf.Log.Info("Check Peer matches on pod", "podName", podName, "peerInPeerList", peer)
 			found = true
 			break
 		}
@@ -134,19 +101,12 @@ func CheckPodNameOnMC(ns string, mcName string, podName string) bool {
 
 // GetPodIP returns IP address of a POD as a string
 func GetPodIP(ns string, podName string) string {
-	output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+	podDetails, err := getPodDetails(ns, podName)
 	if err != nil {
-		cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
-		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		logf.Log.Error(err, "Failed to get pod details", "pod", podName)
 		return ""
 	}
-	restResponse := PodDetailsStruct{}
-	err = json.Unmarshal([]byte(output), &restResponse)
-	if err != nil {
-		logf.Log.Error(err, "Failed to parse cluster searchheads")
-		return ""
-	}
-	return restResponse.Status.PodIP
+	return podDetails.Status.PodIP
 }
 
 // GetMCConfigMap gets config map for give Monitoring Console Name
@@ -157,12 +117,76 @@ func GetMCConfigMap(ctx context.Context, deployment *Deployment, ns string, mcNa
 		logf.Log.Error(err, "Failed to get Monitoring Console Config Map")
 		return mcConfigMap, err
 	}
-	logf.Log.Info("MC Config Map contents", "MC CONFIG MAP NAME", mcConfigMapName, "Data", mcConfigMap.Data)
+	logf.Log.Info("MC Config Map contents", "mcConfigMapName", mcConfigMapName, "data", mcConfigMap.Data)
 	return mcConfigMap, err
 }
 
 // CheckPodNameInString checks for pod name in string
 func CheckPodNameInString(podName string, configString string) bool {
-	logf.Log.Info("Check MC Config String has Pod configured", "Monitoring Console Config Map Pod Config String", configString, "POD String", podName)
+	logf.Log.Info("Check MC Config String has Pod configured", "configString", configString, "podName", podName)
 	return strings.Contains(configString, podName)
+}
+
+// MCReconfigParams holds the service name and URL parameters that differ between
+// V3 (master) and V4 (manager) Monitoring Console tests.
+type MCReconfigParams struct {
+	CMServiceNameFmt string // format string for CM service name (e.g., ClusterMasterServiceName)
+	CMURLKey         string // config map URL key (e.g., "SPLUNK_CLUSTER_MASTER_URL" or splcommon.ClusterManagerURL)
+}
+
+// MCVersionConfig captures the API-version-specific behaviour that differs
+// between V3 (master) and V4 (manager) monitoring console tests.
+type MCVersionConfig struct {
+	MCReconfigParams
+
+	NamePrefix string
+	Label      string
+
+	// DeployC3WithMC deploys a C3 single-site cluster with the given MC ref.
+	DeployC3WithMC func(ctx context.Context, d *Deployment, name string, replicas int, shc bool, mcRef string) error
+
+	// DeployM4WithMC deploys an M4 multisite cluster with the given MC ref.
+	DeployM4WithMC func(ctx context.Context, d *Deployment, name string, replicas int, siteCount int, mcRef string, shc bool) error
+
+	// NewCMObject returns a new, empty cluster-coordinator CR
+	// (*ClusterMaster for V3, *ClusterManager for V4).
+	NewCMObject func() client.Object
+
+	// VerifyCMReady asserts the cluster coordinator has reached Ready phase.
+	VerifyCMReady func(ctx context.Context, d *Deployment, te *TestCaseEnv) error
+
+	// SHCReconfigTimeout is the timeout used when verifying MC config strings
+	// after an SHC MC-ref reconfig (0 means use the synchronous check).
+	SHCReconfigTimeout time.Duration
+
+	// VerifyMCTwoReadyAfterSHC controls whether MC Two is explicitly
+	// verified ready after the SHC reconfig step.
+	VerifyMCTwoReadyAfterSHC bool
+}
+
+// ReconfigCMWithNewMC updates the Cluster Manager's MC ref to a new Monitoring Console,
+// verifies the CM is ready, and deploys the new MC.
+func ReconfigCMWithNewMC(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, cfg MCVersionConfig) (string, *enterprisev4.MonitoringConsole, error) {
+	mcTwoName := deployment.GetName() + "-two"
+	cm := cfg.NewCMObject()
+	if err := testcaseEnvInst.UpdateMonitoringConsoleRefAndVerify(ctx, deployment, cm, deployment.GetName(), mcTwoName); err != nil {
+		return "", nil, fmt.Errorf("unable to update CM MC ref: %w", err)
+	}
+	if err := cfg.VerifyCMReady(ctx, deployment, testcaseEnvInst); err != nil {
+		return "", nil, fmt.Errorf("cluster manager not ready after MC reconfig: %w", err)
+	}
+	mcTwo, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcTwoName, "")
+	if err != nil {
+		return "", nil, fmt.Errorf("unable to deploy Monitoring Console Two: %w", err)
+	}
+	return mcTwoName, mcTwo, nil
+}
+
+// DeployMCAndVerifyRFSF deploys a Monitoring Console and verifies RF/SF is met.
+func DeployMCAndVerifyRFSF(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, mcRef string) error {
+	_, err := testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
+	if err != nil {
+		return err
+	}
+	return testcaseEnvInst.VerifyRFSFMet(ctx, deployment)
 }

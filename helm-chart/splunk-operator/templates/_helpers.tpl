@@ -72,3 +72,15 @@ Define namespace of release and allow for namespace override
 {{- default .Release.Namespace .Values.namespaceOverride }}
 {{- end }}
 
+{{/*
+Format splunkOperator.featureGates map into a --feature-gates arg value.
+Produces: Key1=true,Key2=false
+*/}}
+{{- define "splunk-operator.featureGates" -}}
+{{- $pairs := list -}}
+{{- range $gate, $enabled := .Values.splunkOperator.featureGates -}}
+{{- $pairs = append $pairs (printf "%s=%t" $gate $enabled) -}}
+{{- end -}}
+{{- join "," $pairs -}}
+{{- end }}
+
