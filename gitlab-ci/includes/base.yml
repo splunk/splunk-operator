@@ -40,9 +40,17 @@ default:
 
 .go-verify-job:
   stage: verify
+  rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
+    - when: on_success
 
 .go-test-job:
   stage: test
+  rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
+    - when: on_success
 
 .runtime-artifact-job:
   artifacts:
