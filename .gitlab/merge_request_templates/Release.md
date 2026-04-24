@@ -35,4 +35,3 @@
 - [ ] release validation passed on the final release-branch tip
 - [ ] candidate artifacts are built once on the release branch and promoted from `main`
 - [ ] release publication inputs were reviewed before merge
-

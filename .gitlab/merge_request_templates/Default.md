@@ -27,4 +27,3 @@
 - [ ] no duplicate CI variable contract was added without a clear reason
 - [ ] documentation was updated or intentionally left unchanged
 - [ ] affected lanes and triggers are listed above
-
