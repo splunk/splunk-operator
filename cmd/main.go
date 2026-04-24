@@ -31,6 +31,7 @@ import (
 	intController "github.com/splunk/splunk-operator/internal/controller"
 	"github.com/splunk/splunk-operator/internal/controller/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise/validation"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 
@@ -209,8 +210,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	controllerClient := splcommon.NewAPIAwareClient(mgr.GetClient(), mgr.GetAPIReader())
+
 	if err = (&intController.ClusterManagerReconciler{
-		Client:   mgr.GetClient(),
+		Client:   controllerClient,
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("clustermanager-controller"),
 	}).SetupWithManager(mgr); err != nil {
@@ -220,7 +223,7 @@ func main() {
 	}
 	fmt.Printf("%v", err)
 	if err = (&intController.ClusterMasterReconciler{
-		Client:   mgr.GetClient(),
+		Client:   controllerClient,
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("clustermaster-controller"),
 	}).SetupWithManager(mgr); err != nil {
@@ -228,7 +231,7 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&intController.IndexerClusterReconciler{
-		Client:   mgr.GetClient(),
+		Client:   controllerClient,
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("indexercluster-controller"),
 	}).SetupWithManager(mgr); err != nil {
@@ -236,7 +239,7 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&intController.LicenseMasterReconciler{
-		Client:   mgr.GetClient(),
+		Client:   controllerClient,
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("licensemaster-controller"),
 	}).SetupWithManager(mgr); err != nil {
@@ -244,7 +247,7 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&intController.LicenseManagerReconciler{
-		Client:   mgr.GetClient(),
+		Client:   controllerClient,
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("licensemanager-controller"),
 	}).SetupWithManager(mgr); err != nil {
@@ -252,7 +255,7 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&intController.MonitoringConsoleReconciler{
-		Client:   mgr.GetClient(),
+		Client:   controllerClient,
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("monitoringconsole-controller"),
 	}).SetupWithManager(mgr); err != nil {
@@ -260,7 +263,7 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&intController.SearchHeadClusterReconciler{
-		Client:   mgr.GetClient(),
+		Client:   controllerClient,
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("searchheadcluster-controller"),
 	}).SetupWithManager(mgr); err != nil {
@@ -268,7 +271,7 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&intController.StandaloneReconciler{
-		Client:   mgr.GetClient(),
+		Client:   controllerClient,
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("standalone-controller"),
 	}).SetupWithManager(mgr); err != nil {
@@ -276,7 +279,7 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&controller.IngestorClusterReconciler{
-		Client:   mgr.GetClient(),
+		Client:   controllerClient,
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("ingestorcluster-controller"),
 	}).SetupWithManager(mgr); err != nil {
