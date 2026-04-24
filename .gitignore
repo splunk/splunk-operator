@@ -102,3 +102,6 @@ test/secret/*.log
 kubeconfig
 .devcontainer/devcontainer.json
 kuttl-artifacts/*
+ci-output/
+__pycache__/
+*.pyc
