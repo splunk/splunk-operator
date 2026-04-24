@@ -256,8 +256,8 @@ type CommonSplunkSpec struct {
 }
 
 // StorageClassSpec defines storage class configuration
-// +kubebuilder:validation:XValidation:rule="!(size(self.storageClassName) > 0 && self.ephemeralStorage == true)",message="storageClassName and ephemeralStorage are mutually exclusive"
-// +kubebuilder:validation:XValidation:rule="!(size(self.storageCapacity) > 0 && self.ephemeralStorage == true)",message="storageCapacity and ephemeralStorage are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.storageClassName) && size(self.storageClassName) > 0 && self.ephemeralStorage == true)",message="storageClassName and ephemeralStorage are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.storageCapacity) && size(self.storageCapacity) > 0 && self.ephemeralStorage == true)",message="storageCapacity and ephemeralStorage are mutually exclusive"
 type StorageClassSpec struct {
 	// Name of StorageClass to use for persistent volume claims
 	// +optional

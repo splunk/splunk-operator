@@ -1106,11 +1106,11 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - message: storageClassName and ephemeralStorage are mutually exclusive
-                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
-                    == true)'
+                  rule: '!(has(self.storageClassName) && size(self.storageClassName)
+                    > 0 && self.ephemeralStorage == true)'
                 - message: storageCapacity and ephemeralStorage are mutually exclusive
-                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
-                    == true)'
+                  rule: '!(has(self.storageCapacity) && size(self.storageCapacity)
+                    > 0 && self.ephemeralStorage == true)'
               extraEnv:
                 description: |-
                   ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
@@ -2321,11 +2321,11 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - message: storageClassName and ephemeralStorage are mutually exclusive
-                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
-                    == true)'
+                  rule: '!(has(self.storageClassName) && size(self.storageClassName)
+                    > 0 && self.ephemeralStorage == true)'
                 - message: storageCapacity and ephemeralStorage are mutually exclusive
-                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
-                    == true)'
+                  rule: '!(has(self.storageCapacity) && size(self.storageCapacity)
+                    > 0 && self.ephemeralStorage == true)'
               volumes:
                 description: List of one or more Kubernetes volumes. These will be
                   mounted in all pod containers as as /mnt/<name>
@@ -5320,11 +5320,11 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - message: storageClassName and ephemeralStorage are mutually exclusive
-                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
-                    == true)'
+                  rule: '!(has(self.storageClassName) && size(self.storageClassName)
+                    > 0 && self.ephemeralStorage == true)'
                 - message: storageCapacity and ephemeralStorage are mutually exclusive
-                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
-                    == true)'
+                  rule: '!(has(self.storageCapacity) && size(self.storageCapacity)
+                    > 0 && self.ephemeralStorage == true)'
               extraEnv:
                 description: |-
                   ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
@@ -6620,11 +6620,11 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - message: storageClassName and ephemeralStorage are mutually exclusive
-                  rule: '!(size(self.storageClassName) > 0 && self.ephemeralStorage
-                    == true)'
+                  rule: '!(has(self.storageClassName) && size(self.storageClassName)
+                    > 0 && self.ephemeralStorage == true)'
                 - message: storageCapacity and ephemeralStorage are mutually exclusive
-                  rule: '!(size(self.storageCapacity) > 0 && self.ephemeralStorage
-                    == true)'
+                  rule: '!(has(self.storageCapacity) && size(self.storageCapacity)
+                    > 0 && self.ephemeralStorage == true)'
               volumes:
                 description: List of one or more Kubernetes volumes. These will be
                   mounted in all pod containers as as /mnt/<name>
