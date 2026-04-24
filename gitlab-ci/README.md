@@ -10,6 +10,8 @@
 
 [`gitlab-ci/includes/admin.yml`](includes/admin.yml) defines the one-off admin jobs and the daily scheduled GitHub intake backfill and GitHub mirror health-check jobs. The daily lane defaults to the public `splunk/splunk-operator` GitHub repository, so the schedule only needs `SOK_PIPELINE_MODE=github_admin_daily` unless a different mirror target is required. The intake writer still requires `PIPELINE_GITLAB_API_TOKEN` because GitLab issue and merge-request creation is not authorized with `CI_JOB_TOKEN`.
 
+For a one-off manual intake run, trigger a pipeline with `SOK_PIPELINE_MODE=github_intake` and pass comma-separated GitHub numbers through `PIPELINE_GITHUB_INTAKE_ISSUES` and `PIPELINE_GITHUB_INTAKE_PRS`. Example: `PIPELINE_GITHUB_INTAKE_ISSUES=1234,1250` and `PIPELINE_GITHUB_INTAKE_PRS=812,815`. Set `PIPELINE_GITHUB_INTAKE_DRY_RUN=true` if you want the report artifacts without creating GitLab issues or merge requests.
+
 [`gitlab-ci/build-test-push.sh`](build-test-push.sh) builds the operator image for the current commit and pushes it to the staging ECR target.
 
 [`gitlab-ci/build-test-push-trivy-scan.sh`](build-test-push-trivy-scan.sh) scans the staged image artifact with Trivy.

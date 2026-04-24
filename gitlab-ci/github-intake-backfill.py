@@ -429,6 +429,14 @@ def find_branch_pair_mr(source_branch: str, target_branch: str) -> dict[str, Any
     return None
 
 
+def ensure_gitlab_write_token() -> None:
+    if os.getenv("PIPELINE_GITLAB_API_TOKEN", "").strip():
+        return
+    raise RuntimeError(
+        "PIPELINE_GITLAB_API_TOKEN is required for GitLab intake writes; read-only discovery and audit runs can use CI_JOB_TOKEN"
+    )
+
+
 def main() -> int:
     repo = os.getenv("PIPELINE_GITHUB_INTAKE_REPOSITORY", "splunk/splunk-operator").strip()
     requested_issues = csv_ints("PIPELINE_GITHUB_INTAKE_ISSUES")
@@ -444,10 +452,6 @@ def main() -> int:
     issues = sorted({*requested_issues, *discovered_issues})
     prs = sorted({*requested_prs, *discovered_prs})
     apply_changes = not bool_env("PIPELINE_GITHUB_INTAKE_DRY_RUN", False)
-    if apply_changes and not os.getenv("PIPELINE_GITLAB_API_TOKEN", "").strip():
-        raise RuntimeError(
-            "PIPELINE_GITLAB_API_TOKEN is required for apply mode; CI_JOB_TOKEN is not sufficient for GitLab intake writes"
-        )
     report: dict[str, Any] = {
         "observed_at_utc": utc_now(),
         "github_repo": repo,
@@ -487,6 +491,7 @@ def main() -> int:
             if not existing:
                 action = "create-issue-record"
                 if apply_changes:
+                    ensure_gitlab_write_token()
                     created = gitlab_post(
                         "/issues",
                         {
@@ -545,6 +550,7 @@ def main() -> int:
             elif same_repo and branch_exists(target_branch):
                 action = "push-branch-and-create-mr" if not branch_exists(source_branch) else "create-mr"
                 if apply_changes:
+                    ensure_gitlab_write_token()
                     try:
                         if repo_dir is None:
                             repo_dir, repo_dir_created = ensure_clone(repo)
@@ -580,6 +586,7 @@ def main() -> int:
             else:
                 action = "create-pr-issue-record"
                 if apply_changes:
+                    ensure_gitlab_write_token()
                     reason = "cross-repo PR" if not same_repo else "target branch missing in GitLab"
                     created = gitlab_post(
                         "/issues",
