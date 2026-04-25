@@ -33,7 +33,7 @@ For a one-off manual intake run, trigger a pipeline with `SOK_PIPELINE_MODE=gith
 | Merge request event | MR validation lane | Verify, test, build, scan, and smoke-test the commit | Fill the MR template, watch the MR pipeline, address findings |
 | Push or merge to `develop` | Develop lane | Re-runs baseline validation and smoke fanout on the merged branch | Nothing unless the merged branch fails |
 | Scheduled pipeline on `develop` | Nightly lane | Re-runs the baseline and then runs the full nightly integration fanout | Review nightly failures and fix the repo or infrastructure issue |
-| Web or API pipeline with `SOK_PIPELINE_MODE=qualification_lane` | Qualification lane | Tests the latest released SOK image and chart path against the qualification inputs, then writes the report and gate result | Trigger the lane intentionally and review the report/gate output |
+| Web, API, or downstream-triggered pipeline with `SOK_PIPELINE_MODE=qualification_lane` | Qualification lane | Tests the latest released SOK image and chart path against the qualification inputs, then writes the report and gate result | Trigger the lane intentionally and review the report/gate output |
 | Push to `release/<version>` or `release-<version>` | Release validation lane | Builds the release candidate once, runs full release validation, then packages the candidate outputs | Fix the release branch until the branch pipeline is green |
 | MR from `release/*` to `main` | Release validation lane again | Re-runs release validation on the reviewed release-branch tip | Update changelog or release notes, open the MR, get review and approval |
 | Push to `main` after merge | Main validation plus manual publish jobs | Re-validates the merged `main` tip and exposes the publish jobs | Start the manual publish jobs only when the release is approved |
@@ -134,13 +134,14 @@ What the qualification automation does:
 
 What the user needs to do:
 
-1. Trigger a web or API pipeline with `SOK_PIPELINE_MODE=qualification_lane`.
+1. Trigger a web, API, or downstream pipeline with `SOK_PIPELINE_MODE=qualification_lane`.
 2. Review the report and gate output.
 3. Decide whether the cycle stops at compatibility or needs to escalate into a product release.
 
 Qualification inputs:
 
 - required trigger: `SOK_PIPELINE_MODE=qualification_lane`
+- supported pipeline sources: manual GitLab UI (`web`), direct API (`api`), trigger token (`trigger`), multi-project downstream (`pipeline`), or child pipeline (`parent_pipeline`)
 - EKS runtime inputs: `PIPELINE_AWS_*`, `PIPELINE_EKS_VPC_PUBLIC_SUBNET_STRING`, `PIPELINE_EKS_VPC_PRIVATE_SUBNET_STRING`, `PIPELINE_TEST_BUCKET`, and `PIPELINE_TEST_INDEXES_S3_BUCKET`
 - FIPS existing-cluster input: `PIPELINE_FIPS_EKS_CLUSTER_NAME` when FIPS qualification is part of the cycle
 - Azure runtime inputs: either GitLab OIDC with `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`, or `PIPELINE_AZURE_CREDENTIALS`, plus `PIPELINE_AZURE_ACR_LOGIN_SERVER`, `PIPELINE_AZURE_REGION`, `PIPELINE_AZURE_RESOURCE_GROUP_NAME`, `PIPELINE_AZURE_STORAGE_ACCOUNT`, `PIPELINE_AZURE_STORAGE_ACCOUNT_KEY`, `PIPELINE_AZURE_TEST_CONTAINER`, and `PIPELINE_AZURE_INDEXES_CONTAINER`
@@ -237,7 +238,7 @@ If the project `CI_JOB_TOKEN` is not allowed to create releases, set `PIPELINE_G
 
 ### Qualification cycle
 
-1. Trigger the qualification lane intentionally with `SOK_PIPELINE_MODE=qualification_lane`.
+1. Trigger the qualification lane intentionally with `SOK_PIPELINE_MODE=qualification_lane`, either manually or from the release-management orchestrator.
 2. Review the qualification report and gate result.
 3. If qualification says no new SOK release is needed, stop there.
 4. If qualification says a new SOK release is required, cut a release branch and move into the release flow.
