@@ -13,8 +13,9 @@ ENV GOTOOLCHAIN=${GOTOOLCHAIN}
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
-# Cache dependencies before building and copying source to reduce re-downloading
-RUN go mod download
+# Buildx arm64 has hit Go 1.26 proxy-path panics in CI; fetch modules directly
+# here so the cache is still populated without depending on the proxy path.
+RUN GOPROXY=direct go mod download
 
 # Copy the go source
 COPY cmd/main.go cmd/main.go
