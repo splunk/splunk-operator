@@ -3,9 +3,10 @@ ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal
 ARG BASE_IMAGE_VERSION=8.10-1776645784
 ARG BUILDER_IMAGE=golang:1.26.2
 ARG GOTOOLCHAIN=auto
+ARG BUILDPLATFORM
 
 # Build the manager binary
-FROM ${BUILDER_IMAGE} AS builder
+FROM --platform=${BUILDPLATFORM} ${BUILDER_IMAGE} AS builder
 
 WORKDIR /workspace
 ENV GOTOOLCHAIN=${GOTOOLCHAIN}
@@ -13,9 +14,9 @@ ENV GOTOOLCHAIN=${GOTOOLCHAIN}
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
-# Buildx arm64 has hit Go 1.26 proxy-path panics in CI; fetch modules directly
-# here so the cache is still populated without depending on the proxy path.
-RUN GOPROXY=direct go mod download
+# Buildx arm64 has hit Go toolchain crashes under QEMU emulation. Keep the
+# builder on the native build platform and cross-compile the target binary.
+RUN go mod download
 
 # Copy the go source
 COPY cmd/main.go cmd/main.go
