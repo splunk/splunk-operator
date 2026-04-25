@@ -1,13 +1,14 @@
 # Build the manager binary
-FROM golang:1.26.2 AS builder
+ARG BUILDPLATFORM
+FROM --platform=${BUILDPLATFORM} golang:1.26.2 AS builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
-# Buildx arm64 has hit Go 1.26 proxy-path panics in CI; fetch modules directly
-# here so the cache is still populated without depending on the proxy path.
-RUN GOPROXY=direct go mod download
+# Buildx arm64 has hit Go toolchain crashes under QEMU emulation. Keep the
+# builder on the native build platform and cross-compile the target binary.
+RUN go mod download
 
 # Copy the go source
 COPY cmd/main.go cmd/main.go
