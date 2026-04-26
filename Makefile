@@ -74,7 +74,7 @@ endif
 SCANNER_DATE := `date +%Y-%m-%d`
 SCANNER_DATE_YEST := `TZ=GMT+24 +%Y:%m:%d`
 SCANNER_VERSION := v8
-SCANNER_LOCALIP := $(shell ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | awk '{print $1}' | head -n 1)
+SCANNER_LOCALIP := $(shell hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+(\.[0-9]+){3}$$' | grep -v '^127\.' | head -n 1)
 ifeq ($(shell uname), Linux)
 	SCANNER_FILE = clair-scanner_linux_amd64
 else ifeq ($(shell uname), Darwin)
@@ -244,7 +244,14 @@ setup/eksctl:
 	@mkdir -p "${CI_BIN_DIR}"
 	@if [ ! -x "${CI_BIN_DIR}/eksctl" ]; then \
 		tmp_archive="/tmp/eksctl-${EKSCTL_VERSION}-amd64.tar.gz"; \
-		curl --silent --location -o "$$tmp_archive" "https://github.com/weaveworks/eksctl/releases/download/${EKSCTL_VERSION}/eksctl_$$(uname -s)_amd64.tar.gz"; \
+		curl --fail --show-error --silent --location --retry 3 --retry-delay 2 -o "$$tmp_archive" "https://github.com/eksctl-io/eksctl/releases/download/${EKSCTL_VERSION}/eksctl_$$(uname -s)_amd64.tar.gz"; \
+		if ! tar -tzf "$$tmp_archive" eksctl >/dev/null 2>&1; then \
+			echo "Downloaded eksctl archive is invalid: $$tmp_archive" >&2; \
+			wc -c "$$tmp_archive" >&2 || true; \
+			sed -n '1,20p' "$$tmp_archive" >&2 || true; \
+			rm -f "$$tmp_archive"; \
+			exit 1; \
+		fi; \
 		tar -xzf "$$tmp_archive" -C "${CI_BIN_DIR}" eksctl; \
 		chmod +x "${CI_BIN_DIR}/eksctl"; \
 		rm -f "$$tmp_archive"; \

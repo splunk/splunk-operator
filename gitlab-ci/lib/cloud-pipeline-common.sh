@@ -43,25 +43,7 @@ capture_test_logs() {
 capture_junit_artifact() {
   src="$1"
   dest="$2"
-  if copy_if_exists "${src}" "${dest}" >/dev/null 2>&1; then
-    return 0
-  fi
-
-  # Cloud validation can fail before the test harness emits a JUnit file. Keep
-  # the GitLab report upload contract stable so the job fails for the real
-  # runtime reason instead of a secondary "no files to upload" artifact error.
-  mkdir -p "$(dirname "${dest}")"
-  suite_name="$(basename "${dest}" .xml)"
-  cat > "${dest}" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuites>
-  <testsuite name="${suite_name}" tests="1" failures="0" errors="0" skipped="1">
-    <testcase classname="ci" name="junit-report-missing">
-      <skipped message="JUnit report was not produced; inspect job logs and ci-output artifacts."/>
-    </testcase>
-  </testsuite>
-</testsuites>
-EOF
+  ensure_junit_artifact "${src}" "${dest}"
 }
 
 materialize_json_secret() {

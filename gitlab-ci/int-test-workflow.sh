@@ -27,7 +27,10 @@ copy_integration_junit() {
   junit_report="$(find "${CI_PROJECT_DIR}" -maxdepth 1 -name 'report-junit-*.xml' -type f | sort | tail -n 1)"
   if [ -n "${junit_report}" ]; then
     copy_if_exists "${junit_report}" "${integration_junit}" >/dev/null 2>&1 || true
+    return 0
   fi
+
+  ensure_junit_artifact "${CI_PROJECT_DIR}/inttest-junit.xml" "${integration_junit}"
 }
 
 : > "${context_file}"

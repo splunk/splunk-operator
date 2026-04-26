@@ -414,6 +414,28 @@ copy_if_exists() {
   return 1
 }
 
+ensure_junit_artifact() {
+  src="$1"
+  dest="$2"
+
+  if copy_if_exists "${src}" "${dest}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  mkdir -p "$(dirname "${dest}")"
+  suite_name="$(basename "${dest}" .xml)"
+  cat > "${dest}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="${suite_name}" tests="1" failures="0" errors="0" skipped="1">
+    <testcase classname="ci" name="junit-report-missing">
+      <skipped message="JUnit report was not produced; inspect job logs and ci-output artifacts."/>
+    </testcase>
+  </testsuite>
+</testsuites>
+EOF
+}
+
 sanitize_slug() {
   printf '%s' "$1" \
     | tr '[:upper:]' '[:lower:]' \
