@@ -47,7 +47,7 @@ func Validate(ar *admissionv1.AdmissionReview, validators map[schema.GroupVersio
 }
 
 // ValidateWithClient performs validation on an AdmissionReview request with a Kubernetes client
-// The client enables resource lookups (e.g., verifying secrets exist, cross-resource validation)
+// The client enables resource existence checks (e.g., verifying secrets exist)
 // Returns warnings (even on success) and an error if validation fails
 func ValidateWithClient(ar *admissionv1.AdmissionReview, validators map[schema.GroupVersionResource]Validator, k8sClient client.Client) ([]string, error) {
 	if ar == nil || ar.Request == nil {

@@ -90,6 +90,7 @@ func validateAgainstClass(obj *enterpriseApi.PostgresCluster, reader client.Read
 	}
 
 	if classConfig := class.Spec.Config; classConfig != nil {
+		// Class version acts as a minimum floor for compliance; clusters may override higher but not lower.
 		if obj.Spec.PostgresVersion != nil && classConfig.PostgresVersion != nil {
 			clusterMajor, clusterMinor := parseVersion(*obj.Spec.PostgresVersion)
 			classMajor, classMinor := parseVersion(*classConfig.PostgresVersion)

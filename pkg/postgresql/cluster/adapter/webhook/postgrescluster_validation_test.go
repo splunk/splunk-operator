@@ -256,6 +256,7 @@ func TestValidateAgainstClass(t *testing.T) {
 		obj          *enterpriseApi.PostgresCluster
 		wantErrCount int
 		wantErrField string
+		wantErrMsg   string
 	}{
 		{
 			name:  "class not found",
@@ -265,6 +266,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			},
 			wantErrCount: 1,
 			wantErrField: "spec.class",
+			wantErrMsg:   "referenced PostgresClusterClass not found",
 		},
 		{
 			name:  "valid - no overrides",
@@ -307,6 +309,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			},
 			wantErrCount: 1,
 			wantErrField: "spec.postgresVersion",
+			wantErrMsg:   "postgresVersion cannot be lower than class default (17)",
 		},
 		{
 			name:  "valid - minor version ignored when class has major only",
@@ -363,6 +366,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			},
 			wantErrCount: 1,
 			wantErrField: "spec.postgresVersion",
+			wantErrMsg:   "postgresVersion cannot be lower than class default (17.2)",
 		},
 		{
 			name:  "invalid - cluster major lower even with higher minor",
@@ -375,6 +379,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			},
 			wantErrCount: 1,
 			wantErrField: "spec.postgresVersion",
+			wantErrMsg:   "postgresVersion cannot be lower than class default (17.2)",
 		},
 		{
 			name:  "valid - cluster major higher than class with minor",
@@ -398,6 +403,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			},
 			wantErrCount: 1,
 			wantErrField: "spec.connectionPoolerEnabled",
+			wantErrMsg:   "connection pooler requires cnpg.connectionPooler configuration in PostgresClusterClass",
 		},
 		{
 			name:  "valid - pooler disabled, class has no cnpg config",
@@ -448,6 +454,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			},
 			wantErrCount: 1,
 			wantErrField: "spec.connectionPoolerEnabled",
+			wantErrMsg:   "connection pooler requires cnpg.connectionPooler configuration in PostgresClusterClass",
 		},
 		{
 			name: "invalid - class has no config, cluster missing required fields",
@@ -462,6 +469,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			},
 			wantErrCount: 3,
 			wantErrField: "spec.instances",
+			wantErrMsg:   "must be set in PostgresCluster or PostgresClusterClass",
 		},
 		{
 			name: "invalid - class config missing storage, cluster doesn't provide it",
@@ -480,6 +488,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			},
 			wantErrCount: 1,
 			wantErrField: "spec.storage",
+			wantErrMsg:   "must be set in PostgresCluster or PostgresClusterClass",
 		},
 		{
 			name: "valid - cluster fills in what class is missing",
@@ -514,6 +523,9 @@ func TestValidateAgainstClass(t *testing.T) {
 			require.Len(t, errs, tt.wantErrCount, "unexpected error count: %v", errs)
 			if tt.wantErrField != "" && len(errs) > 0 {
 				assert.Equal(t, tt.wantErrField, errs[0].Field, "unexpected error field")
+			}
+			if tt.wantErrMsg != "" && len(errs) > 0 {
+				assert.Contains(t, errs[0].Detail, tt.wantErrMsg, "unexpected error message")
 			}
 		})
 	}
