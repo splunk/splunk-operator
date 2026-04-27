@@ -60,8 +60,14 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	cr.Kind = "IndexerCluster"
 
 	var err error
-	// Initialize phase
-	cr.Status.Phase = enterpriseApi.PhaseError
+	// Initialize phase and conditions
+	isPaused := cr.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true"
+	setPhaseAndConditions := func(phase enterpriseApi.Phase) {
+		result := splcommon.SetPhaseAndConditions(phase, isPaused, cr.Status.Message)
+		cr.Status.Phase = result.Phase
+		cr.Status.Conditions = result.Conditions
+	}
+	setPhaseAndConditions(enterpriseApi.PhaseError)
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
@@ -135,7 +141,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			cr.Status.Phase = enterpriseApi.PhaseTerminating
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating)
 			cr.Status.ClusterManagerPhase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
@@ -241,7 +247,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			return result, err
 		}
 	}
-	cr.Status.Phase = phase
+	setPhaseAndConditions(phase)
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
@@ -359,6 +365,14 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	eventPublisher := GetEventPublisher(ctx, cr)
 	cr.Kind = "IndexerCluster"
 
+	// Initialize phase and conditions
+	isPaused := cr.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true"
+	setPhaseAndConditions := func(phase enterpriseApi.Phase) {
+		result := splcommon.SetPhaseAndConditions(phase, isPaused, cr.Status.Message)
+		cr.Status.Phase = result.Phase
+		cr.Status.Conditions = result.Conditions
+	}
+
 	// validate and updates defaults for CR
 	err := validateIndexerClusterSpec(ctx, client, cr)
 	if err != nil {
@@ -366,7 +380,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// updates status after function completes
-	cr.Status.Phase = enterpriseApi.PhaseError
+	setPhaseAndConditions(enterpriseApi.PhaseError)
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
 		cr.Status.CredentialSecretVersion = "0"
@@ -429,7 +443,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			cr.Status.Phase = enterpriseApi.PhaseTerminating
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating)
 			cr.Status.ClusterMasterPhase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
@@ -536,7 +550,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			return result, err
 		}
 	}
-	cr.Status.Phase = phase
+	setPhaseAndConditions(phase)
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
