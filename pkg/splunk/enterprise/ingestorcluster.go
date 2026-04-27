@@ -65,8 +65,14 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		return result, err
 	}
 
-	// Initialize phase
-	cr.Status.Phase = enterpriseApi.PhaseError
+	// Initialize phase and conditions
+	isPaused := cr.GetAnnotations()[enterpriseApi.IngestorClusterPausedAnnotation] == "true"
+	setPhaseAndConditions := func(phase enterpriseApi.Phase) {
+		result := splcommon.SetPhaseAndConditions(phase, isPaused, cr.Status.Message)
+		cr.Status.Phase = result.Phase
+		cr.Status.Conditions = result.Conditions
+	}
+	setPhaseAndConditions(enterpriseApi.PhaseError)
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
@@ -128,7 +134,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil {
-			cr.Status.Phase = enterpriseApi.PhaseTerminating
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating)
 		} else {
 			result.Requeue = false
 		}
@@ -205,7 +211,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		eventPublisher.Warning(ctx, "update", fmt.Sprintf("update stateful set failed %s", err.Error()))
 		return result, err
 	}
-	cr.Status.Phase = phase
+	setPhaseAndConditions(phase)
 
 	// No need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
