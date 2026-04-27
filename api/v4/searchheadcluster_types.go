@@ -80,6 +80,15 @@ type SearchHeadClusterStatus struct {
 	// current phase of the search head cluster
 	Phase Phase `json:"phase"`
 
+	// Conditions represent the latest available observations of the resource's state.
+	// Conditions are: Ready, Progressing, Paused
+	// +optional
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+
 	// current phase of the deployer
 	DeployerPhase Phase `json:"deployerPhase"`
 

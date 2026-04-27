@@ -47,6 +47,15 @@ type LicenseManagerStatus struct {
 	// current phase of the license manager
 	Phase Phase `json:"phase"`
 
+	// Conditions represent the latest available observations of the resource's state.
+	// Conditions are: Ready, Progressing, Paused
+	// +optional
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+
 	// App Framework Context
 	AppContext AppDeploymentContext `json:"appContext"`
 

@@ -86,6 +86,15 @@ type QueueStatus struct {
 	// Phase of the queue
 	Phase Phase `json:"phase"`
 
+	// Conditions represent the latest available observations of the resource's state.
+	// Conditions are: Ready, Progressing, Paused
+	// +optional
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+
 	// Resource revision tracker
 	ResourceRevMap map[string]string `json:"resourceRevMap"`
 
