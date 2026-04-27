@@ -404,7 +404,7 @@ func TestGetMergedConfig(t *testing.T) {
 			},
 		}
 
-		cfg, err := getMergedConfig(baseClass, cluster)
+		cfg, err := GetMergedConfig(baseClass, cluster)
 
 		require.NoError(t, err)
 		assert.Equal(t, int32(5), *cfg.Spec.Instances)
@@ -419,7 +419,7 @@ func TestGetMergedConfig(t *testing.T) {
 			Spec: enterprisev4.PostgresClusterSpec{},
 		}
 
-		cfg, err := getMergedConfig(baseClass, cluster)
+		cfg, err := GetMergedConfig(baseClass, cluster)
 
 		require.NoError(t, err)
 		assert.Equal(t, int32(1), *cfg.Spec.Instances)
@@ -437,7 +437,7 @@ func TestGetMergedConfig(t *testing.T) {
 			Spec: enterprisev4.PostgresClusterSpec{},
 		}
 
-		_, err := getMergedConfig(emptyClass, cluster)
+		_, err := GetMergedConfig(emptyClass, cluster)
 
 		require.Error(t, err)
 	})
@@ -447,7 +447,7 @@ func TestGetMergedConfig(t *testing.T) {
 			Spec: enterprisev4.PostgresClusterSpec{},
 		}
 
-		cfg, err := getMergedConfig(baseClass, cluster)
+		cfg, err := GetMergedConfig(baseClass, cluster)
 
 		require.NoError(t, err)
 		require.NotNil(t, cfg.CNPG)
@@ -469,7 +469,7 @@ func TestGetMergedConfig(t *testing.T) {
 			Spec: enterprisev4.PostgresClusterSpec{},
 		}
 
-		cfg, err := getMergedConfig(classWithNoMaps, cluster)
+		cfg, err := GetMergedConfig(classWithNoMaps, cluster)
 
 		require.NoError(t, err)
 		assert.NotNil(t, cfg.Spec.PostgreSQLConfig)

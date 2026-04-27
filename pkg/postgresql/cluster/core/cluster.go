@@ -142,7 +142,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	}
 
 	// Merge PostgresClusterSpec on top of PostgresClusterClass defaults.
-	mergedConfig, err := getMergedConfig(clusterClass, postgresCluster)
+	mergedConfig, err := GetMergedConfig(clusterClass, postgresCluster)
 	if err != nil {
 		logger.Error(err, "Failed to merge PostgresCluster configuration")
 		rc.emitWarning(postgresCluster, EventConfigMergeFailed, fmt.Sprintf("Failed to merge configuration: %v", err))
@@ -1380,9 +1380,9 @@ func isIntermediateState(state pgcConstants.State) bool {
 	}
 }
 
-// getMergedConfig overlays PostgresCluster spec on top of the class defaults.
+// GetMergedConfig overlays PostgresCluster spec on top of the class defaults.
 // Class values are used only where the cluster spec is silent.
-func getMergedConfig(class *enterprisev4.PostgresClusterClass, cluster *enterprisev4.PostgresCluster) (*MergedConfig, error) {
+func GetMergedConfig(class *enterprisev4.PostgresClusterClass, cluster *enterprisev4.PostgresCluster) (*MergedConfig, error) {
 	result := cluster.Spec.DeepCopy()
 
 	// Config is optional on the class — apply defaults only when provided.
@@ -1411,7 +1411,7 @@ func getMergedConfig(class *enterprisev4.PostgresClusterClass, cluster *enterpri
 	}
 
 	if result.Instances == nil || result.PostgresVersion == nil || result.Storage == nil {
-		return nil, fmt.Errorf("invalid configuration for class %s: instances, postgresVersion and storage are required", class.Name)
+		return &MergedConfig{Spec: result, CNPG: class.Spec.CNPG}, fmt.Errorf("invalid configuration for class %s: instances, postgresVersion and storage are required", class.Name)
 	}
 	if result.PostgreSQLConfig == nil {
 		result.PostgreSQLConfig = make(map[string]string)

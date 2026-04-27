@@ -18,13 +18,15 @@ package webhook
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	hba "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
+	core "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 )
 
 // ValidatePostgresClusterCreate validates a PostgresCluster on CREATE.
@@ -33,7 +35,7 @@ func ValidatePostgresClusterCreate(obj *enterpriseApi.PostgresCluster, reader cl
 
 	if len(obj.Spec.PgHBA) > 0 {
 		pgHBAPath := field.NewPath("spec").Child("pgHBA")
-		for _, re := range hba.ValidateRules(obj.Spec.PgHBA) {
+		for _, re := range core.ValidateRules(obj.Spec.PgHBA) {
 			allErrs = append(allErrs, field.Invalid(
 				pgHBAPath.Index(re.Index),
 				obj.Spec.PgHBA[re.Index],
@@ -58,81 +60,62 @@ func validateAgainstClass(obj *enterpriseApi.PostgresCluster, reader client.Read
 
 	class := &enterpriseApi.PostgresClusterClass{}
 	if err := reader.Get(context.Background(), client.ObjectKey{Name: obj.Spec.Class}, class); err != nil {
-		allErrs = append(allErrs, field.Invalid(
-			field.NewPath("spec").Child("class"),
-			obj.Spec.Class,
-			"referenced PostgresClusterClass not found"))
+		classPath := field.NewPath("spec").Child("class")
+		if apierrors.IsNotFound(err) {
+			allErrs = append(allErrs, field.Invalid(classPath, obj.Spec.Class,
+				"referenced PostgresClusterClass not found"))
+		} else {
+			allErrs = append(allErrs, field.InternalError(classPath,
+				fmt.Errorf("failed to look up PostgresClusterClass %q: %w", obj.Spec.Class, err)))
+		}
 		return allErrs
 	}
 
-	classConfig := class.Spec.Config
-
-	mergedInstances := obj.Spec.Instances
-	mergedVersion := obj.Spec.PostgresVersion
-	mergedStorage := obj.Spec.Storage
-	if classConfig != nil {
-		if mergedInstances == nil {
-			mergedInstances = classConfig.Instances
+	merged, err := core.GetMergedConfig(class, obj)
+	if err != nil {
+		specPath := field.NewPath("spec")
+		if merged == nil || merged.Spec.Instances == nil {
+			allErrs = append(allErrs, field.Required(specPath.Child("instances"),
+				"must be set in PostgresCluster or PostgresClusterClass"))
 		}
-		if mergedVersion == nil {
-			mergedVersion = classConfig.PostgresVersion
+		if merged == nil || merged.Spec.PostgresVersion == nil {
+			allErrs = append(allErrs, field.Required(specPath.Child("postgresVersion"),
+				"must be set in PostgresCluster or PostgresClusterClass"))
 		}
-		if mergedStorage == nil {
-			mergedStorage = classConfig.Storage
+		if merged == nil || merged.Spec.Storage == nil {
+			allErrs = append(allErrs, field.Required(specPath.Child("storage"),
+				"must be set in PostgresCluster or PostgresClusterClass"))
 		}
-	}
-	specPath := field.NewPath("spec")
-	if mergedInstances == nil {
-		allErrs = append(allErrs, field.Required(specPath.Child("instances"),
-			"must be set in PostgresCluster or PostgresClusterClass"))
-	}
-	if mergedVersion == nil {
-		allErrs = append(allErrs, field.Required(specPath.Child("postgresVersion"),
-			"must be set in PostgresCluster or PostgresClusterClass"))
-	}
-	if mergedStorage == nil {
-		allErrs = append(allErrs, field.Required(specPath.Child("storage"),
-			"must be set in PostgresCluster or PostgresClusterClass"))
-	}
-
-	if classConfig == nil {
 		return allErrs
 	}
 
-	if obj.Spec.Storage != nil && classConfig.Storage != nil {
-		if obj.Spec.Storage.Cmp(*classConfig.Storage) < 0 {
-			allErrs = append(allErrs, field.Invalid(
-				field.NewPath("spec").Child("storage"),
-				obj.Spec.Storage.String(),
-				"storage cannot be lower than class default ("+classConfig.Storage.String()+")"))
-		}
-	}
-
-	if obj.Spec.PostgresVersion != nil && classConfig.PostgresVersion != nil {
-		clusterMajor, clusterMinor := parseVersion(*obj.Spec.PostgresVersion)
-		classMajor, classMinor := parseVersion(*classConfig.PostgresVersion)
-		if clusterMajor > 0 && classMajor > 0 {
-			versionTooLow := clusterMajor < classMajor ||
-				(clusterMajor == classMajor && classMinor >= 0 && clusterMinor >= 0 && clusterMinor < classMinor)
-			if versionTooLow {
-				allErrs = append(allErrs, field.Invalid(
-					field.NewPath("spec").Child("postgresVersion"),
-					*obj.Spec.PostgresVersion,
-					"postgresVersion cannot be lower than class default ("+*classConfig.PostgresVersion+")"))
+	if classConfig := class.Spec.Config; classConfig != nil {
+		if obj.Spec.PostgresVersion != nil && classConfig.PostgresVersion != nil {
+			clusterMajor, clusterMinor := parseVersion(*obj.Spec.PostgresVersion)
+			classMajor, classMinor := parseVersion(*classConfig.PostgresVersion)
+			if clusterMajor > 0 && classMajor > 0 {
+				versionTooLow := clusterMajor < classMajor ||
+					(clusterMajor == classMajor && classMinor >= 0 && clusterMinor >= 0 && clusterMinor < classMinor)
+				if versionTooLow {
+					allErrs = append(allErrs, field.Invalid(
+						field.NewPath("spec").Child("postgresVersion"),
+						*obj.Spec.PostgresVersion,
+						"postgresVersion cannot be lower than class default ("+*classConfig.PostgresVersion+")"))
+				}
 			}
 		}
-	}
 
-	if obj.Spec.ConnectionPoolerEnabled != nil && *obj.Spec.ConnectionPoolerEnabled {
-		classDisabled := classConfig.ConnectionPoolerEnabled == nil || !*classConfig.ConnectionPoolerEnabled
-		if classDisabled {
+		poolerEnabled := (obj.Spec.ConnectionPoolerEnabled != nil && *obj.Spec.ConnectionPoolerEnabled) ||
+			(obj.Spec.ConnectionPoolerEnabled == nil && classConfig.ConnectionPoolerEnabled != nil && *classConfig.ConnectionPoolerEnabled)
+		if poolerEnabled && (class.Spec.CNPG == nil || class.Spec.CNPG.ConnectionPooler == nil) {
 			allErrs = append(allErrs, field.Invalid(
 				field.NewPath("spec").Child("connectionPoolerEnabled"),
 				true,
-				"connectionPoolerEnabled cannot be enabled when disabled in PostgresClusterClass"))
+				"connection pooler requires cnpg.connectionPooler configuration in PostgresClusterClass"))
 		}
 	}
 
+	_ = merged
 	return allErrs
 }
 

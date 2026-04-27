@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -207,25 +208,16 @@ func newFakeReader(objects ...runtime.Object) *fake.ClientBuilder {
 	return b
 }
 
-func ptrBool(b bool) *bool       { return &b }
-func ptrString(s string) *string { return &s }
-func ptrInt32(i int32) *int32    { return &i }
-
-func ptrQuantity(s string) *resource.Quantity {
-	q := resource.MustParse(s)
-	return &q
-}
-
 func TestValidateAgainstClass(t *testing.T) {
 	classWithDefaults := &enterpriseApi.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "prod"},
 		Spec: enterpriseApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &enterpriseApi.PostgresClusterClassConfig{
-				Instances:               ptrInt32(3),
-				Storage:                 ptrQuantity("50Gi"),
-				PostgresVersion:         ptrString("17"),
-				ConnectionPoolerEnabled: ptrBool(false),
+				Instances:               ptr.To(int32(3)),
+				Storage:                 ptr.To(resource.MustParse("50Gi")),
+				PostgresVersion:         ptr.To("17"),
+				ConnectionPoolerEnabled: ptr.To(false),
 			},
 		},
 	}
@@ -235,9 +227,9 @@ func TestValidateAgainstClass(t *testing.T) {
 		Spec: enterpriseApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &enterpriseApi.PostgresClusterClassConfig{
-				Instances:       ptrInt32(3),
-				Storage:         ptrQuantity("50Gi"),
-				PostgresVersion: ptrString("17.2"),
+				Instances:       ptr.To(int32(3)),
+				Storage:         ptr.To(resource.MustParse("50Gi")),
+				PostgresVersion: ptr.To("17.2"),
 			},
 		},
 	}
@@ -247,10 +239,13 @@ func TestValidateAgainstClass(t *testing.T) {
 		Spec: enterpriseApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &enterpriseApi.PostgresClusterClassConfig{
-				Instances:               ptrInt32(3),
-				Storage:                 ptrQuantity("50Gi"),
-				PostgresVersion:         ptrString("17"),
-				ConnectionPoolerEnabled: ptrBool(true),
+				Instances:               ptr.To(int32(3)),
+				Storage:                 ptr.To(resource.MustParse("50Gi")),
+				PostgresVersion:         ptr.To("17"),
+				ConnectionPoolerEnabled: ptr.To(true),
+			},
+			CNPG: &enterpriseApi.CNPGConfig{
+				ConnectionPooler: &enterpriseApi.ConnectionPoolerConfig{},
 			},
 		},
 	}
@@ -280,46 +275,12 @@ func TestValidateAgainstClass(t *testing.T) {
 			wantErrCount: 0,
 		},
 		{
-			name:  "valid - storage equal to class",
-			class: classWithDefaults,
-			obj: &enterpriseApi.PostgresCluster{
-				Spec: enterpriseApi.PostgresClusterSpec{
-					Class:   "prod",
-					Storage: ptrQuantity("50Gi"),
-				},
-			},
-			wantErrCount: 0,
-		},
-		{
-			name:  "valid - storage higher than class",
-			class: classWithDefaults,
-			obj: &enterpriseApi.PostgresCluster{
-				Spec: enterpriseApi.PostgresClusterSpec{
-					Class:   "prod",
-					Storage: ptrQuantity("100Gi"),
-				},
-			},
-			wantErrCount: 0,
-		},
-		{
-			name:  "invalid - storage lower than class",
-			class: classWithDefaults,
-			obj: &enterpriseApi.PostgresCluster{
-				Spec: enterpriseApi.PostgresClusterSpec{
-					Class:   "prod",
-					Storage: ptrQuantity("10Gi"),
-				},
-			},
-			wantErrCount: 1,
-			wantErrField: "spec.storage",
-		},
-		{
 			name:  "valid - same postgres version",
 			class: classWithDefaults,
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
 					Class:           "prod",
-					PostgresVersion: ptrString("17"),
+					PostgresVersion: ptr.To("17"),
 				},
 			},
 			wantErrCount: 0,
@@ -330,7 +291,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
 					Class:           "prod",
-					PostgresVersion: ptrString("18"),
+					PostgresVersion: ptr.To("18"),
 				},
 			},
 			wantErrCount: 0,
@@ -341,7 +302,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
 					Class:           "prod",
-					PostgresVersion: ptrString("16"),
+					PostgresVersion: ptr.To("16"),
 				},
 			},
 			wantErrCount: 1,
@@ -353,7 +314,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
 					Class:           "prod",
-					PostgresVersion: ptrString("17.2"),
+					PostgresVersion: ptr.To("17.2"),
 				},
 			},
 			wantErrCount: 0,
@@ -364,7 +325,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
 					Class:           "prod",
-					PostgresVersion: ptrString("17.0"),
+					PostgresVersion: ptr.To("17.0"),
 				},
 			},
 			wantErrCount: 0,
@@ -375,7 +336,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
 					Class:           "prod-pinned",
-					PostgresVersion: ptrString("17.2"),
+					PostgresVersion: ptr.To("17.2"),
 				},
 			},
 			wantErrCount: 0,
@@ -386,7 +347,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
 					Class:           "prod-pinned",
-					PostgresVersion: ptrString("17.5"),
+					PostgresVersion: ptr.To("17.5"),
 				},
 			},
 			wantErrCount: 0,
@@ -397,7 +358,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
 					Class:           "prod-pinned",
-					PostgresVersion: ptrString("17.1"),
+					PostgresVersion: ptr.To("17.1"),
 				},
 			},
 			wantErrCount: 1,
@@ -409,7 +370,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
 					Class:           "prod-pinned",
-					PostgresVersion: ptrString("16.9"),
+					PostgresVersion: ptr.To("16.9"),
 				},
 			},
 			wantErrCount: 1,
@@ -421,52 +382,72 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
 					Class:           "prod-pinned",
-					PostgresVersion: ptrString("18"),
+					PostgresVersion: ptr.To("18"),
 				},
 			},
 			wantErrCount: 0,
 		},
 		{
-			name:  "invalid - connection pooler enabled when class disables",
+			name:  "invalid - pooler enabled but class has no cnpg.connectionPooler",
 			class: classWithDefaults,
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
 					Class:                   "prod",
-					ConnectionPoolerEnabled: ptrBool(true),
+					ConnectionPoolerEnabled: ptr.To(true),
 				},
 			},
 			wantErrCount: 1,
 			wantErrField: "spec.connectionPoolerEnabled",
 		},
 		{
-			name:  "valid - connection pooler disabled when class disables",
+			name:  "valid - pooler disabled, class has no cnpg config",
 			class: classWithDefaults,
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
 					Class:                   "prod",
-					ConnectionPoolerEnabled: ptrBool(false),
+					ConnectionPoolerEnabled: ptr.To(false),
 				},
 			},
 			wantErrCount: 0,
 		},
 		{
-			name:  "valid - connection pooler enabled when class enables",
+			name:  "valid - pooler enabled and class has cnpg.connectionPooler",
 			class: classWithPoolerEnabled,
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
 					Class:                   "pooler-class",
-					ConnectionPoolerEnabled: ptrBool(true),
+					ConnectionPoolerEnabled: ptr.To(true),
 				},
 			},
 			wantErrCount: 0,
 		},
 		{
-			name:  "valid - connection pooler unset (inherits class)",
+			name:  "valid - pooler unset (inherits class)",
 			class: classWithDefaults,
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{Class: "prod"},
 			},
 			wantErrCount: 0,
+		},
+		{
+			name: "invalid - class enables pooler but missing cnpg config",
+			class: &enterpriseApi.PostgresClusterClass{
+				ObjectMeta: metav1.ObjectMeta{Name: "pooler-no-cnpg"},
+				Spec: enterpriseApi.PostgresClusterClassSpec{
+					Provisioner: "postgresql.cnpg.io",
+					Config: &enterpriseApi.PostgresClusterClassConfig{
+						Instances:               ptr.To(int32(3)),
+						Storage:                 ptr.To(resource.MustParse("50Gi")),
+						PostgresVersion:         ptr.To("17"),
+						ConnectionPoolerEnabled: ptr.To(true),
+					},
+				},
+			},
+			obj: &enterpriseApi.PostgresCluster{
+				Spec: enterpriseApi.PostgresClusterSpec{Class: "pooler-no-cnpg"},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.connectionPoolerEnabled",
 		},
 		{
 			name: "invalid - class has no config, cluster missing required fields",
@@ -489,8 +470,8 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: enterpriseApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &enterpriseApi.PostgresClusterClassConfig{
-						Instances:       ptrInt32(3),
-						PostgresVersion: ptrString("17"),
+						Instances:       ptr.To(int32(3)),
+						PostgresVersion: ptr.To("17"),
 					},
 				},
 			},
@@ -512,9 +493,9 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
 					Class:           "minimal",
-					Instances:       ptrInt32(1),
-					PostgresVersion: ptrString("17"),
-					Storage:         ptrQuantity("10Gi"),
+					Instances:       ptr.To(int32(1)),
+					PostgresVersion: ptr.To("17"),
+					Storage:         ptr.To(resource.MustParse("10Gi")),
 				},
 			},
 			wantErrCount: 0,

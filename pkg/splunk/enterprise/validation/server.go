@@ -58,11 +58,8 @@ type WebhookServerOptions struct {
 	// WriteTimeout is the maximum duration before timing out writes of the response (default: 10s)
 	WriteTimeout time.Duration
 
-	// Client is the Kubernetes client for resource lookups (optional, cached)
+	// Client is the Kubernetes client for resource lookups (optional)
 	Client client.Client
-
-	// Reader is a live API reader that bypasses the cache (optional).
-	Reader client.Reader
 }
 
 // WebhookServer is the HTTP server for validation webhooks
@@ -177,7 +174,7 @@ func (s *WebhookServer) HandleValidate(w http.ResponseWriter, r *http.Request) {
 			"user", admissionReview.Request.UserInfo.Username)
 	}
 
-	warnings, validationErr := ValidateWithClient(&admissionReview, s.options.Validators, s.options.Client, s.options.Reader)
+	warnings, validationErr := ValidateWithClient(&admissionReview, s.options.Validators, s.options.Client)
 
 	response := &admissionv1.AdmissionResponse{
 		UID: admissionReview.Request.UID,

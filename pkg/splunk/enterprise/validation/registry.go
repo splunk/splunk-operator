@@ -203,10 +203,10 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 			return pgwebhook.ValidatePostgresClusterUpdate(obj, oldObj, nil)
 		},
 		ValidateCreateWithContextFunc: func(obj *enterpriseApi.PostgresCluster, vc *ValidationContext) field.ErrorList {
-			return pgwebhook.ValidatePostgresClusterCreate(obj, vc.Reader)
+			return pgwebhook.ValidatePostgresClusterCreate(obj, vc.Client)
 		},
 		ValidateUpdateWithContextFunc: func(obj *enterpriseApi.PostgresCluster, oldObj *enterpriseApi.PostgresCluster, vc *ValidationContext) field.ErrorList {
-			return pgwebhook.ValidatePostgresClusterUpdate(obj, oldObj, vc.Reader)
+			return pgwebhook.ValidatePostgresClusterUpdate(obj, oldObj, vc.Client)
 		},
 		WarningsOnCreateFunc: pgwebhook.GetPostgresClusterWarningsOnCreate,
 		WarningsOnUpdateFunc: pgwebhook.GetPostgresClusterWarningsOnUpdate,

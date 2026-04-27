@@ -43,14 +43,13 @@ func init() {
 // Validate performs validation on an AdmissionReview request
 // Returns warnings (even on success) and an error if validation fails
 func Validate(ar *admissionv1.AdmissionReview, validators map[schema.GroupVersionResource]Validator) ([]string, error) {
-	return ValidateWithClient(ar, validators, nil, nil)
+	return ValidateWithClient(ar, validators, nil)
 }
 
 // ValidateWithClient performs validation on an AdmissionReview request with a Kubernetes client
-// The client enables resource existence checks (e.g., verifying secrets exist)
-// The reader provides live API reads bypassing the cache for cross-resource lookups
+// The client enables resource lookups (e.g., verifying secrets exist, cross-resource validation)
 // Returns warnings (even on success) and an error if validation fails
-func ValidateWithClient(ar *admissionv1.AdmissionReview, validators map[schema.GroupVersionResource]Validator, k8sClient client.Client, reader client.Reader) ([]string, error) {
+func ValidateWithClient(ar *admissionv1.AdmissionReview, validators map[schema.GroupVersionResource]Validator, k8sClient client.Client) ([]string, error) {
 	if ar == nil || ar.Request == nil {
 		return nil, fmt.Errorf("admission review or request is nil")
 	}
@@ -85,10 +84,10 @@ func ValidateWithClient(ar *admissionv1.AdmissionReview, validators map[schema.G
 		}
 	}
 
-	// Create validation context if client or reader is available
+	// Create validation context if client is available
 	var vc *ValidationContext
-	if k8sClient != nil || reader != nil {
-		vc = NewValidationContext(k8sClient, reader, req.Namespace)
+	if k8sClient != nil {
+		vc = NewValidationContext(k8sClient, req.Namespace)
 	}
 
 	var fieldErrs field.ErrorList
