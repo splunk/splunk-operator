@@ -83,7 +83,7 @@ function createCluster() {
   # Deploy eksctl cluster if not deploy
   rc=$(which eksctl)
   if [ -z "$rc" ]; then
-    echo "eksctl is not installed or in the PATH. Please install eksctl from https://github.com/weaveworks/eksctl."
+    echo "eksctl is not installed or in the PATH. Please install eksctl from https://github.com/eksctl-io/eksctl."
     return 1
   fi
 
