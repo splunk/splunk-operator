@@ -180,14 +180,8 @@ docker-push: ## Push docker image with the manager.
 
 # Docker-buildx is used to build the image for multiple OS/platforms
 # IMG is a mandatory argument to specify the image name
-# Defaults:
-#   Build Platform: linux/amd64,linux/arm64
-#   Build Base OS: registry.access.redhat.com/ubi8/ubi-minimal
-#   Build Base OS Version: 8.10-1776645784
 # Pass only what is required, the rest will use the Dockerfile defaults
 PLATFORMS ?= linux/amd64,linux/arm64
-BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal
-BASE_IMAGE_VERSION ?= 8.10-1776645784
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
