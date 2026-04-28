@@ -415,21 +415,23 @@ copy_if_exists() {
 }
 
 ensure_junit_artifact() {
-  src="$1"
-  dest="$2"
+  dest="$1"
+  shift
 
-  if copy_if_exists "${src}" "${dest}" >/dev/null 2>&1; then
-    return 0
-  fi
+  for src in "$@"; do
+    if [ -n "${src}" ] && copy_if_exists "${src}" "${dest}" >/dev/null 2>&1; then
+      return 0
+    fi
+  done
 
   mkdir -p "$(dirname "${dest}")"
   suite_name="$(basename "${dest}" .xml)"
   cat > "${dest}" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
-  <testsuite name="${suite_name}" tests="1" failures="0" errors="0" skipped="1">
+  <testsuite name="${suite_name}" tests="1" failures="1" errors="0" skipped="0">
     <testcase classname="ci" name="junit-report-missing">
-      <skipped message="JUnit report was not produced; inspect job logs and ci-output artifacts."/>
+      <failure message="JUnit report was not produced; inspect job logs and ci-output artifacts.">Validation exited before the test harness wrote a JUnit report.</failure>
     </testcase>
   </testsuite>
 </testsuites>
