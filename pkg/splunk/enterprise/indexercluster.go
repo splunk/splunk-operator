@@ -62,12 +62,12 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	var err error
 	// Initialize phase and conditions
 	isPaused := cr.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true"
-	setPhaseAndConditions := func(phase enterpriseApi.Phase) {
-		result := splcommon.SetPhaseAndConditions(phase, isPaused, cr.Status.Message)
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
+		result := splcommon.SetPhaseAndConditions(phase, isPaused, message)
 		cr.Status.Phase = result.Phase
 		cr.Status.Conditions = result.Conditions
 	}
-	setPhaseAndConditions(enterpriseApi.PhaseError)
+	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
@@ -141,7 +141,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating)
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 			cr.Status.ClusterManagerPhase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
@@ -247,7 +247,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			return result, err
 		}
 	}
-	setPhaseAndConditions(phase)
+	setPhaseAndConditions(phase, "")
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
@@ -367,8 +367,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// Initialize phase and conditions
 	isPaused := cr.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true"
-	setPhaseAndConditions := func(phase enterpriseApi.Phase) {
-		result := splcommon.SetPhaseAndConditions(phase, isPaused, cr.Status.Message)
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
+		result := splcommon.SetPhaseAndConditions(phase, isPaused, message)
 		cr.Status.Phase = result.Phase
 		cr.Status.Conditions = result.Conditions
 	}
@@ -380,7 +380,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// updates status after function completes
-	setPhaseAndConditions(enterpriseApi.PhaseError)
+	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
 		cr.Status.CredentialSecretVersion = "0"
@@ -443,7 +443,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating)
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 			cr.Status.ClusterMasterPhase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
@@ -550,7 +550,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			return result, err
 		}
 	}
-	setPhaseAndConditions(phase)
+	setPhaseAndConditions(phase, "")
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {

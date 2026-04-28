@@ -56,12 +56,12 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	var err error
 	// Initialize phase and conditions
 	isPaused := cr.GetAnnotations()[enterpriseApi.StandalonePausedAnnotation] == "true"
-	setPhaseAndConditions := func(phase enterpriseApi.Phase) {
-		result := splcommon.SetPhaseAndConditions(phase, isPaused, cr.Status.Message)
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
+		result := splcommon.SetPhaseAndConditions(phase, isPaused, message)
 		cr.Status.Phase = result.Phase
 		cr.Status.Conditions = result.Conditions
 	}
-	setPhaseAndConditions(enterpriseApi.PhaseError)
+	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
@@ -151,7 +151,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating)
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 		} else {
 			result.Requeue = false
 		}
@@ -232,7 +232,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 
 		return result, err
 	}
-	setPhaseAndConditions(phase)
+	setPhaseAndConditions(phase, "")
 
 	// Emit scale events when phase is ready and ready replicas changed to match desired
 	if phase == enterpriseApi.PhaseReady {
