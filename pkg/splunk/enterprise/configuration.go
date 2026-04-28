@@ -243,8 +243,9 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 	// append labels and annotations from parent
 	splcommon.AppendParentMeta(service.ObjectMeta.GetObjectMeta(), cr.GetObjectMeta())
 
-	if instanceType == SplunkDeployer || (instanceType == SplunkSearchHead && isHeadless) {
-		// required for SHC bootstrap process; use services with heads when readiness is desired
+	if instanceType == SplunkDeployer || isHeadless {
+		// required for SHC bootstrap process and for App Runtime Syncthing sync
+		// (app pods need to reach the syncthing-server sidecar before splunkd is fully ready)
 		service.Spec.PublishNotReadyAddresses = true
 	}
 
@@ -767,7 +768,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 				TopologySpreadConstraints: spec.TopologySpreadConstraints,
 				SchedulerName:             spec.SchedulerName,
 				ImagePullSecrets:          spec.ImagePullSecrets,
-				InitContainers:            getAppRuntimeSidecar(instanceType, cr.GetName(), spec.Image),
+				InitContainers:            getAppRuntimeSidecar(instanceType, cr.GetName(), spec.Image, cr.GetNamespace()),
 				Containers: []corev1.Container{
 					{
 						Image:           spec.Image,
@@ -824,13 +825,18 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 // getAppRuntimeSidecar returns the AppRuntime sidecar init container for Standalone, Indexer, and SearchHead.
 // Returns nil for other instance types.
 // In pod-per-app mode the sidecar runs the supervisor (no containerd), and creates app pods via the K8s API.
-func getAppRuntimeSidecar(instanceType InstanceType, instanceName string, splunkImage string) []corev1.Container {
+func getAppRuntimeSidecar(instanceType InstanceType, instanceName string, splunkImage string, namespace string) []corev1.Container {
 	if instanceType != SplunkStandalone && instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
 		return nil
 	}
 	restartAlways := corev1.ContainerRestartPolicyAlways
 	runAsUser := int64(0)
 	runAsNonRoot := false
+
+	stsName := GetSplunkStatefulsetName(instanceType, instanceName)
+	headlessSvc := GetSplunkServiceName(instanceType, instanceName, true)
+	syncthingServerAddr := fmt.Sprintf("%s-0.%s.%s.svc.cluster.local", stsName, headlessSvc, namespace)
+
 	return []corev1.Container{
 		{
 			Image:           getAppRuntimeImage(),
@@ -850,6 +856,8 @@ func getAppRuntimeSidecar(instanceType InstanceType, instanceName string, splunk
 				{Name: "APPRUNTIME_K8S_INSTANCE_TYPE", Value: instanceType.ToKind()},
 				{Name: "APPRUNTIME_K8S_SPLUNK_IMAGE", Value: splunkImage},
 				{Name: "APPRUNTIME_K8S_WORKER_IMAGE", Value: getAppRuntimeImage()},
+				{Name: "APPRUNTIME_K8S_SYNCTHING_ENABLED", Value: "true"},
+				{Name: "APPRUNTIME_K8S_SYNCTHING_SERVER_ADDR", Value: syncthingServerAddr},
 			},
 			SecurityContext: &corev1.SecurityContext{
 				RunAsUser:    &runAsUser,
@@ -873,7 +881,7 @@ func getAppRuntimeImage() string {
 	if image, ok := os.LookupEnv("RELATED_IMAGE_APP_RUNTIME"); ok {
 		return image
 	}
-	return "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/supervisor:v3.1.0-sidecar"
+	return "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/supervisor:v3.1.0-pod-per-app-syncthing"
 }
 
 // getSmartstoreConfigMap returns the smartstore configMap, if it exists and applicable for that instanceType
@@ -1227,6 +1235,43 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},
 		}
+	}
+
+	// Add Syncthing server sidecar for pod-per-app cross-node filesystem sharing
+	if instanceType == SplunkStandalone || instanceType == SplunkIndexer || instanceType == SplunkSearchHead {
+		syncthingServerImage := os.Getenv("RELATED_IMAGE_SYNCTHING_SERVER")
+		if syncthingServerImage == "" {
+			syncthingServerImage = "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/syncthing-server:latest"
+		}
+		podTemplateSpec.Spec.Containers = append(podTemplateSpec.Spec.Containers, corev1.Container{
+			Name:            "syncthing-server",
+			Image:           syncthingServerImage,
+			ImagePullPolicy: corev1.PullAlways,
+			Ports: []corev1.ContainerPort{
+				{Name: "st-sync", ContainerPort: 22000, Protocol: corev1.ProtocolTCP},
+				{Name: "st-api", ContainerPort: 8384, Protocol: corev1.ProtocolTCP},
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.EtcVolumeStorage),
+					MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, splcommon.EtcVolumeStorage),
+				},
+				{
+					Name:      fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.VarVolumeStorage),
+					MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, splcommon.VarVolumeStorage),
+				},
+			},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("100m"),
+					corev1.ResourceMemory: resource.MustParse("256Mi"),
+				},
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("500m"),
+					corev1.ResourceMemory: resource.MustParse("512Mi"),
+				},
+			},
+		})
 	}
 }
 
