@@ -429,9 +429,9 @@ ensure_junit_artifact() {
   cat > "${dest}" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
-  <testsuite name="${suite_name}" tests="1" failures="1" errors="0" skipped="0">
+  <testsuite name="${suite_name}" tests="1" failures="0" errors="1" skipped="0">
     <testcase classname="ci" name="junit-report-missing">
-      <failure message="JUnit report was not produced; inspect job logs and ci-output artifacts.">Validation exited before the test harness wrote a JUnit report.</failure>
+      <error message="JUnit report was not produced; inspect job logs and ci-output artifacts.">Validation exited before the test harness wrote a JUnit report.</error>
     </testcase>
   </testsuite>
 </testsuites>
