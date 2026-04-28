@@ -167,17 +167,13 @@ const (
 
 	// Ready=False reasons
 	ReasonReplicasNotReady   ConditionReason = "ReplicasNotReady"
-	ReasonDependencyNotReady ConditionReason = "DependencyNotReady"
 	ReasonReconcileFailed    ConditionReason = "ReconcileFailed"
+	ReasonDependencyNotReady ConditionReason = "DependencyNotReady"
 	ReasonConfigurationError ConditionReason = "ConfigurationError"
-	ReasonPending            ConditionReason = "Pending"
-	ReasonTerminating        ConditionReason = "Terminating"
 
 	// Progressing=True reasons
-	ReasonScalingUp   ConditionReason = "ScalingUp"
-	ReasonScalingDown ConditionReason = "ScalingDown"
-	ReasonUpgrading   ConditionReason = "Upgrading"
-	ReasonUpdating    ConditionReason = "Updating"
+	ReasonScaling   ConditionReason = "Scaling"
+	ReasonUpgrading ConditionReason = "Upgrading"
 
 	// Progressing=False reasons
 	ReasonStable ConditionReason = "Stable"
