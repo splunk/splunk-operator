@@ -86,6 +86,11 @@ type QueueStatus struct {
 	// Phase of the queue
 	Phase Phase `json:"phase"`
 
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// It corresponds to the metadata.generation which is updated on spec changes.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// Conditions represent the latest available observations of the resource's state.
 	// Conditions are: Ready, Progressing, Paused
 	// +optional

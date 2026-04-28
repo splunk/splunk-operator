@@ -9708,6 +9708,12 @@ spec:
               namespace_scoped_secret_resource_version:
                 description: Indicates resource version of namespace scoped secret
                 type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the most recent generation observed by the controller.
+                  It corresponds to the metadata.generation which is updated on spec changes.
+                format: int64
+                type: integer
               phase:
                 description: current phase of the search head cluster
                 enum:
