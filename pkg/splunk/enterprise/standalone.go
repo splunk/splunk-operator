@@ -57,9 +57,10 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// Initialize phase and conditions
 	isPaused := cr.GetAnnotations()[enterpriseApi.StandalonePausedAnnotation] == "true"
 	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
-		result := splcommon.SetPhaseAndConditions(phase, isPaused, message)
+		result := splcommon.SetPhaseAndConditionsWithGeneration(phase, isPaused, message, cr.GetGeneration())
 		cr.Status.Phase = result.Phase
 		cr.Status.Conditions = result.Conditions
+		cr.Status.ObservedGeneration = cr.GetGeneration()
 	}
 	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 

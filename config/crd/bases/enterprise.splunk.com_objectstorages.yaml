@@ -152,6 +152,12 @@ spec:
               message:
                 description: Auxiliary message describing CR status
                 type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the most recent generation observed by the controller.
+                  It corresponds to the metadata.generation which is updated on spec changes.
+                format: int64
+                type: integer
               phase:
                 description: Phase of the object storage
                 enum:

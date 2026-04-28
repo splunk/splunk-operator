@@ -56,9 +56,10 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// Initialize phase and conditions
 	isPaused := cr.GetAnnotations()[enterpriseApi.SearchHeadClusterPausedAnnotation] == "true"
 	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
-		result := splcommon.SetPhaseAndConditions(phase, isPaused, message)
+		result := splcommon.SetPhaseAndConditionsWithGeneration(phase, isPaused, message, cr.GetGeneration())
 		cr.Status.Phase = result.Phase
 		cr.Status.Conditions = result.Conditions
+		cr.Status.ObservedGeneration = cr.GetGeneration()
 	}
 	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 	cr.Status.DeployerPhase = enterpriseApi.PhaseError

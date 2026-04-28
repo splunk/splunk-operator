@@ -125,7 +125,7 @@ patches:
       - name: OPERATOR_NAME
         value: splunk-operator
       - name: SPLUNK_GENERAL_TERMS
-        value: SPLUNK_GENERAL_TERMS_VALUE
+        value: WATCH_NAMESPACE_VALUE
       - name: POD_NAME
         valueFrom:
           fieldRef:
