@@ -46,12 +46,12 @@ func ApplyQueue(ctx context.Context, client client.Client, cr *enterpriseApi.Que
 
 	// Initialize phase and conditions
 	isPaused := cr.GetAnnotations()[enterpriseApi.QueuePausedAnnotation] == "true"
-	setPhaseAndConditions := func(phase enterpriseApi.Phase) {
-		result := splcommon.SetPhaseAndConditions(phase, isPaused, cr.Status.Message)
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
+		result := splcommon.SetPhaseAndConditions(phase, isPaused, message)
 		cr.Status.Phase = result.Phase
 		cr.Status.Conditions = result.Conditions
 	}
-	setPhaseAndConditions(enterpriseApi.PhaseError)
+	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
@@ -60,14 +60,14 @@ func ApplyQueue(ctx context.Context, client client.Client, cr *enterpriseApi.Que
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating)
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 		} else {
 			result.Requeue = false
 		}
 		return result, err
 	}
 
-	setPhaseAndConditions(enterpriseApi.PhaseReady)
+	setPhaseAndConditions(enterpriseApi.PhaseReady, "")
 
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.

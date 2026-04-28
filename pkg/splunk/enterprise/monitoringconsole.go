@@ -60,12 +60,12 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	var err error
 	// Initialize phase and conditions
 	isPaused := cr.GetAnnotations()[enterpriseApi.MonitoringConsolePausedAnnotation] == "true"
-	setPhaseAndConditions := func(phase enterpriseApi.Phase) {
-		result := splcommon.SetPhaseAndConditions(phase, isPaused, cr.Status.Message)
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
+		result := splcommon.SetPhaseAndConditions(phase, isPaused, message)
 		cr.Status.Phase = result.Phase
 		cr.Status.Conditions = result.Conditions
 	}
-	setPhaseAndConditions(enterpriseApi.PhaseError)
+	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
@@ -120,7 +120,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating)
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 		} else {
 			result.Requeue = false
 		}
@@ -163,7 +163,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		eventPublisher.Warning(ctx, "getMonitoringConsoleStatefulSet", fmt.Sprintf("update to default statefuleset pod manager failed %s", err.Error()))
 		return result, err
 	}
-	setPhaseAndConditions(phase)
+	setPhaseAndConditions(phase, "")
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {

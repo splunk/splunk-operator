@@ -55,12 +55,12 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	var err error
 	// Initialize phase and conditions
 	isPaused := cr.GetAnnotations()[enterpriseApi.SearchHeadClusterPausedAnnotation] == "true"
-	setPhaseAndConditions := func(phase enterpriseApi.Phase) {
-		result := splcommon.SetPhaseAndConditions(phase, isPaused, cr.Status.Message)
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
+		result := splcommon.SetPhaseAndConditions(phase, isPaused, message)
 		cr.Status.Phase = result.Phase
 		cr.Status.Conditions = result.Conditions
 	}
-	setPhaseAndConditions(enterpriseApi.PhaseError)
+	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 	cr.Status.DeployerPhase = enterpriseApi.PhaseError
 
 	// Update the CR Status
@@ -140,7 +140,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating)
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 			cr.Status.DeployerPhase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
@@ -210,7 +210,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	if err != nil {
 		return result, err
 	}
-	setPhaseAndConditions(phase)
+	setPhaseAndConditions(phase, "")
 
 	var finalResult *reconcile.Result
 	if cr.Status.DeployerPhase == enterpriseApi.PhaseReady {
