@@ -43,7 +43,7 @@ capture_test_logs() {
 capture_junit_artifact() {
   src="$1"
   dest="$2"
-  copy_if_exists "${src}" "${dest}" >/dev/null 2>&1 || true
+  ensure_junit_artifact "${dest}" "${src}"
 }
 
 materialize_json_secret() {

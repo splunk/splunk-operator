@@ -1,11 +1,19 @@
+# Setup defaults for build arguments
+ARG BUILDER_IMAGE=golang:1.26.2
+ARG GOTOOLCHAIN=auto
+ARG BUILDPLATFORM
+
 # Build the manager binary
-FROM golang:1.26.2 AS builder
+FROM --platform=${BUILDPLATFORM} ${BUILDER_IMAGE} AS builder
 
 WORKDIR /workspace
+ENV GOTOOLCHAIN=${GOTOOLCHAIN}
+
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
-# Cache dependencies before building to speed up future builds
+# Buildx arm64 has hit Go toolchain crashes under QEMU emulation. Keep the
+# builder on the native build platform and cross-compile the target binary.
 RUN go mod download
 
 # Copy the go source

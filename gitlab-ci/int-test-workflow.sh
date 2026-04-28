@@ -20,14 +20,8 @@ log_step() {
 }
 
 copy_integration_junit() {
-  if copy_if_exists "${CI_PROJECT_DIR}/inttest-junit.xml" "${integration_junit}" >/dev/null 2>&1; then
-    return 0
-  fi
-
   junit_report="$(find "${CI_PROJECT_DIR}" -maxdepth 1 -name 'report-junit-*.xml' -type f | sort | tail -n 1)"
-  if [ -n "${junit_report}" ]; then
-    copy_if_exists "${junit_report}" "${integration_junit}" >/dev/null 2>&1 || true
-  fi
+  ensure_junit_artifact "${integration_junit}" "${CI_PROJECT_DIR}/inttest-junit.xml" "${junit_report}"
 }
 
 : > "${context_file}"
