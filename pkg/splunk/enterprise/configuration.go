@@ -187,7 +187,6 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 
 // getSplunkService returns a Kubernetes Service object for Splunk instances configured for a Splunk Enterprise resource.
 func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, isHeadless bool) *corev1.Service {
-
 	// use template if not headless
 	var service *corev1.Service
 	if isHeadless {
@@ -255,7 +254,6 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 
 // setVolumeDefaults set properties in Volumes to default values
 func setVolumeDefaults(spec *enterpriseApi.CommonSplunkSpec) {
-
 	// work-around openapi validation error by ensuring it is not nil
 	if spec.Volumes == nil {
 		spec.Volumes = []corev1.Volume{}
@@ -577,7 +575,6 @@ func addEphemeralVolumes(statefulSet *appsv1.StatefulSet, volumeType string) err
 
 // addStorageVolumes adds storage volumes to the StatefulSet
 func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splcommon.ControllerClient, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string) error {
-
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("addStorageVolumes").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -616,7 +613,6 @@ func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splc
 }
 
 func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
-
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getProbeConfigMap").WithValues("namespace", cr.GetNamespace())
 
@@ -689,7 +685,6 @@ func addProbeConfigMapVolume(configMap *corev1.ConfigMap, statefulSet *appsv1.St
 
 // getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
 func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
-
 	// prepare misc values
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
 	annotations := splcommon.GetIstioAnnotations(ports)
@@ -812,14 +807,12 @@ func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClie
 
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
 func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
-
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	// Add custom ports to splunk containers
 	if spec.ServiceTemplate.Spec.Ports != nil {
 		for idx := range podTemplateSpec.Spec.Containers {
 			for _, p := range spec.ServiceTemplate.Spec.Ports {
-
 				podTemplateSpec.Spec.Containers[idx].Ports = append(podTemplateSpec.Spec.Containers[idx].Ports, corev1.ContainerPort{
 					Name:          p.Name,
 					ContainerPort: int32(p.TargetPort.IntValue()),
@@ -846,7 +839,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	// image into an emptyDir volume, then mounts it into all Splunk containers.
 	// Needs for faster shim build and test cycles (instead of rebuilding whole splunk+shim image)
 	epShimVolumeName := "ep-shim-bin"
-	epShimImage := "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/supervisor:v3.1.0-appruntime"
+	epShimImage := "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/podman:latest"
 
 	podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, corev1.Volume{
 		Name: epShimVolumeName,
@@ -1045,7 +1038,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterManagerRef.Namespace, clusterManagerURL)
 		}
 		if spec.LicenseManagerRef.Name == "" || spec.LicenseMasterRef.Name == "" {
-			//Check if CM is connected to a LicenseManager
+			// Check if CM is connected to a LicenseManager
 			namespacedName := types.NamespacedName{
 				Namespace: cr.GetNamespace(),
 				Name:      spec.ClusterManagerRef.Name,
@@ -1082,7 +1075,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterManagerURL)
 		}
 		if spec.LicenseManagerRef.Name == "" || spec.LicenseMasterRef.Name == "" {
-			//Check if CM is connected to a LicenseManager
+			// Check if CM is connected to a LicenseManager
 			namespacedName := types.NamespacedName{
 				Namespace: cr.GetNamespace(),
 				Name:      spec.ClusterMasterRef.Name,
@@ -1136,7 +1129,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	// append any extra variables adding environment variable from extraEnv in the first
 	// so when duplicates are removed the last ones are removed from the list
 	env = append(extraEnv, env...)
-	//env = append(env, extraEnv...)
+	// env = append(env, extraEnv...)
 
 	// check if there are any duplicate entries
 	// we use orderedmap so the test case can pass as json marshal
@@ -1219,7 +1212,7 @@ func getProbeWithConfigUpdates(defaultProbe *corev1.Probe, configuredProbe *ente
 		// (Referring the configured Probe memory is kind of OK as we are not writing to the DB, however
 		// updating any values(if the Application needs to do) can cause confusion when referring the CR
 		// while handling a reconcile event)
-		//var derivedProbe = *configuredProbe
+		// var derivedProbe = *configuredProbe
 		derivedProbe := corev1.Probe{
 			InitialDelaySeconds: configuredProbe.InitialDelaySeconds,
 			TimeoutSeconds:      configuredProbe.TimeoutSeconds,
@@ -1248,7 +1241,7 @@ func getProbeWithConfigUpdates(defaultProbe *corev1.Probe, configuredProbe *ente
 		derivedProbe.Exec = defaultProbe.Exec
 		return &derivedProbe
 	} else if configuredDelay != 0 {
-		var derivedProbe = *defaultProbe
+		derivedProbe := *defaultProbe
 		derivedProbe.InitialDelaySeconds = configuredDelay
 		return &derivedProbe
 	}
@@ -1344,7 +1337,6 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 
 // ApplyManualAppUpdateConfigMap applies the manual app update config map
 func ApplyManualAppUpdateConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, crKindMap map[string]string) (*corev1.ConfigMap, error) {
-
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyManualAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -1511,7 +1503,7 @@ refCount: %d`, status, numOfObjects+1)
 func initAppFrameWorkContext(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) error {
 	if appStatusContext.AppsSrcDeployStatus == nil {
 		appStatusContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
-		//Note:- Set version only at the time of allocating AppsSrcDeployStatus. This is important, so that we don't
+		// Note:- Set version only at the time of allocating AppsSrcDeployStatus. This is important, so that we don't
 		// interfere with the upgrade scenarios. So, if the AppsSrcDeployStatus is already allocated
 		// and the version is not `CurrentAfwVersion`, means it is migration scenario, and the migration logic should
 		// handle upgrading to the latest version.
@@ -1577,7 +1569,6 @@ func isAppSourceScopeValid(scope string) bool {
 
 // validateSplunkAppSources validates the App source config in App Framework spec
 func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, localOrPremScope bool, crKind string) error {
-
 	duplicateAppSourceStorageChecker := make(map[string]map[string]bool)
 	duplicateAppSourceStorageChecker[enterpriseApi.ScopeLocal] = make(map[string]bool)
 	duplicateAppSourceStorageChecker[enterpriseApi.ScopePremiumApps] = make(map[string]bool)
@@ -1671,7 +1662,6 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 
 // validatePremiumAppsInputs validates premium app source spec
 func validatePremiumAppsInputs(appSrc enterpriseApi.AppSourceSpec, crKind string) error {
-
 	if appSrc.AppSourceDefaultSpec.PremiumAppsProps.Type != enterpriseApi.PremiumAppsTypeEs {
 		return fmt.Errorf("invalid PremiumAppsProps. Valid value is %s", enterpriseApi.PremiumAppsTypeEs)
 	}
@@ -1758,7 +1748,6 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 
 // validateRemoteVolumeSpec validates the Remote storage volume spec
 func validateRemoteVolumeSpec(ctx context.Context, volList []enterpriseApi.VolumeSpec, isAppFramework bool) error {
-
 	duplicateChecker := make(map[string]bool)
 
 	reqLogger := log.FromContext(ctx)
@@ -1825,7 +1814,6 @@ func isValidProviderForStorageType(storageType string, provider string) bool {
 
 // validateSplunkIndexesSpec validates the smartstore index spec
 func validateSplunkIndexesSpec(smartstore *enterpriseApi.SmartStoreSpec) error {
-
 	duplicateChecker := make(map[string]bool)
 
 	// Make sure that all the indexes are provided with the mandatory config values.
@@ -1927,7 +1915,6 @@ remote.s3.auth_region = %s
 
 // GetSmartstoreIndexesConfig returns the list of indexes configuration in INI format
 func GetSmartstoreIndexesConfig(indexes []enterpriseApi.IndexSpec) string {
-
 	var indexesConf string
 
 	defaultRemotePath := "$_index_name"
@@ -2032,7 +2019,6 @@ max_concurrent_uploads = %d`, serverConfIni, cacheManagerConf.MaxConcurrentUploa
 
 // GetSmartstoreIndexesDefaults fills the indexes.conf default stanza in INI format
 func GetSmartstoreIndexesDefaults(defaults enterpriseApi.IndexConfDefaultsSpec) string {
-
 	remotePath := "$_index_name"
 
 	indexDefaults := fmt.Sprintf(`[default]
@@ -2045,7 +2031,7 @@ thawedPath = $SPLUNK_DB/%s/thaweddb`,
 
 	// Do not change any of the following Sprintf formats(Intentionally indented)
 	if defaults.VolName != "" {
-		//if defaults.VolName != "" && defaults.RemotePath != "" {
+		// if defaults.VolName != "" && defaults.RemotePath != "" {
 		indexDefaults = fmt.Sprintf(`%s
 remotePath = volume:%s/%s`, indexDefaults, defaults.VolName, remotePath)
 	}

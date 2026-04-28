@@ -14,6 +14,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -293,7 +294,16 @@ func (r *AppRuntimeReconciler) createHeadlessService(ctx context.Context, ar *en
 func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterpriseApi.AppRuntime, nn types.NamespacedName, splunkStsName string, ordinal int32) error {
 	etcPvcName := fmt.Sprintf("pvc-etc-%s-%d", splunkStsName, ordinal)
 	varPvcName := fmt.Sprintf("pvc-var-%s-%d", splunkStsName, ordinal)
-	privileged := true
+
+	hostUsers := false
+	fsGroup := int64(1000)
+	fsGroupChangeOnRootMismatch := corev1.FSGroupChangeOnRootMismatch
+	privileged := false
+	allowPrivilegeEscalation := true
+	runAsNonRoot := true
+	runAsUser := int64(1000)
+	runAsGroup := int64(1000)
+
 	pod := &corev1.Pod{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      nn.Name,
@@ -303,6 +313,11 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 		Spec: corev1.PodSpec{
 			Hostname:  nn.Name,
 			Subdomain: getHeadlessName(appRuntime.Name),
+			HostUsers: &hostUsers,
+			SecurityContext: &corev1.PodSecurityContext{
+				FSGroup:             &fsGroup,
+				FSGroupChangePolicy: &fsGroupChangeOnRootMismatch,
+			},
 			Affinity: &corev1.Affinity{
 				PodAffinity: &corev1.PodAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
@@ -348,6 +363,9 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 					Command: []string{
 						"/usr/local/bin/entrypoint.sh",
 					},
+					Env: []corev1.EnvVar{
+						{Name: "XDG_RUNTIME_DIR", Value: "/run/user/1000/containers"},
+					},
 					Ports: []corev1.ContainerPort{
 						{
 							Name:          "appruntime",
@@ -378,15 +396,27 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 							MountPath: "/opt/splunk/bin",
 						},
 						{
-							Name:      "containerd-data",
-							MountPath: "/var/lib/containerd-nested",
+							Name:      "podman-storage",
+							MountPath: "/home/podman/.local/share/containers/storage",
 						},
 						{
-							Name:      "containerd-run",
-							MountPath: "/run/containerd-nested",
+							Name:      "podman-runroot",
+							MountPath: "/run/user/1000/containers",
 						},
 					},
-					SecurityContext: &corev1.SecurityContext{Privileged: &privileged},
+					SecurityContext: &corev1.SecurityContext{
+						Privileged:               &privileged,               // false
+						AllowPrivilegeEscalation: &allowPrivilegeEscalation, // true
+						RunAsNonRoot:             &runAsNonRoot,             // true
+						RunAsUser:                &runAsUser,                // 1000
+						RunAsGroup:               &runAsGroup,               // 1000
+						SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeUnconfined},
+					},
+					Resources: corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							"github.com/fuse": resource.MustParse("1"),
+						},
+					},
 				},
 			},
 			Volumes: []corev1.Volume{
@@ -415,10 +445,12 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 				{
-					Name: "containerd-data",
+					Name:         "podman-storage",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 				{
-					Name: "containerd-run",
+					Name:         "podman-runroot",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 			},
 		},
@@ -444,7 +476,7 @@ func (r *AppRuntimeReconciler) updateStatus(ctx context.Context, appRuntime *ent
 func getImageFromEnv() string {
 	image, ok := os.LookupEnv("RELATED_IMAGE_APP_RUNTIME")
 	if !ok {
-		image = "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/supervisor:v3.1.0-appruntime"
+		image = "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/podman:latest"
 	}
 	return image
 }
