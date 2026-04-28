@@ -1,8 +1,14 @@
-# Build the manager binary
+# Setup defaults for build arguments
+ARG BUILDER_IMAGE=golang:1.26.2
+ARG GOTOOLCHAIN=auto
 ARG BUILDPLATFORM
-FROM --platform=${BUILDPLATFORM} golang:1.26.2 AS builder
+
+# Build the manager binary
+FROM --platform=${BUILDPLATFORM} ${BUILDER_IMAGE} AS builder
 
 WORKDIR /workspace
+ENV GOTOOLCHAIN=${GOTOOLCHAIN}
+
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
