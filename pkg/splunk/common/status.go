@@ -33,16 +33,40 @@ type PhaseAndConditions struct {
 // It derives the appropriate conditions from the given phase and paused state.
 // The message parameter is used to provide additional context in the condition messages.
 func SetPhaseAndConditions(phase enterpriseApi.Phase, isPaused bool, message string) PhaseAndConditions {
-	conditions := deriveConditionsFromPhase(phase, isPaused, message)
+	conditions := deriveConditionsFromPhase(phase, isPaused, message, 0)
 	return PhaseAndConditions{
 		Phase:      phase,
 		Conditions: conditions,
 	}
 }
 
+// SetPhaseAndConditionsWithGeneration is like SetPhaseAndConditions but also sets ObservedGeneration.
+// Use this when you have access to the CR's metadata.generation.
+func SetPhaseAndConditionsWithGeneration(phase enterpriseApi.Phase, isPaused bool, message string, generation int64) PhaseAndConditions {
+	conditions := deriveConditionsFromPhase(phase, isPaused, message, generation)
+	return PhaseAndConditions{
+		Phase:      phase,
+		Conditions: conditions,
+	}
+}
+
+// SetCondition is a convenience function to set a single condition with all required fields.
+// It updates or adds the condition to the provided conditions slice.
+func SetCondition(conditions *[]metav1.Condition, conditionType enterpriseApi.ConditionType,
+	status metav1.ConditionStatus, reason enterpriseApi.ConditionReason, message string, generation int64) {
+	newCondition := metav1.Condition{
+		Type:               string(conditionType),
+		Status:             status,
+		Reason:             string(reason),
+		Message:            message,
+		ObservedGeneration: generation,
+	}
+	*conditions = UpdateCondition(*conditions, newCondition)
+}
+
 // deriveConditionsFromPhase derives Kubernetes-standard conditions from the given Phase.
 // This ensures conditions are always consistent with the phase.
-func deriveConditionsFromPhase(phase enterpriseApi.Phase, isPaused bool, message string) []metav1.Condition {
+func deriveConditionsFromPhase(phase enterpriseApi.Phase, isPaused bool, message string, generation int64) []metav1.Condition {
 	now := metav1.NewTime(time.Now())
 	conditions := make([]metav1.Condition, 0, 3)
 
@@ -50,21 +74,21 @@ func deriveConditionsFromPhase(phase enterpriseApi.Phase, isPaused bool, message
 	readyCondition := metav1.Condition{
 		Type:               string(enterpriseApi.ConditionReady),
 		LastTransitionTime: now,
-		ObservedGeneration: 0, // Will be set by the caller if needed
+		ObservedGeneration: generation,
 	}
 
 	// Progressing condition
 	progressingCondition := metav1.Condition{
 		Type:               string(enterpriseApi.ConditionProgressing),
 		LastTransitionTime: now,
-		ObservedGeneration: 0,
+		ObservedGeneration: generation,
 	}
 
 	// Paused condition
 	pausedCondition := metav1.Condition{
 		Type:               string(enterpriseApi.ConditionPaused),
 		LastTransitionTime: now,
-		ObservedGeneration: 0,
+		ObservedGeneration: generation,
 	}
 
 	// Set Paused condition based on isPaused flag
@@ -94,14 +118,14 @@ func deriveConditionsFromPhase(phase enterpriseApi.Phase, isPaused bool, message
 
 	case enterpriseApi.PhasePending:
 		readyCondition.Status = metav1.ConditionFalse
-		readyCondition.Reason = string(enterpriseApi.ReasonPending)
+		readyCondition.Reason = string(enterpriseApi.ReasonReplicasNotReady)
 		readyCondition.Message = "Resource is pending initialization"
 		if message != "" {
 			readyCondition.Message = message
 		}
 
 		progressingCondition.Status = metav1.ConditionTrue
-		progressingCondition.Reason = string(enterpriseApi.ReasonUpdating)
+		progressingCondition.Reason = string(enterpriseApi.ReasonScaling)
 		progressingCondition.Message = "Resource is being initialized"
 
 	case enterpriseApi.PhaseUpdating:
@@ -113,43 +137,39 @@ func deriveConditionsFromPhase(phase enterpriseApi.Phase, isPaused bool, message
 		}
 
 		progressingCondition.Status = metav1.ConditionTrue
-		progressingCondition.Reason = string(enterpriseApi.ReasonUpdating)
+		progressingCondition.Reason = string(enterpriseApi.ReasonUpgrading)
 		progressingCondition.Message = "Resource is being updated"
 
-	case enterpriseApi.PhaseScalingUp:
+	case enterpriseApi.PhaseScalingUp, enterpriseApi.PhaseScalingDown:
 		readyCondition.Status = metav1.ConditionFalse
 		readyCondition.Reason = string(enterpriseApi.ReasonReplicasNotReady)
-		readyCondition.Message = "Resource is scaling up"
+		if phase == enterpriseApi.PhaseScalingUp {
+			readyCondition.Message = "Resource is scaling up"
+		} else {
+			readyCondition.Message = "Resource is scaling down"
+		}
 		if message != "" {
 			readyCondition.Message = message
 		}
 
 		progressingCondition.Status = metav1.ConditionTrue
-		progressingCondition.Reason = string(enterpriseApi.ReasonScalingUp)
-		progressingCondition.Message = "Resource is scaling up"
-
-	case enterpriseApi.PhaseScalingDown:
-		readyCondition.Status = metav1.ConditionFalse
-		readyCondition.Reason = string(enterpriseApi.ReasonReplicasNotReady)
-		readyCondition.Message = "Resource is scaling down"
-		if message != "" {
-			readyCondition.Message = message
+		progressingCondition.Reason = string(enterpriseApi.ReasonScaling)
+		if phase == enterpriseApi.PhaseScalingUp {
+			progressingCondition.Message = "Resource is scaling up"
+		} else {
+			progressingCondition.Message = "Resource is scaling down"
 		}
-
-		progressingCondition.Status = metav1.ConditionTrue
-		progressingCondition.Reason = string(enterpriseApi.ReasonScalingDown)
-		progressingCondition.Message = "Resource is scaling down"
 
 	case enterpriseApi.PhaseTerminating:
 		readyCondition.Status = metav1.ConditionFalse
-		readyCondition.Reason = string(enterpriseApi.ReasonTerminating)
+		readyCondition.Reason = string(enterpriseApi.ReasonReplicasNotReady)
 		readyCondition.Message = "Resource is being terminated"
 		if message != "" {
 			readyCondition.Message = message
 		}
 
 		progressingCondition.Status = metav1.ConditionTrue
-		progressingCondition.Reason = string(enterpriseApi.ReasonTerminating)
+		progressingCondition.Reason = string(enterpriseApi.ReasonScaling)
 		progressingCondition.Message = "Resource is being terminated"
 
 	case enterpriseApi.PhaseError:

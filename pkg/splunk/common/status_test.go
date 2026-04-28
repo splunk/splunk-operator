@@ -45,7 +45,7 @@ func TestSetPhaseAndConditions(t *testing.T) {
 			isPaused:       false,
 			message:        "",
 			expectedReady:  metav1.ConditionFalse,
-			expectedReason: string(enterpriseApi.ReasonPending),
+			expectedReason: string(enterpriseApi.ReasonReplicasNotReady),
 		},
 		{
 			name:           "PhaseUpdating",
@@ -77,7 +77,7 @@ func TestSetPhaseAndConditions(t *testing.T) {
 			isPaused:       false,
 			message:        "",
 			expectedReady:  metav1.ConditionFalse,
-			expectedReason: string(enterpriseApi.ReasonTerminating),
+			expectedReason: string(enterpriseApi.ReasonReplicasNotReady),
 		},
 		{
 			name:           "PhaseError",
@@ -183,31 +183,31 @@ func TestSetPhaseAndConditions_Progressing(t *testing.T) {
 			name:                "PhasePending - progressing",
 			phase:               enterpriseApi.PhasePending,
 			expectedProgressing: metav1.ConditionTrue,
-			expectedReason:      string(enterpriseApi.ReasonUpdating),
+			expectedReason:      string(enterpriseApi.ReasonScaling),
 		},
 		{
 			name:                "PhaseUpdating - progressing",
 			phase:               enterpriseApi.PhaseUpdating,
 			expectedProgressing: metav1.ConditionTrue,
-			expectedReason:      string(enterpriseApi.ReasonUpdating),
+			expectedReason:      string(enterpriseApi.ReasonUpgrading),
 		},
 		{
 			name:                "PhaseScalingUp - progressing",
 			phase:               enterpriseApi.PhaseScalingUp,
 			expectedProgressing: metav1.ConditionTrue,
-			expectedReason:      string(enterpriseApi.ReasonScalingUp),
+			expectedReason:      string(enterpriseApi.ReasonScaling),
 		},
 		{
 			name:                "PhaseScalingDown - progressing",
 			phase:               enterpriseApi.PhaseScalingDown,
 			expectedProgressing: metav1.ConditionTrue,
-			expectedReason:      string(enterpriseApi.ReasonScalingDown),
+			expectedReason:      string(enterpriseApi.ReasonScaling),
 		},
 		{
 			name:                "PhaseTerminating - progressing",
 			phase:               enterpriseApi.PhaseTerminating,
 			expectedProgressing: metav1.ConditionTrue,
-			expectedReason:      string(enterpriseApi.ReasonTerminating),
+			expectedReason:      string(enterpriseApi.ReasonScaling),
 		},
 		{
 			name:                "PhaseError - not progressing",
@@ -273,7 +273,7 @@ func TestUpdateCondition(t *testing.T) {
 	progressingCondition := metav1.Condition{
 		Type:    string(enterpriseApi.ConditionProgressing),
 		Status:  metav1.ConditionTrue,
-		Reason:  string(enterpriseApi.ReasonUpdating),
+		Reason:  string(enterpriseApi.ReasonUpgrading),
 		Message: "Updating",
 	}
 
@@ -432,5 +432,77 @@ func TestIsPaused(t *testing.T) {
 
 	if IsPaused(notPausedConditions) {
 		t.Errorf("IsPaused() should return false when Paused condition is False")
+	}
+}
+
+func TestSetPhaseAndConditionsWithGeneration(t *testing.T) {
+	generation := int64(5)
+	result := SetPhaseAndConditionsWithGeneration(enterpriseApi.PhaseReady, false, "", generation)
+
+	if result.Phase != enterpriseApi.PhaseReady {
+		t.Errorf("SetPhaseAndConditionsWithGeneration() Phase = %v, want %v", result.Phase, enterpriseApi.PhaseReady)
+	}
+
+	readyCondition := GetCondition(result.Conditions, enterpriseApi.ConditionReady)
+	if readyCondition == nil {
+		t.Errorf("SetPhaseAndConditionsWithGeneration() Ready condition not found")
+		return
+	}
+
+	if readyCondition.ObservedGeneration != generation {
+		t.Errorf("SetPhaseAndConditionsWithGeneration() ObservedGeneration = %v, want %v", readyCondition.ObservedGeneration, generation)
+	}
+
+	progressingCondition := GetCondition(result.Conditions, enterpriseApi.ConditionProgressing)
+	if progressingCondition.ObservedGeneration != generation {
+		t.Errorf("SetPhaseAndConditionsWithGeneration() Progressing.ObservedGeneration = %v, want %v", progressingCondition.ObservedGeneration, generation)
+	}
+}
+
+func TestSetCondition(t *testing.T) {
+	conditions := []metav1.Condition{}
+	generation := int64(3)
+
+	// Test adding a new condition
+	SetCondition(&conditions, enterpriseApi.ConditionReady, metav1.ConditionTrue,
+		enterpriseApi.ReasonAllReplicasReady, "All replicas ready", generation)
+
+	if len(conditions) != 1 {
+		t.Errorf("SetCondition() should add condition, got %d conditions", len(conditions))
+	}
+
+	readyCondition := GetCondition(conditions, enterpriseApi.ConditionReady)
+	if readyCondition == nil {
+		t.Errorf("SetCondition() Ready condition not found")
+		return
+	}
+
+	if readyCondition.Status != metav1.ConditionTrue {
+		t.Errorf("SetCondition() Status = %v, want %v", readyCondition.Status, metav1.ConditionTrue)
+	}
+
+	if readyCondition.Reason != string(enterpriseApi.ReasonAllReplicasReady) {
+		t.Errorf("SetCondition() Reason = %v, want %v", readyCondition.Reason, enterpriseApi.ReasonAllReplicasReady)
+	}
+
+	if readyCondition.ObservedGeneration != generation {
+		t.Errorf("SetCondition() ObservedGeneration = %v, want %v", readyCondition.ObservedGeneration, generation)
+	}
+
+	// Test updating an existing condition
+	SetCondition(&conditions, enterpriseApi.ConditionReady, metav1.ConditionFalse,
+		enterpriseApi.ReasonReplicasNotReady, "Replicas not ready", generation+1)
+
+	if len(conditions) != 1 {
+		t.Errorf("SetCondition() should update existing condition, got %d conditions", len(conditions))
+	}
+
+	readyCondition = GetCondition(conditions, enterpriseApi.ConditionReady)
+	if readyCondition.Status != metav1.ConditionFalse {
+		t.Errorf("SetCondition() updated Status = %v, want %v", readyCondition.Status, metav1.ConditionFalse)
+	}
+
+	if readyCondition.ObservedGeneration != generation+1 {
+		t.Errorf("SetCondition() updated ObservedGeneration = %v, want %v", readyCondition.ObservedGeneration, generation+1)
 	}
 }
