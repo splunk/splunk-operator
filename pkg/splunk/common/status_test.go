@@ -23,7 +23,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestSetPhaseAndConditions(t *testing.T) {
+func TestSetPhaseAndConditions_AllPhases(t *testing.T) {
+	generation := int64(1)
 	tests := []struct {
 		name           string
 		phase          enterpriseApi.Phase
@@ -100,7 +101,7 @@ func TestSetPhaseAndConditions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := SetPhaseAndConditions(tt.phase, tt.isPaused, tt.message)
+			result := SetPhaseAndConditions(nil, tt.phase, tt.isPaused, tt.message, generation)
 
 			if result.Phase != tt.phase {
 				t.Errorf("SetPhaseAndConditions() Phase = %v, want %v", result.Phase, tt.phase)
@@ -127,12 +128,16 @@ func TestSetPhaseAndConditions(t *testing.T) {
 			if tt.message != "" && readyCondition.Message != tt.message {
 				t.Errorf("SetPhaseAndConditions() Ready.Message = %v, want %v", readyCondition.Message, tt.message)
 			}
+
+			if readyCondition.ObservedGeneration != generation {
+				t.Errorf("SetPhaseAndConditions() ObservedGeneration = %v, want %v", readyCondition.ObservedGeneration, generation)
+			}
 		})
 	}
 }
 
 func TestSetPhaseAndConditions_Paused(t *testing.T) {
-	result := SetPhaseAndConditions(enterpriseApi.PhaseReady, true, "")
+	result := SetPhaseAndConditions(nil, enterpriseApi.PhaseReady, true, "", 1)
 
 	pausedCondition := GetCondition(result.Conditions, enterpriseApi.ConditionPaused)
 	if pausedCondition == nil {
@@ -150,7 +155,7 @@ func TestSetPhaseAndConditions_Paused(t *testing.T) {
 }
 
 func TestSetPhaseAndConditions_NotPaused(t *testing.T) {
-	result := SetPhaseAndConditions(enterpriseApi.PhaseReady, false, "")
+	result := SetPhaseAndConditions(nil, enterpriseApi.PhaseReady, false, "", 1)
 
 	pausedCondition := GetCondition(result.Conditions, enterpriseApi.ConditionPaused)
 	if pausedCondition == nil {
@@ -220,7 +225,7 @@ func TestSetPhaseAndConditions_Progressing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := SetPhaseAndConditions(tt.phase, false, "")
+			result := SetPhaseAndConditions(nil, tt.phase, false, "", 1)
 
 			progressingCondition := GetCondition(result.Conditions, enterpriseApi.ConditionProgressing)
 			if progressingCondition == nil {
@@ -436,31 +441,7 @@ func TestIsPaused(t *testing.T) {
 	}
 }
 
-func TestSetPhaseAndConditionsWithGeneration(t *testing.T) {
-	generation := int64(5)
-	result := SetPhaseAndConditionsWithGeneration(enterpriseApi.PhaseReady, false, "", generation)
-
-	if result.Phase != enterpriseApi.PhaseReady {
-		t.Errorf("SetPhaseAndConditionsWithGeneration() Phase = %v, want %v", result.Phase, enterpriseApi.PhaseReady)
-	}
-
-	readyCondition := GetCondition(result.Conditions, enterpriseApi.ConditionReady)
-	if readyCondition == nil {
-		t.Errorf("SetPhaseAndConditionsWithGeneration() Ready condition not found")
-		return
-	}
-
-	if readyCondition.ObservedGeneration != generation {
-		t.Errorf("SetPhaseAndConditionsWithGeneration() ObservedGeneration = %v, want %v", readyCondition.ObservedGeneration, generation)
-	}
-
-	progressingCondition := GetCondition(result.Conditions, enterpriseApi.ConditionProgressing)
-	if progressingCondition.ObservedGeneration != generation {
-		t.Errorf("SetPhaseAndConditionsWithGeneration() Progressing.ObservedGeneration = %v, want %v", progressingCondition.ObservedGeneration, generation)
-	}
-}
-
-func TestSetPhaseAndConditionsPreserving(t *testing.T) {
+func TestSetPhaseAndConditions_TransitionTimePreservation(t *testing.T) {
 	generation := int64(5)
 	oldTime := metav1.NewTime(time.Now().Add(-1 * time.Hour))
 
@@ -493,7 +474,7 @@ func TestSetPhaseAndConditionsPreserving(t *testing.T) {
 	}
 
 	// Test 1: Status unchanged - LastTransitionTime should be preserved
-	result := SetPhaseAndConditionsPreserving(existingConditions, enterpriseApi.PhaseReady, false, "", generation)
+	result := SetPhaseAndConditions(existingConditions, enterpriseApi.PhaseReady, false, "", generation)
 
 	readyCondition := GetCondition(result.Conditions, enterpriseApi.ConditionReady)
 	if readyCondition == nil {
@@ -511,7 +492,7 @@ func TestSetPhaseAndConditionsPreserving(t *testing.T) {
 	}
 
 	// Test 2: Status changed - LastTransitionTime should be updated
-	result = SetPhaseAndConditionsPreserving(existingConditions, enterpriseApi.PhaseError, false, "Error occurred", generation)
+	result = SetPhaseAndConditions(existingConditions, enterpriseApi.PhaseError, false, "Error occurred", generation)
 
 	readyCondition = GetCondition(result.Conditions, enterpriseApi.ConditionReady)
 	if readyCondition == nil {
@@ -527,7 +508,7 @@ func TestSetPhaseAndConditionsPreserving(t *testing.T) {
 	}
 
 	// Test 3: Paused status change - LastTransitionTime should be updated
-	result = SetPhaseAndConditionsPreserving(existingConditions, enterpriseApi.PhaseReady, true, "", generation)
+	result = SetPhaseAndConditions(existingConditions, enterpriseApi.PhaseReady, true, "", generation)
 
 	pausedCondition := GetCondition(result.Conditions, enterpriseApi.ConditionPaused)
 	if pausedCondition == nil {
@@ -543,7 +524,7 @@ func TestSetPhaseAndConditionsPreserving(t *testing.T) {
 	}
 
 	// Test 4: Empty existing conditions - should create new conditions with current time
-	result = SetPhaseAndConditionsPreserving(nil, enterpriseApi.PhaseReady, false, "", generation)
+	result = SetPhaseAndConditions(nil, enterpriseApi.PhaseReady, false, "", generation)
 
 	if len(result.Conditions) != 3 {
 		t.Errorf("Should create 3 conditions, got %d", len(result.Conditions))

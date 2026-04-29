@@ -58,7 +58,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	// Initialize phase and conditions
 	isPaused := cr.GetAnnotations()[enterpriseApi.LicenseManagerPausedAnnotation] == "true"
 	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
-		result := splcommon.SetPhaseAndConditionsPreserving(cr.Status.Conditions, phase, isPaused, message, cr.GetGeneration())
+		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, phase, isPaused, message, cr.GetGeneration())
 		cr.Status.Phase = result.Phase
 		cr.Status.Conditions = result.Conditions
 		cr.Status.ObservedGeneration = cr.GetGeneration()
