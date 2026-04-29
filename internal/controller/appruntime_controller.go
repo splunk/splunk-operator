@@ -299,10 +299,16 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 	fsGroup := int64(1000)
 	fsGroupChangeOnRootMismatch := corev1.FSGroupChangeOnRootMismatch
 	privileged := false
+	initAllowPrivilegeEscalation := false
+	tunResource := corev1.ResourceName("github.com/tun")
+	// Rootless Podman needs newuidmap/newgidmap to elevate inside the pod user namespace.
+	// Do not add capabilities; keep the pod unprivileged and seccomp-unconfined only.
 	allowPrivilegeEscalation := true
 	runAsNonRoot := true
 	runAsUser := int64(1000)
 	runAsGroup := int64(1000)
+	unmaskedProcMount := corev1.UnmaskedProcMount
+	unconfinedSeccomp := &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeUnconfined}
 
 	pod := &corev1.Pod{
 		ObjectMeta: v1.ObjectMeta{
@@ -341,8 +347,14 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 					Name:            "copy-splunk-dirs", // populate lib and bin from Splunk image - most apps need it
 					Image:           appRuntime.Spec.SplunkImage,
 					ImagePullPolicy: corev1.PullIfNotPresent,
-					Command:         []string{"sh", "-c", "cp -rp /opt/splunk/lib/. /mnt/splunk-lib/ && cp -rp /opt/splunk/bin/. /mnt/splunk-bin/"},
-					SecurityContext: &corev1.SecurityContext{RunAsUser: func() *int64 { uid := int64(0); return &uid }()},
+					Command:         []string{"sh", "-c", "cp -R --no-preserve=all /opt/splunk/lib/. /mnt/splunk-lib/ && cp -R --no-preserve=all /opt/splunk/bin/. /mnt/splunk-bin/"},
+					SecurityContext: &corev1.SecurityContext{
+						AllowPrivilegeEscalation: &initAllowPrivilegeEscalation,
+						RunAsNonRoot:             &runAsNonRoot,
+						RunAsUser:                &runAsUser,
+						RunAsGroup:               &runAsGroup,
+						SeccompProfile:           unconfinedSeccomp,
+					},
 					VolumeMounts: []corev1.VolumeMount{
 						{
 							Name:      "splunk-lib",
@@ -364,17 +376,14 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 						"/usr/local/bin/entrypoint.sh",
 					},
 					Env: []corev1.EnvVar{
-						{Name: "XDG_RUNTIME_DIR", Value: "/run/user/1000/containers"},
+						{Name: "HOME", Value: "/opt/splunk"},
+						{Name: "XDG_RUNTIME_DIR", Value: "/tmp/podman-run"},
+						{Name: "PODMAN_SOCKET_PATH", Value: "/tmp/podman-run/podman/podman.sock"},
 					},
 					Ports: []corev1.ContainerPort{
 						{
 							Name:          "appruntime",
 							ContainerPort: 9000,
-							Protocol:      corev1.ProtocolTCP,
-						},
-						{
-							Name:          "appruntime2",
-							ContainerPort: 9001,
 							Protocol:      corev1.ProtocolTCP,
 						},
 					},
@@ -397,24 +406,25 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 						},
 						{
 							Name:      "podman-storage",
-							MountPath: "/home/podman/.local/share/containers/storage",
+							MountPath: "/opt/splunk/.local/share/containers/storage",
 						},
 						{
 							Name:      "podman-runroot",
-							MountPath: "/run/user/1000/containers",
+							MountPath: "/tmp/podman-run",
 						},
 					},
 					SecurityContext: &corev1.SecurityContext{
 						Privileged:               &privileged,               // false
 						AllowPrivilegeEscalation: &allowPrivilegeEscalation, // true
-						RunAsNonRoot:             &runAsNonRoot,             // true
-						RunAsUser:                &runAsUser,                // 1000
-						RunAsGroup:               &runAsGroup,               // 1000
-						SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeUnconfined},
+						ProcMount:                &unmaskedProcMount,
+						RunAsNonRoot:             &runAsNonRoot, // true
+						RunAsUser:                &runAsUser,    // 1000
+						RunAsGroup:               &runAsGroup,   // 1000
+						SeccompProfile:           unconfinedSeccomp,
 					},
 					Resources: corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
-							"github.com/fuse": resource.MustParse("1"),
+							tunResource: resource.MustParse("1"),
 						},
 					},
 				},

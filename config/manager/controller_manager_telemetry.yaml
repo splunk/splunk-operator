@@ -7,5 +7,5 @@ data:
     {
       "lastTransmission": "",
       "test": "false",
-      "sokVersion": "3.1.0-appruntime-crd-pods"
+      "sokVersion": "3.1.0-appruntime-crd-pods-podman"
     }

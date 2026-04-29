@@ -60,7 +60,7 @@ const (
 	DefaultEtcVolumeStorageCapacity = "10Gi"
 
 	// DefaultVarVolumeStorageCapacity represents default storage capacity for var volume
-	DefaultVarVolumeStorageCapacity = "100Gi"
+	DefaultVarVolumeStorageCapacity = "10Gi"
 
 	// SortFieldContainerPort represents field name ContainerPort for sorting
 	SortFieldContainerPort = "ContainerPort"
@@ -116,8 +116,10 @@ const (
 // sgontla: ToDo: being a constant will be a blocker for the UT to pass. relaxing a bit. Find a better alternative
 var AppDownloadVolume string = "/opt/splunk/appframework/"
 
-var EventPublisherKey contextKey = "eventPublisher"
-var EventRecorderKey contextKey = "eventRecorder"
+var (
+	EventPublisherKey contextKey = "eventPublisher"
+	EventRecorderKey  contextKey = "eventRecorder"
+)
 
 // GetVersionedSecretName returns a versioned secret name
 func GetVersionedSecretName(versionedSecretIdentifier string, version string) string {
@@ -137,7 +139,8 @@ func GetSplunkSecretTokenTypes() []string {
 // GetLabelTypes returns a map of label types to strings
 func GetLabelTypes() map[string]string {
 	// Assigning each type of label to string
-	return map[string]string{"manager": "app.kubernetes.io/managed-by",
+	return map[string]string{
+		"manager":   "app.kubernetes.io/managed-by",
 		"component": "app.kubernetes.io/component",
 		"name":      "app.kubernetes.io/name",
 		"partof":    "app.kubernetes.io/part-of",

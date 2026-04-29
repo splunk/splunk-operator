@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -75,10 +76,30 @@ var _ = Describe("AppRuntime Controller", func() {
 			Namespace: ar.Namespace,
 		}, pod)
 		Expect(err).NotTo(HaveOccurred())
+		Expect(pod.Spec.HostUsers).To(Equal(ptrTo(false)))
 		Expect(pod.Spec.Containers).NotTo(BeEmpty())
 		Expect(pod.Spec.Containers[0].Ports).To(HaveLen(1))
 		Expect(pod.Spec.Containers[0].Ports[0].Name).To(Equal("appruntime"))
 		Expect(pod.Spec.Containers[0].Ports[0].ContainerPort).To(Equal(int32(9000)))
 		Expect(pod.Spec.Containers[0].ImagePullPolicy).To(Equal(corev1.PullAlways))
+		Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "HOME", Value: "/opt/splunk"}))
+		Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "XDG_RUNTIME_DIR", Value: "/tmp/podman-run"}))
+		Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "PODMAN_SOCKET_PATH", Value: "/tmp/podman-run/podman/podman.sock"}))
+		Expect(pod.Spec.Containers[0].Resources.Limits).NotTo(HaveKey(corev1.ResourceName("github.com/fuse")))
+		Expect(pod.Spec.Containers[0].Resources.Limits).To(HaveKeyWithValue(corev1.ResourceName("github.com/tun"), resource.MustParse("1")))
+		Expect(pod.Spec.Containers[0].SecurityContext.Capabilities).To(BeNil())
+		Expect(pod.Spec.Containers[0].SecurityContext.ProcMount).To(Equal(ptrTo(corev1.UnmaskedProcMount)))
+		Expect(pod.Spec.Containers[0].SecurityContext.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeUnconfined))
+		Expect(pod.Spec.InitContainers).NotTo(BeEmpty())
+		Expect(pod.Spec.InitContainers[0].Command[2]).To(ContainSubstring("--no-preserve=all"))
+		Expect(pod.Spec.InitContainers[0].Command[2]).NotTo(ContainSubstring("chown"))
+		Expect(pod.Spec.InitContainers[0].Command[2]).NotTo(ContainSubstring("cp -rp"))
+		Expect(pod.Spec.InitContainers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(ptrTo(false)))
+		Expect(pod.Spec.InitContainers[0].SecurityContext.Capabilities).To(BeNil())
+		Expect(pod.Spec.InitContainers[0].SecurityContext.RunAsUser).To(Equal(ptrTo(int64(1000))))
 	})
 })
+
+func ptrTo[T any](value T) *T {
+	return &value
+}
