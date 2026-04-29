@@ -32,18 +32,33 @@ type PhaseAndConditions struct {
 // SetPhaseAndConditions atomically sets both Phase and Conditions to ensure consistency.
 // It derives the appropriate conditions from the given phase and paused state.
 // The message parameter is used to provide additional context in the condition messages.
+// DEPRECATED: Use SetPhaseAndConditionsWithGeneration instead to properly track ObservedGeneration.
 func SetPhaseAndConditions(phase enterpriseApi.Phase, isPaused bool, message string) PhaseAndConditions {
-	conditions := deriveConditionsFromPhase(phase, isPaused, message, 0)
+	conditions := deriveConditionsFromPhase(nil, phase, isPaused, message, 0)
 	return PhaseAndConditions{
 		Phase:      phase,
 		Conditions: conditions,
 	}
 }
 
-// SetPhaseAndConditionsWithGeneration is like SetPhaseAndConditions but also sets ObservedGeneration.
-// Use this when you have access to the CR's metadata.generation.
+// SetPhaseAndConditionsWithGeneration atomically sets Phase and Conditions with proper transition tracking.
+// It preserves LastTransitionTime from existingConditions when the condition status hasn't changed,
+// ensuring consumers can accurately track when conditions actually transitioned.
+// The generation parameter should be the CR's metadata.generation for ObservedGeneration tracking.
 func SetPhaseAndConditionsWithGeneration(phase enterpriseApi.Phase, isPaused bool, message string, generation int64) PhaseAndConditions {
-	conditions := deriveConditionsFromPhase(phase, isPaused, message, generation)
+	conditions := deriveConditionsFromPhase(nil, phase, isPaused, message, generation)
+	return PhaseAndConditions{
+		Phase:      phase,
+		Conditions: conditions,
+	}
+}
+
+// SetPhaseAndConditionsPreserving atomically sets Phase and Conditions while preserving transition metadata.
+// Unlike SetPhaseAndConditionsWithGeneration, this function takes the existing conditions slice
+// and only updates LastTransitionTime when the condition status actually changes.
+// This is the recommended function for controllers to use.
+func SetPhaseAndConditionsPreserving(existingConditions []metav1.Condition, phase enterpriseApi.Phase, isPaused bool, message string, generation int64) PhaseAndConditions {
+	conditions := deriveConditionsFromPhase(existingConditions, phase, isPaused, message, generation)
 	return PhaseAndConditions{
 		Phase:      phase,
 		Conditions: conditions,
@@ -65,29 +80,43 @@ func SetCondition(conditions *[]metav1.Condition, conditionType enterpriseApi.Co
 }
 
 // deriveConditionsFromPhase derives Kubernetes-standard conditions from the given Phase.
-// This ensures conditions are always consistent with the phase.
-func deriveConditionsFromPhase(phase enterpriseApi.Phase, isPaused bool, message string, generation int64) []metav1.Condition {
+// If existingConditions is provided, LastTransitionTime is preserved when status hasn't changed.
+// This ensures conditions are always consistent with the phase while maintaining proper transition tracking.
+func deriveConditionsFromPhase(existingConditions []metav1.Condition, phase enterpriseApi.Phase, isPaused bool, message string, generation int64) []metav1.Condition {
 	now := metav1.NewTime(time.Now())
 	conditions := make([]metav1.Condition, 0, 3)
+
+	// Helper to get existing condition's LastTransitionTime if status matches
+	getTransitionTime := func(condType string, newStatus metav1.ConditionStatus) metav1.Time {
+		for _, c := range existingConditions {
+			if c.Type == condType {
+				if c.Status == newStatus {
+					// Status unchanged - preserve original transition time
+					return c.LastTransitionTime
+				}
+				// Status changed - use current time
+				return now
+			}
+		}
+		// Condition not found - this is a new condition
+		return now
+	}
 
 	// Ready condition
 	readyCondition := metav1.Condition{
 		Type:               string(enterpriseApi.ConditionReady),
-		LastTransitionTime: now,
 		ObservedGeneration: generation,
 	}
 
 	// Progressing condition
 	progressingCondition := metav1.Condition{
 		Type:               string(enterpriseApi.ConditionProgressing),
-		LastTransitionTime: now,
 		ObservedGeneration: generation,
 	}
 
 	// Paused condition
 	pausedCondition := metav1.Condition{
 		Type:               string(enterpriseApi.ConditionPaused),
-		LastTransitionTime: now,
 		ObservedGeneration: generation,
 	}
 
@@ -101,6 +130,7 @@ func deriveConditionsFromPhase(phase enterpriseApi.Phase, isPaused bool, message
 		pausedCondition.Reason = string(enterpriseApi.ReasonNotPaused)
 		pausedCondition.Message = "Reconciliation is not paused"
 	}
+	pausedCondition.LastTransitionTime = getTransitionTime(pausedCondition.Type, pausedCondition.Status)
 
 	// Derive Ready and Progressing conditions from Phase
 	switch phase {
@@ -111,10 +141,12 @@ func deriveConditionsFromPhase(phase enterpriseApi.Phase, isPaused bool, message
 		if message != "" {
 			readyCondition.Message = message
 		}
+		readyCondition.LastTransitionTime = getTransitionTime(readyCondition.Type, readyCondition.Status)
 
 		progressingCondition.Status = metav1.ConditionFalse
 		progressingCondition.Reason = string(enterpriseApi.ReasonStable)
 		progressingCondition.Message = "Resource is stable"
+		progressingCondition.LastTransitionTime = getTransitionTime(progressingCondition.Type, progressingCondition.Status)
 
 	case enterpriseApi.PhasePending:
 		readyCondition.Status = metav1.ConditionFalse
@@ -123,10 +155,12 @@ func deriveConditionsFromPhase(phase enterpriseApi.Phase, isPaused bool, message
 		if message != "" {
 			readyCondition.Message = message
 		}
+		readyCondition.LastTransitionTime = getTransitionTime(readyCondition.Type, readyCondition.Status)
 
 		progressingCondition.Status = metav1.ConditionTrue
 		progressingCondition.Reason = string(enterpriseApi.ReasonScaling)
 		progressingCondition.Message = "Resource is being initialized"
+		progressingCondition.LastTransitionTime = getTransitionTime(progressingCondition.Type, progressingCondition.Status)
 
 	case enterpriseApi.PhaseUpdating:
 		readyCondition.Status = metav1.ConditionFalse
@@ -135,10 +169,12 @@ func deriveConditionsFromPhase(phase enterpriseApi.Phase, isPaused bool, message
 		if message != "" {
 			readyCondition.Message = message
 		}
+		readyCondition.LastTransitionTime = getTransitionTime(readyCondition.Type, readyCondition.Status)
 
 		progressingCondition.Status = metav1.ConditionTrue
 		progressingCondition.Reason = string(enterpriseApi.ReasonUpgrading)
 		progressingCondition.Message = "Resource is being updated"
+		progressingCondition.LastTransitionTime = getTransitionTime(progressingCondition.Type, progressingCondition.Status)
 
 	case enterpriseApi.PhaseScalingUp, enterpriseApi.PhaseScalingDown:
 		readyCondition.Status = metav1.ConditionFalse
@@ -151,6 +187,7 @@ func deriveConditionsFromPhase(phase enterpriseApi.Phase, isPaused bool, message
 		if message != "" {
 			readyCondition.Message = message
 		}
+		readyCondition.LastTransitionTime = getTransitionTime(readyCondition.Type, readyCondition.Status)
 
 		progressingCondition.Status = metav1.ConditionTrue
 		progressingCondition.Reason = string(enterpriseApi.ReasonScaling)
@@ -159,6 +196,7 @@ func deriveConditionsFromPhase(phase enterpriseApi.Phase, isPaused bool, message
 		} else {
 			progressingCondition.Message = "Resource is scaling down"
 		}
+		progressingCondition.LastTransitionTime = getTransitionTime(progressingCondition.Type, progressingCondition.Status)
 
 	case enterpriseApi.PhaseTerminating:
 		readyCondition.Status = metav1.ConditionFalse
@@ -167,10 +205,12 @@ func deriveConditionsFromPhase(phase enterpriseApi.Phase, isPaused bool, message
 		if message != "" {
 			readyCondition.Message = message
 		}
+		readyCondition.LastTransitionTime = getTransitionTime(readyCondition.Type, readyCondition.Status)
 
 		progressingCondition.Status = metav1.ConditionTrue
 		progressingCondition.Reason = string(enterpriseApi.ReasonScaling)
 		progressingCondition.Message = "Resource is being terminated"
+		progressingCondition.LastTransitionTime = getTransitionTime(progressingCondition.Type, progressingCondition.Status)
 
 	case enterpriseApi.PhaseError:
 		readyCondition.Status = metav1.ConditionFalse
@@ -179,20 +219,24 @@ func deriveConditionsFromPhase(phase enterpriseApi.Phase, isPaused bool, message
 		if message != "" {
 			readyCondition.Message = message
 		}
+		readyCondition.LastTransitionTime = getTransitionTime(readyCondition.Type, readyCondition.Status)
 
 		progressingCondition.Status = metav1.ConditionFalse
 		progressingCondition.Reason = string(enterpriseApi.ReasonReconcileFailed)
 		progressingCondition.Message = "Reconciliation failed"
+		progressingCondition.LastTransitionTime = getTransitionTime(progressingCondition.Type, progressingCondition.Status)
 
 	default:
 		// Unknown phase - treat as not ready, not progressing
 		readyCondition.Status = metav1.ConditionUnknown
 		readyCondition.Reason = "Unknown"
 		readyCondition.Message = "Unknown phase"
+		readyCondition.LastTransitionTime = getTransitionTime(readyCondition.Type, readyCondition.Status)
 
 		progressingCondition.Status = metav1.ConditionUnknown
 		progressingCondition.Reason = "Unknown"
 		progressingCondition.Message = "Unknown phase"
+		progressingCondition.LastTransitionTime = getTransitionTime(progressingCondition.Type, progressingCondition.Status)
 	}
 
 	conditions = append(conditions, readyCondition, progressingCondition, pausedCondition)

@@ -17,6 +17,7 @@ package common
 
 import (
 	"testing"
+	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -456,6 +457,101 @@ func TestSetPhaseAndConditionsWithGeneration(t *testing.T) {
 	progressingCondition := GetCondition(result.Conditions, enterpriseApi.ConditionProgressing)
 	if progressingCondition.ObservedGeneration != generation {
 		t.Errorf("SetPhaseAndConditionsWithGeneration() Progressing.ObservedGeneration = %v, want %v", progressingCondition.ObservedGeneration, generation)
+	}
+}
+
+func TestSetPhaseAndConditionsPreserving(t *testing.T) {
+	generation := int64(5)
+	oldTime := metav1.NewTime(time.Now().Add(-1 * time.Hour))
+
+	// Create existing conditions with old transition time
+	existingConditions := []metav1.Condition{
+		{
+			Type:               string(enterpriseApi.ConditionReady),
+			Status:             metav1.ConditionTrue,
+			Reason:             string(enterpriseApi.ReasonAllReplicasReady),
+			Message:            "All replicas are ready",
+			LastTransitionTime: oldTime,
+			ObservedGeneration: generation - 1,
+		},
+		{
+			Type:               string(enterpriseApi.ConditionProgressing),
+			Status:             metav1.ConditionFalse,
+			Reason:             string(enterpriseApi.ReasonStable),
+			Message:            "Resource is stable",
+			LastTransitionTime: oldTime,
+			ObservedGeneration: generation - 1,
+		},
+		{
+			Type:               string(enterpriseApi.ConditionPaused),
+			Status:             metav1.ConditionFalse,
+			Reason:             string(enterpriseApi.ReasonNotPaused),
+			Message:            "Reconciliation is not paused",
+			LastTransitionTime: oldTime,
+			ObservedGeneration: generation - 1,
+		},
+	}
+
+	// Test 1: Status unchanged - LastTransitionTime should be preserved
+	result := SetPhaseAndConditionsPreserving(existingConditions, enterpriseApi.PhaseReady, false, "", generation)
+
+	readyCondition := GetCondition(result.Conditions, enterpriseApi.ConditionReady)
+	if readyCondition == nil {
+		t.Fatal("Ready condition not found")
+	}
+
+	if !readyCondition.LastTransitionTime.Equal(&oldTime) {
+		t.Errorf("LastTransitionTime should be preserved when status unchanged, got %v, want %v",
+			readyCondition.LastTransitionTime, oldTime)
+	}
+
+	if readyCondition.ObservedGeneration != generation {
+		t.Errorf("ObservedGeneration should be updated, got %v, want %v",
+			readyCondition.ObservedGeneration, generation)
+	}
+
+	// Test 2: Status changed - LastTransitionTime should be updated
+	result = SetPhaseAndConditionsPreserving(existingConditions, enterpriseApi.PhaseError, false, "Error occurred", generation)
+
+	readyCondition = GetCondition(result.Conditions, enterpriseApi.ConditionReady)
+	if readyCondition == nil {
+		t.Fatal("Ready condition not found after phase change")
+	}
+
+	if readyCondition.Status != metav1.ConditionFalse {
+		t.Errorf("Ready status should be False for PhaseError, got %v", readyCondition.Status)
+	}
+
+	if readyCondition.LastTransitionTime.Equal(&oldTime) {
+		t.Error("LastTransitionTime should be updated when status changes")
+	}
+
+	// Test 3: Paused status change - LastTransitionTime should be updated
+	result = SetPhaseAndConditionsPreserving(existingConditions, enterpriseApi.PhaseReady, true, "", generation)
+
+	pausedCondition := GetCondition(result.Conditions, enterpriseApi.ConditionPaused)
+	if pausedCondition == nil {
+		t.Fatal("Paused condition not found")
+	}
+
+	if pausedCondition.Status != metav1.ConditionTrue {
+		t.Errorf("Paused status should be True when isPaused=true, got %v", pausedCondition.Status)
+	}
+
+	if pausedCondition.LastTransitionTime.Equal(&oldTime) {
+		t.Error("Paused LastTransitionTime should be updated when status changes from False to True")
+	}
+
+	// Test 4: Empty existing conditions - should create new conditions with current time
+	result = SetPhaseAndConditionsPreserving(nil, enterpriseApi.PhaseReady, false, "", generation)
+
+	if len(result.Conditions) != 3 {
+		t.Errorf("Should create 3 conditions, got %d", len(result.Conditions))
+	}
+
+	readyCondition = GetCondition(result.Conditions, enterpriseApi.ConditionReady)
+	if readyCondition.LastTransitionTime.IsZero() {
+		t.Error("LastTransitionTime should not be zero for new conditions")
 	}
 }
 
