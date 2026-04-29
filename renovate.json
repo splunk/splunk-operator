@@ -29,5 +29,27 @@
   "prHourlyLimit": 2,
   "ignorePaths": [
     ".github/**"
+  ],
+  "assignAutomerge": true,
+  "reviewers": [
+    "gabrielm",
+    "igorg",
+    "jbuczak",
+    "kkoziol",
+    "mqiu",
+    "patrykw",
+    "qingw",
+    "rlieberman",
+    "vivekr"
+  ],
+  "packageRules": [
+    {
+        "matchUpdateTypes": ["patch", "minor"],
+        "automerge": true,
+        "addLabels": [
+            "dependency-update",
+            "auto-merge-enabled"
+        ]
+    }
   ]
 }
