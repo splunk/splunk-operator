@@ -63,6 +63,13 @@ fi
 source_branch="${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME:-}"
 target_branch="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}"
 
+case "${source_branch}" in
+  renovate/*)
+    echo "Skipping merge request description check for Renovate bot MR."
+    exit 0
+    ;;
+esac
+
 if [ -z "${description}" ]; then
   echo "Merge request description is empty." >&2
   echo "Use .gitlab/merge_request_templates/Default.md or .gitlab/merge_request_templates/Release.md." >&2
