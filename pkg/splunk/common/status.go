@@ -29,35 +29,11 @@ type PhaseAndConditions struct {
 	Conditions []metav1.Condition
 }
 
-// SetPhaseAndConditions atomically sets both Phase and Conditions to ensure consistency.
-// It derives the appropriate conditions from the given phase and paused state.
-// The message parameter is used to provide additional context in the condition messages.
-// DEPRECATED: Use SetPhaseAndConditionsWithGeneration instead to properly track ObservedGeneration.
-func SetPhaseAndConditions(phase enterpriseApi.Phase, isPaused bool, message string) PhaseAndConditions {
-	conditions := deriveConditionsFromPhase(nil, phase, isPaused, message, 0)
-	return PhaseAndConditions{
-		Phase:      phase,
-		Conditions: conditions,
-	}
-}
-
-// SetPhaseAndConditionsWithGeneration atomically sets Phase and Conditions with proper transition tracking.
-// It preserves LastTransitionTime from existingConditions when the condition status hasn't changed,
-// ensuring consumers can accurately track when conditions actually transitioned.
+// SetPhaseAndConditions atomically sets Phase and Conditions derived from the given phase.
+// If existingConditions is provided, LastTransitionTime is preserved when the condition status hasn't changed.
+// If existingConditions is nil, new conditions are created with the current time.
 // The generation parameter should be the CR's metadata.generation for ObservedGeneration tracking.
-func SetPhaseAndConditionsWithGeneration(phase enterpriseApi.Phase, isPaused bool, message string, generation int64) PhaseAndConditions {
-	conditions := deriveConditionsFromPhase(nil, phase, isPaused, message, generation)
-	return PhaseAndConditions{
-		Phase:      phase,
-		Conditions: conditions,
-	}
-}
-
-// SetPhaseAndConditionsPreserving atomically sets Phase and Conditions while preserving transition metadata.
-// Unlike SetPhaseAndConditionsWithGeneration, this function takes the existing conditions slice
-// and only updates LastTransitionTime when the condition status actually changes.
-// This is the recommended function for controllers to use.
-func SetPhaseAndConditionsPreserving(existingConditions []metav1.Condition, phase enterpriseApi.Phase, isPaused bool, message string, generation int64) PhaseAndConditions {
+func SetPhaseAndConditions(existingConditions []metav1.Condition, phase enterpriseApi.Phase, isPaused bool, message string, generation int64) PhaseAndConditions {
 	conditions := deriveConditionsFromPhase(existingConditions, phase, isPaused, message, generation)
 	return PhaseAndConditions{
 		Phase:      phase,
