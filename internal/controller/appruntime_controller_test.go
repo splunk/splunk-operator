@@ -92,6 +92,8 @@ var _ = Describe("AppRuntime Controller", func() {
 		Expect(pod.Spec.Containers[0].SecurityContext.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeUnconfined))
 		Expect(pod.Spec.InitContainers).NotTo(BeEmpty())
 		Expect(pod.Spec.InitContainers[0].Command[2]).To(ContainSubstring("--no-preserve=all"))
+		Expect(pod.Spec.InitContainers[0].Command[2]).To(ContainSubstring("chmod a+x"))
+		Expect(pod.Spec.InitContainers[0].Command[2]).NotTo(ContainSubstring("--preserve=mode"))
 		Expect(pod.Spec.InitContainers[0].Command[2]).NotTo(ContainSubstring("chown"))
 		Expect(pod.Spec.InitContainers[0].Command[2]).NotTo(ContainSubstring("cp -rp"))
 		Expect(pod.Spec.InitContainers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(ptrTo(false)))

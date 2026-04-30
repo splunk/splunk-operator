@@ -347,7 +347,7 @@ func (r *AppRuntimeReconciler) createPod(ctx context.Context, appRuntime *enterp
 					Name:            "copy-splunk-dirs", // populate lib and bin from Splunk image - most apps need it
 					Image:           appRuntime.Spec.SplunkImage,
 					ImagePullPolicy: corev1.PullIfNotPresent,
-					Command:         []string{"sh", "-c", "cp -R --no-preserve=all /opt/splunk/lib/. /mnt/splunk-lib/ && cp -R --no-preserve=all /opt/splunk/bin/. /mnt/splunk-bin/"},
+					Command:         []string{"sh", "-c", `cp -R --no-preserve=all /opt/splunk/lib/. /mnt/splunk-lib/ && cp -R --no-preserve=all /opt/splunk/bin/. /mnt/splunk-bin/ && find /opt/splunk/lib -type f -perm /111 -exec sh -c 'for src do dst="/mnt/splunk-lib/${src#/opt/splunk/lib/}"; [ -e "$dst" ] && chmod a+x "$dst"; done' sh {} + && find /opt/splunk/bin -type f -perm /111 -exec sh -c 'for src do dst="/mnt/splunk-bin/${src#/opt/splunk/bin/}"; [ -e "$dst" ] && chmod a+x "$dst"; done' sh {} +`},
 					SecurityContext: &corev1.SecurityContext{
 						AllowPrivilegeEscalation: &initAllowPrivilegeEscalation,
 						RunAsNonRoot:             &runAsNonRoot,
