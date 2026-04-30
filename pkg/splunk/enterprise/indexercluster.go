@@ -78,6 +78,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateIndexerClusterSpec", fmt.Sprintf("validate indexercluster spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate indexercluster spec")
+		setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
 		return result, err
 	}
 
@@ -104,6 +105,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
 		return result, err
 	}
 
@@ -132,6 +134,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		err = VerifyRFPeers(ctx, mgr, client)
 		if err != nil {
 			eventPublisher.Warning(ctx, "verifyRFPeers", fmt.Sprintf("verify RF peer failed %s", err.Error()))
+			setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
 			return result, err
 		}
 	}
@@ -229,6 +232,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("update statefulset failed %s", err.Error()))
+			setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
 			return result, err
 		}
 	} else {
@@ -237,6 +241,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("version mismatch for indexer cluster and indexer container, delete statefulset failed. Error=%s", err.Error()))
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("%s-%s, %s-%s", "indexer-image", cr.Spec.Image, "container-image", statefulSet.Spec.Template.Spec.Containers[0].Image))
+			setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
 			return result, err
 		}
 		time.Sleep(1 * time.Second)
@@ -245,6 +250,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("update statefulset failed %s", err.Error()))
+			setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
 			return result, err
 		}
 	}
@@ -291,6 +297,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
 		if err != nil {
 			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrieve cluster manager spec failed %s", err.Error()))
+			setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
 			return result, err
 		}
 		if cmMonitoringConsoleConfigRef != "" {
