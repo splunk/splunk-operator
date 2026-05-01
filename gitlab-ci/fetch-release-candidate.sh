@@ -49,11 +49,28 @@ download_release_candidate_for_exact_ref_sha() {
   pipelines_json="$(curl --fail --location --silent --show-error \
     --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
     "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/pipelines?ref=${encoded_ref}&sha=${expected_sha}&status=success&per_page=20")"
-  pipeline_id="$(printf '%s' "${pipelines_json}" | jq -r '.[0].id // empty' | head -n 1)"
-  require_nonempty "${pipeline_id}" "successful release validation pipeline for ${candidate_ref} at ${expected_sha}"
+  pipeline_ids="$(printf '%s' "${pipelines_json}" | jq -r '.[].id // empty')"
+  require_nonempty "${pipeline_ids}" "successful release validation pipeline for ${candidate_ref} at ${expected_sha}"
 
-  download_gitlab_job_artifacts_archive_by_pipeline "${pipeline_id}" "${job_name}" "${archive_file}"
-  resolved_source_pipeline_id="${pipeline_id}"
+  for pipeline_id in ${pipeline_ids}; do
+    jobs_json="$(curl --fail --location --silent --show-error \
+      --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+      "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/pipelines/${pipeline_id}/jobs?scope[]=success&per_page=100")"
+    candidate_job_id="$(printf '%s' "${jobs_json}" | jq -r --arg job_name "${job_name}" '.[] | select(.name == $job_name) | .id' | head -n 1)"
+    if [ -z "${candidate_job_id}" ]; then
+      continue
+    fi
+
+    curl --fail --location --silent --show-error \
+      --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+      "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${candidate_job_id}/artifacts" \
+      -o "${archive_file}"
+    resolved_source_pipeline_id="${pipeline_id}"
+    return 0
+  done
+
+  echo "Unable to find a successful ${job_name} job for ${candidate_ref} at ${expected_sha}" >&2
+  return 1
 }
 
 if [ -n "${source_pipeline_id}" ]; then
