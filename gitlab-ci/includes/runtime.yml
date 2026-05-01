@@ -106,6 +106,8 @@ scan-released-operator-image-trivy:
       artifacts: true
     - job: scan-stage-image-trivy
   rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
       when: never
     - if: '$SOK_PIPELINE_MODE == "release_publish"'
@@ -523,6 +525,8 @@ qualification-graviton-indingsep-validation:
       artifacts: true
     - job: scan-stage-image-trivy
   rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
       when: never
     - if: '$SOK_PIPELINE_MODE == "release_publish"'
