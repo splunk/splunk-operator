@@ -173,7 +173,7 @@ release-helm-validation:
       when: never
     - if: '$SOK_PIPELINE_MODE == "release_publish"'
       when: never
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^release([\/-]).+$/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(main|release([\/-]).+)$/ && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^release([\/-]).+$/'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^release([\/-]).+$/'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
   variables:
@@ -446,7 +446,7 @@ psr-release-qualification-collect:
 fetch-release-candidate:
   extends:
     - .release-publish-job
-    - .rules-main-release-publish
+    - .rules-release-publish
   variables:
     WORKFLOW_SLUG: fetch-release-candidate
   script:
@@ -458,7 +458,7 @@ fetch-release-candidate:
 publish-release-images:
   extends:
     - .release-publish-job
-    - .rules-main-release-publish
+    - .rules-release-publish
   needs:
     - job: fetch-release-candidate
       artifacts: true
@@ -473,7 +473,7 @@ publish-release-images:
 publish-release-artifacts:
   extends:
     - .release-publish-job
-    - .rules-main-release-publish
+    - .rules-release-publish
   needs:
     - job: fetch-release-candidate
       artifacts: true
@@ -490,7 +490,7 @@ publish-release-artifacts:
 publish-release-bundle:
   extends:
     - .release-publish-job
-    - .rules-main-release-publish
+    - .rules-release-publish
   needs:
     - job: fetch-release-candidate
       artifacts: true
@@ -507,7 +507,7 @@ publish-release-bundle:
 publish-release-charts:
   extends:
     - .release-publish-job
-    - .rules-main-release-publish
+    - .rules-release-publish
   needs:
     - job: fetch-release-candidate
       artifacts: true
@@ -522,7 +522,7 @@ publish-release-charts:
 preflight-certification:
   extends:
     - .release-publish-job
-    - .rules-main-release-publish
+    - .rules-release-publish
   needs:
     - job: publish-release-images
       artifacts: true
@@ -539,7 +539,7 @@ preflight-certification:
 prepare-certified-operators-submission:
   extends:
     - .release-publish-job
-    - .rules-main-release-publish
+    - .rules-release-publish
   needs:
     - job: publish-release-bundle
       artifacts: true
@@ -556,7 +556,7 @@ prepare-certified-operators-submission:
 prepare-community-operators-submission:
   extends:
     - .release-publish-job
-    - .rules-main-release-publish
+    - .rules-release-publish
   needs:
     - job: publish-release-bundle
       artifacts: true
@@ -573,7 +573,7 @@ prepare-community-operators-submission:
 gitlab-release-record:
   extends:
     - .release-publish-job
-    - .rules-main-release-publish
+    - .rules-release-publish
   when: manual
   needs:
     - job: fetch-release-candidate

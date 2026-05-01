@@ -2,7 +2,7 @@
 set -eu
 
 # Runtime contract
-# - Purpose: fetch the validated release-candidate artifact set into the main
+# - Purpose: fetch the validated release-candidate artifact set into the active
 #   publish pipeline.
 # - Inputs: CI_JOB_TOKEN plus either a release source ref or a pinned source
 #   pipeline ID.
@@ -22,6 +22,7 @@ summary_file="${output_dir}/summary.txt"
 job_name="$(first_nonempty "${PIPELINE_RELEASE_CANDIDATE_JOB_NAME:-}" "release-candidate-packaging")"
 source_pipeline_id="$(first_nonempty "${PIPELINE_RELEASE_SOURCE_PIPELINE_ID:-}" "")"
 source_ref_override="$(first_nonempty "${PIPELINE_RELEASE_SOURCE_REF:-}" "")"
+current_ref="${CI_COMMIT_BRANCH:-}"
 
 mkdir -p "ci-output" "${output_dir}"
 : > "${context_file}"
@@ -40,6 +41,7 @@ if [ -n "${source_pipeline_id}" ]; then
 else
   for candidate_ref in \
     "${source_ref_override}" \
+    "${current_ref}" \
     "release-${release_version}" \
     "release/${release_version}"
   do

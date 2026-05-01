@@ -1,0 +1,48 @@
+@startuml
+title Patch Release Publish Lane
+left to right direction
+skinparam Shadowing false
+skinparam DefaultFontName DejaVu Sans
+skinparam BackgroundColor white
+skinparam ArrowColor #1d4f73
+skinparam Rectangle {
+  BorderColor #1d4f73
+  BackgroundColor #eef6fb
+  FontColor #0f172a
+  RoundCorner 12
+}
+skinparam Note {
+  BorderColor #8b6f2f
+  BackgroundColor #fff7d6
+  FontColor #3f3420
+}
+
+rectangle "Retained maintenance branch\nfor example release/3.1" as branch
+rectangle "Patch change on maintenance branch\nor MR targeting maintenance release/*" as patch
+rectangle "Release validation lane\nre-runs on the reviewed patch tip" as validate
+rectangle "Intentional web/api publish start\nSOK_PIPELINE_MODE=release_publish\non protected maintenance branch" as trigger
+rectangle "Fetch retained release candidate\nfrom current maintenance branch\nfetch-release-candidate" as fetch
+rectangle "Promote validated patch outputs\npublish-release-images\npublish-release-artifacts\npublish-release-bundle\npublish-release-charts" as publish #eefbf1
+rectangle "Certification and submission prep\npreflight-certification\nprepare-certified-operators-submission\nprepare-community-operators-submission" as downstream #f7f7ff
+rectangle "GitLab Release record\nfor patch version" as release_record #f7f7ff
+rectangle "Forward-port patch to main\nseparate change-management step" as forward_port
+
+branch --> patch
+patch --> validate
+validate --> trigger
+trigger --> fetch
+fetch --> publish
+publish --> downstream
+downstream --> release_record
+release_record --> forward_port
+
+note bottom of trigger
+Patch publication does not require merging the
+maintenance branch into main first.
+end note
+
+note bottom of forward_port
+Forward-port the released patch back to main after the
+patch release is cut so the trunks do not diverge.
+end note
+@enduml

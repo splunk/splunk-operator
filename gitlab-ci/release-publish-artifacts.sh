@@ -5,7 +5,8 @@ set -eu
 # - Purpose: publish the validated deployment artifacts for the release.
 # - Inputs: release-candidate contract plus the published release image contract.
 # - Outputs: rendered GA release manifests under ci-output/.
-# - Guardrails: artifact publication only; no manifest regeneration on main.
+# - Guardrails: artifact publication only; no manifest regeneration during
+#   publication.
 
 . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
 

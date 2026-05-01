@@ -33,5 +33,6 @@ publish --> downstream
 note bottom of trigger
 Publication is intentionally manual on main.
 The release branch merge does not auto-publish externally.
+Patch releases use the separate maintenance-branch publish flow.
 end note
 @enduml
