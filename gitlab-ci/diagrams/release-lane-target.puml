@@ -17,7 +17,7 @@ skinparam Note {
   FontColor #3f3420
 }
 
-rectangle "Push to release/<version> or release-<version>\nor MR from release branch to main\nor another maintenance release/* branch" as trigger
+rectangle "Push to release/<version> or release-<version>\nor MR from release branch to main\nor any MR targeting a maintenance release/* branch" as trigger
 rectangle "Baseline\nverify and test jobs" as baseline
 rectangle "Build\nstaged multi-arch and distroless release images" as build
 rectangle "Image scan\nscan-stage-image-trivy" as scan

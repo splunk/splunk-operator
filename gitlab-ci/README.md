@@ -37,7 +37,7 @@ For a one-off manual intake run, trigger a pipeline with `SOK_PIPELINE_MODE=gith
 | Scheduled pipeline on `develop` | Nightly lane | Re-runs the baseline and then runs the full nightly integration fanout | Review nightly failures and fix the repo or infrastructure issue |
 | Web, API, or downstream-triggered pipeline with `SOK_PIPELINE_MODE=qualification_lane` | Qualification lane | Tests the latest released SOK image and chart path against the qualification inputs, then writes the report and gate result | Trigger the lane intentionally and review the report/gate output |
 | Push to `release/<version>` or `release-<version>` | Release validation lane | Builds the release candidate once, runs full release validation, then packages the candidate outputs | Fix the release branch until the branch pipeline is green |
-| MR from `release/*` to `main` or another `release/*` maintenance branch | Release validation lane again | Re-runs release validation on the reviewed release-branch tip | Update changelog or release notes, open the MR, get review and approval |
+| MR to `main` from `release/*`, or any MR targeting a maintenance `release/*` branch | Release validation lane again | Re-runs release validation on the reviewed release-target tip | Update changelog or release notes, open the MR, get review and approval |
 | Push to `main` after merge | Main validation plus manual publish jobs | Re-validates the merged `main` tip and exposes the publish jobs | Start the manual publish jobs only when the release is approved |
 | Web or API pipeline on `main` or a protected `release/*` branch with `SOK_PIPELINE_MODE=release_publish` | Publish-only release promotion | Re-fetches a retained release candidate and re-runs the publish or certification path | Use this on `main` for normal releases or on a maintenance `release/*` branch for a patch release |
 
@@ -166,7 +166,7 @@ Qualification runtime inventory:
 ![Release validation lane](diagrams/release-lane-target.png)
 
 The release validation lane is the product-release path for SOK itself.
-It is triggered by a real `release/<version>` or `release-<version>` branch, and it also re-runs on the MR from that release branch to `main` or to another `release/*` maintenance branch.
+It is triggered by a real `release/<version>` or `release-<version>` branch, and it also re-runs on reviewed MRs into the release targets: `release/*` to `main`, or any MR that targets a maintenance `release/*` branch.
 
 What the release validation automation does:
 
