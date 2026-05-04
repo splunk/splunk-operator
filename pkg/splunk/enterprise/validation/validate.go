@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
+	appsv1alpha1 "github.com/splunk/splunk-operator/api/apps/v1alpha1"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 )
 
@@ -35,6 +36,7 @@ var (
 )
 
 func init() {
+	_ = appsv1alpha1.AddToScheme(scheme)
 	_ = enterpriseApi.AddToScheme(scheme)
 	codecs = serializer.NewCodecFactory(scheme)
 }

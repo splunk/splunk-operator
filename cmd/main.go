@@ -303,7 +303,7 @@ func main() {
 		webhookServer := validation.NewWebhookServer(validation.WebhookServerOptions{
 			Port:         9443,
 			CertDir:      "/tmp/k8s-webhook-server/serving-certs",
-			Validators:   validation.DefaultValidators,
+			Validators:   validation.DefaultValidators(mgr.GetClient()),
 			ReadTimeout:  readTimeout,
 			WriteTimeout: writeTimeout,
 		})
