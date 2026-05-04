@@ -29,6 +29,8 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
     - [A Burstable QoS Class example:](#a-burstable-qos-class-example)
     - [A BestEffort QoS Class example:](#a-besteffort-qos-class-example)
     - [Pod Resources Management](#pod-resources-management)
+  - [Status Conditions](#status-conditions)
+  - [Troubleshooting](#troubleshooting)
 
 For examples on how to use these custom resources, please see
 [Configuring Splunk Enterprise Deployments](Examples.md).
@@ -501,7 +503,78 @@ __CPU Throttling__
 
 Kubernetes starts throttling CPUs if a pod's demand for CPU exceeds the value set in the ```limits``` parameter. If your nodes have extra CPU resources available, leaving the ```limits``` value unset will allow the pods to utilize more CPUs.
 
-### Troubleshooting
+## Status Conditions
+
+All Splunk Enterprise Custom Resources include Kubernetes-standard [status conditions](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-conditions) that provide detailed information about the resource state. These conditions follow Kubernetes conventions and can be used for monitoring, alerting, and automation.
+
+### Condition Types
+
+| Condition Type | Description |
+|----------------|-------------|
+| `Ready` | Indicates whether the resource is fully operational and all replicas are ready |
+| `Progressing` | Indicates whether the resource is being updated, scaled, or initialized |
+| `Paused` | Indicates whether reconciliation is paused via the pause annotation |
+
+### Condition Fields
+
+Each condition includes the following fields:
+
+| Field | Description |
+|-------|-------------|
+| `type` | The condition type (Ready, Progressing, or Paused) |
+| `status` | Either "True", "False", or "Unknown" |
+| `reason` | A machine-readable reason code for the condition's state |
+| `message` | A human-readable description of the condition |
+| `lastTransitionTime` | The last time the condition status changed |
+| `observedGeneration` | The generation of the CR spec that was observed |
+
+### Example Status with Conditions
+
+```yaml
+status:
+  phase: Ready
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: ReconcileComplete
+      message: Resource is ready
+      lastTransitionTime: "2026-05-04T10:00:00Z"
+      observedGeneration: 3
+    - type: Progressing
+      status: "False"
+      reason: Stable
+      message: Resource is stable
+      lastTransitionTime: "2026-05-04T09:55:00Z"
+      observedGeneration: 3
+    - type: Paused
+      status: "False"
+      reason: NotPaused
+      message: Reconciliation is not paused
+      lastTransitionTime: "2026-05-04T08:00:00Z"
+      observedGeneration: 3
+```
+
+### Checking Conditions
+
+You can view conditions using kubectl:
+
+```bash
+kubectl get standalone example -o jsonpath='{.status.conditions}' | jq .
+```
+
+Or describe the resource:
+
+```bash
+kubectl describe standalone example
+```
+
+### Condition Behavior
+
+- **`lastTransitionTime`** only updates when the condition's `status` field changes (e.g., from "False" to "True"), not on every reconcile
+- **`observedGeneration`** reflects which spec generation the controller has processed
+- When an error occurs, the `Ready` condition's `message` field contains the specific error description
+
+## Troubleshooting
 
 #### CR Status Message
 The Splunk Enterprise CRDs with the Splunk Operator have a field `cr.Status.message` which provides a detailed view of the CR's current status.
