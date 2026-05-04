@@ -41,20 +41,6 @@ func SetPhaseAndConditions(existingConditions []metav1.Condition, phase enterpri
 	}
 }
 
-// SetCondition is a convenience function to set a single condition with all required fields.
-// It updates or adds the condition to the provided conditions slice.
-func SetCondition(conditions *[]metav1.Condition, conditionType enterpriseApi.ConditionType,
-	status metav1.ConditionStatus, reason enterpriseApi.ConditionReason, message string, generation int64) {
-	newCondition := metav1.Condition{
-		Type:               string(conditionType),
-		Status:             status,
-		Reason:             string(reason),
-		Message:            message,
-		ObservedGeneration: generation,
-	}
-	*conditions = UpdateCondition(*conditions, newCondition)
-}
-
 // deriveConditionsFromPhase derives Kubernetes-standard conditions from the given Phase.
 // If existingConditions is provided, LastTransitionTime is preserved when status hasn't changed.
 // This ensures conditions are always consistent with the phase while maintaining proper transition tracking.
