@@ -244,7 +244,7 @@ func TestSetPhaseAndConditions_Progressing(t *testing.T) {
 	}
 }
 
-func TestUpdateCondition(t *testing.T) {
+func TestUpsertCondition(t *testing.T) {
 	now := metav1.Now()
 	existingConditions := []metav1.Condition{
 		{
@@ -264,15 +264,15 @@ func TestUpdateCondition(t *testing.T) {
 		Message: "Replicas not ready",
 	}
 
-	updatedConditions := UpdateCondition(existingConditions, newCondition)
+	updatedConditions := UpsertCondition(existingConditions, newCondition)
 
 	if len(updatedConditions) != 1 {
-		t.Errorf("UpdateCondition() should not add new condition when updating existing, got %d conditions", len(updatedConditions))
+		t.Errorf("UpsertCondition() should not add new condition when updating existing, got %d conditions", len(updatedConditions))
 	}
 
 	readyCondition := GetCondition(updatedConditions, enterpriseApi.ConditionReady)
 	if readyCondition.Status != metav1.ConditionFalse {
-		t.Errorf("UpdateCondition() Status = %v, want %v", readyCondition.Status, metav1.ConditionFalse)
+		t.Errorf("UpsertCondition() Status = %v, want %v", readyCondition.Status, metav1.ConditionFalse)
 	}
 
 	// Test adding new condition
@@ -283,10 +283,10 @@ func TestUpdateCondition(t *testing.T) {
 		Message: "Updating",
 	}
 
-	updatedConditions = UpdateCondition(updatedConditions, progressingCondition)
+	updatedConditions = UpsertCondition(updatedConditions, progressingCondition)
 
 	if len(updatedConditions) != 2 {
-		t.Errorf("UpdateCondition() should add new condition, got %d conditions", len(updatedConditions))
+		t.Errorf("UpsertCondition() should add new condition, got %d conditions", len(updatedConditions))
 	}
 }
 
@@ -337,31 +337,6 @@ func TestIsConditionTrue(t *testing.T) {
 
 	if IsConditionTrue(conditions, enterpriseApi.ConditionPaused) {
 		t.Errorf("IsConditionTrue() should return false for non-existing condition")
-	}
-}
-
-func TestIsConditionFalse(t *testing.T) {
-	conditions := []metav1.Condition{
-		{
-			Type:   string(enterpriseApi.ConditionReady),
-			Status: metav1.ConditionTrue,
-		},
-		{
-			Type:   string(enterpriseApi.ConditionProgressing),
-			Status: metav1.ConditionFalse,
-		},
-	}
-
-	if IsConditionFalse(conditions, enterpriseApi.ConditionReady) {
-		t.Errorf("IsConditionFalse() should return false for Ready condition")
-	}
-
-	if !IsConditionFalse(conditions, enterpriseApi.ConditionProgressing) {
-		t.Errorf("IsConditionFalse() should return true for Progressing condition")
-	}
-
-	if IsConditionFalse(conditions, enterpriseApi.ConditionPaused) {
-		t.Errorf("IsConditionFalse() should return false for non-existing condition")
 	}
 }
 

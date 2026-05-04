@@ -205,10 +205,10 @@ func deriveConditionsFromPhase(existingConditions []metav1.Condition, phase ente
 	return conditions
 }
 
-// UpdateCondition updates or adds a condition in the conditions slice.
+// UpsertCondition updates or adds a condition in the conditions slice.
 // If a condition with the same type already exists, it is updated.
 // If not, the new condition is appended.
-func UpdateCondition(conditions []metav1.Condition, newCondition metav1.Condition) []metav1.Condition {
+func UpsertCondition(conditions []metav1.Condition, newCondition metav1.Condition) []metav1.Condition {
 	for i, c := range conditions {
 		if c.Type == newCondition.Type {
 			// Only update LastTransitionTime if status changed
@@ -241,12 +241,6 @@ func GetCondition(conditions []metav1.Condition, conditionType enterpriseApi.Con
 func IsConditionTrue(conditions []metav1.Condition, conditionType enterpriseApi.ConditionType) bool {
 	condition := GetCondition(conditions, conditionType)
 	return condition != nil && condition.Status == metav1.ConditionTrue
-}
-
-// IsConditionFalse returns true if the condition with the given type has status False.
-func IsConditionFalse(conditions []metav1.Condition, conditionType enterpriseApi.ConditionType) bool {
-	condition := GetCondition(conditions, conditionType)
-	return condition != nil && condition.Status == metav1.ConditionFalse
 }
 
 // IsReady returns true if the Ready condition is True.
