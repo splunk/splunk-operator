@@ -141,7 +141,7 @@ func deriveConditionsFromPhase(existingConditions []metav1.Condition, phase ente
 	case enterpriseApi.PhaseUpdating:
 		readyCondition.Status = metav1.ConditionFalse
 		readyCondition.Reason = string(enterpriseApi.ReasonReplicasNotReady)
-		readyCondition.Message = "Resource is updating"
+		readyCondition.Message = "Resource is being updated"
 		if message != "" {
 			readyCondition.Message = message
 		}
