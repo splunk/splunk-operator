@@ -186,6 +186,9 @@ func deriveConditionsFromPhase(existingConditions []metav1.Condition, phase ente
 		progressingCondition.Status = metav1.ConditionFalse
 		progressingCondition.Reason = string(enterpriseApi.ReasonReconcileFailed)
 		progressingCondition.Message = "Reconciliation failed"
+		if message != "" {
+			progressingCondition.Message = message
+		}
 		progressingCondition.LastTransitionTime = getTransitionTime(progressingCondition.Type, progressingCondition.Status)
 
 	default:
