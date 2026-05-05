@@ -152,7 +152,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			extraEnv, _ := GetCMMultisiteEnvVarsCall(ctx, cr, namespaceScopedSecret)
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 				return result, err
 			}
 		}
@@ -208,7 +208,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	extraEnv, _ := GetCMMultisiteEnvVarsCall(ctx, cr, namespaceScopedSecret)
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, extraEnv)
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 		return result, err
 	}
 
@@ -236,7 +236,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
 		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, true)
 		if err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 			return result, err
 		}
 	}
@@ -260,7 +260,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
 			err := addTelApp(ctx, podExecClient, numberOfClusterMasterReplicas, cr)
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install telemetry app")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install Telemetry app")
 				return result, err
 			}
 
@@ -272,7 +272,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		// So keep PerformCmBundlePush() as the last call in this block of code, so that other functionalities are not blocked
 		err = PerformCmBundlePush(ctx, client, cr, podExecClient)
 		if err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to push manager apps bundle")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to push Manager Apps bundle")
 			return result, err
 		}
 
@@ -282,7 +282,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		// trigger MonitoringConsole reconcile by changing the splunk/image-tag annotation
 		err = changeMonitoringConsoleAnnotations(ctx, client, cr)
 		if err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 			return result, err
 		}
 	}

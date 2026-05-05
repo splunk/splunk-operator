@@ -111,7 +111,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), false)
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 				return result, err
 			}
 		}
@@ -158,7 +158,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	//make changes to respective mc configmap when changing/removing mcRef from spec
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec))
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 		return result, err
 	}
 
@@ -180,7 +180,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
 		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), true)
 		if err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 			return result, err
 		}
 	}
@@ -199,7 +199,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 			podExecClient := splutil.GetPodExecClient(client, cr, "")
 			err := addTelApp(ctx, podExecClient, numberOfLicenseMasterReplicas, cr)
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install telemetry app")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install Telemetry app")
 				return result, err
 			}
 

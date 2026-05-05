@@ -127,7 +127,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getSearchHeadEnv(cr), false)
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 				return result, err
 			}
 		}
@@ -182,7 +182,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// create or update statefulset for the deployer
 	statefulSet, err := getDeployerStatefulSet(ctx, client, cr)
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update deployer StatefulSet")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Deployer StatefulSet")
 		return result, err
 	}
 
@@ -200,7 +200,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	deployerManager := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := deployerManager.Update(ctx, client, statefulSet, 1)
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update deployer pods")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Deployer pods")
 		return result, err
 	}
 	cr.Status.DeployerPhase = phase
@@ -208,14 +208,14 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// create or update statefulset for the search heads
 	statefulSet, err = getSearchHeadStatefulSet(ctx, client, cr)
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update search head StatefulSet")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head StatefulSet")
 		return result, err
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getSearchHeadEnv(cr))
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 		return result, err
 	}
 
@@ -225,7 +225,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update search head pods")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Search Head pods")
 		return result, err
 	}
 	setPhaseAndConditions(phase, "")
@@ -238,7 +238,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
 		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getSearchHeadEnv(cr), true)
 		if err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 			return result, err
 		}
 	}
@@ -263,7 +263,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 			podExecClient := splutil.GetPodExecClient(client, cr, "")
 			err := addTelApp(ctx, podExecClient, numberOfDeployerReplicas, cr)
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install telemetry app")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install Telemetry app")
 				return result, err
 			}
 

@@ -121,7 +121,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), false)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("create/update monitoring console config map failed %s", err.Error()))
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 				return result, err
 			}
 		}
@@ -175,7 +175,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 		isStatefulSetScaling, err := splctrl.IsStatefulSetScalingUpOrDown(ctx, client, cr, statefulsetName, cr.Spec.Replicas)
 		if err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to determine scaling state")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to determine Scaling state")
 			return result, err
 		}
 
@@ -212,7 +212,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, make([]corev1.EnvVar, 0))
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateMonitoringConsoleRef", fmt.Sprintf("validate monitoring console reference failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 		return result, err
 	}
 
@@ -231,7 +231,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		qosCfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, cr.Spec.QueueRef, cr.Spec.ObjectStorageRef, cr.Spec.ServiceAccount)
 		if err != nil {
 			scopedLog.Error(err, "Failed to resolve Queue/ObjectStorage config")
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to resolve queue configuration")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to resolve Queue configuration")
 			return result, err
 		}
 
@@ -245,7 +245,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyIngestorCluster", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
 				scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply queue configuration")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply Queue configuration")
 				return result, err
 			}
 
@@ -253,7 +253,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 				ingClient := mgr.getClient(ctx, i)
 				err = ingClient.RestartSplunk()
 				if err != nil {
-					setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to restart ingestor pods")
+					setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to restart Ingestor pods")
 					return result, err
 				}
 				scopedLog.Info("Restarted splunk", "ingestor", i)
@@ -274,7 +274,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), true)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map failed %s", err.Error()))
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 				return result, err
 			}
 		}
@@ -287,7 +287,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			podExecClient := splutil.GetPodExecClient(client, cr, "")
 			err = addTelApp(ctx, podExecClient, cr.Spec.Replicas, cr)
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install telemetry app")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install Telemetry app")
 				return result, err
 			}
 

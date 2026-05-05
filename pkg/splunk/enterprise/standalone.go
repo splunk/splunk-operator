@@ -139,7 +139,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), false)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("create/update monitoring console config map failed %s", err.Error()))
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 				return result, err
 			}
 		}
@@ -194,7 +194,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 
 		isStatefulSetScaling, err := splctrl.IsStatefulSetScalingUpOrDown(ctx, client, cr, statefulsetName, cr.Spec.Replicas)
 		if err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to determine scaling state")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to determine Scaling state")
 			return result, err
 		}
 		appStatusContext := cr.Status.AppContext
@@ -231,7 +231,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateMonitoringConsoleRef", fmt.Sprintf("validate monitoring console reference failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 		return result, err
 	}
 
@@ -270,7 +270,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), true)
 		if err != nil {
 			eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map failed %s", err.Error()))
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 			return result, err
 		}
 	}
@@ -293,7 +293,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			podExecClient := splutil.GetPodExecClient(client, cr, "")
 			err := addTelApp(ctx, podExecClient, cr.Spec.Replicas, cr)
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install telemetry app")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install Telemetry app")
 				return result, err
 			}
 
