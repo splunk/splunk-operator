@@ -76,14 +76,14 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateMonitoringConsoleSpec", fmt.Sprintf("validate monitoringconsole spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate monitoring console spec")
-		setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
 		return result, err
 	}
 
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
 		return result, err
 	}
 
@@ -95,7 +95,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		if err != nil {
 			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
-			setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
 			return result, err
 		}
 	}
@@ -107,7 +107,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
 		return result, err
 	}
 
@@ -119,7 +119,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkLicenseManager)
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
 				return result, err
 			}
 		}
@@ -137,7 +137,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, true))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create or update headless service failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
 		return result, err
 	}
 
@@ -145,7 +145,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create or update regular service failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
 		return result, err
 	}
 
@@ -153,7 +153,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	statefulSet, err := getMonitoringConsoleStatefulSet(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "getMonitoringConsoleStatefulSet", fmt.Sprintf("get monitoring console stateful set failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
 		return result, err
 	}
 
@@ -163,7 +163,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
 		if err != nil || !continueReconcile {
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
 			}
 			return result, err
 		}
@@ -173,7 +173,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	phase, err := mgr.Update(ctx, client, statefulSet, 1)
 	if err != nil {
 		eventPublisher.Warning(ctx, "getMonitoringConsoleStatefulSet", fmt.Sprintf("update to default statefuleset pod manager failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, err.Error())
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
 		return result, err
 	}
 	setPhaseAndConditions(phase, "")
