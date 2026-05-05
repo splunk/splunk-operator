@@ -267,7 +267,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		qosCfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, cr.Spec.QueueRef, cr.Spec.ObjectStorageRef, cr.Spec.ServiceAccount)
 		if err != nil {
 			scopedLog.Error(err, "Failed to resolve Queue/ObjectStorage config")
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to resolve queue configuration")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to resolve Queue configuration")
 			return result, err
 		}
 
@@ -282,7 +282,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				if err != nil {
 					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
 					scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
-					setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply queue configuration")
+					setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply Queue configuration")
 					return result, err
 				}
 
@@ -290,7 +290,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 					idxcClient := mgr.getClient(ctx, i)
 					err = idxcClient.RestartSplunk()
 					if err != nil {
-						setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to restart indexer pods")
+						setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to restart Indexer pods")
 						return result, err
 					}
 					scopedLog.Info("Restarted splunk", "indexer", i)
@@ -318,7 +318,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				err := c.AutomateMCApplyChanges()
 				if err != nil {
 					eventPublisher.Warning(ctx, "AutomateMCApplyChanges", fmt.Sprintf("get monitoring console client failed %s", err.Error()))
-					setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
+					setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
 					return result, err
 				}
 			}
@@ -340,7 +340,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
 			if err != nil {
 				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintenance mode failed %s", err.Error()))
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to set cluster maintenance mode")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to set Cluster Maintenance Mode")
 				return result, err
 			}
 		}
