@@ -78,7 +78,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateIndexerClusterSpec", fmt.Sprintf("validate indexercluster spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate indexercluster spec")
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Indexer Cluster spec validation failed")
 		return result, err
 	}
 
@@ -105,7 +105,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
 		return result, err
 	}
 
@@ -134,7 +134,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		err = VerifyRFPeers(ctx, mgr, client)
 		if err != nil {
 			eventPublisher.Warning(ctx, "verifyRFPeers", fmt.Sprintf("verify RF peer failed %s", err.Error()))
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Replication factor peer verification failed")
 			return result, err
 		}
 	}
@@ -159,6 +159,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update headless service for indexer cluster failed %s", err.Error()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update service")
 		return result, err
 	}
 
@@ -166,6 +167,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update service for indexer cluster failed %s", err.Error()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update service")
 		return result, err
 	}
 
@@ -173,6 +175,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	statefulSet, err := getIndexerStatefulSet(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "getIndexerStatefulSet", fmt.Sprintf("get indexer stateful set failed %s", err.Error()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")
 		return result, err
 	}
 
@@ -223,6 +226,9 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		// check if the IndexerCluster is ready for version upgrade
 		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
 		if err != nil || !continueReconcile {
+			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
+			}
 			return result, err
 		}
 	}
@@ -232,7 +238,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("update statefulset failed %s", err.Error()))
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods")
 			return result, err
 		}
 	} else {
@@ -241,7 +247,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("version mismatch for indexer cluster and indexer container, delete statefulset failed. Error=%s", err.Error()))
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("%s-%s, %s-%s", "indexer-image", cr.Spec.Image, "container-image", statefulSet.Spec.Template.Spec.Containers[0].Image))
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to upgrade StatefulSet")
 			return result, err
 		}
 		time.Sleep(1 * time.Second)
@@ -250,7 +256,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("update statefulset failed %s", err.Error()))
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods")
 			return result, err
 		}
 	}
@@ -261,6 +267,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		qosCfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, cr.Spec.QueueRef, cr.Spec.ObjectStorageRef, cr.Spec.ServiceAccount)
 		if err != nil {
 			scopedLog.Error(err, "Failed to resolve Queue/ObjectStorage config")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to resolve queue configuration")
 			return result, err
 		}
 
@@ -275,6 +282,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				if err != nil {
 					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
 					scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
+					setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply queue configuration")
 					return result, err
 				}
 
@@ -282,6 +290,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 					idxcClient := mgr.getClient(ctx, i)
 					err = idxcClient.RestartSplunk()
 					if err != nil {
+						setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to restart indexer pods")
 						return result, err
 					}
 					scopedLog.Info("Restarted splunk", "indexer", i)
@@ -297,7 +306,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
 		if err != nil {
 			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrieve cluster manager spec failed %s", err.Error()))
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Reconciliation failed")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to retrieve Cluster Manager spec")
 			return result, err
 		}
 		if cmMonitoringConsoleConfigRef != "" {
@@ -309,6 +318,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				err := c.AutomateMCApplyChanges()
 				if err != nil {
 					eventPublisher.Warning(ctx, "AutomateMCApplyChanges", fmt.Sprintf("get monitoring console client failed %s", err.Error()))
+					setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update monitoring console configuration")
 					return result, err
 				}
 			}
@@ -321,6 +331,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			if len(cr.Spec.ClusterManagerRef.Name) > 0 {
 				managerIdxcName = cr.Spec.ClusterManagerRef.Name
 			} else {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Empty Cluster Manager reference")
 				return result, errors.New("empty cluster manager reference")
 			}
 			cmPodName := fmt.Sprintf("splunk-%s-cluster-manager-%s", managerIdxcName, "0")
@@ -329,6 +340,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
 			if err != nil {
 				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintenance mode failed %s", err.Error()))
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to set cluster maintenance mode")
 				return result, err
 			}
 		}
@@ -347,6 +359,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		err = splctrl.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
 		if err != nil {
 			eventPublisher.Warning(ctx, "SetStatefulSetOwnerRef", fmt.Sprintf("set stateful set owner reference failed %s", err.Error()))
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to set StatefulSet owner reference")
 			result.Requeue = true
 			return result, err
 		}
