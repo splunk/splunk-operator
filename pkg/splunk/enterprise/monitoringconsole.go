@@ -137,7 +137,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, true))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create or update headless service failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update service")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update headless service")
 		return result, err
 	}
 
@@ -145,7 +145,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create or update regular service failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update service")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update regular service")
 		return result, err
 	}
 

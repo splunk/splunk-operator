@@ -159,7 +159,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update headless service for indexer cluster failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update service")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update headless service")
 		return result, err
 	}
 
@@ -167,7 +167,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update service for indexer cluster failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update service")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update regular service")
 		return result, err
 	}
 
@@ -256,7 +256,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("update statefulset failed %s", err.Error()))
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods after upgrade")
 			return result, err
 		}
 	}

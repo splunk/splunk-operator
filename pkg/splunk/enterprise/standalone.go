@@ -91,13 +91,13 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 
 		if err != nil {
 			eventPublisher.Warning(ctx, "AreRemoteVolumeKeysChanged", fmt.Sprintf("check remote volume key change failed %s", err.Error()))
-			setPhaseAndConditions(enterpriseApi.PhaseError, "SmartStore configuration failed")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "SmartStore remote volume key validation failed")
 			return result, err
 		}
 
 		_, _, err := ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
 		if err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "SmartStore configuration failed")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply SmartStore ConfigMap")
 			return result, err
 		}
 
@@ -139,7 +139,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), false)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("create/update monitoring console config map failed %s", err.Error()))
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
 				return result, err
 			}
 		}
@@ -171,7 +171,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, true))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update headless service failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update service")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update headless service")
 		return result, err
 	}
 
@@ -179,7 +179,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update regular service failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update service")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update regular service")
 		return result, err
 	}
 
@@ -231,7 +231,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateMonitoringConsoleRef", fmt.Sprintf("validate monitoring console reference failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference")
 		return result, err
 	}
 
@@ -270,7 +270,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), true)
 		if err != nil {
 			eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map failed %s", err.Error()))
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap")
 			return result, err
 		}
 	}
