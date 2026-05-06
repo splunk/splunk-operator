@@ -87,13 +87,13 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 		if err != nil {
 			eventPublisher.Warning(ctx, "AreRemoteVolumeKeysChanged", fmt.Sprintf("check remote volume key change failed %s", err.Error()))
-			setPhaseAndConditions(enterpriseApi.PhaseError, "SmartStore configuration failed")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "SmartStore remote volume key validation failed")
 			return result, err
 		}
 
 		_, configMapDataChanged, err := ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
 		if err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "SmartStore configuration failed")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply SmartStore ConfigMap")
 			return result, err
 		} else if configMapDataChanged {
 			// Do not auto populate with configMapDataChanged flag to NeedToPushManagerApps. Set it only  if
@@ -108,7 +108,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 	// This is to take care of case where AreRemoteVolumeKeysChanged returns an error if it returns false.
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "SmartStore configuration failed")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "SmartStore remote volume key validation failed")
 		return result, err
 	}
 
@@ -152,7 +152,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			extraEnv, _ := GetCMMultisiteEnvVarsCall(ctx, cr, namespaceScopedSecret)
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
 				return result, err
 			}
 		}
@@ -163,7 +163,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkClusterManager)
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up app framework ConfigMap during deletion")
 				return result, err
 			}
 		}
@@ -171,7 +171,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		// Check if ClusterManager has any remaining references to other CRs, if so don't delete
 		err = checkCmRemainingReferences(ctx, client, cr)
 		if err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Cluster Manager still has remaining CR references")
 			return result, err
 		}
 
@@ -208,7 +208,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	extraEnv, _ := GetCMMultisiteEnvVarsCall(ctx, cr, namespaceScopedSecret)
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, extraEnv)
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference")
 		return result, err
 	}
 
@@ -236,7 +236,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
 		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, true)
 		if err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap")
 			return result, err
 		}
 	}
@@ -282,7 +282,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		// trigger MonitoringConsole reconcile by changing the splunk/image-tag annotation
 		err = changeMonitoringConsoleAnnotations(ctx, client, cr)
 		if err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to trigger Monitoring Console reconciliation")
 			return result, err
 		}
 	}

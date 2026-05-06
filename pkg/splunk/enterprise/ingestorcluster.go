@@ -121,7 +121,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), false)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("create/update monitoring console config map failed %s", err.Error()))
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
 				return result, err
 			}
 		}
@@ -152,7 +152,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, true))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update headless service for ingestor cluster failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update service")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update headless service")
 		return result, err
 	}
 
@@ -160,7 +160,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update service for ingestor cluster failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update service")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update regular service")
 		return result, err
 	}
 
@@ -212,7 +212,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, make([]corev1.EnvVar, 0))
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateMonitoringConsoleRef", fmt.Sprintf("validate monitoring console reference failed %s", err.Error()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference")
 		return result, err
 	}
 
@@ -274,7 +274,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), true)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map failed %s", err.Error()))
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap")
 				return result, err
 			}
 		}
