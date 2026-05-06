@@ -18,10 +18,10 @@ package enterprise
 import (
 	"context"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // K8EventPublisher structure used to publish k8s event
@@ -56,9 +56,8 @@ func (k *K8EventPublisher) publishEvent(ctx context.Context, eventType, reason, 
 		return
 	}
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("PublishEvent")
-	scopedLog.Info("publishing event", "eventType", eventType, "reason", reason, "message", message)
+	logger := logging.FromContext(ctx).With("func", "PublishEvent")
+	logger.InfoContext(ctx, "publishing event", "eventType", eventType, "reason", reason, "message", message)
 
 	// Use the EventRecorder to emit the event
 	k.recorder.Event(k.instance, eventType, reason, message)

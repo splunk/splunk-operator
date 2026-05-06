@@ -21,8 +21,8 @@ import (
 	"fmt"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // NewMockAWSS3Client returns an AWS S3 mock client for testing
@@ -99,20 +99,19 @@ func NewMockAzureBlobClient(ctx context.Context, bucketName string, storageAccou
 
 // ConvertRemoteDataListResponse converts S3 Response to a mock client response
 func ConvertRemoteDataListResponse(ctx context.Context, RemoteDataListResponse RemoteDataListResponse) (spltest.MockRemoteDataClient, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ConvertRemoteDataListResponse")
+	scopedLog := logging.FromContext(ctx).With("func", "ConvertRemoteDataListResponse")
 
 	var mockResponse spltest.MockRemoteDataClient
 
 	tmp, err := json.Marshal(RemoteDataListResponse)
 	if err != nil {
-		scopedLog.Error(err, "Unable to marshal s3 response")
+		scopedLog.ErrorContext(ctx, "unable to marshal s3 response", "error", err)
 		return mockResponse, err
 	}
 
 	err = json.Unmarshal(tmp, &mockResponse)
 	if err != nil {
-		scopedLog.Error(err, "Unable to unmarshal s3 response")
+		scopedLog.ErrorContext(ctx, "unable to unmarshal s3 response", "error", err)
 		return mockResponse, err
 	}
 
@@ -137,8 +136,7 @@ func GetAppSrcVolume(ctx context.Context, appSource enterpriseApi.AppSourceSpec,
 	var err error
 	var vol enterpriseApi.VolumeSpec
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("GetAppSrcVolume")
+	scopedLog := logging.FromContext(ctx).With("func", "GetAppSrcVolume")
 
 	// get the volume spec from the volume name
 	if appSource.VolName != "" {
@@ -149,7 +147,7 @@ func GetAppSrcVolume(ctx context.Context, appSource enterpriseApi.AppSourceSpec,
 
 	index, err = CheckIfVolumeExists(appFrameworkRef.VolList, volName)
 	if err != nil {
-		scopedLog.Error(err, "Invalid volume name provided. Please specify a valid volume name.", "App source", appSource.Name, "Volume name", volName)
+		scopedLog.ErrorContext(ctx, "invalid volume name provided. Please specify a valid volume name", "appSource", appSource.Name, "volumeName", volName, "error", err)
 		return vol, err
 	}
 
