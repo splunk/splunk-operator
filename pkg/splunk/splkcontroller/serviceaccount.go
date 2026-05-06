@@ -18,18 +18,17 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // ApplyServiceAccount creates or updates a Kubernetes serviceAccount
 func ApplyServiceAccount(ctx context.Context, client splcommon.ControllerClient, serviceAccount *corev1.ServiceAccount) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyServiceAccount").WithValues("serviceAccount", serviceAccount.GetName(),
+	scopedLog := logging.FromContext(ctx).With("func", "ApplyServiceAccount", "serviceAccount", serviceAccount.GetName(),
 		"namespace", serviceAccount.GetNamespace())
 
 	namespacedName := types.NamespacedName{Namespace: serviceAccount.GetNamespace(), Name: serviceAccount.GetName()}
@@ -38,7 +37,7 @@ func ApplyServiceAccount(ctx context.Context, client splcommon.ControllerClient,
 	err := client.Get(ctx, namespacedName, &current)
 	if err == nil {
 		if !reflect.DeepEqual(serviceAccount, &current) {
-			scopedLog.Info("Updating service account")
+			scopedLog.InfoContext(ctx, "updating service account")
 			current = *serviceAccount
 			err = splutil.UpdateResource(ctx, client, &current)
 			if err != nil {
@@ -61,10 +60,9 @@ func GetServiceAccount(ctx context.Context, client splcommon.ControllerClient, n
 	var serviceAccount corev1.ServiceAccount
 	err := client.Get(ctx, namespacedName, &serviceAccount)
 	if err != nil {
-		reqLogger := log.FromContext(ctx)
-		scopedLog := reqLogger.WithName("GetServiceAccount").WithValues("serviceAccount", namespacedName.Name,
+		scopedLog := logging.FromContext(ctx).With("func", "GetServiceAccount", "serviceAccount", namespacedName.Name,
 			"namespace", namespacedName.Namespace, "error", err)
-		scopedLog.Info("ServiceAccount not found")
+		scopedLog.InfoContext(ctx, "serviceAccount not found")
 		return nil, err
 	}
 	return &serviceAccount, nil

@@ -19,7 +19,7 @@ import (
 	"context"
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"github.com/splunk/splunk-operator/pkg/logging"
 )
 
 // RemoteDataClientsMap is a map of remote storage provider name to
@@ -113,8 +113,7 @@ type SplunkRemoteDataClient struct {
 
 // RegisterRemoteDataClient registers the respective Client
 func RegisterRemoteDataClient(ctx context.Context, provider string) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("RegisterRemoteDataClient")
+	scopedLog := logging.FromContext(ctx).With("func", "RegisterRemoteDataClient")
 	switch provider {
 	case "aws":
 		RegisterAWSS3Client()
@@ -125,6 +124,6 @@ func RegisterRemoteDataClient(ctx context.Context, provider string) {
 	case "gcp":
 		RegisterGCSClient()
 	default:
-		scopedLog.Error(nil, "Invalid provider specified", "provider", provider)
+		scopedLog.ErrorContext(ctx, "invalid provider specified", "provider", provider)
 	}
 }
