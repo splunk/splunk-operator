@@ -22,6 +22,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
@@ -30,7 +31,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // DefaultStatefulSetPodManager is a simple StatefulSetPodManager that does nothing
@@ -113,8 +113,7 @@ func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised
 
 // UpdateStatefulSetPods manages scaling and config updates for StatefulSets
 func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, mgr splcommon.StatefulSetPodManager, desiredReplicas int32) (enterpriseApi.Phase, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("UpdateStatefulSetPods").WithValues(
+	scopedLog := logging.FromContext(ctx).With("func", "UpdateStatefulSetPods",
 		"name", statefulSet.GetObjectMeta().GetName(),
 		"namespace", statefulSet.GetObjectMeta().GetNamespace())
 
@@ -125,7 +124,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: statefulSet.GetName()}
 	err := c.Get(ctx, namespacedName, statefulSet)
 	if err != nil {
-		scopedLog.Error(err, "Unable to re-fetch StatefulSet for latest status")
+		scopedLog.ErrorContext(ctx, "unable to re-fetch StatefulSet for latest status", "error", err)
 		return enterpriseApi.PhaseError, err
 	}
 
@@ -133,13 +132,13 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	replicas := *statefulSet.Spec.Replicas
 	readyReplicas := statefulSet.Status.ReadyReplicas
 	if readyReplicas < replicas {
-		scopedLog.Info("Waiting for pods to become ready")
+		scopedLog.InfoContext(ctx, "waiting for pods to become ready")
 		if readyReplicas > 0 {
 			return enterpriseApi.PhaseScalingUp, nil
 		}
 		return enterpriseApi.PhasePending, nil
 	} else if readyReplicas > replicas {
-		scopedLog.Info("Waiting for scale down to complete")
+		scopedLog.InfoContext(ctx, "waiting for scale down to complete")
 		return enterpriseApi.PhaseScalingDown, nil
 	}
 
@@ -148,7 +147,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	// check for scaling up
 	if readyReplicas < desiredReplicas {
 		// scale up StatefulSet to match desiredReplicas
-		scopedLog.Info("Scaling replicas up", "replicas", desiredReplicas)
+		scopedLog.InfoContext(ctx, "scaling replicas up", "replicas", desiredReplicas)
 		*statefulSet.Spec.Replicas = desiredReplicas
 		return enterpriseApi.PhaseScalingUp, splutil.UpdateResource(ctx, c, statefulSet)
 	}
@@ -160,7 +159,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
 		ready, err := mgr.PrepareScaleDown(ctx, n)
 		if err != nil {
-			scopedLog.Error(err, "Unable to decommission Pod", "podName", podName)
+			scopedLog.ErrorContext(ctx, "unable to decommission Pod", "podName", podName, "error", err)
 			return enterpriseApi.PhaseError, err
 		}
 		if !ready {
@@ -169,11 +168,11 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		}
 
 		// scale down statefulset to terminate pod
-		scopedLog.Info("Scaling replicas down", "replicas", n)
+		scopedLog.InfoContext(ctx, "scaling replicas down", "replicas", n)
 		*statefulSet.Spec.Replicas = n
 		err = splutil.UpdateResource(ctx, c, statefulSet)
 		if err != nil {
-			scopedLog.Error(err, "Scale down update failed for StatefulSet")
+			scopedLog.ErrorContext(ctx, "scale down update failed for StatefulSet", "error", err)
 			return enterpriseApi.PhaseError, err
 		}
 
@@ -186,13 +185,13 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			var pvc corev1.PersistentVolumeClaim
 			err := c.Get(ctx, namespacedName, &pvc)
 			if err != nil {
-				scopedLog.Error(err, "Unable to find PVC for deletion", "pvcName", pvc.ObjectMeta.Name)
+				scopedLog.ErrorContext(ctx, "unable to find PVC for deletion", "pvcName", pvc.ObjectMeta.Name, "error", err)
 				return enterpriseApi.PhaseError, err
 			}
-			scopedLog.Info("Deleting PVC", "pvcName", pvc.ObjectMeta.Name)
+			scopedLog.InfoContext(ctx, "deleting PVC", "pvcName", pvc.ObjectMeta.Name)
 			err = c.Delete(ctx, &pvc)
 			if err != nil {
-				scopedLog.Error(err, "Unable to delete PVC", "pvcName", pvc.ObjectMeta.Name)
+				scopedLog.ErrorContext(ctx, "unable to delete PVC", "pvcName", pvc.ObjectMeta.Name, "error", err)
 				return enterpriseApi.PhaseError, err
 			}
 		}
@@ -211,11 +210,11 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		var pod corev1.Pod
 		err := c.Get(ctx, namespacedName, &pod)
 		if err != nil {
-			scopedLog.Error(err, "Unable to find Pod", "podName", podName)
+			scopedLog.ErrorContext(ctx, "unable to find Pod", "podName", podName, "error", err)
 			return enterpriseApi.PhaseError, err
 		}
 		if pod.Status.Phase != corev1.PodRunning || len(pod.Status.ContainerStatuses) == 0 || !pod.Status.ContainerStatuses[0].Ready {
-			scopedLog.Error(err, "Waiting for Pod to become ready", "podName", podName)
+			scopedLog.ErrorContext(ctx, "waiting for Pod to become ready", "podName", podName, "error", err)
 			return enterpriseApi.PhaseUpdating, err
 		}
 
@@ -224,7 +223,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			// pod needs to be updated; first, prepare it to be recycled
 			ready, err := mgr.PrepareRecycle(ctx, n)
 			if err != nil {
-				scopedLog.Error(err, "Unable to prepare Pod for recycling", "podName", podName)
+				scopedLog.ErrorContext(ctx, "unable to prepare Pod for recycling", "podName", podName, "error", err)
 				return enterpriseApi.PhaseError, err
 			}
 			if !ready {
@@ -233,13 +232,13 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			}
 
 			// deleting pod will cause StatefulSet controller to create a new one with latest template
-			scopedLog.Info("Recycling Pod for updates", "podName", podName,
+			scopedLog.InfoContext(ctx, "recycling Pod for updates", "podName", podName,
 				"statefulSetRevision", statefulSet.Status.UpdateRevision,
 				"podRevision", pod.GetLabels()["controller-revision-hash"])
 			preconditions := client.Preconditions{UID: &pod.ObjectMeta.UID, ResourceVersion: &pod.ObjectMeta.ResourceVersion}
 			err = c.Delete(context.Background(), &pod, preconditions)
 			if err != nil {
-				scopedLog.Error(err, "Unable to delete Pod", "podName", podName)
+				scopedLog.ErrorContext(ctx, "unable to delete Pod", "podName", podName, "error", err)
 				return enterpriseApi.PhaseError, err
 			}
 
@@ -250,7 +249,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		// check if pod was previously prepared for recycling; if so, complete
 		complete, err := mgr.FinishRecycle(ctx, n)
 		if err != nil {
-			scopedLog.Error(err, "Unable to complete recycling of pod", "podName", podName)
+			scopedLog.ErrorContext(ctx, "unable to complete recycling of pod", "podName", podName, "error", err)
 			return enterpriseApi.PhaseError, err
 		}
 		if !complete {
@@ -266,17 +265,17 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	}
 
 	// all is good!
-	scopedLog.Info("All pods are ready")
+	scopedLog.InfoContext(ctx, "all pods are ready")
 
 	// Finalize rolling upgrade process
 	// It uses first pod to get a client
 	err = mgr.FinishUpgrade(ctx, 0)
 	if err != nil {
-		scopedLog.Error(err, "Unable to finalize rolling upgrade process")
+		scopedLog.ErrorContext(ctx, "unable to finalize rolling upgrade process", "error", err)
 		return enterpriseApi.PhaseError, err
 	}
 
-	scopedLog.Info("Statefulset - Phase Ready")
+	scopedLog.InfoContext(ctx, "statefulset - Phase Ready")
 
 	return enterpriseApi.PhaseReady, nil
 }
@@ -307,10 +306,9 @@ func SetStatefulSetOwnerRef(ctx context.Context, client splcommon.ControllerClie
 
 // RemoveUnwantedOwnerRefSs removes all the unwanted owner references for statefulset except the CR it belongs to
 func RemoveUnwantedOwnerRefSs(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, cr splcommon.MetaObject) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("RemoveUnwantedOwnerRefSs").WithValues("statefulSet", namespacedName)
+	scopedLog := logging.FromContext(ctx).With("func", "RemoveUnwantedOwnerRefSs", "statefulSet", namespacedName)
 
-	scopedLog.Info("Removing unwanted owner references on CR deletion")
+	scopedLog.InfoContext(ctx, "removing unwanted owner references on CR deletion")
 
 	// Get statefulSet
 	statefulset, err := GetStatefulSetByName(ctx, client, namespacedName)
@@ -385,13 +383,12 @@ func isCurrentCROwner(cr splcommon.MetaObject, currentOwners []metav1.OwnerRefer
 
 // IsStatefulSetScalingUpOrDown checks if we are currently scaling up or down
 func IsStatefulSetScalingUpOrDown(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, name string, desiredReplicas int32) (enterpriseApi.StatefulSetScalingType, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("isScalingUp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := logging.FromContext(ctx).With("func", "isScalingUp", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: name}
 	current, err := GetStatefulSetByName(ctx, client, namespacedName)
 	if err != nil {
-		scopedLog.Error(err, "Unable to get current stateful set", "name", namespacedName)
+		scopedLog.ErrorContext(ctx, "unable to get current stateful set", "name", namespacedName, "error", err)
 		return enterpriseApi.StatefulSetNotScaling, err
 	}
 

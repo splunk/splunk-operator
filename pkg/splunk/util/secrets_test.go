@@ -1073,24 +1073,54 @@ func TestGetNamespaceScopedSecretByName(t *testing.T) {
 	_, _ = ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	secretName := splcommon.GetNamespaceScopedSecretName("test")
 
-	secret, err := GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), secretName)
+	secret, err := GetSecretByName(ctx, c, cr.GetNamespace(), secretName)
 	if secret == nil || err != nil {
 		t.Error(err.Error())
 	}
 }
 
-// mockLogger is a test logger that implements the logger interface used by validateNamespaceScopedSecrets
-type mockLogger struct {
-	infoMessages  []string
-	errorMessages []string
+func TestGetSecretByNameNotFound(t *testing.T) {
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+
+	notFoundErr := k8serrors.NewNotFound(
+		schema.GroupResource{Group: "", Resource: "secrets"},
+		"nonexistent-secret",
+	)
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = notFoundErr
+
+	secret, err := GetSecretByName(ctx, c, "test", "nonexistent-secret")
+	if secret != nil {
+		t.Error("Expected nil secret for NotFound error")
+	}
+	if err == nil {
+		t.Fatal("Expected error for NotFound")
+	}
+	if !k8serrors.IsNotFound(err) {
+		t.Errorf("Expected NotFound error, got: %v", err)
+	}
 }
 
-func (ml *mockLogger) Info(msg string, keysAndValues ...interface{}) {
-	ml.infoMessages = append(ml.infoMessages, msg)
-}
+func TestGetSecretByNameAPIError(t *testing.T) {
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
 
-func (ml *mockLogger) Error(err error, msg string, keysAndValues ...interface{}) {
-	ml.errorMessages = append(ml.errorMessages, msg)
+	apiErr := errors.New("connection refused")
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = apiErr
+
+	secret, err := GetSecretByName(ctx, c, "test", "some-secret")
+	if secret != nil {
+		t.Error("Expected nil secret for API error")
+	}
+	if err == nil {
+		t.Fatal("Expected error for API failure")
+	}
+	if k8serrors.IsNotFound(err) {
+		t.Error("Expected non-NotFound error")
+	}
+	if err.Error() != "connection refused" {
+		t.Errorf("Expected 'connection refused' error, got: %v", err)
+	}
 }
 
 func TestValidateNamespaceScopedSecrets(t *testing.T) {
@@ -1256,29 +1286,16 @@ func TestValidateNamespaceScopedSecrets(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockLog := &mockLogger{}
-			err := validateNamespaceScopedSecrets(mockLog, tt.secret)
+			err := validateNamespaceScopedSecrets(context.TODO(), tt.secret)
 
 			if (err != nil) != tt.wantError {
 				t.Errorf("validateNamespaceScopedSecrets() error = %v, wantError %v", err, tt.wantError)
 			}
 
 			if tt.wantError && err != nil && tt.errMsg != "" {
-				// Check error message contains expected substring
-				if !errors.Is(err, err) && tt.errMsg != "" {
+				if !strings.Contains(err.Error(), tt.errMsg) {
 					t.Errorf("validateNamespaceScopedSecrets() error message = %v, want to contain %v", err.Error(), tt.errMsg)
 				}
-			}
-
-			// Verify logging was called appropriately
-			// Only check info logs if we had a successful validation and had secrets to validate
-			if !tt.wantError && len(tt.secret.Data) > 0 && len(mockLog.infoMessages) == 0 {
-				t.Errorf("validateNamespaceScopedSecrets() expected info logs for successful validation")
-			}
-
-			// Only check error logs if we had a failure and secrets existed to be validated
-			if tt.wantError && len(tt.secret.Data) > 0 && len(mockLog.errorMessages) == 0 {
-				t.Errorf("validateNamespaceScopedSecrets() expected error logs for failed validation")
 			}
 		})
 	}
