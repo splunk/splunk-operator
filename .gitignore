@@ -92,7 +92,7 @@ clair-scanner-logs
 release-*
 !gitlab-ci/release-*.sh
 deploy/olm-certified
-report-junit*.xml
+*-junit*.xml
 unit_test*.xml
 junit-reports/
 # Bias Language Linter
@@ -104,6 +104,9 @@ kubeconfig
 .devcontainer/devcontainer.json
 kuttl-artifacts/*
 ci-output/
+
+# Helm data (CI cache directory)
+.helm-data/
 
 # Python bytecode caches
 __pycache__/

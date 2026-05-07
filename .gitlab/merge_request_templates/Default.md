@@ -1,29 +1,25 @@
 ## Summary
 
-- what changed
-- why it changed
+_What does this MR do and why?_
 
-## Pipeline Impact
+## Key Changes
 
-- affected lanes: MR / develop / nightly / qualification / release / main publish / none
-- trigger or behavior changes:
-- new or changed `PIPELINE_*` inputs:
+_Highlight the updates in specific files or areas of the codebase_
 
 ## Testing
 
-- local:
-- pipeline:
-- manual:
+_How were these changes tested? What automated tests are added or updated?_
 
 ## Jira
 
 - epic:
-- story:
+- ticket:
 - follow-up:
 
 ## Checklist
 
-- [ ] existing `make` targets were reused where available
-- [ ] no duplicate CI variable contract was added without a clear reason
-- [ ] documentation was updated or intentionally left unchanged
-- [ ] affected lanes and triggers are listed above
+- [ ] Code changes adhere to the project's coding standards
+- [ ] Relevant unit and integration tests are included
+- [ ] Documentation has been updated accordingly
+- [ ] If test framework files were changed (`test/testenv/`, `test/run-tests.sh`, `test/env.sh`), `docs/IntegrationTesting.md` has been updated
+- [ ] All tests pass locally

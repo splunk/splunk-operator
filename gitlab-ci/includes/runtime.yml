@@ -20,6 +20,7 @@ build-stage-image:
   needs:
     - unit-tests
     - kubectl-splunk-tests
+    - helm-chart-tests
   variables:
     WORKFLOW_SLUG: build-test-push-workflow
   script:

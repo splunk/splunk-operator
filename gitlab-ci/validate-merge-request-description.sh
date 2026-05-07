@@ -79,7 +79,7 @@ fi
 template_path=".gitlab/merge_request_templates/Default.md"
 set -- \
   "## Summary" \
-  "## Pipeline Impact" \
+  "## Key Changes" \
   "## Testing" \
   "## Jira" \
   "## Checklist"
