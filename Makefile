@@ -586,8 +586,16 @@ setup/ginkgo:
 
 .PHONY: setup/helm-unittest
 setup/helm-unittest:
-	@helm plugin list 2>/dev/null | grep -q unittest || \
-		helm plugin install https://github.com/helm-unittest/helm-unittest.git --version $(HELM_UNITTEST_VERSION)
+	@if helm plugin list 2>/dev/null | grep -q unittest; then \
+		installed=$$(helm plugin list 2>/dev/null | awk '/unittest/{print $$2}'); \
+		expected=$$(echo "$(HELM_UNITTEST_VERSION)" | sed 's/^v//'); \
+		if [ "$$installed" != "$$expected" ]; then \
+			helm plugin uninstall unittest; \
+			helm plugin install https://github.com/helm-unittest/helm-unittest.git --version $(HELM_UNITTEST_VERSION); \
+		fi; \
+	else \
+		helm plugin install https://github.com/helm-unittest/helm-unittest.git --version $(HELM_UNITTEST_VERSION); \
+	fi
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize
