@@ -7,6 +7,9 @@ build-stage-image:
       when: never
     - if: '$SOK_PIPELINE_MODE == "release_publish"'
       when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^release([\/-]).+$/'
+      variables:
+        JOB_BUILD_DISTROLESS: "true"
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^release([\/-]).+$/'
       variables:
         JOB_BUILD_DISTROLESS: "true"
@@ -115,6 +118,8 @@ scan-released-operator-image-trivy:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: never
     - if: '$CI_COMMIT_BRANCH =~ /^release([\/-]).+$/'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^release([\/-]).+$/'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^release([\/-]).+$/'
       when: never
