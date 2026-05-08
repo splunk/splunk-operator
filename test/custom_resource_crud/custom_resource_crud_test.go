@@ -50,8 +50,8 @@ var _ = Describe("Custom Resource CRUD test", func() {
 			newCPULimits = UpdatedCPULimits
 		})
 
-		AfterEach(func() {
-			Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+		AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+			Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 		})
 
 		It("managercrcrud, integration, s1: can deploy a Standalone instance, change its CR, update the instance", func() {
@@ -72,8 +72,8 @@ var _ = Describe("Custom Resource CRUD test", func() {
 				Expect(err).To(Succeed(), "Failed to setup test case environment")
 			})
 
-			AfterEach(func() {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
 			It(tc.Label+", integration, c3: can deploy Indexer and Search Head Cluster, change their CR, update the instances", func() {
@@ -97,8 +97,8 @@ var _ = Describe("Custom Resource CRUD test", func() {
 			Expect(err).To(Succeed(), "Failed to setup test case environment")
 		})
 
-		AfterEach(func() {
-			Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+		AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+			Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 		})
 
 		It("managercrcrud, integration, shc: can deploy Search Head Cluster with Deployer resource spec configured", func() {
@@ -118,8 +118,8 @@ var _ = Describe("Custom Resource CRUD test", func() {
 				Expect(err).To(Succeed(), "Failed to setup test case environment")
 			})
 
-			AfterEach(func() {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
 			It(tc.Label+", integration, m4: can deploy multisite Indexer and Search Head Clusters, change their CR, update the instances", func() {
