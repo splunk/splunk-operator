@@ -54,7 +54,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 	})
 
 	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
-		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+		Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 	})
 
 	Context("Ingestor and Indexer deployment", func() {

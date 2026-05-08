@@ -130,7 +130,12 @@ func GetPodAppStatus(ctx context.Context, deployment *Deployment, podName string
 	if err != nil {
 		return "", "", err
 	}
-	status := strings.Fields(output)[2]
+	fields := strings.Fields(output)
+	if len(fields) < 3 {
+		return "", "", fmt.Errorf("unexpected output from 'splunk display app' on pod %s for app %s: %q", podName, appname, output)
+	}
+	status := fields[2]
+
 	version, err := GetPodInstalledAppVersion(ctx, deployment, podName, ns, appname, clusterWideInstall)
 	return status, version, err
 
@@ -487,7 +492,7 @@ func (testenv *TestCaseEnv) VerifyAppFrameworkState(ctx context.Context, deploym
 				}()
 
 				testenv.Log.Info(fmt.Sprintf("Verify apps '%v' state on CR %v with name %v", p, as.CrKind, as.CrName))
-				verifyCtx, cancel := context.WithTimeout(ctx, deployment.GetTimeout())
+				verifyCtx, cancel := context.WithTimeout(ctx, AppInstallTimeout)
 				defer cancel()
 
 				if err := testenv.VerifyAppListPhase(verifyCtx, deployment, as.CrName, as.CrKind, as.CrAppSourceName, p, as.CrAppFileList); err != nil {
@@ -538,7 +543,7 @@ func (testenv *TestCaseEnv) VerifyAppFrameworkState(ctx context.Context, deploym
 			}()
 
 			testenv.Log.Info(fmt.Sprintf("Verify apps '%v' state on CR %v with name %v", enterpriseApi.PhaseInstall, as.CrKind, as.CrName))
-			verifyCtx, cancel := context.WithTimeout(ctx, deployment.GetTimeout())
+			verifyCtx, cancel := context.WithTimeout(ctx, AppInstallTimeout)
 			defer cancel()
 
 			if err := testenv.VerifyAppListPhase(verifyCtx, deployment, as.CrName, as.CrKind, as.CrAppSourceName, enterpriseApi.PhaseInstall, as.CrAppFileList); err != nil {

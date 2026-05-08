@@ -51,6 +51,11 @@ const defaultTestTimeout = 5400
 // complete in seconds; this value is a generous safety net.
 const DefaultTimeout = 15 * time.Minute
 
+// ReadinessPollTimeout is the per-attempt timeout for individual CR readiness
+// polls inside Verify*Ready helpers. It must be shorter than DefaultTimeout so
+// that an outer Eventually wrapper has room to retry on transient failures.
+const ReadinessPollTimeout = 5 * time.Minute
+
 // AppInstallTimeout is the timeout for waiting for apps to reach Install phase on a CR.
 // C3 deployments require bundle push across all indexers and SHC deployer which can exceed 5 minutes.
 const AppInstallTimeout = 10 * time.Minute
@@ -60,6 +65,12 @@ const AppInstallTimeout = 10 * time.Minute
 // M4 clusters need time to initialise before app processing begins, so this
 // value is generous.
 const AppStateVerificationTimeout = 60 * time.Minute
+
+// MonitoringConsoleReadyTimeout is the outer Eventually budget used by tests
+// that wait for the MonitoringConsole CR to reach the Ready phase. MC
+// reconciliation can take longer than DefaultTimeout (15m) on M4 deployments
+// while the operator settles SHC/IDXC peer registration; allow 30m here.
+const MonitoringConsoleReadyTimeout = 30 * time.Minute
 
 // SetupTeardownTimeout limits BeforeEach setup and AfterEach teardown nodes.
 // Prevents hung setup or cleanup from consuming the entire suite timeout.
