@@ -38,7 +38,9 @@ func RunLMS1Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 	Expect(err).To(Succeed(), "Unable to deploy Standalone instance with LM")
 
 	// Wait for License Manager/Master and Standalone to be in READY status
-	Expect(testenv.VerifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config.ClusterReadinessConfig, standalone)).To(Succeed(), "License Manager or Standalone not ready")
+	Eventually(func() error {
+		return testenv.VerifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config.ClusterReadinessConfig, standalone)
+	}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "License Manager or Standalone not ready")
 
 	// Deploy and verify Monitoring Console
 	_, err = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
@@ -49,10 +51,10 @@ func RunLMS1Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 
 	// Verify License Manager/Master is configured on Standalone instance
 	standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-	Expect(testenv.VerifyLMConfiguredOnPod(ctx, deployment, standalonePodName)).To(Succeed(), "LM not configured on Standalone pod")
+	Eventually(func() error { return testenv.VerifyLMConfiguredOnPod(ctx, deployment, standalonePodName) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "LM not configured on Standalone pod")
 
 	// Verify License Manager/Master is configured on Monitoring Console
-	Expect(testenv.VerifyLMConfiguredOnMC(ctx, deployment)).To(Succeed(), "LM not configured on MC")
+	Eventually(func() error { return testenv.VerifyLMConfiguredOnMC(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "LM not configured on MC")
 }
 
 // RunLMC3Test deploys a C3 cluster with License Manager and Monitoring Console,
@@ -66,7 +68,7 @@ func RunLMC3Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 
 	// Verify License Manager/Master is configured on indexers, search heads, and MC
 	indexerPods := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), 3, false, 0)
-	Expect(testenv.VerifyLMConfiguredOnCluster(ctx, deployment, indexerPods)).To(Succeed(), "LM not configured on cluster pods")
+	Eventually(func() error { return testenv.VerifyLMConfiguredOnCluster(ctx, deployment, indexerPods) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "LM not configured on cluster pods")
 }
 
 // RunLMC3AppFrameworkTest deploys a License Manager with App Framework, verifies V1 apps
@@ -132,7 +134,7 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 	Expect(err).To(Succeed(), "Unable to deploy LM with App Framework")
 
 	// Wait for License Manager/Master to be in READY status
-	Expect(config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)).To(Succeed(), "License Manager not ready")
+	Eventually(func() error { return config.LicenseManagerReady(ctx, deployment, testcaseEnvInst) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "License Manager not ready")
 
 	// Wait for V1 apps to reach Install phase on License Manager/Master
 	err = testcaseEnvInst.WaitForAllAppsPhase(ctx, deployment, deployment.GetName(), config.CrKind, appSourceName, appListV1, enterpriseApi.PhaseInstall, 2*time.Minute)
@@ -140,7 +142,9 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 
 	// Verify apps are copied and installed on License Manager/Master
 	podName := []string{fmt.Sprintf(config.LicenseManagerPodName, deployment.GetName(), 0)}
-	Expect(testenv.VerifyLMAppsOnPod(ctx, deployment, testcaseEnvInst, testenvInstance, podName, appListV1, false)).To(Succeed(), "V1 apps not found on LM pod")
+	Eventually(func() error {
+		return testenv.VerifyLMAppsOnPod(ctx, deployment, testcaseEnvInst, testenvInstance, podName, appListV1, false)
+	}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "V1 apps not found on LM pod")
 
 	// Delete files uploaded
 	testenv.DeleteUploadedFiles(ctx, testS3Bucket, uploadedApps)
@@ -163,14 +167,16 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 	testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), config.CrKind, appSourceName, appFileList)
 
 	// Wait for License Manager/Master to finish processing V2 apps and become Ready
-	Expect(config.LicenseManagerReady(ctx, deployment, testcaseEnvInst)).To(Succeed(), "License Manager not ready after V2 upload")
+	Eventually(func() error { return config.LicenseManagerReady(ctx, deployment, testcaseEnvInst) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "License Manager not ready after V2 upload")
 
 	// Wait for V2 apps to reach Install phase on License Manager/Master
 	err = testcaseEnvInst.WaitForAllAppsPhase(ctx, deployment, deployment.GetName(), config.CrKind, appSourceName, appListV2, enterpriseApi.PhaseInstall, 2*time.Minute)
 	Expect(err).To(Succeed(), "Timed out waiting for V2 apps to reach Install phase on LicenseManager")
 
 	// Verify apps are copied and installed on License Manager/Master
-	Expect(testenv.VerifyLMAppsOnPod(ctx, deployment, testcaseEnvInst, testenvInstance, podName, appListV2, true)).To(Succeed(), "V2 apps not found on LM pod")
+	Eventually(func() error {
+		return testenv.VerifyLMAppsOnPod(ctx, deployment, testcaseEnvInst, testenvInstance, podName, appListV2, true)
+	}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "V2 apps not found on LM pod")
 
 	// Delete files uploaded
 	testenv.DeleteUploadedFiles(ctx, testS3Bucket, uploadedApps)
@@ -191,5 +197,5 @@ func RunLMM4Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 
 	// Verify License Manager/Master is configured on indexers, search heads, and MC
 	indexerPods := testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)
-	Expect(testenv.VerifyLMConfiguredOnCluster(ctx, deployment, indexerPods)).To(Succeed(), "LM not configured on multisite cluster pods")
+	Eventually(func() error { return testenv.VerifyLMConfiguredOnCluster(ctx, deployment, indexerPods) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "LM not configured on multisite cluster pods")
 }

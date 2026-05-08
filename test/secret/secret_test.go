@@ -43,8 +43,8 @@ var _ = Describe("Secret test", func() {
 			Expect(err).To(Succeed(), "Failed to setup test case environment")
 		})
 
-		AfterEach(func() {
-			Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+		AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+			Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 		})
 
 		It("managersecret, integration, s1: Secret update on a standalone instance with LM and MC", func() {
@@ -73,8 +73,8 @@ var _ = Describe("Secret test", func() {
 				Expect(err).To(Succeed(), "Failed to setup test case environment")
 			})
 
-			AfterEach(func() {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
 			It(tc.Label+", smoke, c3: secret update on Indexers and Search Head Cluster", func() {
@@ -94,8 +94,8 @@ var _ = Describe("Secret test", func() {
 				Expect(err).To(Succeed(), "Failed to setup test case environment")
 			})
 
-			AfterEach(func() {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
 			It(tc.Label+", integration, m4: secret update on multisite Indexers and Search Head Cluster", func() {

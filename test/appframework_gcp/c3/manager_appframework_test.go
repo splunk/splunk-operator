@@ -14,6 +14,7 @@
 package c3gcpappfw
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -121,7 +122,11 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Upload V1 apps to GCS for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Indexer Cluster", appVersion))
@@ -157,13 +162,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -172,7 +177,11 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)).To(Succeed(), "Custom resource version not changed")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Verify no SH in disconnected status is present on CM
 			Expect(testcaseEnvInst.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment)).To(Succeed(), "Disconnected SH found on CM")
@@ -239,13 +248,13 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -253,7 +262,11 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)).To(Succeed(), "Custom resource version not changed")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -335,22 +348,30 @@ var _ = Describe("c3appfw test", func() {
 			idxc, err := deployment.DeployIndexerCluster(ctx, idxName, lm.GetName(), 3, cm.GetName(), "", corev1.ObjectReference{}, corev1.ObjectReference{}, "")
 
 			// Wait for License Manager to be in READY phase
-			Expect(testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment)).To(Succeed(), "License Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "License Manager not ready")
 
 			// Ensure Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Monitoring Console goes to Ready phase
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// // Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// // Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// // Verify no SH in disconnected status is present on CM
 			Expect(testcaseEnvInst.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment)).To(Succeed(), "Disconnected SH found on CM")
@@ -408,19 +429,23 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Failed upgrade Indexer Cluster image")
 
 			// Ensure Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Wait for License Manager to be in READY phase
-			Expect(testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment)).To(Succeed(), "License Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "License Manager not ready")
 
 			// // Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// // Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// // Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 		})
 	})
@@ -491,7 +516,11 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Upload V2 apps to GCS for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Indexer Cluster", appVersion))
@@ -527,13 +556,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -542,7 +571,11 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)).To(Succeed(), "Custom resource version not changed")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -597,13 +630,13 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -611,7 +644,11 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)).To(Succeed(), "Custom resource version not changed")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -708,13 +745,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -797,7 +834,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp, idxcName)).To(Succeed(), "Indexer Cluster phase mismatch")
 
 			// Ensure Indexer Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify New Indexer On Cluster Manager
 			indexerName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas-1)
@@ -808,7 +845,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.IngestDataOnIndexers(ctx, deployment, int(scaledIndexerReplicas))
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -883,10 +920,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown, idxcName)).To(Succeed(), "Indexer Cluster phase mismatch")
 
 			// Ensure Indexer Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -981,13 +1018,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -1031,13 +1068,13 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -1172,13 +1209,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -1237,13 +1274,13 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -1381,13 +1418,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -1462,13 +1499,13 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -1561,13 +1598,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -1659,7 +1696,11 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Upload V1 apps to GCS for Indexer Cluster
 			gcsTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
@@ -1689,19 +1730,23 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App Framework")
 
 			// Ensure Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1752,13 +1797,13 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -1766,7 +1811,9 @@ var _ = Describe("c3appfw test", func() {
 			//  ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
 			allPodNames := append(idxcPodNames, shcPodNames...)
-			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), allPodNames, appListV1, true, "enabled", false, true)).To(Succeed(), "App installation verification failed")
+			Eventually(func() error {
+				return testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 
 			// ############ ENABLE MANUAL POLL ############
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
@@ -1779,10 +1826,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
 			config, err = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
@@ -1794,7 +1841,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -1809,7 +1856,11 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1903,13 +1954,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -1953,13 +2004,13 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -1980,10 +2031,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
 			config, err = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
@@ -1995,7 +2046,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -2131,13 +2182,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -2208,13 +2259,13 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -2302,7 +2353,11 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Download all apps from GCS
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
@@ -2358,7 +2413,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Ensure Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Wait for polling interval to pass
 			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
@@ -2367,16 +2422,20 @@ var _ = Describe("c3appfw test", func() {
 			appList = append(testenv.BigSingleApp, testenv.ExtraApps...)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Cluster Manager", appList))
-			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), cmPod, appList, true, "enabled", false, false)).To(Succeed(), "App installation verification failed")
+			Eventually(func() error {
+				return testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), cmPod, appList, true, "enabled", false, false)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Verify all apps are installed on Deployer
 			appList = append(testenv.BigSingleApp, testenv.ExtraApps...)
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Deployer", appList))
-			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), deployerPod, appList, true, "enabled", false, false)).To(Succeed(), "App installation verification failed")
+			Eventually(func() error {
+				return testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), deployerPod, appList, true, "enabled", false, false)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 		})
 	})
 	// Vivek need testing
@@ -2431,7 +2490,11 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Download all apps from GCS
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
@@ -2487,23 +2550,25 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Ensure Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Wait for polling interval to pass
 			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify all apps are installed on indexers
 			appList = append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
 			idxcPodNames := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on indexers", appList))
-			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), idxcPodNames, appList, true, "enabled", false, true)).To(Succeed(), "App installation verification failed")
+			Eventually(func() error {
+				return testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), idxcPodNames, appList, true, "enabled", false, true)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Wait for polling interval to pass
 			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
@@ -2511,7 +2576,9 @@ var _ = Describe("c3appfw test", func() {
 			// Verify all apps are installed on Search Heads
 			shcPodNames := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Search Heads", appList))
-			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), shcPodNames, appList, true, "enabled", false, true)).To(Succeed(), "App installation verification failed")
+			Eventually(func() error {
+				return testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), shcPodNames, appList, true, "enabled", false, true)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 
 		})
 	})
@@ -2579,13 +2646,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Ensure Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -2674,13 +2741,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.DeleteOperatorPod()).To(Succeed(), "Failed to delete operator pod")
 
 			// Ensure Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -2760,13 +2827,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -2798,10 +2865,10 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
 
 			// Ensure Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Wait for App state to update after config file change
 			testcaseEnvInst.WaitforAppInstallState(ctx, deployment, idxcPodNames, testcaseEnvInst.GetName(), appName, "disabled", true)
@@ -2904,20 +2971,22 @@ var _ = Describe("c3appfw test", func() {
 
 			//######### VERIFICATIONS #############
 			appVersion = "V1"
-			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appListV1, false, "enabled", false, false)).To(Succeed(), "App installation verification failed")
+			Eventually(func() error {
+				return testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appListV1, false, "enabled", false, false)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			appFileList = testenv.GetAppFileList(appListV2)
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -3006,13 +3075,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -3100,13 +3169,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to delete file on pod")
 
 			// Ensure Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -3181,17 +3250,17 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, cm.Name, cm.Kind)).To(Succeed(), "IsDeploymentInProgress flag not set")
 
 			// Ensure Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Verify IsDeploymentInProgress Flag is set to true for SHC CR
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag")
 			Expect(testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, shc.Name, shc.Kind)).To(Succeed(), "IsDeploymentInProgress flag not set")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -3235,16 +3304,18 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with clusterMasterRef")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			//  Ensure that the Standalone goes to Ready phase
-			Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
+			Eventually(func() error {
+				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Standalone not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -3366,13 +3437,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment)).To(Succeed(), "Cluster Manager not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")

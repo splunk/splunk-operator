@@ -52,7 +52,7 @@ var _ = Describe("Smartstore test", func() {
 			})
 
 			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
 			It(tc.Label+", integration: Can configure multiple indexes through app", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
@@ -72,7 +72,7 @@ var _ = Describe("Smartstore test", func() {
 			})
 
 			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
 			It(tc.Label+", m4, smoke: Can configure indexes and volumes on Multisite Indexer Cluster through app", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
@@ -90,7 +90,7 @@ var _ = Describe("Smartstore test", func() {
 		})
 
 		AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
-			Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+			Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 		})
 
 		It("integration, s1, smartstore: can deploy a Standalone instance with Ephemeral Etc storage", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
