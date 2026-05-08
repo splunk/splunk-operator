@@ -82,7 +82,7 @@ var _ = Describe("Monitoring Console C3 scale-up tests", func() {
 			})
 
 			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
 			It(cfg.Label+", smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
@@ -105,7 +105,7 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 	})
 
 	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
-		Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+		Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 	})
 
 	Context("Deploy Monitoring Console", func() {
@@ -261,7 +261,7 @@ var _ = Describe("Monitoring Console reconfig tests", func() {
 			})
 
 			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
 			It(cfg.Label+", integration: MC can configure SHC, indexer instances and reconfigure to new MC", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
@@ -281,7 +281,7 @@ var _ = Describe("Monitoring Console reconfig tests", func() {
 			})
 
 			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
 			It(cfg.Label+", integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {

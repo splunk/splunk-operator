@@ -54,6 +54,28 @@ type TestCaseEnv struct {
 	cleanupFuncs         []cleanupFunc
 	debug                string
 	clusterWideOperator  string
+	// teardownCtx is an optional parent context for cleanup operations.
+	// When set (typically to a Ginkgo SpecContext via SetTeardownContext),
+	// per-cleanup deadlines derive from it so that Ginkgo NodeTimeout cancellation
+	// propagates cleanly into in-flight Delete/poll calls instead of leaving them
+	// orphaned with a Background parent.
+	teardownCtx context.Context
+}
+
+// SetTeardownContext sets the parent context used by subsequent Teardown
+// cleanup operations. Callers (typically AfterEach blocks) should pass the
+// Ginkgo SpecContext so cleanup respects NodeTimeout.
+func (testenv *TestCaseEnv) SetTeardownContext(ctx context.Context) {
+	testenv.teardownCtx = ctx
+}
+
+// cleanupParentCtx returns the parent context for cleanup operations.
+// Falls back to context.Background() when SetTeardownContext was not called.
+func (testenv *TestCaseEnv) cleanupParentCtx() context.Context {
+	if testenv.teardownCtx != nil {
+		return testenv.teardownCtx
+	}
+	return context.Background()
 }
 
 // GetKubeClient returns the kube client to talk to kube-apiserver
@@ -221,32 +243,36 @@ func (testenv *TestCaseEnv) createNamespace() error {
 		return err
 	}
 
-	// Cleanup the namespace when we teardown this testenv
+	// Cleanup the namespace when we teardown this testenv.
 	testenv.pushCleanupFunc(func() error {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Duration(float64(SetupTeardownTimeout)*CleanupGraceFraction))
+		// Reserve a grace fraction of SetupTeardownTimeout so the surrounding
+		// AfterEach (NodeTimeout = SetupTeardownTimeout) still has budget left
+		// to run the rest of the cleanup stack and report cleanly even when a
+		// namespace gets stuck in Terminating. See timeouts.go.
+		cleanupCtx, cleanupCancel := context.WithTimeout(testenv.cleanupParentCtx(), time.Duration(float64(SetupTeardownTimeout)*CleanupGraceFraction))
 		defer cleanupCancel()
-		err := testenv.GetKubeClient().Delete(cleanupCtx, namespace)
-		if err != nil {
+		if err := testenv.GetKubeClient().Delete(cleanupCtx, namespace); err != nil {
 			testenv.Log.Error(err, "Unable to delete namespace")
 			return err
 		}
-		if err = wait.PollUntilContextCancel(cleanupCtx, PollInterval, true, func(ctx context.Context) (bool, error) {
-			key := client.ObjectKey{Name: testenv.namespace, Namespace: testenv.namespace}
+		if err := wait.PollUntilContextCancel(cleanupCtx, PollInterval, true, func(ctx context.Context) (bool, error) {
+			key := client.ObjectKey{Name: testenv.namespace}
 			ns := &corev1.Namespace{}
 			err := testenv.GetKubeClient().Get(ctx, key, ns)
 			if errors.IsNotFound(err) {
 				return true, nil
 			}
+			if err != nil {
+				return false, err
+			}
 			if ns.Status.Phase == corev1.NamespaceTerminating {
 				return false, nil
 			}
-
 			return true, nil
 		}); err != nil {
-			testenv.Log.Error(err, "Unable to delete namespace")
+			testenv.Log.Error(err, "Namespace did not finish terminating within cleanup budget; continuing teardown", "namespace", testenv.namespace)
 			return err
 		}
-
 		return nil
 	})
 
@@ -290,7 +316,7 @@ func (testenv *TestCaseEnv) createSA() error {
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.Background(), sa)
+		err := testenv.GetKubeClient().Delete(testenv.cleanupParentCtx(), sa)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete service account")
 			return err
@@ -312,7 +338,7 @@ func (testenv *TestCaseEnv) createRole() error {
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.Background(), role)
+		err := testenv.GetKubeClient().Delete(testenv.cleanupParentCtx(), role)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete role")
 			return err
@@ -334,7 +360,7 @@ func (testenv *TestCaseEnv) createRoleBinding() error {
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.Background(), binding)
+		err := testenv.GetKubeClient().Delete(testenv.cleanupParentCtx(), binding)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete rolebinding")
 			return err
@@ -418,9 +444,31 @@ func (testenv *TestCaseEnv) createOperator() error {
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.Background(), op)
-		if err != nil {
+		// Bound the wait so a stuck operator pod doesn't starve later cleanup
+		// steps (notably namespace deletion) of their grace budget.
+		cleanupCtx, cleanupCancel := context.WithTimeout(testenv.cleanupParentCtx(), time.Duration(float64(SetupTeardownTimeout)*CleanupGraceFraction))
+		defer cleanupCancel()
+		if err := testenv.GetKubeClient().Delete(cleanupCtx, op); err != nil && !errors.IsNotFound(err) {
 			testenv.Log.Error(err, "Unable to delete operator")
+			return err
+		}
+		// Wait for the operator Deployment to be fully gone before returning so
+		// the subsequent namespace cleanup does not race with operator pod
+		// termination (which is required for CR finalizers to have been
+		// processed prior to this point).
+		if err := wait.PollUntilContextCancel(cleanupCtx, PollInterval, true, func(ctx context.Context) (bool, error) {
+			key := client.ObjectKey{Name: testenv.operatorName, Namespace: testenv.namespace}
+			dep := &appsv1.Deployment{}
+			err := testenv.GetKubeClient().Get(ctx, key, dep)
+			if errors.IsNotFound(err) {
+				return true, nil
+			}
+			if err != nil {
+				return false, err
+			}
+			return false, nil
+		}); err != nil {
+			testenv.Log.Error(err, "Operator deployment did not finish deleting within cleanup budget; continuing teardown", "operator", testenv.operatorName)
 			return err
 		}
 		return nil
@@ -488,7 +536,7 @@ func (testenv *TestCaseEnv) createLicenseConfigMap() error {
 	testenv.Log.Info("New License Config Map created.", "License Config Map Name", testenv.namespace)
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.Background(), lic)
+		err := testenv.GetKubeClient().Delete(testenv.cleanupParentCtx(), lic)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete license configmap ")
 			return err
@@ -509,7 +557,7 @@ func (testenv *TestCaseEnv) CreateServiceAccount(name string) error {
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.Background(), serviceAccountConfig)
+		err := testenv.GetKubeClient().Delete(testenv.cleanupParentCtx(), serviceAccountConfig)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete service account")
 			return err
@@ -543,7 +591,7 @@ func (testenv *TestCaseEnv) createIndexSecret() error {
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.Background(), secret)
+		err := testenv.GetKubeClient().Delete(testenv.cleanupParentCtx(), secret)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete s3 index secret object")
 			return err
@@ -572,7 +620,7 @@ func (testenv *TestCaseEnv) createIndexSecretGCP() error {
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.Background(), secret)
+		err := testenv.GetKubeClient().Delete(testenv.cleanupParentCtx(), secret)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete GCP index secret object")
 			return err
@@ -596,7 +644,7 @@ func (testenv *TestCaseEnv) createIndexSecretAzure() error {
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.Background(), secret)
+		err := testenv.GetKubeClient().Delete(testenv.cleanupParentCtx(), secret)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete Azure index secret object")
 			return err
@@ -622,7 +670,7 @@ func (testenv *TestCaseEnv) createIndexIngestSepSecret() error {
 	}
 
 	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(context.Background(), secret)
+		err := testenv.GetKubeClient().Delete(testenv.cleanupParentCtx(), secret)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete index and ingestion sep secret object")
 			return err

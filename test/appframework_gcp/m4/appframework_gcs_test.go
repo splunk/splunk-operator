@@ -14,6 +14,7 @@
 package m4gcpappfw
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -126,7 +127,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Upload V1 apps to GCP for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
@@ -168,7 +173,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)).To(Succeed(), "Custom resource version not changed")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -238,10 +247,18 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify MC is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -329,7 +346,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Upload V2 apps to GCP for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
@@ -365,7 +386,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -424,7 +449,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -595,7 +624,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp, idxcName)).To(Succeed(), "Indexer Cluster phase mismatch")
 
 			// Ensure Indexer cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Ingest data on  new Indexers
 			podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 1)
@@ -604,7 +633,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testenv.IngestFileViaMonitor(ctx, deployment, logFile, "main", podName)).To(Succeed(), "Failed to ingest file via monitor")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -681,10 +710,10 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown, idxcName)).To(Succeed(), "Indexer Cluster phase mismatch")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexer cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -905,7 +934,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Upload V1 apps to GCP for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
@@ -939,7 +972,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -993,12 +1030,18 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
 			allPodNames := append(idxcPodNames, shcPodNames...)
-			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), allPodNames, appListV1, true, "enabled", false, true)).To(Succeed(), "App installation verification failed")
+			Eventually(func() error {
+				return testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 
 			// ############ ENABLE MANUAL POLL ############
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
@@ -1011,10 +1054,10 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure that the Cluster Master goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)).To(Succeed(), "Cluster Master not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Master not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer cluster configured as multisite
 			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
@@ -1029,7 +1072,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -1048,7 +1091,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Timed out waiting for MonitoringConsole to reach Ready phase")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1205,10 +1252,10 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure that the Cluster Master goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)).To(Succeed(), "Cluster Master not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Master not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer cluster configured as multisite
 			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
@@ -1223,7 +1270,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Verify RF SF is met
 			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
@@ -1520,7 +1567,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Download all test apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
@@ -1577,7 +1628,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Ensure Cluster Master goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)).To(Succeed(), "Cluster Master not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Master not ready")
 
 			// Wait for polling interval to pass
 			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
@@ -1587,10 +1638,12 @@ var _ = Describe("m4appfw test", func() {
 			appFileList = testenv.GetAppFileList(appList)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName())}
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Cluster Manager", appList))
-			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), cmPod, appList, true, "enabled", false, false)).To(Succeed(), "App installation verification failed")
+			Eventually(func() error {
+				return testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), cmPod, appList, true, "enabled", false, false)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Wait for SearchHeadCluster to reach Ready phase
 			err = testcaseEnvInst.WaitForSearchHeadClusterPhase(ctx, deployment, testcaseEnvInst.GetName(), shc.Name, enterpriseApi.PhaseReady, 60*time.Second)
@@ -1602,7 +1655,9 @@ var _ = Describe("m4appfw test", func() {
 			// Verify all apps are installed on Deployer
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Deployer", appList))
-			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), deployerPod, appList, true, "enabled", false, false)).To(Succeed(), "App installation verification failed")
+			Eventually(func() error {
+				return testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), deployerPod, appList, true, "enabled", false, false)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 		})
 	})
 
@@ -1657,7 +1712,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Download all test apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
@@ -1715,23 +1774,25 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Ensure Cluster Master goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)).To(Succeed(), "Cluster Master not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Master not ready")
 
 			// Wait for polling interval to pass
 			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure the Indexers of all sites go to Ready phase
-			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Verify all apps are installed on indexers
 			appList = append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
 			idxcPodNames := testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), indexersPerSite, true, siteCount)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on indexers", appList))
-			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), idxcPodNames, appList, true, "enabled", false, true)).To(Succeed(), "App installation verification failed")
+			Eventually(func() error {
+				return testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), idxcPodNames, appList, true, "enabled", false, true)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Wait for polling interval to pass
 			testcaseEnvInst.WaitForAppInstall(ctx, deployment, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
@@ -1739,7 +1800,9 @@ var _ = Describe("m4appfw test", func() {
 			// Verify all apps are installed on Search Heads
 			shcPodNames := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Search Heads", appList))
-			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), shcPodNames, appList, true, "enabled", false, true)).To(Succeed(), "App installation verification failed")
+			Eventually(func() error {
+				return testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), shcPodNames, appList, true, "enabled", false, true)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 
 		})
 	})
@@ -1995,10 +2058,10 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
 
 			// Ensure Cluster Master goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)).To(Succeed(), "Cluster Master not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Master not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer Cluster configured as Multisite
 			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
@@ -2280,20 +2343,22 @@ var _ = Describe("m4appfw test", func() {
 
 			//########## VERIFICATIONS ##########
 			appVersion = "V1"
-			Expect(testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName())}, appListV1, false, "enabled", false, false)).To(Succeed(), "App installation verification failed")
+			Eventually(func() error {
+				return testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName())}, appListV1, false, "enabled", false, false)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			appFileList = testenv.GetAppFileList(appListV2)
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Master goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)).To(Succeed(), "Cluster Master not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Master not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure the Indexers of all sites go to Ready phase
-			Expect(testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount)).To(Succeed(), "Indexers not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyIndexersReady(ctx, deployment, siteCount) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 			// Ensure Indexer Cluster configured as Multisite
 			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
@@ -2536,7 +2601,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, cm.Name, cm.Kind)).To(Succeed(), "IsDeploymentInProgress flag not set")
 
 			// Ensure that the Cluster Master goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)).To(Succeed(), "Cluster Master not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Master not ready")
 
 			// Verify IsDeploymentInProgress Flag is set to true for SHC CR
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag for SHC")
