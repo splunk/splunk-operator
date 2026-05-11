@@ -494,7 +494,18 @@ Environment variables are defined in `test/env.sh`.
 
 **10. _(Index/ingestion separation tests only)_ Provision AWS resources**
 
-These tests require dedicated SQS queues and an S3 bucket in `us-west-2`. Resource names are hardcoded in the test suite file and the S3 bucket name is globally unique, so these tests can only be run by the SOK team against the team's AWS account.
+These tests require dedicated SQS queues and an S3 bucket. Resource names default to SOK-team–owned resources but can be overridden via environment variables so that external contributors can run the tests against their own AWS account:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TEST_SQS_QUEUE` | `index-ingest-separation-test-q` | SQS queue name |
+| `TEST_SQS_DLQ` | `index-ingest-separation-test-dlq` | SQS dead-letter queue name |
+| `TEST_S3_BUCKET_PATH` | `index-ingest-separation-test-bucket/smartbus-test` | S3 bucket and prefix (`bucket/prefix`) |
+| `TEST_AWS_REGION` | `us-west-2` | AWS region for SQS and S3 |
+| `TEST_SQS_ENDPOINT` | derived from region | SQS endpoint URL (e.g. `https://sqs.us-west-2.amazonaws.com`) |
+| `TEST_S3_ENDPOINT` | derived from region | S3 endpoint URL (e.g. `https://s3.us-west-2.amazonaws.com`) |
+
+When variables are unset, the tests fall back to the current hardcoded defaults and behave identically to before. Endpoints are automatically derived from `TEST_AWS_REGION` unless explicitly overridden.
 
 ### Run All Integration Tests via Makefile
 
@@ -749,6 +760,12 @@ Cloud provider variables below are used to create Kubernetes Secrets in each tes
 | `TEST_BUCKET` / `TEST_S3_BUCKET` | S3 bucket for test data |
 | `TEST_INDEXES_S3_BUCKET` | S3 bucket for index tests |
 | `S3_REGION` | AWS region (default: `us-west-2`) |
+| `TEST_SQS_QUEUE` | SQS queue name for index/ingestion separation tests |
+| `TEST_SQS_DLQ` | SQS dead-letter queue for index/ingestion separation tests |
+| `TEST_S3_BUCKET_PATH` | S3 bucket/prefix for index/ingestion separation tests |
+| `TEST_AWS_REGION` | AWS region for index/ingestion separation tests (default: `us-west-2`) |
+| `TEST_SQS_ENDPOINT` | SQS endpoint URL (derived from `TEST_AWS_REGION` if unset) |
+| `TEST_S3_ENDPOINT` | S3 endpoint URL (derived from `TEST_AWS_REGION` if unset) |
 
 ### Azure
 
