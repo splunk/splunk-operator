@@ -36,11 +36,11 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var defaultLivenessProbe corev1.Probe = corev1.Probe{
@@ -423,8 +423,7 @@ func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 
 // ValidateImagePullSecrets sets default values for imagePullSecrets if not provided
 func ValidateImagePullSecrets(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ValidateImagePullSecrets").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "ValidateImagePullSecrets")
 
 	// If no imagePullSecrets are configured
 	var nilImagePullSecrets []corev1.LocalObjectReference
@@ -435,9 +434,9 @@ func ValidateImagePullSecrets(ctx context.Context, c splcommon.ControllerClient,
 
 	// If configured, validated if the secret/s exist
 	for _, secret := range spec.ImagePullSecrets {
-		_, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), secret.Name)
+		_, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), secret.Name)
 		if err != nil {
-			scopedLog.Error(err, "Couldn't get secret in the imagePullSecrets config", "Secret", secret.Name)
+			logger.ErrorContext(ctx, "couldn't get secret in the imagePullSecrets config", "Secret", secret.Name, "error", err)
 		}
 	}
 
@@ -578,8 +577,7 @@ func addEphemeralVolumes(statefulSet *appsv1.StatefulSet, volumeType string) err
 // addStorageVolumes adds storage volumes to the StatefulSet
 func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splcommon.ControllerClient, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string) error {
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("addStorageVolumes").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "addStorageVolumes")
 
 	// configure storage for mount path /opt/splunk/etc
 	if spec.EtcVolumeStorageConfig.EphemeralStorage {
@@ -608,7 +606,7 @@ func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splc
 	// Add Splunk Probe config map
 	probeConfigMap, err := getProbeConfigMap(ctx, client, cr)
 	if err != nil {
-		scopedLog.Error(err, "Unable to get probeConfigMap")
+		logger.ErrorContext(ctx, "unable to get probeConfigMap", "error", err)
 		return err
 	}
 	addProbeConfigMapVolume(probeConfigMap, statefulSet)
@@ -617,28 +615,27 @@ func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splc
 
 func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getProbeConfigMap").WithValues("namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "getProbeConfigMap")
 
 	configMapName := GetProbeConfigMapName(cr.GetNamespace())
 	configMapNamespace := cr.GetNamespace()
 	namespacedName := types.NamespacedName{Namespace: configMapNamespace, Name: configMapName}
 
 	// Check if the config map already exists
-	scopedLog.Info("Checking for existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+	logger.DebugContext(ctx, "checking for existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
 	var configMap corev1.ConfigMap
 	err := client.Get(ctx, namespacedName, &configMap)
 
 	if err == nil {
-		scopedLog.Info("Retrieved existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+		logger.DebugContext(ctx, "retrieved existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
 		return &configMap, nil
 	} else if !k8serrors.IsNotFound(err) {
-		scopedLog.Error(err, "Error retrieving config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+		logger.ErrorContext(ctx, "error retrieving config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace, "error", err)
 		return nil, err
 	}
 
 	// Existing config map not found, create one for the probes
-	scopedLog.Info("Creating new config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+	logger.InfoContext(ctx, "creating new config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
 	configMap = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configMapName,
@@ -813,8 +810,7 @@ func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClie
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
 func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "updateSplunkPodTemplateWithConfig")
 	// Add custom ports to splunk containers
 	if spec.ServiceTemplate.Spec.Ports != nil {
 		for idx := range podTemplateSpec.Spec.Containers {
@@ -874,7 +870,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		if err == nil {
 			podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = configMapResourceVersion
 		} else {
-			scopedLog.Error(err, "Updation of default configMap annotation failed")
+			logger.ErrorContext(ctx, "updation of default configMap annotation failed", "error", err)
 		}
 	}
 
@@ -999,7 +995,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			managerIdxCluster := &enterpriseApi.ClusterManager{}
 			err := client.Get(ctx, namespacedName, managerIdxCluster)
 			if err != nil {
-				scopedLog.Error(err, "Unable to get ClusterManager")
+				logger.ErrorContext(ctx, "unable to get ClusterManager", "error", err)
 			}
 
 			if managerIdxCluster.Spec.LicenseManagerRef.Name != "" {
@@ -1036,7 +1032,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			managerIdxCluster := &enterpriseApiV3.ClusterMaster{}
 			err := client.Get(ctx, namespacedName, managerIdxCluster)
 			if err != nil {
-				scopedLog.Error(err, "Unable to get ClusterManager")
+				logger.ErrorContext(ctx, "unable to get ClusterMaster", "error", err)
 			}
 
 			if managerIdxCluster.Spec.LicenseManagerRef.Name != "" {
@@ -1133,28 +1129,25 @@ func removeDuplicateEnvVars(sliceList []corev1.EnvVar) []corev1.EnvVar {
 
 // getLivenessProbe the probe for checking the liveness of the Pod
 func getLivenessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx)
 	livenessProbe := getProbeWithConfigUpdates(&defaultLivenessProbe, spec.LivenessProbe, spec.LivenessInitialDelaySeconds)
-	scopedLog.Info("LivenessProbe", "Configured", livenessProbe)
+	logger.DebugContext(ctx, "livenessProbe", "Configured", livenessProbe)
 	return livenessProbe
 }
 
 // getReadinessProbe the probe for checking the readiness of the Pod
 func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx)
 	readinessProbe := getProbeWithConfigUpdates(&defaultReadinessProbe, spec.ReadinessProbe, spec.ReadinessInitialDelaySeconds)
-	scopedLog.Info("ReadinessProbe", "Configured", readinessProbe)
+	logger.DebugContext(ctx, "readinessProbe", "Configured", readinessProbe)
 	return readinessProbe
 }
 
 // getStartupProbe the probe for checking the first start of splunk on the Pod
 func getStartupProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getStartupProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx)
 	startupProbe := getProbeWithConfigUpdates(&defaultStartupProbe, spec.StartupProbe, 0)
-	scopedLog.Info("StartupProbe", "Configured", startupProbe)
+	logger.DebugContext(ctx, "startupProbe", "Configured", startupProbe)
 	return startupProbe
 }
 
@@ -1255,13 +1248,12 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 		return false
 	}
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("AreRemoteVolumeKeysChanged").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "AreRemoteVolumeKeysChanged")
 
 	volList := smartstore.VolList
 	for _, volume := range volList {
 		if volume.SecretRef != "" {
-			namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
+			namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), volume.SecretRef)
 			// Ideally, this should have been detected in Spec validation time
 			if err != nil {
 				*retError = fmt.Errorf("not able to access secret object = %s, reason: %s", volume.SecretRef, err)
@@ -1271,7 +1263,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 			// Check if the secret version is already tracked, and if there is a change in it
 			if existingSecretVersion, ok := ResourceRev[volume.SecretRef]; ok {
 				if existingSecretVersion != namespaceScopedSecret.ResourceVersion {
-					scopedLog.Info("secret keys changed", "previous resource version", existingSecretVersion, "current version", namespaceScopedSecret.ResourceVersion)
+					logger.InfoContext(ctx, "secret keys changed", "previousResourceVersion", existingSecretVersion, "currentVersion", namespaceScopedSecret.ResourceVersion)
 					ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
 					return true
 				}
@@ -1281,7 +1273,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 			// First time adding to track the secret resource version
 			ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
 		} else {
-			scopedLog.Info("no valid SecretRef for volume.  No secret to track.", "volumeName", volume.Name)
+			logger.DebugContext(ctx, "no valid SecretRef for volume. No secret to track", "volumeName", volume.Name)
 		}
 	}
 
@@ -1291,8 +1283,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 // ApplyManualAppUpdateConfigMap applies the manual app update config map
 func ApplyManualAppUpdateConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, crKindMap map[string]string) (*corev1.ConfigMap, error) {
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyManualAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "ApplyManualAppUpdateConfigMap")
 
 	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
@@ -1312,17 +1303,17 @@ func ApplyManualAppUpdateConfigMap(ctx context.Context, client splcommon.Control
 	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
 
 	if newConfigMap {
-		scopedLog.Info("creating manual app update configMap")
+		logger.InfoContext(ctx, "creating manual app update configMap")
 		err = splutil.CreateResource(ctx, client, configMap)
 		if err != nil {
-			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
+			logger.ErrorContext(ctx, "unable to create the configMap", "name", configMapName, "error", err)
 			return configMap, err
 		}
 	} else {
-		scopedLog.Info("updating manual app update configMap")
+		logger.InfoContext(ctx, "updating manual app update configMap")
 		err = splutil.UpdateResource(ctx, client, configMap)
 		if err != nil {
-			scopedLog.Error(err, "unable to update the configMap", "name", configMapName)
+			logger.ErrorContext(ctx, "unable to update the configMap", "name", configMapName, "error", err)
 			return configMap, err
 		}
 	}
@@ -1331,8 +1322,7 @@ func ApplyManualAppUpdateConfigMap(ctx context.Context, client splcommon.Control
 
 // getManualUpdateStatus extracts the status field from the configMap data
 func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) string {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getManualUpdateStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "getManualUpdateStatus")
 
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
@@ -1342,11 +1332,11 @@ func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClien
 		data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
 		result = extractFieldFromConfigMapData(statusRegex, data)
 		if result == "on" {
-			scopedLog.Info("namespace configMap value is set to", "name", configMapName, "data", result)
+			logger.InfoContext(ctx, "namespace configMap value is set to", "name", configMapName, "data", result)
 			return result
 		}
 	} else {
-		scopedLog.Error(err, "Unable to get namespace specific configMap", "name", configMapName)
+		logger.ErrorContext(ctx, "unable to get namespace specific configMap", "name", configMapName, "error", err)
 	}
 
 	return "off"
@@ -1354,17 +1344,16 @@ func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClien
 
 // getManualUpdatePerCrStatus extracts the status field from the configMap data
 func getManualUpdatePerCrStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) string {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getManualUpdatePerCrStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "getManualUpdatePerCrStatus")
 
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())}
 	crconfigMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
 	if err == nil {
-		scopedLog.Info("custom configMap value is set to", "name", configMapName, "data", crconfigMap.Data)
+		logger.InfoContext(ctx, "custom configMap value is set to", "name", configMapName, "data", crconfigMap.Data)
 		data := crconfigMap.Data["manualUpdate"]
 		return data
 	} else {
-		scopedLog.Error(err, "unable to get custom specific configMap", "name", configMapName)
+		logger.ErrorContext(ctx, "unable to get custom specific configMap", "name", configMapName, "error", err)
 	}
 
 	return "off"
@@ -1372,13 +1361,12 @@ func getManualUpdatePerCrStatus(ctx context.Context, client splcommon.Controller
 
 // getManualUpdateRefCount extracts the refCount field from the configMap data
 func getManualUpdateRefCount(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) int {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getManualUpdateRefCount").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "getManualUpdateRefCount")
 	var refCount int
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
-		scopedLog.Error(err, "unable to get the configMap", "name", configMapName)
+		logger.ErrorContext(ctx, "unable to get the configMap", "name", configMapName, "error", err)
 		return refCount
 	}
 
@@ -1391,8 +1379,7 @@ func getManualUpdateRefCount(ctx context.Context, client splcommon.ControllerCli
 
 // createOrUpdateAppUpdateConfigMap creates or updates the manual app update configMap
 func createOrUpdateAppUpdateConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("createOrUpdateAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "createOrUpdateAppUpdateConfigMap", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	var crKindMap map[string]string
 	var configMapData, status string
@@ -1420,7 +1407,7 @@ func createOrUpdateAppUpdateConfigMap(ctx context.Context, client splcommon.Cont
 			}
 		}
 
-		scopedLog.Info("existing configMap data", "data", configMap.Data)
+		logger.InfoContext(ctx, "existing configMap data", "data", configMap.Data)
 		crKindMap = configMap.Data
 
 		// get the number of instance types of this kind
@@ -1446,7 +1433,7 @@ refCount: %d`, status, numOfObjects+1)
 	// Create/update the configMap to store the values of manual trigger per CR kind.
 	configMap, err = ApplyManualAppUpdateConfigMap(ctx, client, cr, crKindMap)
 	if err != nil {
-		scopedLog.Error(err, "create/update configMap for app update failed")
+		logger.ErrorContext(ctx, "create/update configMap for app update failed", "error", err)
 		return configMap, err
 	}
 
@@ -1655,28 +1642,27 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 		return nil
 	}
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ValidateAppFrameworkSpec")
+	logger := logging.FromContext(ctx).With("func", "ValidateAppFrameworkSpec")
 
-	scopedLog.Info("configCheck", "scope", localScope)
+	logger.InfoContext(ctx, "configCheck", "scope", localScope)
 
 	// Set the value in status field to be same as that in spec.
 	appContext.AppsRepoStatusPollInterval = appFramework.AppsRepoPollInterval
 	appContext.AppsStatusMaxConcurrentAppDownloads = appFramework.MaxConcurrentAppDownloads
 
 	if appContext.AppsRepoStatusPollInterval <= 0 {
-		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured. Disabling polling of apps repo changes, defaulting to manual updates")
+		logger.ErrorContext(ctx, "appsRepoPollIntervalSeconds is not configured. Disabling polling of apps repo changes, defaulting to manual updates", "error", err)
 		appContext.AppsRepoStatusPollInterval = 0
 	} else if appFramework.AppsRepoPollInterval < splcommon.MinAppsRepoPollInterval {
-		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too small", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default min. value(seconds)", splcommon.MinAppsRepoPollInterval)
+		logger.ErrorContext(ctx, "configured appsRepoPollIntervalSeconds is too small", "error", err, "configuredValue", appFramework.AppsRepoPollInterval, "defaultMinSeconds", splcommon.MinAppsRepoPollInterval)
 		appContext.AppsRepoStatusPollInterval = splcommon.MinAppsRepoPollInterval
 	} else if appFramework.AppsRepoPollInterval > splcommon.MaxAppsRepoPollInterval {
-		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too large", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default max. value(seconds)", splcommon.MaxAppsRepoPollInterval, "seconds", nil)
+		logger.ErrorContext(ctx, "configured appsRepoPollIntervalSeconds is too large", "error", err, "configuredValue", appFramework.AppsRepoPollInterval, "defaultMaxSeconds", splcommon.MaxAppsRepoPollInterval)
 		appContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval
 	}
 
 	if appContext.AppsStatusMaxConcurrentAppDownloads <= 0 {
-		scopedLog.Info("Invalid value of maxConcurrentAppDownloads", "configured value", appContext.AppsStatusMaxConcurrentAppDownloads, "Setting it to default value", splcommon.DefaultMaxConcurrentAppDownloads)
+		logger.InfoContext(ctx, "invalid value of maxConcurrentAppDownloads", "configuredValue", appContext.AppsStatusMaxConcurrentAppDownloads, "defaultValue", splcommon.DefaultMaxConcurrentAppDownloads)
 		appContext.AppsStatusMaxConcurrentAppDownloads = splcommon.DefaultMaxConcurrentAppDownloads
 	}
 
@@ -1685,7 +1671,7 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 
 	// check whether the temporary volume to download apps is mounted or not on the operator pod
 	if _, err := os.Stat(appDownloadVolume); errors.Is(err, os.ErrNotExist) {
-		scopedLog.Error(err, "Volume needs to be mounted on operator pod to download apps. Please mount it as a separate volume on operator pod.", "volume path", appDownloadVolume)
+		logger.ErrorContext(ctx, "volume needs to be mounted on operator pod to download apps. Please mount it as a separate volume on operator pod", "error", err, "volumePath", appDownloadVolume)
 		return err
 	}
 
@@ -1696,7 +1682,7 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 
 	err = validateSplunkAppSources(appFramework, localScope, crKind)
 	if err == nil {
-		scopedLog.Info("App framework configuration is valid")
+		logger.InfoContext(ctx, "app framework configuration is valid")
 	}
 
 	return err
@@ -1707,8 +1693,7 @@ func validateRemoteVolumeSpec(ctx context.Context, volList []enterpriseApi.Volum
 
 	duplicateChecker := make(map[string]bool)
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("validateRemoteVolumeSpec")
+	logger := logging.FromContext(ctx).With("func", "validateRemoteVolumeSpec")
 
 	// Make sure that all the Volumes are provided with the mandatory config values.
 	for i, volume := range volList {
@@ -1728,7 +1713,7 @@ func validateRemoteVolumeSpec(ctx context.Context, volList []enterpriseApi.Volum
 		}
 		// Make the secretRef optional if theyre using IAM roles
 		if volume.SecretRef == "" {
-			scopedLog.Info("No valid SecretRef for volume.", "volumeName", volume.Name)
+			logger.InfoContext(ctx, "no valid SecretRef for volume", "volumeName", volume.Name)
 		}
 
 		// provider is used in App framework to pick the S3 client(supported providers are aws and minio),
@@ -1836,8 +1821,7 @@ func ValidateSplunkSmartstoreSpec(ctx context.Context, smartstore *enterpriseApi
 func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, mapData map[string]string) (string, error) {
 	var volumesConf string
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("GetSmartstoreVolumesConfig")
+	logger := logging.FromContext(ctx).With("func", "GetSmartstoreVolumesConfig")
 
 	volumes := smartstore.VolList
 	for i := 0; i < len(volumes); i++ {
@@ -1857,7 +1841,7 @@ remote.s3.endpoint = %s
 remote.s3.auth_region = %s
 `, volumesConf, volumes[i].Name, volumes[i].Path, s3AccessKey, s3SecretKey, volumes[i].Endpoint, volumes[i].Region)
 		} else {
-			scopedLog.Info("No valid secretRef configured.  Configure volume without access/secret keys", "volumeName", volumes[i].Name)
+			logger.InfoContext(ctx, "no valid secretRef configured.  Configure volume without access/secret keys", "volumeName", volumes[i].Name)
 			volumesConf = fmt.Sprintf(`%s
 [volume:%s]
 storageType = remote
@@ -2022,11 +2006,10 @@ func validateProbe(probe *enterpriseApi.Probe) error {
 // validateLivenessProbe validates the liveness probe config
 func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenessProbe *enterpriseApi.Probe) error {
 	var err error
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("validateLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "validateLivenessProbe", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	if livenessProbe == nil {
-		scopedLog.Info("empty liveness probe.")
+		logger.InfoContext(ctx, "empty liveness probe")
 		return err
 	}
 
@@ -2036,19 +2019,19 @@ func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenes
 	}
 
 	if livenessProbe.InitialDelaySeconds != 0 && livenessProbe.InitialDelaySeconds < livenessProbeDefaultDelaySec {
-		scopedLog.Info("Liveness Probe: Configured  InitialDelaySeconds is too small, recommended default minimum will be used", "configured", livenessProbe.InitialDelaySeconds, "recommended minimum", livenessProbeDefaultDelaySec)
+		logger.InfoContext(ctx, "liveness Probe: Configured  InitialDelaySeconds is too small, recommended default minimum will be used", "configured", livenessProbe.InitialDelaySeconds, "recommendedMinimum", livenessProbeDefaultDelaySec)
 	}
 
 	if livenessProbe.TimeoutSeconds != 0 && livenessProbe.TimeoutSeconds < livenessProbeTimeoutSec {
-		scopedLog.Info("Liveness Probe: Configured TimeoutSeconds is too small, recommended default minimum will be used", "configured", livenessProbe.TimeoutSeconds, "recommended minimum", livenessProbeTimeoutSec)
+		logger.InfoContext(ctx, "liveness Probe: Configured TimeoutSeconds is too small, recommended default minimum will be used", "configured", livenessProbe.TimeoutSeconds, "recommendedMinimum", livenessProbeTimeoutSec)
 	}
 
 	if livenessProbe.PeriodSeconds != 0 && livenessProbe.PeriodSeconds < livenessProbePeriodSec {
-		scopedLog.Info("Liveness Probe: Configured PeriodSeconds is too small, recommended default minimum will be used", "configured", livenessProbe.PeriodSeconds, "recommended minimum", livenessProbePeriodSec)
+		logger.InfoContext(ctx, "liveness Probe: Configured PeriodSeconds is too small, recommended default minimum will be used", "configured", livenessProbe.PeriodSeconds, "recommendedMinimum", livenessProbePeriodSec)
 	}
 
 	if livenessProbe.FailureThreshold != 0 && livenessProbe.FailureThreshold < livenessProbeFailureThreshold {
-		scopedLog.Info("Liveness Probe: Configured FailureThreshold is too small, recommended default minimum will be used", "configured", livenessProbe.FailureThreshold, "recommended minimum", livenessProbeFailureThreshold)
+		logger.InfoContext(ctx, "liveness Probe: Configured FailureThreshold is too small, recommended default minimum will be used", "configured", livenessProbe.FailureThreshold, "recommendedMinimum", livenessProbeFailureThreshold)
 	}
 
 	return err
@@ -2057,11 +2040,10 @@ func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenes
 // validateReadinessProbe validates the Readiness probe config
 func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readinessProbe *enterpriseApi.Probe) error {
 	var err error
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("validateReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "validateReadinessProbe", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	if readinessProbe == nil {
-		scopedLog.Info("empty readiness probe.")
+		logger.InfoContext(ctx, "empty readiness probe")
 		return err
 	}
 
@@ -2071,19 +2053,19 @@ func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readin
 	}
 
 	if readinessProbe.InitialDelaySeconds != 0 && readinessProbe.InitialDelaySeconds < readinessProbeDefaultDelaySec {
-		scopedLog.Info("Readiness Probe: Configured InitialDelaySeconds is too small, recommended default minimum will be used", "configured", readinessProbe.InitialDelaySeconds, "recommended minimum", readinessProbeDefaultDelaySec)
+		logger.InfoContext(ctx, "readiness Probe: Configured InitialDelaySeconds is too small, recommended default minimum will be used", "configured", readinessProbe.InitialDelaySeconds, "recommendedMinimum", readinessProbeDefaultDelaySec)
 	}
 
 	if readinessProbe.TimeoutSeconds != 0 && readinessProbe.TimeoutSeconds < readinessProbeTimeoutSec {
-		scopedLog.Info("Readiness Probe: Configured TimeoutSeconds is too small, recommended default minimum will be used", "configured", readinessProbe.TimeoutSeconds, "recommended minimum", readinessProbeTimeoutSec)
+		logger.InfoContext(ctx, "readiness Probe: Configured TimeoutSeconds is too small, recommended default minimum will be used", "configured", readinessProbe.TimeoutSeconds, "recommendedMinimum", readinessProbeTimeoutSec)
 	}
 
 	if readinessProbe.PeriodSeconds != 0 && readinessProbe.PeriodSeconds < readinessProbePeriodSec {
-		scopedLog.Info("Readiness Probe: Configured PeriodSeconds is too small, recommended default minimum will be used", "configured", readinessProbe.PeriodSeconds, "recommended minimum", readinessProbePeriodSec)
+		logger.InfoContext(ctx, "readiness Probe: Configured PeriodSeconds is too small, recommended default minimum will be used", "configured", readinessProbe.PeriodSeconds, "recommendedMinimum", readinessProbePeriodSec)
 	}
 
 	if readinessProbe.FailureThreshold != 0 && readinessProbe.FailureThreshold < readinessProbeFailureThreshold {
-		scopedLog.Info("Readiness Probe: Configured FailureThreshold is too small, recommended default minimum will be used", "configured", readinessProbe.FailureThreshold, "recommended minimum", readinessProbeFailureThreshold)
+		logger.InfoContext(ctx, "readiness Probe: Configured FailureThreshold is too small, recommended default minimum will be used", "configured", readinessProbe.FailureThreshold, "recommendedMinimum", readinessProbeFailureThreshold)
 	}
 	return err
 }
@@ -2091,11 +2073,10 @@ func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readin
 // validateStartupProbe validates the startup probe config
 func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupProbe *enterpriseApi.Probe) error {
 	var err error
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("validateStartupProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "validateStartupProbe", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	if startupProbe == nil {
-		scopedLog.Info("empty startup probe.")
+		logger.InfoContext(ctx, "empty startup probe")
 		return err
 	}
 
@@ -2105,15 +2086,15 @@ func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupP
 	}
 
 	if startupProbe.InitialDelaySeconds != 0 && startupProbe.InitialDelaySeconds < startupProbeDefaultDelaySec {
-		scopedLog.Info("Startup Probe: InitialDelaySeconds is too small, recommended default minimum will be used", "configured", startupProbe.InitialDelaySeconds, "recommended minimum", startupProbeDefaultDelaySec)
+		logger.InfoContext(ctx, "startup Probe: InitialDelaySeconds is too small, recommended default minimum will be used", "configured", startupProbe.InitialDelaySeconds, "recommendedMinimum", startupProbeDefaultDelaySec)
 	}
 
 	if startupProbe.TimeoutSeconds != 0 && startupProbe.TimeoutSeconds < startupProbeTimeoutSec {
-		scopedLog.Info("Startup Probe: TimeoutSeconds is too small, recommended default minimum will be used", "configured", startupProbe.TimeoutSeconds, "recommended minimum", startupProbeTimeoutSec)
+		logger.InfoContext(ctx, "startup Probe: TimeoutSeconds is too small, recommended default minimum will be used", "configured", startupProbe.TimeoutSeconds, "recommendedMinimum", startupProbeTimeoutSec)
 	}
 
 	if startupProbe.PeriodSeconds != 0 && startupProbe.PeriodSeconds < startupProbePeriodSec {
-		scopedLog.Info("Startup Probe: PeriodSeconds is too small, recommended default minimum will be used", "configured", startupProbe.PeriodSeconds, "recommended minimum", startupProbePeriodSec)
+		logger.InfoContext(ctx, "startup Probe: PeriodSeconds is too small, recommended default minimum will be used", "configured", startupProbe.PeriodSeconds, "recommendedMinimum", startupProbePeriodSec)
 	}
 	return err
 }

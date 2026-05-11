@@ -27,12 +27,12 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	"github.com/pkg/errors"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var (
@@ -71,8 +71,8 @@ func isFanOutApplicableToCR(cr splcommon.MetaObject) bool {
 func (ppln *AppInstallPipeline) createAndAddPipelineWorker(ctx context.Context, phase enterpriseApi.AppPhaseType, appDeployInfo *enterpriseApi.AppDeploymentInfo,
 	appSrcName string, podName string, appFrameworkConfig *enterpriseApi.AppFrameworkSpec,
 	client splcommon.ControllerClient, cr splcommon.MetaObject, statefulSet *appsv1.StatefulSet) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("createAndAddPipelineWorker").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	scopedLog := logging.FromContext(ctx).With("func", "createAndAddPipelineWorker", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	worker := &PipelineWorker{
 		appDeployInfo: appDeployInfo,
@@ -85,7 +85,7 @@ func (ppln *AppInstallPipeline) createAndAddPipelineWorker(ctx context.Context, 
 		fanOut:        isFanOutApplicableToCR(cr),
 	}
 
-	scopedLog.Info("Created new worker", "Pod name", worker.targetPodName, "App name", appDeployInfo.AppName, "digest", appDeployInfo.ObjectHash, "phase", appDeployInfo.PhaseInfo.Phase, "fan out", worker.fanOut)
+	scopedLog.InfoContext(ctx, "created new worker", "podName", worker.targetPodName, "appName", appDeployInfo.AppName, "digest", appDeployInfo.ObjectHash, "phase", appDeployInfo.PhaseInfo.Phase, "fanOut", worker.fanOut)
 
 	ppln.addWorkersToPipelinePhase(ctx, phase, worker)
 }
@@ -171,8 +171,7 @@ func getTelAppNameExtension(crKind string) (string, error) {
 var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
 	var err error
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("addTelApp").WithValues(
+	scopedLog := logging.FromContext(ctx).With("func", "addTelApp",
 		"name", cr.GetObjectMeta().GetName(),
 		"namespace", cr.GetObjectMeta().GetNamespace())
 
@@ -201,13 +200,13 @@ var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImp
 	// Run the commands on Splunk pods
 	err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command1, podExecClient)
 	if err != nil {
-		scopedLog.Error(err, "unable to run command on splunk pod")
+		scopedLog.ErrorContext(ctx, "unable to run command on splunk pod", "error", err)
 		return err
 	}
 
 	err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command2, podExecClient)
 	if err != nil {
-		scopedLog.Error(err, "unable to run command on splunk pod")
+		scopedLog.ErrorContext(ctx, "unable to run command on splunk pod", "error", err)
 		return err
 	}
 
@@ -237,11 +236,11 @@ func canAppScopeHaveInstallWorker(scope string) bool {
 
 // addWorkersToPipelinePhase adds a worker to a given pipeline phase
 func (ppln *AppInstallPipeline) addWorkersToPipelinePhase(ctx context.Context, phaseID enterpriseApi.AppPhaseType, workers ...*PipelineWorker) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("addWorkersToPipelinePhase").WithValues("phase", phaseID)
+
+	scopedLog := logging.FromContext(ctx).With("func", "addWorkersToPipelinePhase", "phase", phaseID)
 
 	for _, worker := range workers {
-		scopedLog.Info("Adding worker", "name", worker.cr.GetName(), "namespace", worker.cr.GetNamespace(), "Pod name", worker.targetPodName, "App name", worker.appDeployInfo.AppName, "digest", worker.appDeployInfo.ObjectHash)
+		scopedLog.InfoContext(ctx, "adding worker", "name", worker.cr.GetName(), "namespace", worker.cr.GetNamespace(), "podName", worker.targetPodName, "appName", worker.appDeployInfo.AppName, "digest", worker.appDeployInfo.ObjectHash)
 	}
 	ppln.pplnPhases[phaseID].mutex.Lock()
 	ppln.pplnPhases[phaseID].q = append(ppln.pplnPhases[phaseID].q, workers...)
@@ -250,8 +249,8 @@ func (ppln *AppInstallPipeline) addWorkersToPipelinePhase(ctx context.Context, p
 
 // deleteWorkerFromPipelinePhase deletes a given worker from a pipeline phase
 func (ppln *AppInstallPipeline) deleteWorkerFromPipelinePhase(ctx context.Context, phaseID enterpriseApi.AppPhaseType, worker *PipelineWorker) bool {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("deleteWorkerFromPipelinePhase").WithValues("phase", phaseID)
+
+	scopedLog := logging.FromContext(ctx).With("func", "deleteWorkerFromPipelinePhase", "phase", phaseID)
 	ppln.pplnPhases[phaseID].mutex.Lock()
 	defer ppln.pplnPhases[phaseID].mutex.Unlock()
 
@@ -264,7 +263,7 @@ func (ppln *AppInstallPipeline) deleteWorkerFromPipelinePhase(ctx context.Contex
 			phaseQ = phaseQ[:len(phaseQ)-1]
 			ppln.pplnPhases[phaseID].q = phaseQ
 
-			scopedLog.Info("Deleted worker", "name", worker.cr.GetName(), "namespace", worker.cr.GetNamespace(), "Pod name", worker.targetPodName, "phase", phaseID, "App name", worker.appDeployInfo.AppName, "digest", worker.appDeployInfo.ObjectHash)
+			scopedLog.InfoContext(ctx, "deleted worker", "name", worker.cr.GetName(), "namespace", worker.cr.GetNamespace(), "podName", worker.targetPodName, "phase", phaseID, "appName", worker.appDeployInfo.AppName, "digest", worker.appDeployInfo.ObjectHash)
 			return true
 		}
 	}
@@ -305,8 +304,7 @@ func createFanOutWorker(seedWorker *PipelineWorker, ordinalIdx int) *PipelineWor
 // In the case of Standalone CR with multiple replicas, Fan-out `replicas` number of new workers
 func (ppln *AppInstallPipeline) transitionWorkerPhase(ctx context.Context, worker *PipelineWorker, currentPhase, nextPhase enterpriseApi.AppPhaseType) {
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("transitionWorkerPhase").WithValues("name", worker.cr.GetName(), "namespace", worker.cr.GetNamespace(), "App name", worker.appDeployInfo.AppName, "digest", worker.appDeployInfo.ObjectHash, "pod name", worker.targetPodName, "current Phase", currentPhase, "next phase", nextPhase)
+	scopedLog := logging.FromContext(ctx).With("func", "transitionWorkerPhase", "name", worker.cr.GetName(), "namespace", worker.cr.GetNamespace(), "appName", worker.appDeployInfo.AppName, "digest", worker.appDeployInfo.ObjectHash, "podName", worker.targetPodName, "currentPhase", currentPhase, "nextPhase", nextPhase)
 
 	var replicaCount int32
 	if worker.sts != nil {
@@ -327,14 +325,14 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(ctx context.Context, worke
 	// without affecting other pods.
 	appDeployInfo := worker.appDeployInfo
 	if worker.fanOut {
-		scopedLog.Info("Fan-out transition")
+		scopedLog.InfoContext(ctx, "fan-out transition")
 		if currentPhase == enterpriseApi.PhaseDownload {
 			// On a reconcile entry, processing the Standalone CR right after loading the appDeployContext from the CR status
 			var podCopyWorkers, installWorkers []*PipelineWorker
 
 			// Seems like the download just finished. Allocate Phase info
 			if len(appDeployInfo.AuxPhaseInfo) == 0 {
-				scopedLog.Info("Just finished the download phase")
+				scopedLog.InfoContext(ctx, "just finished the download phase")
 				// Create Phase info for all the statefulset Pods.
 				appDeployInfo.AuxPhaseInfo = make([]enterpriseApi.PhaseInfo, replicaCount)
 
@@ -347,10 +345,10 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(ctx context.Context, worke
 					podCopyWorkers[podID] = createFanOutWorker(worker, podID)
 
 					setContextForNewPhase(&appDeployInfo.AuxPhaseInfo[podID], enterpriseApi.PhasePodCopy)
-					scopedLog.Info("Created a new fan-out pod copy worker", "pod name", worker.targetPodName)
+					scopedLog.InfoContext(ctx, "created a new fan-out pod copy worker", "podName", worker.targetPodName)
 				}
 			} else {
-				scopedLog.Info("Installation was already in progress for replica members")
+				scopedLog.InfoContext(ctx, "installation was already in progress for replica members")
 
 				for podID := range appDeployInfo.AuxPhaseInfo {
 					phaseInfo := &appDeployInfo.AuxPhaseInfo[podID]
@@ -366,7 +364,7 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(ctx context.Context, worke
 					} else if phaseInfo.Phase == enterpriseApi.PhasePodCopy {
 						podCopyWorkers = append(podCopyWorkers, newWorker)
 					} else {
-						scopedLog.Error(nil, "invalid phase info detected", "phase", phaseInfo.Phase, "phase status", phaseInfo.Status)
+						scopedLog.ErrorContext(ctx, "invalid phase info detected", "phase", phaseInfo.Phase, "phaseStatus", phaseInfo.Status)
 					}
 				}
 			}
@@ -374,11 +372,11 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(ctx context.Context, worke
 			ppln.addWorkersToPipelinePhase(ctx, enterpriseApi.PhasePodCopy, podCopyWorkers...)
 			ppln.addWorkersToPipelinePhase(ctx, enterpriseApi.PhaseInstall, installWorkers...)
 		} else {
-			scopedLog.Error(nil, "Invalid phase detected")
+			scopedLog.ErrorContext(ctx, "invalid phase detected")
 		}
 
 	} else {
-		scopedLog.Info("Simple transition")
+		scopedLog.InfoContext(ctx, "simple transition")
 		var phaseInfo *enterpriseApi.PhaseInfo
 
 		if isFanOutApplicableToCR(worker.cr) {
@@ -394,7 +392,7 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(ctx context.Context, worke
 
 	// We have already moved the worker(s) to the required queue.
 	// Now, safely delete the worker from the current phase queue
-	scopedLog.Info("Deleted worker", "phase", currentPhase)
+	scopedLog.InfoContext(ctx, "deleted worker", "phase", currentPhase)
 	ppln.deleteWorkerFromPipelinePhase(ctx, currentPhase, worker)
 }
 
@@ -420,13 +418,13 @@ func needToUseAuxPhaseInfo(worker *PipelineWorker, phaseType enterpriseApi.AppPh
 
 // getPhaseInfoByPhaseType gives the phase info suitable for a given phase
 func getPhaseInfoByPhaseType(ctx context.Context, worker *PipelineWorker, phaseType enterpriseApi.AppPhaseType) *enterpriseApi.PhaseInfo {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getPhaseInfoFromWorker")
+
+	scopedLog := logging.FromContext(ctx).With("func", "getPhaseInfoFromWorker")
 
 	if needToUseAuxPhaseInfo(worker, phaseType) {
 		podID, err := getOrdinalValFromPodName(worker.targetPodName)
 		if err != nil {
-			scopedLog.Error(err, "unable to get the pod Id", "pod name", worker.targetPodName)
+			scopedLog.ErrorContext(ctx, "unable to get the pod Id", "podName", worker.targetPodName, "error", err)
 			return nil
 		}
 
@@ -438,17 +436,17 @@ func getPhaseInfoByPhaseType(ctx context.Context, worker *PipelineWorker, phaseT
 
 // updatePplnWorkerPhaseInfo updates the in-memory PhaseInfo(specifically status and retryCount)
 func updatePplnWorkerPhaseInfo(ctx context.Context, appDeployInfo *enterpriseApi.AppDeploymentInfo, failCount uint32, statusType enterpriseApi.AppPhaseStatusType) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("updatePplnWorkerPhaseInfo").WithValues("appName", appDeployInfo.AppName)
 
-	scopedLog.Info("changing the status", "old status", appPhaseStatusAsStr(appDeployInfo.PhaseInfo.Status), "new status", appPhaseStatusAsStr(statusType))
+	scopedLog := logging.FromContext(ctx).With("func", "updatePplnWorkerPhaseInfo", "appName", appDeployInfo.AppName)
+
+	scopedLog.InfoContext(ctx, "changing the status", "oldStatus", appPhaseStatusAsStr(appDeployInfo.PhaseInfo.Status), "newStatus", appPhaseStatusAsStr(statusType))
 	appDeployInfo.PhaseInfo.FailCount = failCount
 	appDeployInfo.PhaseInfo.Status = statusType
 }
 
 func (downloadWorker *PipelineWorker) createDownloadDirOnOperator(ctx context.Context) (string, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("createDownloadDirOnOperator").WithValues("appSrcName", downloadWorker.appSrcName, "appName", downloadWorker.appDeployInfo.AppName)
+
+	scopedLog := logging.FromContext(ctx).With("func", "createDownloadDirOnOperator", "appSrcName", downloadWorker.appSrcName, "appName", downloadWorker.appDeployInfo.AppName)
 	scope := getAppSrcScope(ctx, downloadWorker.afwConfig, downloadWorker.appSrcName)
 
 	kind := downloadWorker.cr.GetObjectKind().GroupVersionKind().Kind
@@ -462,7 +460,7 @@ func (downloadWorker *PipelineWorker) createDownloadDirOnOperator(ctx context.Co
 	// create the sub-directories on the volume for downloading scoped apps
 	err := createAppDownloadDir(ctx, localPath)
 	if err != nil {
-		scopedLog.Error(err, "unable to create app download directory on operator")
+		scopedLog.ErrorContext(ctx, "unable to create app download directory on operator", "error", err)
 	}
 	return localPath, err
 }
@@ -480,8 +478,8 @@ func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *P
 
 	splunkCR := downloadWorker.cr
 	appSrcName := downloadWorker.appSrcName
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("PipelineWorker.Download()").WithValues("name", splunkCR.GetName(), "namespace", splunkCR.GetNamespace(), "App name", downloadWorker.appDeployInfo.AppName, "objectHash", downloadWorker.appDeployInfo.ObjectHash)
+
+	scopedLog := logging.FromContext(ctx).With("func", "PipelineWorker.Download", "name", splunkCR.GetName(), "namespace", splunkCR.GetNamespace(), "appName", downloadWorker.appDeployInfo.AppName, "objectHash", downloadWorker.appDeployInfo.ObjectHash)
 
 	appDeployInfo := downloadWorker.appDeployInfo
 	appName := appDeployInfo.AppName
@@ -489,7 +487,7 @@ func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *P
 	localFile := getLocalAppFileName(ctx, localPath, appName, appDeployInfo.ObjectHash)
 	remoteFile, err := getRemoteObjectKey(ctx, splunkCR, downloadWorker.afwConfig, appSrcName, appName)
 	if err != nil {
-		scopedLog.Error(err, "unable to get remote object key", "appName", appName)
+		scopedLog.ErrorContext(ctx, "unable to get remote object key", "appName", appName, "error", err)
 		// increment the retry count and mark this app as download pending
 		updatePplnWorkerPhaseInfo(ctx, appDeployInfo, appDeployInfo.PhaseInfo.FailCount+1, enterpriseApi.AppPkgDownloadPending)
 
@@ -499,12 +497,12 @@ func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *P
 	// download the app from remote storage
 	err = remoteDataClientMgr.DownloadApp(ctx, remoteFile, localFile, appDeployInfo.ObjectHash)
 	if err != nil {
-		scopedLog.Error(err, "unable to download app", "appName", appName)
+		scopedLog.ErrorContext(ctx, "unable to download app", "appName", appName, "error", err)
 
 		// remove the local file
 		err = os.RemoveAll(localFile)
 		if err != nil {
-			scopedLog.Error(err, "unable to remove local file from operator")
+			scopedLog.ErrorContext(ctx, "unable to remove local file from operator", "error", err)
 		}
 
 		// increment the retry count and mark this app as download pending
@@ -515,14 +513,13 @@ func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *P
 	// download is successful, update the state and reset the retry count
 	updatePplnWorkerPhaseInfo(ctx, appDeployInfo, 0, enterpriseApi.AppPkgDownloadComplete)
 
-	scopedLog.Info("Finished downloading app")
+	scopedLog.InfoContext(ctx, "finished downloading app")
 }
 
 // downloadWorkerHandler schedules the download workers to download app/s
 func (pplnPhase *PipelinePhase) downloadWorkerHandler(ctx context.Context, ppln *AppInstallPipeline, maxWorkers uint64, scheduleDownloadsWaiter *sync.WaitGroup) {
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("downloadWorkerHandler")
+	scopedLog := logging.FromContext(ctx).With("func", "downloadWorkerHandler")
 
 	// derive a counting semaphore from the channel to represent worker run pool
 	var downloadWorkersRunPool = make(chan struct{}, maxWorkers)
@@ -536,13 +533,13 @@ downloadWork:
 			case downloadWorker, ok := <-pplnPhase.msgChannel:
 				// if channel is closed, then just break from here as we have nothing to read
 				if !ok {
-					scopedLog.Info("msgChannel is closed by downloadPhaseManager, hence nothing to read.")
+					scopedLog.InfoContext(ctx, "msgChannel is closed by downloadPhaseManager, hence nothing to read")
 					break downloadWork
 				}
 
 				// do not redownload the app if it is already downloaded
 				if isAppAlreadyDownloaded(ctx, downloadWorker) {
-					scopedLog.Info("app is already downloaded on operator pod, hence skipping it.", "appSrcName", downloadWorker.appSrcName, "appName", downloadWorker.appDeployInfo.AppName)
+					scopedLog.InfoContext(ctx, "app is already downloaded on operator pod, hence skipping it", "appSrcName", downloadWorker.appSrcName, "appName", downloadWorker.appDeployInfo.AppName)
 					// update the state to be download complete
 					updatePplnWorkerPhaseInfo(ctx, downloadWorker.appDeployInfo, 0, enterpriseApi.AppPkgDownloadComplete)
 					<-downloadWorkersRunPool
@@ -553,7 +550,7 @@ downloadWork:
 
 				err := reserveStorage(downloadWorker.appDeployInfo.Size)
 				if err != nil {
-					scopedLog.Error(err, "insufficient storage for the app pkg download. appSrcName: %s, app name: %s, app size: %d Bytes", downloadWorker.appSrcName, downloadWorker.appDeployInfo.AppName, downloadWorker.appDeployInfo.Size)
+					scopedLog.ErrorContext(ctx, "insufficient storage for the app pkg download", "appSrcName", downloadWorker.appSrcName, "appName", downloadWorker.appDeployInfo.AppName, "appSize", downloadWorker.appDeployInfo.Size, "error", err)
 					// setting isActive to false here so that downloadPhaseManager can take care of it.
 					downloadWorker.isActive = false
 					<-downloadWorkersRunPool
@@ -568,7 +565,7 @@ downloadWork:
 				// create the sub-directories on the volume for downloading scoped apps
 				localPath, err := downloadWorker.createDownloadDirOnOperator(ctx)
 				if err != nil {
-					scopedLog.Error(err, "unable to create download directory on operator", "appSrcName", downloadWorker.appSrcName, "appName", appDeployInfo.AppName)
+					scopedLog.ErrorContext(ctx, "unable to create download directory on operator", "appSrcName", downloadWorker.appSrcName, "appName", appDeployInfo.AppName, "error", err)
 
 					// increment the retry count and mark this app as download pending
 					updatePplnWorkerPhaseInfo(ctx, appDeployInfo, appDeployInfo.PhaseInfo.FailCount+1, enterpriseApi.AppPkgDownloadPending)
@@ -580,7 +577,7 @@ downloadWork:
 				// get the remoteDataClientMgr instance
 				remoteDataClientMgr, err := getRemoteDataClientMgr(ctx, downloadWorker.client, downloadWorker.cr, downloadWorker.afwConfig, downloadWorker.appSrcName)
 				if err != nil {
-					scopedLog.Error(err, "unable to get remote data client manager")
+					scopedLog.ErrorContext(ctx, "unable to get remote data client manager", "error", err)
 					// increment the retry count and mark this app as download error
 					updatePplnWorkerPhaseInfo(ctx, appDeployInfo, appDeployInfo.PhaseInfo.FailCount+1, enterpriseApi.AppPkgDownloadError)
 
@@ -599,7 +596,7 @@ downloadWork:
 			}
 		default:
 			// All the workers are busy, check after one second
-			scopedLog.Info("All the workers are busy, we will check again after one second")
+			scopedLog.InfoContext(ctx, "all the workers are busy, we will check again after one second")
 			time.Sleep(phaseManagerBusyWaitDuration)
 		}
 
@@ -618,26 +615,26 @@ downloadWork:
 // 2. wait for the handler to finish all its work
 // 3. mark the phase as done/complete
 func (ppln *AppInstallPipeline) shutdownPipelinePhase(ctx context.Context, phaseManager string, pplnPhase *PipelinePhase, perPhaseWaiter *sync.WaitGroup) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName(phaseManager)
+
+	scopedLog := logging.FromContext(ctx).With("func", phaseManager)
 
 	// close the msgChannel
 	close(pplnPhase.msgChannel)
 
 	// wait for the handler code to finish its work
-	scopedLog.Info("Waiting for the workers to finish")
+	scopedLog.InfoContext(ctx, "waiting for the workers to finish")
 	perPhaseWaiter.Wait()
 
 	// mark the phase as done/complete
-	scopedLog.Info("All the workers finished")
+	scopedLog.InfoContext(ctx, "all the workers finished")
 	ppln.phaseWaiter.Done()
 }
 
 // downloadPhaseManager creates download phase manager for the install pipeline
 func (ppln *AppInstallPipeline) downloadPhaseManager(ctx context.Context) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("downloadPhaseManager")
-	scopedLog.Info("Starting Download phase manager")
+
+	scopedLog := logging.FromContext(ctx).With("func", "downloadPhaseManager")
+	scopedLog.InfoContext(ctx, "starting Download phase manager")
 
 	pplnPhase := ppln.pplnPhases[enterpriseApi.PhaseDownload]
 
@@ -657,7 +654,7 @@ downloadPhase:
 		select {
 		case _, channelOpen := <-ppln.sigTerm:
 			if !channelOpen {
-				scopedLog.Info("Received the termination request from the scheduler")
+				scopedLog.InfoContext(ctx, "received the termination request from the scheduler")
 				break downloadPhase
 			}
 
@@ -674,7 +671,7 @@ downloadPhase:
 					downloadWorker.waiter = &pplnPhase.workerWaiter
 					select {
 					case pplnPhase.msgChannel <- downloadWorker:
-						scopedLog.Info("Download worker got a run slot", "name", downloadWorker.cr.GetName(), "namespace", downloadWorker.cr.GetNamespace(), "App name", downloadWorker.appDeployInfo.AppName, "digest", downloadWorker.appDeployInfo.ObjectHash)
+						scopedLog.InfoContext(ctx, "download worker got a run slot", "name", downloadWorker.cr.GetName(), "namespace", downloadWorker.cr.GetNamespace(), "appName", downloadWorker.appDeployInfo.AppName, "digest", downloadWorker.appDeployInfo.ObjectHash)
 						downloadWorker.isActive = true
 					default:
 						downloadWorker.waiter = nil
@@ -689,8 +686,8 @@ downloadPhase:
 
 // markWorkerPhaseInstallationComplete marks the worker phase as app package installation complete
 func markWorkerPhaseInstallationComplete(ctx context.Context, phaseInfo *enterpriseApi.PhaseInfo, worker *PipelineWorker) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("markWorkerPhaseInstallationComplete")
+
+	scopedLog := logging.FromContext(ctx).With("func", "markWorkerPhaseInstallationComplete")
 
 	// Set auxphase info status for fanout CRs and phaseinfo status for others
 	phaseInfo.Status = enterpriseApi.AppPkgInstallComplete
@@ -700,7 +697,7 @@ func markWorkerPhaseInstallationComplete(ctx context.Context, phaseInfo *enterpr
 	// phaseinfo as install complete
 	if isFanOutApplicableToCR(worker.cr) {
 		if isAppInstallationCompleteOnAllReplicas(worker.appDeployInfo.AuxPhaseInfo) {
-			scopedLog.Info("app pkg installed on all the pods", "app pkg", worker.appDeployInfo.AppName)
+			scopedLog.InfoContext(ctx, "app pkg installed on all the pods", "appPkg", worker.appDeployInfo.AppName)
 			worker.appDeployInfo.PhaseInfo.Phase = enterpriseApi.PhaseInstall
 			worker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgInstallComplete
 
@@ -714,8 +711,7 @@ func markWorkerPhaseInstallationComplete(ctx context.Context, phaseInfo *enterpr
 func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr splcommon.MetaObject, phaseInfo *enterpriseApi.PhaseInfo) error {
 	worker := localCtx.worker
 
-	reqLogger := log.FromContext(rctx)
-	scopedLog := reqLogger.WithName("installApp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
+	scopedLog := logging.FromContext(rctx).With("func", "installApp", "name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "appName", worker.appDeployInfo.AppName)
 
 	// if the app name is app1.tgz and hash is "abcd1234", then appPkgFileName is app1.tgz_abcd1234
 	appPkgFileName := getAppPackageName(worker)
@@ -724,7 +720,7 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 	appPkgPathOnPod := filepath.Join(appBktMnt, worker.appSrcName, appPkgFileName)
 
 	if !checkIfFileExistsOnPod(rctx, cr, appPkgPathOnPod, localCtx.podExecClient) {
-		scopedLog.Error(nil, "app pkg missing on Pod", "app pkg path", appPkgPathOnPod)
+		scopedLog.ErrorContext(rctx, "app pkg missing on Pod", "appPkgPath", appPkgPathOnPod)
 		phaseInfo.Status = enterpriseApi.AppPkgMissingOnPodError
 
 		return fmt.Errorf("app pkg missing on Pod. app pkg path: %s", appPkgPathOnPod)
@@ -733,10 +729,10 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 	if worker.appDeployInfo.AppPackageTopFolder == "" {
 		appTopFolder, err := getAppTopFolderFromPackage(rctx, cr, appPkgPathOnPod, localCtx.podExecClient)
 		if err != nil {
-			scopedLog.Error(err, "local scoped app package install failed while getting name of installed app")
+			scopedLog.ErrorContext(rctx, "local scoped app package install failed while getting name of installed app", "error", err)
 			return err
 		}
-		scopedLog.Info("app top folder", "name", appTopFolder)
+		scopedLog.InfoContext(rctx, "app top folder", "name", appTopFolder)
 
 		worker.appDeployInfo.AppPackageTopFolder = appTopFolder
 	}
@@ -750,16 +746,16 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 		// we can come to this block if post installation failed
 		// e.g. es post installation failed but es app was already installed
 
-		scopedLog.Info("Check if app is already installed ", "name", worker.appDeployInfo.AppPackageTopFolder)
+		scopedLog.InfoContext(rctx, "check if app is already installed ", "name", worker.appDeployInfo.AppPackageTopFolder)
 
 		appInstalled, err := isAppAlreadyInstalled(rctx, cr, localCtx.podExecClient, worker.appDeployInfo.AppPackageTopFolder)
 		if err != nil {
-			scopedLog.Error(err, "local scoped app package install failed while checking if app is already installed")
+			scopedLog.ErrorContext(rctx, "local scoped app package install failed while checking if app is already installed", "error", err)
 			return err
 		}
 
 		if appInstalled {
-			scopedLog.Info("Not reinstalling app as it is already installed.")
+			scopedLog.InfoContext(rctx, "not reinstalling app as it is already installed")
 			return nil
 		}
 
@@ -773,13 +769,13 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 	// TODO(patrykw-splunk): remove this once we have confirm that we are not using stderr for error detection at all
 	// Log stderr content for debugging but don't use it for error detection
 	if stdErr != "" {
-		scopedLog.Info("App install command stderr output (informational only)", "stderr", stdErr)
+		scopedLog.InfoContext(rctx, "app install command stderr output (informational only)", "stderr", stdErr)
 	}
 
 	// Check only the actual command execution error, not stderr content
 	if err != nil {
 		phaseInfo.FailCount++
-		scopedLog.Error(err, "local scoped app package install failed", "stdout", stdOut, "stderr", stdErr, "app pkg path", appPkgPathOnPod, "failCount", phaseInfo.FailCount)
+		scopedLog.ErrorContext(rctx, "local scoped app package install failed", "stdout", stdOut, "stderr", stdErr, "appPkgPath", appPkgPathOnPod, "failCount", phaseInfo.FailCount, "error", err)
 		return fmt.Errorf("local scoped app package install failed. stdOut: %s, stdErr: %s, app pkg path: %s, failCount: %d", stdOut, stdErr, appPkgPathOnPod, phaseInfo.FailCount)
 	}
 
@@ -789,17 +785,17 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 // check if the given app is already installed and enabled.
 // the installed app name is supposed to be same as
 // name of top folder (AppTopFolder)
-func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExecClient splutil.PodExecClientImpl, appTopFolder string) (bool, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("isAppAlreadyInstalled").WithValues("podName", podExecClient.GetTargetPodName(), "namespace", cr.GetNamespace()).WithValues("AppTopFolder", appTopFolder)
+func isAppAlreadyInstalled(rctx context.Context, cr splcommon.MetaObject, podExecClient splutil.PodExecClientImpl, appTopFolder string) (bool, error) {
 
-	scopedLog.Info("check app's installation state")
+	scopedLog := logging.FromContext(rctx).With("func", "isAppAlreadyInstalled", "podName", podExecClient.GetTargetPodName(), "namespace", cr.GetNamespace(), "AppTopFolder", appTopFolder)
+
+	scopedLog.InfoContext(rctx, "check app's installation state")
 
 	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s -auth admin:`cat /mnt/splunk-secrets/password`| grep ENABLED", appTopFolder)
 
 	streamOptions := splutil.NewStreamOptionsObject(command)
 
-	stdOut, stdErr, err := podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+	stdOut, stdErr, err := podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
 
 	// Handle specific stderr cases first
 	if strings.Contains(stdErr, "Could not find object") {
@@ -811,7 +807,7 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 
 	// Log any other stderr content for debugging but don't use it for error detection
 	if stdErr != "" {
-		scopedLog.Info("Command stderr output (informational only)", "stderr", stdErr)
+		scopedLog.InfoContext(rctx, "command stderr output (informational only)", "stderr", stdErr)
 	}
 
 	// Now check the actual command result
@@ -823,7 +819,7 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 		// Check for grep exit code 1 (pattern not found)
 		if strings.Contains(errMsg, "exit status 1") || strings.Contains(errMsg, "command terminated with exit code 1") {
 			// grep exit code 1 means "ENABLED" pattern not found - app exists but is not enabled
-			scopedLog.Info("App not enabled - grep pattern not found", "stdout", stdOut, "stderr", stdErr)
+			scopedLog.InfoContext(rctx, "app not enabled - grep pattern not found", "stdout", stdOut, "stderr", stdErr)
 			return false, nil
 		}
 
@@ -838,22 +834,21 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 		return false, fmt.Errorf("command succeeded but no output received, command: %s", command)
 	}
 
-	scopedLog.Info("App installation state check successful - app is enabled", "appStatus", strings.TrimSpace(stdOut))
+	scopedLog.InfoContext(rctx, "app installation state check successful - app is enabled", "appStatus", strings.TrimSpace(stdOut))
 	return true, nil
 }
 
 // get the name of top folder from the package.
 // this name is later used as installed app name
 func getAppTopFolderFromPackage(rctx context.Context, cr splcommon.MetaObject, appPkgPathOnPod string, podExecClient splutil.PodExecClientImpl) (string, error) {
-	reqLogger := log.FromContext(rctx)
-	scopedLog := reqLogger.WithName("getAppTopFolderFromPackage").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "appPkgPathOnPod", appPkgPathOnPod)
+	scopedLog := logging.FromContext(rctx).With("func", "getAppTopFolderFromPackage", "name", cr.GetName(), "namespace", cr.GetNamespace(), "appPkgPathOnPod", appPkgPathOnPod)
 
 	command := fmt.Sprintf("tar tf %s|head -1|cut -d/ -f1", appPkgPathOnPod)
 
 	streamOptions := splutil.NewStreamOptionsObject(command)
 
 	stdOut, stdErr, err := podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
-	scopedLog.Info("Pod exec result", "stdOut", stdOut)
+	scopedLog.InfoContext(rctx, "pod exec result", "stdOut", stdOut)
 
 	if stdErr != "" || err != nil {
 		// CSPL-2598 - Log warnings/errors.
@@ -864,7 +859,7 @@ func getAppTopFolderFromPackage(rctx context.Context, cr splcommon.MetaObject, a
 		// The onus falls on the user to make sure the app packages are tarred appropriately
 		// to avoid the re-installation cycles as it is prudent to continue
 		// to the install step for harmless warnings
-		scopedLog.Error(err, "error in tar contents list, but app installation will continue", "stdOut", stdOut, "stdErr", stdErr, "command", command, "appPkgPathOnPod", appPkgPathOnPod)
+		scopedLog.ErrorContext(rctx, "error in tar contents list, but app installation will continue", "stdOut", stdOut, "stdErr", stdErr, "command", command, "appPkgPathOnPod", appPkgPathOnPod, "error", err)
 		if stdOut == "" {
 			return "Empty app package name, could not get installed app name", err
 		}
@@ -879,8 +874,7 @@ func getAppTopFolderFromPackage(rctx context.Context, cr splcommon.MetaObject, a
 func cleanupApp(rctx context.Context, localCtx *localScopePlaybookContext, cr splcommon.MetaObject, phaseInfo *enterpriseApi.PhaseInfo) error {
 	worker := localCtx.worker
 
-	reqLogger := log.FromContext(rctx)
-	scopedLog := reqLogger.WithName("cleanupApp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
+	scopedLog := logging.FromContext(rctx).With("func", "cleanupApp", "name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "appName", worker.appDeployInfo.AppName)
 
 	// if the app name is app1.tgz and hash is "abcd1234", then appPkgFileName is app1.tgz_abcd1234
 	appPkgFileName := getAppPackageName(worker)
@@ -893,10 +887,10 @@ func cleanupApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 	streamOptions := splutil.NewStreamOptionsObject(command)
 	stdOut, stdErr, err := localCtx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
 	if stdErr != "" || err != nil {
-		scopedLog.Error(err, "app pkg deletion failed", "stdout", stdOut, "stderr", stdErr, "app pkg path", appPkgPathOnPod)
+		scopedLog.ErrorContext(rctx, "app pkg deletion failed", "stdout", stdOut, "stderr", stdErr, "appPkgPath", appPkgPathOnPod, "error", err)
 		return fmt.Errorf("app pkg deletion failed.  stdOut: %s, stdErr: %s, app pkg path: %s", stdOut, stdErr, appPkgPathOnPod)
 	}
-	scopedLog.Info("App package deleted from target pod", "command", command)
+	scopedLog.InfoContext(rctx, "app package deleted from target pod", "command", command)
 
 	// Try to remove the app package from the Operator Pod
 	tryAppPkgCleanupFromOperatorPod(rctx, worker)
@@ -908,8 +902,7 @@ func cleanupApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 func (localCtx *localScopePlaybookContext) runPlaybook(rctx context.Context) error {
 	worker := localCtx.worker
 	cr := worker.cr
-	reqLogger := log.FromContext(rctx)
-	scopedLog := reqLogger.WithName("localScopePlaybookContext.runPlaybook").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
+	scopedLog := logging.FromContext(rctx).With("func", "localScopePlaybookContext.runPlaybook", "name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "appName", worker.appDeployInfo.AppName)
 
 	defer func() {
 		<-localCtx.sem
@@ -923,7 +916,7 @@ func (localCtx *localScopePlaybookContext) runPlaybook(rctx context.Context) err
 	// Call the API to install an app
 	err := installApp(rctx, localCtx, cr, phaseInfo)
 	if err != nil {
-		scopedLog.Error(err, "app package installation error")
+		scopedLog.ErrorContext(rctx, "app package installation error", "error", err)
 		return fmt.Errorf("app pkg installation failed. error %s", err.Error())
 	}
 
@@ -933,7 +926,7 @@ func (localCtx *localScopePlaybookContext) runPlaybook(rctx context.Context) err
 	// Call the API to cleanup the app
 	err = cleanupApp(rctx, localCtx, cr, phaseInfo)
 	if err != nil {
-		scopedLog.Error(err, "app package cleanup error")
+		scopedLog.ErrorContext(rctx, "app package cleanup error", "error", err)
 		return fmt.Errorf("app pkg cleanup failed. error %s", err.Error())
 	}
 
@@ -943,8 +936,8 @@ func (localCtx *localScopePlaybookContext) runPlaybook(rctx context.Context) err
 // extractClusterScopedAppOnPod untars the given app package to the bundle push location
 func extractClusterScopedAppOnPod(ctx context.Context, worker *PipelineWorker, appSrcScope string, appPkgPathOnPod, appPkgLocalPath string, podExecClient splutil.PodExecClientImpl) error {
 	cr := worker.cr
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("extractClusterScopedAppOnPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "app name", worker.appDeployInfo.AppName)
+
+	scopedLog := logging.FromContext(ctx).With("func", "extractClusterScopedAppOnPod", "name", cr.GetName(), "namespace", cr.GetNamespace(), "appName", worker.appDeployInfo.AppName)
 
 	var stdOut, stdErr string
 	var err error
@@ -952,7 +945,7 @@ func extractClusterScopedAppOnPod(ctx context.Context, worker *PipelineWorker, a
 	clusterAppsPath := getClusterScopedAppsLocOnPod(worker.cr)
 	if clusterAppsPath == "" {
 		// This should never happen
-		scopedLog.Error(nil, "could not find the cluster scoped apps location on the Pod")
+		scopedLog.ErrorContext(ctx, "could not find the cluster scoped apps location on the Pod")
 		return err
 	}
 
@@ -979,8 +972,8 @@ func extractClusterScopedAppOnPod(ctx context.Context, worker *PipelineWorker, a
 // runPodCopyWorker runs one pod copy worker
 func runPodCopyWorker(ctx context.Context, worker *PipelineWorker, ch chan struct{}) {
 	cr := worker.cr
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("runPodCopyWorker").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "app name", worker.appDeployInfo.AppName, "pod", worker.targetPodName)
+
+	scopedLog := logging.FromContext(ctx).With("func", "runPodCopyWorker", "name", cr.GetName(), "namespace", cr.GetNamespace(), "appName", worker.appDeployInfo.AppName, "pod", worker.targetPodName)
 	defer func() {
 		<-ch
 		worker.isActive = false
@@ -999,7 +992,7 @@ func runPodCopyWorker(ctx context.Context, worker *PipelineWorker, ch chan struc
 	_, err := os.Stat(appPkgLocalPath)
 	if err != nil {
 		// Move the worker to download phase
-		scopedLog.Error(err, "app package is missing", "pod name", worker.targetPodName)
+		scopedLog.ErrorContext(ctx, "app package is missing", "podName", worker.targetPodName, "error", err)
 		phaseInfo.Status = enterpriseApi.AppPkgMissingFromOperator
 		return
 	}
@@ -1013,7 +1006,7 @@ func runPodCopyWorker(ctx context.Context, worker *PipelineWorker, ch chan struc
 	stdOut, stdErr, err := CopyFileToPod(ctx, worker.client, cr.GetNamespace(), appPkgLocalPath, appPkgPathOnPod, podExecClient)
 	if err != nil {
 		phaseInfo.FailCount++
-		scopedLog.Error(err, "app package pod copy failed", "stdout", stdOut, "stderr", stdErr, "failCount", phaseInfo.FailCount)
+		scopedLog.ErrorContext(ctx, "app package pod copy failed", "stdout", stdOut, "stderr", stdErr, "failCount", phaseInfo.FailCount, "error", err)
 		return
 	}
 
@@ -1021,19 +1014,19 @@ func runPodCopyWorker(ctx context.Context, worker *PipelineWorker, ch chan struc
 		err = extractClusterScopedAppOnPod(ctx, worker, appSrcScope, appPkgPathOnPod, appPkgLocalPath, podExecClient)
 		if err != nil {
 			phaseInfo.FailCount++
-			scopedLog.Error(err, "extracting the app package on pod failed", "failCount", phaseInfo.FailCount)
+			scopedLog.ErrorContext(ctx, "extracting the app package on pod failed", "failCount", phaseInfo.FailCount, "error", err)
 			return
 		}
 	}
 
-	scopedLog.Info("podCopy complete", "app pkg path", appPkgPathOnPod)
+	scopedLog.InfoContext(ctx, "podCopy complete", "appPkgPath", appPkgPathOnPod)
 	phaseInfo.Status = enterpriseApi.AppPkgPodCopyComplete
 }
 
 // podCopyWorkerHandler fetches and runs the pod copy workers
 func (pplnPhase *PipelinePhase) podCopyWorkerHandler(ctx context.Context, handlerWaiter *sync.WaitGroup, numPodCopyRunners int) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("podCopyWorkerHandler")
+
+	scopedLog := logging.FromContext(ctx).With("func", "podCopyWorkerHandler")
 	defer handlerWaiter.Done()
 
 	// Using the channel, derive a counting semaphore called podCopyRunPool that represents worker run pool
@@ -1051,7 +1044,7 @@ podCopyHandler:
 			case worker, channelOpen := <-pplnPhase.msgChannel:
 				if !channelOpen {
 					// Channel is closed, so, do not handle any more workers
-					scopedLog.Info("worker channel closed")
+					scopedLog.InfoContext(ctx, "worker channel closed")
 					break podCopyHandler
 				}
 
@@ -1060,7 +1053,7 @@ podCopyHandler:
 					go runPodCopyWorker(ctx, worker, podCopyWorkerPool)
 				} else {
 					/// This should never happen
-					scopedLog.Error(nil, "invalid worker reference")
+					scopedLog.ErrorContext(ctx, "invalid worker reference")
 					<-podCopyWorkerPool
 				}
 
@@ -1076,16 +1069,16 @@ podCopyHandler:
 	}
 
 	// Wait for all the workers to finish
-	scopedLog.Info("Waiting for all the workers to finish")
+	scopedLog.InfoContext(ctx, "waiting for all the workers to finish")
 	pplnPhase.workerWaiter.Wait()
-	scopedLog.Info("All the workers finished")
+	scopedLog.InfoContext(ctx, "all the workers finished")
 }
 
 // podCopyPhaseManager creates pod copy phase manager for the install pipeline
 func (ppln *AppInstallPipeline) podCopyPhaseManager(ctx context.Context) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("podCopyPhaseManager")
-	scopedLog.Info("Starting Pod copy phase manager")
+
+	scopedLog := logging.FromContext(ctx).With("func", "podCopyPhaseManager")
+	scopedLog.InfoContext(ctx, "starting Pod copy phase manager")
 	var handlerWaiter sync.WaitGroup
 
 	pplnPhase := ppln.pplnPhases[enterpriseApi.PhasePodCopy]
@@ -1105,7 +1098,7 @@ podCopyPhase:
 		select {
 		case _, channelOpen := <-ppln.sigTerm:
 			if !channelOpen {
-				scopedLog.Info("Received the termination request from the scheduler")
+				scopedLog.InfoContext(ctx, "received the termination request from the scheduler")
 				break podCopyPhase
 			}
 
@@ -1129,7 +1122,7 @@ podCopyPhase:
 					podCopyWorker.waiter = &pplnPhase.workerWaiter
 					select {
 					case pplnPhase.msgChannel <- podCopyWorker:
-						scopedLog.Info("Pod copy worker got a run slot", "name", podCopyWorker.cr.GetName(), "namespace", podCopyWorker.cr.GetNamespace(), "pod name", podCopyWorker.targetPodName, "App name", podCopyWorker.appDeployInfo.AppName, "digest", podCopyWorker.appDeployInfo.ObjectHash)
+						scopedLog.InfoContext(ctx, "pod copy worker got a run slot", "name", podCopyWorker.cr.GetName(), "namespace", podCopyWorker.cr.GetNamespace(), "podName", podCopyWorker.targetPodName, "appName", podCopyWorker.appDeployInfo.AppName, "digest", podCopyWorker.appDeployInfo.ObjectHash)
 						podCopyWorker.isActive = true
 					default:
 						podCopyWorker.waiter = nil
@@ -1144,11 +1137,11 @@ podCopyPhase:
 
 // getInstallSlotForPod tries to allocate a local scoped install slot for a pod
 func getInstallSlotForPod(ctx context.Context, installTracker []chan struct{}, podName string) bool {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getInstallSlotForPod")
+
+	scopedLog := logging.FromContext(ctx).With("func", "getInstallSlotForPod")
 	podID, err := getOrdinalValFromPodName(podName)
 	if err != nil {
-		scopedLog.Error(err, "unable to derive podId for podname", podName)
+		scopedLog.ErrorContext(ctx, "unable to derive podId for podname", "podName", podName, "error", err)
 		return false
 	}
 
@@ -1162,18 +1155,18 @@ func getInstallSlotForPod(ctx context.Context, installTracker []chan struct{}, p
 
 // freeInstallSlotForPod frees up an install slot for a pod
 func freeInstallSlotForPod(ctx context.Context, installTracker []chan struct{}, podName string) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("freeInstallSlotForPod")
+
+	scopedLog := logging.FromContext(ctx).With("func", "freeInstallSlotForPod")
 	podID, err := getOrdinalValFromPodName(podName)
 	if err != nil {
-		scopedLog.Error(err, "unable to derive podId for podname", podName)
+		scopedLog.ErrorContext(ctx, "unable to derive podId for podname", "podName", podName, "error", err)
 		return
 	}
 
 	select {
 	case <-installTracker[podID]:
 	default:
-		scopedLog.Error(nil, "trying to free an install slot without even allocating it")
+		scopedLog.ErrorContext(ctx, "trying to free an install slot without even allocating it")
 	}
 }
 
@@ -1222,8 +1215,8 @@ func tryAppPkgCleanupFromOperatorPod(ctx context.Context, installWorker *Pipelin
 // installWorkerHandler fetches and runs the install workers
 // local scope installs are handled first, then the cluster scoped apps are considered for bundle push
 func (pplnPhase *PipelinePhase) installWorkerHandler(ctx context.Context, ppln *AppInstallPipeline, handlerWaiter *sync.WaitGroup, installTracker []chan struct{}) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("installWorkerHandler")
+
+	scopedLog := logging.FromContext(ctx).With("func", "installWorkerHandler")
 	defer handlerWaiter.Done()
 
 installHandler:
@@ -1232,7 +1225,7 @@ installHandler:
 		case installWorker, channelOpen := <-pplnPhase.msgChannel:
 			if !channelOpen {
 				// Channel is closed, so, do not handle any more workers
-				scopedLog.Info("worker channel closed")
+				scopedLog.InfoContext(ctx, "worker channel closed")
 				break installHandler
 			}
 
@@ -1247,7 +1240,7 @@ installHandler:
 				// Get app source spec
 				appSrcSpec, err := getAppSrcSpec(installWorker.afwConfig.AppSources, installWorker.appSrcName)
 				if err != nil {
-					scopedLog.Error(err, "getting app source spec failed while installing app app src name %s", installWorker.appSrcName)
+					scopedLog.ErrorContext(ctx, "getting app source spec failed while installing app", "appSrcName", installWorker.appSrcName, "error", err)
 				}
 
 				// Get app source scope
@@ -1266,11 +1259,11 @@ installHandler:
 					go iwctx.runPlaybook(ctx)
 				} else {
 					<-installTracker[podID]
-					scopedLog.Error(nil, "unable to get install worker context. app name %s", installWorker.appDeployInfo.AppName)
+					scopedLog.ErrorContext(ctx, "unable to get install worker context", "appName", installWorker.appDeployInfo.AppName)
 				}
 			} else {
 				// This should never happen
-				scopedLog.Error(nil, "invalid worker reference")
+				scopedLog.ErrorContext(ctx, "invalid worker reference")
 			}
 
 		default:
@@ -1290,7 +1283,7 @@ installHandler:
 			if ctxt != nil {
 				ctxt.runPlaybook(ctx)
 			} else {
-				scopedLog.Error(nil, "unable to get the cluster scoped playbook context, kind: %s, name: %s", ppln.cr.GroupVersionKind().Kind, ppln.cr.GetName())
+				scopedLog.ErrorContext(ctx, "unable to get the cluster scoped playbook context", "kind", ppln.cr.GroupVersionKind().Kind, "name", ppln.cr.GetName())
 			}
 		} else {
 			break
@@ -1301,16 +1294,16 @@ installHandler:
 	}
 
 	// Wait for all the workers to finish
-	scopedLog.Info("Waiting for all the workers to finish")
+	scopedLog.InfoContext(ctx, "waiting for all the workers to finish")
 	pplnPhase.workerWaiter.Wait()
-	scopedLog.Info("All the workers finished")
+	scopedLog.InfoContext(ctx, "all the workers finished")
 }
 
 // installPhaseManager creates install phase manager for the afw installation pipeline
 func (ppln *AppInstallPipeline) installPhaseManager(ctx context.Context) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("installPhaseManager")
-	scopedLog.Info("Starting Install phase manager")
+
+	scopedLog := logging.FromContext(ctx).With("func", "installPhaseManager")
+	scopedLog.InfoContext(ctx, "starting Install phase manager")
 
 	var handlerWaiter sync.WaitGroup
 
@@ -1343,7 +1336,7 @@ installPhase:
 		select {
 		case _, channelOpen := <-ppln.sigTerm:
 			if !channelOpen {
-				scopedLog.Info("Received the termination request from the scheduler")
+				scopedLog.InfoContext(ctx, "received the termination request from the scheduler")
 				break installPhase
 			}
 
@@ -1353,7 +1346,7 @@ installPhase:
 				// Cluster scope has only bundle push no workers to install
 				appScope := getAppSrcScope(ctx, installWorker.afwConfig, installWorker.appSrcName)
 				if !canAppScopeHaveInstallWorker(appScope) {
-					scopedLog.Error(nil, "Install worker with incorrect scope", "name", installWorker.cr.GetName(), "namespace", installWorker.cr.GetNamespace(), "pod name", installWorker.targetPodName, "App name", installWorker.appDeployInfo.AppName, "digest", installWorker.appDeployInfo.ObjectHash, "scope", appScope)
+					scopedLog.ErrorContext(ctx, "install worker with incorrect scope", "name", installWorker.cr.GetName(), "namespace", installWorker.cr.GetNamespace(), "podName", installWorker.targetPodName, "appName", installWorker.appDeployInfo.AppName, "digest", installWorker.appDeployInfo.ObjectHash, "scope", appScope)
 					continue
 				}
 
@@ -1363,7 +1356,7 @@ installPhase:
 
 					// For fanout CRs, also update the main PhaseInfo to reflect the failure
 					if isFanOutApplicableToCR(installWorker.cr) {
-						scopedLog.Info("Max retries reached for fanout CR - updating main phase info", "app", installWorker.appDeployInfo.AppName, "failCount", phaseInfo.FailCount)
+						scopedLog.InfoContext(ctx, "max retries reached for fanout CR - updating main phase info", "app", installWorker.appDeployInfo.AppName, "failCount", phaseInfo.FailCount)
 						installWorker.appDeployInfo.PhaseInfo.Phase = enterpriseApi.PhaseInstall
 						installWorker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgInstallError
 						installWorker.appDeployInfo.DeployStatus = enterpriseApi.DeployStatusError
@@ -1379,7 +1372,7 @@ installPhase:
 					installWorker.waiter = &pplnPhase.workerWaiter
 					select {
 					case pplnPhase.msgChannel <- installWorker:
-						scopedLog.Info("Install worker got a run slot", "name", installWorker.cr.GetName(), "namespace", installWorker.cr.GetNamespace(), "pod name", installWorker.targetPodName, "App name", installWorker.appDeployInfo.AppName, "digest", installWorker.appDeployInfo.ObjectHash)
+						scopedLog.InfoContext(ctx, "install worker got a run slot", "name", installWorker.cr.GetName(), "namespace", installWorker.cr.GetNamespace(), "podName", installWorker.targetPodName, "appName", installWorker.appDeployInfo.AppName, "digest", installWorker.appDeployInfo.ObjectHash)
 
 						// Always set the isActive in Phase manager itself, to avoid any delay in the install handler, otherwise it can
 						// cause running the same playbook multiple times.
@@ -1425,8 +1418,8 @@ func isPhaseStatusComplete(phaseInfo *enterpriseApi.PhaseInfo) bool {
 
 // validatePhaseInfo validates if phase and status in phaseInfo is valid
 func validatePhaseInfo(ctx context.Context, phaseInfo *enterpriseApi.PhaseInfo) bool {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("validatePhaseInfo").WithValues("phaseInfo", phaseInfo)
+
+	scopedLog := logging.FromContext(ctx).With("func", "validatePhaseInfo", "phaseInfo", phaseInfo)
 
 	// Check for phase in phaseInfo
 	phases := string(
@@ -1435,12 +1428,12 @@ func validatePhaseInfo(ctx context.Context, phaseInfo *enterpriseApi.PhaseInfo) 
 			enterpriseApi.PhaseInstall)
 
 	if !strings.Contains(phases, string(phaseInfo.Phase)) {
-		scopedLog.Error(nil, "Invalid phase in PhaseInfo", "phase", string(phaseInfo.Phase))
+		scopedLog.ErrorContext(ctx, "invalid phase in PhaseInfo", "phase", string(phaseInfo.Phase))
 		return false
 	}
 
 	if ok := appPhaseInfoStatuses[phaseInfo.Status]; !ok {
-		scopedLog.Error(nil, "Invalid status in PhaseInfo", "phase", string(phaseInfo.Phase), "status", phaseInfo.Status)
+		scopedLog.ErrorContext(ctx, "invalid status in PhaseInfo", "phase", string(phaseInfo.Phase), "status", phaseInfo.Status)
 		return false
 	}
 	return true
@@ -1523,25 +1516,25 @@ func initAppInstallPipeline(ctx context.Context, appDeployContext *enterpriseApi
 
 // deleteAppPkgFromOperator removes the app pkg from the Operator Pod
 func deleteAppPkgFromOperator(ctx context.Context, worker *PipelineWorker) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("deleteAppPkgFromOperator").WithValues("name", worker.cr.GetName(), "namespace", worker.cr.GetNamespace(), "app pkg", worker.appDeployInfo.AppName)
+
+	scopedLog := logging.FromContext(ctx).With("func", "deleteAppPkgFromOperator", "name", worker.cr.GetName(), "namespace", worker.cr.GetNamespace(), "appPkg", worker.appDeployInfo.AppName)
 
 	appPkgLocalPath := getAppPackageLocalPath(ctx, worker)
 	err := os.Remove(appPkgLocalPath)
 	if err != nil {
 		// Issue is local, so just log an error msg and return
 		// ToDo: sgontla: For any transient errors, handle the clean-up at the end of the install
-		scopedLog.Error(err, "failed to delete app pkg from Operator", "app pkg path", appPkgLocalPath)
+		scopedLog.ErrorContext(ctx, "failed to delete app pkg from Operator", "appPkgPath", appPkgLocalPath, "error", err)
 		return
 	}
 
-	scopedLog.Info("Deleted app package from the operator", "App package path", appPkgLocalPath)
+	scopedLog.InfoContext(ctx, "deleted app package from the operator", "appPkgPath", appPkgLocalPath)
 	releaseStorage(worker.appDeployInfo.Size)
 }
 
 func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObject, client splcommon.ControllerClient) *appsv1.StatefulSet {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getReleventStatefulsetByKind").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	scopedLog := logging.FromContext(ctx).With("func", "getReleventStatefulsetByKind", "name", cr.GetName(), "namespace", cr.GetNamespace())
 	var instanceID InstanceType
 
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
@@ -1569,7 +1562,7 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: statefulsetName}
 	sts, err := splctrl.GetStatefulSetByName(ctx, client, namespacedName)
 	if err != nil {
-		scopedLog.Error(err, "Unable to get the stateful set")
+		scopedLog.ErrorContext(ctx, "unable to get the stateful set", "error", err)
 	}
 
 	return sts
@@ -1621,8 +1614,8 @@ func getLocalScopePlaybookContext(ctx context.Context, installWorker *PipelineWo
 // getInsallWorkerPlaybookContext returns the playbook context for install workers i.e either local
 // or premiumApps scope for now
 func getInsallWorkerPlaybookContext(ctx context.Context, worker *PipelineWorker, sem chan struct{}, podExecClient splutil.PodExecClientImpl, appSrcSpec *enterpriseApi.AppSourceSpec, appSrcScope string, ppln *AppInstallPipeline) PlaybookImpl {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getInsallWorkerPlaybookContext").WithValues("crName", ppln.cr.GetName(), "namespace", ppln.cr.GetNamespace())
+
+	scopedLog := logging.FromContext(ctx).With("func", "getInsallWorkerPlaybookContext", "crName", ppln.cr.GetName(), "namespace", ppln.cr.GetNamespace())
 
 	// Since local app context is needed for premiumAppContext we retrieve it for both cases
 	localCtx := getLocalScopePlaybookContext(ctx, worker, sem, podExecClient)
@@ -1633,7 +1626,7 @@ func getInsallWorkerPlaybookContext(ctx context.Context, worker *PipelineWorker,
 	}
 
 	// Invalid scope
-	scopedLog.Error(nil, "Install workers can have only local or premium apps scope", "appSrcScope", appSrcScope)
+	scopedLog.ErrorContext(ctx, "install workers can have only local or premium apps scope", "appSrcScope", appSrcScope)
 
 	return nil
 }
@@ -1668,8 +1661,8 @@ func (shcPlaybookContext *SHCPlaybookContext) removeSHCBundlePushStatusFile(ctx 
 
 // isBundlePushComplete checks whether the SHC bundle push is complete or still pending
 func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.Context) (bool, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("isBundlePushComplete").WithValues("crName", shcPlaybookContext.cr.GetName(), "namespace", shcPlaybookContext.cr.GetNamespace())
+
+	scopedLog := logging.FromContext(ctx).With("func", "isBundlePushComplete", "crName", shcPlaybookContext.cr.GetName(), "namespace", shcPlaybookContext.cr.GetNamespace())
 
 	cmd := fmt.Sprintf("cat %s", shcBundlePushStatusCheckFile)
 	streamOptions := splutil.NewStreamOptionsObject(cmd)
@@ -1695,7 +1688,7 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 	//    in applySHCBundleCmdStr before the actual push output is written)
 	// 3. stdOut has some other string other than the bundle push success message
 	if stdOut == "" {
-		scopedLog.Info("SHC Bundle Push is still in progress")
+		scopedLog.InfoContext(ctx, "SHC Bundle Push is still in progress")
 		return false, nil
 	} else if !strings.Contains(stdOut, shcBundlePushCompleteStr) {
 		// Check whether the file contains only known informational lines. On FIPS-enabled
@@ -1723,13 +1716,13 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 			break
 		}
 		if !hasMeaningfulContent {
-			scopedLog.Info("SHC Bundle Push is still in progress (status file contains only informational messages)")
+			scopedLog.InfoContext(ctx, "SHC Bundle Push is still in progress (status file contains only informational messages)")
 			return false, nil
 		}
 
 		// this means there was an error in bundle push command
 		err = fmt.Errorf("there was an error in applying SHC Bundle, err=\"%v\"", stdOut)
-		scopedLog.Error(err, "SHC Bundle push status file reported an error while applying bundle")
+		scopedLog.ErrorContext(ctx, "SHC Bundle push status file reported an error while applying bundle", "error", err)
 
 		// reset the bundle push state to Pending, so that we retry again.
 		setBundlePushState(ctx, shcPlaybookContext.afwPipeline, enterpriseApi.BundlePushPending)
@@ -1745,7 +1738,7 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 	// now that bundle push is complete, remove the status file
 	err = shcPlaybookContext.removeSHCBundlePushStatusFile(ctx)
 	if err != nil {
-		scopedLog.Error(err, "removing SHC Bundle Push status file failed, will retry again.")
+		scopedLog.ErrorContext(ctx, "removing SHC Bundle Push status file failed, will retry again", "error", err)
 
 		// reset the state to BundlePushInProgress so that we can check the status of file again.
 		setBundlePushState(ctx, shcPlaybookContext.afwPipeline, enterpriseApi.BundlePushInProgress)
@@ -1759,8 +1752,8 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 
 // triggerBundlePush triggers the bundle push operation for SHC
 func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Context) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("shcPlaybookContext.triggerBundlePush()").WithValues(
+
+	scopedLog := logging.FromContext(ctx).With("func", "shcPlaybookContext.triggerBundlePush",
 		"shcCaptainUrl", shcPlaybookContext.searchHeadCaptainURL,
 		"cr", shcPlaybookContext.cr.GetName())
 
@@ -1769,7 +1762,7 @@ func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Cont
 
 	// Trigger bundle push
 	cmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlaybookContext.searchHeadCaptainURL, shcBundlePushStatusCheckFile)
-	scopedLog.Info("Triggering bundle push", "command", cmd)
+	scopedLog.InfoContext(ctx, "triggering bundle push", "command", cmd)
 	streamOptions := splutil.NewStreamOptionsObject(cmd)
 	stdOut, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 	if err != nil || stdErr != "" {
@@ -1781,14 +1774,14 @@ func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Cont
 
 // setLivenessProbeLevel sets the liveness probe level across all the Search Head Pods.
 func (shcPlaybookContext *SHCPlaybookContext) setLivenessProbeLevel(ctx context.Context, probeLevel int) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("shcPlaybookContext.setLivenessProbeLevel()")
+
+	scopedLog := logging.FromContext(ctx).With("func", "shcPlaybookContext.setLivenessProbeLevel")
 
 	shcStsName := GetSplunkStatefulsetName(SplunkSearchHead, shcPlaybookContext.cr.GetName())
 	shcStsNamespaceName := types.NamespacedName{Namespace: shcPlaybookContext.cr.GetNamespace(), Name: shcStsName}
 	shcSts, err := splctrl.GetStatefulSetByName(ctx, shcPlaybookContext.client, shcStsNamespaceName)
 	if err != nil {
-		scopedLog.Error(err, "Unable to get the stateful set")
+		scopedLog.ErrorContext(ctx, "unable to get the stateful set", "error", err)
 		return err
 	}
 
@@ -1806,7 +1799,7 @@ func (shcPlaybookContext *SHCPlaybookContext) setLivenessProbeLevel(ctx context.
 
 		err = setProbeLevelOnCRPods(ctx, shcPlaybookContext.cr, *shcSts.Spec.Replicas, shcPlaybookContext.podExecClient, probeLevel)
 		if err != nil {
-			scopedLog.Error(err, "Unable to set the Liveness probe level")
+			scopedLog.ErrorContext(ctx, "unable to set the Liveness probe level", "error", err)
 			return err
 		}
 
@@ -1847,8 +1840,8 @@ func adjustClusterAppsFilePermissions(ctx context.Context, podExecClient splutil
 
 // runPlaybook will implement the bundle push logic for SHC
 func (shcPlaybookContext *SHCPlaybookContext) runPlaybook(ctx context.Context) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("runPlaybook").WithValues("crName", shcPlaybookContext.cr.GetName(), "namespace", shcPlaybookContext.cr.GetNamespace())
+
+	scopedLog := logging.FromContext(ctx).With("func", "runPlaybook", "crName", shcPlaybookContext.cr.GetName(), "namespace", shcPlaybookContext.cr.GetNamespace())
 
 	var err error
 	var ok bool
@@ -1857,7 +1850,7 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook(ctx context.Context) e
 		return nil
 	}
 	if cr.Status.Phase != enterpriseApi.PhaseReady {
-		scopedLog.Info("SHC is not ready yet.")
+		scopedLog.InfoContext(ctx, "SHC is not ready yet")
 		return nil
 	}
 
@@ -1866,11 +1859,11 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook(ctx context.Context) e
 	switch appDeployContext.BundlePushStatus.BundlePushStage {
 	// if the bundle push is already in progress, check the status
 	case enterpriseApi.BundlePushInProgress:
-		scopedLog.Info("checking the status of SHC Bundle Push")
+		scopedLog.InfoContext(ctx, "checking the status of SHC Bundle Push")
 		// check if the bundle push is complete
 		ok, err = shcPlaybookContext.isBundlePushComplete(ctx)
 		if ok {
-			scopedLog.Info("Bundle push complete, setting bundle push state in CR")
+			scopedLog.InfoContext(ctx, "bundle push complete, setting bundle push state in CR")
 
 			// set the bundle push status to complete
 			setBundlePushState(ctx, shcPlaybookContext.afwPipeline, enterpriseApi.BundlePushComplete)
@@ -1884,28 +1877,28 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook(ctx context.Context) e
 			// set the liveness probe to default
 			shcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelDefault)
 		} else if err != nil {
-			scopedLog.Error(err, "there was an error in SHC bundle push, will retry again")
+			scopedLog.ErrorContext(ctx, "there was an error in SHC bundle push, will retry again", "error", err)
 		} else {
-			scopedLog.Info("SHC Bundle Push is still in progress, will check back again")
+			scopedLog.InfoContext(ctx, "SHC Bundle Push is still in progress, will check back again")
 		}
 	case enterpriseApi.BundlePushPending:
 		// run the command to apply cluster bundle
-		scopedLog.Info("running command to apply SHC Bundle")
+		scopedLog.InfoContext(ctx, "running command to apply SHC Bundle")
 
 		// Adjust the file permissions
 		err = adjustClusterAppsFilePermissions(ctx, shcPlaybookContext.podExecClient)
 		if err != nil {
-			scopedLog.Error(err, "failed to adjust the file permissions")
+			scopedLog.ErrorContext(ctx, "failed to adjust the file permissions", "error", err)
 			return err
 		}
 
 		err = shcPlaybookContext.triggerBundlePush(ctx)
 		if err != nil {
-			scopedLog.Error(err, "failed to apply SHC Bundle")
+			scopedLog.ErrorContext(ctx, "failed to apply SHC Bundle", "error", err)
 			return err
 		}
 
-		scopedLog.Info("SHC Bundle Push is in progress")
+		scopedLog.InfoContext(ctx, "SHC Bundle Push is in progress")
 
 		// set the state to bundle push complete since SHC bundle push is a sync call
 		setBundlePushState(ctx, shcPlaybookContext.afwPipeline, enterpriseApi.BundlePushInProgress)
@@ -1918,29 +1911,29 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook(ctx context.Context) e
 
 // isBundlePushComplete checks the status of bundle push
 func (idxcPlaybookContext *IdxcPlaybookContext) isBundlePushComplete(ctx context.Context) bool {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("isBundlePushComplete").WithValues("crName", idxcPlaybookContext.cr.GetName(), "namespace", idxcPlaybookContext.cr.GetNamespace())
+
+	scopedLog := logging.FromContext(ctx).With("func", "isBundlePushComplete", "crName", idxcPlaybookContext.cr.GetName(), "namespace", idxcPlaybookContext.cr.GetNamespace())
 
 	streamOptions := splutil.NewStreamOptionsObject(idxcShowClusterBundleStatusStr)
 	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 	if err == nil && strings.Contains(stdOut, "cluster_status=None") && !strings.Contains(stdOut, "last_bundle_validation_status=failure") {
-		scopedLog.Info("IndexerCluster Bundle push complete")
+		scopedLog.InfoContext(ctx, "IndexerCluster Bundle push complete")
 		return true
 	}
 
 	if err != nil || stdErr != "" {
-		scopedLog.Error(err, "show cluster-bundle-status failed", "stdout", stdOut, "stderr", stdErr)
+		scopedLog.ErrorContext(ctx, "show cluster-bundle-status failed", "stdout", stdOut, "stderr", stdErr, "error", err)
 		return false
 	}
 
-	scopedLog.Info("IndexerCluster Bundle push is still in progress")
+	scopedLog.InfoContext(ctx, "IndexerCluster Bundle push is still in progress")
 	return false
 }
 
 // triggerBundlePush triggers the bundle push for indexer cluster
 func (idxcPlaybookContext *IdxcPlaybookContext) triggerBundlePush(ctx context.Context) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("idxcPlaybookContext.triggerBundlePush()")
+
+	scopedLog := logging.FromContext(ctx).With("func", "idxcPlaybookContext.triggerBundlePush")
 
 	// Reduce the liveness probe level
 	idxcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
@@ -1950,7 +1943,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) triggerBundlePush(ctx context.Co
 	// If the error is due to a bundle which is already present, don't do anything.
 	// In the next reconcile we will mark it as bundle push complete
 	if strings.Contains(stdErr, idxcBundleAlreadyPresentStr) {
-		scopedLog.Info("bundle already present on peers")
+		scopedLog.InfoContext(ctx, "bundle already present on peers")
 	} else if err != nil || !strings.Contains(stdErr, "OK\n") {
 		err = fmt.Errorf("error while applying cluster bundle. stdout: %s, stderr: %s, err: %v", stdOut, stdErr, err)
 		return err
@@ -1961,8 +1954,8 @@ func (idxcPlaybookContext *IdxcPlaybookContext) triggerBundlePush(ctx context.Co
 
 // setLivenessProbeLevel sets the liveness probe level across all the indexer pods
 func (idxcPlaybookContext *IdxcPlaybookContext) setLivenessProbeLevel(ctx context.Context, probeLevel int) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("idxcPlaybookContext.setLivenessProbeLevel()")
+
+	scopedLog := logging.FromContext(ctx).With("func", "idxcPlaybookContext.setLivenessProbeLevel")
 	var err error
 
 	managerSts := afwGetReleventStatefulsetByKind(ctx, idxcPlaybookContext.cr, idxcPlaybookContext.client)
@@ -1994,7 +1987,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) setLivenessProbeLevel(ctx contex
 			err = idxcPlaybookContext.client.Get(ctx, idxcNameSpaceName, &idxcCR)
 			if err != nil {
 				// Probably a dangling owner reference, just ignore and continue
-				scopedLog.Error(err, "Unable to fetch the CR", "Name", managerOwnerRefs[i].Name, "Namespace", idxcPlaybookContext.cr.GetNamespace())
+				scopedLog.ErrorContext(ctx, "unable to fetch the CR", "Name", managerOwnerRefs[i].Name, "Namespace", idxcPlaybookContext.cr.GetNamespace(), "error", err)
 				continue
 			}
 
@@ -2002,14 +1995,14 @@ func (idxcPlaybookContext *IdxcPlaybookContext) setLivenessProbeLevel(ctx contex
 			idxcStsNamespaceName := types.NamespacedName{Namespace: idxcCR.GetNamespace(), Name: idxcStsName}
 			idxcSts, err := splctrl.GetStatefulSetByName(ctx, idxcPlaybookContext.client, idxcStsNamespaceName)
 			if err != nil {
-				scopedLog.Error(err, "Unable to get the stateful set")
+				scopedLog.ErrorContext(ctx, "unable to get the stateful set", "error", err)
 				// Probably a dangling owner reference, just ignore and continue
 				continue
 			}
 
 			err = setProbeLevelOnCRPods(ctx, &idxcCR, *idxcSts.Spec.Replicas, idxcPlaybookContext.podExecClient, probeLevel)
 			if err != nil {
-				scopedLog.Error(err, "Unable to set the Liveness probe level")
+				scopedLog.ErrorContext(ctx, "unable to set the Liveness probe level", "error", err)
 				return err
 			}
 		}
@@ -2024,15 +2017,14 @@ func (idxcPlaybookContext *IdxcPlaybookContext) setLivenessProbeLevel(ctx contex
 // 2. OR else, if the bundle push is already in progress, check the status of bundle push
 func (idxcPlaybookContext *IdxcPlaybookContext) runPlaybook(ctx context.Context) error {
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("RunPlaybook").WithValues("crName", idxcPlaybookContext.cr.GetName(), "namespace", idxcPlaybookContext.cr.GetNamespace())
+	scopedLog := logging.FromContext(ctx).With("func", "RunPlaybook", "crName", idxcPlaybookContext.cr.GetName(), "namespace", idxcPlaybookContext.cr.GetNamespace())
 
 	appDeployContext := idxcPlaybookContext.afwPipeline.appDeployContext
 
 	switch appDeployContext.BundlePushStatus.BundlePushStage {
 	// if the bundle push is already in progress, check the status
 	case enterpriseApi.BundlePushInProgress:
-		scopedLog.Info("checking the status of IndexerCluster Bundle Push")
+		scopedLog.InfoContext(ctx, "checking the status of IndexerCluster Bundle Push")
 		// check if the bundle push is complete
 		if idxcPlaybookContext.isBundlePushComplete(ctx) {
 			// set the bundle push status to complete
@@ -2045,22 +2037,22 @@ func (idxcPlaybookContext *IdxcPlaybookContext) runPlaybook(ctx context.Context)
 			setInstallStateForClusterScopedApps(ctx, appDeployContext)
 			idxcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelDefault)
 		} else {
-			scopedLog.Info("IndexerCluster Bundle Push is still in progress, will check back again in next reconcile..")
+			scopedLog.InfoContext(ctx, "IndexerCluster Bundle Push is still in progress, will check back again in next reconcile")
 		}
 
 	case enterpriseApi.BundlePushPending:
 		// Adjust the file permissions
 		err := adjustClusterAppsFilePermissions(ctx, idxcPlaybookContext.podExecClient)
 		if err != nil {
-			scopedLog.Error(err, "failed to adjust the file permissions")
+			scopedLog.ErrorContext(ctx, "failed to adjust the file permissions", "error", err)
 			return err
 		}
 
 		// run the command to apply cluster bundle
-		scopedLog.Info("running command to apply IndexerCluster Bundle")
+		scopedLog.InfoContext(ctx, "running command to apply IndexerCluster Bundle")
 		err = idxcPlaybookContext.triggerBundlePush(ctx)
 		if err != nil {
-			scopedLog.Error(err, "failed to apply IndexerCluster Bundle")
+			scopedLog.ErrorContext(ctx, "failed to apply IndexerCluster Bundle", "error", err)
 			return err
 		}
 
@@ -2093,8 +2085,7 @@ func handleEsappPostinstall(rctx context.Context, preCtx *premiumAppScopePlayboo
 	cr := preCtx.cr
 	appSrcSpec := preCtx.appSrcSpec
 
-	reqLogger := log.FromContext(rctx)
-	scopedLog := reqLogger.WithName("handleEsappPostinstall").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
+	scopedLog := logging.FromContext(rctx).With("func", "handleEsappPostinstall", "name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "appName", worker.appDeployInfo.AppName)
 
 	// For ES app, run post-install commands
 	var command string
@@ -2116,12 +2107,12 @@ func handleEsappPostinstall(rctx context.Context, preCtx *premiumAppScopePlayboo
 	// banner and related informational messages to stderr on every invocation,
 	// so a non-empty stderr does not indicate failure.
 	if stdErr != "" {
-		scopedLog.Info("Post install command stderr output (informational only)", "stdout", stdOut, "stderr", stdErr, "post install command", command)
+		scopedLog.InfoContext(rctx, "post install command stderr output (informational only)", "stdout", stdOut, "stderr", stdErr, "postInstallCommand", command)
 	}
 
 	if err != nil {
 		phaseInfo.FailCount++
-		scopedLog.Error(err, "premium scoped app package install failed", "stdout", stdOut, "stderr", stdErr, "post install command", command, "failCount", phaseInfo.FailCount)
+		scopedLog.ErrorContext(rctx, "premium scoped app package install failed", "stdout", stdOut, "stderr", stdErr, "postInstallCommand", command, "failCount", phaseInfo.FailCount, "error", err)
 		return fmt.Errorf("premium scoped app package install failed. stdOut: %s, stdErr: %s, post install command: %s, failCount: %d", stdOut, stdErr, command, phaseInfo.FailCount)
 	}
 
@@ -2138,8 +2129,7 @@ func (preCtx *premiumAppScopePlaybookContext) runPlaybook(rctx context.Context) 
 	worker := preCtx.localCtx.worker
 	appSrcSpec := preCtx.appSrcSpec
 
-	reqLogger := log.FromContext(rctx)
-	scopedLog := reqLogger.WithName("premiumAppScopePlaybookContext.runPlaybook").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
+	scopedLog := logging.FromContext(rctx).With("func", "premiumAppScopePlaybookContext.runPlaybook", "name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "appName", worker.appDeployInfo.AppName)
 
 	defer func() {
 		<-preCtx.localCtx.sem
@@ -2153,7 +2143,7 @@ func (preCtx *premiumAppScopePlaybookContext) runPlaybook(rctx context.Context) 
 	// Call the API to install an app
 	err := installApp(rctx, preCtx.localCtx, cr, phaseInfo)
 	if err != nil {
-		scopedLog.Error(err, "premium app package installation error")
+		scopedLog.ErrorContext(rctx, "premium app package installation error", "error", err)
 		return fmt.Errorf("app pkg installation failed. error %s", err.Error())
 	}
 
@@ -2161,7 +2151,7 @@ func (preCtx *premiumAppScopePlaybookContext) runPlaybook(rctx context.Context) 
 	if appSrcSpec.PremiumAppsProps.Type == enterpriseApi.PremiumAppsTypeEs {
 		err = handleEsappPostinstall(rctx, preCtx, phaseInfo)
 		if err != nil {
-			scopedLog.Error(err, "app package post installation error")
+			scopedLog.ErrorContext(rctx, "app package post installation error", "error", err)
 			return fmt.Errorf("app pkg post installation failed. error %s", err.Error())
 		}
 	}
@@ -2172,7 +2162,7 @@ func (preCtx *premiumAppScopePlaybookContext) runPlaybook(rctx context.Context) 
 	// Call the API to clean up app
 	err = cleanupApp(rctx, preCtx.localCtx, cr, phaseInfo)
 	if err != nil {
-		scopedLog.Error(err, "premium app package installation error")
+		scopedLog.ErrorContext(rctx, "premium app package installation error", "error", err)
 		return fmt.Errorf("app pkg installation failed. error %s", err.Error())
 	}
 
@@ -2223,8 +2213,8 @@ func isPhaseInfoEligibleForSchedulerEntry(ctx context.Context, appSrcName string
 
 // afwSchedulerEntry Starts the scheduler Pipeline with the required phases
 func afwSchedulerEntry(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) (bool, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("afwSchedulerEntry").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	scopedLog := logging.FromContext(ctx).With("func", "afwSchedulerEntry", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// return error, if there is no storage defined for the Operator pod
 	if !isPersistentVolConfigured() {
@@ -2252,7 +2242,7 @@ func afwSchedulerEntry(ctx context.Context, client splcommon.ControllerClient, c
 	afwPipeline.phaseWaiter.Add(1)
 	go afwPipeline.installPhaseManager(ctx)
 
-	scopedLog.Info("Creating pipeline workers for pending app packages")
+	scopedLog.InfoContext(ctx, "creating pipeline workers for pending app packages")
 
 	for appSrcName, appSrcDeployInfo := range appDeployContext.AppsSrcDeployStatus {
 
@@ -2267,7 +2257,7 @@ func afwSchedulerEntry(ctx context.Context, client splcommon.ControllerClient, c
 		// create the dir on Splunk pod/s where app/s will be copied from operator pod
 		err = createDirOnSplunkPods(ctx, cr, *sts.Spec.Replicas, appsPathOnPod, podExecClient)
 		if err != nil {
-			scopedLog.Error(err, "unable to create directory on splunk pod")
+			scopedLog.ErrorContext(ctx, "unable to create directory on splunk pod", "error", err)
 			// break from here and let yield logic take care of everything
 			break
 		}
@@ -2288,11 +2278,11 @@ func afwSchedulerEntry(ctx context.Context, client splcommon.ControllerClient, c
 	afwPipeline.phaseWaiter.Add(1)
 	go afwPipeline.afwYieldWatcher(ctx)
 
-	scopedLog.Info("Waiting for the phase managers to finish")
+	scopedLog.InfoContext(ctx, "waiting for the phase managers to finish")
 
 	// Wait for all the pipeline managers to finish
 	afwPipeline.phaseWaiter.Wait()
-	scopedLog.Info("All the phase managers finished")
+	scopedLog.InfoContext(ctx, "all the phase managers finished")
 
 	// Finally mark if all the App framework is complete
 	checkAndUpdateAppFrameworkProgressFlag(afwPipeline)
@@ -2302,15 +2292,15 @@ func afwSchedulerEntry(ctx context.Context, client splcommon.ControllerClient, c
 
 // afwYieldWatcher issues termination request to the scheduler when the yield time expires or the pipelines become empty.
 func (ppln *AppInstallPipeline) afwYieldWatcher(ctx context.Context) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("afwYieldWatcher").WithValues("name", ppln.cr.GetName(), "namespace", ppln.cr.GetNamespace())
+
+	scopedLog := logging.FromContext(ctx).With("func", "afwYieldWatcher", "name", ppln.cr.GetName(), "namespace", ppln.cr.GetNamespace())
 	yieldTrigger := time.After(time.Duration(ppln.appDeployContext.AppFrameworkConfig.SchedulerYieldInterval) * time.Second)
 
 yieldScheduler:
 	for {
 		select {
 		case <-yieldTrigger:
-			scopedLog.Info("Yielding from AFW scheduler", "time elapsed", time.Now().Unix()-ppln.afwEntryTime)
+			scopedLog.InfoContext(ctx, "yielding from AFW scheduler", "timeElapsed", time.Now().Unix()-ppln.afwEntryTime)
 			break yieldScheduler
 		default:
 			if ppln.isPipelineEmpty() {
@@ -2324,5 +2314,5 @@ yieldScheduler:
 	// Trigger the pipeline termination by closing the channel
 	close(ppln.sigTerm)
 	ppln.phaseWaiter.Done()
-	scopedLog.Info("Termination issued")
+	scopedLog.InfoContext(ctx, "termination issued")
 }

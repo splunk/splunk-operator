@@ -67,8 +67,11 @@ func SetupTestCaseEnv(testenvInstance *TestEnv, namePrefix string, opts ...Setup
 	return testcaseEnvInst, deployment, nil
 }
 
-// TeardownTestCaseEnv handles the common teardown logic for test case environments.
-func TeardownTestCaseEnv(testcaseEnvInst *TestCaseEnv, deployment *Deployment) error {
+// TeardownTestCaseEnv handles the common teardown logic for test case
+// environments and propagates ctx as the parent context for all cleanup
+// operations (Delete + poll). Callers (typically AfterEach blocks) should
+// pass the Ginkgo SpecContext so cleanup respects NodeTimeout.
+func TeardownTestCaseEnv(ctx context.Context, testcaseEnvInst *TestCaseEnv, deployment *Deployment) error {
 	if types.SpecState(ginkgo.CurrentSpecReport().State) == types.SpecStateFailed {
 		if testcaseEnvInst != nil {
 			testcaseEnvInst.SkipTeardown = true
@@ -76,10 +79,12 @@ func TeardownTestCaseEnv(testcaseEnvInst *TestCaseEnv, deployment *Deployment) e
 	}
 
 	if deployment != nil {
+		deployment.SetTeardownContext(ctx)
 		deployment.Teardown()
 	}
 
 	if testcaseEnvInst != nil {
+		testcaseEnvInst.SetTeardownContext(ctx)
 		if err := testcaseEnvInst.Teardown(); err != nil {
 			return fmt.Errorf("teardown failed: %w", err)
 		}
@@ -100,7 +105,7 @@ func CleanupOperatorFile(ctx context.Context, deployment *Deployment, testcaseEn
 // TeardownAppFrameworkTestCaseEnv handles teardown for app framework tests with provider-specific
 // cloud storage cleanup. cloudCleanup is called only if SkipTeardown is false.
 func TeardownAppFrameworkTestCaseEnv(ctx context.Context, testcaseEnvInst *TestCaseEnv, deployment *Deployment, cloudCleanup func(), filePresentOnOperator bool) error {
-	if err := TeardownTestCaseEnv(testcaseEnvInst, deployment); err != nil {
+	if err := TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment); err != nil {
 		return err
 	}
 

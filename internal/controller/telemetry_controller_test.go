@@ -166,10 +166,13 @@ var _ = Describe("Telemetry Controller", func() {
 			panic("test panic")
 		}
 
-		// Should not panic, should recover and return requeue
+		// Should not panic, should recover and return requeue with error
 		Expect(func() {
-			_, err := r.Reconcile(ctx, req)
-			Expect(err).To(BeNil())
+			result, err := r.Reconcile(ctx, req)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("panic"))
+			Expect(result.Requeue).To(BeTrue())
+			Expect(result.RequeueAfter).To(Equal(time.Second * 600))
 		}).NotTo(Panic())
 	})
 
@@ -177,8 +180,11 @@ var _ = Describe("Telemetry Controller", func() {
 		r := &TelemetryReconciler{Client: &panicClient{}, Scheme: scheme.Scheme}
 		req := reconcile.Request{NamespacedName: types.NamespacedName{Name: cmName, Namespace: ns}}
 		Expect(func() {
-			_, err := r.Reconcile(ctx, req)
-			Expect(err).To(BeNil())
+			result, err := r.Reconcile(ctx, req)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("panic"))
+			Expect(result.Requeue).To(BeTrue())
+			Expect(result.RequeueAfter).To(Equal(time.Second * 600))
 		}).NotTo(Panic())
 	})
 
