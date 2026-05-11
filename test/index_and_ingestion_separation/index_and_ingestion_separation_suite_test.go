@@ -14,6 +14,7 @@
 package indexingestionsep
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,35 +30,74 @@ var (
 	testenvInstance *testenv.TestEnv
 	testSuiteName   = "idxingsep-" + testenv.RandomDNSName(3)
 
+	// Configurable AWS resource names (env var → default)
+	sqsQueueName = testenv.GetEnvWithDefault("TEST_SQS_QUEUE", "index-ingest-separation-test-q")
+	sqsDLQName   = testenv.GetEnvWithDefault("TEST_SQS_DLQ", "index-ingest-separation-test-dlq")
+	s3BucketPath = testenv.GetEnvWithDefault("TEST_S3_BUCKET_PATH", "index-ingest-separation-test-bucket/smartbus-test")
+	awsRegion    = testenv.GetEnvWithDefault("TEST_AWS_REGION", "us-west-2")
+	sqsEndpoint  = testenv.GetEnvWithDefault("TEST_SQS_ENDPOINT", "")
+	s3Endpoint   = testenv.GetEnvWithDefault("TEST_S3_ENDPOINT", "")
+
+	queue              enterpriseApi.QueueSpec
+	objectStorage      enterpriseApi.ObjectStorageSpec
+	serviceAccountName = "index-ingest-sa"
+
+	inputs                  []string
+	outputs                 []string
+	defaultsAll             []string
+	defaultsIngest          []string
+	awsEnvVars              []string
+	inputsShouldNotContain  []string
+	outputsShouldNotContain []string
+
+	testDataS3Bucket    = os.Getenv("TEST_BUCKET")
+	testS3Bucket        = os.Getenv("TEST_INDEXES_S3_BUCKET")
+	currDir, _          = os.Getwd()
+	downloadDirV1       = filepath.Join(currDir, "icappfwV1-"+testenv.RandomDNSName(4))
+	appSourceVolumeName = "appframework-test-volume-" + testenv.RandomDNSName(3)
+	s3TestDir           = "icappfw-" + testenv.RandomDNSName(4)
+	appListV1           = testenv.BasicApps
+)
+
+func init() {
+	// Derive endpoints from region if not explicitly set
+	if sqsEndpoint == "" {
+		sqsEndpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", awsRegion)
+	}
+	if s3Endpoint == "" {
+		s3Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", awsRegion)
+	}
+
 	queue = enterpriseApi.QueueSpec{
 		Provider: "sqs",
 		SQS: enterpriseApi.SQSSpec{
-			Name:       "index-ingest-separation-test-q",
-			AuthRegion: "us-west-2",
-			Endpoint:   "https://sqs.us-west-2.amazonaws.com",
-			DLQ:        "index-ingest-separation-test-dlq",
+			Name:       sqsQueueName,
+			AuthRegion: awsRegion,
+			Endpoint:   sqsEndpoint,
+			DLQ:        sqsDLQName,
 		},
 	}
 	objectStorage = enterpriseApi.ObjectStorageSpec{
 		Provider: "s3",
 		S3: enterpriseApi.S3Spec{
-			Endpoint: "https://s3.us-west-2.amazonaws.com",
-			Path:     "index-ingest-separation-test-bucket/smartbus-test",
+			Endpoint: s3Endpoint,
+			Path:     s3BucketPath,
 		},
 	}
-	serviceAccountName = "index-ingest-sa"
 
 	inputs = []string{
-		"[remote_queue:index-ingest-separation-test-q]",
+		fmt.Sprintf("[remote_queue:%s]", sqsQueueName),
 		"remote_queue.type = sqs_smartbus",
-		"remote_queue.sqs_smartbus.auth_region = us-west-2",
-		"remote_queue.sqs_smartbus.dead_letter_queue.name = index-ingest-separation-test-dlq",
-		"remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com",
-		"remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com",
-		"remote_queue.sqs_smartbus.large_message_store.path = s3://index-ingest-separation-test-bucket/smartbus-test",
+		fmt.Sprintf("remote_queue.sqs_smartbus.auth_region = %s", awsRegion),
+		fmt.Sprintf("remote_queue.sqs_smartbus.dead_letter_queue.name = %s", sqsDLQName),
+		fmt.Sprintf("remote_queue.sqs_smartbus.endpoint = %s", sqsEndpoint),
+		fmt.Sprintf("remote_queue.sqs_smartbus.large_message_store.endpoint = %s", s3Endpoint),
+		fmt.Sprintf("remote_queue.sqs_smartbus.large_message_store.path = s3://%s", s3BucketPath),
 		"remote_queue.sqs_smartbus.retry_policy = max_count",
-		"remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4"}
-	outputs     = append(inputs, "remote_queue.sqs_smartbus.encoding_format = s2s", "remote_queue.sqs_smartbus.send_interval = 5s")
+		"remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4",
+	}
+	outputs = append(inputs, "remote_queue.sqs_smartbus.encoding_format = s2s", "remote_queue.sqs_smartbus.send_interval = 5s")
+
 	defaultsAll = []string{
 		"[pipeline:remotequeueruleset]\ndisabled = false",
 		"[pipeline:ruleset]\ndisabled = true",
@@ -68,29 +108,22 @@ var (
 	defaultsIngest = append(defaultsAll, "[pipeline:indexerPipe]\ndisabled = true")
 
 	awsEnvVars = []string{
-		"AWS_REGION=us-west-2",
-		"AWS_DEFAULT_REGION=us-west-2",
+		fmt.Sprintf("AWS_REGION=%s", awsRegion),
+		fmt.Sprintf("AWS_DEFAULT_REGION=%s", awsRegion),
 		"AWS_WEB_IDENTITY_TOKEN_FILE=/var/run/secrets/eks.amazonaws.com/serviceaccount/token",
 		"AWS_ROLE_ARN=arn:aws:iam::",
 		"AWS_STS_REGIONAL_ENDPOINTS=regional",
 	}
 
 	inputsShouldNotContain = []string{
-		"[remote_queue:index-ingest-separation-test-q]",
-		"remote_queue.sqs_smartbus.dead_letter_queue.name = index-ingest-separation-test-dlq",
-		"remote_queue.sqs_smartbus.large_message_store.path = s3://index-ingest-separation-test-bucket/smartbus-test",
+		fmt.Sprintf("[remote_queue:%s]", sqsQueueName),
+		fmt.Sprintf("remote_queue.sqs_smartbus.dead_letter_queue.name = %s", sqsDLQName),
+		fmt.Sprintf("remote_queue.sqs_smartbus.large_message_store.path = s3://%s", s3BucketPath),
 		"remote_queue.sqs_smartbus.retry_policy = max_count",
-		"remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4"}
+		"remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4",
+	}
 	outputsShouldNotContain = append(inputs, "remote_queue.sqs_smartbus.send_interval = 5s")
-
-	testDataS3Bucket    = os.Getenv("TEST_BUCKET")
-	testS3Bucket        = os.Getenv("TEST_INDEXES_S3_BUCKET")
-	currDir, _          = os.Getwd()
-	downloadDirV1       = filepath.Join(currDir, "icappfwV1-"+testenv.RandomDNSName(4))
-	appSourceVolumeName = "appframework-test-volume-" + testenv.RandomDNSName(3)
-	s3TestDir           = "icappfw-" + testenv.RandomDNSName(4)
-	appListV1           = testenv.BasicApps
-)
+}
 
 // TestIndexIngestionSeparation is the main entry point
 func TestIndexIngestionSeparation(t *testing.T) {
