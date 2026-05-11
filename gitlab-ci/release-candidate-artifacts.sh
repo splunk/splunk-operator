@@ -19,9 +19,9 @@ contract_file="${candidate_dir}/release-candidate-contract.env"
 manifest_file="${candidate_dir}/artifact-manifest.txt"
 summary_file="${candidate_dir}/summary.txt"
 chart_inventory_file="${candidate_dir}/chart-inventory.txt"
-build_image_ref_file="${BUILD_IMAGE_REF_FILE:-ci-output/build-test-push-workflow-image-ref.txt}"
+build_image_ref_file="${BUILD_IMAGE_REF_FILE:-ci-output/build-test-push-workflow-ecr-image-ref.txt}"
 build_image_digest_file="${BUILD_IMAGE_DIGEST_FILE:-ci-output/build-test-push-workflow-digest.txt}"
-build_distroless_image_ref_file="${BUILD_DISTROLESS_IMAGE_REF_FILE:-ci-output/build-test-push-workflow-distroless-image-ref.txt}"
+build_distroless_image_ref_file="${BUILD_DISTROLESS_IMAGE_REF_FILE:-ci-output/build-test-push-workflow-ecr-distroless-image-ref.txt}"
 build_distroless_image_digest_file="${BUILD_DISTROLESS_IMAGE_DIGEST_FILE:-ci-output/build-test-push-workflow-distroless-digest.txt}"
 
 mkdir -p "ci-output" "${output_dir}" "${candidate_dir}"
@@ -36,7 +36,7 @@ resolve_release_version "${CI_PROJECT_DIR}/Makefile"
 resolve_release_image_repository
 resolve_enterprise_release_image
 ensure_pipeline_aws_env
-resolve_pipeline_image_repository "$(first_nonempty "${PIPELINE_ECR_REPOSITORY:-}" "")" "splunk/splunk-operator"
+resolve_ecr_pipeline_image_repository "$(first_nonempty "${PIPELINE_ECR_REPOSITORY:-}" "")" "splunk/splunk-operator"
 
 candidate_registry="${RESOLVED_ECR_REGISTRY}"
 candidate_repository="${RESOLVED_IMAGE_REPOSITORY}"
@@ -142,7 +142,7 @@ printf '%s\n%s\n' "${operator_chart_archive}" "${enterprise_chart_archive}" > "$
 
 bundle_target="$(first_nonempty "${PIPELINE_BUNDLE_REGISTRY:-}" "")"
 require_nonempty "${bundle_target}" "PIPELINE_BUNDLE_REGISTRY"
-resolve_pipeline_image_repository "${bundle_target}" "splunk/splunk-operator"
+resolve_ecr_pipeline_image_repository "${bundle_target}" "splunk/splunk-operator"
 bundle_registry="${RESOLVED_ECR_REGISTRY}"
 image_tag_base="${RESOLVED_IMAGE_REPOSITORY}"
 candidate_bundle_image="${image_tag_base}-bundle:v${release_version}-rc.${release_candidate_number}"

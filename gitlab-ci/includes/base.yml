@@ -63,6 +63,18 @@ default:
     - .runtime-artifact-job
     - .aws-pipeline-env-job
   stage: build
+  id_tokens:
+    CI_JOB_JWT:
+      aud: $CICD_VAULT_ADDR
+  before_script:
+    - creds-helper init
+    - |
+      if [ "${CI_COMMIT_REF_NAME}" = "main" ] || [ "${CI_COMMIT_REF_NAME}" = "develop" ]; then
+        export DOCKER_PATH=artifactory:v2/cloud/role/sok-docker-deployer-role
+      else
+        export DOCKER_PATH=artifactory:v2/cloud/role/sok-docker-test-deployer-role
+      fi
+    - eval $(creds-helper docker --eval $DOCKER_PATH)
 
 .runtime-image-scan-job:
   extends:

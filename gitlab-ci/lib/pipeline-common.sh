@@ -215,7 +215,7 @@ download_gitlab_job_artifacts_archive_by_pipeline() {
     -o "${output_path}"
 }
 
-resolve_pipeline_image_repository() {
+resolve_ecr_pipeline_image_repository() {
   pipeline_target="$1"
   default_repo_path="$2"
 
@@ -277,7 +277,7 @@ resolve_release_version() {
 
 resolve_release_image_repository() {
   release_target="$(first_nonempty "${PIPELINE_RELEASE_IMAGE_REPOSITORY:-}" "docker.io/splunk/splunk-operator")"
-  resolve_pipeline_image_repository "${release_target}" "splunk/splunk-operator"
+  resolve_ecr_pipeline_image_repository "${release_target}" "splunk/splunk-operator"
   RESOLVED_RELEASE_IMAGE_REGISTRY="${RESOLVED_ECR_REGISTRY}"
   RESOLVED_RELEASE_IMAGE_REPOSITORY="${RESOLVED_IMAGE_REPOSITORY}"
 }
@@ -306,7 +306,7 @@ resolve_operator_runtime_source() {
     load_repo_dotenv "${released_sok_contract_file}"
     RUNTIME_OPERATOR_SOURCE_KIND="official-release"
     RUNTIME_INPUT_ARTIFACT="${released_sok_contract_file}"
-    resolve_pipeline_image_repository "$(first_nonempty "${PIPELINE_ECR_REPOSITORY:-}" "")" "${default_repo_path}"
+    resolve_ecr_pipeline_image_repository "$(first_nonempty "${PIPELINE_ECR_REPOSITORY:-}" "")" "${default_repo_path}"
     RUNTIME_ECR_REGISTRY="${RESOLVED_ECR_REGISTRY}"
     case "${RUNTIME_OPERATOR_IMAGE_VARIANT}" in
       distroless)

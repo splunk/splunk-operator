@@ -68,7 +68,7 @@ The operational check is simple:
 
 The merge request lane is the normal branch-validation path.
 It runs on `merge_request_event`, not on plain feature-branch pushes.
-The lane checks the MR description template, runs repository verification, runs unit and `kubectl-splunk` tests, builds the staged operator image, scans that staged image with Trivy, and runs the smoke fanout on disposable EKS clusters.
+The lane checks the MR description template, runs repository verification, runs unit and `kubectl-splunk` tests, builds the staged operator image, scans that staged image with the prodsec `.container-scan` template, and runs the smoke fanout on disposable EKS clusters.
 
 In practice this means:
 
@@ -124,7 +124,7 @@ What the qualification automation does:
 
 - runs baseline repository verification and tests
 - resolves the released-SOK contract
-- scans the released operator image with Trivy
+- scans the released operator image with the prodsec `.container-scan` template
 - runs the qualification EKS integration validation
 - runs qualification FIPS smoke and managersecret validation on the approved existing FIPS EKS cluster when `PIPELINE_FIPS_EKS_CLUSTER_NAME` is configured
 - runs Azure validation against the released operator path
@@ -346,9 +346,8 @@ The pipeline is designed to collect operator-facing evidence by default instead 
 
 ### Build and image scan jobs
 
-- `build-stage-image` writes image-reference and digest files such as `ci-output/build-test-push-workflow-image-ref.txt`
+- `build-stage-image` writes image-reference and digest files such as `ci-output/build-test-push-workflow-ecr-image-ref.txt`
 - release-validation builds also write distroless reference and digest files
-- Trivy jobs write `*-trivy-results.txt`, `*-trivy-results.sarif`, and the scanned image ref
 - most runtime and publish jobs write `ci-output/*-runtime-context.txt` so the exact inputs are recorded alongside the result
 
 ### Runtime integration and Helm jobs
@@ -389,7 +388,7 @@ The pipeline is designed to collect operator-facing evidence by default instead 
 - `merge-request-description-check`: the MR template is incomplete or the wrong template was used
 - `format-and-vet`, `unit-tests`, `kubectl-splunk-tests`: repository code, formatting, unit tests, or local toolchain assumptions are broken
 - `build-stage-image`: image build, registry auth, or staging-repository configuration is broken
-- `scan-stage-image-trivy` or `scan-released-operator-image-trivy`: the scanned image has a vulnerability or the scanner input/auth path is wrong
+- `scan-stage-image-container` or `scan-released-operator-image-container`: the prodsec scanner found an issue, could not read `ci-output/build-test-push-workflow-artifactory-image-ref.txt`, or could not scan the exported `CONTAINER_IMAGE`
 - smoke, nightly, qualification, or release runtime jobs: the product behavior, cluster setup, or runtime environment is broken
 - qualification report or gate jobs: one of the required upstream evidence jobs failed, is missing artifacts, or produced a failing decision
 - release publish, preflight, or submission-prep jobs: the release contracts, publication targets, registry auth, or external release inputs are wrong
@@ -407,7 +406,6 @@ For image build and scan failures:
 - `ci-output/*-runtime-context.txt`
 - `ci-output/*-image-ref.txt`
 - `ci-output/*-digest.txt`
-- `ci-output/*-trivy-results.txt`
 
 For integration-test failures:
 
@@ -430,7 +428,6 @@ For qualification failures:
 - `ci-output/release-controller/released-sok-contract.env`
 - `ci-output/release-controller/qualification-manifest.md`
 - `ci-output/release-controller/qualification-report.md`
-- the Trivy text result and the qualification runtime JUnit files
 
 For release and publish failures:
 

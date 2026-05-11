@@ -4,7 +4,6 @@ from __future__ import annotations
 
 BASE_REQUIRED_QUALIFICATION_JOBS = [
     "released-sok-contract",
-    "scan-released-operator-image-trivy",
     "gosec-scan",
     "govulncheck-scan",
     "eks-qualification-integration-validation",
@@ -67,7 +66,6 @@ def qualification_jobs_for_environment(*, include_fips: bool) -> list[str]:
 
 JOB_EVIDENCE = {
     "released-sok-contract": ["ci-output/release-controller/released-sok-contract.json"],
-    "scan-released-operator-image-trivy": ["ci-output/scan-released-operator-image-trivy-trivy-results.txt"],
     "gosec-scan": ["gosec-results.txt"],
     "govulncheck-scan": ["govulncheck-results.txt"],
     "eks-qualification-integration-validation": ["ci-output/qualification-int-test-workflow-inttest-junit.xml"],
