@@ -127,32 +127,3 @@ type IngestorClusterList struct {
 func init() {
 	SchemeBuilder.Register(&IngestorCluster{}, &IngestorClusterList{})
 }
-
-// NewEvent creates a new event associated with the object and ready
-// to be published to Kubernetes API
-func (ic *IngestorCluster) NewEvent(eventType, reason, message string) corev1.Event {
-	t := metav1.Now()
-	return corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: reason + "-",
-			Namespace:    ic.ObjectMeta.Namespace,
-		},
-		InvolvedObject: corev1.ObjectReference{
-			Kind:       "IngestorCluster",
-			Namespace:  ic.Namespace,
-			Name:       ic.Name,
-			UID:        ic.UID,
-			APIVersion: GroupVersion.String(),
-		},
-		Reason:  reason,
-		Message: message,
-		Source: corev1.EventSource{
-			Component: "splunk-ingestor-cluster-controller",
-		},
-		FirstTimestamp:      t,
-		LastTimestamp:       t,
-		Count:               1,
-		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/ingestor-cluster-controller",
-	}
-}

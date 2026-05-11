@@ -165,32 +165,3 @@ type IndexerClusterList struct {
 func init() {
 	SchemeBuilder.Register(&IndexerCluster{}, &IndexerClusterList{})
 }
-
-// NewEvent creates a new event associated with the object and ready
-// to be published to the kubernetes API.
-func (icstr *IndexerCluster) NewEvent(eventType, reason, message string) corev1.Event {
-	t := metav1.Now()
-	return corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: reason + "-",
-			Namespace:    icstr.ObjectMeta.Namespace,
-		},
-		InvolvedObject: corev1.ObjectReference{
-			Kind:       "IndexerCluster",
-			Namespace:  icstr.Namespace,
-			Name:       icstr.Name,
-			UID:        icstr.UID,
-			APIVersion: GroupVersion.String(),
-		},
-		Reason:  reason,
-		Message: message,
-		Source: corev1.EventSource{
-			Component: "splunk-indexercluster-controller",
-		},
-		FirstTimestamp:      t,
-		LastTimestamp:       t,
-		Count:               1,
-		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/indexercluster-controller",
-	}
-}
