@@ -17,7 +17,6 @@ limitations under the License.
 package v4
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -112,33 +111,4 @@ type ClusterManagerList struct {
 
 func init() {
 	SchemeBuilder.Register(&ClusterManager{}, &ClusterManagerList{})
-}
-
-// NewEvent creates a new event associated with the object and ready
-// to be published to the kubernetes API.
-func (cmstr *ClusterManager) NewEvent(eventType, reason, message string) corev1.Event {
-	t := metav1.Now()
-	return corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: reason + "-",
-			Namespace:    cmstr.ObjectMeta.Namespace,
-		},
-		InvolvedObject: corev1.ObjectReference{
-			Kind:       "ClusterManager",
-			Namespace:  cmstr.Namespace,
-			Name:       cmstr.Name,
-			UID:        cmstr.UID,
-			APIVersion: GroupVersion.String(),
-		},
-		Reason:  reason,
-		Message: message,
-		Source: corev1.EventSource{
-			Component: "splunk-clustermanager-controller",
-		},
-		FirstTimestamp:      t,
-		LastTimestamp:       t,
-		Count:               1,
-		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/clustermanager-controller",
-	}
 }

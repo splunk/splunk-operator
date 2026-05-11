@@ -18,7 +18,6 @@ package v3
 
 import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -101,33 +100,4 @@ type ClusterMasterList struct {
 
 func init() {
 	SchemeBuilder.Register(&ClusterMaster{}, &ClusterMasterList{})
-}
-
-// NewEvent creates a new event associated with the object and ready
-// to be published to the kubernetes API.
-func (cmstr *ClusterMaster) NewEvent(eventType, reason, message string) corev1.Event {
-	t := metav1.Now()
-	return corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: reason + "-",
-			Namespace:    cmstr.ObjectMeta.Namespace,
-		},
-		InvolvedObject: corev1.ObjectReference{
-			Kind:       "Clustermaster",
-			Namespace:  cmstr.Namespace,
-			Name:       cmstr.Name,
-			UID:        cmstr.UID,
-			APIVersion: GroupVersion.String(),
-		},
-		Reason:  reason,
-		Message: message,
-		Source: corev1.EventSource{
-			Component: "splunk-clustermaster-controller",
-		},
-		FirstTimestamp:      t,
-		LastTimestamp:       t,
-		Count:               1,
-		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/clustermaster-controller",
-	}
 }
