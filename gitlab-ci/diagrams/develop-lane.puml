@@ -21,7 +21,7 @@ rectangle "Push or merge to develop" as trigger
 rectangle "Verify\nformat-and-vet" as verify
 rectangle "Test\nunit-tests\nkubectl-splunk-tests\noss-scan (advisory)" as test
 rectangle "Build\nbuild-stage-image" as build
-rectangle "Image scan\nscan-stage-image-trivy" as scan
+rectangle "Image scan\nscan-stage-image-container" as scan
 rectangle "Smoke fanout on disposable EKS\nall smoke suites in parallel" as smoke #eefbf1
 rectangle "Merged-branch evidence\nci-output and test reports" as evidence #f7f7ff
 

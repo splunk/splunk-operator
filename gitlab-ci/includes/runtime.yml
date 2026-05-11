@@ -32,8 +32,23 @@ build-stage-image:
     paths:
       - ci-output/build-test-push-workflow-*
 
-scan-stage-image-trivy:
-  extends: .runtime-image-scan-job
+.runtime-image-container-scan-job:
+  stage: image_scan
+  extends:
+    - .container-scan
+    - .runtime-image-scan-job
+  before_script:
+    - |
+      set -eu
+      . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
+      require_file "${BUILD_IMAGE_REF_FILE}" "container scan image reference"
+      CONTAINER_IMAGE="$(cat "${BUILD_IMAGE_REF_FILE}")"
+      require_nonempty "${CONTAINER_IMAGE}" "container scan image"
+      export CONTAINER_IMAGE
+      echo "Container scan image: ${CONTAINER_IMAGE}"
+
+scan-stage-image-container:
+  extends: .runtime-image-container-scan-job
   rules:
     - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
       when: never
@@ -46,36 +61,26 @@ scan-stage-image-trivy:
     - job: build-stage-image
       artifacts: true
   variables:
-    WORKFLOW_SLUG: scan-stage-image-trivy
-  script:
-    - gitlab-ci/build-test-push-trivy-scan.sh
-  artifacts:
-    paths:
-      - ci-output/scan-stage-image-trivy-*
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-artifactory-image-ref.txt
+    WORKFLOW_SLUG: scan-stage-image-container
 
-scan-released-operator-image-trivy:
-  extends: .runtime-image-scan-job
-  timeout: 2h
+scan-released-operator-image-container:
+  extends: .runtime-image-container-scan-job
   needs:
     - job: released-sok-contract
       artifacts: true
   rules:
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
   variables:
-    WORKFLOW_SLUG: scan-released-operator-image-trivy
-    TARGET_IMAGE_REF_FILE: ci-output/release-controller/released-operator-image-source.txt
-  script:
-    - gitlab-ci/build-test-push-trivy-scan.sh
-  artifacts:
-    paths:
-      - ci-output/scan-released-operator-image-trivy-*
+    BUILD_IMAGE_REF_FILE: ci-output/release-controller/released-operator-image-source.txt
+    WORKFLOW_SLUG: scan-released-operator-image-container
 
 .runtime-released-sok-validation-job:
   extends: .runtime-integration-job
   needs:
     - job: released-sok-contract
       artifacts: true
-    - job: scan-released-operator-image-trivy
+    - job: scan-released-operator-image-container
   rules:
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
   variables:
@@ -108,7 +113,7 @@ scan-released-operator-image-trivy:
   needs:
     - job: build-stage-image
       artifacts: true
-    - job: scan-stage-image-trivy
+    - job: scan-stage-image-container
   rules:
     - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
       when: never
@@ -130,7 +135,7 @@ scan-released-operator-image-trivy:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH && $CI_COMMIT_TITLE =~ /^Merge /'
     - if: '$CI_COMMIT_BRANCH == "develop"'
   variables:
-    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-ecr-image-ref.txt
     JOB_INT_TEST_PROFILE: smoke
     JOB_INT_TEST_TIMEOUT: 225m
     JOB_INT_TEST_TO_SKIP: '^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$'
@@ -529,7 +534,7 @@ qualification-graviton-indingsep-validation:
   needs:
     - job: build-stage-image
       artifacts: true
-    - job: scan-stage-image-trivy
+    - job: scan-stage-image-container
   rules:
     - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
       when: never
@@ -539,7 +544,7 @@ qualification-graviton-indingsep-validation:
       when: never
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
   variables:
-    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-ecr-image-ref.txt
     JOB_INT_TEST_PROFILE: full
     JOB_INT_TEST_TIMEOUT: 225m
     JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'

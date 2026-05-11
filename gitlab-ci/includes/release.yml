@@ -5,13 +5,13 @@
   needs:
     - job: build-stage-image
       artifacts: true
-    - job: scan-stage-image-trivy
+    - job: scan-stage-image-container
 
 .release-validation-integration-suite-job:
   extends: .release-validation-runtime-job
   timeout: 5h
   variables:
-    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-ecr-image-ref.txt
     JOB_INT_TEST_PROFILE: full
     JOB_INT_TEST_TIMEOUT: 255m
     JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
@@ -147,7 +147,7 @@ release-helm-validation:
 .release-validation-distroless-suite-job:
   extends: .release-validation-integration-suite-job
   variables:
-    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-distroless-image-ref.txt
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-ecr-distroless-image-ref.txt
     JOB_EKS_CLUSTER_PLATFORM_SUFFIX: release-distroless
 
 .release-validation-graviton-suite-job:
@@ -165,7 +165,7 @@ release-helm-validation:
   needs:
     - job: build-stage-image
       artifacts: true
-    - job: scan-stage-image-trivy
+    - job: scan-stage-image-container
   rules:
     - if: '$PIPELINE_FIPS_EKS_CLUSTER_NAME == ""'
       when: never
@@ -178,7 +178,7 @@ release-helm-validation:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^release([\/-]).+$/'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
   variables:
-    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-image-ref.txt
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-ecr-image-ref.txt
     JOB_USE_EXISTING_CLUSTER: "true"
     JOB_EXISTING_CLUSTER_NAME: $PIPELINE_FIPS_EKS_CLUSTER_NAME
   script:

@@ -47,7 +47,7 @@ ensure_pipeline_aws_env
 ci_bin_dir="${CI_PROJECT_DIR}/bin"
 ensure_ci_bin_path "${ci_bin_dir}"
 
-BUILD_IMAGE_REF_FILE="${BUILD_IMAGE_REF_FILE:-ci-output/build-test-push-workflow-image-ref.txt}"
+BUILD_IMAGE_REF_FILE="${BUILD_IMAGE_REF_FILE:-ci-output/build-test-push-workflow-ecr-image-ref.txt}"
 RELEASED_SOK_CONTRACT_FILE="${RELEASED_SOK_CONTRACT_FILE:-}"
 resolve_operator_runtime_source "${BUILD_IMAGE_REF_FILE}" "${RELEASED_SOK_CONTRACT_FILE}" "splunk/splunk-operator"
 ECR_REGISTRY="${RUNTIME_ECR_REGISTRY}"

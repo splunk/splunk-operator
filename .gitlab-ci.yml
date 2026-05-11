@@ -28,6 +28,16 @@ include:
   - project: 'ci-cd/templates'
     ref: main
     file: '/prodsec/.oss-scan.yml'
+  - project: 'ci-cd/templates'
+    ref: main
+    file: '/prodsec/.container-scan.yml'
+    rules:
+      - if: '$CI_COMMIT_REF_NAME == "main" || $CI_COMMIT_REF_NAME == "develop"'
+  - project: 'ci-cd/templates'
+    ref: docker-test
+    file: '/prodsec/.container-scan.yml'
+    rules:
+      - if: '$CI_COMMIT_REF_NAME != "main" && $CI_COMMIT_REF_NAME != "develop"'
 
 oss-scan:
   stage: test
