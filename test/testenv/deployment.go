@@ -48,6 +48,27 @@ type Deployment struct {
 	testenv      *TestCaseEnv
 	cleanupFuncs []cleanupFunc
 	testTimeout  time.Duration
+	// teardownCtx is an optional parent context for cleanup operations.
+	// When set (typically to a Ginkgo SpecContext via SetTeardownContext),
+	// per-cleanup deadlines derive from it so that NodeTimeout cancellation
+	// propagates cleanly into in-flight Delete/poll calls.
+	teardownCtx context.Context
+}
+
+// SetTeardownContext sets the parent context used by subsequent Teardown
+// cleanup operations. Callers (typically AfterEach blocks) should pass the
+// Ginkgo SpecContext so cleanup respects NodeTimeout.
+func (d *Deployment) SetTeardownContext(ctx context.Context) {
+	d.teardownCtx = ctx
+}
+
+// cleanupParentCtx returns the parent context for cleanup operations.
+// Falls back to context.Background() when SetTeardownContext was not called.
+func (d *Deployment) cleanupParentCtx() context.Context {
+	if d.teardownCtx != nil {
+		return d.teardownCtx
+	}
+	return context.Background()
 }
 
 // GetName returns this deployment name
@@ -136,12 +157,18 @@ func (d *Deployment) Teardown() error {
 		return nil
 	}
 
+	// Run cleanups sequentially in LIFO order so dependent CRs are deleted
+	// before their dependencies (e.g. SHC/MC before IDX, IDX before CM, CM
+	// before LM). Parallel teardown would race finalizers and frequently
+	// leave dangling resources when a child CR's deletion depends on its
+	// parent still being reconciled.
 	var cleanupErr error
-
 	for fn, err := d.popCleanupFunc(); err == nil; fn, err = d.popCleanupFunc() {
-		cleanupErr = fn()
-		if cleanupErr != nil {
-			d.testenv.Log.Error(cleanupErr, "Deployment cleanupFunc returns an error. Attempt to continue.\n")
+		if err := fn(); err != nil {
+			d.testenv.Log.Error(err, "Deployment cleanupFunc returns an error. Attempt to continue.\n")
+			if cleanupErr == nil {
+				cleanupErr = err
+			}
 		}
 	}
 	d.testenv.Log.Info("deployment deleted.\n", "name", d.name)
@@ -551,7 +578,7 @@ func (d *Deployment) deployCR(ctx context.Context, name string, cr client.Object
 	// Push the clean up func to delete the cr when done
 	d.pushCleanupFunc(func() error {
 		d.testenv.Log.Info("Deleting cr", "name", name)
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Duration(float64(SetupTeardownTimeout)*CleanupGraceFraction))
+		cleanupCtx, cleanupCancel := context.WithTimeout(d.cleanupParentCtx(), time.Duration(float64(SetupTeardownTimeout)*CleanupGraceFraction))
 		defer cleanupCancel()
 		err := d.testenv.GetKubeClient().Delete(cleanupCtx, cr)
 		if err != nil {
@@ -1207,6 +1234,9 @@ func (d *Deployment) DeploySearchHeadClusterWithGivenSpec(ctx context.Context, n
 	d.testenv.Log.Info("Deploying Search Head Cluster", "name", name)
 	indexer := newSearchHeadClusterWithGivenSpec(name, d.testenv.namespace, spec)
 	deployed, err := d.deployCR(ctx, name, indexer)
+	if err != nil {
+		return nil, err
+	}
 	return deployed.(*enterpriseApi.SearchHeadCluster), err
 }
 

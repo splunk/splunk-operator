@@ -2,10 +2,11 @@
 set -eu
 
 # Runtime contract
-# - Purpose: promote the validated release-candidate images from main.
+# - Purpose: promote the validated release-candidate images from the active
+#   release publish branch.
 # - Inputs: release-candidate contract, target repository, and OCI registry auth.
 # - Outputs: published image refs and a contract file for downstream release jobs.
-# - Guardrails: explicit main-only/manual trigger path; no rebuilds after
+# - Guardrails: explicit manual release-publish trigger path; no rebuilds after
 #   release-branch validation completes.
 
 . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"

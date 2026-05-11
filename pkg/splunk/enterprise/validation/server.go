@@ -25,15 +25,16 @@ import (
 	"net/http"
 	"time"
 
+	"log/slog"
+
+	"github.com/splunk/splunk-operator/pkg/logging"
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var serverLog = ctrl.Log.WithName("webhook-server")
+var serverLog = slog.Default().With("component", "webhook-server")
 
 // WebhookServerOptions contains configuration for the webhook server
 type WebhookServerOptions struct {
@@ -116,7 +117,7 @@ func (s *WebhookServer) Start(ctx context.Context) error {
 		WriteTimeout: writeTimeout,
 	}
 
-	serverLog.Info("Starting webhook server", "port", s.options.Port)
+	serverLog.InfoContext(ctx, "starting webhook server", "port", s.options.Port)
 
 	// Start server in goroutine
 	errChan := make(chan error, 1)
@@ -131,7 +132,7 @@ func (s *WebhookServer) Start(ctx context.Context) error {
 	// Wait for context cancellation or server error
 	select {
 	case <-ctx.Done():
-		serverLog.Info("Shutting down webhook server")
+		serverLog.InfoContext(ctx, "shutting down webhook server")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		return s.httpServer.Shutdown(shutdownCtx)
@@ -142,8 +143,8 @@ func (s *WebhookServer) Start(ctx context.Context) error {
 
 // handleValidate handles validation requests
 func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
-	reqLog := log.FromContext(r.Context()).WithName("webhook-server")
-	reqLog.V(1).Info("Received validation request", "method", r.Method, "path", r.URL.Path)
+	logger := logging.FromContext(r.Context()).With("func", "handleValidate")
+	logger.DebugContext(r.Context(), "Received validation request", "method", r.Method, "path", r.URL.Path)
 
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -152,7 +153,7 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		reqLog.Error(err, "Failed to read request body")
+		logger.ErrorContext(r.Context(), "Failed to read request body", "error", err)
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return
 	}
@@ -160,13 +161,13 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 
 	var admissionReview admissionv1.AdmissionReview
 	if err := json.Unmarshal(body, &admissionReview); err != nil {
-		reqLog.Error(err, "Failed to decode admission review")
+		logger.ErrorContext(r.Context(), "Failed to decode admission review", "error", err)
 		http.Error(w, "Failed to decode admission review", http.StatusBadRequest)
 		return
 	}
 
 	if admissionReview.Request != nil {
-		reqLog.Info("Processing admission request",
+		logger.InfoContext(r.Context(), "Processing admission request",
 			"kind", admissionReview.Request.Kind.Kind,
 			"name", admissionReview.Request.Name,
 			"namespace", admissionReview.Request.Namespace,
@@ -181,7 +182,7 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if validationErr != nil {
-		reqLog.Info("Validation failed",
+		logger.InfoContext(r.Context(), "Validation failed",
 			"kind", admissionReview.Request.Kind.Kind,
 			"name", admissionReview.Request.Name,
 			"error", validationErr.Error())
@@ -214,7 +215,7 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(responseReview); err != nil {
-		serverLog.Error(err, "Failed to encode response")
+		serverLog.ErrorContext(r.Context(), "Failed to encode response", "error", err)
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}

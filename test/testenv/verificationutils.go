@@ -108,20 +108,24 @@ func PollConsistently(ctx context.Context, duration, interval time.Duration, con
 	return nil
 }
 
-// VerifyMonitoringConsoleReady verify Monitoring Console CR is in Ready Status and does not flip-flop
+// VerifyMonitoringConsoleReady verifies the Monitoring Console CR reaches
+// Ready status and stays there (does not flip-flop).
+// The effective timeout is min(deployment.GetTimeout(), ctx deadline).
+// Callers that need a shorter per-attempt budget (e.g. inside Eventually)
+// should pass a context with a tighter deadline.
 func (testenv *TestCaseEnv) VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, mcName string, monitoringConsole *enterpriseApi.MonitoringConsole) error {
-	err := wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
-		err := deployment.GetInstance(ctx, mcName, monitoringConsole)
-		if err != nil {
-			return false, nil
-		}
-		testenv.Log.Info("Waiting for Monitoring Console phase to be ready", "instance", monitoringConsole.ObjectMeta.Name, "phase", monitoringConsole.Status.Phase)
-		DumpGetPods(testenv.GetName())
-		return monitoringConsole.Status.Phase == enterpriseApi.PhaseReady, nil
-	})
+	err := testenv.WatchForMonitoringConsolePhase(ctx, deployment, testenv.GetName(), mcName, enterpriseApi.PhaseReady, deployment.GetTimeout())
 	if err != nil {
 		return fmt.Errorf("monitoring console %s failed to reach Ready phase: %w", mcName, err)
 	}
+
+	// Refresh the instance to get latest state
+	err = deployment.GetInstance(ctx, mcName, monitoringConsole)
+	if err != nil {
+		return fmt.Errorf("failed to get MonitoringConsole instance: %w", err)
+	}
+	testenv.Log.Info("MonitoringConsole reached Ready phase", "instance", monitoringConsole.ObjectMeta.Name, "phase", monitoringConsole.Status.Phase)
+	DumpGetPods(testenv.GetName())
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
@@ -969,7 +973,7 @@ func (testenv *TestCaseEnv) VerifyAppsCopied(ctx context.Context, deployment *De
 
 // VerifyAppsInFolder verify that apps are present in folder. Set checkAppDirectory false to verify app is not copied.
 func (testenv *TestCaseEnv) VerifyAppsInFolder(ctx context.Context, deployment *Deployment, podName string, apps []string, path string, checkAppDirectory bool) error {
-	return wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, AppInstallTimeout, true, func(ctx context.Context) (bool, error) {
 		// Using checkAppDirectory here to get all files in case of negative check.  GetDirsOrFilesInPath  will return files/directory when checkAppDirecotry is FALSE
 		appList, err := GetDirsOrFilesInPath(ctx, deployment, podName, path, checkAppDirectory)
 		if err != nil {

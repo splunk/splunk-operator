@@ -7,6 +7,9 @@ build-stage-image:
       when: never
     - if: '$SOK_PIPELINE_MODE == "release_publish"'
       when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^release([\/-]).+$/'
+      variables:
+        JOB_BUILD_DISTROLESS: "true"
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^release([\/-]).+$/'
       variables:
         JOB_BUILD_DISTROLESS: "true"
@@ -20,6 +23,7 @@ build-stage-image:
   needs:
     - unit-tests
     - kubectl-splunk-tests
+    - helm-chart-tests
   variables:
     WORKFLOW_SLUG: build-test-push-workflow
   script:
@@ -106,6 +110,8 @@ scan-released-operator-image-trivy:
       artifacts: true
     - job: scan-stage-image-trivy
   rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
       when: never
     - if: '$SOK_PIPELINE_MODE == "release_publish"'
@@ -113,6 +119,8 @@ scan-released-operator-image-trivy:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: never
     - if: '$CI_COMMIT_BRANCH =~ /^release([\/-]).+$/'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^release([\/-]).+$/'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^release([\/-]).+$/'
       when: never
@@ -523,6 +531,8 @@ qualification-graviton-indingsep-validation:
       artifacts: true
     - job: scan-stage-image-trivy
   rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
       when: never
     - if: '$SOK_PIPELINE_MODE == "release_publish"'

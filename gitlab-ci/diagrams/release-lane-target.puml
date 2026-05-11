@@ -17,7 +17,7 @@ skinparam Note {
   FontColor #3f3420
 }
 
-rectangle "Push to release/<version> or release-<version>\nor MR from release branch to main" as trigger
+rectangle "Push to release/<version> or release-<version>\nor MR from release branch to main\nor any MR targeting a maintenance release/* branch" as trigger
 rectangle "Baseline\nverify and test jobs" as baseline
 rectangle "Build\nstaged multi-arch and distroless release images" as build
 rectangle "Image scan\nscan-stage-image-trivy" as scan
@@ -30,7 +30,7 @@ rectangle "Release Graviton runtime\narm64 fanout" as runtime_graviton #eefbf1
 rectangle "Release Helm runtime\nfull chart validation" as runtime_helm #eefbf1
 rectangle "Release candidate packaging\npromote validated RC artifacts once" as packaging #f7f7ff
 rectangle "PSR plan and verdict\nplan now, dispatch-ready later" as psr #f7f7ff
-rectangle "GitLab Release record\nmanual final publish step on main" as release_record #f7f7ff
+rectangle "GitLab Release record\nmanual final publish step on the chosen\nrelease publish branch" as release_record #f7f7ff
 
 trigger --> baseline
 baseline --> build
@@ -54,7 +54,7 @@ psr --> release_record
 
 note bottom of packaging
 The release branch builds the candidate once.
-Main later promotes those validated outputs instead of rebuilding them.
+The selected publish branch later promotes those validated outputs instead of rebuilding them.
 end note
 
 note bottom of runtime_graviton

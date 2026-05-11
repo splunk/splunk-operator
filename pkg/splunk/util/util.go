@@ -38,7 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"github.com/splunk/splunk-operator/pkg/logging"
 )
 
 // kubernetes logger used by splunk.reconcile package
@@ -79,54 +79,51 @@ func (cr *TestResource) DeepCopyObject() runtime.Object {
 
 // CreateResource creates a new Kubernetes resource using the REST API.
 func CreateResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("CreateResource").WithValues(
+	scopedLog := logging.FromContext(ctx).With("func", "CreateResource",
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
 
 	err := client.Create(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
-		scopedLog.Error(err, "Failed to create resource", "kind", obj.GetObjectKind())
+		scopedLog.ErrorContext(ctx, "failed to create resource", "kind", obj.GetObjectKind(), "error", err)
 		return err
 	}
 
-	scopedLog.Info("Created resource", "kind", obj.GetObjectKind())
+	scopedLog.InfoContext(ctx, "created resource", "kind", obj.GetObjectKind())
 
 	return nil
 }
 
 // UpdateResource updates an existing Kubernetes resource using the REST API.
 func UpdateResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("UpdateResource").WithValues(
+	scopedLog := logging.FromContext(ctx).With("func", "UpdateResource",
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
 	err := client.Update(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
-		scopedLog.Error(err, "Failed to update resource", "kind", obj.GetObjectKind())
+		scopedLog.ErrorContext(ctx, "failed to update resource", "kind", obj.GetObjectKind(), "error", err)
 		return err
 	}
-	scopedLog.Info("Updated resource", "kind", obj.GetObjectKind())
+	scopedLog.InfoContext(ctx, "updated resource", "kind", obj.GetObjectKind())
 
 	return nil
 }
 
 // DeleteResource deletes an existing Kubernetes resource using the REST API.
 func DeleteResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("DeleteResource").WithValues(
+	scopedLog := logging.FromContext(ctx).With("func", "DeleteResource",
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
 	err := client.Delete(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
-		scopedLog.Error(err, "Failed to delete resource", "kind", obj.GetObjectKind())
+		scopedLog.ErrorContext(ctx, "failed to delete resource", "kind", obj.GetObjectKind(), "error", err)
 		return err
 	}
 
-	scopedLog.Info("Deleted resource", "kind", obj.GetObjectKind())
+	scopedLog.InfoContext(ctx, "deleted resource", "kind", obj.GetObjectKind())
 
 	return nil
 }
@@ -298,13 +295,13 @@ func suppressHarmlessErrorMessages(values ...*string) {
 
 // RunPodExecCommand runs the specific pod exec command
 func (podExecClient *PodExecClient) RunPodExecCommand(ctx context.Context, streamOptions *remotecommand.StreamOptions, baseCmd []string) (string, string, error) {
-	reqLogger := log.FromContext(ctx)
+	scopedLog := logging.FromContext(ctx)
 	errmsg := ""
 	stdOut, stdErr, err := PodExecCommand(ctx, podExecClient.client, podExecClient.targetPodName, podExecClient.cr.GetNamespace(), baseCmd, streamOptions, false, false, "")
 	if err != nil {
 		errmsg = err.Error()
 	}
-	reqLogger.Info("podexec call returned", "cmd", strings.Join(baseCmd, " "), "stdout", stdOut, "stderr", stdErr, "err", errmsg)
+	scopedLog.InfoContext(ctx, "podexec call returned", "cmd", strings.Join(baseCmd, " "), "stdout", stdOut, "stderr", stdErr, "err", errmsg)
 
 	// Note: splunk 9.0 throws a few harmless warning error messages, suppress it!
 	suppressHarmlessErrorMessages(&stdErr, &stdOut)

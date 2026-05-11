@@ -10,8 +10,10 @@ The operating model is:
 - `develop` re-runs the same validation after merge
 - the nightly schedule runs broader runtime coverage on `develop`
 - qualification is a manual compatibility decision lane
-- release validation runs on `release/*` or `release-*` branches and on the matching MR to `main`
-- `main` never rebuilds for release publication; it promotes the validated release-candidate outputs from the release branch
+- release validation runs on `release/*` or `release-*` branches and on the matching MR to `main` or to another maintenance `release/*` branch
+- normal releases publish from the validated `main` merge result
+- patch releases publish intentionally from a protected maintenance `release/*` branch
+- release publication never rebuilds the product; it promotes validated release-candidate outputs
 
 ## Trigger Map
 
@@ -25,7 +27,7 @@ For a one-off manual intake run, trigger a pipeline with `SOK_PIPELINE_MODE=gith
 
 [`gitlab-ci/mirror-health-check.sh`](mirror-health-check.sh) performs a read-only branch parity check against the configured GitHub mirror repository.
 
-[`gitlab-ci/release-candidate-artifacts.sh`](release-candidate-artifacts.sh), [`gitlab-ci/fetch-release-candidate.sh`](fetch-release-candidate.sh), [`gitlab-ci/release-publish-images.sh`](release-publish-images.sh), [`gitlab-ci/release-publish-artifacts.sh`](release-publish-artifacts.sh), [`gitlab-ci/release-publish-bundle.sh`](release-publish-bundle.sh), and [`gitlab-ci/release-publish-charts.sh`](release-publish-charts.sh) implement the checked-in release path: package once on the release branch, then promote or publish those validated outputs on `main`.
+[`gitlab-ci/release-candidate-artifacts.sh`](release-candidate-artifacts.sh), [`gitlab-ci/fetch-release-candidate.sh`](fetch-release-candidate.sh), [`gitlab-ci/release-publish-images.sh`](release-publish-images.sh), [`gitlab-ci/release-publish-artifacts.sh`](release-publish-artifacts.sh), [`gitlab-ci/release-publish-bundle.sh`](release-publish-bundle.sh), and [`gitlab-ci/release-publish-charts.sh`](release-publish-charts.sh) implement the checked-in release path: package once on the release branch, then promote or publish those validated outputs either from `main` for a normal release or from a protected maintenance `release/*` branch for a patch release.
 
 | Event | Pipeline behavior | What automation does | What the user needs to do |
 | --- | --- | --- | --- |
@@ -35,9 +37,9 @@ For a one-off manual intake run, trigger a pipeline with `SOK_PIPELINE_MODE=gith
 | Scheduled pipeline on `develop` | Nightly lane | Re-runs the baseline and then runs the full nightly integration fanout | Review nightly failures and fix the repo or infrastructure issue |
 | Web, API, or downstream-triggered pipeline with `SOK_PIPELINE_MODE=qualification_lane` | Qualification lane | Tests the latest released SOK image and chart path against the qualification inputs, then writes the report and gate result | Trigger the lane intentionally and review the report/gate output |
 | Push to `release/<version>` or `release-<version>` | Release validation lane | Builds the release candidate once, runs full release validation, then packages the candidate outputs | Fix the release branch until the branch pipeline is green |
-| MR from `release/*` to `main` | Release validation lane again | Re-runs release validation on the reviewed release-branch tip | Update changelog or release notes, open the MR, get review and approval |
+| MR to `main` from `release/*`, or any MR targeting a maintenance `release/*` branch | Release validation lane again | Re-runs release validation on the reviewed release-target tip | Update changelog or release notes, open the MR, get review and approval |
 | Push to `main` after merge | Main validation plus manual publish jobs | Re-validates the merged `main` tip and exposes the publish jobs | Start the manual publish jobs only when the release is approved |
-| Web or API pipeline on `main` with `SOK_PIPELINE_MODE=release_publish` | Publish-only rerun | Re-fetches a retained release candidate and re-runs the publish or certification path | Use only when the main publish path must be re-run intentionally |
+| Web or API pipeline on `main` or a protected `release/*` branch with `SOK_PIPELINE_MODE=release_publish` | Publish-only release promotion | Re-fetches a retained release candidate and re-runs the publish or certification path | Use this on `main` for normal releases or on a maintenance `release/*` branch for a patch release |
 
 The important rule is that ordinary feature-branch pushes do not run their own GitLab pipeline.
 Branch validation is MR-driven.
@@ -164,7 +166,7 @@ Qualification runtime inventory:
 ![Release validation lane](diagrams/release-lane-target.png)
 
 The release validation lane is the product-release path for SOK itself.
-It is triggered by a real `release/<version>` or `release-<version>` branch, and it also re-runs on the MR from that release branch to `main`.
+It is triggered by a real `release/<version>` or `release-<version>` branch, and it also re-runs on reviewed MRs into the release targets: `release/*` to `main`, or any MR that targets a maintenance `release/*` branch.
 
 What the release validation automation does:
 
@@ -205,9 +207,10 @@ Release runtime inventory:
 
 After the release branch is reviewed and merged to `main`, GitLab creates a normal `main` push pipeline.
 That `main` pipeline re-runs validation on the merged tip and exposes the release publish jobs as manual jobs.
-The publish path can also be re-run later from a dedicated `main` web or API pipeline with `SOK_PIPELINE_MODE=release_publish`.
+For maintenance patch releases, the publish path runs intentionally from the protected `release/*` branch after that branch tip has already passed release validation.
+The publish path can also be re-run later from a dedicated web or API pipeline with `SOK_PIPELINE_MODE=release_publish` on either `main` or the protected maintenance `release/*` branch.
 
-What the publish automation does on `main`:
+What the publish automation does in the normal `main` release publish path:
 
 - fetches the retained release-candidate artifacts from the validated release branch
 - promotes the validated candidate operator and distroless images to GA tags
@@ -223,6 +226,28 @@ It does not rebuild the product from source for publication.
 Helm publication also moves forward on OCI only.
 This lane publishes newly validated charts; it does not backfill historical chart versions into the OCI repository.
 If the project `CI_JOB_TOKEN` is not allowed to create releases, set `PIPELINE_GITLAB_RELEASE_API_TOKEN` for the final release-record job.
+
+## Patch Release Publish Lane
+
+![Patch release publish lane](diagrams/patch-release-lane.png)
+
+Patch releases keep the same release validation lane, but publication happens from the protected maintenance branch instead of from `main`.
+The branch should already have passed release validation before the patch publish pipeline is started.
+
+What the patch publish automation does:
+
+- starts from the protected maintenance branch, for example `release/3.1`
+- fetches the retained release-candidate artifacts from that branch first
+- promotes the validated candidate operator and distroless images to the patch GA tags
+- publishes the validated patch artifacts, bundle, catalog, and charts
+- runs the same certification and submission-prep jobs as the normal publish path
+- creates the GitLab Release record for the patch line
+
+The important guardrails are:
+
+- patch publication is still intentional and manual through `SOK_PIPELINE_MODE=release_publish`
+- patch publication does not require merging the maintenance branch into `main` first
+- the patch fix should still be forward-ported to `main` separately after the patch release is cut
 
 ## End-To-End Operator Process
 
@@ -259,8 +284,23 @@ If the project `CI_JOB_TOKEN` is not allowed to create releases, set `PIPELINE_G
 
 ### Patch release later
 
-Keep the retained release branch.
-When a patch is needed, make the patch change there, re-run the same release validation flow, update changelog or release notes again, merge that reviewed branch tip to `main`, and then run the publish path again with a new release-candidate number if needed.
+Keep the retained maintenance release branch, for example `release/3.1`.
+When a patch is needed:
+
+1. Make the patch change on that maintenance branch or merge a reviewed fix into it.
+2. Let the same release validation lane run on the resulting `release/*` branch tip.
+3. Update changelog or release notes for the new patch version.
+4. If you need branch review before cutting the patch, open an MR that targets the maintenance `release/*` branch and let the release validation lane re-run there.
+5. Start a dedicated web or API pipeline on that maintenance `release/*` branch with `SOK_PIPELINE_MODE=release_publish`.
+6. Use a new `PIPELINE_RELEASE_VERSION` and `PIPELINE_RELEASE_CANDIDATE_NUMBER` if the patch line needs a new candidate identity.
+7. Forward-port the patch back to `main` separately after the patch release is cut.
+
+### End-to-end flow summary
+
+1. Normal code change: MR lane -> merge to `develop` -> `develop` lane -> nightly lane
+2. Qualification cycle: intentional `qualification_lane` -> review report and gate
+3. New product release: `release/<version>` branch -> release validation -> MR to `main` -> `main` publish path
+4. Patch release: retained maintenance `release/*` branch -> release validation on that branch -> intentional `release_publish` on that maintenance branch -> forward-port to `main`
 
 ## Inputs And Guardrails
 
@@ -274,7 +314,7 @@ The most important operator-facing rules are:
 - use the MR lane for normal branch validation
 - use `qualification_lane` only for qualification
 - use `release/*` or `release-*` branches for product-release validation
-- treat `release_publish` as a manual `main`-branch action only
+- treat `release_publish` as an intentional manual action: `main` for normal releases, protected `release/*` branches for patch releases
 - never assume `main` publish should rebuild the product
 
 The main variable families for the expanded runtime coverage are:

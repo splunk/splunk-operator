@@ -45,8 +45,8 @@ var _ = Describe("License Manager test", func() {
 				Expect(err).To(Succeed(), "Failed to setup test case environment")
 			})
 
-			AfterEach(func() {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
 			It(tc.Label+", smoke, s1: Splunk Operator can configure LM with Standalone in S1 SVA", func() {
@@ -61,8 +61,8 @@ var _ = Describe("License Manager test", func() {
 				Expect(err).To(Succeed(), "Failed to setup test case environment")
 			})
 
-			AfterEach(func() {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
 			It(tc.Label+", integration, c3: Splunk Operator can configure LM with Indexers and Search Heads in C3 SVA", func() {
@@ -77,8 +77,8 @@ var _ = Describe("License Manager test", func() {
 				Expect(err).To(Succeed(), "Failed to setup test case environment")
 			})
 
-			AfterEach(func() {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
 			It(tc.Label+", integration, m4: Splunk Operator can configure LM with Indexers and Search Heads in M4 SVA", func() {
@@ -93,8 +93,8 @@ var _ = Describe("License Manager test", func() {
 				Expect(err).To(Succeed(), "Failed to setup test case environment")
 			})
 
-			AfterEach(func() {
-				Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+			AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
 			It(tc.Label+", integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {

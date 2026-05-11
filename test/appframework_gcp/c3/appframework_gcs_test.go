@@ -15,6 +15,7 @@ package c3gcpappfw
 
 import (
 	//"encoding/json"
+	"context"
 	"fmt"
 
 	//"strings"
@@ -123,7 +124,11 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Upload V1 apps to GCS for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Bucket for Indexer Cluster", appVersion))
@@ -327,7 +332,11 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			Expect(testcaseEnvInst.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc)).To(Succeed(), "Monitoring Console not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
+			}, testenv.MonitoringConsoleReadyTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Upload V2 apps to GCS for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Indexer Cluster", appVersion))
@@ -630,7 +639,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, cm.Name, cm.Kind)).To(Succeed(), "IsDeploymentInProgress flag not set")
 
 			// Ensure Cluster Master goes to Ready phase
-			Expect(testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment)).To(Succeed(), "Cluster Master not ready")
+			Eventually(func() error { return testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Master not ready")
 
 			// Verify IsDeploymentInProgress Flag is set to true for SHC CR
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag")

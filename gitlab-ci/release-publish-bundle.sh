@@ -5,7 +5,8 @@ set -eu
 # - Purpose: promote the validated candidate bundle and catalog images for the release.
 # - Inputs: release-candidate contract, published release image contract, bundle registry target, and OCI auth.
 # - Outputs: pushed bundle/catalog refs and a bundle contract for certification/submission jobs.
-# - Guardrails: explicit manual/main path only; no bundle/catalog rebuild on main.
+# - Guardrails: explicit manual release-publish path only; no bundle/catalog
+#   rebuild during publication.
 
 . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
 
