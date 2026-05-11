@@ -54,6 +54,15 @@ func init() {
 
 }
 
+// GetEnvWithDefault returns the value of the environment variable named by key,
+// or fallback if the variable is unset or empty.
+func GetEnvWithDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
 // RandomDNSName returns a random string that is a valid DNS name
 func RandomDNSName(n int) string {
 	b := make([]byte, n)
