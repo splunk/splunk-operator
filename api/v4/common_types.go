@@ -144,6 +144,47 @@ const (
 	PhaseError Phase = "Error"
 )
 
+// ConditionType represents the type of condition for Splunk Enterprise CRs
+type ConditionType string
+
+const (
+	// ConditionReady indicates the resource is fully operational and serving
+	ConditionReady ConditionType = "Ready"
+
+	// ConditionProgressing indicates actual state change is in progress (scaling, upgrading)
+	ConditionProgressing ConditionType = "Progressing"
+
+	// ConditionPaused indicates reconciliation is paused via annotation
+	ConditionPaused ConditionType = "Paused"
+)
+
+// ConditionReason represents the reason for a condition's status
+type ConditionReason string
+
+const (
+	// Ready=True reasons
+	ReasonAllReplicasReady ConditionReason = "AllReplicasReady"
+
+	// Ready=False reasons
+	ReasonReplicasNotReady   ConditionReason = "ReplicasNotReady"
+	ReasonReconcileFailed    ConditionReason = "ReconcileFailed"
+	ReasonDependencyNotReady ConditionReason = "DependencyNotReady"
+	ReasonConfigurationError ConditionReason = "ConfigurationError"
+
+	// Progressing=True reasons
+	ReasonScaling   ConditionReason = "Scaling"
+	ReasonUpgrading ConditionReason = "Upgrading"
+
+	// Progressing=False reasons
+	ReasonStable ConditionReason = "Stable"
+
+	// Paused=True reasons
+	ReasonPausedByAnnotation ConditionReason = "PausedByAnnotation"
+
+	// Paused=False reasons
+	ReasonNotPaused ConditionReason = "NotPaused"
+)
+
 // Probe defines set of configurable values for Startup, Readiness, and Liveness probes
 type Probe struct {
 	// Number of seconds after the container has started before liveness probes are initiated.

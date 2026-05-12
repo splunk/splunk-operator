@@ -57,8 +57,15 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
-	// Initialize phase
-	cr.Status.Phase = enterpriseApi.PhaseError
+	// Initialize phase and conditions
+	isPaused := cr.GetAnnotations()[enterpriseApi.ClusterManagerPausedAnnotation] == "true"
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
+		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, phase, isPaused, message, cr.GetGeneration())
+		cr.Status.Phase = result.Phase
+		cr.Status.Conditions = result.Conditions
+		cr.Status.ObservedGeneration = cr.GetGeneration()
+	}
+	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
@@ -67,6 +74,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	err = validateClusterManagerSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Cluster Manager spec validation failed")
 		return result, fmt.Errorf("validate clustermanager spec: %w", err)
 	}
 
@@ -78,11 +86,13 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 		if err != nil {
 			eventPublisher.Warning(ctx, EventReasonRemoteVolumeKeyCheckFailed, fmt.Sprintf("Remote volume key change check failed for %s — check operator logs", cr.GetName()))
+			setPhaseAndConditions(enterpriseApi.PhaseError, "SmartStore remote volume key validation failed")
 			return result, err
 		}
 
 		_, configMapDataChanged, err := ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
 		if err != nil {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply SmartStore ConfigMap")
 			return result, err
 		} else if configMapDataChanged {
 			// Do not auto populate with configMapDataChanged flag to NeedToPushManagerApps. Set it only  if
@@ -97,12 +107,14 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 	// This is to take care of case where AreRemoteVolumeKeysChanged returns an error if it returns false.
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "SmartStore remote volume key validation failed")
 		return result, err
 	}
 
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, false)
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "App framework migration failed")
 		return result, err
 	}
 
@@ -114,6 +126,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		if err != nil {
 			eventPublisher.Warning(ctx, EventReasonAppFrameworkInitFailed, fmt.Sprintf("App framework initialization failed for %s — check operator logs", cr.GetName()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
+			setPhaseAndConditions(enterpriseApi.PhaseError, "App framework initialization failed")
 			return result, err
 		}
 	}
@@ -122,6 +135,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
 	if err != nil {
 		eventPublisher.Warning(ctx, EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s — check operator logs", cr.GetName()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
 		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
@@ -136,6 +150,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			extraEnv, _ := GetCMMultisiteEnvVarsCall(ctx, cr, namespaceScopedSecret)
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
 			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
 				return result, err
 			}
 		}
@@ -146,6 +161,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkClusterManager)
 			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up app framework ConfigMap during deletion")
 				return result, err
 			}
 		}
@@ -153,6 +169,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		// Check if ClusterManager has any remaining references to other CRs, if so don't delete
 		err = checkCmRemainingReferences(ctx, client, cr)
 		if err != nil {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Cluster Manager still has remaining CR references")
 			return result, err
 		}
 
@@ -161,7 +178,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			cr.Status.Phase = enterpriseApi.PhaseTerminating
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 		} else {
 			result.Requeue = false
 		}
@@ -174,12 +191,14 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	// create or update a regular service for the cluster manager
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterManager, false))
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update service")
 		return result, err
 	}
 
 	// create or update statefulset for the cluster manager
 	statefulSet, err := getClusterManagerStatefulSet(ctx, client, cr)
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")
 		return result, err
 	}
 
@@ -187,6 +206,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	extraEnv, _ := GetCMMultisiteEnvVarsCall(ctx, cr, namespaceScopedSecret)
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, extraEnv)
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference")
 		return result, err
 	}
 
@@ -195,6 +215,9 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		// check if the ClusterManager is ready for version upgrade, if required
 		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
 		if err != nil || !continueReconcile {
+			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
+			}
 			return result, err
 		}
 	}
@@ -202,14 +225,16 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	clusterManagerManager := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := clusterManagerManager.Update(ctx, client, statefulSet, 1)
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods")
 		return result, err
 	}
-	cr.Status.Phase = phase
+	setPhaseAndConditions(phase, "")
 
 	//Update MC configmap
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
 		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, true)
 		if err != nil {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap")
 			return result, err
 		}
 	}
@@ -232,6 +257,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
 			err := addTelApp(ctx, podExecClient, numberOfClusterMasterReplicas, cr)
 			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install Telemetry app")
 				return result, err
 			}
 
@@ -243,6 +269,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		// So keep PerformCmBundlePush() as the last call in this block of code, so that other functionalities are not blocked
 		err = PerformCmBundlePush(ctx, client, cr, podExecClient)
 		if err != nil {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to push Manager Apps bundle")
 			return result, err
 		}
 
@@ -252,6 +279,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		// trigger MonitoringConsole reconcile by changing the splunk/image-tag annotation
 		err = changeMonitoringConsoleAnnotations(ctx, client, cr)
 		if err != nil {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to trigger Monitoring Console reconciliation")
 			return result, err
 		}
 	}

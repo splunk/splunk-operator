@@ -54,8 +54,15 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	cr.Kind = "LicenseManager"
 
 	var err error
-	// Initialize phase
-	cr.Status.Phase = enterpriseApi.PhaseError
+	// Initialize phase and conditions
+	isPaused := cr.GetAnnotations()[enterpriseApi.LicenseManagerPausedAnnotation] == "true"
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
+		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, phase, isPaused, message, cr.GetGeneration())
+		cr.Status.Phase = result.Phase
+		cr.Status.Conditions = result.Conditions
+		cr.Status.ObservedGeneration = cr.GetGeneration()
+	}
+	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
@@ -64,12 +71,14 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	err = validateLicenseManagerSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateLicenseManagerSpec", fmt.Sprintf("validate license manager spec failed %s", err.Error()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "License Manager spec validation failed")
 		return result, fmt.Errorf("validate license manager spec: %w", err)
 	}
 
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "App framework migration failed")
 		return result, err
 	}
 
@@ -81,6 +90,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		if err != nil {
 			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
+			setPhaseAndConditions(enterpriseApi.PhaseError, "App framework initialization failed")
 			return result, err
 		}
 	}
@@ -89,6 +99,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseManager)
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
 		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
@@ -97,6 +108,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), false)
 			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
 				return result, err
 			}
 		}
@@ -107,6 +119,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkLicenseManager)
 			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
 				return result, err
 			}
 		}
@@ -115,7 +128,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			cr.Status.Phase = enterpriseApi.PhaseTerminating
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 		} else {
 			result.Requeue = false
 		}
@@ -128,36 +141,42 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	// create or update a service
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseManager, false))
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update service")
 		return result, err
 	}
 
 	// create or update statefulset
 	statefulSet, err := getLicenseManagerStatefulSet(ctx, client, cr)
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")
 		return result, err
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec))
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference")
 		return result, err
 	}
 
 	// Check for license-related pod failures before updating
 	if err = checkLicenseRelatedPodFailures(ctx, client, cr, statefulSet); err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "License validation failed")
 		return result, fmt.Errorf("license check: %w", err)
 	}
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(ctx, client, statefulSet, 1)
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods")
 		return result, err
 	}
-	cr.Status.Phase = phase
+	setPhaseAndConditions(phase, "")
 
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
 		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), true)
 		if err != nil {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap")
 			return result, err
 		}
 	}
@@ -176,6 +195,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 			podExecClient := splutil.GetPodExecClient(client, cr, "")
 			err := addTelApp(ctx, podExecClient, numberOfLicenseMasterReplicas, cr)
 			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install Telemetry app")
 				return result, err
 			}
 
@@ -189,6 +209,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		// trigger ClusterManager reconcile by changing the splunk/image-tag annotation
 		err = changeClusterManagerAnnotations(ctx, client, cr)
 		if err != nil {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to trigger Cluster Manager reconciliation")
 			return result, err
 		}
 	}
