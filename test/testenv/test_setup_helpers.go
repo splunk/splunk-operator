@@ -272,6 +272,33 @@ func SetupGCPAppsSuite(suiteName, testDataBucket, appDirV1, downloadDirV1, appDi
 	return testenvInst, nil, nil, nil
 }
 
+// SetupAppsSuite initialises the test environment and downloads V1 and V2 app
+// sets using the given CloudStorageBackend, abstracting the cloud provider.
+func SetupAppsSuite(suiteName string, backend CloudStorageBackend, appDirV1, downloadDirV1, appDirV2, downloadDirV2 string) (*TestEnv, []string, []string, error) {
+	testenvInst, err := NewDefaultTestEnv(suiteName)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("unable to create test env: %w", err)
+	}
+
+	ctx := context.TODO()
+
+	appListV1 := BasicApps
+	appFileList := GetAppFileList(appListV1)
+
+	if err = backend.DownloadFiles(ctx, appDirV1, downloadDirV1, appFileList); err != nil {
+		return nil, nil, nil, fmt.Errorf("unable to download V1 app files: %w", err)
+	}
+
+	appListV2 := append(appListV1, NewAppsAddedBetweenPolls...)
+	appFileList = GetAppFileList(appListV2)
+
+	if err = backend.DownloadFiles(ctx, appDirV2, downloadDirV2, appFileList); err != nil {
+		return nil, nil, nil, fmt.Errorf("unable to download V2 app files: %w", err)
+	}
+
+	return testenvInst, appListV1, appListV2, nil
+}
+
 // SetupLicenseConfigMap downloads the license file from the appropriate provider
 // and creates a license config map.
 func SetupLicenseConfigMap(ctx context.Context, testcaseEnvInst *TestCaseEnv) error {
