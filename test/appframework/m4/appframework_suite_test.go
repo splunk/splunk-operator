@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package s1appfw
+package m4appfw
 
 import (
 	"os"
@@ -26,15 +26,16 @@ import (
 
 var (
 	testenvInstance       *testenv.TestEnv
-	testSuiteName         = "s1appfw-" + testenv.RandomDNSName(3)
+	testSuiteName         = "m4appfw-" + testenv.RandomDNSName(3)
 	appListV1             []string
 	appListV2             []string
 	testDataS3Bucket      = os.Getenv("TEST_BUCKET")
 	testS3Bucket          = os.Getenv("TEST_INDEXES_S3_BUCKET")
 	currDir, _            = os.Getwd()
-	downloadDirV1         = filepath.Join(currDir, "s1appfwV1-"+testenv.RandomDNSName(4))
-	downloadDirV2         = filepath.Join(currDir, "s1appfwV2-"+testenv.RandomDNSName(4))
-	downloadDirPVTestApps = filepath.Join(currDir, "s1appfwPVTestApps-"+testenv.RandomDNSName(4))
+	downloadDirV1         = filepath.Join(currDir, "m4appfwV1-"+testenv.RandomDNSName(4))
+	downloadDirV2         = filepath.Join(currDir, "m4appfwV2-"+testenv.RandomDNSName(4))
+	downloadDirPVTestApps = filepath.Join(currDir, "m4appfwPVTestApps-"+testenv.RandomDNSName(4))
+	cloudBackend          testenv.CloudStorageBackend
 )
 
 // TestBasic is the main entry point
@@ -42,14 +43,15 @@ func TestBasic(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	sc, _ := GinkgoConfiguration()
-	sc.Timeout = testenv.MediumLongSuiteTimeout
+	sc.Timeout = testenv.LongSuiteTimeout
 
 	RunSpecs(t, "Running "+testSuiteName, sc)
 }
 
 var _ = BeforeSuite(func() {
 	var err error
-	testenvInstance, appListV1, appListV2, err = testenv.SetupS3AppsSuite(testSuiteName, testDataS3Bucket, testenv.AppLocationV1, downloadDirV1, testenv.AppLocationV2, downloadDirV2)
+	cloudBackend = testenv.NewCloudStorageBackend(testS3Bucket, testDataS3Bucket)
+	testenvInstance, appListV1, appListV2, err = testenv.SetupAppsSuite(testSuiteName, cloudBackend, testenv.AppLocationV1, downloadDirV1, testenv.AppLocationV2, downloadDirV2)
 	Expect(err).ToNot(HaveOccurred())
 })
 
