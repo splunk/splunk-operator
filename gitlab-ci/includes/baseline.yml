@@ -5,6 +5,12 @@ merge-request-description-check:
   script:
     - sh gitlab-ci/validate-merge-request-description.sh
 
+private-docs-reference-check:
+  extends:
+    - .go-verify-job
+  script:
+    - bash gitlab-ci/validate-no-private-refs.sh
+
 format-and-vet:
   extends:
     - .go-verify-job

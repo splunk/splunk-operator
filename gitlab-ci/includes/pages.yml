@@ -1,0 +1,62 @@
+.pages-build:
+  image: docker.repo.splunkdev.net/ci-cd/ci-container/ruby-3.4-trixie:5.9.0
+  before_script: []
+  variables:
+    BUNDLE_GEMFILE: splunk_private/Gemfile.gitlab
+    BUNDLE_PATH: vendor/bundle
+  cache:
+    key:
+      files:
+        - docs/splunk_private/Gemfile.gitlab
+        - docs/splunk_private/Gemfile.gitlab.lock
+    paths:
+      - docs/vendor/bundle
+    policy: pull-push
+  script:
+    - cd docs
+    - gem install bundler
+    - bundle install --jobs 4 --retry 3
+    - bundle exec jekyll build --config _config.yml,splunk_private/_config_gitlab.yml -d ../public
+
+pages:
+  extends: .pages-build
+  stage: publish
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: '$SOK_PIPELINE_MODE'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      changes:
+        - docs/**/*
+
+pages:preview:
+  extends: .pages-build
+  stage: test
+  variables:
+    PAGES_PREFIX: "mr-$CI_MERGE_REQUEST_IID"
+  script:
+    - cd docs
+    - gem install bundler
+    - bundle install --jobs 4 --retry 3
+    - bundle exec jekyll build
+        --config _config.yml,splunk_private/_config_gitlab.yml
+        --baseurl "/$PAGES_PREFIX"
+        -d ../public/$PAGES_PREFIX
+    - echo "/ /$PAGES_PREFIX/ 302" > ../public/_redirects
+  pages:
+    path_prefix: "$PAGES_PREFIX"
+  artifacts:
+    paths:
+      - public
+  environment:
+    name: "Documentation Preview for $PAGES_PREFIX"
+    url: "https://splunk-operator-892f76.splunkdev.page/$PAGES_PREFIX"
+    auto_stop_in: 1 week
+  rules:
+    - if: '$SOK_PIPELINE_MODE'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - docs/**/*

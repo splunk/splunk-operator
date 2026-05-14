@@ -25,6 +25,7 @@ include:
   - local: gitlab-ci/includes/qualification.yml
   - local: gitlab-ci/includes/admin.yml
   - local: gitlab-ci/includes/release.yml
+  - local: gitlab-ci/includes/pages.yml
   - project: 'ci-cd/templates'
     ref: main
     file: '/prodsec/.oss-scan.yml'
