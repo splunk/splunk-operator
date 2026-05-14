@@ -1,0 +1,10 @@
+url: ""
+baseurl: ""
+remote_theme: null
+theme: just-the-docs
+plugins: []
+exclude:
+  - splunk_private/vendor
+aux_links:
+  "View on GitLab":
+    - https://cd.splunkdev.com/sok/splunk-operator

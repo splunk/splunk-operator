@@ -123,11 +123,12 @@ graph TD
 - Does **not** create namespaces — that happens per-spec in `TestCaseEnv`
 
 **TestCaseEnv** (`test/testenv/testcaseenv.go`)
-- Created per `It` block via `testenv.NewDefaultTestCaseEnv(kubeClient, name)` followed by `testcaseEnvInst.NewDeployment(name)`
+- Created per `It` block — use `testenv.SetupTestCaseEnv(testenvInstance, namePrefix)` which returns `(testcaseEnvInst, deployment, error)` and handles namespace creation, deployment setup, **and** prerequisites validation in one call
 - Creates a unique namespace and sets up all required resources:
   - Cloud provider index secrets (EKS/Azure/GCP), created from environment variables
   - License ConfigMap (only when `--license-file` is provided; without it, Splunk instances use trial license)
-- Torn down manually: `deployment.Teardown()` then `testcaseEnvInst.Teardown()`
+- **Prerequisites validation (fail-fast):** `SetupTestCaseEnv` calls `ValidateTestPrerequisites` immediately after creating the namespace and deployment. This checks that (a) the test namespace exists and (b) the operator pod is `Running` and `Ready` in the correct namespace (`splunk-operator` for cluster-wide, or the test namespace otherwise). If either check fails, the test fails fast with a clear error before any long-running operations begin
+- Torn down via `testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)` — which handles failure detection, skip-teardown on failure, deployment cleanup, and namespace deletion in one call
 
 **Deployment** (`test/testenv/deployment.go`)
 - Wraps the Splunk Custom Resources deployed in a test
@@ -146,11 +147,12 @@ sequenceDiagram
     Suite->>Suite: BeforeSuite: NewDefaultTestEnv(suiteName)
 
     loop For each It spec
-        Suite->>TestCaseEnv: NewDefaultTestCaseEnv(kubeClient, name)
+        Suite->>TestCaseEnv: SetupTestCaseEnv(testenvInstance, namePrefix)
         TestCaseEnv->>Cluster: Create namespace
         TestCaseEnv->>Cluster: Create cloud secrets / license
-        TestCaseEnv->>Cluster: Validate prerequisites
-        Suite->>Deployment: testcaseEnvInst.NewDeployment(name)
+        TestCaseEnv->>Deployment: NewDeployment(name)
+        TestCaseEnv->>Cluster: ValidateTestPrerequisites (fail-fast)
+        Note right of Cluster: Checks namespace exists +<br/>operator pod Running/Ready
 
         critical It: your test logic
             Deployment->>Cluster: Deploy CRs (Standalone, C3, M4, etc.)
@@ -158,10 +160,10 @@ sequenceDiagram
             Deployment->>Cluster: Modify CRs, verify updates
         end
 
-        Suite->>Deployment: deployment.Teardown()
+        Suite->>TestCaseEnv: TeardownTestCaseEnv(testcaseEnvInst, deployment)
+        TestCaseEnv->>TestCaseEnv: Check spec state (skip teardown on failure)
         Deployment->>Deployment: Capture pod logs
         Deployment->>Cluster: Delete CRs (cleanup stack, LIFO)
-        Suite->>TestCaseEnv: testcaseEnvInst.Teardown()
         TestCaseEnv->>Cluster: Delete namespace
     end
 
@@ -174,18 +176,15 @@ sequenceDiagram
 
 ### Option A: Add a Spec to an Existing Suite
 
-The simplest approach — add a new `It` block to an existing test file:
+The simplest approach — add a new `It` block to an existing test file. Use `NodeTimeout` to set a per-spec deadline from `testenv/timeouts.go`:
 
 ```go
-It("<mysuite>, <mytag>, <topology>: <human description>", func() {
-    // 1. Deploy a CR
-    standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
+It("<mysuite>, <mytag>, <topology>: <human description>", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+    // 1. Deploy and verify in one call
+    standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, "", "")
     Expect(err).To(Succeed(), "Unable to deploy standalone")
 
-    // 2. Verify it reaches Ready
-    testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
-
-    // 3. Your custom assertions
+    // 2. Your custom assertions
     // ...
 })
 ```
@@ -202,7 +201,7 @@ cp -r test/example test/my_feature
 
 **Step 2: Update the suite file**
 
-Rename and update `test/my_feature/example_suite_test.go`:
+Rename and update `test/my_feature/example_suite_test.go`. Set the suite-level timeout using `GinkgoConfiguration` and a tier from `testenv/timeouts.go`:
 
 ```go
 package my_feature
@@ -218,40 +217,40 @@ import (
 
 var (
     testenvInstance *testenv.TestEnv
-    testSuiteName  = "myfeature-" + testenv.RandomDNSName(3)
+    testSuiteName   = "myfeature-" + testenv.RandomDNSName(3)
 )
 
 func TestMyFeature(t *testing.T) {
     RegisterFailHandler(Fail)
-    RunSpecs(t, "Running "+testSuiteName)
+
+    sc, _ := GinkgoConfiguration()
+    sc.Timeout = testenv.MediumSuiteTimeout
+
+    RunSpecs(t, "Running "+testSuiteName, sc)
 }
 
 var _ = BeforeSuite(func() {
     var err error
     testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
-    Expect(err).ToNot(HaveOccurred())
+    Expect(err).To(Succeed(), "Failed to initialize test environment")
 })
 
 var _ = AfterSuite(func() {
     if testenvInstance != nil {
-        Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
+        Expect(testenvInstance.Teardown()).To(Succeed(), "Failed to teardown test environment")
     }
 })
 ```
 
 **Step 3: Write your test spec file**
 
-Create `test/my_feature/my_feature_test.go`:
+Create `test/my_feature/my_feature_test.go`. Use `SetupTestCaseEnv` and `TeardownTestCaseEnv` for setup/teardown, and `NodeTimeout` with tiers from `testenv/timeouts.go` for per-spec deadlines:
 
 ```go
 package my_feature
 
 import (
-    "context"
-    "fmt"
-
     . "github.com/onsi/ginkgo/v2"
-    "github.com/onsi/ginkgo/v2/types"
     . "github.com/onsi/gomega"
 
     "github.com/splunk/splunk-operator/test/testenv"
@@ -261,37 +260,23 @@ var _ = Describe("My Feature", func() {
 
     var testcaseEnvInst *testenv.TestCaseEnv
     var deployment *testenv.Deployment
-    ctx := context.TODO()
 
-    BeforeEach(func() {
+    BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
         var err error
-        name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
-        testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-        Expect(err).To(Succeed(), "Unable to create testcaseenv")
-        deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
-        Expect(err).To(Succeed(), "Unable to create deployment")
+        testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+        Expect(err).To(Succeed(), "Failed to setup test case environment")
     })
 
-    AfterEach(func() {
-        if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
-            testcaseEnvInst.SkipTeardown = true
-        }
-        if deployment != nil {
-            deployment.Teardown()
-        }
-        if testcaseEnvInst != nil {
-            Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
-        }
+    AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+        Expect(testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)).To(Succeed(),
+            "Failed to teardown test case environment")
     })
 
     Context("Standalone deployment (S1)", func() {
-        It("<mysuite>, <mytag>, <topology>: <human description>", func() {
-            standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
-            Expect(err).To(Succeed(), "Unable to deploy standalone")
-
-            testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
-
-            // Your test logic here
+        It("<mysuite>, <mytag>, <topology>: <human description>",
+            NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+            _, err := testcaseEnvInst.RunStandaloneDeploymentWorkflow(ctx, deployment)
+            Expect(err).To(Succeed(), "Unable to deploy standalone instance")
         })
     })
 })
@@ -316,39 +301,53 @@ Tags used in CI filtering:
 
 ### Common Test Patterns
 
-#### Deploy and Verify a Standalone
+#### Workflow Helpers (Preferred for Standard Deployments)
+
+For common topologies, use the workflow methods on `TestCaseEnv` (`test/testenv/test_workflows.go`). These combine deployment + verification and return a `WorkflowResult`:
 
 ```go
-standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
+// Standalone
+result, err := testcaseEnvInst.RunStandaloneDeploymentWorkflow(ctx, deployment)
 Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
-testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+// C3 cluster (CM + IDXC + SHC)
+_, err := testcaseEnvInst.RunC3DeploymentWorkflow(ctx, deployment, 3, "")
+Expect(err).To(Succeed(), "Unable to deploy C3 cluster")
+
+// M4 multisite cluster (CM + multisite IDXC + SHC)
+_, err := testcaseEnvInst.RunM4DeploymentWorkflow(ctx, deployment, 1, 3, "")
+Expect(err).To(Succeed(), "Unable to deploy M4 cluster")
+
+// M1 multisite indexer cluster (no SHC)
+_, err := testcaseEnvInst.RunM1DeploymentWorkflow(ctx, deployment, 1, 3)
+Expect(err).To(Succeed(), "Unable to deploy M1 cluster")
+
+// Standalone with service account
+_, err := testcaseEnvInst.RunStandaloneWithServiceAccountWorkflow(ctx, deployment, "my-sa")
+Expect(err).To(Succeed(), "Unable to deploy standalone with service account")
 ```
 
-#### Deploy and Verify a C3 Cluster
+#### Deploy and Verify (Granular Control)
+
+When you need more control than the workflow helpers provide:
 
 ```go
+// Standalone
+standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, "", "")
+Expect(err).To(Succeed(), "Unable to deploy standalone instance")
+
+// C3 cluster
 err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")
 Expect(err).To(Succeed(), "Unable to deploy cluster")
+Expect(testcaseEnvInst.VerifyClusterReadyAndRFSF(ctx, deployment)).To(Succeed())
 
-testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
-testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
-testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
-```
-
-#### Deploy and Verify a Multisite M4 Cluster
-
-```go
+// M4 multisite cluster
 siteCount := 3
 err := deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, "")
 Expect(err).To(Succeed(), "Unable to deploy cluster")
-
-testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
-testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
-testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
-testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount,
+    testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed())
+Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed())
 ```
 
 #### Deploy with a Custom Spec
@@ -365,17 +364,36 @@ spec := enterpriseApi.StandaloneSpec{
 }
 standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
 Expect(err).To(Succeed())
-
-testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed())
 ```
 
-#### Verify a CR is in a Specific Phase
+#### Watch for a CR Phase (Poll-Based)
+
+The watch helpers in `watch_utils.go` provide typed, poll-based phase waits:
 
 ```go
-testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, crName, enterpriseApi.PhaseReady)
-testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseReady)
-testenv.VerifySearchHeadClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseReady)
-testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseReady, idxcName)
+err := testcaseEnvInst.WatchForStandalonePhase(ctx, deployment, namespace, crName, enterpriseApi.PhaseReady, testenv.DefaultTimeout)
+err := testcaseEnvInst.WatchForClusterManagerPhase(ctx, deployment, namespace, crName, enterpriseApi.PhaseReady, testenv.DefaultTimeout)
+err := testcaseEnvInst.WatchForSearchHeadClusterPhase(ctx, deployment, namespace, crName, enterpriseApi.PhaseReady, testenv.DefaultTimeout)
+err := testcaseEnvInst.WatchForIndexerClusterPhase(ctx, deployment, namespace, crName, enterpriseApi.PhaseReady, testenv.DefaultTimeout)
+```
+
+For SearchHeadCluster, `WatchForSearchHeadClusterPhase` requires **both** `Status.Phase` and `Status.DeployerPhase` to match the expected phase before succeeding.
+
+#### Watch for App Phase Changes
+
+```go
+// Single app
+err := testcaseEnvInst.WatchForAppPhaseChange(ctx, deployment, namespace, crName, crKind, appSourceName, appName, enterpriseApi.PhaseInstall, timeout)
+
+// All apps in a list
+err := testcaseEnvInst.WatchForAllAppsPhaseChange(ctx, deployment, namespace, crName, crKind, appSourceName, appList, enterpriseApi.PhaseInstall, timeout)
+```
+
+#### Watch for a Kubernetes Event
+
+```go
+err := testcaseEnvInst.WatchForEventWithReason(ctx, deployment, namespace, crName, "ReconcileComplete", testenv.DefaultTimeout)
 ```
 
 #### Update a CR
@@ -388,25 +406,87 @@ err := deployment.UpdateCR(ctx, standalone)
 Expect(err).To(Succeed())
 ```
 
-#### Verify a Service Account on a Pod
-
-```go
-standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-testenv.VerifyServiceAccountConfiguredOnPod(deployment, testcaseEnvInst.GetName(), standalonePodName, serviceAccountName)
-```
-
 ### Available Test Helpers (`test/testenv/`)
 
 | Category | Key Files |
 |----------|-----------|
-| Test lifecycle (suite + per-spec setup/teardown) | `testenv.go`, `testcaseenv.go` |
+| Test lifecycle (suite + per-spec setup/teardown) | `testenv.go`, `testcaseenv.go`, `test_setup_helpers.go` |
+| Timeout tiers (per-spec and suite-level) | `timeouts.go` |
+| Standard deployment workflows | `test_workflows.go` |
 | CR deployment (create, update, delete, exec) | `deployment.go`, `util.go` |
 | Readiness and phase verification | `verificationutils.go` |
+| Poll-based CR phase and event watches | `watch_utils.go` |
+| V3/V4 abstraction and composite patterns | `common_test_patterns.go` |
+| Scale, deploy+verify, and composite checks | `assertion_helpers.go` |
 | Component-specific utilities (CM, LM, MC, SHC) | `cmutil.go`, `lmutil.go`, `mcutil.go`, `search_head_cluster_utils.go` |
 | App Framework verification | `appframework_utils.go` |
 | Cloud storage (S3, Azure Blob, GCS) | `s3utils.go`, `azureutils.go`, `gcputils.go` |
 | Data ingestion and search | `ingest_utils.go`, `search_utils.go` |
 | Secrets and credentials | `secretutil.go` |
+
+### Shared Test Procedures
+
+Some suites extract multi-step test procedures into `*_shared.go` files to keep the Ginkgo spec files declarative. For example, the License Manager suite uses `test/licensemanager/lm_test_shared.go`:
+
+| Function | What It Tests |
+|----------|---------------|
+| `RunLMS1Test` | S1 + LM + MC: deploys standalone with license manager, verifies LM configured on standalone and MC pods |
+| `RunLMC3Test` | C3 + LM + MC: deploys C3 cluster with license, verifies LM configured on indexers and MC |
+| `RunLMM4Test` | M4 + LM + MC: deploys multisite cluster with license, verifies LM configured on multisite indexers |
+| `RunLMC3AppFrameworkTest` | C3 + LM + App Framework: V1 app install → V2 app upgrade cycle on a license manager |
+
+These shared functions use Gomega assertions internally and are called directly from `It` blocks. Follow this pattern when your suite has multiple test variants that share a common procedure.
+
+### V3/V4 Test Abstraction
+
+Suites that need to test both v3 (ClusterMaster/LicenseMaster) and v4 (ClusterManager/LicenseManager) API versions use the `ClusterCoordinator` interface from `common_test_patterns.go`. This allows a single test body to run against both API versions via a config loop:
+
+```go
+var configs = []testenv.MasterManagerLMTestConfig{
+    {NamePrefix: "master", Label: "licensemaster", NewConfig: testenv.NewLicenseMasterConfig},
+    {NamePrefix: "",       Label: "licensemanager", NewConfig: testenv.NewLicenseManagerConfig},
+}
+
+for _, tc := range configs {
+    tc := tc
+    Context("Test with "+tc.Label, func() {
+        // BeforeEach / AfterEach using SetupTestCaseEnv(testenvInstance, tc.NamePrefix)
+        It("...", func() {
+            RunMyTest(ctx, deployment, testcaseEnvInst, tc.NewConfig())
+        })
+    })
+}
+```
+
+### Timeout Tiers
+
+Per-spec and suite-level timeouts are defined in `test/testenv/timeouts.go`. Use them consistently instead of hardcoding durations:
+
+**Per-spec timeouts** (used with `NodeTimeout()`):
+
+| Constant | Duration | Typical Use |
+|----------|----------|-------------|
+| `ShortTimeout` | 15 min | S1 deployments, SmartStore, delete CR, basic LM |
+| `MediumTimeout` | 45 min | MC, C3/M4 app framework, secret, smoke M4 |
+| `MediumLongTimeout` | 70 min | CR CRUD C3/M4, MC C3, app framework scale-up, smoke C3 |
+| `LongTimeout` | 100 min | Secret M4, C3 app framework image-upgrade |
+
+**Suite-level timeouts** (used with `GinkgoConfiguration().Timeout`):
+
+| Constant | Duration | Typical Suites |
+|----------|----------|----------------|
+| `ShortSuiteTimeout` | 30 min | SmartStore, index/ingestion separation |
+| `MediumSuiteTimeout` | 90 min | Smoke, S1 app framework |
+| `MediumLongSuiteTimeout` | 150 min | MC, License Manager, secret |
+| `LongSuiteTimeout` | 225 min | CR CRUD, M4/C3 app framework |
+
+**Other timeouts:**
+
+| Constant | Duration | Purpose |
+|----------|----------|---------|
+| `SetupTeardownTimeout` | 10 min | `BeforeEach`/`AfterEach` node timeout |
+| `DefaultTimeout` | 15 min | Infrastructure polls (namespace creation, operator readiness) |
+| `AppInstallTimeout` | 10 min | Waiting for apps to reach Install phase |
 
 ---
 
@@ -571,15 +651,29 @@ export TEST_TIMEOUT="120m"
 ./test/trigger-tests.sh <operator-image> <enterprise-image>
 ```
 
-### In CI (GitHub Actions)
+### In CI
 
 Tests run automatically on:
-- **PRs to main/develop:** Smoke tests (`build-test-push-workflow.yml`)
-- **Push to develop/main/feature branches:** Full integration tests (`int-test-workflow.yml`)
-- **Weekly schedule:** Nightly integration suite (`nightly-int-test-workflow.yml`)
-- **Manual trigger:** `manual-int-test-workflow.yml` with `workflow_dispatch`
+- **PRs to main/develop:** Smoke tests
+- **Push to develop/main/feature branches:** Full integration tests
+- **Weekly schedule:** Nightly integration suite
+- **Manual trigger:**
 
 For integration test workflows, CI provisions an EKS cluster, builds and pushes operator images to ECR, then runs `make int-test`. Smoke tests run on the existing CI infrastructure without provisioning a dedicated cluster.
+
+**JUnit report naming:**
+
+`trigger-tests.sh` generates JUnit reports with the naming pattern:
+
+```
+report-junit-<YYYYMMDD-HHMMSS>[-<pipeline_id>]-<sanitized_focus>.xml
+```
+
+For example: `report-junit-20260506-141523-12345-smoke.xml`
+
+In CI, these are uploaded as artifacts named `test-report-integration-<matrix_test>`.
+
+Unit tests produce `unit_test.xml` (configurable via `UNIT_TEST_REPORT_FILE` in the Makefile), uploaded as the `test-report-unit` artifact.
 
 ---
 
@@ -597,7 +691,7 @@ This prevents cleanup of CRs and namespaces so you can inspect the cluster state
 
 ### Read Pod Logs from Test Output
 
-On teardown, the `Deployment` object automatically captures pod logs to files. After a test run, look for log files in the test output directory. In CI, these are uploaded as GitHub Actions artifacts under `pod_logs`.
+On teardown, the `Deployment` object automatically captures pod logs to files. After a test run, look for log files in the test output directory. In CI, these are uploaded as artifacts under `pod_logs`.
 
 ### Inspect the Cluster During/After a Test
 
@@ -688,7 +782,7 @@ ginkgo -v --timeout=300m \
 | `context deadline exceeded` | CR never reached `PhaseReady` | Check operator logs, node resources, image pull errors |
 | `namespace not found` | Previous test cleanup failed | Manually delete leftover namespaces |
 | `image pull backoff` | Registry not accessible from cluster | Verify `PRIVATE_REGISTRY` and image push |
-| `prerequisites validation failed` | Operator not running | Deploy operator to `splunk-operator` namespace |
+| `prerequisites validation failed` | Operator pod not `Running`/`Ready` or namespace missing | Deploy operator via `make deploy` to `splunk-operator` namespace; check `kubectl get pods -n splunk-operator` |
 | Test hangs indefinitely | `Eventually` polling a condition that never becomes true | Check operator logs for reconciliation errors |
 | CR or namespace stuck in `Terminating` | Finalizer on a resource that can't be reconciled (e.g. CR in `Error` phase with no PVC) | Remove the finalizer manually (see below) |
 
@@ -746,7 +840,7 @@ kubectl get all,pvc --all-namespaces -o json | \
 
 ### Cloud Provider Credentials
 
-Cloud provider variables below are used to create Kubernetes Secrets in each test namespace for SmartStore, App Framework, and index tests. In CI, these are populated from GitHub Actions secrets. For local runs, export them in your shell or source them from a `.env` file. If you're only running smoke tests without cloud storage features, these can be left unset.
+Cloud provider variables below are used to create Kubernetes Secrets in each test namespace for SmartStore, App Framework, and index tests. In CI, these are populated from repository secrets. For local runs, export them in your shell or source them from a `.env` file. If you're only running smoke tests without cloud storage features, these can be left unset.
 
 > **Caution:** If you modify `test/env.sh` with local values or secrets, do **not** commit or push it. Changes to `env.sh` affect CI runs for all contributors and risk disclosing confidential data such as credentials and access keys. Consider using a local `.env` file (which is `.gitignore`d) or exporting variables in your shell session instead.
 
@@ -789,10 +883,10 @@ Cloud provider variables below are used to create Kubernetes Secrets in each tes
 
 1. Decide if your test fits in an existing suite or needs a new one
 2. If new suite: `cp -r test/example test/your_feature`
-3. Update the package name and suite name
-4. Write your spec using `BeforeEach` (with `NewDefaultTestCaseEnv` + `NewDeployment`) and `AfterEach` (with `deployment.Teardown()` + `testcaseEnvInst.Teardown()`)
-5. Use `deployment.Deploy*` methods to create CRs
-6. Use `testenv.*Ready` functions (e.g., `testenv.StandaloneReady`, `testenv.ClusterManagerReady`) to assert readiness
+3. Update the package name, suite name, and suite timeout (`sc.Timeout = testenv.MediumSuiteTimeout`)
+4. Use `testenv.SetupTestCaseEnv` in `BeforeEach` and `testenv.TeardownTestCaseEnv` in `AfterEach`, both with `NodeTimeout(testenv.SetupTeardownTimeout)`
+5. Add `NodeTimeout(testenv.ShortTimeout)` (or appropriate tier) to each `It` block, and accept `ctx SpecContext` as the func parameter
+6. Use workflow helpers (e.g. `testcaseEnvInst.RunStandaloneDeploymentWorkflow`) for standard topologies, or `DeployAndVerify*` / `Deploy*` + `Verify*` for custom flows
 7. Name your `It` blocks with tags for CI filtering: `"<mysuite>, <mytag>, <topology>: <human description>"`
 8. Run locally: `ginkgo -v ./test/your_feature -- -operator-image=... -splunk-image=...`
-9. Verify in CI: push your branch and check GitHub Actions
+9. Verify in CI: push your branch and check automated CI runs
