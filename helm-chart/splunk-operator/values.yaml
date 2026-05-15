@@ -156,6 +156,9 @@ splunkOperator:
   #   ValidationWebhook: true
   #   MyNewFeature: false
 
+  telemetry:
+    test: true
+
 # Array with extra yaml to deploy with the chart. Evaluated as a template
 extraManifests: []
 # extraManifests:
