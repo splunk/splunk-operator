@@ -1,0 +1,62 @@
+suite: telemetry configmap
+templates:
+  - templates/telemetry_configmap.yaml
+tests:
+  - it: should be a ConfigMap
+    asserts:
+      - isKind:
+          of: ConfigMap
+
+  - it: should set the correct name
+    asserts:
+      - equal:
+          path: metadata.name
+          value: splunk-operator-manager-telemetry
+
+  - it: should have the fixed operator label for controller predicate matching
+    asserts:
+      - equal:
+          path: metadata.labels.name
+          value: splunk-operator
+
+  - it: should include common labels
+    asserts:
+      - exists:
+          path: metadata.labels["helm.sh/chart"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+
+  - it: should use release namespace by default
+    release:
+      namespace: my-ns
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: my-ns
+
+  - it: should contain sokVersion from Chart.AppVersion
+    asserts:
+      - matchRegex:
+          path: data.status
+          pattern: '"sokVersion":\s*"3\.1\.0"'
+
+  - it: should default test to true
+    asserts:
+      - matchRegex:
+          path: data.status
+          pattern: '"test":\s*"true"'
+
+  - it: should set test to false when overridden
+    set:
+      splunkOperator.telemetry.test: false
+    asserts:
+      - matchRegex:
+          path: data.status
+          pattern: '"test":\s*"false"'
+
+  - it: should contain empty lastTransmission
+    asserts:
+      - matchRegex:
+          path: data.status
+          pattern: '"lastTransmission":\s*""'
