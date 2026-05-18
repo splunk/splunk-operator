@@ -14,12 +14,14 @@
 // limitations under the License.
 
 /*
-Package splkcontroller manipulates Kubernetes resources using its REST API.
-This package has no dependencies outside of the standard go and kubernetes
-libraries, and the splunk.common package.
+Package workflow contains multi-step, stateful operations that are CR-agnostic.
+Each sub-package owns a domain workflow (App Framework sync, rolling upgrade,
+SHC captain election, indexer decommission, etc.) and is consumed by one or more
+reconcile/<cr>/ packages.
 
-This package will be renamed to k8sops/ to reflect its actual scope (full K8s
-CRUD) and avoid confusion with the new reconcile/<cr>/ packages. See
-pkg/splunk/k8sops/doc.go for the target documentation.
+Workflow packages call client/<system>/ for external I/O but never import
+reconcile/ packages. Allowed imports from pkg/splunk/:
+
+	common/, util/, client/
 */
-package splkcontroller
+package workflow
