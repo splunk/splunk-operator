@@ -26,17 +26,20 @@ The Splunk Operator is a Kubernetes operator that manages Splunk Enterprise depl
 ├── helm-chart/            # Helm charts for operator and enterprise
 ├── internal/              # Internal controller logic
 ├── kuttl/                 # KUTTL test scenarios
-├── pkg/                   # Core business logic
-│   ├── splunk/
-│   │   ├── common/       # Common utilities
-│   │   ├── enterprise/   # Enterprise-specific logic
-│   │   ├── client/       # Splunk API client
-│   │   └── util/         # Utility functions
+├── pkg/                   # Core business logic (see Package Architecture below)
+│   └── splunk/
 ├── test/                  # Integration tests
 │   ├── testenv/          # Test environment utilities
 │   └── */                # Test suites by feature
 └── tools/                 # Helper scripts and utilities
 ```
+
+## Package Architecture
+
+Domain logic under `pkg/splunk/` is organized by concern with a strict layered
+import direction. Each package has a `doc.go` that documents its purpose and
+allowed imports. See [`pkg/splunk/README.md`](pkg/splunk/README.md) for the
+full package layout, import rules, and guidance on where to put new code.
 
 ## Common Makefile Commands
 
@@ -142,7 +145,7 @@ Test coverage includes:
 
 #### Integration Tests
 
-> **Maintenance note:** When modifying test framework files (`test/testenv/`, `test/run-tests.sh`, `test/env.sh`), also update `docs/IntegrationTesting.md` to keep the guide accurate.
+> **Maintenance note:** When modifying test framework files (`test/testenv/`, `test/run-tests.sh`, `test/env.sh`), also update `docs/develop/IntegrationTesting.md` to keep the guide accurate.
 
 **Integration Test Structure:**
 - Each test suite has its own directory under `test/`
@@ -186,7 +189,7 @@ When making changes that affect users:
 # 2. Preview documentation locally
 make docs-preview
 
-# 3. Update CONTRIBUTING.md if workflow changes
+# 3. Update docs/develop/Contributing.md if workflow changes
 ```
 
 ## Environment Variables

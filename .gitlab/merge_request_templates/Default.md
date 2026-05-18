@@ -21,5 +21,5 @@ _How were these changes tested? What automated tests are added or updated?_
 - [ ] Code changes adhere to the project's coding standards
 - [ ] Relevant unit and integration tests are included
 - [ ] Documentation has been updated accordingly
-- [ ] If test framework files were changed (`test/testenv/`, `test/run-tests.sh`, `test/env.sh`), `docs/IntegrationTesting.md` has been updated
+- [ ] If test framework files were changed (`test/testenv/`, `test/run-tests.sh`, `test/env.sh`), `docs/develop/IntegrationTesting.md` has been updated
 - [ ] All tests pass locally
