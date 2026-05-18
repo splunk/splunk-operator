@@ -14,12 +14,7 @@
 // limitations under the License.
 
 /*
-Package splkcontroller manipulates Kubernetes resources using its REST API.
-This package has no dependencies outside of the standard go and kubernetes
-libraries, and the splunk.common package.
-
-This package will be renamed to k8sops/ to reflect its actual scope (full K8s
-CRUD) and avoid confusion with the new reconcile/<cr>/ packages. See
-pkg/splunk/k8sops/doc.go for the target documentation.
+Package indexercluster implements multi-step indexer cluster workflows: peer
+decommission, rebalance wait, and scale-down sequencing.
 */
-package splkcontroller
+package indexercluster
