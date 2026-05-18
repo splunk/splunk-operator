@@ -41,6 +41,9 @@ For a one-off manual intake run, trigger a pipeline with `SOK_PIPELINE_MODE=gith
 | Push to `main` after merge | Main validation plus manual publish jobs | Re-validates the merged `main` tip and exposes the publish jobs | Start the manual publish jobs only when the release is approved |
 | Web or API pipeline on `main` or a protected `release/*` branch with `SOK_PIPELINE_MODE=release_publish` | Publish-only release promotion | Re-fetches a retained release candidate and re-runs the publish or certification path | Use this on `main` for normal releases or on a maintenance `release/*` branch for a patch release |
 
+Develop pipelines also publish prerelease Helm chart snapshots to the internal Artifactory Helm test repository once the staged operator image is built. By default the publish base is `https://repo.splunkdev.net/artifactory/helm-test/sok/splunk-operator` and the matching read URL is `https://repo.splunkdev.net/artifactory/api/helm/helm-test`; `PIPELINE_CHART_STAGE_REPOSITORY` and `PIPELINE_CHART_STAGE_REPO_URL` can override them if needed. Those snapshots use pipeline-derived prerelease chart versions so they do not collide with release chart versions, they keep `splunk-operator` and `splunk-enterprise` on the same version, they repackage `splunk-enterprise` with the matching `splunk-operator` dependency archive, and they default the operator chart to the exact staged internal image from the same pipeline.
+This does not change the other lanes: qualification continues to validate the latest released chart path, and release publish continues to push only immutable validated release chart archives to the shared Artifactory Helm release repository.
+
 The important rule is that ordinary feature-branch pushes do not run their own GitLab pipeline.
 Branch validation is MR-driven.
 GitLab also suppresses duplicate push pipelines once a branch already has an open MR.
@@ -216,15 +219,15 @@ What the publish automation does in the normal `main` release publish path:
 - promotes the validated candidate operator and distroless images to GA tags
 - prepares the validated deployment-artifact archive
 - promotes the validated bundle and catalog images
-- pushes the validated Helm charts to the approved OCI repository
+- pushes the validated Helm charts to the approved Artifactory Helm release repository
 - runs Red Hat preflight checks
 - prepares the certified-operators and community-operators submission payloads
 - creates the GitLab Release record and uploads stable release assets to the Generic Package Registry
 
 The important guardrail is that `main` promotes validated outputs.
 It does not rebuild the product from source for publication.
-Helm publication also moves forward on OCI only.
-This lane publishes newly validated charts; it does not backfill historical chart versions into the OCI repository.
+Helm publication also moves forward only from the validated chart archives into the shared Artifactory Helm release repository.
+This lane publishes newly validated charts; it does not backfill historical chart versions into the release repository.
 If the project `CI_JOB_TOKEN` is not allowed to create releases, set `PIPELINE_GITLAB_RELEASE_API_TOKEN` for the final release-record job.
 
 ## Patch Release Publish Lane
@@ -347,6 +350,7 @@ The pipeline is designed to collect operator-facing evidence by default instead 
 ### Build and image scan jobs
 
 - `build-stage-image` writes image-reference and digest files such as `ci-output/build-test-push-workflow-ecr-image-ref.txt`
+- `build-stage-charts` packages prerelease `splunk-operator` and `splunk-enterprise` charts, pins the operator chart to the staged internal operator image from the same pipeline, publishes them to the internal Artifactory Helm test repository, and writes the published chart URLs plus summary under `ci-output/build-stage-charts-*`
 - release-validation builds also write distroless reference and digest files
 - most runtime and publish jobs write `ci-output/*-runtime-context.txt` so the exact inputs are recorded alongside the result
 

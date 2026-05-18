@@ -694,6 +694,95 @@ helm_login_registry() {
   printf '%s' "${REGISTRY_LOGIN_PASSWORD}" | helm registry login "${registry_host}" --username "${REGISTRY_LOGIN_USERNAME}" --password-stdin
 }
 
+artifactory_helm_repo_url_from_publish_base() {
+  publish_base="$1"
+  printf '%s\n' "${publish_base}" | sed -nE 's#^(https://[^/]+/artifactory)/([^/]+)(/.*)?$#\1/api/helm/\2#p'
+}
+
+resolve_artifactory_http_auth() {
+  username="$1"
+  password="$2"
+  role_path="$3"
+
+  ARTIFACTORY_PUBLISH_AUTH_HEADER=""
+  ARTIFACTORY_PUBLISH_USER=""
+  ARTIFACTORY_PUBLISH_PASSWORD=""
+
+  if [ -n "${username}" ] || [ -n "${password}" ]; then
+    require_nonempty "${username}" "Artifactory username"
+    require_nonempty "${password}" "Artifactory password"
+    ARTIFACTORY_PUBLISH_USER="${username}"
+    ARTIFACTORY_PUBLISH_PASSWORD="${password}"
+    return 0
+  fi
+
+  require_nonempty "${role_path}" "Artifactory deploy role"
+  require_commands creds-helper
+  creds-helper init >/dev/null 2>&1
+  eval "$(creds-helper artifactory --eval "${role_path}")"
+  require_nonempty "${ARTIFACTORY_AUTHORIZATION:-}" "ARTIFACTORY_AUTHORIZATION"
+  ARTIFACTORY_PUBLISH_AUTH_HEADER="${ARTIFACTORY_AUTHORIZATION}"
+}
+
+resolve_artifactory_publish_auth() {
+  resolve_artifactory_http_auth "$1" "$2" "$3"
+}
+
+artifactory_upload_file() {
+  target_url="$1"
+  file_path="$2"
+
+  require_file "${file_path}" "Artifactory upload source"
+  require_commands curl
+
+  if [ -n "${ARTIFACTORY_PUBLISH_AUTH_HEADER:-}" ]; then
+    curl --fail --location --silent --show-error \
+      --header "Authorization: ${ARTIFACTORY_PUBLISH_AUTH_HEADER}" \
+      --request PUT \
+      --upload-file "${file_path}" \
+      "${target_url}"
+    return 0
+  fi
+
+  require_nonempty "${ARTIFACTORY_PUBLISH_USER:-}" "Artifactory username"
+  require_nonempty "${ARTIFACTORY_PUBLISH_PASSWORD:-}" "Artifactory password"
+  curl --fail --location --silent --show-error \
+    --user "${ARTIFACTORY_PUBLISH_USER}:${ARTIFACTORY_PUBLISH_PASSWORD}" \
+    --request PUT \
+    --upload-file "${file_path}" \
+    "${target_url}"
+}
+
+artifactory_download_file() {
+  source_url="$1"
+  output_path="$2"
+
+  require_commands curl
+  mkdir -p "$(dirname "${output_path}")"
+
+  if [ -n "${ARTIFACTORY_PUBLISH_AUTH_HEADER:-}" ]; then
+    curl --fail --location --silent --show-error \
+      --header "Authorization: ${ARTIFACTORY_PUBLISH_AUTH_HEADER}" \
+      --output "${output_path}" \
+      "${source_url}"
+    return 0
+  fi
+
+  if [ -n "${ARTIFACTORY_PUBLISH_USER:-}" ] || [ -n "${ARTIFACTORY_PUBLISH_PASSWORD:-}" ]; then
+    require_nonempty "${ARTIFACTORY_PUBLISH_USER:-}" "Artifactory username"
+    require_nonempty "${ARTIFACTORY_PUBLISH_PASSWORD:-}" "Artifactory password"
+    curl --fail --location --silent --show-error \
+      --user "${ARTIFACTORY_PUBLISH_USER}:${ARTIFACTORY_PUBLISH_PASSWORD}" \
+      --output "${output_path}" \
+      "${source_url}"
+    return 0
+  fi
+
+  curl --fail --location --silent --show-error \
+    --output "${output_path}" \
+    "${source_url}"
+}
+
 ensure_operator_sdk() {
   ci_bin_dir="$1"
   operator_sdk_version="$2"

@@ -202,7 +202,25 @@ default:
 # - PIPELINE_RELEASE_CANDIDATE_JOB_NAME defaults to release-candidate-packaging.
 # - PIPELINE_DOCKER_USERNAME / PIPELINE_DOCKER_PASSWORD provide generic OCI auth.
 # - PIPELINE_BUNDLE_REGISTRY is the bundle/catalog target registry.
-# - PIPELINE_CHART_RELEASE_REPOSITORY must be an OCI repo like oci://...
+# - PIPELINE_CHART_RELEASE_REPOSITORY optionally overrides the Artifactory Helm
+#   publish base URL for release publication. When unset, release publication
+#   defaults to https://repo.splunkdev.net/artifactory/helm/sok/splunk-operator.
+# - PIPELINE_CHART_RELEASE_REPO_URL optionally overrides the Artifactory Helm
+#   read URL for release consumers. When unset, release publication defaults to
+#   https://repo.splunkdev.net/artifactory/api/helm/helm.
+# - PIPELINE_CHART_STAGE_REPOSITORY optionally overrides the Artifactory Helm
+#   publish base URL for develop snapshot chart publication. When unset,
+#   develop snapshot publication defaults to
+#   https://repo.splunkdev.net/artifactory/helm-test/sok/splunk-operator.
+# - PIPELINE_CHART_STAGE_REPO_URL optionally overrides the Artifactory Helm
+#   read URL for develop snapshot consumers. When unset, develop snapshot
+#   publication defaults to
+#   https://repo.splunkdev.net/artifactory/api/helm/helm-test.
+# - PIPELINE_CHART_RELEASE_ARTIFACTORY_ROLE and
+#   PIPELINE_CHART_STAGE_ARTIFACTORY_ROLE optionally override the default VRG
+#   deploy roles used by the release and develop chart publication jobs.
+# - PIPELINE_HELM_CHART_VERSION / PIPELINE_HELM_CHART_APP_VERSION optionally
+#   override the generated develop snapshot chart metadata.
 # - PIPELINE_PYXIS_API_TOKEN and PIPELINE_PYXIS_CERTIFICATION_COMPONENT_ID
 #   unlock Red Hat preflight submission.
 #

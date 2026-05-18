@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -81,11 +82,40 @@ def released_operator_repository() -> tuple[str, str]:
     return split_image_repository(repository)
 
 
+def artifactory_helm_repo_url_from_publish_base(publish_base: str) -> str:
+    normalized = publish_base.strip().rstrip("/")
+    if not normalized:
+        return ""
+    parsed = urllib.parse.urlparse(normalized)
+    if parsed.scheme != "https" or not parsed.netloc:
+        return ""
+    path = parsed.path.strip("/")
+    if not path.startswith("artifactory/"):
+        return ""
+    remainder = path.removeprefix("artifactory/")
+    repo_key = remainder.split("/", 1)[0]
+    if not repo_key:
+        return ""
+    return f"{parsed.scheme}://{parsed.netloc}/artifactory/api/helm/{repo_key}"
+
+
 def released_helm_repo_url() -> str:
-    return env_first(
+    explicit_repo_url = env_first(
         "PIPELINE_RELEASED_HELM_REPO_URL",
+        "PIPELINE_CHART_RELEASE_REPO_URL",
+    )
+    if explicit_repo_url:
+        return explicit_repo_url
+    return (
+        artifactory_helm_repo_url_from_publish_base(os.getenv("PIPELINE_CHART_RELEASE_REPOSITORY", ""))
+        or DEFAULT_HELM_REPO_URL
+    )
+
+
+def released_helm_publish_base() -> str:
+    return env_first(
         "PIPELINE_CHART_RELEASE_REPOSITORY",
-        default=DEFAULT_HELM_REPO_URL,
+        default="",
     )
 
 
@@ -101,15 +131,34 @@ def chart_download_url(repo_url: str, chart_name: str, version: str) -> str:
     return f"{repo_url.rstrip('/')}/{chart_name}-{version}.tgz"
 
 
-def require_chart_release(repo_url: str, helm_index: str, chart_name: str, version: str) -> str:
+def index_chart_download_url(repo_url: str, helm_index: str, chart_name: str, version: str) -> str:
+    pattern = re.compile(
+        rf"(?m)^\s*-\s*(?P<url>\S*{re.escape(chart_name)}-{re.escape(version)}\.tgz)\s*$"
+    )
+    match = pattern.search(helm_index)
+    if not match:
+        return ""
+    raw_url = match.group("url")
+    return urllib.parse.urljoin(f"{repo_url.rstrip('/')}/", raw_url)
+
+
+def require_chart_release(repo_url: str, helm_index: str, chart_name: str, version: str, publish_base: str = "") -> str:
     chart_ref = chart_download_url(repo_url, chart_name, version)
     if repo_url.startswith("oci://"):
         return chart_ref
-    if chart_ref not in helm_index:
+    chart_filename = f"{chart_name}-{version}.tgz"
+    if chart_filename not in helm_index:
         raise RuntimeError(
             f"Released Helm repo is missing {chart_name} chart version {version}: {chart_ref}"
         )
-    return chart_ref
+    if publish_base:
+        return f"{publish_base.rstrip('/')}/{chart_filename}"
+    indexed_chart_url = index_chart_download_url(repo_url, helm_index, chart_name, version)
+    if not indexed_chart_url:
+        raise RuntimeError(
+            f"Released Helm repo is missing {chart_name} chart version {version}: {chart_ref}"
+        )
+    return indexed_chart_url
 
 
 def fetch_docker_registry_token(repository: str) -> str:
@@ -173,11 +222,16 @@ def build_contract() -> dict:
     release = fetch_json(GITHUB_RELEASE_URL)
     released_version = normalize_version(release["tag_name"])
     helm_repo_url = released_helm_repo_url()
+    helm_publish_base = released_helm_publish_base()
     helm_index_url = released_helm_index_url(helm_repo_url)
     helm_index = fetch_text(helm_index_url) if helm_index_url else ""
     operator_registry, operator_repository_path = released_operator_repository()
-    enterprise_chart_url = require_chart_release(helm_repo_url, helm_index, "splunk-enterprise", released_version)
-    operator_chart_url = require_chart_release(helm_repo_url, helm_index, "splunk-operator", released_version)
+    enterprise_chart_url = require_chart_release(
+        helm_repo_url, helm_index, "splunk-enterprise", released_version, helm_publish_base
+    )
+    operator_chart_url = require_chart_release(
+        helm_repo_url, helm_index, "splunk-operator", released_version, helm_publish_base
+    )
     operator_image_source = require_released_operator_image(operator_registry, operator_repository_path, released_version)
     distroless_image_source = require_released_operator_image(
         operator_registry,
@@ -193,6 +247,7 @@ def build_contract() -> dict:
             "github_release_html": release.get("html_url", ""),
             "helm_repo_index": helm_index_url,
             "helm_repo_url": helm_repo_url,
+            "helm_publish_base": helm_publish_base,
             "docker_registry": operator_registry if operator_registry != "docker.io" else DOCKER_REGISTRY_URL,
         },
         "released_sok": {
@@ -227,6 +282,7 @@ def write_contract_artifacts(output_dir: Path, contract: dict) -> None:
                 f"SOK_RELEASED_ENTERPRISE_CHART_VERSION={released_version}",
                 f"SOK_RELEASED_OPERATOR_CHART_VERSION={released_version}",
                 f"SOK_RELEASED_HELM_REPO_URL={contract['release_source']['helm_repo_url']}",
+                f"SOK_RELEASED_HELM_PUBLISH_BASE={contract['release_source']['helm_publish_base']}",
                 f"SOK_RELEASED_ENTERPRISE_CHART_URL={contract['released_sok']['enterprise_chart_url']}",
                 f"SOK_RELEASED_OPERATOR_CHART_URL={contract['released_sok']['operator_chart_url']}",
             ]
@@ -255,6 +311,8 @@ def write_contract_artifacts(output_dir: Path, contract: dict) -> None:
                 f"- enterprise_chart_version: {released_version}",
                 f"- operator_chart_version: {released_version}",
                 f"- github_release_html: {contract['release_source']['github_release_html']}",
+                f"- helm_repo_url: {contract['release_source']['helm_repo_url']}",
+                f"- helm_publish_base: {contract['release_source']['helm_publish_base']}",
                 f"- enterprise_chart_url: {contract['released_sok']['enterprise_chart_url']}",
                 f"- operator_chart_url: {contract['released_sok']['operator_chart_url']}",
             ]
