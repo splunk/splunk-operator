@@ -32,6 +32,32 @@ build-stage-image:
     paths:
       - ci-output/build-test-push-workflow-*
 
+build-stage-charts:
+  extends: .runtime-build-job
+  rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "develop"'
+    - when: never
+  needs:
+    - job: build-stage-image
+      artifacts: true
+  variables:
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-artifactory-image-ref.txt
+    DEFAULT_CHART_STAGE_REPOSITORY: https://repo.splunkdev.net/artifactory/helm-test/sok/splunk-operator
+    DEFAULT_CHART_STAGE_REPO_URL: https://repo.splunkdev.net/artifactory/api/helm/helm-test
+    JOB_CHART_STAGE_ARTIFACTORY_ROLE: artifactory:v2/cloud/role/helm-test-deployer-role
+    WORKFLOW_SLUG: build-stage-charts
+  script:
+    - gitlab-ci/publish-stage-charts.sh
+  artifacts:
+    paths:
+      - ci-output/build-stage-charts-*
+
 .runtime-image-container-scan-job:
   stage: image_scan
   extends:

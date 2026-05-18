@@ -56,6 +56,8 @@ if [ "${RUNTIME_OPERATOR_SOURCE_KIND}" = "official-release" ]; then
   RELEASED_HELM_REPO_URL="$(first_nonempty "${SOK_RELEASED_HELM_REPO_URL:-}" "")"
   RELEASED_ENTERPRISE_CHART_VERSION="$(first_nonempty "${SOK_RELEASED_ENTERPRISE_CHART_VERSION:-}" "")"
   RELEASED_OPERATOR_CHART_VERSION="$(first_nonempty "${SOK_RELEASED_OPERATOR_CHART_VERSION:-}" "")"
+  RELEASED_ENTERPRISE_CHART_URL="$(first_nonempty "${SOK_RELEASED_ENTERPRISE_CHART_URL:-}" "")"
+  RELEASED_OPERATOR_CHART_URL="$(first_nonempty "${SOK_RELEASED_OPERATOR_CHART_URL:-}" "")"
   if [ -z "${RELEASED_HELM_REPO_URL}" ] || [ -z "${RELEASED_ENTERPRISE_CHART_VERSION}" ] || [ -z "${RELEASED_OPERATOR_CHART_VERSION}" ]; then
     echo "Released SOK contract is missing chart fields" >&2
     exit 1
@@ -110,6 +112,11 @@ append_context "${context_file}" "helm_test_parallel" "${RESOLVED_HELM_TEST_PARA
 append_context "${context_file}" "helm_version" "${helm_version}"
 append_context "${context_file}" "kuttl_version" "${kuttl_version}"
 append_context "${context_file}" "enterprise_image" "${SPLUNK_ENTERPRISE_IMAGE}"
+if [ "${RUNTIME_OPERATOR_SOURCE_KIND}" = "official-release" ]; then
+  append_context "${context_file}" "released_helm_repo_url" "${RELEASED_HELM_REPO_URL}"
+  append_context "${context_file}" "released_enterprise_chart_url" "${RELEASED_ENTERPRISE_CHART_URL}"
+  append_context "${context_file}" "released_operator_chart_url" "${RELEASED_OPERATOR_CHART_URL}"
+fi
 
 cleanup_and_exit() {
   rc="$1"
@@ -218,10 +225,25 @@ if [ "${RUNTIME_OPERATOR_SOURCE_KIND}" = "official-release" ]; then
       helm pull "${RELEASED_HELM_REPO_URL}/splunk-operator" --version "${RELEASED_OPERATOR_CHART_VERSION}" --untar --untardir "${released_helm_root}" >> "${kuttl_log}" 2>&1
       ;;
     *)
-      helm repo add splunk "${RELEASED_HELM_REPO_URL}" >> "${kuttl_log}" 2>&1
-      helm repo update >> "${kuttl_log}" 2>&1
-      helm pull splunk/splunk-enterprise --version "${RELEASED_ENTERPRISE_CHART_VERSION}" --untar --untardir "${released_helm_root}" >> "${kuttl_log}" 2>&1
-      helm pull splunk/splunk-operator --version "${RELEASED_OPERATOR_CHART_VERSION}" --untar --untardir "${released_helm_root}" >> "${kuttl_log}" 2>&1
+      if [ -n "${RELEASED_ENTERPRISE_CHART_URL}" ] && [ -n "${RELEASED_OPERATOR_CHART_URL}" ]; then
+        chart_username="$(first_nonempty "${PIPELINE_CHART_RELEASE_USERNAME:-}" "${PIPELINE_DOCKER_USERNAME:-}" "")"
+        chart_password="$(first_nonempty "${PIPELINE_CHART_RELEASE_PASSWORD:-}" "${PIPELINE_DOCKER_PASSWORD:-}" "")"
+        chart_artifactory_role="$(first_nonempty "${PIPELINE_CHART_RELEASE_ARTIFACTORY_ROLE:-}" "${JOB_CHART_RELEASE_ARTIFACTORY_ROLE:-}" "")"
+        if printf '%s\n%s\n' "${RELEASED_ENTERPRISE_CHART_URL}" "${RELEASED_OPERATOR_CHART_URL}" | grep -q '/artifactory/'; then
+          resolve_artifactory_http_auth "${chart_username}" "${chart_password}" "${chart_artifactory_role}"
+        fi
+        enterprise_chart_archive="${released_helm_root}/splunk-enterprise-${RELEASED_ENTERPRISE_CHART_VERSION}.tgz"
+        operator_chart_archive="${released_helm_root}/splunk-operator-${RELEASED_OPERATOR_CHART_VERSION}.tgz"
+        artifactory_download_file "${RELEASED_ENTERPRISE_CHART_URL}" "${enterprise_chart_archive}"
+        artifactory_download_file "${RELEASED_OPERATOR_CHART_URL}" "${operator_chart_archive}"
+        tar -xzf "${enterprise_chart_archive}" -C "${released_helm_root}" >> "${kuttl_log}" 2>&1
+        tar -xzf "${operator_chart_archive}" -C "${released_helm_root}" >> "${kuttl_log}" 2>&1
+      else
+        helm repo add splunk "${RELEASED_HELM_REPO_URL}" >> "${kuttl_log}" 2>&1
+        helm repo update >> "${kuttl_log}" 2>&1
+        helm pull splunk/splunk-enterprise --version "${RELEASED_ENTERPRISE_CHART_VERSION}" --untar --untardir "${released_helm_root}" >> "${kuttl_log}" 2>&1
+        helm pull splunk/splunk-operator --version "${RELEASED_OPERATOR_CHART_VERSION}" --untar --untardir "${released_helm_root}" >> "${kuttl_log}" 2>&1
+      fi
       ;;
   esac
   export HELM_REPO_PATH="${released_helm_root}"
