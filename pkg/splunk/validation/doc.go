@@ -14,12 +14,7 @@
 // limitations under the License.
 
 /*
-Package splkcontroller manipulates Kubernetes resources using its REST API.
-This package has no dependencies outside of the standard go and kubernetes
-libraries, and the splunk.common package.
-
-This package will be renamed to k8sops/ to reflect its actual scope (full K8s
-CRUD) and avoid confusion with the new reconcile/<cr>/ packages. See
-pkg/splunk/k8sops/doc.go for the target documentation.
+Package validation implements admission webhooks and CR spec validation.
+Promoted from enterprise/validation/ to a top-level package under pkg/splunk/.
 */
-package splkcontroller
+package validation

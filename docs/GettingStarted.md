@@ -16,7 +16,7 @@ Splunk Operator for Kubernetes. It is divided into the following sections:
 * [Prerequisites for the Splunk Operator](#prerequisites-for-the-splunk-operator)
 * [Installing the Splunk Operator](#installing-the-splunk-operator)
 * [Creating Splunk Enterprise Deployments](#creating-a-splunk-enterprise-deployment)
-* [Securing Splunk Deployments in Kubernetes](Security.md)
+* [Securing Splunk Deployments in Kubernetes](operate/Security.md)
 * [Contacting Support](#contacting-support)
 
 ## Support Resources
@@ -25,7 +25,7 @@ SPLUNK SUPPORTED: The Splunk Operator for Kubernetes is a supported method for d
 
 COMMUNITY DEVELOPED: Splunk Operator for Kubernetes is an open source product developed by Splunkers with contributions from the community of partners and customers. The primary reason why Splunk is taking this approach is to push product development closer to those that use and depend upon it. This direct connection will help us all be more successful and move at a rapid pace.
 
-If you're interested in contributing to the SOK open source project, review the [Contributing to the Project](CONTRIBUTING.md) page.
+If you're interested in contributing to the SOK open source project, review the [Contributing to the Project](develop/Contributing) page.
 
 **Community Support & Discussions on
 [Slack](https://splunk-usergroups.slack.com)** channel #splunk-operator-for-kubernetes
@@ -36,7 +36,7 @@ If you're interested in contributing to the SOK open source project, review the 
 
 ## Known Issues for the Splunk Operator
 
-Review the [Change Log](ChangeLog.md) page for a history of changes in each release.
+Review the [Change Log](reference/ChangeLog.md) page for a history of changes in each release.
 
 ## Prerequisites for the Splunk Operator
 
@@ -63,7 +63,7 @@ Each release of splunk-operator is preset to latest release mentioned in [releas
 
 ### Splunk Apps Installation
 
-Apps and add-ons can be installed using the Splunk Operator by following the instructions given at [Installing Splunk Apps](Examples.md#installing-splunk-apps). For the installation of premium apps please refer to [Premium Apps Installation Guide](PremiumApps.md).
+Apps and add-ons can be installed using the Splunk Operator by following the instructions given at [Installing Splunk Apps](reference/Examples.md#installing-splunk-apps). For the installation of premium apps please refer to [Premium Apps Installation Guide](operate/PremiumApps.md).
 
 ### Docker requirements
 The Splunk Operator requires these docker images to be present or available to your Kubernetes cluster:
@@ -72,9 +72,9 @@ The Splunk Operator requires these docker images to be present or available to y
 * `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk)
 
 
-All of the Splunk Enterprise images are publicly available on [Docker Hub](https://hub.docker.com/). If your cluster does not have access to pull from Docker Hub, see the [Required Images Documentation](Images.md) page.
+All of the Splunk Enterprise images are publicly available on [Docker Hub](https://hub.docker.com/). If your cluster does not have access to pull from Docker Hub, see the [Required Images Documentation](deploy/Images.md) page.
 
-Review the [Change Log](ChangeLog.md) page for a history of changes and Splunk Enterprise compatibility for each release.
+Review the [Change Log](reference/ChangeLog.md) page for a history of changes and Splunk Enterprise compatibility for each release.
 
 ### Hardware Resources Requirements
 The resource guidelines for running production Splunk Enterprise instances in pods through the Splunk Operator are the same as running Splunk Enterprise natively on a supported operating system and file system. Refer to the Splunk Enterprise [Reference Hardware documentation](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware) for additional details.  We would also recommend following the same guidance on [Splunk Enterprise for disabling Transparent Huge Pages (THP)](https://docs.splunk.com/Documentation/Splunk/latest/ReleaseNotes/SplunkandTHP) for the nodes in your Kubernetes cluster.  Please be aware that this may impact performance of other non-Splunk workloads.
@@ -98,12 +98,12 @@ In addition to the guidelines provided in the reference hardware, [Kubernetes Qu
 | _Burstable_ | _CPU/Mem ```requests``` < CPU/Mem ```limits```_  | _When the CPU and memory  ```requests``` value is set lower than the ```limits``` the pod is given a QoS class of Burstable. This level of service is useful in a user acceptance testing ___(UAT) environment___, where the pods run with minimum resources, and Kubernetes allocates additional resources depending on usage._|
 | _BestEffort_ | _No CPU/Mem ```requests``` or ```limits``` are set_ | _When the ```requests``` or ```limits``` values are not set, the pod is given a QoS class of BestEffort. This level of service is sufficient for ___testing, or a small development task___._ |
 
-Examples on how to implement these QoS are given at [Examples of Guaranteed and Burstable QoS](CustomResources.md#examples-of-guaranteed-and-burstable-qos) section.
+Examples on how to implement these QoS are given at [Examples of Guaranteed and Burstable QoS](operate/CustomResources.md#examples-of-guaranteed-and-burstable-qos) section.
 
 
 ### Storage guidelines
 The Splunk Operator uses Kubernetes [Persistent Volume Claims](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) to store all of your Splunk Enterprise configuration ("$SPLUNK_HOME/etc" path) and event ("$SPLUNK_HOME/var" path) data. If one of the underlying machines fail, Kubernetes will automatically try to recover by restarting the Splunk Enterprise pods on another machine that is able to reuse the same data volumes. This minimizes the maintenance burden on your operations team by reducing the impact of common hardware failures to the equivalent of a service restart.
-The use of Persistent Volume Claims requires that your cluster is configured to support one or more Kubernetes persistent [Storage Classes](https://kubernetes.io/docs/concepts/storage/storage-classes/). See the [Setting Up a Persistent Storage for Splunk](StorageClass.md) page for more
+The use of Persistent Volume Claims requires that your cluster is configured to support one or more Kubernetes persistent [Storage Classes](https://kubernetes.io/docs/concepts/storage/storage-classes/). See the [Setting Up a Persistent Storage for Splunk](deploy/StorageClass.md) page for more
 information.
 
 ### What Storage Type To Use?
@@ -112,7 +112,7 @@ The Kubernetes infrastructure must have access to storage that meets or exceeds 
 
 
 ### Splunk SmartStore Required
-For production environments, we are requiring the use of Splunk SmartStore. As a Splunk Enterprise deployment's data volume increases, demand for storage typically outpaces demand for compute resources. [Splunk's SmartStore Feature](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) allows you to manage your indexer storage and compute resources in a ___cost-effective___ manner by scaling those resources separately. SmartStore utilizes a fast storage cache on each indexer node to keep recent data locally available for search and keep other data in a remote object store. Look into the [SmartStore Resource Guide](SmartStore.md) document for configuring and using SmartStore through operator.
+For production environments, we are requiring the use of Splunk SmartStore. As a Splunk Enterprise deployment's data volume increases, demand for storage typically outpaces demand for compute resources. [Splunk's SmartStore Feature](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) allows you to manage your indexer storage and compute resources in a ___cost-effective___ manner by scaling those resources separately. SmartStore utilizes a fast storage cache on each indexer node to keep recent data locally available for search and keep other data in a remote object store. Look into the [SmartStore Resource Guide](operate/SmartStore.md) document for configuring and using SmartStore through operator.
 
 ## Installing the Splunk Operator
 
@@ -128,9 +128,9 @@ kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/3.1
 
 The reason for appending `--server-side` to the apply command is that some of the CRDs are getting too long according to the CRD standards. There are no real implications caused by this.
 
-The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.
+The [Advanced Installation Instructions](deploy/Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](platforms/OpenShift.md) page.
 
-*Note: We recommended that the Splunk Enterprise Docker image is copied to a private registry, or directly onto your Kubernetes workers before creating large Splunk Enterprise deployments. See the [Required Images Documentation](Images.md) page, and the [Advanced Installation Instructions](Install.md) page for guidance on working with copies of the Docker images.*
+*Note: We recommended that the Splunk Enterprise Docker image is copied to a private registry, or directly onto your Kubernetes workers before creating large Splunk Enterprise deployments. See the [Required Images Documentation](deploy/Images.md) page, and the [Advanced Installation Instructions](deploy/Install.md) page for guidance on working with copies of the Docker images.*
 
 After the Splunk Operator starts, you'll see a single pod running within your current namespace:
 ```
@@ -141,13 +141,13 @@ splunk-operator-75f5d4d85b-8pshn   1/1     Running   0          5s
 
 ### Installation using Helm charts
 
-Installing the Splunk Operator using Helm allows you to quickly deploy the operator and Splunk Enterprise in a Kubernetes cluster. The operator is easily configurable allowing for advanced installations including support for Splunk Validated Architectures. Helm also provides a number of features to manage the operator lifecycle. The [Installation using Helm](Helm.md) page will walk you through installing and configuring Splunk Enterprise deployments using Helm charts.
+Installing the Splunk Operator using Helm allows you to quickly deploy the operator and Splunk Enterprise in a Kubernetes cluster. The operator is easily configurable allowing for advanced installations including support for Splunk Validated Architectures. Helm also provides a number of features to manage the operator lifecycle. The [Installation using Helm](deploy/Helm.md) page will walk you through installing and configuring Splunk Enterprise deployments using Helm charts.
 
-Splunk Operator CRDs are not deployed as part of the helm installation. Users need to deploy the latest CRDs manually. See the [Installation using Helm](Helm.md) documentation on how to deploy the CRDs before installing the helm charts.
+Splunk Operator CRDs are not deployed as part of the helm installation. Users need to deploy the latest CRDs manually. See the [Installation using Helm](deploy/Helm.md) documentation on how to deploy the CRDs before installing the helm charts.
 
 ## Upgrading the Splunk Operator
 
-For information on upgrading the Splunk Operator, see the [How to upgrade Splunk Operator and Splunk Enterprise Deployments](SplunkOperatorUpgrade.md) page.
+For information on upgrading the Splunk Operator, see the [How to upgrade Splunk Operator and Splunk Enterprise Deployments](reference/SplunkOperatorUpgrade.md) page.
 
 ## Creating a Splunk Enterprise deployment
 
@@ -186,7 +186,7 @@ splunk-s1-standalone-0                  1/1    Running   0          45s
 kubectl port-forward splunk-s1-standalone-0 8000
 ```
 
-3. Get your passwords for the namespace. The Splunk Enterprise passwords used in the namespace are generated automatically. To learn how to find and read the passwords, see the [Reading global kubernetes secret object](Examples.md#reading-global-kubernetes-secret-object) page.
+3. Get your passwords for the namespace. The Splunk Enterprise passwords used in the namespace are generated automatically. To learn how to find and read the passwords, see the [Reading global kubernetes secret object](reference/Examples.md#reading-global-kubernetes-secret-object) page.
 
 
 4. Log into Splunk Enterprise at http://localhost:8000 using the `admin` account with the password.
@@ -197,12 +197,12 @@ kubectl port-forward splunk-s1-standalone-0 8000
 kubectl delete standalone s1
 ```
 
-The `Standalone` custom resource is just one of the resources the Splunk Operator provides. You can find more custom resources and the parameters they support on the [Custom Resource Guide](CustomResources.md) page.
+The `Standalone` custom resource is just one of the resources the Splunk Operator provides. You can find more custom resources and the parameters they support on the [Custom Resource Guide](operate/CustomResources.md) page.
 
 For additional deployment examples, including Splunk Enterprise clusters, see the
-[Configuring Splunk Enterprise Deployments](Examples.md) page.
+[Configuring Splunk Enterprise Deployments](reference/Examples.md) page.
 
-For additional guidance on making Splunk Enterprise ports accessible outside of Kubernetes, see the [Configuring Ingress](Ingress.md) page.
+For additional guidance on making Splunk Enterprise ports accessible outside of Kubernetes, see the [Configuring Ingress](deploy/Ingress.md) page.
 
 ## Contacting Support
 If you are a Splunk Enterprise customer with a valid support entitlement contract and have a Splunk-related question, you can open a support case on the https://www.splunk.com/ support portal.

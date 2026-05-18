@@ -14,12 +14,13 @@
 // limitations under the License.
 
 /*
-Package splkcontroller manipulates Kubernetes resources using its REST API.
-This package has no dependencies outside of the standard go and kubernetes
-libraries, and the splunk.common package.
+Package reconcile contains per-CR orchestration sub-packages. Each sub-package
+owns the thin reconcile loop for a single Custom Resource type: it reads the CR,
+builds Kubernetes objects via resources/, applies them via k8sops/, delegates
+multi-step workflows to workflow/<domain>/, and writes status.
 
-This package will be renamed to k8sops/ to reflect its actual scope (full K8s
-CRUD) and avoid confusion with the new reconcile/<cr>/ packages. See
-pkg/splunk/k8sops/doc.go for the target documentation.
+Sub-packages must never import each other. Allowed imports from pkg/splunk/:
+
+	common/, util/, resources/, k8sops/, client/, workflow/
 */
-package splkcontroller
+package reconcile
