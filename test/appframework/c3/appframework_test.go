@@ -436,9 +436,17 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready")
 
 			// Verify RF SF is met
-			Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyRFSFMet(attemptCtx, deployment)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "RF/SF not met")
 
-			Expect(testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)).To(Succeed(), "MC version not changed or not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyMCVersionChangedAndReady(attemptCtx, deployment, mc, resourceVersion)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "MC version not changed or not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())

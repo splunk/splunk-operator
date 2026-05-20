@@ -318,32 +318,42 @@ func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1
 			revised.Data[url.Name] = url.Value
 		} else {
 			newInsURLs := strings.Split(url.Value, ",")
-			//1. Find number of URLs, that crname,  present in the current configmap
-			var crURLs string
-			for _, newURL := range newInsURLs {
-				if strings.Contains(revised.Data[url.Name], newURL) {
-					if crURLs == "" {
-						crURLs = newURL
-					} else {
-						str := []string{crURLs, newURL}
-						crURLs = strings.Join(str, ",")
-					}
+			// 1. Count CR-owned URLs currently present in the configmap for this key.
+			//    We compare counts (not string lengths) because string-length comparison
+			//    is unreliable: it depends on whether new entries are a subset of current,
+			//    and could never detect scale-down (where current has MORE CR URLs than new).
+			currentURLs := strings.Split(revised.Data[url.Name], ",")
+			currentCRCount := 0
+			for _, curr := range currentURLs {
+				if strings.Contains(curr, crName) {
+					currentCRCount++
 				}
 			}
-			//2. if length of both same then just reconcile
-			if len(crURLs) == len(url.Value) {
-				//reconcile
-				continue
-			} else if len(crURLs) < len(url.Value) { //3. incoming URLs are more than current scaling up
-				//scaling UP
+			newCount := len(newInsURLs)
+
+			// 2. Same count: ensure all new entries are present (otherwise it's a rename/no-op),
+			//    nothing to add or remove.
+			if currentCRCount == newCount {
+				allPresent := true
+				for _, newEntry := range newInsURLs {
+					if !strings.Contains(revised.Data[url.Name], newEntry) {
+						allPresent = false
+						break
+					}
+				}
+				if allPresent {
+					continue
+				}
+			}
+
+			if currentCRCount < newCount { // 3. scaling UP
 				for _, newEntry := range newInsURLs {
 					if !strings.Contains(revised.Data[url.Name], newEntry) {
 						str := []string{revised.Data[url.Name], newEntry}
 						revised.Data[url.Name] = strings.Join(str, ",")
 					}
 				}
-			} else { //4. incoming URLs are less than current then scaling down
-				//scaling DOWN pods
+			} else { // 4. scaling DOWN (currentCRCount > newCount)
 				DeleteURLsConfigMap(revised, crName, newURLs, false)
 			}
 		}

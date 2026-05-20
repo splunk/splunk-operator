@@ -33,7 +33,9 @@ import (
 // getMCPod Get MC Pod String
 func getMCPod(ns string) string {
 	mcPod := fmt.Sprintf(MonitoringConsolePod, ns)
-	output, err := exec.Command("kubectl", "get", "pod", "-n", ns, mcPod).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), KubectlQuickTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "kubectl", "get", "pod", "-n", ns, mcPod).Output()
 	if err != nil {
 		cmd := fmt.Sprintf("kubectl get pods -n %s %s", ns, mcPod)
 		logf.Log.Error(err, "Failed to execute command", "command", cmd)
@@ -45,7 +47,9 @@ func getMCPod(ns string) string {
 // getMCSts Get Monitoring Console StatefulSet
 func getMCSts(ns string) string {
 	mcSts := fmt.Sprintf(MonitoringConsoleSts, ns)
-	output, err := exec.Command("kubectl", "get", "sts", "-n", ns, mcSts).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), KubectlQuickTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "kubectl", "get", "sts", "-n", ns, mcSts).Output()
 	if err != nil {
 		cmd := fmt.Sprintf("kubectl get sts -n %s %s", ns, mcSts)
 		logf.Log.Error(err, "Failed to execute command", "command", cmd)
@@ -60,7 +64,9 @@ func GetConfiguredPeers(ns string, mcName string) []string {
 	var peerList []string
 	if len(podName) > 0 {
 		peerFile := "/opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf"
-		output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "cat", peerFile).Output()
+		ctx, cancel := context.WithTimeout(context.Background(), KubectlExecTimeout)
+		defer cancel()
+		output, err := exec.CommandContext(ctx, "kubectl", "exec", "-n", ns, podName, "--", "cat", peerFile).Output()
 		if err != nil {
 			cmd := fmt.Sprintf("kubectl exec -n %s %s -- cat %s", ns, podName, peerFile)
 			logf.Log.Error(err, "Failed to execute command", "command", cmd)

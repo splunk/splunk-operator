@@ -109,7 +109,9 @@ func (d *Deployment) Teardown() error {
 		if len(podName) == 0 {
 			continue
 		}
-		output, err := exec.Command("kubectl", "logs", "-n", d.testenv.GetName(), podName).Output()
+		ctx, cancel := context.WithTimeout(context.Background(), KubectlExecTimeout)
+		output, err := exec.CommandContext(ctx, "kubectl", "logs", "-n", d.testenv.GetName(), podName).Output()
+		cancel()
 		if err != nil {
 			d.testenv.Log.Error(err, fmt.Sprintf("Failed to get logs from Pod %s", podName))
 		} else {
@@ -132,10 +134,12 @@ func (d *Deployment) Teardown() error {
 	var err error
 	var output []byte
 	podName := d.testenv.GetOperatorPodName()
+	ctx, cancel := context.WithTimeout(context.Background(), KubectlExecTimeout)
+	defer cancel()
 	if d.testenv.clusterWideOperator != "true" {
-		output, err = exec.Command("kubectl", "logs", "-n", d.testenv.GetName(), podName).Output()
+		output, err = exec.CommandContext(ctx, "kubectl", "logs", "-n", d.testenv.GetName(), podName).Output()
 	} else {
-		output, err = exec.Command("kubectl", "logs", "-n", "splunk-operator", podName, "manager").Output()
+		output, err = exec.CommandContext(ctx, "kubectl", "logs", "-n", "splunk-operator", podName, "manager").Output()
 	}
 	if err != nil {
 		d.testenv.Log.Error(err, fmt.Sprintf("Failed to get operator logs from Pod %s", podName))
