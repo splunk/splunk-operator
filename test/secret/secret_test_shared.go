@@ -16,7 +16,6 @@ package secret
 import (
 	"context"
 	"fmt"
-	"time"
 
 	. "github.com/onsi/gomega"
 
@@ -94,21 +93,28 @@ func RunC3SecretUpdateTest(ctx context.Context, deployment *testenv.Deployment, 
 
 	Expect(testenv.VerifyLMAndClusterManagerReady(ctx, deployment, testcaseEnvInst, config)).To(Succeed(), "LM and Cluster Manager not ready")
 
-	// Ensure Search Head Cluster goes to Ready phase
-	Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready")
+	// Verify the cascade in the order the operator actually performs it:
+	// CM -> IndexerCluster roll -> SearchHeadCluster roll. Waiting on SHC
+	// before IDXC has finished rolling can exhaust the SHC ready budget
+	// while search peers are still being recycled.
 
-	// Wait for PasswordSyncCompleted event on SearchHeadCluster
-	shcName := deployment.GetName() + "-shc"
-	err = testcaseEnvInst.WaitForPasswordSyncCompleted(ctx, deployment, testcaseEnvInst.GetName(), shcName, 2*time.Minute)
-	Expect(err).To(Succeed(), "Timed out waiting for PasswordSyncCompleted event on SearchHeadCluster")
-
-	// Ensure Indexers go to Ready phase
-	Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready")
+	// Ensure Indexers go to Ready phase. Secret-driven rolling restart of a
+	// 3-node IDXC plus CM bundle push can exceed the 15m DefaultTimeout used
+	// by VerifySingleSiteIndexersReady, so wait with a larger budget here.
+	idxcName := deployment.GetName() + "-idxc"
+	Expect(testcaseEnvInst.WatchForIndexerClusterPhase(ctx, deployment, testcaseEnvInst.GetName(), idxcName, enterpriseApi.PhaseReady, testenv.SecretUpdateClusterReadyTimeout)).To(Succeed(), "Indexers not ready")
 
 	// Wait for PasswordSyncCompleted event on IndexerCluster
-	idxcName := deployment.GetName() + "-idxc"
-	err = testcaseEnvInst.WaitForPasswordSyncCompleted(ctx, deployment, testcaseEnvInst.GetName(), idxcName, 2*time.Minute)
+	err = testcaseEnvInst.WaitForPasswordSyncCompleted(ctx, deployment, testcaseEnvInst.GetName(), idxcName, testenv.PasswordSyncEventTimeout)
 	Expect(err).To(Succeed(), "Timed out waiting for PasswordSyncCompleted event on IndexerCluster")
+
+	// Ensure Search Head Cluster goes to Ready phase (same rationale as IDXC).
+	shcInstance := deployment.GetName() + "-shc"
+	Expect(testcaseEnvInst.WatchForSearchHeadClusterPhase(ctx, deployment, testcaseEnvInst.GetName(), shcInstance, enterpriseApi.PhaseReady, testenv.SecretUpdateClusterReadyTimeout)).To(Succeed(), "Search Head Cluster not ready")
+
+	// Wait for PasswordSyncCompleted event on SearchHeadCluster
+	err = testcaseEnvInst.WaitForPasswordSyncCompleted(ctx, deployment, testcaseEnvInst.GetName(), shcInstance, testenv.PasswordSyncEventTimeout)
+	Expect(err).To(Succeed(), "Timed out waiting for PasswordSyncCompleted event on SearchHeadCluster")
 
 	Expect(testenv.VerifyPostSecretChangeCluster(ctx, deployment, testcaseEnvInst, mc, resourceVersion, updatedSecretData)).To(Succeed(), "Post secret change cluster verification failed")
 }
