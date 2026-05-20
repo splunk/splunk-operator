@@ -3,6 +3,7 @@ package testenv
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -239,31 +240,41 @@ func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string)
 
 	// Create a folder named 'untarred_apps' to store untarred apps folders
 	untarredAppsMainFolder := downloadDir + "/untarred_apps"
-	cmd := exec.Command("mkdir", untarredAppsMainFolder)
-	cmd.Run()
+	if err := os.MkdirAll(untarredAppsMainFolder, 0755); err != nil {
+		return fmt.Errorf("create %s: %w", untarredAppsMainFolder, err)
+	}
 
 	// Create a folder named 'disabled_apps' to stored disabled apps tgz files
 	disabledAppsFolder := downloadDir + "/disabled_apps"
-	cmd = exec.Command("mkdir", disabledAppsFolder)
-	cmd.Run()
+	if err := os.MkdirAll(disabledAppsFolder, 0755); err != nil {
+		return fmt.Errorf("create %s: %w", disabledAppsFolder, err)
+	}
 
 	for _, key := range appFileList {
 		// Create a specific folder for each app in 'untarred_apps'
 		tarfile := downloadDir + "/" + key
 		lastInd := strings.LastIndex(key, ".")
 		untarredCurrentAppFolder := untarredAppsMainFolder + "/" + key[:lastInd]
-		cmd := exec.Command("mkdir", untarredCurrentAppFolder)
-		cmd.Run()
+		if err := os.MkdirAll(untarredCurrentAppFolder, 0755); err != nil {
+			return fmt.Errorf("create %s: %w", untarredCurrentAppFolder, err)
+		}
 
 		// Untar the app
-		cmd = exec.Command("tar", "-xf", tarfile, "-C", untarredCurrentAppFolder)
-		cmd.Run()
+		if out, err := exec.Command("tar", "-xf", tarfile, "-C", untarredCurrentAppFolder).CombinedOutput(); err != nil {
+			return fmt.Errorf("untar %s into %s: %w (output: %s)", tarfile, untarredCurrentAppFolder, err, string(out))
+		}
 
 		// Disable the app
 		// - Get the name of the untarred app folder (as it could be different from the tgz file)
 		wildcardpath := untarredCurrentAppFolder + "/*/./"
-		bytepath, _ := exec.Command("/bin/sh", "-c", "cd "+wildcardpath+"; pwd").Output()
+		bytepath, err := exec.Command("/bin/sh", "-c", "cd "+wildcardpath+"; pwd").Output()
+		if err != nil {
+			return fmt.Errorf("locate untarred app root under %s: %w", untarredCurrentAppFolder, err)
+		}
 		untarredAppRootFolder := string(bytepath)
+		if len(untarredAppRootFolder) == 0 {
+			return fmt.Errorf("locate untarred app root under %s: empty output", untarredCurrentAppFolder)
+		}
 		untarredAppRootFolder = untarredAppRootFolder[:len(untarredAppRootFolder)-1] //removing \n at the end of folder path
 
 		// - Edit /default/app.conf (add "state = disabled" in [install] stanza)
@@ -291,8 +302,9 @@ func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string)
 		lastInd = strings.LastIndex(untarredAppRootFolder, "/")
 		appFolderName := untarredAppRootFolder[lastInd+1:]
 		tarDestination := disabledAppsFolder + "/" + key
-		cmd = exec.Command("tar", "-czf", tarDestination, "--directory", untarredCurrentAppFolder, appFolderName)
-		cmd.Run()
+		if out, err := exec.Command("tar", "-czf", tarDestination, "--directory", untarredCurrentAppFolder, appFolderName).CombinedOutput(); err != nil {
+			return fmt.Errorf("tar %s -> %s: %w (output: %s)", untarredCurrentAppFolder, tarDestination, err, string(out))
+		}
 	}
 
 	// Upload disabled apps to S3

@@ -286,6 +286,10 @@ else
   # TODO CSPL-4731: replace public GitHub URLs with internal mirror once
   # artifact mirroring is set up for the SOK staging environment.
   log_step "cluster:addons:metrics-server"
+  # Remove any pre-existing metrics-server Deployment to avoid conflicts with
+  # the upstream manifest (e.g. immutable selector changes or duplicate port
+  # names from older bundled versions). Other resources re-apply safely.
+  kubectl delete deployment metrics-server -n kube-system --ignore-not-found 2>&1 | tee -a "${cluster_log}"
   kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml 2>&1 | tee -a "${cluster_log}"
   log_step "cluster:addons:metrics-server:complete"
 

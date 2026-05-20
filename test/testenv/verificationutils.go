@@ -78,7 +78,9 @@ type PodDetailsStruct struct {
 
 // getPodDetails fetches and unmarshals the JSON details for a single pod.
 func getPodDetails(ns, podName string) (*PodDetailsStruct, error) {
-	output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), KubectlQuickTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
 	if err != nil {
 		return nil, fmt.Errorf("kubectl get pod %s in ns %s: %w", podName, ns, err)
 	}
@@ -114,7 +116,8 @@ func PollConsistently(ctx context.Context, duration, interval time.Duration, con
 // Callers that need a shorter per-attempt budget (e.g. inside Eventually)
 // should pass a context with a tighter deadline.
 func (testenv *TestCaseEnv) VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, mcName string, monitoringConsole *enterpriseApi.MonitoringConsole) error {
-	err := testenv.WatchForMonitoringConsolePhase(ctx, deployment, testenv.GetName(), mcName, enterpriseApi.PhaseReady, deployment.GetTimeout())
+	// Use optimized watch to wait for Ready phase
+	err := testenv.WatchForMonitoringConsolePhase(ctx, deployment, testenv.GetName(), mcName, enterpriseApi.PhaseReady, DefaultTimeout)
 	if err != nil {
 		return fmt.Errorf("monitoring console %s failed to reach Ready phase: %w", mcName, err)
 	}
@@ -143,7 +146,7 @@ func (testenv *TestCaseEnv) VerifyMonitoringConsoleReady(ctx context.Context, de
 // VerifyStandaloneReady verify Standalone is in ReadyStatus and does not flip-flop
 func (testenv *TestCaseEnv) VerifyStandaloneReady(ctx context.Context, deployment *Deployment, deploymentName string, standalone *enterpriseApi.Standalone) error {
 	// Use optimized watch to wait for Ready phase
-	err := testenv.WatchForStandalonePhase(ctx, deployment, testenv.GetName(), standalone.Name, enterpriseApi.PhaseReady, deployment.GetTimeout())
+	err := testenv.WatchForStandalonePhase(ctx, deployment, testenv.GetName(), standalone.Name, enterpriseApi.PhaseReady, DefaultTimeout)
 	if err != nil {
 		return fmt.Errorf("standalone failed to reach Ready phase: %w", err)
 	}
@@ -181,40 +184,73 @@ func (testenv *TestCaseEnv) VerifyStandalonePhaseAndReady(ctx context.Context, d
 // VerifySearchHeadClusterReady verify SHC is in READY status and does not flip-flop
 func (testenv *TestCaseEnv) VerifySearchHeadClusterReady(ctx context.Context, deployment *Deployment) error {
 	instanceName := fmt.Sprintf("%s-shc", deployment.GetName())
-	// Use optimized watch to wait for Ready phase (checks both Phase and DeployerPhase)
-	err := testenv.WatchForSearchHeadClusterPhase(ctx, deployment, testenv.GetName(), instanceName, enterpriseApi.PhaseReady, deployment.GetTimeout())
-	if err != nil {
-		return fmt.Errorf("SearchHeadCluster failed to reach Ready phase: %w", err)
-	}
 
-	// Refresh the instance to get latest state
+	// Honor the deployment's configured timeout so suites that explicitly opt
+	// into a larger budget (e.g. LongTimeout / MediumLongTimeout / WithTimeout(4000))
+	// aren't silently hard-capped at DefaultTimeout (30m).
+	overallTimeout := deployment.GetTimeout()
+	if overallTimeout <= 0 {
+		overallTimeout = DefaultTimeout
+	}
+	overallDeadline := time.Now().Add(overallTimeout)
+
 	shc := &enterpriseApi.SearchHeadCluster{}
-	err = deployment.GetInstance(ctx, instanceName, shc)
-	if err != nil {
-		return fmt.Errorf("failed to get SearchHeadCluster instance: %w", err)
-	}
-	testenv.Log.Info("SearchHeadCluster reached Ready phase", "instance", shc.ObjectMeta.Name, "phase", shc.Status.Phase, "deployerPhase", shc.Status.DeployerPhase)
-	DumpGetPods(testenv.GetName())
+	// Retry the "wait for Ready + verify it stays Ready" cycle as a single
+	// unit, bounded by the deployment timeout. A brief flip back to Pending
+	// during an in-flight app-framework reconcile (legitimate operator
+	// behavior between download/copy/install stages) should not fail the
+	// whole spec — we just re-wait for the next steady Ready and retry the
+	// consistency window.
+	for {
+		remaining := time.Until(overallDeadline)
+		if remaining <= 0 {
+			return fmt.Errorf("SearchHeadCluster did not reach steady Ready phase within %s", overallTimeout)
+		}
 
-	// In a steady state, we should stay in Ready and not flip-flop around
-	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+		// Use optimized watch to wait for Ready phase (checks both Phase and DeployerPhase).
+		// Cap each wait attempt at the remaining overall budget.
+		err := testenv.WatchForSearchHeadClusterPhase(ctx, deployment, testenv.GetName(), instanceName, enterpriseApi.PhaseReady, remaining)
+		if err != nil {
+			return fmt.Errorf("SearchHeadCluster failed to reach Ready phase: %w", err)
+		}
+
+		// Refresh the instance to get latest state
 		if err := deployment.GetInstance(ctx, instanceName, shc); err != nil {
-			testenv.Log.Info("Transient error refreshing SearchHeadCluster during consistency check", "error", err)
+			return fmt.Errorf("failed to get SearchHeadCluster instance: %w", err)
 		}
-		testenv.Log.Info("Check for Consistency Search Head Cluster phase to be ready", "instance", shc.ObjectMeta.Name, "phase", shc.Status.Phase)
-		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-shc-")
-		if shc.Status.Phase != enterpriseApi.PhaseReady {
-			return fmt.Errorf("SHC phase flipped to %s", shc.Status.Phase)
+		testenv.Log.Info("SearchHeadCluster reached Ready phase", "instance", shc.ObjectMeta.Name, "phase", shc.Status.Phase, "deployerPhase", shc.Status.DeployerPhase)
+		DumpGetPods(testenv.GetName())
+
+		// In a steady state, we should stay in Ready and not flip-flop around.
+		consistencyErr := PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+			if err := deployment.GetInstance(ctx, instanceName, shc); err != nil {
+				testenv.Log.Info("Transient error refreshing SearchHeadCluster during consistency check", "error", err)
+			}
+			testenv.Log.Info("Check for Consistency Search Head Cluster phase to be ready", "instance", shc.ObjectMeta.Name, "phase", shc.Status.Phase)
+			DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-shc-")
+			if shc.Status.Phase != enterpriseApi.PhaseReady {
+				return fmt.Errorf("SHC phase flipped to %s", shc.Status.Phase)
+			}
+			return nil
+		})
+		if consistencyErr == nil {
+			return nil
 		}
-		return nil
-	})
+
+		// Bail out immediately on context cancellation rather than spinning.
+		if ctx.Err() != nil {
+			return fmt.Errorf("context cancelled while waiting for steady SHC Ready: %w", consistencyErr)
+		}
+
+		testenv.Log.Info("SHC consistency check failed, will re-wait for steady Ready", "error", consistencyErr, "remaining", time.Until(overallDeadline))
+	}
 }
 
 // VerifySingleSiteIndexersReady verify single site indexers go to ready state
 func (testenv *TestCaseEnv) VerifySingleSiteIndexersReady(ctx context.Context, deployment *Deployment) error {
 	instanceName := fmt.Sprintf("%s-idxc", deployment.GetName())
 	// Use optimized watch to wait for Ready phase
-	err := testenv.WatchForIndexerClusterPhase(ctx, deployment, testenv.GetName(), instanceName, enterpriseApi.PhaseReady, deployment.GetTimeout())
+	err := testenv.WatchForIndexerClusterPhase(ctx, deployment, testenv.GetName(), instanceName, enterpriseApi.PhaseReady, DefaultTimeout)
 	if err != nil {
 		return fmt.Errorf("IndexerCluster failed to reach Ready phase: %w", err)
 	}
@@ -246,7 +282,7 @@ func (testenv *TestCaseEnv) VerifySingleSiteIndexersReady(ctx context.Context, d
 func (testenv *TestCaseEnv) VerifyIngestorReady(ctx context.Context, deployment *Deployment) error {
 	instanceName := fmt.Sprintf("%s-ingest", deployment.GetName())
 	// Use optimized watch to wait for Ready phase
-	err := testenv.WatchForIngestorClusterPhase(ctx, deployment, testenv.GetName(), instanceName, enterpriseApi.PhaseReady, deployment.GetTimeout())
+	err := testenv.WatchForIngestorClusterPhase(ctx, deployment, testenv.GetName(), instanceName, enterpriseApi.PhaseReady, DefaultTimeout)
 	if err != nil {
 		return fmt.Errorf("IngestorCluster failed to reach Ready phase: %w", err)
 	}
@@ -277,7 +313,7 @@ func (testenv *TestCaseEnv) VerifyIngestorReady(ctx context.Context, deployment 
 // VerifyClusterManagerReady verify Cluster Manager Instance is in ready status
 func (testenv *TestCaseEnv) VerifyClusterManagerReady(ctx context.Context, deployment *Deployment) error {
 	// Use optimized watch to wait for Ready phase
-	err := testenv.WatchForClusterManagerPhase(ctx, deployment, testenv.GetName(), deployment.GetName(), enterpriseApi.PhaseReady, deployment.GetTimeout())
+	err := testenv.WatchForClusterManagerPhase(ctx, deployment, testenv.GetName(), deployment.GetName(), enterpriseApi.PhaseReady, DefaultTimeout)
 	if err != nil {
 		return fmt.Errorf("ClusterManager failed to reach Ready phase: %w", err)
 	}
@@ -309,7 +345,7 @@ func (testenv *TestCaseEnv) VerifyClusterManagerReady(ctx context.Context, deplo
 // VerifyClusterMasterReady verify Cluster Master Instance is in ready status
 func (testenv *TestCaseEnv) VerifyClusterMasterReady(ctx context.Context, deployment *Deployment) error {
 	// Use optimized watch to wait for Ready phase
-	err := testenv.WatchForClusterMasterPhase(ctx, deployment, testenv.GetName(), deployment.GetName(), enterpriseApi.PhaseReady, deployment.GetTimeout())
+	err := testenv.WatchForClusterMasterPhase(ctx, deployment, testenv.GetName(), deployment.GetName(), enterpriseApi.PhaseReady, DefaultTimeout)
 	if err != nil {
 		return fmt.Errorf("ClusterMaster failed to reach Ready phase: %w", err)
 	}
@@ -900,49 +936,65 @@ func (testenv *TestCaseEnv) VerifyAppInstalled(ctx context.Context, deployment *
 
 	for _, podName := range pods {
 		for _, appName := range apps {
-			status, versionInstalled, err := GetPodAppStatus(ctx, deployment, podName, ns, appName, clusterWideInstall)
-			testenv.Log.Info("App details", "app", appName, "status", status, "version", versionInstalled, "error", err)
-			if err != nil {
-				return fmt.Errorf("unable to get app status on pod %s: %w", podName, err)
-			}
-			comparison := strings.EqualFold(status, statusCheck)
-			//Check the app is installed on specific pods and un-installed on others for cluster-wide install
-			var check bool
-			if clusterWideInstall {
-				if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
-					check = true
+			// Poll per (pod, app) to tolerate transient mismatches just after install/bundle-push
+			var lastErr error
+			pollErr := wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
+				status, versionInstalled, err := GetPodAppStatus(ctx, deployment, podName, ns, appName, clusterWideInstall)
+				testenv.Log.Info("App details", "app", appName, "status", status, "version", versionInstalled, "error", err)
+				if err != nil {
+					lastErr = fmt.Errorf("unable to get app status on pod %s: %w", podName, err)
+					return false, nil
+				}
+				comparison := strings.EqualFold(status, statusCheck)
+				//Check the app is installed on specific pods and un-installed on others for cluster-wide install
+				var check bool
+				if clusterWideInstall {
+					if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
+						check = true
+						testenv.Log.Info("App Install Check", "pod", podName, "app", appName, "expected", check, "found", comparison, "scope:cluster", clusterWideInstall)
+						if comparison != check {
+							lastErr = fmt.Errorf("app %s install check failed on pod %s: expected=%v, found=%v", appName, podName, check, comparison)
+							return false, nil
+						}
+					}
+				} else {
+					// For local install check pods individually
+					if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
+						check = false
+					} else {
+						check = true
+					}
 					testenv.Log.Info("App Install Check", "pod", podName, "app", appName, "expected", check, "found", comparison, "scope:cluster", clusterWideInstall)
 					if comparison != check {
-						return fmt.Errorf("app %s install check failed on pod %s: expected=%v, found=%v", appName, podName, check, comparison)
+						lastErr = fmt.Errorf("app %s install check failed on pod %s: expected=%v, found=%v", appName, podName, check, comparison)
+						return false, nil
 					}
 				}
-			} else {
-				// For local install check pods individually
-				if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
-					check = false
-				} else {
-					check = true
-				}
-				testenv.Log.Info("App Install Check", "pod", podName, "app", appName, "expected", check, "found", comparison, "scope:cluster", clusterWideInstall)
-				if comparison != check {
-					return fmt.Errorf("app %s install check failed on pod %s: expected=%v, found=%v", appName, podName, check, comparison)
-				}
-			}
 
-			if versionCheck {
-				// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
-				if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, "-cluster-manager-") || strings.Contains(podName, "-"+splcommon.ClusterManager+"-"))) {
-					var expectedVersion string
-					if checkupdated {
-						expectedVersion = AppInfo[appName]["V2"]
-					} else {
-						expectedVersion = AppInfo[appName]["V1"]
-					}
-					testenv.Log.Info("Verify app", "pod", podName, "app", appName, "expectedVersion", expectedVersion, "versionInstalled", versionInstalled, "updated", checkupdated)
-					if versionInstalled != expectedVersion {
-						return fmt.Errorf("app %s version mismatch on pod %s: expected=%s, found=%s", appName, podName, expectedVersion, versionInstalled)
+				if versionCheck {
+					// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
+					if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, "-cluster-manager-") || strings.Contains(podName, "-"+splcommon.ClusterManager+"-"))) {
+						var expectedVersion string
+						if checkupdated {
+							expectedVersion = AppInfo[appName]["V2"]
+						} else {
+							expectedVersion = AppInfo[appName]["V1"]
+						}
+						testenv.Log.Info("Verify app", "pod", podName, "app", appName, "expectedVersion", expectedVersion, "versionInstalled", versionInstalled, "updated", checkupdated)
+						if versionInstalled != expectedVersion {
+							lastErr = fmt.Errorf("app %s version mismatch on pod %s: expected=%s, found=%s", appName, podName, expectedVersion, versionInstalled)
+							return false, nil
+						}
 					}
 				}
+				lastErr = nil
+				return true, nil
+			})
+			if pollErr != nil {
+				if lastErr != nil {
+					return lastErr
+				}
+				return fmt.Errorf("timed out verifying app %s on pod %s: %w", appName, podName, pollErr)
 			}
 		}
 	}
@@ -1822,24 +1874,25 @@ func VerifyMCOneAfterCMReconfig(ctx context.Context, deployment *Deployment, tes
 func VerifyMCTwoAfterSHCReconfig(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv,
 	params MCReconfigParams, mcTwoName string, shPods, indexerPods []string, timeout time.Duration) error {
 
-	testcaseEnvInst.Log.Info("Verify CM in MC Two Config Map after SHC Reconfig")
-	if err := testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
-		[]string{fmt.Sprintf(params.CMServiceNameFmt, deployment.GetName())}, params.CMURLKey, mcTwoName, true); err != nil {
-		return err
-	}
-
-	testcaseEnvInst.Log.Info("Verify Deployer in MC Two Config Map after SHC Reconfig")
-	if err := testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
-		[]string{fmt.Sprintf(DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcTwoName, true); err != nil {
-		return err
-	}
-
-	testcaseEnvInst.Log.Info("Verify SH Pods in MC Two Config Map after SHC Reconfig")
-	if err := testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, true); err != nil {
-		return err
-	}
+	cmService := []string{fmt.Sprintf(params.CMServiceNameFmt, deployment.GetName())}
+	deployerService := []string{fmt.Sprintf(DeployerServiceName, deployment.GetName())}
 
 	if timeout > 0 {
+		testcaseEnvInst.Log.Info("Verify CM in MC Two Config Map after SHC Reconfig (with wait)")
+		if err := testcaseEnvInst.WaitForPodsInMCConfigMap(ctx, deployment, cmService, params.CMURLKey, mcTwoName, true, timeout); err != nil {
+			return fmt.Errorf("timed out waiting for CM in MC two config map after SHC reconfig: %w", err)
+		}
+
+		testcaseEnvInst.Log.Info("Verify Deployer in MC Two Config Map after SHC Reconfig (with wait)")
+		if err := testcaseEnvInst.WaitForPodsInMCConfigMap(ctx, deployment, deployerService, "SPLUNK_DEPLOYER_URL", mcTwoName, true, timeout); err != nil {
+			return fmt.Errorf("timed out waiting for deployer in MC two config map after SHC reconfig: %w", err)
+		}
+
+		testcaseEnvInst.Log.Info("Verify SH Pods in MC Two Config Map after SHC Reconfig (with wait)")
+		if err := testcaseEnvInst.WaitForPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, true, timeout); err != nil {
+			return fmt.Errorf("timed out waiting for search heads in MC two config map after SHC reconfig: %w", err)
+		}
+
 		testcaseEnvInst.Log.Info("Verify SH Pods in MC Two Config String after SHC Reconfig (with wait)")
 		if err := testcaseEnvInst.WaitForPodsInMCConfigString(ctx, shPods, mcTwoName, true, false, timeout); err != nil {
 			return fmt.Errorf("timed out waiting for search heads in MC two config after SHC reconfig: %w", err)
@@ -1850,6 +1903,21 @@ func VerifyMCTwoAfterSHCReconfig(ctx context.Context, deployment *Deployment, te
 			return fmt.Errorf("timed out waiting for indexers in MC two config after SHC reconfig: %w", err)
 		}
 	} else {
+		testcaseEnvInst.Log.Info("Verify CM in MC Two Config Map after SHC Reconfig")
+		if err := testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, cmService, params.CMURLKey, mcTwoName, true); err != nil {
+			return err
+		}
+
+		testcaseEnvInst.Log.Info("Verify Deployer in MC Two Config Map after SHC Reconfig")
+		if err := testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, deployerService, "SPLUNK_DEPLOYER_URL", mcTwoName, true); err != nil {
+			return err
+		}
+
+		testcaseEnvInst.Log.Info("Verify SH Pods in MC Two Config Map after SHC Reconfig")
+		if err := testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, true); err != nil {
+			return err
+		}
+
 		testcaseEnvInst.Log.Info("Verify SH Pods in MC Two Config String after SHC Reconfig")
 		if err := testcaseEnvInst.VerifyPodsInMCConfigString(ctx, shPods, mcTwoName, true, false); err != nil {
 			return err
@@ -1873,29 +1941,45 @@ func VerifyMCOneAfterSHCReconfig(ctx context.Context, deployment *Deployment, te
 		return err
 	}
 
-	testcaseEnvInst.Log.Info("Verify CM NOT in MC One Config Map after SHC Reconfig")
-	if err := testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
-		[]string{fmt.Sprintf(params.CMServiceNameFmt, deployment.GetName())}, params.CMURLKey, mcName, false); err != nil {
-		return err
-	}
-
-	testcaseEnvInst.Log.Info("Verify Deployer NOT in MC One Config Map after SHC Reconfig")
-	if err := testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment,
-		[]string{fmt.Sprintf(DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, false); err != nil {
-		return err
-	}
-
-	testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC One Config Map after SHC Reconfig")
-	if err := testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, false); err != nil {
-		return err
-	}
+	cmService := []string{fmt.Sprintf(params.CMServiceNameFmt, deployment.GetName())}
+	deployerService := []string{fmt.Sprintf(DeployerServiceName, deployment.GetName())}
 
 	if timeout > 0 {
+		testcaseEnvInst.Log.Info("Verify CM NOT in MC One Config Map after SHC Reconfig (with wait)")
+		if err := testcaseEnvInst.WaitForPodsInMCConfigMap(ctx, deployment, cmService, params.CMURLKey, mcName, false, timeout); err != nil {
+			return fmt.Errorf("timed out waiting for CM to be removed from MC one config map after SHC reconfig: %w", err)
+		}
+
+		testcaseEnvInst.Log.Info("Verify Deployer NOT in MC One Config Map after SHC Reconfig (with wait)")
+		if err := testcaseEnvInst.WaitForPodsInMCConfigMap(ctx, deployment, deployerService, "SPLUNK_DEPLOYER_URL", mcName, false, timeout); err != nil {
+			return fmt.Errorf("timed out waiting for deployer to be removed from MC one config map after SHC reconfig: %w", err)
+		}
+
+		testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC One Config Map after SHC Reconfig (with wait)")
+		if err := testcaseEnvInst.WaitForPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, false, timeout); err != nil {
+			return fmt.Errorf("timed out waiting for search heads to be removed from MC one config map after SHC reconfig: %w", err)
+		}
+
 		testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC One Config String after SHC Reconfig (with wait)")
 		if err := testcaseEnvInst.WaitForPodsInMCConfigString(ctx, shPods, mcName, false, false, timeout); err != nil {
 			return fmt.Errorf("timed out waiting for search heads to be removed from MC one config after SHC reconfig: %w", err)
 		}
 	} else {
+		testcaseEnvInst.Log.Info("Verify CM NOT in MC One Config Map after SHC Reconfig")
+		if err := testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, cmService, params.CMURLKey, mcName, false); err != nil {
+			return err
+		}
+
+		testcaseEnvInst.Log.Info("Verify Deployer NOT in MC One Config Map after SHC Reconfig")
+		if err := testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, deployerService, "SPLUNK_DEPLOYER_URL", mcName, false); err != nil {
+			return err
+		}
+
+		testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC One Config Map after SHC Reconfig")
+		if err := testcaseEnvInst.VerifyPodsInMCConfigMap(ctx, deployment, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, false); err != nil {
+			return err
+		}
+
 		testcaseEnvInst.Log.Info("Verify SH Pods NOT in MC One Config String after SHC Reconfig")
 		if err := testcaseEnvInst.VerifyPodsInMCConfigString(ctx, shPods, mcName, false, false); err != nil {
 			return err

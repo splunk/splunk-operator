@@ -807,13 +807,14 @@ func newMonitoringConsoleSpecWithGivenSpec(name string, ns string, spec enterpri
 	return &mcSpec
 }
 
-// DumpGetPods prints and returns list of pods in the namespace
+// DumpGetPods prints and returns list of pods in the namespace.
 func DumpGetPods(ns string) []string {
-	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), KubectlQuickTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "kubectl", "get", "pods", "-n", ns).Output()
 	var splunkPods []string
 	if err != nil {
-		//cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
-		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		logf.Log.Error(err, "DumpGetPods: kubectl get pods failed or timed out", "namespace", ns)
 		return nil
 	}
 	for _, line := range strings.Split(string(output), "\n") {
@@ -833,7 +834,9 @@ func (testcaseEnvInst *TestCaseEnv) GetOperatorPodName() string {
 	} else {
 		ns = "splunk-operator"
 	}
-	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), KubectlQuickTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "kubectl", "get", "pods", "-n", ns).Output()
 	var splunkPods string
 	if err != nil {
 		cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
@@ -856,7 +859,9 @@ func (testcaseEnvInst *TestCaseEnv) GetOperatorPodName() string {
 
 // DumpGetPvcs prints and returns list of pvcs in the namespace
 func DumpGetPvcs(ns string) []string {
-	output, err := exec.Command("kubectl", "get", "pvc", "-n", ns).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), KubectlQuickTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "kubectl", "get", "pvc", "-n", ns).Output()
 	var splunkPvcs []string
 	if err != nil {
 		cmd := fmt.Sprintf("kubectl get pvc -n %s", ns)
@@ -1122,7 +1127,9 @@ func (testcaseEnvInst *TestCaseEnv) DeleteOperatorPod() error {
 	}
 	podName = testcaseEnvInst.GetOperatorPodName()
 
-	_, err := exec.Command("kubectl", "delete", "pod", "-n", ns, podName).Output()
+	delCtx, delCancel := context.WithTimeout(context.Background(), KubectlQuickTimeout)
+	defer delCancel()
+	_, err := exec.CommandContext(delCtx, "kubectl", "delete", "pod", "-n", ns, podName).Output()
 	if err != nil {
 		logf.Log.Error(err, "Failed to delete operator pod ", "podName", podName, "namespace", ns)
 		return err
@@ -1172,7 +1179,9 @@ func CreateDummyFileOnOperator(ctx context.Context, deployment *Deployment, podN
 // DeleteConfigMap Delete configMap in the namespace
 func DeleteConfigMap(ns string, ConfigMapName string) error {
 	logf.Log.Info("Delete configMap", "configMapName", ConfigMapName)
-	_, err := exec.Command("kubectl", "delete", "configmap", "-n", ns, ConfigMapName).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), KubectlQuickTimeout)
+	defer cancel()
+	_, err := exec.CommandContext(ctx, "kubectl", "delete", "configmap", "-n", ns, ConfigMapName).Output()
 	if err != nil {
 		logf.Log.Error(err, "Failed to delete config Map", "configMapName", ConfigMapName, "namespace", ns)
 		return err
@@ -1185,7 +1194,9 @@ func GetConfFile(podName, filePath, ns string) (string, error) {
 	var config string
 	var err error
 
-	output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "cat", filePath).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), KubectlExecTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "kubectl", "exec", "-n", ns, podName, "--", "cat", filePath).Output()
 	if err != nil {
 		cmd := fmt.Sprintf("kubectl exec -n %s %s -- cat %s", ns, podName, filePath)
 		logf.Log.Error(err, "Failed to execute command", "command", cmd)
@@ -1200,7 +1211,9 @@ func GetAWSEnv(podName, ns string) (string, error) {
 	var config string
 	var err error
 
-	output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "env", "|", "grep", "-i", "aws").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), KubectlExecTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "kubectl", "exec", "-n", ns, podName, "--", "env", "|", "grep", "-i", "aws").Output()
 	if err != nil {
 		cmd := fmt.Sprintf("kubectl exec -n %s %s -- env | grep -i aws", ns, podName)
 		logf.Log.Error(err, "Failed to execute command", "command", cmd)

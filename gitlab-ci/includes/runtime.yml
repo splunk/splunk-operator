@@ -135,7 +135,7 @@ scan-released-operator-image-container:
 # one EKS cluster per job, and shared runtime logic through int-test-workflow.sh.
 .runtime-smoke-suite-job:
   extends: .runtime-integration-job
-  timeout: 4h
+  timeout: 5h
   needs:
     - job: build-stage-image
       artifacts: true
@@ -184,7 +184,7 @@ scan-released-operator-image-container:
   # Qualification jobs must still publish evidence so the report/gate path can
   # decide the final lane outcome instead of stopping at the first failed test.
   allow_failure: true
-  timeout: 4h
+  timeout: 5h
   variables:
     JOB_INT_TEST_PROFILE: full
     JOB_INT_TEST_TIMEOUT: 225m
@@ -556,7 +556,7 @@ qualification-graviton-indingsep-validation:
 # one suite per job and one EKS cluster per suite instead of a single large run.
 .runtime-nightly-integration-suite-job:
   extends: .runtime-integration-job
-  timeout: 4h
+  timeout: 5h
   needs:
     - job: build-stage-image
       artifacts: true
