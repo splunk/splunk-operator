@@ -1,5 +1,5 @@
-url: ""
-baseurl: ""
+url: "https://sok.splunkdev.page"
+baseurl: "/splunk-operator"
 remote_theme: null
 theme: just-the-docs
 plugins: []

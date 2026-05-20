@@ -18,12 +18,13 @@
     - bundle install --jobs 4 --retry 3
     - bundle exec jekyll build --config _config.yml,splunk_private/_config_gitlab.yml -d ../public
 
-pages:
+pages-deploy:
   extends: .pages-build
-  stage: publish
+  stage: build
   artifacts:
     paths:
       - public
+  pages: true
   rules:
     - if: '$SOK_PIPELINE_MODE'
       when: never
@@ -42,9 +43,9 @@ pages:preview:
     - bundle install --jobs 4 --retry 3
     - bundle exec jekyll build
         --config _config.yml,splunk_private/_config_gitlab.yml
-        --baseurl "/$PAGES_PREFIX"
+        --baseurl "/splunk-operator/$PAGES_PREFIX"
         -d ../public/$PAGES_PREFIX
-    - echo "/ /$PAGES_PREFIX/ 302" > ../public/_redirects
+    - echo "/ /splunk-operator/$PAGES_PREFIX/ 302" > ../public/_redirects
   pages:
     path_prefix: "$PAGES_PREFIX"
   artifacts:
@@ -52,7 +53,7 @@ pages:preview:
       - public
   environment:
     name: "Documentation Preview for $PAGES_PREFIX"
-    url: "https://splunk-operator-892f76.splunkdev.page/$PAGES_PREFIX"
+    url: "https://sok.splunkdev.page/splunk-operator/$PAGES_PREFIX"
     auto_stop_in: 1 week
   rules:
     - if: '$SOK_PIPELINE_MODE'
