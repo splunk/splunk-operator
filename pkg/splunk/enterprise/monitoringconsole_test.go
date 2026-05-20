@@ -277,10 +277,12 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 	}
 	newURLsAdded = false
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
+	// Scale-down case: current has two CR-owned URLs (test-a,test-b), new keeps only test-b.
+	// The stale "test-a" entry must be removed -> Update is expected.
 	env = []corev1.EnvVar{
 		{Name: "A", Value: "test-b"},
 	}
-	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -386,6 +388,51 @@ func TestAddURLsConfigMapMultipleEnvVars(t *testing.T) {
 		if configMap.Data["SPLUNK_INDEXER_URL"] != expectedIndexerURL {
 			t.Errorf("SPLUNK_INDEXER_URL not scaled up. Got: %s, Want: %s",
 				configMap.Data["SPLUNK_INDEXER_URL"], expectedIndexerURL)
+		}
+	})
+
+	t.Run("Scale down removes stale CR URL", func(t *testing.T) {
+		configMap := &corev1.ConfigMap{
+			Data: map[string]string{
+				"SPLUNK_STANDALONE_URL": "splunk-test-cr-standalone-0,splunk-test-cr-standalone-1",
+			},
+		}
+
+		newURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_STANDALONE_URL", Value: "splunk-test-cr-standalone-0"},
+		}
+
+		AddURLsConfigMap(configMap, "test-cr", newURLs)
+
+		got := configMap.Data["SPLUNK_STANDALONE_URL"]
+		want := "splunk-test-cr-standalone-0"
+		if got != want {
+			t.Errorf("Stale peer not removed on scale-down. Got: %q, Want: %q", got, want)
+		}
+	})
+
+	t.Run("Scale down preserves URLs from other CRs", func(t *testing.T) {
+		configMap := &corev1.ConfigMap{
+			Data: map[string]string{
+				"SPLUNK_STANDALONE_URL": "splunk-test-cr-standalone-0,splunk-test-cr-standalone-1,splunk-other-cr-standalone-0",
+			},
+		}
+
+		newURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_STANDALONE_URL", Value: "splunk-test-cr-standalone-0"},
+		}
+
+		AddURLsConfigMap(configMap, "test-cr", newURLs)
+
+		got := configMap.Data["SPLUNK_STANDALONE_URL"]
+		if !strings.Contains(got, "splunk-test-cr-standalone-0") {
+			t.Errorf("Surviving CR URL missing. Got: %q", got)
+		}
+		if strings.Contains(got, "splunk-test-cr-standalone-1") {
+			t.Errorf("Stale CR URL not removed. Got: %q", got)
+		}
+		if !strings.Contains(got, "splunk-other-cr-standalone-0") {
+			t.Errorf("Other CR URL was incorrectly removed. Got: %q", got)
 		}
 	})
 

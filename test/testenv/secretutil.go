@@ -139,7 +139,9 @@ func GetKeysToMatch(podName string) []string {
 
 // GetVersionedSecretNames returns list of versioned secrets of given namespace and version
 func GetVersionedSecretNames(ns string, version int) []string {
-	output, err := exec.Command("kubectl", "get", "secrets", "-n", ns).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), KubectlQuickTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "kubectl", "get", "secrets", "-n", ns).Output()
 	var splunkSecrets []string
 	suffix := fmt.Sprintf("v%d", version)
 	if err != nil {

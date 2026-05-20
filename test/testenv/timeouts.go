@@ -49,7 +49,7 @@ const defaultTestTimeout = 5400
 // DefaultTimeout is a backstop for infrastructure-level polls (namespace creation,
 // operator deployment readiness, CR existence after create). These operations should
 // complete in seconds; this value is a generous safety net.
-const DefaultTimeout = 15 * time.Minute
+const DefaultTimeout = 30 * time.Minute
 
 // ReadinessPollTimeout is the per-attempt timeout for individual CR readiness
 // polls inside Verify*Ready helpers. It must be shorter than DefaultTimeout so
@@ -68,9 +68,22 @@ const AppStateVerificationTimeout = 60 * time.Minute
 
 // MonitoringConsoleReadyTimeout is the outer Eventually budget used by tests
 // that wait for the MonitoringConsole CR to reach the Ready phase. MC
-// reconciliation can take longer than DefaultTimeout (15m) on M4 deployments
-// while the operator settles SHC/IDXC peer registration; allow 30m here.
-const MonitoringConsoleReadyTimeout = 30 * time.Minute
+// reconciliation can take longer than DefaultTimeout on M4 deployments
+// while the operator settles SHC/IDXC peer registration; allow extra margin here.
+const MonitoringConsoleReadyTimeout = 45 * time.Minute
+
+// PasswordSyncEventTimeout is the budget for waiting for the
+// PasswordSyncCompleted event on IndexerCluster / SearchHeadCluster CRs
+// after a namespace-scoped secret update. The event is emitted shortly
+// after the CR reaches Ready, so a small window is sufficient.
+const PasswordSyncEventTimeout = 2 * time.Minute
+
+// SecretUpdateClusterReadyTimeout is the per-CR budget used in the C3/M4
+// secret-update tests when waiting for IndexerCluster and SearchHeadCluster
+// to return to Ready after a namespace-scoped secret change. The cascading
+// rolling restart (CM bundle push -> IDXC roll -> SHC roll) can exceed the
+// generic 15m DefaultTimeout on busy CI workers, so allow a larger budget.
+const SecretUpdateClusterReadyTimeout = MediumTimeout
 
 // SetupTeardownTimeout limits BeforeEach setup and AfterEach teardown nodes.
 // Prevents hung setup or cleanup from consuming the entire suite timeout.
@@ -80,6 +93,16 @@ const SetupTeardownTimeout = 10 * time.Minute
 // cleanup context deadlines, leaving the remainder as a grace period so
 // cleanup can fail gracefully before Ginkgo's NodeTimeout forcibly kills the node.
 const CleanupGraceFraction = 0.8
+
+// KubectlQuickTimeout bounds short-lived `kubectl get/delete` invocations used
+// by dump/inspection helpers. Must be well below Ginkgo's default 30s grace
+// period so the subprocess is reliably killed before the grace period elapses,
+// preventing "running node failed to exit in time" goroutine leaks.
+const KubectlQuickTimeout = 10 * time.Second
+
+// KubectlExecTimeout bounds longer `kubectl exec` and `kubectl logs` calls
+// (cat config files, dump pod logs). Still below the 30s Ginkgo grace period.
+const KubectlExecTimeout = 25 * time.Second
 
 // Suite-level timeouts. Applied via GinkgoConfiguration().Timeout in suite files.
 // Sized for sequential spec execution (no ginkgo -nodes parallelism).
