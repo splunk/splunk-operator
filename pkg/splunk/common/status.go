@@ -18,7 +18,7 @@ package common
 import (
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

@@ -21,7 +21,7 @@ import (
 	"log/slog"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -42,16 +42,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// SearchHeadClusterReconciler reconciles a SearchHeadCluster object
-type SearchHeadClusterReconciler struct {
+// LicenseManagerReconciler reconciles a LicenseManager object
+type LicenseManagerReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 }
 
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=searchheadclusters,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=searchheadclusters/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=searchheadclusters/finalizers,verbs=update
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemanagers,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemanagers/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemanagers/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -68,21 +68,21 @@ type SearchHeadClusterReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the SearchHeadCluster object against the actual cluster state, and then
+// the LicenseManager object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
-func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "SearchHeadCluster")).Inc()
-	defer recordInstrumentionData(time.Now(), req, "controller", "SearchHeadCluster")
+func (r *LicenseManagerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "LicenseManager")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "LicenseManager")
 
-	logger := slog.Default().With("controller", "SearchHeadCluster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
+	logger := slog.Default().With("controller", "LicenseManager", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 	ctx = logging.WithLogger(ctx, logger)
 
-	// Fetch the SearchHeadCluster
-	instance := &enterpriseApi.SearchHeadCluster{}
+	// Fetch the LicenseManager
+	instance := &enterpriseApi.LicenseManager{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -93,13 +93,13 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load search head cluster data")
+		return ctrl.Result{}, errors.Wrap(err, "could not load license manager data")
 	}
 
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterpriseApi.SearchHeadClusterPausedAnnotation]; ok {
+		if _, ok := annotations[enterpriseApi.LicenseManagerPausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
@@ -109,7 +109,7 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// Pass event recorder through context
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
-	result, err := ApplySearchHeadCluster(ctx, r.Client, instance)
+	result, err := ApplyLicenseManager(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
 		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
 	}
@@ -117,15 +117,15 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return result, err
 }
 
-// ApplySearchHeadCluster adding to handle unit test case
-var ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
-	return enterprise.ApplySearchHeadCluster(ctx, client, instance)
+// ApplyLicenseManager adding to handle unit test case
+var ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
+	return enterprise.ApplyLicenseManager(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *LicenseManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterpriseApi.SearchHeadCluster{}).
+		For(&enterpriseApi.LicenseManager{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
 			common.AnnotationChangedPredicate(),
@@ -134,34 +134,35 @@ func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.ConfigMapChangedPredicate(),
 			common.StatefulsetChangedPredicate(),
 			common.PodChangedPredicate(),
+			common.CrdChangedPredicate(),
 		)).
 		Watches(&appsv1.StatefulSet{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.SearchHeadCluster{},
+				&enterpriseApi.LicenseManager{},
 			)).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.SearchHeadCluster{},
+				&enterpriseApi.LicenseManager{},
 			)).
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.SearchHeadCluster{},
+				&enterpriseApi.LicenseManager{},
 			)).
 		Watches(&corev1.Pod{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.SearchHeadCluster{},
+				&enterpriseApi.LicenseManager{},
 			)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
-		Named("search-head-cluster-controller").
+		Named("license-manager-controller").
 		Complete(r)
 }

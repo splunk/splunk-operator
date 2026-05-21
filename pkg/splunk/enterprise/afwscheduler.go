@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
 	"github.com/pkg/errors"
 	"github.com/splunk/splunk-operator/pkg/logging"

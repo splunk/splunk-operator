@@ -103,7 +103,7 @@ When modifying the operator code, follow this workflow:
 git checkout -b feature/your-feature develop
 
 # 2. Make your changes to the codebase
-#    - API changes: api/v4/*.go
+#    - API changes: api/enterprise/v4/*.go
 #    - Controller logic: internal/controller/*.go
 #    - Business logic: pkg/splunk/**/*.go
 

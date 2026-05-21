@@ -98,9 +98,9 @@ A typical change follows this flow:
 git checkout -b feature/your-feature develop
 
 # 2. Make your code changes
-#    - API types:       api/v4/*.go
-#    - Controllers:     internal/controller/*.go
-#    - Business logic:  pkg/splunk/**/*.go
+#    - API types:       api/{group}/v4/*.go
+#    - Controllers:     internal/controller/{group}/*.go
+#    - Business logic:  pkg/splunk/{group}/**/*.go
 
 # 3. If you modified API types, regenerate manifests and code
 make manifests generate
