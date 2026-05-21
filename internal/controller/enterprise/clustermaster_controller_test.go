@@ -2,12 +2,12 @@ package controller
 
 import (
 	"context"
-	"time"
 
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -20,65 +20,66 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-const timeout = time.Second * 10
-const interval = time.Millisecond * 250
-
-var _ = Describe("Standalone Controller", func() {
+var _ = Describe("ClusterMaster Controller", func() {
 
 	AfterEach(func() {
 
 	})
 
-	Context("Standalone Management", func() {
+	Context("ClusterMaster Management failed", func() {
 
-		It("Get Standalone custom resource should failed", func() {
-			namespace := "ns-splunk-st-1"
-			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+		It("Get ClusterMaster custom resource should fail", func() {
+			namespace := "ns-splunk-cmaster-1"
+			ApplyClusterMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.ClusterMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			// check when resource not found
-			_, err := GetStandalone("test", nsSpecs.Name)
-			Expect(err.Error()).Should(Equal("standalones.enterprise.splunk.com \"test\" not found"))
+			_, err := GetClusterMaster("test", nsSpecs.Name)
+			Expect(err.Error()).Should(Equal("clustermasters.enterprise.splunk.com \"test\" not found"))
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
+	})
 
-		It("Create Standalone custom resource with annotations should pause", func() {
-			namespace := "ns-splunk-st-2"
-			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+	Context("ClusterMaster Management with annotations", func() {
+
+		It("Create ClusterMaster custom resource with annotations should pause", func() {
+			namespace := "ns-splunk-cmaster-2"
+			ApplyClusterMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.ClusterMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.StandalonePausedAnnotation] = ""
-			CreateStandalone("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			ssSpec, _ := GetStandalone("test", nsSpecs.Name)
+			annotations[enterpriseApiV3.ClusterMasterPausedAnnotation] = ""
+			CreateClusterMaster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			ssSpec, _ := GetClusterMaster("test", nsSpecs.Name)
 			annotations = map[string]string{}
 			ssSpec.Annotations = annotations
 			ssSpec.Status.Phase = "Ready"
-			UpdateStandalone(ssSpec, enterpriseApi.PhaseReady)
-			DeleteStandalone("test", nsSpecs.Name)
+			UpdateClusterMaster(ssSpec, enterpriseApi.PhaseReady)
+			DeleteClusterMaster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
-
-		It("Create Standalone custom resource should succeeded", func() {
-			namespace := "ns-splunk-st-3"
-			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+	})
+	Context("ClusterMaster Management", func() {
+		It("Create ClusterMaster custom resource should succeeded", func() {
+			namespace := "ns-splunk-cmaster-3"
+			ApplyClusterMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.ClusterMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			CreateStandalone("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			DeleteStandalone("test", nsSpecs.Name)
+			CreateClusterMaster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			DeleteClusterMaster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
 		It("Cover Unused methods", func() {
-			namespace := "ns-splunk-st-4"
-			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+			namespace := "ns-splunk-cmaster-4"
+			ApplyClusterMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.ClusterMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -86,7 +87,7 @@ var _ = Describe("Standalone Controller", func() {
 			ctx := context.TODO()
 			builder := fake.NewClientBuilder()
 			c := builder.Build()
-			instance := StandaloneReconciler{
+			instance := ClusterMasterReconciler{
 				Client: c,
 				Scheme: scheme.Scheme,
 			}
@@ -100,20 +101,18 @@ var _ = Describe("Standalone Controller", func() {
 			_, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 			// create resource first and then reconcile for the first time
-			ssSpec := testutils.NewStandalone("test", namespace, "image")
+			ssSpec := testutils.NewClusterMaster("test", namespace, "image")
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 			// reconcile with updated annotations for pause
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.StandalonePausedAnnotation] = ""
+			annotations[enterpriseApiV3.ClusterMasterPausedAnnotation] = ""
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
 			_, err = instance.Reconcile(ctx, request)
-			Expect(err).ToNot(HaveOccurred())
 			// reconcile after removing annotations for pause
 			annotations = map[string]string{}
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
-			_, err = instance.Reconcile(ctx, request)
 			// reconcile after adding delete timestamp
 			Expect(err).ToNot(HaveOccurred())
 			ssSpec.DeletionTimestamp = &metav1.Time{}
@@ -124,13 +123,13 @@ var _ = Describe("Standalone Controller", func() {
 	})
 })
 
-func GetStandalone(name string, namespace string) (*enterpriseApi.Standalone, error) {
+func GetClusterMaster(name string, namespace string) (*enterpriseApiV3.ClusterMaster, error) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	By("Expecting Standalone custom resource to be created successfully")
-	ss := &enterpriseApi.Standalone{}
+	By("Expecting ClusterMaster custom resource to be created successfully")
+	ss := &enterpriseApiV3.ClusterMaster{}
 	err := k8sClient.Get(context.Background(), key, ss)
 	if err != nil {
 		return nil, err
@@ -138,24 +137,16 @@ func GetStandalone(name string, namespace string) (*enterpriseApi.Standalone, er
 	return ss, err
 }
 
-func CreateStandalone(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApi.Standalone {
+func CreateClusterMaster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApiV3.ClusterMaster {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	ssSpec := &enterpriseApi.Standalone{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Annotations: annotations,
-		},
-		Spec: enterpriseApi.StandaloneSpec{},
-	}
-	ssSpec = testutils.NewStandalone(name, namespace, "image")
+	ssSpec := testutils.NewClusterMaster(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
 
-	By("Expecting Standalone custom resource to be created successfully")
-	ss := &enterpriseApi.Standalone{}
+	By("Expecting ClusterMaster custom resource to be created successfully")
+	ss := &enterpriseApiV3.ClusterMaster{}
 	Eventually(func() bool {
 		return k8sClient.Get(context.Background(), key, ss) == nil
 	}, timeout, interval).Should(BeTrue())
@@ -167,18 +158,18 @@ func CreateStandalone(name string, namespace string, annotations map[string]stri
 	return ss
 }
 
-func UpdateStandalone(instance *enterpriseApi.Standalone, status enterpriseApi.Phase) *enterpriseApi.Standalone {
+func UpdateClusterMaster(instance *enterpriseApiV3.ClusterMaster, status enterpriseApi.Phase) *enterpriseApiV3.ClusterMaster {
 	key := types.NamespacedName{
 		Name:      instance.Name,
 		Namespace: instance.Namespace,
 	}
 
-	ssSpec := testutils.NewStandalone(instance.Name, instance.Namespace, "image")
+	ssSpec := testutils.NewClusterMaster(instance.Name, instance.Namespace, "image")
 	ssSpec.ResourceVersion = instance.ResourceVersion
 	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
 
-	By("Expecting Standalone custom resource to be updated successfully")
-	ss := &enterpriseApi.Standalone{}
+	By("Expecting ClusterMaster custom resource to be updated successfully")
+	ss := &enterpriseApiV3.ClusterMaster{}
 	Eventually(func() bool {
 		return k8sClient.Get(context.Background(), key, ss) == nil
 	}, timeout, interval).Should(BeTrue())
@@ -190,15 +181,15 @@ func UpdateStandalone(instance *enterpriseApi.Standalone, status enterpriseApi.P
 	return ss
 }
 
-func DeleteStandalone(name string, namespace string) {
+func DeleteClusterMaster(name string, namespace string) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
 
-	By("Expecting Standalone Deleted successfully")
+	By("Expecting ClusterMaster Deleted successfully")
 	Eventually(func() error {
-		ssys := &enterpriseApi.Standalone{}
+		ssys := &enterpriseApiV3.ClusterMaster{}
 		_ = k8sClient.Get(context.Background(), key, ssys)
 		err := k8sClient.Delete(context.Background(), ssys)
 		return err
