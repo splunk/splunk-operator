@@ -26,9 +26,9 @@ config/manifests/bases/splunk-operator.clusterserviceversion.yaml
 config/crd/kustomization.yaml
 config/crd/patches/patch_preserve_unknown_fields.yaml
 config/rbac/role.yaml
-api/v3/licensemaster_types.go
-api/v3/zz_generated.deepcopy.go
-api/v3/common_types.go
+api/enterprise/v3/licensemaster_types.go
+api/enterprise/v3/zz_generated.deepcopy.go
+api/enterprise/v3/common_types.go
 pkg/splunk/enterprise/licensemaster.go
 controller/licensemaster_controller.go
 tools/k8s_collectors/k8s-systeminfo-collector.sh
@@ -37,9 +37,9 @@ pkg/splunk/enterprise/finalizers.go
 controller/monitoringconsole_controller.go
 pkg/splunk/enterprise/events.go
 #Exceptions for dual support of cluster manager
-api/v3/clustermaster_types.go
-api/v3/indexercluster_types.go
-api/v3/clustermanager_types.go
+api/enterprise/v3/clustermaster_types.go
+api/enterprise/v3/indexercluster_types.go
+api/enterprise/v3/clustermanager_types.go
 config/crd/patches/cainjection_in_clustermasters.yaml
 config/crd/patches/webhook_in_clustermasters.yaml
 config/crd/patches/webhook_in_clustermasters.yaml
@@ -70,10 +70,10 @@ test/clustermaster/cmaster_appframework_test.go
 test/clustermaster/cmaster_appframework_test.go
 test/licensemaster/lmaster_m4_test.go
 tools/k8s_collectors/k8s-splunk-collector.sh
-api/v4/clustermanager_types.go
-api/v4/indexercluster_types.go
-api/v4/zz_generated.deepcopy.go
-api/v4/common_types.go
+api/enterprise/v4/clustermanager_types.go
+api/enterprise/v4/indexercluster_types.go
+api/enterprise/v4/zz_generated.deepcopy.go
+api/enterprise/v4/common_types.go
 #Below should be reviewed once CRDs have no bias lang
 tools/bias_lang_migration.sh
 go.mod

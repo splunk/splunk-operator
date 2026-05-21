@@ -21,13 +21,13 @@ import (
 	"log/slog"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	"github.com/pkg/errors"
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
@@ -43,16 +43,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// MonitoringConsoleReconciler reconciles a MonitoringConsole object
-type MonitoringConsoleReconciler struct {
+// LicenseMasterReconciler reconciles a LicenseMaster object
+type LicenseMasterReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 }
 
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=monitoringconsoles,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=monitoringconsoles/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=monitoringconsoles/finalizers,verbs=update
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemasters,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemasters/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemasters/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -69,21 +69,21 @@ type MonitoringConsoleReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the MonitoringConsole object against the actual cluster state, and then
+// the LicenseMaster object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
-func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "MonitoringConsole")).Inc()
-	defer recordInstrumentionData(time.Now(), req, "controller", "MonitoringConsole")
+func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "LicenseMaster")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "LicenseMaster")
 
-	logger := slog.Default().With("controller", "MonitoringConsole", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
+	logger := slog.Default().With("controller", "LicenseMaster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 	ctx = logging.WithLogger(ctx, logger)
 
-	// Fetch the MonitoringConsole
-	instance := &enterpriseApi.MonitoringConsole{}
+	// Fetch the LicenseMaster
+	instance := &enterpriseApiV3.LicenseMaster{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -94,13 +94,13 @@ func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load monitoring console data")
+		return ctrl.Result{}, errors.Wrap(err, "could not load license manager data")
 	}
 
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterpriseApi.MonitoringConsolePausedAnnotation]; ok {
+		if _, ok := annotations[enterpriseApiV3.LicenseMasterPausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
@@ -110,7 +110,7 @@ func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// Pass event recorder through context
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
-	result, err := ApplyMonitoringConsole(ctx, r.Client, instance)
+	result, err := ApplyLicenseMaster(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
 		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
 	}
@@ -118,15 +118,15 @@ func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return result, err
 }
 
-// ApplyMonitoringConsole adding to handle unit test case
-var ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
-	return enterprise.ApplyMonitoringConsole(ctx, client, instance)
+// ApplyLicenseMaster adding to handle unit test case
+var ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
+	return enterprise.ApplyLicenseMaster(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *LicenseMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterpriseApi.MonitoringConsole{}).
+		For(&enterpriseApiV3.LicenseMaster{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
 			common.AnnotationChangedPredicate(),
@@ -141,43 +141,29 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.MonitoringConsole{},
+				&enterpriseApiV3.LicenseMaster{},
 			)).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.MonitoringConsole{},
+				&enterpriseApiV3.LicenseMaster{},
 			)).
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.MonitoringConsole{},
+				&enterpriseApiV3.LicenseMaster{},
 			)).
 		Watches(&corev1.Pod{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.MonitoringConsole{},
+				&enterpriseApiV3.LicenseMaster{},
 			)).
-		Watches(&enterpriseApi.Standalone{},
-			&handler.EnqueueRequestForObject{}).
-		Watches(&enterpriseApiV3.LicenseMaster{},
-			&handler.EnqueueRequestForObject{}).
-		Watches(&enterpriseApi.LicenseManager{},
-			&handler.EnqueueRequestForObject{}).
-		Watches(&enterpriseApi.IndexerCluster{},
-			&handler.EnqueueRequestForObject{}).
-		Watches(&enterpriseApi.SearchHeadCluster{},
-			&handler.EnqueueRequestForObject{}).
-		Watches(&enterpriseApiV3.ClusterMaster{},
-			&handler.EnqueueRequestForObject{}).
-		Watches(&enterpriseApi.ClusterManager{},
-			&handler.EnqueueRequestForObject{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
-		Named("monitoring-console-controller").
+		Named("license-master-controller").
 		Complete(r)
 }

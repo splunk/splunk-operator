@@ -5,9 +5,10 @@ import (
 
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -19,62 +20,62 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-var _ = Describe("LicenseManager Controller", func() {
+var _ = Describe("LicenseMaster Controller", func() {
 
 	AfterEach(func() {
 
 	})
 
-	Context("LicenseManager Management", func() {
+	Context("LicenseMaster Management", func() {
 
-		It("Get LicenseManager custom resource should failed", func() {
-			namespace := "ns-splunk-lm-1"
-			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
+		It("Get LicenseMaster custom resource should failed", func() {
+			namespace := "ns-splunk-lmaster-1"
+			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			// check when resource not found
-			_, err := GetLicenseManager("test", nsSpecs.Name)
-			Expect(err.Error()).Should(Equal("licensemanagers.enterprise.splunk.com \"test\" not found"))
+			_, err := GetLicenseMaster("test", nsSpecs.Name)
+			Expect(err.Error()).Should(Equal("licensemasters.enterprise.splunk.com \"test\" not found"))
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create LicenseManager custom resource with annotations should pause", func() {
-			namespace := "ns-splunk-lm-2"
-			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
+		It("Create LicenseMaster custom resource with annotations should pause", func() {
+			namespace := "ns-splunk-lmaster-2"
+			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.LicenseManagerPausedAnnotation] = ""
-			CreateLicenseManager("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			ssSpec, _ := GetLicenseManager("test", nsSpecs.Name)
+			annotations[enterpriseApiV3.LicenseMasterPausedAnnotation] = ""
+			CreateLicenseMaster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			ssSpec, _ := GetLicenseMaster("test", nsSpecs.Name)
 			annotations = map[string]string{}
 			ssSpec.Annotations = annotations
 			ssSpec.Status.Phase = "Ready"
-			UpdateLicenseManager(ssSpec, enterpriseApi.PhaseReady)
-			DeleteLicenseManager("test", nsSpecs.Name)
+			UpdateLicenseMaster(ssSpec, enterpriseApi.PhaseReady)
+			DeleteLicenseMaster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create LicenseManager custom resource should succeeded", func() {
-			namespace := "ns-splunk-lm-3"
-			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
+		It("Create LicenseMaster custom resource should succeeded", func() {
+			namespace := "ns-splunk-lmaster-3"
+			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
+
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			CreateLicenseManager("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			DeleteLicenseManager("test", nsSpecs.Name)
+			CreateLicenseMaster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			DeleteLicenseMaster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
-
 		It("Cover Unused methods", func() {
-			namespace := "ns-splunk-lm-4"
-			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
+			namespace := "ns-splunk-lmaster-4"
+			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -82,7 +83,7 @@ var _ = Describe("LicenseManager Controller", func() {
 			ctx := context.TODO()
 			builder := fake.NewClientBuilder()
 			c := builder.Build()
-			instance := LicenseManagerReconciler{
+			instance := LicenseMasterReconciler{
 				Client: c,
 				Scheme: scheme.Scheme,
 			}
@@ -92,15 +93,15 @@ var _ = Describe("LicenseManager Controller", func() {
 					Namespace: namespace,
 				},
 			}
-			// econcile for the first time err is resource not found
+			// reconcile for the first time err is resource not found
 			_, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 			// create resource first and then reconcile for the first time
-			ssSpec := testutils.NewLicenseManager("test", namespace, "image")
+			ssSpec := testutils.NewLicenseMaster("test", namespace, "image")
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 			// reconcile with updated annotations for pause
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.LicenseManagerPausedAnnotation] = ""
+			annotations[enterpriseApiV3.LicenseMasterPausedAnnotation] = ""
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
 			_, err = instance.Reconcile(ctx, request)
@@ -120,13 +121,13 @@ var _ = Describe("LicenseManager Controller", func() {
 	})
 })
 
-func GetLicenseManager(name string, namespace string) (*enterpriseApi.LicenseManager, error) {
+func GetLicenseMaster(name string, namespace string) (*enterpriseApiV3.LicenseMaster, error) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	By("Expecting LicenseManager custom resource to be created successfully")
-	ss := &enterpriseApi.LicenseManager{}
+	By("Expecting LicenseMaster custom resource to be created successfully")
+	ss := &enterpriseApiV3.LicenseMaster{}
 	err := k8sClient.Get(context.Background(), key, ss)
 	if err != nil {
 		return nil, err
@@ -134,16 +135,16 @@ func GetLicenseManager(name string, namespace string) (*enterpriseApi.LicenseMan
 	return ss, err
 }
 
-func CreateLicenseManager(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApi.LicenseManager {
+func CreateLicenseMaster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApiV3.LicenseMaster {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	ssSpec := testutils.NewLicenseManager(name, namespace, "image")
+	ssSpec := testutils.NewLicenseMaster(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
 
-	By("Expecting LicenseManager custom resource to be created successfully")
-	ss := &enterpriseApi.LicenseManager{}
+	By("Expecting LicenseMaster custom resource to be created successfully")
+	ss := &enterpriseApiV3.LicenseMaster{}
 	Eventually(func() bool {
 		return k8sClient.Get(context.Background(), key, ss) == nil
 	}, timeout, interval).Should(BeTrue())
@@ -155,18 +156,18 @@ func CreateLicenseManager(name string, namespace string, annotations map[string]
 	return ss
 }
 
-func UpdateLicenseManager(instance *enterpriseApi.LicenseManager, status enterpriseApi.Phase) *enterpriseApi.LicenseManager {
+func UpdateLicenseMaster(instance *enterpriseApiV3.LicenseMaster, status enterpriseApi.Phase) *enterpriseApiV3.LicenseMaster {
 	key := types.NamespacedName{
 		Name:      instance.Name,
 		Namespace: instance.Namespace,
 	}
 
-	ssSpec := testutils.NewLicenseManager(instance.Name, instance.Namespace, "image")
+	ssSpec := testutils.NewLicenseMaster(instance.Name, instance.Namespace, "image")
 	ssSpec.ResourceVersion = instance.ResourceVersion
 	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
 
-	By("Expecting LicenseManager custom resource to be updated successfully")
-	ss := &enterpriseApi.LicenseManager{}
+	By("Expecting LicenseMaster custom resource to be updated successfully")
+	ss := &enterpriseApiV3.LicenseMaster{}
 	Eventually(func() bool {
 		return k8sClient.Get(context.Background(), key, ss) == nil
 	}, timeout, interval).Should(BeTrue())
@@ -178,15 +179,15 @@ func UpdateLicenseManager(instance *enterpriseApi.LicenseManager, status enterpr
 	return ss
 }
 
-func DeleteLicenseManager(name string, namespace string) {
+func DeleteLicenseMaster(name string, namespace string) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
 
-	By("Expecting LicenseManager Deleted successfully")
+	By("Expecting LicenseMaster Deleted successfully")
 	Eventually(func() error {
-		ssys := &enterpriseApi.LicenseManager{}
+		ssys := &enterpriseApiV3.LicenseMaster{}
 		_ = k8sClient.Get(context.Background(), key, ssys)
 		err := k8sClient.Delete(context.Background(), ssys)
 		return err

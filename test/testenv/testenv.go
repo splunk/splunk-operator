@@ -22,8 +22,8 @@ import (
 	"os"
 	"time"
 
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo/v2"

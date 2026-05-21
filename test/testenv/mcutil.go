@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"

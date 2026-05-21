@@ -5,7 +5,7 @@ import (
 
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -19,62 +19,63 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-var _ = Describe("MonitoringConsole Controller", func() {
+var _ = Describe("SearchHeadCluster Controller", func() {
 
 	AfterEach(func() {
 
 	})
 
-	Context("MonitoringConsole Management", func() {
+	Context("SearchHeadCluster Management", func() {
 
-		It("Get MonitoringConsole custom resource should failed", func() {
-			namespace := "ns-splunk-mc-1"
-			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
+		It("Get SearchHeadCluster custom resource should failed", func() {
+			namespace := "ns-splunk-shc-1"
+			ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			// check when resource not found
-			_, err := GetMonitoringConsole("test", nsSpecs.Name)
-			Expect(err.Error()).Should(Equal("monitoringconsoles.enterprise.splunk.com \"test\" not found"))
+			_, err := GetSearchHeadCluster("test", nsSpecs.Name)
+			Expect(err.Error()).Should(Equal("searchheadclusters.enterprise.splunk.com \"test\" not found"))
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create MonitoringConsole custom resource with annotations should pause", func() {
-			namespace := "ns-splunk-mc-2"
-			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
+		It("Create SearchHeadCluster custom resource with annotations should pause", func() {
+			namespace := "ns-splunk-shc-2"
+			ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.MonitoringConsolePausedAnnotation] = ""
-			CreateMonitoringConsole("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			ssSpec, _ := GetMonitoringConsole("test", nsSpecs.Name)
+			annotations[enterpriseApi.SearchHeadClusterPausedAnnotation] = ""
+			CreateSearchHeadCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			ssSpec, _ := GetSearchHeadCluster("test", nsSpecs.Name)
 			annotations = map[string]string{}
 			ssSpec.Annotations = annotations
+			ssSpec.Status.DeployerPhase = "Ready"
 			ssSpec.Status.Phase = "Ready"
-			UpdateMonitoringConsole(ssSpec, enterpriseApi.PhaseReady)
-			DeleteMonitoringConsole("test", nsSpecs.Name)
+			UpdateSearchHeadCluster(ssSpec, enterpriseApi.PhaseReady)
+			DeleteSearchHeadCluster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create MonitoringConsole custom resource should succeeded", func() {
-			namespace := "ns-splunk-mc-3"
-			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
+		It("Create SearchHeadCluster custom resource should succeeded", func() {
+			namespace := "ns-splunk-shc-3"
+			ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			CreateMonitoringConsole("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			DeleteMonitoringConsole("test", nsSpecs.Name)
+			CreateSearchHeadCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			DeleteSearchHeadCluster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
 		It("Cover Unused methods", func() {
-			namespace := "ns-splunk-mc-4"
-			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
+			namespace := "ns-splunk-shc-4"
+			ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -82,7 +83,7 @@ var _ = Describe("MonitoringConsole Controller", func() {
 			ctx := context.TODO()
 			builder := fake.NewClientBuilder()
 			c := builder.Build()
-			instance := MonitoringConsoleReconciler{
+			instance := SearchHeadClusterReconciler{
 				Client: c,
 				Scheme: scheme.Scheme,
 			}
@@ -96,11 +97,11 @@ var _ = Describe("MonitoringConsole Controller", func() {
 			_, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 			// create resource first and then reconcile for the first time
-			ssSpec := testutils.NewMonitoringConsole("test", namespace, "image")
+			ssSpec := testutils.NewSearchHeadCluster("test", namespace, "image")
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 			// reconcile with updated annotations for pause
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.MonitoringConsolePausedAnnotation] = ""
+			annotations[enterpriseApi.SearchHeadClusterPausedAnnotation] = ""
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
 			_, err = instance.Reconcile(ctx, request)
@@ -120,13 +121,13 @@ var _ = Describe("MonitoringConsole Controller", func() {
 	})
 })
 
-func GetMonitoringConsole(name string, namespace string) (*enterpriseApi.MonitoringConsole, error) {
+func GetSearchHeadCluster(name string, namespace string) (*enterpriseApi.SearchHeadCluster, error) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	By("Expecting MonitoringConsole custom resource to be created successfully")
-	ss := &enterpriseApi.MonitoringConsole{}
+	By("Expecting SearchHeadCluster custom resource to be created successfully")
+	ss := &enterpriseApi.SearchHeadCluster{}
 	err := k8sClient.Get(context.Background(), key, ss)
 	if err != nil {
 		return nil, err
@@ -134,59 +135,61 @@ func GetMonitoringConsole(name string, namespace string) (*enterpriseApi.Monitor
 	return ss, err
 }
 
-func CreateMonitoringConsole(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApi.MonitoringConsole {
+func CreateSearchHeadCluster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApi.SearchHeadCluster {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	ssSpec := testutils.NewMonitoringConsole(name, namespace, "image")
+	ssSpec := testutils.NewSearchHeadCluster(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
 
-	By("Expecting MonitoringConsole custom resource to be created successfully")
-	ss := &enterpriseApi.MonitoringConsole{}
+	By("Expecting SearchHeadCluster custom resource to be created successfully")
+	ss := &enterpriseApi.SearchHeadCluster{}
 	Eventually(func() bool {
 		return k8sClient.Get(context.Background(), key, ss) == nil
 	}, timeout, interval).Should(BeTrue())
 	if status != "" {
 		ss.Status.Phase = status
+		ss.Status.DeployerPhase = status
 		Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
 	}
 
 	return ss
 }
 
-func UpdateMonitoringConsole(instance *enterpriseApi.MonitoringConsole, status enterpriseApi.Phase) *enterpriseApi.MonitoringConsole {
+func UpdateSearchHeadCluster(instance *enterpriseApi.SearchHeadCluster, status enterpriseApi.Phase) *enterpriseApi.SearchHeadCluster {
 	key := types.NamespacedName{
 		Name:      instance.Name,
 		Namespace: instance.Namespace,
 	}
 
-	ssSpec := testutils.NewMonitoringConsole(instance.Name, instance.Namespace, "image")
+	ssSpec := testutils.NewSearchHeadCluster(instance.Name, instance.Namespace, "image")
 	ssSpec.ResourceVersion = instance.ResourceVersion
 	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
 
-	By("Expecting MonitoringConsole custom resource to be updated successfully")
-	ss := &enterpriseApi.MonitoringConsole{}
+	By("Expecting SearchHeadCluster custom resource to be updated successfully")
+	ss := &enterpriseApi.SearchHeadCluster{}
 	Eventually(func() bool {
 		return k8sClient.Get(context.Background(), key, ss) == nil
 	}, timeout, interval).Should(BeTrue())
 	if status != "" {
 		ss.Status.Phase = status
+		ss.Status.DeployerPhase = status
 		Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
 	}
 
 	return ss
 }
 
-func DeleteMonitoringConsole(name string, namespace string) {
+func DeleteSearchHeadCluster(name string, namespace string) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
 
-	By("Expecting MonitoringConsole Deleted successfully")
+	By("Expecting SearchHeadCluster Deleted successfully")
 	Eventually(func() error {
-		ssys := &enterpriseApi.MonitoringConsole{}
+		ssys := &enterpriseApi.SearchHeadCluster{}
 		_ = k8sClient.Get(context.Background(), key, ssys)
 		err := k8sClient.Delete(context.Background(), ssys)
 		return err

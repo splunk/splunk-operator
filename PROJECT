@@ -5,6 +5,7 @@
 domain: splunk.com
 layout:
 - go.kubebuilder.io/v4
+multigroup: true
 plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
@@ -18,7 +19,7 @@ resources:
   domain: splunk.com
   group: enterprise
   kind: ClusterMaster
-  path: github.com/splunk/splunk-operator/api/v3
+  path: github.com/splunk/splunk-operator/api/enterprise/v3
   version: v3
 - api:
     crdVersion: v1
@@ -27,7 +28,7 @@ resources:
   domain: splunk.com
   group: enterprise
   kind: IndexerCluster
-  path: github.com/splunk/splunk-operator/api/v3
+  path: github.com/splunk/splunk-operator/api/enterprise/v3
   version: v3
 - api:
     crdVersion: v1
@@ -36,7 +37,7 @@ resources:
   domain: splunk.com
   group: enterprise
   kind: LicenseMaster
-  path: github.com/splunk/splunk-operator/api/v3
+  path: github.com/splunk/splunk-operator/api/enterprise/v3
   version: v3
 - api:
     crdVersion: v1
@@ -45,7 +46,7 @@ resources:
   domain: splunk.com
   group: enterprise
   kind: MonitoringConsole
-  path: github.com/splunk/splunk-operator/api/v3
+  path: github.com/splunk/splunk-operator/api/enterprise/v3
   version: v3
 - api:
     crdVersion: v1
@@ -54,7 +55,7 @@ resources:
   domain: splunk.com
   group: enterprise
   kind: SearchHeadCluster
-  path: github.com/splunk/splunk-operator/api/v3
+  path: github.com/splunk/splunk-operator/api/enterprise/v3
   version: v3
 - api:
     crdVersion: v1
@@ -63,7 +64,7 @@ resources:
   domain: splunk.com
   group: enterprise
   kind: Standalone
-  path: github.com/splunk/splunk-operator/api/v3
+  path: github.com/splunk/splunk-operator/api/enterprise/v3
   version: v3
 - api:
     crdVersion: v1
@@ -71,7 +72,7 @@ resources:
   domain: splunk.com
   group: enterprise
   kind: IndexerCluster
-  path: github.com/splunk/splunk-operator/api/v4
+  path: github.com/splunk/splunk-operator/api/enterprise/v4
   version: v4
 - api:
     crdVersion: v1
@@ -79,7 +80,7 @@ resources:
   domain: splunk.com
   group: enterprise
   kind: Standalone
-  path: github.com/splunk/splunk-operator/api/v4
+  path: github.com/splunk/splunk-operator/api/enterprise/v4
   version: v4
 - api:
     crdVersion: v1
@@ -87,7 +88,7 @@ resources:
   domain: splunk.com
   group: enterprise
   kind: MonitoringConsole
-  path: github.com/splunk/splunk-operator/api/v4
+  path: github.com/splunk/splunk-operator/api/enterprise/v4
   version: v4
 - api:
     crdVersion: v1
@@ -95,7 +96,7 @@ resources:
   domain: splunk.com
   group: enterprise
   kind: SearchHeadCluster
-  path: github.com/splunk/splunk-operator/api/v4
+  path: github.com/splunk/splunk-operator/api/enterprise/v4
   version: v4
 - api:
     crdVersion: v1
@@ -103,7 +104,7 @@ resources:
   domain: splunk.com
   group: enterprise
   kind: ClusterManager
-  path: github.com/splunk/splunk-operator/api/v4
+  path: github.com/splunk/splunk-operator/api/enterprise/v4
   version: v4
 - api:
     crdVersion: v1
@@ -111,7 +112,7 @@ resources:
   domain: splunk.com
   group: enterprise
   kind: LicenseManager
-  path: github.com/splunk/splunk-operator/api/v4
+  path: github.com/splunk/splunk-operator/api/enterprise/v4
   version: v4
 - api:
     crdVersion: v1
@@ -120,7 +121,7 @@ resources:
   domain: splunk.com
   group: enterprise
   kind: IngestorCluster
-  path: github.com/splunk/splunk-operator/api/v4
+  path: github.com/splunk/splunk-operator/api/enterprise/v4
   version: v4
 - api:
     crdVersion: v1
@@ -129,7 +130,7 @@ resources:
   domain: splunk.com
   group: enterprise
   kind: Queue
-  path: github.com/splunk/splunk-operator/api/v4
+  path: github.com/splunk/splunk-operator/api/enterprise/v4
   version: v4
 - api:
     crdVersion: v1
@@ -138,6 +139,6 @@ resources:
   domain: splunk.com
   group: enterprise
   kind: ObjectStorage
-  path: github.com/splunk/splunk-operator/api/v4
+  path: github.com/splunk/splunk-operator/api/enterprise/v4
   version: v4
 version: "3"

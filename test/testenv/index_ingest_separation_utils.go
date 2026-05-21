@@ -19,7 +19,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 )
 
 // DeployQueueAndObjectStorage deploys a Queue and ObjectStorage CR and returns both.
