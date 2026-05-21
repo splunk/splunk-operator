@@ -111,3 +111,26 @@ ci-output/
 # Python bytecode caches
 __pycache__/
 *.pyc
+
+# AI coding agents / MCP config files (may contain API tokens and credentials)
+# Claude Code / Anthropic
+CLAUDE.md
+.mcp.json
+.claude/
+# Cursor
+.cursor/
+.cursorignore
+.cursorules
+# GitHub Copilot
+.github/copilot-instructions.md
+# Windsurf / Codeium
+.codeium/
+.windsurf/
+# Aider
+.aider*
+# Codex / OpenAI
+codex.md
+# Generic agent memory / secrets
+.secrets
+.env.local
+.env.*.local
