@@ -23,7 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 )
 
 // storageCapacityRegex validates storage capacity format (e.g., "10Gi", "100Gi")
@@ -33,7 +33,7 @@ var storageCapacityRegex = regexp.MustCompile(`^[0-9]+Gi$`)
 func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
-	// Note: The following fields are validated via kubebuilder annotations in api/v4/common_types.go:
+	// Note: The following fields are validated via kubebuilder annotations in api/enterprise/v4/common_types.go:
 	// - ImagePullPolicy: +kubebuilder:validation:Enum=Always;Never;IfNotPresent
 	// - LivenessInitialDelaySeconds: +kubebuilder:validation:Minimum=0
 	// - ReadinessInitialDelaySeconds: +kubebuilder:validation:Minimum=0

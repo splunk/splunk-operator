@@ -2,14 +2,16 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	"time"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -20,62 +22,67 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-var _ = Describe("LicenseMaster Controller", func() {
+var _ = Describe("IndexerCluster Controller", func() {
+
+	BeforeEach(func() {
+		time.Sleep(2 * time.Second)
+	})
 
 	AfterEach(func() {
 
 	})
 
-	Context("LicenseMaster Management", func() {
+	Context("IndexerCluster Management", func() {
 
-		It("Get LicenseMaster custom resource should failed", func() {
-			namespace := "ns-splunk-lmaster-1"
-			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
+		It("Get IndexerCluster custom resource should failed", func() {
+			namespace := "ns-splunk-ic-1"
+			ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			// check when resource not found
-			_, err := GetLicenseMaster("test", nsSpecs.Name)
-			Expect(err.Error()).Should(Equal("licensemasters.enterprise.splunk.com \"test\" not found"))
+			_, err := GetIndexerCluster("test", nsSpecs.Name)
+			Expect(err.Error()).Should(Equal("indexerclusters.enterprise.splunk.com \"test\" not found"))
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create LicenseMaster custom resource with annotations should pause", func() {
-			namespace := "ns-splunk-lmaster-2"
-			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
+		It("Create IndexerCluster custom resource with annotations should pause", func() {
+			namespace := "ns-splunk-ic-2"
+			ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			annotations[enterpriseApiV3.LicenseMasterPausedAnnotation] = ""
-			CreateLicenseMaster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			ssSpec, _ := GetLicenseMaster("test", nsSpecs.Name)
+			annotations[enterpriseApi.IndexerClusterPausedAnnotation] = ""
+			CreateIndexerCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			ssSpec, _ := GetIndexerCluster("test", nsSpecs.Name)
 			annotations = map[string]string{}
 			ssSpec.Annotations = annotations
 			ssSpec.Status.Phase = "Ready"
-			UpdateLicenseMaster(ssSpec, enterpriseApi.PhaseReady)
-			DeleteLicenseMaster("test", nsSpecs.Name)
+			ssSpec.Status.ClusterManagerPhase, ssSpec.Status.ClusterMasterPhase = "Ready", "Ready" //CM* Phase can't be empty
+			UpdateIndexerCluster(ssSpec, enterpriseApi.PhaseReady)
+			DeleteIndexerCluster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create LicenseMaster custom resource should succeeded", func() {
-			namespace := "ns-splunk-lmaster-3"
-			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
+		It("Create IndexerCluster custom resource should succeeded", func() {
+			namespace := "ns-splunk-ic-3"
+			ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
-
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			CreateLicenseMaster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			DeleteLicenseMaster("test", nsSpecs.Name)
+			CreateIndexerCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			DeleteIndexerCluster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
+
 		It("Cover Unused methods", func() {
-			namespace := "ns-splunk-lmaster-4"
-			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
+			namespace := "ns-splunk-ic-4"
+			ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -83,7 +90,7 @@ var _ = Describe("LicenseMaster Controller", func() {
 			ctx := context.TODO()
 			builder := fake.NewClientBuilder()
 			c := builder.Build()
-			instance := LicenseMasterReconciler{
+			instance := IndexerClusterReconciler{
 				Client: c,
 				Scheme: scheme.Scheme,
 			}
@@ -97,11 +104,11 @@ var _ = Describe("LicenseMaster Controller", func() {
 			_, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 			// create resource first and then reconcile for the first time
-			ssSpec := testutils.NewLicenseMaster("test", namespace, "image")
+			ssSpec := testutils.NewIndexerCluster("test", namespace, "image")
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 			// reconcile with updated annotations for pause
 			annotations := make(map[string]string)
-			annotations[enterpriseApiV3.LicenseMasterPausedAnnotation] = ""
+			annotations[enterpriseApi.IndexerClusterPausedAnnotation] = ""
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
 			_, err = instance.Reconcile(ctx, request)
@@ -121,13 +128,13 @@ var _ = Describe("LicenseMaster Controller", func() {
 	})
 })
 
-func GetLicenseMaster(name string, namespace string) (*enterpriseApiV3.LicenseMaster, error) {
+func GetIndexerCluster(name string, namespace string) (*enterpriseApi.IndexerCluster, error) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	By("Expecting LicenseMaster custom resource to be created successfully")
-	ss := &enterpriseApiV3.LicenseMaster{}
+	By("Expecting IndexerCluster custom resource to be created successfully")
+	ss := &enterpriseApi.IndexerCluster{}
 	err := k8sClient.Get(context.Background(), key, ss)
 	if err != nil {
 		return nil, err
@@ -135,59 +142,69 @@ func GetLicenseMaster(name string, namespace string) (*enterpriseApiV3.LicenseMa
 	return ss, err
 }
 
-func CreateLicenseMaster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApiV3.LicenseMaster {
+func CreateIndexerCluster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApi.IndexerCluster {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	ssSpec := testutils.NewLicenseMaster(name, namespace, "image")
+	ssSpec := testutils.NewIndexerCluster(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
+	time.Sleep(2 * time.Second)
 
-	By("Expecting LicenseMaster custom resource to be created successfully")
-	ss := &enterpriseApiV3.LicenseMaster{}
+	By("Expecting IndexerCluster custom resource to be created successfully")
+	ss := &enterpriseApi.IndexerCluster{}
 	Eventually(func() bool {
-		return k8sClient.Get(context.Background(), key, ss) == nil
+		_ = k8sClient.Get(context.Background(), key, ss)
+		if status != "" {
+			fmt.Printf("status is set to %v", status)
+			ss.Status.Phase = status
+			ss.Status.ClusterManagerPhase, ss.Status.ClusterMasterPhase = status, status //CM* Phase can't be empty
+			Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
+			time.Sleep(2 * time.Second)
+		}
+		return true
 	}, timeout, interval).Should(BeTrue())
-	if status != "" {
-		ss.Status.Phase = status
-		Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
-	}
 
 	return ss
 }
 
-func UpdateLicenseMaster(instance *enterpriseApiV3.LicenseMaster, status enterpriseApi.Phase) *enterpriseApiV3.LicenseMaster {
+func UpdateIndexerCluster(instance *enterpriseApi.IndexerCluster, status enterpriseApi.Phase) *enterpriseApi.IndexerCluster {
 	key := types.NamespacedName{
 		Name:      instance.Name,
 		Namespace: instance.Namespace,
 	}
 
-	ssSpec := testutils.NewLicenseMaster(instance.Name, instance.Namespace, "image")
+	ssSpec := testutils.NewIndexerCluster(instance.Name, instance.Namespace, "image")
 	ssSpec.ResourceVersion = instance.ResourceVersion
 	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
+	time.Sleep(2 * time.Second)
 
-	By("Expecting LicenseMaster custom resource to be updated successfully")
-	ss := &enterpriseApiV3.LicenseMaster{}
+	By("Expecting IndexerCluster custom resource to be created successfully")
+	ss := &enterpriseApi.IndexerCluster{}
 	Eventually(func() bool {
-		return k8sClient.Get(context.Background(), key, ss) == nil
+		_ = k8sClient.Get(context.Background(), key, ss)
+		if status != "" {
+			fmt.Printf("status is set to %v", status)
+			ss.Status.Phase = status
+			ss.Status.ClusterManagerPhase, ss.Status.ClusterMasterPhase = status, status //CM* Phase can't be empty
+			Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
+			time.Sleep(2 * time.Second)
+		}
+		return true
 	}, timeout, interval).Should(BeTrue())
-	if status != "" {
-		ss.Status.Phase = status
-		Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
-	}
 
 	return ss
 }
 
-func DeleteLicenseMaster(name string, namespace string) {
+func DeleteIndexerCluster(name string, namespace string) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
 
-	By("Expecting LicenseMaster Deleted successfully")
+	By("Expecting IndexerCluster Deleted successfully")
 	Eventually(func() error {
-		ssys := &enterpriseApiV3.LicenseMaster{}
+		ssys := &enterpriseApi.IndexerCluster{}
 		_ = k8sClient.Get(context.Background(), key, ssys)
 		err := k8sClient.Delete(context.Background(), ssys)
 		return err

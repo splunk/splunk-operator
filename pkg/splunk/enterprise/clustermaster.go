@@ -18,14 +18,13 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"time"
 
-	"log/slog"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"

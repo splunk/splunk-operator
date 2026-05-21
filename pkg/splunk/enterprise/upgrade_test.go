@@ -7,7 +7,7 @@ import (
 	"runtime/debug"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	"github.com/splunk/splunk-operator/pkg/splunk/common"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
