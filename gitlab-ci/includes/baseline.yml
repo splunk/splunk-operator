@@ -11,6 +11,12 @@ private-docs-reference-check:
   script:
     - bash gitlab-ci/validate-no-private-refs.sh
 
+ai-config-files-check:
+  extends:
+    - .go-verify-job
+  script:
+    - bash gitlab-ci/validate-no-ai-config-files.sh
+
 format-and-vet:
   extends:
     - .go-verify-job
