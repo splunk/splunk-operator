@@ -60,9 +60,6 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Monitoring Console
-			   * Create app source for Monitoring Console
-			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
 			   * Upload V1 apps to S3 for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
@@ -88,50 +85,13 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify App enabled  and version by running splunk cmd
 			*/
 
-			// ################## SETUP FOR MONITORING CONSOLE ####################
-
-			// Upload V1 apps to S3 for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-
-			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App Framework spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Eventually(func() error {
-				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-				defer cancel()
-				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// ################## SETUP FOR STANDALONE ####################
 			// Upload V1 apps to S3 for Standalone
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
-			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -149,9 +109,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -165,13 +122,6 @@ var _ = Describe("s1appfw test", func() {
 			Eventually(func() error {
 				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Standalone not ready")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Eventually(func() error {
-				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-				defer cancel()
-				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -187,10 +137,8 @@ var _ = Describe("s1appfw test", func() {
 
 			// ############ INITIAL VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -210,10 +158,6 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
 			// Check for changes in App phase to determine if next poll has been triggered
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
@@ -222,13 +166,6 @@ var _ = Describe("s1appfw test", func() {
 				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Standalone not ready")
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			Eventually(func() error {
-				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-				defer cancel()
-				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
@@ -236,10 +173,7 @@ var _ = Describe("s1appfw test", func() {
 			standaloneAppSourceInfo.CrAppVersion = appVersion
 			standaloneAppSourceInfo.CrAppList = appListV2
 			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			mcAppSourceInfo.CrAppVersion = appVersion
-			mcAppSourceInfo.CrAppList = appListV2
-			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -251,9 +185,6 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V2 apps to S3 for Monitoring Console
-			   * Create app source for Monitoring Console
-			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
 			   * Upload V2 apps to S3 for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
@@ -268,7 +199,6 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify App enabled  and version by running splunk cmd
 			   ############# DOWNGRADE APPS ################
 			   * Upload V1 apps on S3
-			   * Wait for Monitoring Console and Standalone pods to be ready
 			   ########## DOWNGRADE VERIFICATION FOR STANDALONE AND MONITORING CONSOLE ###########
 			   * Verify Apps Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
@@ -292,40 +222,6 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App Framework Spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Eventually(func() error {
-				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-				defer cancel()
-				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
-
 			// Create App Framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
@@ -336,9 +232,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -353,22 +246,13 @@ var _ = Describe("s1appfw test", func() {
 				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Standalone not ready")
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			Eventually(func() error {
-				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-				defer cancel()
-				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//############ INITIAL VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -377,9 +261,6 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 			Expect(cloudBackend.DeleteFiles(ctx, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
-
-			// get revision number of the resource
-			resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, mc)
 
 			// Upload V1 apps to S3 for Standalone and Monitoring Console
 			appVersion = "V1"
@@ -390,10 +271,6 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
 			// Check for changes in App phase to determine if next poll has been triggered
 			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
@@ -402,16 +279,6 @@ var _ = Describe("s1appfw test", func() {
 				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Standalone not ready")
 
-			// wait for custom resource resource version to change
-			Expect(testcaseEnvInst.VerifyCustomResourceVersionChanged(ctx, deployment, mc, resourceVersion)).To(Succeed(), "Custom resource version not changed")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Eventually(func() error {
-				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-				defer cancel()
-				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
@@ -419,10 +286,7 @@ var _ = Describe("s1appfw test", func() {
 			standaloneAppSourceInfo.CrAppVersion = appVersion
 			standaloneAppSourceInfo.CrAppList = appListV1
 			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
-			mcAppSourceInfo.CrAppVersion = appVersion
-			mcAppSourceInfo.CrAppList = appListV1
-			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
-			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -435,8 +299,6 @@ var _ = Describe("s1appfw test", func() {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload apps on S3
-			   * Create 2 app sources for Monitoring Console and Standalone
-			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
 			   * Prepare and deploy Standalone CRD with app framework and wait for the pod to be ready
 			   ########## INITIAL VERIFICATION #############
 			   * Verify Apps Downloaded in App Deployment Info
@@ -449,7 +311,6 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify App enabled  and version by running splunk cmd
 			   ############### SCALING UP ##################
 			   * Scale up Standalone
-			   * Wait for Monitoring Console and  Standalone to be ready
 			   ########### SCALING UP VERIFICATION #########
 			   * Verify Apps Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
@@ -461,7 +322,6 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify App enabled  and version by running splunk cmd
 			   ############## SCALING DOWN #################
 			   * Scale down Standalone
-			   * Wait for Monitoring Console and Standalone to be ready
 			   ########### SCALING DOWN VERIFICATION #######
 			   * Verify Apps Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
@@ -474,46 +334,14 @@ var _ = Describe("s1appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to S3 for Standalone and Monitoring Console
+			// Upload V1 apps to S3 for Standalone
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
-
-			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App Framework Spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
 
 			// Upload apps to S3 for Standalone
 			s3TestDir := "s1appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -527,9 +355,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -544,13 +369,6 @@ var _ = Describe("s1appfw test", func() {
 				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Standalone not ready")
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			Eventually(func() error {
-				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-				defer cancel()
-				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
@@ -563,10 +381,8 @@ var _ = Describe("s1appfw test", func() {
 			//########## INITIAL VERIFICATION #############
 			scaledReplicaCount := 2
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: scaledReplicaCount}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
 
@@ -592,7 +408,6 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseReady)).To(Succeed(), "Standalone phase mismatch")
 
-			// Verify Monitoring Console is Ready and stays in ready state
 			//testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			//########### SCALING UP VERIFICATION #########
@@ -623,13 +438,6 @@ var _ = Describe("s1appfw test", func() {
 
 			// Wait for Standalone to be in READY status
 			Expect(testcaseEnvInst.VerifyStandalonePhase(ctx, deployment, enterpriseApi.PhaseReady)).To(Succeed(), "Standalone phase mismatch")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Eventually(func() error {
-				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-				defer cancel()
-				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			//########### SCALING DOWN VERIFICATION #######
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
@@ -676,13 +484,9 @@ var _ = Describe("s1appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1)
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
 
-			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
 			// Upload apps to S3 for Standalone
 			s3TestDir := "s1appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -792,6 +596,7 @@ var _ = Describe("s1appfw test", func() {
 			*/
 
 			//################## SETUP ####################
+			appVersion := "V1"
 
 			// Download ES App from S3
 			testcaseEnvInst.Log.Info("Download ES app from S3")
@@ -840,7 +645,6 @@ var _ = Describe("s1appfw test", func() {
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			// ############ INITIAL VERIFICATION ###########
-			appVersion := "V1"
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: esApp, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
@@ -906,11 +710,11 @@ var _ = Describe("s1appfw test", func() {
 			*/
 
 			//################## SETUP ####################
+			appVersion := "V1"
 
 			// Creating a bigger list of apps to be installed than the default one
 			appList := append(appListV1, testenv.RestartNeededApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			appVersion := "V1"
 
 			// Download apps from S3
 			testcaseEnvInst.Log.Info("Download bigger amount of apps from S3 for this test")
@@ -965,9 +769,6 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Monitoring Console
-			   * Create app source for Monitoring Console
-			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework(MANUAL POLL) and wait for the pod to be ready
 			   ############### VERIFICATION ################
@@ -998,45 +799,11 @@ var _ = Describe("s1appfw test", func() {
 
 			//################## SETUP ####################
 
-			// Upload V1 apps to S3 for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App Framework spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Eventually(func() error {
-				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-				defer cancel()
-				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Upload V1 apps to S3
-			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1051,9 +818,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -1066,13 +830,6 @@ var _ = Describe("s1appfw test", func() {
 			Eventually(func() error {
 				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Standalone not ready")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Eventually(func() error {
-				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-				defer cancel()
-				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1098,10 +855,6 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
 			testcaseEnvInst.Log.Info("Step: Wait for Phase Change")
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -1115,13 +868,6 @@ var _ = Describe("s1appfw test", func() {
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Standalone not ready")
 
 			testcaseEnvInst.Log.Info("Step: Verify if Monitoring Console is ready")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Eventually(func() error {
-				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-				defer cancel()
-				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			testcaseEnvInst.Log.Info("Step: Check if verification apps are not updated before enabling manual poll")
 
@@ -1139,7 +885,6 @@ var _ = Describe("s1appfw test", func() {
 
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
 			config.Data["Standalone"] = strings.Replace(config.Data["Standalone"], "off", "on", 1)
-			config.Data["MonitoringConsole"] = strings.Replace(config.Data["Standalone"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
@@ -1152,20 +897,13 @@ var _ = Describe("s1appfw test", func() {
 				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Standalone not ready")
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			Eventually(func() error {
-				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-				defer cancel()
-				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
-
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
 			//Verify config map set back to off after poll trigger
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify config map set back to off after poll trigger for %s app", appVersion))
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			//Expect(strings.Contains(config.Data["Standalone"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
+			//Expect(strings.Contains(config.Data["Standalone"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//############### VERIFICATION FOR UPGRADE ################
 			standaloneAppSourceInfo.CrAppVersion = appVersion
@@ -1198,10 +936,10 @@ var _ = Describe("s1appfw test", func() {
 
 			//################## SETUP ####################
 
+			appVersion := "V1"
 			// Creating a list of apps to be installed on both standalone
 			appList1 := append(appListV1, testenv.RestartNeededApps[len(testenv.RestartNeededApps)/2:]...)
 			appList2 := append(appListV1, testenv.RestartNeededApps[:len(testenv.RestartNeededApps)/2]...)
-			appVersion := "V1"
 
 			// Download apps from S3
 			testcaseEnvInst.Log.Info("Download the extra apps from S3 for this test")
@@ -1290,9 +1028,6 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 				################## SETUP ####################
-				* Upload V1 apps to S3 for Monitoring Console
-			    * Create app source for Monitoring Console
-			   	* Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
 				* Upload big-size app to S3 for Standalone
 				* Create app source for Standalone
 				* Prepare and deploy Standalone
@@ -1303,56 +1038,20 @@ var _ = Describe("s1appfw test", func() {
 			    * Verify all apps are installed on Standalone
 			*/
 
-			// ################## SETUP FOR MONITORING CONSOLE ####################
-			// Upload V1 apps to S3 for Monitoring Console
-			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App Framework spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Eventually(func() error {
-				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-				defer cancel()
-				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// ################## SETUP FOR STANDALONE ####################
 			// Download all test apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = cloudBackend.DownloadFiles(ctx, testenv.AppLocationV1, downloadDirV1, appFileList)
+			err := cloudBackend.DownloadFiles(ctx, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to S3 for Standalone
 			appList = testenv.BigSingleApp
 			appFileList = testenv.GetAppFileList(appList)
 			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Standalone")
-			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1366,9 +1065,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -1425,9 +1121,9 @@ var _ = Describe("s1appfw test", func() {
 
 			// ################## SETUP FOR STANDALONE ####################
 			// Download all test apps from S3
-			appVersion := "V1"
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
+			appVersion := "V1"
 			err := cloudBackend.DownloadFiles(ctx, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -1521,9 +1217,9 @@ var _ = Describe("s1appfw test", func() {
 
 			// ################## SETUP FOR STANDALONE ####################
 			// Download all test apps from S3
-			appVersion := "V1"
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
+			appVersion := "V1"
 			err := cloudBackend.DownloadFiles(ctx, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -1599,8 +1295,8 @@ var _ = Describe("s1appfw test", func() {
 
 			// ################## SETUP FOR STANDALONE ####################
 			// Upload V1 apps to S3 for Standalone
-			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
+			appVersion := "V1"
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
 			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
@@ -1715,8 +1411,8 @@ var _ = Describe("s1appfw test", func() {
 
 			// ################## SETUP FOR STANDALONE ####################
 			// Upload V1 apps to S3 for Standalone
-			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
+			appVersion := "V1"
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
 			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
@@ -1841,9 +1537,9 @@ var _ = Describe("s1appfw test", func() {
 
 			// ################## SETUP FOR STANDALONE ####################
 			// Download test app from S3
-			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
+			appVersion := "V1"
 			err := cloudBackend.DownloadFiles(ctx, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
@@ -1932,13 +1628,13 @@ var _ = Describe("s1appfw test", func() {
 
 			//################## SETUP ####################
 			// Create a large file on Operator pod
+			appVersion := "V1"
 			opPod := testcaseEnvInst.GetOperatorPodName()
 			err := testenv.CreateDummyFileOnOperator(ctx, deployment, opPod, testenv.AppDownloadVolume, "1G", "test_file.img")
 			Expect(err).To(Succeed(), "Unable to create file on operator")
 			filePresentOnOperator = true
 
 			// Download apps for test
-			appVersion := "V1"
 			appList := testenv.PVTestApps
 			appFileList := testenv.GetAppFileList(appList)
 			err = cloudBackend.DownloadFiles(ctx, testenv.PVTestAppsLocation, downloadDirPVTestApps, appFileList)
@@ -2008,9 +1704,9 @@ var _ = Describe("s1appfw test", func() {
 
 			// ################## SETUP FOR STANDALONE ####################
 			// Download big size apps from S3
-			appVersion := "V1"
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
+			appVersion := "V1"
 			err := cloudBackend.DownloadFiles(ctx, testenv.AppLocationV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big app")
 
@@ -2070,66 +1766,20 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Monitoring Console
-			   * Create app source for Monitoring Console
-			   * Prepare and deploy Monitoring Console with app framework
-			   * Check isDeploymentInProgress is set for Monitoring Console CR
 			   * Wait for the pod to be ready
 			   * Upload V1 apps to S3 for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework
-			   * Check isDeploymentInProgress is set for Monitoring Console CR
 			   * Wait for the pod to be ready
 			*/
 
-			// ################## SETUP FOR MONITORING CONSOLE ####################
-
-			// Upload V1 apps to S3 for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-
-			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App Framework spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify IsDeploymentInProgress Flag is set to true for Monitroing Console CR
-			testcaseEnvInst.Log.Info("Checking isDeploymentInProgressFlag")
-			Expect(testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, mcName, mc.Kind)).To(Succeed(), "IsDeploymentInProgress flag not set")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Eventually(func() error {
-				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-				defer cancel()
-				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 			// ################## SETUP FOR STANDALONE ####################
 			// Upload V1 apps to S3 for Standalone
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
-			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
+			uploadedFiles, err := cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -2147,9 +1797,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -2166,13 +1813,6 @@ var _ = Describe("s1appfw test", func() {
 			Eventually(func() error {
 				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Standalone not ready")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			Eventually(func() error {
-				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-				defer cancel()
-				return testcaseEnvInst.VerifyMonitoringConsoleReady(attemptCtx, deployment, deployment.GetName(), mc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Monitoring Console not ready")
 
 		})
 	})
