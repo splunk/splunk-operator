@@ -82,41 +82,15 @@ def released_operator_repository() -> tuple[str, str]:
     return split_image_repository(repository)
 
 
-def artifactory_helm_repo_url_from_publish_base(publish_base: str) -> str:
-    normalized = publish_base.strip().rstrip("/")
-    if not normalized:
-        return ""
-    parsed = urllib.parse.urlparse(normalized)
-    if parsed.scheme != "https" or not parsed.netloc:
-        return ""
-    path = parsed.path.strip("/")
-    if not path.startswith("artifactory/"):
-        return ""
-    remainder = path.removeprefix("artifactory/")
-    repo_key = remainder.split("/", 1)[0]
-    if not repo_key:
-        return ""
-    return f"{parsed.scheme}://{parsed.netloc}/artifactory/api/helm/{repo_key}"
-
-
 def released_helm_repo_url() -> str:
-    explicit_repo_url = env_first(
-        "PIPELINE_RELEASED_HELM_REPO_URL",
-        "PIPELINE_CHART_RELEASE_REPO_URL",
-    )
+    explicit_repo_url = env_first("PIPELINE_RELEASED_HELM_REPO_URL")
     if explicit_repo_url:
         return explicit_repo_url
-    return (
-        artifactory_helm_repo_url_from_publish_base(os.getenv("PIPELINE_CHART_RELEASE_REPOSITORY", ""))
-        or DEFAULT_HELM_REPO_URL
-    )
+    return DEFAULT_HELM_REPO_URL
 
 
 def released_helm_publish_base() -> str:
-    return env_first(
-        "PIPELINE_CHART_RELEASE_REPOSITORY",
-        default="",
-    )
+    return ""
 
 
 def released_helm_index_url(repo_url: str) -> str:

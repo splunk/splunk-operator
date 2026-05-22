@@ -259,8 +259,10 @@ setup/helm:
 	fi
 	@mkdir -p "${CI_BIN_DIR}"
 	@if [ ! -x "${CI_BIN_DIR}/helm" ]; then \
-		tmp_archive="/tmp/helm-${HELM_VERSION}-linux-amd64.tar.gz"; \
-		curl -fsSL -o "$$tmp_archive" "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"; \
+		set -e; \
+		normalized_version="v$${HELM_VERSION#v}"; \
+		tmp_archive="/tmp/helm-$${normalized_version}-linux-amd64.tar.gz"; \
+		curl -fsSL -o "$$tmp_archive" "https://get.helm.sh/helm-$${normalized_version}-linux-amd64.tar.gz"; \
 		tar -xzf "$$tmp_archive" -C /tmp linux-amd64/helm; \
 		mv /tmp/linux-amd64/helm "${CI_BIN_DIR}/helm"; \
 		chmod +x "${CI_BIN_DIR}/helm"; \
