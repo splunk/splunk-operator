@@ -1658,6 +1658,13 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              podAnnotations:
+                additionalProperties:
+                  type: string
+                description: |-
+                  PodAnnotations is a map of annotations applied to Splunk instance pods.
+                  These annotations override operator-provided pod annotations when keys overlap.
+                type: object
               queueRef:
                 description: Queue reference
                 properties:

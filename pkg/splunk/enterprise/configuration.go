@@ -778,6 +778,14 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 
 	// append labels and annotations from parent
 	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
+	if len(spec.PodAnnotations) > 0 {
+		if statefulSet.Spec.Template.Annotations == nil {
+			statefulSet.Spec.Template.Annotations = make(map[string]string)
+		}
+		for k, v := range spec.PodAnnotations {
+			statefulSet.Spec.Template.Annotations[k] = v
+		}
+	}
 
 	// retrieve the secret to upload to the statefulSet pod
 	statefulSetSecret, err := splutil.GetLatestVersionedSecret(ctx, client, cr, cr.GetNamespace(), statefulSet.GetName())

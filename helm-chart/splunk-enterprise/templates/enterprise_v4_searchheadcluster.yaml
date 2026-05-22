@@ -85,6 +85,10 @@ items:
     imagePullSecrets:
 {{ toYaml . | indent 6 }}
   {{- end }}
+  {{- with $.Values.searchHeadCluster.podAnnotations }}
+    podAnnotations:
+{{ toYaml . | indent 6 }}
+  {{- end }}
   {{- with $.Values.searchHeadCluster.volumes }}
     volumes:
 {{ toYaml . | indent 6 }}

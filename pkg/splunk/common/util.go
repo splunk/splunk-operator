@@ -202,6 +202,13 @@ func CompareSortedStrings(a []string, b []string) bool {
 	return !reflect.DeepEqual(a, b)
 }
 
+const (
+	// IstioExcludeOutboundPortsAnnotation configures ports excluded from Istio outbound traffic capture.
+	IstioExcludeOutboundPortsAnnotation = "traffic.sidecar.istio.io/excludeOutboundPorts"
+	// IstioIncludeInboundPortsAnnotation configures ports included in Istio inbound traffic capture.
+	IstioIncludeInboundPortsAnnotation = "traffic.sidecar.istio.io/includeInboundPorts"
+)
+
 // GetIstioAnnotations returns a map of istio annotations for a pod template
 func GetIstioAnnotations(ports []corev1.ContainerPort) map[string]string {
 	// list of ports within the deployments that we want istio to leave alone
@@ -232,8 +239,8 @@ func GetIstioAnnotations(ports []corev1.ContainerPort) map[string]string {
 	}
 
 	return map[string]string{
-		"traffic.sidecar.istio.io/excludeOutboundPorts": excludeOutboundPortsBuf.String(),
-		"traffic.sidecar.istio.io/includeInboundPorts":  includeInboundPortsBuf.String(),
+		IstioExcludeOutboundPortsAnnotation: excludeOutboundPortsBuf.String(),
+		IstioIncludeInboundPortsAnnotation:  includeInboundPortsBuf.String(),
 	}
 }
 
