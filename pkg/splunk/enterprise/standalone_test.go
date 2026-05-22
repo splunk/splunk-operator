@@ -402,6 +402,93 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 	test(loadFixture(t, "statefulset_stack1_standalone_with_service_account_2.json"))
 }
 
+func TestGetStandaloneStatefulSetPodAnnotationsOverrideIstioDefaults(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+			Annotations: map[string]string{
+				"custom.splunk.com/parent": "from-parent",
+			},
+		},
+	}
+	cr.Spec.PodAnnotations = map[string]string{
+		splcommon.IstioExcludeOutboundPortsAnnotation: "8089,8191,9997,15020",
+		splcommon.IstioIncludeInboundPortsAnnotation:  "8000,8088,15021",
+		"custom.splunk.com/pod":                       "from-pod-annotations",
+		"custom.splunk.com/parent":                    "overridden-by-pod-annotations",
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Fatalf("Failed to create namespace scoped object: %v", err)
+	}
+	if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("validateStandaloneSpec() returned error: %v", err)
+	}
+
+	ss, err := getStandaloneStatefulSet(ctx, c, &cr)
+	if err != nil {
+		t.Fatalf("getStandaloneStatefulSet() returned error: %v", err)
+	}
+
+	annotations := ss.Spec.Template.GetAnnotations()
+	want := map[string]string{
+		splcommon.IstioExcludeOutboundPortsAnnotation: "8089,8191,9997,15020",
+		splcommon.IstioIncludeInboundPortsAnnotation:  "8000,8088,15021",
+		"custom.splunk.com/pod":                       "from-pod-annotations",
+		"custom.splunk.com/parent":                    "overridden-by-pod-annotations",
+	}
+	for key, value := range want {
+		if annotations[key] != value {
+			t.Errorf("StatefulSet pod annotation %q = %q; want %q", key, annotations[key], value)
+		}
+	}
+}
+
+func TestGetStandaloneStatefulSetPodAnnotationsPreserveIstioDefaults(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	cr.Spec.PodAnnotations = map[string]string{
+		"custom.splunk.com/pod": "from-pod-annotations",
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Fatalf("Failed to create namespace scoped object: %v", err)
+	}
+	if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("validateStandaloneSpec() returned error: %v", err)
+	}
+
+	ss, err := getStandaloneStatefulSet(ctx, c, &cr)
+	if err != nil {
+		t.Fatalf("getStandaloneStatefulSet() returned error: %v", err)
+	}
+
+	annotations := ss.Spec.Template.GetAnnotations()
+	want := map[string]string{
+		splcommon.IstioExcludeOutboundPortsAnnotation: "8089,8191,9997",
+		splcommon.IstioIncludeInboundPortsAnnotation:  "8000,8088",
+		"custom.splunk.com/pod":                       "from-pod-annotations",
+	}
+	for key, value := range want {
+		if annotations[key] != value {
+			t.Errorf("StatefulSet pod annotation %q = %q; want %q", key, annotations[key], value)
+		}
+	}
+}
+
 func TestStandaloneSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	// Unset the SPLUNK_GENERAL_TERMS environment variable
 	os.Unsetenv("SPLUNK_GENERAL_TERMS")

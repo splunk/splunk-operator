@@ -76,6 +76,10 @@ items:
     imagePullSecrets:
 {{ toYaml . | indent 6 }}
   {{- end }}
+  {{- with $.Values.indexerCluster.podAnnotations }}
+    podAnnotations:
+{{ toYaml . | indent 6 }}
+  {{- end }}
   {{- with $.Values.indexerCluster.volumes }}
     volumes:
 {{ toYaml . | indent 6 }}
