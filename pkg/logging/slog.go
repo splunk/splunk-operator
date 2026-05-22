@@ -186,7 +186,9 @@ func LevelFromString(s string) slog.Level {
 		return slog.LevelError
 	default:
 		if n, err := strconv.Atoi(s); err == nil {
-			return slog.Level(n)
+			if level := slog.Level(n); level >= slog.LevelDebug && level <= slog.LevelError {
+				return level
+			}
 		}
 		return slog.LevelInfo
 	}
