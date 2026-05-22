@@ -243,20 +243,9 @@ def build_description(release_version: str, project_dir: Path, assets: list[dict
     publish_charts_context = load_optional_env_file(
         project_dir / "ci-output" / "publish-release-charts-runtime-context.txt"
     )
-    chart_repo_url = first_nonempty(
-        os.getenv("PIPELINE_CHART_RELEASE_REPO_URL", ""),
-        os.getenv("JOB_CHART_RELEASE_REPO_URL", ""),
-        os.getenv("DEFAULT_CHART_RELEASE_REPO_URL", ""),
-        publish_charts_context.get("chart_repo_url", ""),
-        os.getenv("PIPELINE_RELEASED_HELM_REPO_URL", ""),
-        "unset",
-    )
     chart_publish_base = first_nonempty(
-        os.getenv("PIPELINE_CHART_RELEASE_REPOSITORY", ""),
-        os.getenv("JOB_CHART_RELEASE_REPOSITORY", ""),
-        os.getenv("DEFAULT_CHART_RELEASE_REPOSITORY", ""),
         publish_charts_context.get("chart_repo", ""),
-        "unset",
+        "https://repo.splunkdev.net/artifactory/helm/sok/splunk-operator",
     )
     psr_summary = load_optional_text(project_dir / "ci-output" / "release-psr-qualification-plan-output" / "summary.txt")
     preflight_summary = load_optional_text(project_dir / "ci-output" / "preflight-certification-output" / "summary.txt")
@@ -273,7 +262,6 @@ def build_description(release_version: str, project_dir: Path, assets: list[dict
         "",
         "## Published Charts",
         "",
-        f"- chart_repo_url: `{chart_repo_url}`",
         f"- chart_publish_base: `{chart_publish_base}`",
         f"- operator_chart_archive: `{candidate_contract.get('RELEASE_OPERATOR_CHART_ARCHIVE', 'unset')}`",
         f"- enterprise_chart_archive: `{candidate_contract.get('RELEASE_ENTERPRISE_CHART_ARCHIVE', 'unset')}`",

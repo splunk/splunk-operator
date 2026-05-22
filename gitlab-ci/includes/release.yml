@@ -100,7 +100,9 @@ release-indingsep-validation:
     JOB_INT_TEST_FOCUS: indingsep
 
 release-helm-validation:
-  extends: .release-validation-runtime-job
+  extends:
+    - .release-validation-runtime-job
+    - .release-chart-read-creds-helper-job
   timeout: 10h
   variables:
     WORKFLOW_SLUG: release-helm-validation
@@ -508,17 +510,12 @@ publish-release-bundle:
 publish-release-charts:
   extends:
     - .release-publish-job
+    - .release-chart-publish-creds-helper-job
     - .rules-release-publish
-  id_tokens:
-    CI_JOB_JWT:
-      aud: $CICD_VAULT_ADDR
   needs:
     - job: fetch-release-candidate
       artifacts: true
   variables:
-    DEFAULT_CHART_RELEASE_REPOSITORY: https://repo.splunkdev.net/artifactory/helm/sok/splunk-operator
-    DEFAULT_CHART_RELEASE_REPO_URL: https://repo.splunkdev.net/artifactory/api/helm/helm
-    JOB_CHART_RELEASE_ARTIFACTORY_ROLE: artifactory:v2/cloud/role/helm-deployer-role
     WORKFLOW_SLUG: publish-release-charts
   script:
     - gitlab-ci/release-publish-charts.sh

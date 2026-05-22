@@ -218,10 +218,10 @@ if [ "${RUNTIME_OPERATOR_SOURCE_KIND}" = "official-release" ]; then
     oci://*)
       released_chart_path="${RELEASED_HELM_REPO_URL#oci://}"
       released_chart_registry="${released_chart_path%%/*}"
-      chart_username="$(first_nonempty "${PIPELINE_CHART_RELEASE_USERNAME:-}" "${PIPELINE_DOCKER_USERNAME:-}" "")"
-      chart_password="$(first_nonempty "${PIPELINE_CHART_RELEASE_PASSWORD:-}" "${PIPELINE_DOCKER_PASSWORD:-}" "")"
-      if [ -n "${chart_username}" ] || [ -n "${chart_password}" ] || printf '%s' "${released_chart_registry}" | grep -Eq '\.dkr\.ecr\..*\.amazonaws\.com$'; then
-        helm_login_registry "${released_chart_registry}" "${chart_username}" "${chart_password}" >> "${kuttl_log}" 2>&1
+      registry_username="$(first_nonempty "${PIPELINE_DOCKER_USERNAME:-}" "")"
+      registry_password="$(first_nonempty "${PIPELINE_DOCKER_PASSWORD:-}" "")"
+      if [ -n "${registry_username}" ] || [ -n "${registry_password}" ] || printf '%s' "${released_chart_registry}" | grep -Eq '\.dkr\.ecr\..*\.amazonaws\.com$'; then
+        helm_login_registry "${released_chart_registry}" "${registry_username}" "${registry_password}" >> "${kuttl_log}" 2>&1
       else
         log_step "helm:pull-released:registry-login:skipped"
       fi
@@ -230,12 +230,6 @@ if [ "${RUNTIME_OPERATOR_SOURCE_KIND}" = "official-release" ]; then
       ;;
     *)
       if [ -n "${RELEASED_ENTERPRISE_CHART_URL}" ] && [ -n "${RELEASED_OPERATOR_CHART_URL}" ]; then
-        chart_username="$(first_nonempty "${PIPELINE_CHART_RELEASE_USERNAME:-}" "${PIPELINE_DOCKER_USERNAME:-}" "")"
-        chart_password="$(first_nonempty "${PIPELINE_CHART_RELEASE_PASSWORD:-}" "${PIPELINE_DOCKER_PASSWORD:-}" "")"
-        chart_artifactory_role="$(first_nonempty "${PIPELINE_CHART_RELEASE_ARTIFACTORY_ROLE:-}" "${JOB_CHART_RELEASE_ARTIFACTORY_ROLE:-}" "")"
-        if printf '%s\n%s\n' "${RELEASED_ENTERPRISE_CHART_URL}" "${RELEASED_OPERATOR_CHART_URL}" | grep -q '/artifactory/'; then
-          resolve_artifactory_http_auth "${chart_username}" "${chart_password}" "${chart_artifactory_role}"
-        fi
         enterprise_chart_archive="${released_helm_root}/splunk-enterprise-${RELEASED_ENTERPRISE_CHART_VERSION}.tgz"
         operator_chart_archive="${released_helm_root}/splunk-operator-${RELEASED_OPERATOR_CHART_VERSION}.tgz"
         artifactory_download_file "${RELEASED_ENTERPRISE_CHART_URL}" "${enterprise_chart_archive}"

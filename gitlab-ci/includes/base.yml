@@ -58,11 +58,7 @@ default:
     when: always
     expire_in: 90 days
 
-.runtime-build-job:
-  extends:
-    - .runtime-artifact-job
-    - .aws-pipeline-env-job
-  stage: build
+.creds-helper-job:
   id_tokens:
     CI_JOB_JWT:
       aud: $CICD_VAULT_ADDR
@@ -71,10 +67,36 @@ default:
     - |
       if [ "${CI_COMMIT_REF_NAME}" = "main" ] || [ "${CI_COMMIT_REF_NAME}" = "develop" ]; then
         export DOCKER_PATH=artifactory:v2/cloud/role/sok-docker-deployer-role
+        export HELM_DEPLOYER_PATH=artifactory:v2/cloud/role/helm-deployer-role
       else
         export DOCKER_PATH=artifactory:v2/cloud/role/sok-docker-test-deployer-role
+        export HELM_DEPLOYER_PATH=artifactory:v2/cloud/role/helm-test-deployer-role
       fi
     - eval $(creds-helper docker --eval $DOCKER_PATH)
+    - eval $(creds-helper artifactory --eval $HELM_DEPLOYER_PATH)
+
+.release-chart-publish-creds-helper-job:
+  id_tokens:
+    CI_JOB_JWT:
+      aud: $CICD_VAULT_ADDR
+  before_script:
+    - creds-helper init
+    - eval $(creds-helper artifactory --eval artifactory:v2/cloud/role/helm-deployer-role)
+
+.release-chart-read-creds-helper-job:
+  id_tokens:
+    CI_JOB_JWT:
+      aud: $CICD_VAULT_ADDR
+  before_script:
+    - creds-helper init
+    - eval $(creds-helper artifactory --eval artifactory:v2/cloud/role/helm-reader-role)
+
+.runtime-build-job:
+  extends:
+    - .runtime-artifact-job
+    - .aws-pipeline-env-job
+    - .creds-helper-job
+  stage: build
 
 .runtime-image-scan-job:
   extends:
@@ -202,23 +224,9 @@ default:
 # - PIPELINE_RELEASE_CANDIDATE_JOB_NAME defaults to release-candidate-packaging.
 # - PIPELINE_DOCKER_USERNAME / PIPELINE_DOCKER_PASSWORD provide generic OCI auth.
 # - PIPELINE_BUNDLE_REGISTRY is the bundle/catalog target registry.
-# - PIPELINE_CHART_RELEASE_REPOSITORY optionally overrides the Artifactory Helm
-#   publish base URL for release publication. When unset, release publication
-#   defaults to https://repo.splunkdev.net/artifactory/helm/sok/splunk-operator.
-# - PIPELINE_CHART_RELEASE_REPO_URL optionally overrides the Artifactory Helm
-#   read URL for release consumers. When unset, release publication defaults to
-#   https://repo.splunkdev.net/artifactory/api/helm/helm.
-# - PIPELINE_CHART_STAGE_REPOSITORY optionally overrides the Artifactory Helm
-#   publish base URL for develop snapshot chart publication. When unset,
-#   develop snapshot publication defaults to
-#   https://repo.splunkdev.net/artifactory/helm-test/sok/splunk-operator.
-# - PIPELINE_CHART_STAGE_REPO_URL optionally overrides the Artifactory Helm
-#   read URL for develop snapshot consumers. When unset, develop snapshot
-#   publication defaults to
-#   https://repo.splunkdev.net/artifactory/api/helm/helm-test.
-# - PIPELINE_CHART_RELEASE_ARTIFACTORY_ROLE and
-#   PIPELINE_CHART_STAGE_ARTIFACTORY_ROLE optionally override the default VRG
-#   deploy roles used by the release and develop chart publication jobs.
+# - Helm chart publication uses fixed internal Artifactory repositories and
+#   fixed VRG roles: release charts publish to `helm`, protected stage refs
+#   publish to `helm`, and other stage refs publish to `helm-test`.
 # - PIPELINE_HELM_CHART_VERSION / PIPELINE_HELM_CHART_APP_VERSION optionally
 #   override the generated develop snapshot chart metadata.
 # - PIPELINE_PYXIS_API_TOKEN and PIPELINE_PYXIS_CERTIFICATION_COMPONENT_ID

@@ -33,38 +33,14 @@ require_file "${build_image_ref_file}" "validated staged operator image referenc
 stage_operator_image="$(cat "${build_image_ref_file}")"
 require_nonempty "${stage_operator_image}" "staged operator image reference"
 
-chart_repo="$(first_nonempty \
-  "${PIPELINE_CHART_STAGE_REPOSITORY:-}" \
-  "${JOB_CHART_STAGE_REPOSITORY:-}" \
-  "${DEFAULT_CHART_STAGE_REPOSITORY:-}" \
-  "")"
-require_nonempty "${chart_repo}" "PIPELINE_CHART_STAGE_REPOSITORY"
-case "${chart_repo}" in
-  https://*/artifactory/*) ;;
+case "${CI_COMMIT_REF_NAME:-}" in
+  main|develop)
+    chart_repo="https://repo.splunkdev.net/artifactory/helm/sok/splunk-operator"
+    ;;
   *)
-    echo "PIPELINE_CHART_STAGE_REPOSITORY must be an Artifactory publish URL (https://.../artifactory/...)" >&2
-    exit 1
+    chart_repo="https://repo.splunkdev.net/artifactory/helm-test/sok/splunk-operator"
     ;;
 esac
-
-chart_repo_url="$(first_nonempty \
-  "${PIPELINE_CHART_STAGE_REPO_URL:-}" \
-  "${JOB_CHART_STAGE_REPO_URL:-}" \
-  "${DEFAULT_CHART_STAGE_REPO_URL:-}" \
-  "$(artifactory_helm_repo_url_from_publish_base "${chart_repo}")" \
-  "")"
-require_nonempty "${chart_repo_url}" "PIPELINE_CHART_STAGE_REPO_URL"
-
-chart_username="$(first_nonempty \
-  "${PIPELINE_CHART_STAGE_USERNAME:-}" \
-  "")"
-chart_password="$(first_nonempty \
-  "${PIPELINE_CHART_STAGE_PASSWORD:-}" \
-  "")"
-chart_artifactory_role="$(first_nonempty \
-  "${PIPELINE_CHART_STAGE_ARTIFACTORY_ROLE:-}" \
-  "${JOB_CHART_STAGE_ARTIFACTORY_ROLE:-}" \
-  "")"
 
 sanitize_chart_prerelease_token() {
   token="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
@@ -93,8 +69,10 @@ chart_app_version="$(first_nonempty \
 
 ci_bin_dir="${CI_PROJECT_DIR}/bin"
 ensure_ci_bin_path "${ci_bin_dir}"
+helm_version="$(first_nonempty "${PIPELINE_HELM_VERSION:-}" "${JOB_HELM_VERSION:-}" "v3.8.2")"
+append_context "${context_file}" "helm_version" "${helm_version}"
 make setup/helm \
-  HELM_VERSION="$(first_nonempty "${PIPELINE_HELM_VERSION:-}" "${HELM_VERSION:-}" "v3.8.2")" \
+  HELM_VERSION="${helm_version}" \
   CI_BIN_DIR="${ci_bin_dir}"
 
 rm -rf "${workspace_dir}"
@@ -134,18 +112,16 @@ helm package "${enterprise_chart_dir}" \
 enterprise_chart_archive="${package_dir}/splunk-enterprise-${chart_version}.tgz"
 require_file "${enterprise_chart_archive}" "packaged splunk-enterprise chart"
 
-resolve_artifactory_publish_auth "${chart_username}" "${chart_password}" "${chart_artifactory_role}"
+require_commands artifact-ci
 operator_chart_ref="${chart_repo%/}/$(basename "${operator_chart_archive}")"
 enterprise_chart_ref="${chart_repo%/}/$(basename "${enterprise_chart_archive}")"
-artifactory_upload_file "${operator_chart_ref}" "${operator_chart_archive}"
-artifactory_upload_file "${enterprise_chart_ref}" "${enterprise_chart_archive}"
+artifact-ci publish helm -d "${package_dir}" sok/splunk-operator
 
 printf '%s\n' "${operator_chart_ref}" > "${operator_chart_ref_file}"
 printf '%s\n' "${enterprise_chart_ref}" > "${enterprise_chart_ref_file}"
 printf '%s\n%s\n' "${operator_chart_ref}" "${enterprise_chart_ref}" > "${inventory_file}"
 
 append_context "${context_file}" "chart_repo" "${chart_repo}"
-append_context "${context_file}" "chart_repo_url" "${chart_repo_url}"
 append_context "${context_file}" "chart_version" "${chart_version}"
 append_context "${context_file}" "chart_app_version" "${chart_app_version}"
 append_context "${context_file}" "chart_channel" "${snapshot_channel}"
@@ -154,10 +130,10 @@ append_context "${context_file}" "operator_chart_ref" "${operator_chart_ref}"
 append_context "${context_file}" "enterprise_chart_ref" "${enterprise_chart_ref}"
 
 cat > "${summary_file}" <<EOF
-Published develop-lane snapshot Helm charts.
+Published stage snapshot Helm charts.
 
 - chart_repo: ${chart_repo}
-- chart_repo_url: ${chart_repo_url}
+- helm_version: ${helm_version}
 - chart_version: ${chart_version}
 - chart_app_version: ${chart_app_version}
 - stage_operator_image: ${stage_operator_image}

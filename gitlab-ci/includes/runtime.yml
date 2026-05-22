@@ -48,9 +48,6 @@ build-stage-charts:
       artifacts: true
   variables:
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-artifactory-image-ref.txt
-    DEFAULT_CHART_STAGE_REPOSITORY: https://repo.splunkdev.net/artifactory/helm-test/sok/splunk-operator
-    DEFAULT_CHART_STAGE_REPO_URL: https://repo.splunkdev.net/artifactory/api/helm/helm-test
-    JOB_CHART_STAGE_ARTIFACTORY_ROLE: artifactory:v2/cloud/role/helm-test-deployer-role
     WORKFLOW_SLUG: build-stage-charts
   script:
     - gitlab-ci/publish-stage-charts.sh
@@ -274,7 +271,9 @@ qualification-indingsep-validation:
     JOB_INT_TEST_FOCUS: indingsep
 
 helm-eks-validation:
-  extends: .runtime-released-sok-validation-job
+  extends:
+    - .runtime-released-sok-validation-job
+    - .release-chart-read-creds-helper-job
   allow_failure: true
   timeout: 10h
   variables:
