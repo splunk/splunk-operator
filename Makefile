@@ -135,9 +135,11 @@ scheck: ## Run static check against code
 vet: setup/ginkgo	 ## Run go vet against code.
 	go vet ./...
 
+UNIT_TEST_PACKAGES ?= ./pkg/... ./internal/controller/...
+
 test: manifests generate fmt vet setup-envtest ## Run tests.
 	REPORT_FILE="$${UNIT_TEST_REPORT_FILE:-unit_test.xml}"; \
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=$$REPORT_FILE --output-dir=`pwd` -vv --trace --keep-going --timeout=$${TEST_TIMEOUT:-170m} --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/client ./pkg/splunk/util ./internal/controller ./pkg/splunk/splkcontroller
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=$$REPORT_FILE --output-dir=`pwd` -vv --trace --keep-going --timeout=$${TEST_TIMEOUT:-170m} --cover --covermode=count --coverprofile=coverage.out $(UNIT_TEST_PACKAGES)
 
 
 ##@ Documentation
