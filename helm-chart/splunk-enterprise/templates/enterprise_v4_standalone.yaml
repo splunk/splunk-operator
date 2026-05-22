@@ -78,6 +78,10 @@ spec:
   imagePullSecrets:
 {{ toYaml . | indent 4 }}
 {{- end }}
+{{- with .Values.standalone.podAnnotations }}
+  podAnnotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
 {{- with .Values.standalone.volumes }}
   volumes:
 {{ toYaml . | indent 4 }}

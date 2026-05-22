@@ -1617,6 +1617,13 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              podAnnotations:
+                additionalProperties:
+                  type: string
+                description: |-
+                  PodAnnotations is a map of annotations applied to Splunk instance pods.
+                  These annotations override operator-provided pod annotations when keys overlap.
+                type: object
               readinessInitialDelaySeconds:
                 description: |-
                   ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe
@@ -6581,6 +6588,13 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              podAnnotations:
+                additionalProperties:
+                  type: string
+                description: |-
+                  PodAnnotations is a map of annotations applied to Splunk instance pods.
+                  These annotations override operator-provided pod annotations when keys overlap.
+                type: object
               readinessInitialDelaySeconds:
                 description: |-
                   ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe

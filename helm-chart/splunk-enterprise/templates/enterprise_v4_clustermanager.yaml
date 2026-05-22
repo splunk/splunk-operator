@@ -57,6 +57,10 @@ spec:
   imagePullSecrets:
 {{ toYaml . | indent 4 }}
 {{- end }}
+{{- with .Values.clusterManager.podAnnotations }}
+  podAnnotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
 {{- with .Values.clusterManager.volumes }}      
   volumes:
 {{ toYaml . | indent 4 }}
