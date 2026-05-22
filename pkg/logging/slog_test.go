@@ -149,6 +149,7 @@ func TestLevelFromString(t *testing.T) {
 		{"4", slog.LevelWarn},
 		{"8", slog.LevelError},
 		{"-1", slog.Level(-1)},
+		{"123", slog.LevelInfo},
 	}
 
 	for _, tt := range tests {
