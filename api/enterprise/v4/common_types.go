@@ -115,6 +115,11 @@ type Spec struct {
 
 	// TopologySpreadConstraint https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
 	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+
+	// PodAnnotations is a map of annotations applied to Splunk instance pods.
+	// These annotations override operator-provided pod annotations when keys overlap.
+	// +optional
+	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
 }
 
 // Phase is used to represent the current phase of a custom resource

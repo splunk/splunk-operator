@@ -53,6 +53,10 @@ spec:
   imagePullSecrets:
 {{ toYaml . | indent 4 }}
 {{- end }}
+{{- with .Values.licenseManager.podAnnotations }}
+  podAnnotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
 {{- with .Values.licenseManager.volumes }}
   volumes:
 {{ toYaml . | indent 4 }}

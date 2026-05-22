@@ -94,7 +94,8 @@ clusterManager:
 
   additionalAnnotations: {}
 
-
+  # Add annotations to Splunk instance pods. Can override default Istio traffic annotations.
+  podAnnotations: {}
 
   # Splunk Enterprise App repository
   # Specifies remote App location and scope for Splunk App management
@@ -275,6 +276,9 @@ indexerCluster:
 
   additionalAnnotations: {}
 
+  # Add annotations to Splunk instance pods. Can override default Istio traffic annotations.
+  podAnnotations: {}
+
   replicaCount: 1
 
   volumes: []
@@ -365,6 +369,9 @@ searchHeadCluster:
   additionalLabels: {}
 
   additionalAnnotations: {}
+
+  # Add annotations to Splunk instance pods. Can override default Istio traffic annotations.
+  podAnnotations: {}
 
   replicaCount: 1
 
@@ -481,6 +488,9 @@ monitoringConsole:
 
   additionalAnnotations: {}
 
+  # Add annotations to Splunk instance pods. Can override default Istio traffic annotations.
+  podAnnotations: {}
+
   appRepo: {}
     # appsRepoPollIntervalSeconds:
     # defaults:
@@ -584,6 +594,9 @@ licenseManager:
   additionalLabels: {}
 
   additionalAnnotations: {}
+
+  # Add annotations to Splunk instance pods. Can override default Istio traffic annotations.
+  podAnnotations: {}
 
   appRepo: {}
     # appsRepoPollIntervalSeconds:
@@ -699,6 +712,9 @@ standalone:
   additionalLabels: {}
 
   additionalAnnotations: {}
+
+  # Add annotations to Splunk instance pods. Can override default Istio traffic annotations.
+  podAnnotations: {}
 
   replicaCount: 1
 
@@ -828,6 +844,9 @@ ingestorCluster:
   additionalLabels: {}
 
   additionalAnnotations: {}
+
+  # Add annotations to Splunk instance pods. Can override default Istio traffic annotations.
+  podAnnotations: {}
 
   replicaCount: 3
 
