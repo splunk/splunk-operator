@@ -534,7 +534,7 @@ type AppFrameworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Minimum:=30
 	// +kubebuilder:default:=90
-	SchedulerYieldInterval uint64 `json:"appInstallPeriodSeconds,omitempty"`
+	SchedulerYieldInterval int64 `json:"appInstallPeriodSeconds,omitempty"`
 
 	// Maximum number of retries to install Apps
 	// +optional
@@ -553,7 +553,8 @@ type AppFrameworkSpec struct {
 
 	// Maximum number of apps that can be downloaded at same time
 	// +optional
-	MaxConcurrentAppDownloads uint64 `json:"maxConcurrentAppDownloads,omitempty"`
+	// +kubebuilder:validation:Minimum:=0
+	MaxConcurrentAppDownloads int64 `json:"maxConcurrentAppDownloads,omitempty"`
 }
 
 // AppDeploymentInfo represents a single App deployment information
@@ -564,7 +565,7 @@ type AppDeploymentInfo struct {
 	LastModifiedTime string              `json:"lastModifiedTime,omitempty"`
 	ObjectHash       string              `json:"objectHash"`
 	IsUpdate         bool                `json:"isUpdate"`
-	Size             uint64              `json:"Size,omitempty"`
+	Size             int64               `json:"Size,omitempty"`
 	RepoState        AppRepoState        `json:"repoState"`
 	DeployStatus     AppDeploymentStatus `json:"deployStatus"`
 
@@ -644,7 +645,7 @@ type AppDeploymentContext struct {
 	AppsRepoStatusPollInterval int64 `json:"appsRepoStatusPollIntervalSeconds,omitempty"`
 
 	// Represents the Status field for maximum number of apps that can be downloaded at same time
-	AppsStatusMaxConcurrentAppDownloads uint64 `json:"appsStatusMaxConcurrentAppDownloads,omitempty"`
+	AppsStatusMaxConcurrentAppDownloads int64 `json:"appsStatusMaxConcurrentAppDownloads,omitempty"`
 
 	// Internal to the App framework. Used in case of CM(IDXC) and deployer(SHC)
 	BundlePushStatus BundlePushTracker `json:"bundlePushStatus,omitempty"`

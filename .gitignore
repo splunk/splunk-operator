@@ -112,6 +112,7 @@ ci-output/
 __pycache__/
 *.pyc
 
+.tool-versions
 # AI coding agents / MCP config files (may contain API tokens and credentials)
 # Claude Code / Anthropic
 CLAUDE.md

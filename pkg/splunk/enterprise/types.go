@@ -101,7 +101,7 @@ type globalResourceTracker struct {
 
 type storageTracker struct {
 	// represents the available disk space on operator pod
-	availableDiskSpace uint64
+	availableDiskSpace int64
 
 	// mutex to serialize the access
 	mutex sync.Mutex

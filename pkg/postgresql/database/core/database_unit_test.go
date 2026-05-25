@@ -1,0 +1,2195 @@
+/*
+Copyright 2026.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+package core
+
+// The following functions are intentionally not tested directly here.
+// Their business logic is covered by narrower helper tests where practical,
+// and the remaining behavior is mostly controller-runtime orchestration:
+// - patchManagedRoles
+// - reconcileCNPGDatabases
+// - handleDeletion
+// - orphanRetainedResources
+// - deleteRemovedResources
+// - cleanupManagedRoles
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"testing"
+	"unicode"
+
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+)
+
+// managedRolesFieldsRaw is a helper to construct the raw managed fields JSON for testing parseRoleNames and related functions.
+func managedRolesFieldsRaw(t *testing.T, keys ...string) []byte {
+	t.Helper()
+
+	managedRoles := make(map[string]any, len(keys))
+	for _, key := range keys {
+		managedRoles[key] = map[string]any{}
+	}
+
+	raw, err := json.Marshal(map[string]any{
+		"f:spec": map[string]any{
+			"f:managedRoles": managedRoles,
+		},
+	})
+	require.NoError(t, err)
+
+	return raw
+}
+
+type stubDBRepo struct {
+	execErr error
+	calls   []string
+}
+
+// ExecGrants is a stub implementation of the DBRepo interface that records calls and returns a predefined error.
+func (r *stubDBRepo) ExecGrants(_ context.Context, dbName string) error {
+	r.calls = append(r.calls, dbName)
+	return r.execErr
+}
+
+// boolPtr is a helper to get a pointer to a bool value, used for testing conditions with pointer fields.
+func boolPtr(v bool) *bool {
+	return &v
+}
+
+// strPtr is a helper to get a pointer to a string value, used for testing pointer string fields.
+func strPtr(s string) *string {
+	return &s
+}
+
+func databaseNames(defs []enterprisev4.DatabaseDefinition) []string {
+	names := make([]string, 0, len(defs))
+	for _, def := range defs {
+		names = append(names, def.Name)
+	}
+	return names
+}
+
+func assertGeneratedPassword(t *testing.T, got string, wantLength, wantDigits int) {
+	t.Helper()
+
+	digitCount := 0
+	for _, r := range got {
+		if unicode.IsDigit(r) {
+			digitCount++
+			continue
+		}
+
+		assert.Truef(t, unicode.IsLetter(r), "password contains unsupported rune %q", r)
+	}
+
+	assert.Len(t, got, wantLength)
+	assert.Equal(t, wantDigits, digitCount)
+}
+
+// testScheme constructs a runtime.Scheme with the necessary API types registered for testing.
+func testScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(enterprisev4.AddToScheme(scheme))
+	utilruntime.Must(cnpgv1.AddToScheme(scheme))
+
+	return scheme
+}
+
+// testClient constructs a fake client with the given scheme and initial objects for testing.
+func testClient(t *testing.T, scheme *runtime.Scheme, objs ...client.Object) client.Client {
+	t.Helper()
+
+	builder := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+		WithObjects(objs...)
+
+	return builder.Build()
+}
+
+func postgresDatabaseConflict(name string) error {
+	return apierrors.NewConflict(
+		schema.GroupResource{
+			Group:    enterprisev4.GroupVersion.Group,
+			Resource: "postgresdatabases",
+		},
+		name,
+		errors.New("resource version conflict"),
+	)
+}
+
+func TestPostgresDatabaseServiceRequeuesOnConflict(t *testing.T) {
+	scheme := testScheme(t)
+	tests := []struct {
+		name     string
+		existing *enterprisev4.PostgresDatabase
+		build    func(*enterprisev4.PostgresDatabase) client.Client
+	}{
+		{
+			name: "when adding the finalizer",
+			existing: &enterprisev4.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "primary",
+					Namespace: "dbs",
+				},
+			},
+			build: func(existing *enterprisev4.PostgresDatabase) client.Client {
+				return fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+					WithObjects(existing).
+					WithInterceptorFuncs(interceptor.Funcs{
+						Update: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.UpdateOption) error {
+							return postgresDatabaseConflict(obj.GetName())
+						},
+					}).
+					Build()
+			},
+		},
+		{
+			name: "when persisting status",
+			existing: &enterprisev4.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "primary",
+					Namespace:  "dbs",
+					Finalizers: []string{postgresDatabaseFinalizerName},
+				},
+				Spec: enterprisev4.PostgresDatabaseSpec{
+					ClusterRef: corev1.LocalObjectReference{Name: "missing-cluster"},
+				},
+			},
+			build: func(existing *enterprisev4.PostgresDatabase) client.Client {
+				return fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+					WithObjects(existing).
+					WithInterceptorFuncs(interceptor.Funcs{
+						SubResourceUpdate: func(_ context.Context, _ client.Client, subResourceName string, obj client.Object, _ ...client.SubResourceUpdateOption) error {
+							if subResourceName != "status" {
+								return nil
+							}
+							return postgresDatabaseConflict(obj.GetName())
+						},
+					}).
+					Build()
+			},
+		},
+		{
+			name: "when status update conflicts while handling another error",
+			existing: &enterprisev4.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "primary",
+					Namespace:  "dbs",
+					Finalizers: []string{postgresDatabaseFinalizerName},
+				},
+				Spec: enterprisev4.PostgresDatabaseSpec{
+					ClusterRef: corev1.LocalObjectReference{Name: "primary"},
+				},
+			},
+			build: func(existing *enterprisev4.PostgresDatabase) client.Client {
+				return fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+					WithObjects(existing).
+					WithInterceptorFuncs(interceptor.Funcs{
+						Get: func(ctx context.Context, client client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+							if _, ok := obj.(*enterprisev4.PostgresCluster); ok {
+								return errors.New("temporary get failure")
+							}
+							return client.Get(ctx, key, obj, opts...)
+						},
+						SubResourceUpdate: func(_ context.Context, _ client.Client, subResourceName string, obj client.Object, _ ...client.SubResourceUpdateOption) error {
+							if subResourceName != "status" {
+								return nil
+							}
+							return postgresDatabaseConflict(obj.GetName())
+						},
+					}).
+					Build()
+			},
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			c := tst.build(tst.existing)
+
+			postgresDB := &enterprisev4.PostgresDatabase{}
+			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: tst.existing.Name, Namespace: tst.existing.Namespace}, postgresDB))
+
+			result, err := PostgresDatabaseService(
+				context.Background(),
+				&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}},
+				postgresDB,
+				nil,
+			)
+
+			require.NoError(t, err)
+			assert.Equal(t, ctrl.Result{Requeue: true}, result)
+		})
+	}
+}
+
+func TestSecretMissingPolicyForDB(t *testing.T) {
+	tests := []struct {
+		name        string
+		dbName      string
+		existingDBs map[string]struct{}
+		want        secretMissingPolicy
+	}{
+		{
+			name:        "creates secrets for new databases",
+			dbName:      "payments",
+			existingDBs: map[string]struct{}{},
+			want:        createSecretIfMissing,
+		},
+		{
+			name:   "reports drift for previously provisioned databases",
+			dbName: "payments",
+			existingDBs: map[string]struct{}{
+				"payments": {},
+			},
+			want: reportSecretDriftIfMissing,
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			assert.Equal(t, tst.want, secretMissingPolicyForDB(tst.dbName, tst.existingDBs))
+		})
+	}
+}
+
+func TestGetDesiredRoles(t *testing.T) {
+	postgresDB := &enterprisev4.PostgresDatabase{
+		Spec: enterprisev4.PostgresDatabaseSpec{
+			Databases: []enterprisev4.DatabaseDefinition{
+				{Name: "main_db"},
+				{Name: "secondary_db"},
+			},
+		},
+	}
+	want := []string{
+		"main_db_admin",
+		"main_db_rw",
+		"secondary_db_admin",
+		"secondary_db_rw",
+	}
+
+	got := getDesiredRoles(postgresDB)
+
+	assert.Equal(t, want, got)
+}
+
+func TestParseRoleNames(t *testing.T) {
+	validKey, err := json.Marshal(map[string]string{"name": "main_db_admin"})
+	require.NoError(t, err)
+	ignoredKey, err := json.Marshal(map[string]string{"other": "value"})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		raw  []byte
+		want []string
+	}{
+		{
+			name: "extracts role names from managed roles fields",
+			raw: managedRolesFieldsRaw(
+				t,
+				"k:"+string(validKey),
+				"k:"+string(ignoredKey),
+				"plain-key",
+			),
+			want: []string{"main_db_admin"},
+		},
+		{
+			name: "returns nil on invalid json",
+			raw:  []byte(`{"f:spec"`),
+			want: nil,
+		},
+		{
+			name: "returns empty when managed roles missing",
+			raw:  []byte(`{"f:spec":{}}`),
+			want: nil,
+		},
+		{
+			name: "returns empty when spec field is missing entirely",
+			raw:  []byte(`{"f:metadata":{}}`),
+			want: nil,
+		},
+	}
+
+	for _, tst := range tests {
+
+		t.Run(tst.name, func(t *testing.T) {
+			got := parseRoleNames(tst.raw)
+
+			assert.ElementsMatch(t, tst.want, got)
+		})
+	}
+}
+
+func TestManagedRoleOwners(t *testing.T) {
+	roleKey, err := json.Marshal(map[string]string{"name": "main_db_admin"})
+	require.NoError(t, err)
+	secondRoleKey, err := json.Marshal(map[string]string{"name": "main_db_rw"})
+	require.NoError(t, err)
+
+	managedFields := []metav1.ManagedFieldsEntry{
+		{Manager: "ignored"},
+		{
+			Manager: "postgresdatabase-other",
+			FieldsV1: &metav1.FieldsV1{
+				Raw: managedRolesFieldsRaw(
+					t,
+					"k:"+string(roleKey),
+					"k:"+string(secondRoleKey),
+				),
+			},
+		},
+		{
+			Manager: "postgresdatabase-newer",
+			FieldsV1: &metav1.FieldsV1{
+				Raw: managedRolesFieldsRaw(t, "k:"+string(roleKey)),
+			},
+		},
+	}
+	want := map[string]string{
+		"main_db_admin": "postgresdatabase-newer",
+		"main_db_rw":    "postgresdatabase-other",
+	}
+
+	got := managedRoleOwners(managedFields)
+
+	assert.Equal(t, want, got)
+}
+
+func TestGetRoleConflicts(t *testing.T) {
+	roleKey, err := json.Marshal(map[string]string{"name": "main_db_admin"})
+	require.NoError(t, err)
+	sameOwnerKey, err := json.Marshal(map[string]string{"name": "main_db_rw"})
+	require.NoError(t, err)
+	unrelatedKey, err := json.Marshal(map[string]string{"name": "audit_admin"})
+	require.NoError(t, err)
+
+	postgresDB := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary"},
+		Spec: enterprisev4.PostgresDatabaseSpec{
+			Databases: []enterprisev4.DatabaseDefinition{{Name: "main_db"}},
+		},
+	}
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			ManagedFields: []metav1.ManagedFieldsEntry{
+				{
+					Manager: "postgresdatabase-legacy",
+					FieldsV1: &metav1.FieldsV1{
+						Raw: managedRolesFieldsRaw(
+							t,
+							"k:"+string(roleKey),
+							"k:"+string(unrelatedKey),
+						),
+					},
+				},
+				{
+					Manager: fieldManagerName(postgresDB.Name),
+					FieldsV1: &metav1.FieldsV1{
+						Raw: managedRolesFieldsRaw(t, "k:"+string(sameOwnerKey)),
+					},
+				},
+			},
+		},
+	}
+	want := []string{"main_db_admin (owned by postgresdatabase-legacy)"}
+
+	got := getRoleConflicts(postgresDB, cluster)
+
+	assert.ElementsMatch(t, want, got)
+}
+
+func TestVerifyRolesReady(t *testing.T) {
+	tests := []struct {
+		name          string
+		expectedRoles []string
+		cluster       *cnpgv1.Cluster
+		wantNotReady  []string
+		wantErr       string
+	}{
+		{
+			name:          "returns error when a role cannot reconcile",
+			expectedRoles: []string{"main_db_admin", "main_db_rw"},
+			cluster: &cnpgv1.Cluster{
+				Status: cnpgv1.ClusterStatus{
+					ManagedRolesStatus: cnpgv1.ManagedRoles{
+						CannotReconcile: map[string][]string{
+							"main_db_rw": {"reserved role"},
+						},
+					},
+				},
+			},
+			wantErr: "reconciling user main_db_rw: [reserved role]",
+		},
+		{
+			name:          "returns missing roles that are not reconciled yet",
+			expectedRoles: []string{"main_db_admin", "main_db_rw", "analytics_admin"},
+			cluster: &cnpgv1.Cluster{
+				Status: cnpgv1.ClusterStatus{
+					ManagedRolesStatus: cnpgv1.ManagedRoles{
+						ByStatus: map[cnpgv1.RoleStatus][]string{
+							cnpgv1.RoleStatusReconciled: {"main_db_admin", "analytics_admin"},
+						},
+					},
+				},
+			},
+			wantNotReady: []string{"main_db_rw"},
+		},
+		{
+			name:          "returns pending reconciliation roles as not ready",
+			expectedRoles: []string{"main_db_admin", "main_db_rw"},
+			cluster: &cnpgv1.Cluster{
+				Status: cnpgv1.ClusterStatus{
+					ManagedRolesStatus: cnpgv1.ManagedRoles{
+						ByStatus: map[cnpgv1.RoleStatus][]string{
+							cnpgv1.RoleStatusReconciled:            {"main_db_admin"},
+							cnpgv1.RoleStatusPendingReconciliation: {"main_db_rw"},
+						},
+					},
+				},
+			},
+			wantNotReady: []string{"main_db_rw"},
+		},
+		{
+			name:          "returns empty when all roles are reconciled",
+			expectedRoles: []string{"main_db_admin"},
+			cluster: &cnpgv1.Cluster{
+				Status: cnpgv1.ClusterStatus{
+					ManagedRolesStatus: cnpgv1.ManagedRoles{
+						ByStatus: map[cnpgv1.RoleStatus][]string{
+							cnpgv1.RoleStatusReconciled: {"main_db_admin"},
+						},
+					},
+				},
+			},
+			wantNotReady: nil,
+		},
+	}
+
+	for _, tst := range tests {
+
+		t.Run(tst.name, func(t *testing.T) {
+			gotNotReady, err := verifyRolesReady(context.Background(), tst.expectedRoles, tst.cluster)
+			if tst.wantErr != "" {
+				require.Error(t, err)
+				assert.Equal(t, tst.wantErr, err.Error())
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tst.wantNotReady, gotNotReady)
+		})
+	}
+}
+
+func TestReconcileRWRolePrivileges(t *testing.T) {
+	tests := []struct {
+		name            string
+		dbNames         []string
+		newRepoErrs     map[string]error
+		execErrs        map[string]error
+		wantRepoCalls   []string
+		wantExecCalls   map[string][]string
+		wantErrContains []string
+	}{
+		{
+			name:          "returns nil when all databases succeed",
+			dbNames:       []string{"payments", "analytics"},
+			wantRepoCalls: []string{"payments", "analytics"},
+			wantExecCalls: map[string][]string{
+				"payments":  {"payments"},
+				"analytics": {"analytics"},
+			},
+		},
+		{
+			name:          "continues after repo creation and exec errors",
+			dbNames:       []string{"payments", "analytics", "audit"},
+			newRepoErrs:   map[string]error{"payments": errors.New("connect failed")},
+			execErrs:      map[string]error{"analytics": errors.New("grant failed")},
+			wantRepoCalls: []string{"payments", "analytics", "audit"},
+			wantExecCalls: map[string][]string{
+				"analytics": {"analytics"},
+				"audit":     {"audit"},
+			},
+			wantErrContains: []string{
+				"database payments: connect failed",
+				"database analytics: grant failed",
+			},
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			repos := make(map[string]*stubDBRepo, len(tst.dbNames))
+			repoCalls := make([]string, 0, len(tst.dbNames))
+
+			for _, dbName := range tst.dbNames {
+				repos[dbName] = &stubDBRepo{execErr: tst.execErrs[dbName]}
+			}
+
+			newDBRepo := func(_ context.Context, host, dbName, password string) (DBRepo, error) {
+				repoCalls = append(repoCalls, dbName)
+				if err := tst.newRepoErrs[dbName]; err != nil {
+					return nil, err
+				}
+
+				return repos[dbName], nil
+			}
+
+			err := reconcileRWRolePrivileges(context.Background(), "rw.example.internal", "supersecret", tst.dbNames, newDBRepo)
+
+			assert.Equal(t, tst.wantRepoCalls, repoCalls)
+			for dbName, wantCalls := range tst.wantExecCalls {
+				assert.Equal(t, wantCalls, repos[dbName].calls)
+			}
+
+			if len(tst.wantErrContains) == 0 {
+				assert.NoError(t, err)
+				return
+			}
+
+			require.Error(t, err)
+			for _, wantMsg := range tst.wantErrContains {
+				assert.ErrorContains(t, err, wantMsg)
+			}
+		})
+	}
+}
+
+func TestGetClusterReadyStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		cluster    *enterprisev4.PostgresCluster
+		wantStatus clusterReadyStatus
+	}{
+		{
+			name:       "returns not ready when phase is nil",
+			cluster:    &enterprisev4.PostgresCluster{},
+			wantStatus: ClusterNotReady,
+		},
+		{
+			name: "returns not ready when phase is not ready",
+			cluster: &enterprisev4.PostgresCluster{
+				Status: enterprisev4.PostgresClusterStatus{
+					Phase: strPtr("Provisioning"),
+				},
+			},
+			wantStatus: ClusterNotReady,
+		},
+		{
+			name: "returns no provisioner ref when phase is ready but ref is missing",
+			cluster: &enterprisev4.PostgresCluster{
+				Status: enterprisev4.PostgresClusterStatus{
+					Phase: strPtr(string(ClusterReady)),
+				},
+			},
+			wantStatus: ClusterNoProvisionerRef,
+		},
+		{
+			name: "returns ready when phase and provisioner ref are present",
+			cluster: &enterprisev4.PostgresCluster{
+				Status: enterprisev4.PostgresClusterStatus{
+					Phase:          strPtr(string(ClusterReady)),
+					ProvisionerRef: &corev1.ObjectReference{Name: "cnpg-primary", Namespace: "dbs"},
+				},
+			},
+			wantStatus: ClusterReady,
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			assert.Equal(t, tst.wantStatus, getClusterReadyStatus(tst.cluster))
+		})
+	}
+}
+
+// Uses a fake client because fetching the referenced Cluster depends on API reads.
+func TestFetchCluster(t *testing.T) {
+	scheme := testScheme(t)
+
+	tests := []struct {
+		name       string
+		cluster    *enterprisev4.PostgresCluster
+		wantName   string
+		wantErr    string
+		wantAbsent bool
+	}{
+		{
+			name:       "returns not found when cluster is absent",
+			wantAbsent: true,
+		},
+		{
+			name: "returns referenced cluster when present",
+			cluster: &enterprisev4.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs"},
+			},
+			wantName: "primary",
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			postgresDB := &enterprisev4.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "dbs"},
+				Spec: enterprisev4.PostgresDatabaseSpec{
+					ClusterRef: corev1.LocalObjectReference{Name: "primary"},
+				},
+			}
+
+			var objs []client.Object
+			if tst.cluster != nil {
+				objs = append(objs, tst.cluster)
+			}
+
+			c := testClient(t, scheme, objs...)
+			cluster, err := fetchCluster(context.Background(), c, postgresDB)
+
+			if tst.wantAbsent {
+				require.Error(t, err)
+				assert.True(t, apierrors.IsNotFound(err))
+				assert.Nil(t, cluster)
+				return
+			}
+
+			if tst.wantErr != "" {
+				require.Error(t, err)
+				assert.ErrorContains(t, err, tst.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, cluster)
+			assert.Equal(t, tst.wantName, cluster.Name)
+		})
+	}
+
+	t.Run("returns error on client failure", func(t *testing.T) {
+		postgresDB := &enterprisev4.PostgresDatabase{
+			ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "dbs"},
+			Spec: enterprisev4.PostgresDatabaseSpec{
+				ClusterRef: corev1.LocalObjectReference{Name: "primary"},
+			},
+		}
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Get: func(_ context.Context, _ client.WithWatch, _ client.ObjectKey, _ client.Object, _ ...client.GetOption) error {
+					return errors.New("api unavailable")
+				},
+			}).
+			Build()
+
+		cluster, err := fetchCluster(context.Background(), c, postgresDB)
+
+		require.Error(t, err)
+		assert.Nil(t, cluster)
+		assert.ErrorContains(t, err, "api unavailable")
+	})
+}
+
+// Uses a fake client because the helper mutates status in-memory and persists it through the status subresource.
+func TestSetStatus(t *testing.T) {
+	scheme := testScheme(t)
+	existing := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "primary",
+			Namespace:  "dbs",
+			Generation: 7,
+		},
+	}
+	c := testClient(t, scheme, existing)
+	postgresDB := &enterprisev4.PostgresDatabase{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, postgresDB))
+
+	err := persistStatus(
+		context.Background(),
+		c,
+		&pgprometheus.NoopRecorder{},
+		postgresDB,
+		clusterReady,
+		metav1.ConditionTrue,
+		reasonClusterAvailable,
+		"Cluster is operational",
+		provisioningDBPhase,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, postgresDB.Status.Phase)
+	assert.Equal(t, string(provisioningDBPhase), *postgresDB.Status.Phase)
+	require.Len(t, postgresDB.Status.Conditions, 1)
+	assert.Equal(t, string(clusterReady), postgresDB.Status.Conditions[0].Type)
+	assert.Equal(t, metav1.ConditionTrue, postgresDB.Status.Conditions[0].Status)
+	assert.Equal(t, string(reasonClusterAvailable), postgresDB.Status.Conditions[0].Reason)
+	assert.Equal(t, "Cluster is operational", postgresDB.Status.Conditions[0].Message)
+	assert.Equal(t, postgresDB.Generation, postgresDB.Status.Conditions[0].ObservedGeneration)
+
+	got := &enterprisev4.PostgresDatabase{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: postgresDB.Name, Namespace: postgresDB.Namespace}, got))
+	require.NotNil(t, got.Status.Phase)
+	assert.Equal(t, *postgresDB.Status.Phase, *got.Status.Phase)
+	require.Len(t, got.Status.Conditions, 1)
+	assert.Equal(t, postgresDB.Status.Conditions[0], got.Status.Conditions[0])
+}
+
+// Uses a fake client because readiness is determined from CNPG Database objects in the API.
+func TestVerifyDatabasesReady(t *testing.T) {
+	scheme := testScheme(t)
+	postgresDB := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs"},
+		Spec: enterprisev4.PostgresDatabaseSpec{
+			Databases: []enterprisev4.DatabaseDefinition{
+				{Name: "payments"},
+				{Name: "analytics"},
+			},
+		},
+	}
+
+	tests := []struct {
+		name         string
+		objects      []client.Object
+		wantNotReady []string
+		wantErr      string
+	}{
+		{
+			name: "returns empty when all databases are applied",
+			objects: []client.Object{
+				&cnpgv1.Database{
+					ObjectMeta: metav1.ObjectMeta{Name: "primary-payments", Namespace: "dbs"},
+					Status:     cnpgv1.DatabaseStatus{Applied: boolPtr(true)},
+				},
+				&cnpgv1.Database{
+					ObjectMeta: metav1.ObjectMeta{Name: "primary-analytics", Namespace: "dbs"},
+					Status:     cnpgv1.DatabaseStatus{Applied: boolPtr(true)},
+				},
+			},
+			wantNotReady: nil,
+		},
+		{
+			name: "returns names for databases that are not applied",
+			objects: []client.Object{
+				&cnpgv1.Database{
+					ObjectMeta: metav1.ObjectMeta{Name: "primary-payments", Namespace: "dbs"},
+					Status:     cnpgv1.DatabaseStatus{Applied: boolPtr(false)},
+				},
+				&cnpgv1.Database{
+					ObjectMeta: metav1.ObjectMeta{Name: "primary-analytics", Namespace: "dbs"},
+				},
+			},
+			wantNotReady: []string{"payments", "analytics"},
+		},
+		{
+			name: "returns not ready when a database is missing",
+			objects: []client.Object{
+				&cnpgv1.Database{
+					ObjectMeta: metav1.ObjectMeta{Name: "primary-payments", Namespace: "dbs"},
+					Status:     cnpgv1.DatabaseStatus{Applied: boolPtr(true)},
+				},
+			},
+			wantNotReady: []string{"analytics"},
+		},
+	}
+
+	for _, tst := range tests {
+
+		t.Run(tst.name, func(t *testing.T) {
+			c := testClient(t, scheme, tst.objects...)
+
+			got, err := verifyDatabasesReady(context.Background(), c, postgresDB)
+
+			if tst.wantErr != "" {
+				require.Error(t, err)
+				assert.ErrorContains(t, err, tst.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tst.wantNotReady, got)
+		})
+	}
+}
+
+// Uses a fake client because the helper wraps Kubernetes get/not-found behavior.
+func TestGetSecret(t *testing.T) {
+	scheme := testScheme(t)
+
+	t.Run("returns secret when found", func(t *testing.T) {
+		existing := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "db-secret", Namespace: "dbs"},
+			Data:       map[string][]byte{secretKeyPassword: []byte("value")},
+		}
+		c := testClient(t, scheme, existing)
+
+		secret, err := getSecret(context.Background(), c, "dbs", "db-secret")
+
+		require.NoError(t, err)
+		require.NotNil(t, secret)
+		assert.Equal(t, existing.Name, secret.Name)
+		assert.Equal(t, "value", string(secret.Data[secretKeyPassword]))
+	})
+
+	t.Run("returns nil nil when secret is absent", func(t *testing.T) {
+		c := testClient(t, scheme)
+
+		secret, err := getSecret(context.Background(), c, "dbs", "missing")
+
+		require.NoError(t, err)
+		assert.Nil(t, secret)
+	})
+}
+
+// Uses a fake client because adoption updates object metadata and persists it through the client.
+func TestAdoptResource(t *testing.T) {
+	scheme := testScheme(t)
+	postgresDB := &enterprisev4.PostgresDatabase{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: enterprisev4.GroupVersion.String(),
+			Kind:       "PostgresDatabase",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "primary",
+			Namespace: "dbs",
+			UID:       types.UID("postgresdb-uid"),
+		},
+	}
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "primary-payments-config",
+			Namespace:   "dbs",
+			Annotations: map[string]string{annotationRetainedFrom: "primary", "keep": "true"},
+		},
+	}
+	c := testClient(t, scheme, postgresDB, configMap)
+
+	err := adoptResource(context.Background(), c, scheme, postgresDB, configMap)
+
+	require.NoError(t, err)
+
+	updated := &corev1.ConfigMap{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, updated))
+	assert.Equal(t, "true", updated.Annotations["keep"])
+	_, exists := updated.Annotations[annotationRetainedFrom]
+	assert.False(t, exists)
+	require.Len(t, updated.OwnerReferences, 1)
+	assert.Equal(t, postgresDB.UID, updated.OwnerReferences[0].UID)
+}
+
+func TestAdoptResourceNilAnnotations(t *testing.T) {
+	scheme := testScheme(t)
+	postgresDB := &enterprisev4.PostgresDatabase{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: enterprisev4.GroupVersion.String(),
+			Kind:       "PostgresDatabase",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "primary",
+			Namespace: "dbs",
+			UID:       types.UID("postgresdb-uid"),
+		},
+	}
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "primary-payments-config",
+			Namespace: "dbs",
+			// no annotations — must not panic
+		},
+	}
+	c := testClient(t, scheme, postgresDB, configMap)
+
+	err := adoptResource(context.Background(), c, scheme, postgresDB, configMap)
+
+	require.NoError(t, err)
+	updated := &corev1.ConfigMap{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, updated))
+	require.Len(t, updated.OwnerReferences, 1)
+	assert.Equal(t, postgresDB.UID, updated.OwnerReferences[0].UID)
+}
+
+// Uses a fake client because these helpers mutate existing API objects during orphaning.
+func TestOrphanResourceHelpers(t *testing.T) {
+	scheme := testScheme(t)
+	postgresDB := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "primary",
+			Namespace: "dbs",
+			UID:       types.UID("postgresdb-uid"),
+		},
+	}
+	databases := []enterprisev4.DatabaseDefinition{{Name: "payments"}}
+
+	t.Run("orphanCNPGDatabases strips owner and adds retain annotation", func(t *testing.T) {
+		db := &cnpgv1.Database{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary-payments",
+				Namespace: "dbs",
+				OwnerReferences: []metav1.OwnerReference{
+					{UID: postgresDB.UID, Name: postgresDB.Name},
+					{UID: types.UID("other"), Name: "other"},
+				},
+			},
+		}
+		c := testClient(t, scheme, db)
+
+		require.NoError(t, orphanCNPGDatabases(context.Background(), c, postgresDB, databases))
+
+		updated := &cnpgv1.Database{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, updated))
+		assert.Equal(t, postgresDB.Name, updated.Annotations[annotationRetainedFrom])
+		require.Len(t, updated.OwnerReferences, 1)
+		assert.Equal(t, types.UID("other"), updated.OwnerReferences[0].UID)
+	})
+
+	t.Run("orphanConfigMaps skips not found", func(t *testing.T) {
+		c := testClient(t, scheme)
+		require.NoError(t, orphanConfigMaps(context.Background(), c, postgresDB, databases))
+	})
+
+	t.Run("orphanSecrets skips already retained secret", func(t *testing.T) {
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "primary-payments-admin",
+				Namespace:   "dbs",
+				Annotations: map[string]string{annotationRetainedFrom: postgresDB.Name},
+			},
+		}
+		c := testClient(t, scheme, secret)
+
+		require.NoError(t, orphanSecrets(context.Background(), c, postgresDB, databases))
+
+		updated := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, updated))
+		assert.Equal(t, postgresDB.Name, updated.Annotations[annotationRetainedFrom])
+		assert.Empty(t, updated.OwnerReferences)
+		assert.Equal(t, secret, updated)
+	})
+}
+
+// Uses a fake client because these helpers delete Kubernetes resources and must verify API state.
+func TestDeleteResourceHelpers(t *testing.T) {
+	scheme := testScheme(t)
+	postgresDB := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs"},
+	}
+	databases := []enterprisev4.DatabaseDefinition{{Name: "payments"}}
+
+	t.Run("deleteCNPGDatabases removes existing object", func(t *testing.T) {
+		db := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{Name: "primary-payments", Namespace: "dbs"}}
+		c := testClient(t, scheme, db)
+		require.NoError(t, deleteCNPGDatabases(context.Background(), c, postgresDB, databases))
+	})
+
+	t.Run("deleteConfigMaps ignores missing objects", func(t *testing.T) {
+		c := testClient(t, scheme)
+		require.NoError(t, deleteConfigMaps(context.Background(), c, postgresDB, databases))
+	})
+
+	t.Run("deleteSecrets deletes admin and rw secrets", func(t *testing.T) {
+		admin := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "primary-payments-admin", Namespace: "dbs"}}
+		rw := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "primary-payments-rw", Namespace: "dbs"}}
+		c := testClient(t, scheme, admin, rw)
+		require.NoError(t, deleteSecrets(context.Background(), c, postgresDB, databases))
+	})
+}
+
+func TestGeneratePassword(t *testing.T) {
+	wantLength := passwordLength
+	wantDigits := passwordDigits
+
+	got, err := generatePassword()
+
+	require.NoError(t, err)
+	assertGeneratedPassword(t, got, wantLength, wantDigits)
+}
+
+// Uses a fake client because the helper creates Secret objects and persists owner references through the Kubernetes API.
+func TestCreateRoleSecret(t *testing.T) {
+	scheme := testScheme(t)
+	postgresDB := &enterprisev4.PostgresDatabase{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: enterprisev4.GroupVersion.String(),
+			Kind:       "PostgresDatabase",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "primary",
+			Namespace: "dbs",
+			UID:       types.UID("postgresdb-uid"),
+		},
+	}
+
+	t.Run("creates secret with generated credentials", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		wantManagedBy := "splunk-operator"
+		wantReload := "true"
+		wantRolename := roleName
+		wantOwnerUID := postgresDB.UID
+		wantPasswordLength := passwordLength
+		wantPasswordDigits := passwordDigits
+		c := testClient(t, scheme)
+
+		err := createRoleSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+
+		require.NoError(t, err)
+
+		got := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, secretName, got.Name)
+		assert.Equal(t, postgresDB.Namespace, got.Namespace)
+		assert.Equal(t, wantManagedBy, got.Labels[labelManagedBy])
+		assert.Equal(t, wantReload, got.Labels[labelCNPGReload])
+		assert.Equal(t, wantRolename, string(got.Data["username"]))
+		assertGeneratedPassword(t, string(got.Data[secretKeyPassword]), wantPasswordLength, wantPasswordDigits)
+		require.Len(t, got.OwnerReferences, 1)
+		assert.Equal(t, wantOwnerUID, got.OwnerReferences[0].UID)
+	})
+
+	t.Run("returns nil when secret already exists", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		wantRolename := roleName
+		wantPassword := "existing-password"
+		existing := buildPasswordSecret(postgresDB, secretName, wantRolename, wantPassword)
+		c := testClient(t, scheme, existing)
+
+		err := createRoleSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+
+		require.NoError(t, err)
+
+		got := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, wantRolename, string(got.Data["username"]))
+		assert.Equal(t, wantPassword, string(got.Data[secretKeyPassword]))
+		assert.Empty(t, got.OwnerReferences)
+	})
+}
+
+// Uses a fake client because the helper decides between get/create/adopt behavior based on Secret state in the API.
+func TestEnsureSecret(t *testing.T) {
+	scheme := testScheme(t)
+	postgresDB := &enterprisev4.PostgresDatabase{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: enterprisev4.GroupVersion.String(),
+			Kind:       "PostgresDatabase",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "primary",
+			Namespace: "dbs",
+			UID:       types.UID("postgresdb-uid"),
+		},
+	}
+
+	t.Run("creates missing secret", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		wantManagedBy := "splunk-operator"
+		wantReload := "true"
+		wantRolename := roleName
+		wantOwnerUID := postgresDB.UID
+		wantPasswordLength := passwordLength
+		wantPasswordDigits := passwordDigits
+		c := testClient(t, scheme)
+
+		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+
+		require.NoError(t, err)
+
+		got := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, wantManagedBy, got.Labels[labelManagedBy])
+		assert.Equal(t, wantReload, got.Labels[labelCNPGReload])
+		assert.Equal(t, wantRolename, string(got.Data["username"]))
+		assertGeneratedPassword(t, string(got.Data[secretKeyPassword]), wantPasswordLength, wantPasswordDigits)
+		require.Len(t, got.OwnerReferences, 1)
+		assert.Equal(t, wantOwnerUID, got.OwnerReferences[0].UID)
+	})
+
+	t.Run("re-adopts retained secret", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		wantRolename := roleName
+		wantPassword := "existing-password"
+		wantOwnerUID := postgresDB.UID
+		wantKeep := "true"
+		retained := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: postgresDB.Namespace,
+				Annotations: map[string]string{
+					annotationRetainedFrom: postgresDB.Name,
+					"keep":                 wantKeep,
+				},
+				OwnerReferences: []metav1.OwnerReference{
+					{UID: types.UID("old-owner"), Name: "old-owner"},
+				},
+			},
+			Data: map[string][]byte{
+				"username":        []byte(wantRolename),
+				secretKeyPassword: []byte(wantPassword),
+			},
+		}
+		c := testClient(t, scheme, retained)
+
+		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+
+		require.NoError(t, err)
+
+		got := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, wantKeep, got.Annotations["keep"])
+		_, hasRetainedAnnotation := got.Annotations[annotationRetainedFrom]
+		assert.False(t, hasRetainedAnnotation)
+		assert.Equal(t, wantRolename, string(got.Data["username"]))
+		assert.Equal(t, wantPassword, string(got.Data[secretKeyPassword]))
+		assert.Contains(t, got.OwnerReferences, metav1.OwnerReference{
+			APIVersion:         enterprisev4.GroupVersion.String(),
+			Kind:               "PostgresDatabase",
+			Name:               postgresDB.Name,
+			UID:                wantOwnerUID,
+			Controller:         boolPtr(true),
+			BlockOwnerDeletion: boolPtr(true),
+		})
+	})
+
+	t.Run("does nothing for existing managed secret", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		wantRolename := roleName
+		wantPassword := "existing-password"
+		wantKeep := "true"
+		wantOwnerUID := postgresDB.UID
+		existing := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: postgresDB.Namespace,
+				Annotations: map[string]string{
+					"keep": wantKeep,
+				},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         enterprisev4.GroupVersion.String(),
+						Kind:               "PostgresDatabase",
+						Name:               postgresDB.Name,
+						UID:                wantOwnerUID,
+						Controller:         boolPtr(true),
+						BlockOwnerDeletion: boolPtr(true),
+					},
+				},
+			},
+			Data: map[string][]byte{
+				"username":        []byte(wantRolename),
+				secretKeyPassword: []byte(wantPassword),
+			},
+		}
+		c := testClient(t, scheme, existing)
+
+		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+
+		require.NoError(t, err)
+
+		got := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, wantKeep, got.Annotations["keep"])
+		assert.Equal(t, wantRolename, string(got.Data["username"]))
+		assert.Equal(t, wantPassword, string(got.Data[secretKeyPassword]))
+		require.Len(t, got.OwnerReferences, 1)
+		assert.Equal(t, wantOwnerUID, got.OwnerReferences[0].UID)
+	})
+
+	t.Run("returns drift error when a previously provisioned secret is missing", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		c := testClient(t, scheme)
+
+		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+
+		require.Error(t, err)
+		var driftErr *secretReconcileError
+		require.ErrorAs(t, err, &driftErr)
+		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+		assert.ErrorContains(t, err, secretName)
+	})
+
+	t.Run("re-attaches owner reference when ownership was manually stripped", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		existing := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: postgresDB.Namespace,
+				Labels: map[string]string{
+					labelManagedBy:  "splunk-operator",
+					labelCNPGReload: "true",
+				},
+				Annotations: map[string]string{"keep": "true"},
+			},
+			Data: map[string][]byte{
+				"username":        []byte(roleName),
+				secretKeyPassword: []byte("existing-password"),
+			},
+		}
+		c := testClient(t, scheme, existing)
+
+		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+
+		require.NoError(t, err)
+
+		got := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, "true", got.Annotations["keep"])
+		require.Len(t, got.OwnerReferences, 1)
+		assert.Equal(t, postgresDB.UID, got.OwnerReferences[0].UID)
+	})
+
+	t.Run("accepts an existing secret with mutated data without rewriting it", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		wantUsername := "wrong_user"
+		existing := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: postgresDB.Namespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{UID: postgresDB.UID, Name: postgresDB.Name},
+				},
+			},
+			Data: map[string][]byte{
+				"username":        []byte(wantUsername),
+				secretKeyPassword: []byte("existing-password"),
+			},
+		}
+		c := testClient(t, scheme, existing)
+
+		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+
+		require.NoError(t, err)
+
+		got := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, wantUsername, string(got.Data["username"]))
+		assert.Equal(t, "existing-password", string(got.Data[secretKeyPassword]))
+	})
+
+	t.Run("returns drift error when secret is owned by a different controller", func(t *testing.T) {
+		roleName := "payments_admin"
+		secretName := "primary-payments-admin"
+		otherOwnerUID := types.UID("other-owner-uid")
+		existing := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: postgresDB.Namespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         "v1",
+						Kind:               "SomeOtherController",
+						Name:               "other-controller",
+						UID:                otherOwnerUID,
+						Controller:         boolPtr(true),
+						BlockOwnerDeletion: boolPtr(true),
+					},
+				},
+			},
+			Data: map[string][]byte{
+				"username":        []byte(roleName),
+				secretKeyPassword: []byte("existing-password"),
+			},
+		}
+		c := testClient(t, scheme, existing)
+
+		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+
+		require.Error(t, err)
+		var driftErr *secretReconcileError
+		require.ErrorAs(t, err, &driftErr)
+		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+		assert.ErrorContains(t, err, secretName)
+	})
+}
+
+// Uses a fake client because the helper reconciles multiple Secret objects through the Kubernetes API.
+func TestReconcileRoleSecrets(t *testing.T) {
+	scheme := testScheme(t)
+	postgresDB := &enterprisev4.PostgresDatabase{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: enterprisev4.GroupVersion.String(),
+			Kind:       "PostgresDatabase",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "primary",
+			Namespace: "dbs",
+			UID:       types.UID("postgresdb-uid"),
+		},
+		Spec: enterprisev4.PostgresDatabaseSpec{
+			Databases: []enterprisev4.DatabaseDefinition{
+				{Name: "payments"},
+				{Name: "analytics"},
+			},
+		},
+	}
+
+	t.Run("creates secrets for each database role", func(t *testing.T) {
+		c := testClient(t, scheme)
+		wantSecrets := []struct {
+			name     string
+			username string
+		}{
+			{name: "primary-payments-admin", username: "payments_admin"},
+			{name: "primary-payments-rw", username: "payments_rw"},
+			{name: "primary-analytics-admin", username: "analytics_admin"},
+			{name: "primary-analytics-rw", username: "analytics_rw"},
+		}
+
+		err := reconcileRoleSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB))
+
+		require.NoError(t, err)
+		for _, want := range wantSecrets {
+			got := &corev1.Secret{}
+			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: want.name, Namespace: postgresDB.Namespace}, got))
+			assert.Equal(t, want.username, string(got.Data["username"]))
+			assertGeneratedPassword(t, string(got.Data[secretKeyPassword]), passwordLength, passwordDigits)
+			require.Len(t, got.OwnerReferences, 1)
+			assert.Equal(t, postgresDB.UID, got.OwnerReferences[0].UID)
+		}
+	})
+
+	t.Run("is idempotent when secrets already exist", func(t *testing.T) {
+		c := testClient(t, scheme)
+
+		require.NoError(t, reconcileRoleSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB)))
+
+		before := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments-admin", Namespace: postgresDB.Namespace}, before))
+		beforePassword := append([]byte(nil), before.Data[secretKeyPassword]...)
+
+		err := reconcileRoleSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB))
+
+		require.NoError(t, err)
+
+		after := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments-admin", Namespace: postgresDB.Namespace}, after))
+		assert.Equal(t, beforePassword, after.Data[secretKeyPassword])
+		require.Len(t, after.OwnerReferences, 1)
+		assert.Equal(t, postgresDB.UID, after.OwnerReferences[0].UID)
+	})
+
+	t.Run("does not recreate missing secrets for previously provisioned databases", func(t *testing.T) {
+		postgresDB.Status.Phase = strPtr(string(readyDBPhase))
+		postgresDB.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
+		c := testClient(t, scheme)
+
+		err := reconcileRoleSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB))
+
+		require.Error(t, err)
+		var driftErr *secretReconcileError
+		require.ErrorAs(t, err, &driftErr)
+		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+	})
+}
+
+// Uses a fake client because the helper reconciles ConfigMaps through CreateOrUpdate and persists re-adoption metadata.
+func TestReconcileRoleConfigMaps(t *testing.T) {
+	scheme := testScheme(t)
+	endpoints := clusterEndpoints{
+		RWHost:       "rw.default.svc.cluster.local",
+		ROHost:       "ro.default.svc.cluster.local",
+		PoolerRWHost: "pooler-rw.default.svc.cluster.local",
+		PoolerROHost: "pooler-ro.default.svc.cluster.local",
+	}
+
+	t.Run("creates configmaps for all databases", func(t *testing.T) {
+		postgresDB := &enterprisev4.PostgresDatabase{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: enterprisev4.GroupVersion.String(),
+				Kind:       "PostgresDatabase",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary",
+				Namespace: "dbs",
+				UID:       types.UID("postgresdb-uid"),
+			},
+			Spec: enterprisev4.PostgresDatabaseSpec{
+				Databases: []enterprisev4.DatabaseDefinition{
+					{Name: "payments"},
+					{Name: "analytics"},
+				},
+			},
+		}
+		wantManagedBy := "splunk-operator"
+		wantOwnerUID := postgresDB.UID
+		wantPaymentsName := "primary-payments-config"
+		wantAnalyticsName := "primary-analytics-config"
+		wantPaymentsData := buildDatabaseConfigMapBody("payments", endpoints)
+		wantAnalyticsData := buildDatabaseConfigMapBody("analytics", endpoints)
+		c := testClient(t, scheme)
+
+		err := reconcileRoleConfigMaps(context.Background(), c, scheme, postgresDB, endpoints)
+
+		require.NoError(t, err)
+
+		gotPayments := &corev1.ConfigMap{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: wantPaymentsName, Namespace: postgresDB.Namespace}, gotPayments))
+		assert.Equal(t, wantManagedBy, gotPayments.Labels[labelManagedBy])
+		assert.Equal(t, wantPaymentsData, gotPayments.Data)
+		require.Len(t, gotPayments.OwnerReferences, 1)
+		assert.Equal(t, wantOwnerUID, gotPayments.OwnerReferences[0].UID)
+
+		gotAnalytics := &corev1.ConfigMap{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: wantAnalyticsName, Namespace: postgresDB.Namespace}, gotAnalytics))
+		assert.Equal(t, wantManagedBy, gotAnalytics.Labels[labelManagedBy])
+		assert.Equal(t, wantAnalyticsData, gotAnalytics.Data)
+		require.Len(t, gotAnalytics.OwnerReferences, 1)
+		assert.Equal(t, wantOwnerUID, gotAnalytics.OwnerReferences[0].UID)
+	})
+
+	t.Run("re-adopts retained configmap", func(t *testing.T) {
+		postgresDB := &enterprisev4.PostgresDatabase{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: enterprisev4.GroupVersion.String(),
+				Kind:       "PostgresDatabase",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary",
+				Namespace: "dbs",
+				UID:       types.UID("postgresdb-uid"),
+			},
+			Spec: enterprisev4.PostgresDatabaseSpec{
+				Databases: []enterprisev4.DatabaseDefinition{
+					{Name: "payments"},
+				},
+			},
+		}
+		cmName := "primary-payments-config"
+		wantManagedBy := "splunk-operator"
+		wantOwnerUID := postgresDB.UID
+		wantKeep := "true"
+		wantData := buildDatabaseConfigMapBody("payments", endpoints)
+		retained := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cmName,
+				Namespace: postgresDB.Namespace,
+				Labels:    map[string]string{labelManagedBy: wantManagedBy},
+				Annotations: map[string]string{
+					annotationRetainedFrom: postgresDB.Name,
+					"keep":                 wantKeep,
+				},
+				OwnerReferences: []metav1.OwnerReference{
+					{UID: types.UID("old-owner"), Name: "old-owner"},
+				},
+			},
+			Data: map[string]string{
+				"dbname": "stale",
+			},
+		}
+		c := testClient(t, scheme, retained)
+
+		err := reconcileRoleConfigMaps(context.Background(), c, scheme, postgresDB, endpoints)
+
+		require.NoError(t, err)
+
+		got := &corev1.ConfigMap{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: cmName, Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, wantManagedBy, got.Labels[labelManagedBy])
+		assert.Equal(t, wantKeep, got.Annotations["keep"])
+		_, hasRetainedAnnotation := got.Annotations[annotationRetainedFrom]
+		assert.False(t, hasRetainedAnnotation)
+		assert.Equal(t, wantData, got.Data)
+		assert.Contains(t, got.OwnerReferences, metav1.OwnerReference{
+			APIVersion:         enterprisev4.GroupVersion.String(),
+			Kind:               "PostgresDatabase",
+			Name:               postgresDB.Name,
+			UID:                wantOwnerUID,
+			Controller:         boolPtr(true),
+			BlockOwnerDeletion: boolPtr(true),
+		})
+	})
+
+	t.Run("re-attaches owner reference when configmap ownership was manually stripped", func(t *testing.T) {
+		postgresDB := &enterprisev4.PostgresDatabase{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: enterprisev4.GroupVersion.String(),
+				Kind:       "PostgresDatabase",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary",
+				Namespace: "dbs",
+				UID:       types.UID("postgresdb-uid"),
+			},
+			Spec: enterprisev4.PostgresDatabaseSpec{
+				Databases: []enterprisev4.DatabaseDefinition{
+					{Name: "payments"},
+				},
+			},
+		}
+		cmName := "primary-payments-config"
+		existing := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        cmName,
+				Namespace:   postgresDB.Namespace,
+				Labels:      map[string]string{labelManagedBy: "splunk-operator"},
+				Annotations: map[string]string{"keep": "true"},
+			},
+			Data: map[string]string{"dbname": "payments"},
+		}
+		c := testClient(t, scheme, existing)
+
+		err := reconcileRoleConfigMaps(context.Background(), c, scheme, postgresDB, endpoints)
+
+		require.NoError(t, err)
+
+		got := &corev1.ConfigMap{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: cmName, Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, "true", got.Annotations["keep"])
+		require.Len(t, got.OwnerReferences, 1)
+		assert.Equal(t, postgresDB.UID, got.OwnerReferences[0].UID)
+		assert.Equal(t, buildDatabaseConfigMapBody("payments", endpoints), got.Data)
+	})
+}
+
+func TestBuildDeletionPlan(t *testing.T) {
+	databases := []enterprisev4.DatabaseDefinition{
+		{Name: "payments", DeletionPolicy: deletionPolicyRetain},
+		{Name: "analytics"},
+		{Name: "audit", DeletionPolicy: deletionPolicyRetain},
+	}
+	wantRetainedNames := []string{"payments", "audit"}
+	wantDeletedNames := []string{"analytics"}
+
+	got := buildDeletionPlan(databases)
+
+	assert.ElementsMatch(t, wantRetainedNames, databaseNames(got.retained))
+	assert.ElementsMatch(t, wantDeletedNames, databaseNames(got.deleted))
+}
+
+func TestBuildManagedRoles(t *testing.T) {
+	databases := []enterprisev4.DatabaseDefinition{
+		{Name: "payments"},
+		{Name: "analytics"},
+	}
+	want := []enterprisev4.ManagedRole{
+		{
+			Name:   "payments_admin",
+			Exists: true,
+			PasswordSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "primary-payments-admin"},
+				Key:                  secretKeyPassword,
+			},
+		},
+		{
+			Name:   "payments_rw",
+			Exists: true,
+			PasswordSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "primary-payments-rw"},
+				Key:                  secretKeyPassword,
+			},
+		},
+		{
+			Name:   "analytics_admin",
+			Exists: true,
+			PasswordSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "primary-analytics-admin"},
+				Key:                  secretKeyPassword,
+			},
+		},
+		{
+			Name:   "analytics_rw",
+			Exists: true,
+			PasswordSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "primary-analytics-rw"},
+				Key:                  secretKeyPassword,
+			},
+		},
+	}
+
+	got := buildDesiredRoles("primary", databases)
+
+	assert.Equal(t, want, got)
+}
+
+func TestBuildManagedRolesPatch(t *testing.T) {
+	scheme := testScheme(t)
+	cluster := &enterprisev4.PostgresCluster{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: enterprisev4.GroupVersion.String(),
+			Kind:       "PostgresCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "primary",
+			Namespace: "dbs",
+		},
+	}
+	roles := buildDesiredRoles("primary", []enterprisev4.DatabaseDefinition{{Name: "payments"}})
+	c := testClient(t, scheme, cluster)
+
+	got, err := buildManagedRolesPatch(cluster, roles, c.Scheme())
+	require.NoError(t, err)
+
+	assert.Equal(t, cluster.APIVersion, got.Object["apiVersion"])
+	assert.Equal(t, cluster.Kind, got.Object["kind"])
+	assert.Equal(t, map[string]any{"name": cluster.Name, "namespace": cluster.Namespace}, got.Object["metadata"])
+	assert.Equal(t, map[string]any{"managedRoles": roles}, got.Object["spec"])
+}
+
+func TestFindAddedRoleNames(t *testing.T) {
+	desired := buildDesiredRoles("primary", []enterprisev4.DatabaseDefinition{{Name: "payments"}, {Name: "api"}})
+
+	tests := []struct {
+		name    string
+		current []enterprisev4.ManagedRole
+		want    []string
+	}{
+		{
+			name:    "all missing from cluster",
+			current: nil,
+			want:    []string{"payments_admin", "payments_rw", "api_admin", "api_rw"},
+		},
+		{
+			name: "some already present",
+			current: []enterprisev4.ManagedRole{
+				{Name: "payments_admin", Exists: true},
+				{Name: "payments_rw", Exists: true},
+			},
+			want: []string{"api_admin", "api_rw"},
+		},
+		{
+			name: "role present but marked absent — should be re-added",
+			current: []enterprisev4.ManagedRole{
+				{Name: "payments_admin", Exists: false},
+				{Name: "payments_rw", Exists: true},
+			},
+			want: []string{"payments_admin", "api_admin", "api_rw"},
+		},
+		{
+			name: "all already present",
+			current: []enterprisev4.ManagedRole{
+				{Name: "payments_admin", Exists: true},
+				{Name: "payments_rw", Exists: true},
+				{Name: "api_admin", Exists: true},
+				{Name: "api_rw", Exists: true},
+			},
+			want: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cluster := &enterprisev4.PostgresCluster{
+				Spec: enterprisev4.PostgresClusterSpec{ManagedRoles: tc.current},
+			}
+			got := findAddedRoleNames(cluster, desired)
+			assert.ElementsMatch(t, tc.want, got)
+		})
+	}
+}
+
+type roleFieldOwner struct {
+	manager string
+	roles   []string
+}
+
+func TestFindRemovedRoleNames(t *testing.T) {
+	manager := "splunk-operator-primary"
+	desired := buildDesiredRoles("primary", []enterprisev4.DatabaseDefinition{{Name: "payments"}})
+
+	tests := []struct {
+		name        string
+		fieldOwners []roleFieldOwner
+		want        []string
+	}{
+		{
+			name:        "no roles owned by any manager",
+			fieldOwners: nil,
+			want:        nil,
+		},
+		{
+			name:        "owned roles still in desired — nothing to remove",
+			fieldOwners: []roleFieldOwner{{manager: manager, roles: []string{"payments_admin", "payments_rw"}}},
+			want:        nil,
+		},
+		{
+			name:        "owned role no longer in desired — should be removed",
+			fieldOwners: []roleFieldOwner{{manager: manager, roles: []string{"payments_admin", "payments_rw", "api_admin", "api_rw"}}},
+			want:        []string{"api_admin", "api_rw"},
+		},
+		{
+			name:        "role owned by different manager — ignored",
+			fieldOwners: []roleFieldOwner{{manager: "other-manager", roles: []string{"api_admin", "api_rw"}}},
+			want:        nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var managedFields []metav1.ManagedFieldsEntry
+			for _, fo := range tc.fieldOwners {
+				keys := make([]string, len(fo.roles))
+				for i, r := range fo.roles {
+					keys[i] = `k:{"name":"` + r + `"}`
+				}
+				managedFields = append(managedFields, metav1.ManagedFieldsEntry{
+					Manager:   fo.manager,
+					FieldsV1:  &metav1.FieldsV1{Raw: managedRolesFieldsRaw(t, keys...)},
+					Operation: metav1.ManagedFieldsOperationApply,
+				})
+			}
+			cluster := &enterprisev4.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{ManagedFields: managedFields},
+			}
+			got := findRemovedRoleNames(cluster, manager, desired)
+			assert.ElementsMatch(t, tc.want, got)
+		})
+	}
+}
+
+func TestBuildRolesToRemove(t *testing.T) {
+	tests := []struct {
+		name    string
+		deleted []enterprisev4.DatabaseDefinition
+		want    []enterprisev4.ManagedRole
+	}{
+		{
+			name:    "nothing to remove",
+			deleted: nil,
+			want:    []enterprisev4.ManagedRole{},
+		},
+		{
+			name:    "single database removed",
+			deleted: []enterprisev4.DatabaseDefinition{{Name: "api"}},
+			want:    []enterprisev4.ManagedRole{{Name: "api_admin", Exists: false}, {Name: "api_rw", Exists: false}},
+		},
+		{
+			name:    "multiple databases removed",
+			deleted: []enterprisev4.DatabaseDefinition{{Name: "api"}, {Name: "payments"}},
+			want: []enterprisev4.ManagedRole{
+				{Name: "api_admin", Exists: false}, {Name: "api_rw", Exists: false},
+				{Name: "payments_admin", Exists: false}, {Name: "payments_rw", Exists: false},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, buildRolesToRemove(tc.deleted))
+		})
+	}
+}
+
+func TestStripOwnerReference(t *testing.T) {
+	obj := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			OwnerReferences: []metav1.OwnerReference{
+				{UID: types.UID("remove-me"), Name: "db"},
+				{UID: types.UID("keep-me"), Name: "cluster"},
+			},
+		},
+	}
+
+	stripOwnerReference(obj, types.UID("remove-me"))
+
+	require.Len(t, obj.OwnerReferences, 1)
+	assert.Equal(t, types.UID("keep-me"), obj.OwnerReferences[0].UID)
+}
+
+func TestBuildPasswordSecret(t *testing.T) {
+	postgresDB := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "primary",
+			Namespace: "dbs",
+		},
+	}
+	wantName := "primary-payments-admin"
+	wantNamespace := "dbs"
+	wantManagedBy := "splunk-operator"
+	wantReload := "true"
+	wantRolename := "payments_admin"
+	wantPassword := "topsecret"
+
+	got := buildPasswordSecret(postgresDB, wantName, wantRolename, wantPassword)
+
+	assert.Equal(t, wantName, got.Name)
+	assert.Equal(t, wantNamespace, got.Namespace)
+	assert.Equal(t, wantManagedBy, got.Labels[labelManagedBy])
+	assert.Equal(t, wantReload, got.Labels[labelCNPGReload])
+	assert.Equal(t, wantRolename, string(got.Data["username"]))
+	assert.Equal(t, wantPassword, string(got.Data[secretKeyPassword]))
+}
+
+func TestBuildCNPGDatabaseSpec(t *testing.T) {
+	tests := []struct {
+		name       string
+		db         enterprisev4.DatabaseDefinition
+		extensions []cnpgv1.ExtensionSpec
+		want       cnpgv1.DatabaseSpec
+	}{
+		{
+			name: "uses delete reclaim policy by default",
+			db:   enterprisev4.DatabaseDefinition{Name: "payments"},
+			want: cnpgv1.DatabaseSpec{
+				Name:          "payments",
+				Owner:         "payments_admin",
+				ClusterRef:    corev1.LocalObjectReference{Name: "cnpg-primary"},
+				ReclaimPolicy: cnpgv1.DatabaseReclaimDelete,
+			},
+		},
+		{
+			name: "uses retain reclaim policy when deletion policy is retain",
+			db:   enterprisev4.DatabaseDefinition{Name: "analytics", DeletionPolicy: deletionPolicyRetain},
+			want: cnpgv1.DatabaseSpec{
+				Name:          "analytics",
+				Owner:         "analytics_admin",
+				ClusterRef:    corev1.LocalObjectReference{Name: "cnpg-primary"},
+				ReclaimPolicy: cnpgv1.DatabaseReclaimRetain,
+			},
+		},
+		{
+			name: "passes extensions through unchanged",
+			db:   enterprisev4.DatabaseDefinition{Name: "myapp"},
+			extensions: []cnpgv1.ExtensionSpec{
+				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent}},
+			},
+			want: cnpgv1.DatabaseSpec{
+				Name:          "myapp",
+				Owner:         "myapp_admin",
+				ClusterRef:    corev1.LocalObjectReference{Name: "cnpg-primary"},
+				ReclaimPolicy: cnpgv1.DatabaseReclaimDelete,
+				Extensions: []cnpgv1.ExtensionSpec{
+					{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent}},
+				},
+			},
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			got := buildCNPGDatabaseSpec("cnpg-primary", tst.db, tst.extensions)
+			assert.Equal(t, tst.want, got)
+		})
+	}
+}
+
+func TestReconcileExtensions(t *testing.T) {
+	tests := []struct {
+		name     string
+		desired  []string
+		existing []cnpgv1.ExtensionSpec
+		want     []cnpgv1.ExtensionSpec
+	}{
+		{
+			name:    "no extensions returns nil",
+			desired: nil,
+			want:    nil,
+		},
+		{
+			name:    "desired extensions all marked present",
+			desired: []string{"pg_trgm", "unaccent"},
+			want: []cnpgv1.ExtensionSpec{
+				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent}},
+				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "unaccent", Ensure: cnpgv1.EnsurePresent}},
+			},
+		},
+		{
+			name:    "removed extension marked absent",
+			desired: []string{"pg_trgm"},
+			existing: []cnpgv1.ExtensionSpec{
+				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent}},
+				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "unaccent", Ensure: cnpgv1.EnsurePresent}},
+			},
+			want: []cnpgv1.ExtensionSpec{
+				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent}},
+				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "unaccent", Ensure: cnpgv1.EnsureAbsent}},
+			},
+		},
+		{
+			name:    "already absent extension persisted",
+			desired: []string{},
+			existing: []cnpgv1.ExtensionSpec{
+				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsureAbsent}},
+			},
+			want: []cnpgv1.ExtensionSpec{
+				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsureAbsent}},
+			},
+		},
+		{
+			name:    "all extensions removed marks all absent",
+			desired: []string{},
+			existing: []cnpgv1.ExtensionSpec{
+				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent}},
+				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "unaccent", Ensure: cnpgv1.EnsurePresent}},
+			},
+			want: []cnpgv1.ExtensionSpec{
+				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsureAbsent}},
+				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "unaccent", Ensure: cnpgv1.EnsureAbsent}},
+			},
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			got := reconcileExtensions(tst.desired, tst.existing)
+			assert.Equal(t, tst.want, got)
+		})
+	}
+}
+
+func TestBuildDatabaseConfigMapBody(t *testing.T) {
+	tests := []struct {
+		name      string
+		endpoints clusterEndpoints
+		want      map[string]string
+	}{
+		{
+			name: "without pooler endpoints",
+			endpoints: clusterEndpoints{
+				RWHost: "rw.default.svc.cluster.local",
+				ROHost: "ro.default.svc.cluster.local",
+			},
+			want: map[string]string{
+				"dbname":     "payments",
+				"port":       postgresPort,
+				"rw-host":    "rw.default.svc.cluster.local",
+				"ro-host":    "ro.default.svc.cluster.local",
+				"admin-user": "payments_admin",
+				"rw-user":    "payments_rw",
+			},
+		},
+		{
+			name: "includes pooler endpoints when available",
+			endpoints: clusterEndpoints{
+				RWHost:       "rw.default.svc.cluster.local",
+				ROHost:       "ro.default.svc.cluster.local",
+				PoolerRWHost: "pooler-rw.default.svc.cluster.local",
+				PoolerROHost: "pooler-ro.default.svc.cluster.local",
+			},
+			want: map[string]string{
+				"dbname":         "payments",
+				"port":           postgresPort,
+				"rw-host":        "rw.default.svc.cluster.local",
+				"ro-host":        "ro.default.svc.cluster.local",
+				"admin-user":     "payments_admin",
+				"rw-user":        "payments_rw",
+				"pooler-rw-host": "pooler-rw.default.svc.cluster.local",
+				"pooler-ro-host": "pooler-ro.default.svc.cluster.local",
+			},
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			got := buildDatabaseConfigMapBody("payments", tst.endpoints)
+			assert.Equal(t, tst.want, got)
+		})
+	}
+}
+
+func TestResolveClusterEndpoints(t *testing.T) {
+	tests := []struct {
+		name      string
+		cluster   *enterprisev4.PostgresCluster
+		cnpg      *cnpgv1.Cluster
+		namespace string
+		want      clusterEndpoints
+	}{
+		{
+			name:    "without connection pooler",
+			cluster: &enterprisev4.PostgresCluster{},
+			cnpg: &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "cnpg-primary"},
+				Status: cnpgv1.ClusterStatus{
+					WriteService: "primary-rw",
+					ReadService:  "primary-ro",
+				},
+			},
+			namespace: "dbs",
+			want: clusterEndpoints{
+				RWHost: "primary-rw.dbs.svc.cluster.local",
+				ROHost: "primary-ro.dbs.svc.cluster.local",
+			},
+		},
+		{
+			name: "with connection pooler",
+			cluster: &enterprisev4.PostgresCluster{
+				Status: enterprisev4.PostgresClusterStatus{
+					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true},
+				},
+			},
+			cnpg: &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "cnpg-primary"},
+				Status: cnpgv1.ClusterStatus{
+					WriteService: "primary-rw",
+					ReadService:  "primary-ro",
+				},
+			},
+			namespace: "dbs",
+			want: clusterEndpoints{
+				RWHost:       "primary-rw.dbs.svc.cluster.local",
+				ROHost:       "primary-ro.dbs.svc.cluster.local",
+				PoolerRWHost: "cnpg-primary-pooler-rw.dbs.svc.cluster.local",
+				PoolerROHost: "cnpg-primary-pooler-ro.dbs.svc.cluster.local",
+			},
+		},
+	}
+
+	for _, tst := range tests {
+
+		t.Run(tst.name, func(t *testing.T) {
+			got := resolveClusterEndpoints(tst.cluster, tst.cnpg, tst.namespace)
+			assert.Equal(t, tst.want, got)
+		})
+	}
+}
+
+func TestPopulateDatabaseStatus(t *testing.T) {
+	postgresDB := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary"},
+		Spec: enterprisev4.PostgresDatabaseSpec{
+			Databases: []enterprisev4.DatabaseDefinition{
+				{Name: "payments"},
+				{Name: "analytics"},
+			},
+		},
+	}
+	want := []enterprisev4.DatabaseInfo{
+		{
+			Name:  "payments",
+			Ready: true,
+			AdminUserSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "primary-payments-admin"},
+				Key:                  secretKeyPassword,
+			},
+			RWUserSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "primary-payments-rw"},
+				Key:                  secretKeyPassword,
+			},
+			ConfigMapRef: &corev1.LocalObjectReference{Name: "primary-payments-config"},
+		},
+		{
+			Name:  "analytics",
+			Ready: true,
+			AdminUserSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "primary-analytics-admin"},
+				Key:                  secretKeyPassword,
+			},
+			RWUserSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "primary-analytics-rw"},
+				Key:                  secretKeyPassword,
+			},
+			ConfigMapRef: &corev1.LocalObjectReference{Name: "primary-analytics-config"},
+		},
+	}
+
+	got := populateDatabaseStatus(postgresDB)
+
+	assert.Equal(t, want, got)
+}
+
+func TestHasNewDatabases(t *testing.T) {
+	tests := []struct {
+		name       string
+		postgresDB *enterprisev4.PostgresDatabase
+		want       bool
+	}{
+		{
+			name: "returns true when spec contains a new database",
+			postgresDB: &enterprisev4.PostgresDatabase{
+				Spec: enterprisev4.PostgresDatabaseSpec{
+					Databases: []enterprisev4.DatabaseDefinition{
+						{Name: "payments"},
+						{Name: "analytics"},
+					},
+				},
+				Status: enterprisev4.PostgresDatabaseStatus{
+					Databases: []enterprisev4.DatabaseInfo{
+						{Name: "payments"},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "returns false when all spec databases already exist in status",
+			postgresDB: &enterprisev4.PostgresDatabase{
+				Spec: enterprisev4.PostgresDatabaseSpec{
+					Databases: []enterprisev4.DatabaseDefinition{
+						{Name: "payments"},
+					},
+				},
+				Status: enterprisev4.PostgresDatabaseStatus{
+					Databases: []enterprisev4.DatabaseInfo{
+						{Name: "payments"},
+						{Name: "legacy-extra"},
+					},
+				},
+			},
+			want: false,
+		},
+	}
+
+	for _, tst := range tests {
+
+		t.Run(tst.name, func(t *testing.T) {
+			got := hasNewDatabases(tst.postgresDB)
+			assert.Equal(t, tst.want, got)
+		})
+	}
+}
+
+func TestNamingHelpers(t *testing.T) {
+	tests := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{name: "field manager", got: fieldManagerName("primary"), want: "postgresdatabase-primary"},
+		{name: "admin role", got: adminRoleName("payments"), want: "payments_admin"},
+		{name: "rw role", got: rwRoleName("payments"), want: "payments_rw"},
+		{name: "cnpg database", got: cnpgDatabaseName("primary", "payments"), want: "primary-payments"},
+		{name: "role secret", got: roleSecretName("primary", "payments", "admin"), want: "primary-payments-admin"},
+		{name: "config map", got: configMapName("primary", "payments"), want: "primary-payments-config"},
+	}
+
+	for _, tst := range tests {
+
+		t.Run(tst.name, func(t *testing.T) {
+			assert.Equal(t, tst.want, tst.got)
+		})
+	}
+}

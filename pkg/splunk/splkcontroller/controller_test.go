@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/tools/record"
 	ctrl2 "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -43,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/conversion"
 	//"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -243,6 +245,22 @@ func (mgr MockManager) GetWebhookServer() webhook.Server {
 	})
 	mgr.SetFields(&s)
 	return s
+}
+
+func (mgr MockManager) GetConverterRegistry() conversion.Registry {
+	return nil
+}
+
+func (mgr MockManager) GetEventRecorder(name string) events.EventRecorder {
+	return nil
+}
+
+func (mgr MockManager) NeedLeaderElection() bool {
+	return false
+}
+
+func (mgr MockManager) Warmup(ctx context.Context) error {
+	return nil
 }
 
 // NewMockManager returns a new instance of a MockManager

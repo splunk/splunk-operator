@@ -17,9 +17,14 @@ limitations under the License.
 package validation
 
 import (
+	"context"
+
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	pgclusterwebhook "github.com/splunk/splunk-operator/pkg/postgresql/cluster/adapter/webhook"
+	pgdbwebhook "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter/webhook"
 )
 
 // GVR constants for all Splunk Enterprise CRDs
@@ -70,6 +75,24 @@ var (
 		Group:    "enterprise.splunk.com",
 		Version:  "v4",
 		Resource: "monitoringconsoles",
+	}
+
+	PostgresClusterGVR = schema.GroupVersionResource{
+		Group:    "enterprise.splunk.com",
+		Version:  "v4",
+		Resource: "postgresclusters",
+	}
+
+	PostgresClusterClassGVR = schema.GroupVersionResource{
+		Group:    "enterprise.splunk.com",
+		Version:  "v4",
+		Resource: "postgresclusterclasses",
+	}
+
+	PostgresDatabaseGVR = schema.GroupVersionResource{
+		Group:    "enterprise.splunk.com",
+		Version:  "v4",
+		Resource: "postgresdatabases",
 	}
 )
 
@@ -178,6 +201,48 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 		GroupKind: schema.GroupKind{
 			Group: "enterprise.splunk.com",
 			Kind:  "MonitoringConsole",
+		},
+	},
+
+	PostgresClusterGVR: &GenericValidator[*enterpriseApi.PostgresCluster]{
+		ValidateCreateFunc: func(obj *enterpriseApi.PostgresCluster) field.ErrorList {
+			return pgclusterwebhook.ValidatePostgresClusterCreate(context.Background(), obj, nil)
+		},
+		ValidateUpdateFunc: func(obj, oldObj *enterpriseApi.PostgresCluster) field.ErrorList {
+			return pgclusterwebhook.ValidatePostgresClusterUpdate(context.Background(), obj, oldObj, nil)
+		},
+		ValidateCreateWithContextFunc: func(obj *enterpriseApi.PostgresCluster, vc *ValidationContext) field.ErrorList {
+			return pgclusterwebhook.ValidatePostgresClusterCreate(vc.Ctx, obj, vc.Client)
+		},
+		ValidateUpdateWithContextFunc: func(obj *enterpriseApi.PostgresCluster, oldObj *enterpriseApi.PostgresCluster, vc *ValidationContext) field.ErrorList {
+			return pgclusterwebhook.ValidatePostgresClusterUpdate(vc.Ctx, obj, oldObj, vc.Client)
+		},
+		WarningsOnCreateFunc: pgclusterwebhook.GetPostgresClusterWarningsOnCreate,
+		WarningsOnUpdateFunc: pgclusterwebhook.GetPostgresClusterWarningsOnUpdate,
+		GroupKind: schema.GroupKind{
+			Group: "enterprise.splunk.com",
+			Kind:  "PostgresCluster",
+		},
+	},
+
+	PostgresClusterClassGVR: &GenericValidator[*enterpriseApi.PostgresClusterClass]{
+		ValidateCreateFunc:   pgclusterwebhook.ValidatePostgresClusterClassCreate,
+		ValidateUpdateFunc:   pgclusterwebhook.ValidatePostgresClusterClassUpdate,
+		WarningsOnCreateFunc: pgclusterwebhook.GetPostgresClusterClassWarningsOnCreate,
+		WarningsOnUpdateFunc: pgclusterwebhook.GetPostgresClusterClassWarningsOnUpdate,
+		GroupKind: schema.GroupKind{
+			Group: "enterprise.splunk.com",
+			Kind:  "PostgresClusterClass",
+		},
+	},
+	PostgresDatabaseGVR: &GenericValidator[*enterpriseApi.PostgresDatabase]{
+		ValidateCreateFunc:   pgdbwebhook.ValidatePostgresDatabaseCreate,
+		ValidateUpdateFunc:   pgdbwebhook.ValidatePostgresDatabaseUpdate,
+		WarningsOnCreateFunc: pgdbwebhook.GetPostgresDatabaseWarningsOnCreate,
+		WarningsOnUpdateFunc: pgdbwebhook.GetPostgresDatabaseWarningsOnUpdate,
+		GroupKind: schema.GroupKind{
+			Group: "enterprise.splunk.com",
+			Kind:  "PostgresDatabase",
 		},
 	},
 }

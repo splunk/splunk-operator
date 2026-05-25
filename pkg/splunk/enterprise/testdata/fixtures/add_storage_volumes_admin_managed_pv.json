@@ -5,7 +5,6 @@
     "annotations": {
       "enterprise.splunk.com/admin-managed-pv": "true"
     },
-    "creationTimestamp": null,
     "labels": {
       "app.kubernetes.io/component": "indexer",
       "app.kubernetes.io/instance": "splunk-CM-cluster-manager",
@@ -20,9 +19,7 @@
     "selector": null,
     "serviceName": "",
     "template": {
-      "metadata": {
-        "creationTimestamp": null
-      },
+      "metadata": {},
       "spec": {
         "containers": [
           {
@@ -60,7 +57,6 @@
     "volumeClaimTemplates": [
       {
         "metadata": {
-          "creationTimestamp": null,
           "labels": {
             "app.kubernetes.io/component": "indexer",
             "app.kubernetes.io/instance": "splunk-CM-cluster-manager",
@@ -90,7 +86,6 @@
       },
       {
         "metadata": {
-          "creationTimestamp": null,
           "labels": {
             "app.kubernetes.io/component": "indexer",
             "app.kubernetes.io/instance": "splunk-CM-cluster-manager",

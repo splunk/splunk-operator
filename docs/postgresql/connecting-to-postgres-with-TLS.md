@@ -1,0 +1,138 @@
+---
+title: Connecting to PostgreSQL with TLS
+parent: PostgreSQL
+nav_order: 2
+---
+
+# Connecting to PostgreSQL with TLS
+
+This guide describes how **application workloads** connect to a managed `**PostgresCluster`** using TLS: where to read **non-secret** connection metadata, where **passwords and CA PEM** live, and how to use `**sslmode=verify-full`** safely inside Kubernetes.
+
+**Separation of concerns:** the **cluster access ConfigMap** (same namespace as the `PostgresCluster`, often `**<cluster-name>-configmap`**) holds **connection endpoints and port**—not PEM material or passwords. Those come from Kubernetes **Secrets** referenced by name in the ConfigMap.
+
+Certificate lifecycle and server-side behaviour follow **[CloudNativePG — Certificates](https://cloudnative-pg.io/docs/1.28/certificates)** (pick the doc version that matches your CNPG release).
+
+---
+
+## Finding the cluster access ConfigMap
+
+1. **By convention:** many installs use `**metadata.name`** = `**<PostgresCluster.metadata.name>-configmap**` in the same namespace as the `PostgresCluster`.
+2. **From status:** after reconciliation, `**status.resources.configMapRef.name`** points at the published ConfigMap (useful for scripts and GitOps that avoid hardcoding derived names).
+3. **Example:**
+  ```bash
+   kubectl get postgrescluster -n <namespace> <name> -o jsonpath='{.status.resources.configMapRef.name}{"\n"}'
+   kubectl get configmap -n <namespace> <configmap-name> -o yaml
+  ```
+
+---
+
+## ConfigMap keys (what apps read)
+
+
+| Key                                                                 | Use                                                              |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `**CLUSTER_RW_ENDPOINT**`                                           | Primary / read–write endpoint                                    |
+| `**CLUSTER_RO_ENDPOINT**`                                           | Read-only replica traffic                                        |
+| `**CLUSTER_R_ENDPOINT**`                                            | Any instance                                                     |
+| `**DEFAULT_CLUSTER_PORT**`                                          | Port (usually **5432**)                                          |
+| `**SUPER_USER_NAME`**                                               | Bootstrap superuser (often `**postgres**`)                       |
+| `**SUPER_USER_SECRET_REF**`                                         | Secret **name** for the superuser password                       |
+| `**SERVER_CA_SECRET_REF`**                                          | Secret **name** for the CA used to verify the server certificate |
+| `**SERVER_CA_CERT_KEY`**                                            | Key inside that Secret for the PEM file (often `**ca.crt**`)     |
+| `**CLUSTER_POOLER_RW_ENDPOINT**` / `**CLUSTER_POOLER_RO_ENDPOINT**` | PgBouncer hosts — only if poolers are enabled                    |
+
+
+If `**SERVER_CA_***` is missing, the database may still be starting, CNPG has not yet published CA metadata, or the operator has not validated the Secret yet—check `**PostgresCluster**` events and CNPG cluster status, then retry.
+
+---
+
+## Secrets to mount
+
+
+| Purpose                      | Source                                                                                                                                                                             |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Trust anchor (server CA)** | Secret named `**SERVER_CA_SECRET_REF`**, data key `**SERVER_CA_CERT_KEY**` — mount read-only (e.g. `**/etc/postgres-ca/ca.crt**`) and set `**PGSSLROOTCERT**` / `**sslrootcert**`. |
+| **Password**                 | Secret named `**SUPER_USER_SECRET_REF`** — typically key `**password**` (follow your cluster’s conventions if documented elsewhere).                                               |
+
+
+Never copy PEM or passwords into the ConfigMap; keep them in Secrets and restrict RBAC to workloads that need them.
+
+---
+
+## Connect with `verify-full` (direct Postgres)
+
+Use the **RW or RO endpoint** from the ConfigMap for strict certificate verification.
+
+1. Mount the CA `**Secret`** named in `**SERVER_CA_SECRET_REF**`, using the file key `**SERVER_CA_CERT_KEY**` (e.g. mount as `**/etc/postgres-ca/ca.crt**`).
+2. Load the password from the `**Secret**` named `**SUPER_USER_SECRET_REF**` (convention: key `**password**`).
+3. Point your client at the endpoint and port from the ConfigMap. With `**verify-full**`, the client validates both the CA chain and server certificate identity.
+
+Example environment:
+
+```text
+PGSSLMODE=verify-full
+PGSSLROOTCERT=/etc/postgres-ca/ca.crt
+PGHOST=<CLUSTER_RW_ENDPOINT>
+PGPORT=<DEFAULT_CLUSTER_PORT>
+PGUSER=<SUPER_USER_NAME>
+PGPASSWORD=<from superuser Secret>
+```
+
+Equivalent libpq connection string parameters: `**sslmode=verify-full**`, `**sslrootcert=...**`, `**host=**`, `**port=**`, `**user=**`, `**password=**`.
+
+---
+
+## Pooler and `verify-full`
+
+> **Needs attention — further work:** This subsection is preliminary guidance. Pooler hostnames, CNPG certificate identities, and Splunk Operator behaviour here should be revisited and expanded (including any operator or doc updates) before treating it as complete.
+
+The pooler is a separate Service from direct Postgres. With `**sslmode=verify-full`**, the client checks that the name it connects to matches the server certificate. If that name is the pooler endpoint from `**CLUSTER_POOLER_***`, the certificate presented on that path must include a matching identity.
+
+`**PostgresCluster` / `PostgresClusterClass` do not carry certificate or SAN settings**; CloudNativePG owns server TLS. How identities are chosen or extended is defined in **[CloudNativePG — Certificates](https://cloudnative-pg.io/docs/1.28/certificates)** and your CNPG `**Cluster`** spec, not in this guide.
+
+**Practical defaults:**
+
+- Prefer `**CLUSTER_RW_ENDPOINT`** / `**CLUSTER_RO_ENDPOINT**` when you need `**verify-full**` and want the simplest alignment with typical CNPG server certs.
+- If you must use the pooler and `**verify-full**` fails on name mismatch, adjust CNPG-side certificate configuration (per CNPG docs), or use `**verify-ca**` only if your security policy allows trusting the CA without pinning the server name.
+
+**Operational note:** after server certificate material changes, pooler Pods may need to roll so PgBouncer picks up the new leaf; expect brief TLS errors until clients and poolers converge.
+
+---
+
+## Require TLS on the server (`pg_hba`)
+
+PostgreSQL decides **whether a connection may use plaintext or must use TLS** using `**pg_hba.conf`** rules. In Splunk Operator, you express those rules on `**PostgresClusterClass**` under `**spec.config.pgHBA**`: each entry is one line, in the same order PostgreSQL will evaluate them.
+
+**Typical pattern:** reject anything that tries to skip SSL, then allow password login only over SSL:
+
+```yaml
+# PostgresClusterClass (fragment)
+spec:
+  config:
+    pgHBA:
+      # Decline connections that do not negotiate TLS
+      - "hostnossl all all 0.0.0.0/0 reject"
+      # Allow all databases/users from any IPv4 address when using TLS + SCRAM password auth
+      - "hostssl all all 0.0.0.0/0 scram-sha-256"
+```
+
+If you also need IPv6 clients, add equivalent rules for `**::/0**` (see the [PostgreSQL `**pg_hba.conf**` documentation](https://www.postgresql.org/docs/current/auth-pg-hba-conf.html)).
+
+**Together with client TLS:** set your application to `**sslmode=verify-full`** (or `**PGSSLMODE=verify-full**`) and mount the server CA as described above. The server presents a certificate managed by the platform; `**pg_hba**` is what **forces** clients to use SSL for password auth on those lines.
+
+**Do not** put `**ssl`**, `**ssl_cert_file**`, or similar server certificate settings in `**postgresqlConfig**` here—the platform already provisions server TLS. Use `**pgHBA**` (and general non-TLS `**postgresqlConfig**` tuning) for policy and performance.
+
+For allowed PostgreSQL parameters in this setup, see **[CloudNativePG — PostgreSQL configuration](https://cloudnative-pg.io/documentation/1.28/postgresql_conf/)**.
+
+---
+
+## Quick troubleshooting
+
+
+| Symptom                                      | Things to check                                                                                                                                                                                              |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `**SERVER_CA_`* missing in ConfigMap**       | CNPG not ready yet; CA Secret not published or not readable by the operator; requeue/reconcile.                                                                                                              |
+| `**verify-full` fails with hostname errors** | Use an endpoint whose name appears in the server cert (often direct RW/RO); or align CNPG server certificate identities with the pooler host per CNPG docs; pooler rollout may be needed after cert changes. |
+| **Password auth fails**                      | Correct Secret name/key; user exists for that database; `pg_hba` allows your client network and SSL method.                                                                                                  |
+
+

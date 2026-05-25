@@ -91,7 +91,7 @@ const (
 	MaxAppsRepoPollInterval int64 = 60 * 60 * 24
 
 	// DefaultMaxConcurrentAppDownloads sets the default value for maximum concurrent app downloads
-	DefaultMaxConcurrentAppDownloads uint64 = 5
+	DefaultMaxConcurrentAppDownloads int64 = 5
 
 	// MockClientInduceErrorGet represents an error for get Api
 	MockClientInduceErrorGet = "mockClientGetError"
@@ -107,6 +107,9 @@ const (
 
 	// MockClientInduceErrorDelete represents an error for delete Api
 	MockClientInduceErrorDelete = "mockClientDeleteError"
+
+	// MockClientInduceErrorApply represents an error for apply Api (controller-runtime v0.22+ / k8s v0.34+)
+	MockClientInduceErrorApply = "mockClientApplyError"
 
 	// Rerr represents a random error strting
 	Rerr = "randomError"

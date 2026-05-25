@@ -548,8 +548,8 @@ func createAppDownloadDir(_ context.Context, path string) error {
 }
 
 // getAvailableDiskSpace returns the disk space available to download apps at volume "/opt/splunk/appframework"
-func getAvailableDiskSpace(ctx context.Context) (uint64, error) {
-	var availDiskSpace uint64
+func getAvailableDiskSpace(ctx context.Context) (int64, error) {
+	var availDiskSpace int64
 	var stat syscall.Statfs_t
 
 	scopedLog := logging.FromContext(ctx).With("func", "getAvailableDiskSpace", "volume mount", splcommon.AppDownloadVolume)
@@ -570,7 +570,7 @@ func getAvailableDiskSpace(ctx context.Context) (uint64, error) {
 		return 0, err
 	}
 
-	availDiskSpace = stat.Bavail * uint64(stat.Bsize)
+	availDiskSpace = int64(stat.Bavail) * int64(stat.Bsize)
 	scopedLog.InfoContext(ctx, "current available disk space in GB", "availableDiskSpace(GB)", availDiskSpace/1024/1024/1024)
 
 	return availDiskSpace, err
@@ -2060,7 +2060,7 @@ func isPersistentVolConfigured() bool {
 }
 
 // reserveStorage tries to reserve the amount of requested storage
-func reserveStorage(allocSize uint64) error {
+func reserveStorage(allocSize int64) error {
 	if !isPersistentVolConfigured() {
 		return fmt.Errorf("storageTracker was not initialized")
 	}
@@ -2079,7 +2079,7 @@ func reserveStorage(allocSize uint64) error {
 }
 
 // releaseStorage releases the reserved storage
-func releaseStorage(releaseSize uint64) error {
+func releaseStorage(releaseSize int64) error {
 	if !isPersistentVolConfigured() {
 		return fmt.Errorf("storageTracker was not initialized")
 	}
@@ -2305,156 +2305,130 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 	namespacedName := types.NamespacedName{Name: origCR.GetName(), Namespace: origCR.GetNamespace()}
 
 	var err error
-	switch origCR.GetObjectKind().GroupVersionKind().Kind {
-	case "Standalone":
-		latestStdlnCR := &enterpriseApi.Standalone{}
-		err = client.Get(ctx, namespacedName, latestStdlnCR)
-		if err != nil {
+	switch cr := origCR.(type) {
+	case *enterpriseApi.Standalone:
+		latestCR := &enterpriseApi.Standalone{}
+		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
-
-		// CSPL-2626 - Update error
-		origCR.(*enterpriseApi.Standalone).Status.Message = ""
+		cr.Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
-			origCR.(*enterpriseApi.Standalone).Status.Message = (*crError).Error()
+			cr.Status.Message = (*crError).Error()
 		}
-		origCR.(*enterpriseApi.Standalone).Status.DeepCopyInto(&latestStdlnCR.Status)
-		return latestStdlnCR, nil
+		cr.Status.DeepCopyInto(&latestCR.Status)
+		return latestCR, nil
 
-	case "IngestorCluster":
-		latestIngCR := &enterpriseApi.IngestorCluster{}
-		err = client.Get(ctx, namespacedName, latestIngCR)
-		if err != nil {
+	case *enterpriseApi.IngestorCluster:
+		latestCR := &enterpriseApi.IngestorCluster{}
+		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
-
-		origCR.(*enterpriseApi.IngestorCluster).Status.Message = ""
+		cr.Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
-			origCR.(*enterpriseApi.IngestorCluster).Status.Message = (*crError).Error()
+			cr.Status.Message = (*crError).Error()
 		}
-		origCR.(*enterpriseApi.IngestorCluster).Status.DeepCopyInto(&latestIngCR.Status)
-		return latestIngCR, nil
+		cr.Status.DeepCopyInto(&latestCR.Status)
+		return latestCR, nil
 
-	case "Queue":
-		latestQueueCR := &enterpriseApi.Queue{}
-		err = client.Get(ctx, namespacedName, latestQueueCR)
-		if err != nil {
+	case *enterpriseApi.Queue:
+		latestCR := &enterpriseApi.Queue{}
+		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
-
-		origCR.(*enterpriseApi.Queue).Status.Message = ""
+		cr.Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
-			origCR.(*enterpriseApi.Queue).Status.Message = (*crError).Error()
+			cr.Status.Message = (*crError).Error()
 		}
-		origCR.(*enterpriseApi.Queue).Status.DeepCopyInto(&latestQueueCR.Status)
-		return latestQueueCR, nil
+		cr.Status.DeepCopyInto(&latestCR.Status)
+		return latestCR, nil
 
-	case "ObjectStorage":
-		latestOsCR := &enterpriseApi.ObjectStorage{}
-		err = client.Get(ctx, namespacedName, latestOsCR)
-		if err != nil {
+	case *enterpriseApi.ObjectStorage:
+		latestCR := &enterpriseApi.ObjectStorage{}
+		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
-
-		origCR.(*enterpriseApi.ObjectStorage).Status.Message = ""
+		cr.Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
-			origCR.(*enterpriseApi.ObjectStorage).Status.Message = (*crError).Error()
+			cr.Status.Message = (*crError).Error()
 		}
-		origCR.(*enterpriseApi.ObjectStorage).Status.DeepCopyInto(&latestOsCR.Status)
-		return latestOsCR, nil
+		cr.Status.DeepCopyInto(&latestCR.Status)
+		return latestCR, nil
 
-	case "LicenseMaster":
-		latestLmCR := &enterpriseApiV3.LicenseMaster{}
-		err = client.Get(ctx, namespacedName, latestLmCR)
-		if err != nil {
+	case *enterpriseApiV3.LicenseMaster:
+		latestCR := &enterpriseApiV3.LicenseMaster{}
+		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
-		origCR.(*enterpriseApiV3.LicenseMaster).Status.DeepCopyInto(&latestLmCR.Status)
-		return latestLmCR, nil
+		cr.Status.DeepCopyInto(&latestCR.Status)
+		return latestCR, nil
 
-	case "LicenseManager":
-		latestLmCR := &enterpriseApi.LicenseManager{}
-		err = client.Get(ctx, namespacedName, latestLmCR)
-		if err != nil {
+	case *enterpriseApi.LicenseManager:
+		latestCR := &enterpriseApi.LicenseManager{}
+		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
-
-		// CSPL-2626 - Update error
-		origCR.(*enterpriseApi.LicenseManager).Status.Message = ""
+		cr.Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
-			origCR.(*enterpriseApi.LicenseManager).Status.Message = (*crError).Error()
+			cr.Status.Message = (*crError).Error()
 		}
-		origCR.(*enterpriseApi.LicenseManager).Status.DeepCopyInto(&latestLmCR.Status)
-		return latestLmCR, nil
+		cr.Status.DeepCopyInto(&latestCR.Status)
+		return latestCR, nil
 
-	case "SearchHeadCluster":
-		latestShcCR := &enterpriseApi.SearchHeadCluster{}
-		err = client.Get(ctx, namespacedName, latestShcCR)
-		if err != nil {
+	case *enterpriseApi.SearchHeadCluster:
+		latestCR := &enterpriseApi.SearchHeadCluster{}
+		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
-
-		// CSPL-2626 - Update error
-		origCR.(*enterpriseApi.SearchHeadCluster).Status.Message = ""
+		cr.Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
-			origCR.(*enterpriseApi.SearchHeadCluster).Status.Message = (*crError).Error()
+			cr.Status.Message = (*crError).Error()
 		}
-		origCR.(*enterpriseApi.SearchHeadCluster).Status.DeepCopyInto(&latestShcCR.Status)
-		return latestShcCR, nil
+		cr.Status.DeepCopyInto(&latestCR.Status)
+		return latestCR, nil
 
-	case "IndexerCluster":
-		latestIdxcCR := &enterpriseApi.IndexerCluster{}
-		err = client.Get(ctx, namespacedName, latestIdxcCR)
-		if err != nil {
+	case *enterpriseApi.IndexerCluster:
+		latestCR := &enterpriseApi.IndexerCluster{}
+		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
-
-		// CSPL-2626 - Update error
-		origCR.(*enterpriseApi.IndexerCluster).Status.Message = ""
+		cr.Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
-			origCR.(*enterpriseApi.IndexerCluster).Status.Message = (*crError).Error()
+			cr.Status.Message = (*crError).Error()
 		}
-		origCR.(*enterpriseApi.IndexerCluster).Status.DeepCopyInto(&latestIdxcCR.Status)
-		return latestIdxcCR, nil
+		cr.Status.DeepCopyInto(&latestCR.Status)
+		return latestCR, nil
 
-	case "ClusterMaster":
-		latestCmCR := &enterpriseApiV3.ClusterMaster{}
-		err = client.Get(ctx, namespacedName, latestCmCR)
-		if err != nil {
+	case *enterpriseApiV3.ClusterMaster:
+		latestCR := &enterpriseApiV3.ClusterMaster{}
+		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
-		origCR.(*enterpriseApiV3.ClusterMaster).Status.DeepCopyInto(&latestCmCR.Status)
-		return latestCmCR, nil
+		cr.Status.DeepCopyInto(&latestCR.Status)
+		return latestCR, nil
 
-	case "ClusterManager":
-		latestCmCR := &enterpriseApi.ClusterManager{}
-		err = client.Get(ctx, namespacedName, latestCmCR)
-		if err != nil {
+	case *enterpriseApi.ClusterManager:
+		latestCR := &enterpriseApi.ClusterManager{}
+		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
-
-		// CSPL-2626 - Update error
-		origCR.(*enterpriseApi.ClusterManager).Status.Message = ""
+		cr.Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
-			origCR.(*enterpriseApi.ClusterManager).Status.Message = (*crError).Error()
+			cr.Status.Message = (*crError).Error()
 		}
-		origCR.(*enterpriseApi.ClusterManager).Status.DeepCopyInto(&latestCmCR.Status)
-		return latestCmCR, nil
+		cr.Status.DeepCopyInto(&latestCR.Status)
+		return latestCR, nil
 
-	case "MonitoringConsole":
-		latestMcCR := &enterpriseApi.MonitoringConsole{}
-		err = client.Get(ctx, namespacedName, latestMcCR)
-		if err != nil {
+	case *enterpriseApi.MonitoringConsole:
+		latestCR := &enterpriseApi.MonitoringConsole{}
+		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
-
-		// CSPL-2626 - Update error
-		origCR.(*enterpriseApi.MonitoringConsole).Status.Message = ""
+		cr.Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
-			origCR.(*enterpriseApi.MonitoringConsole).Status.Message = (*crError).Error()
+			cr.Status.Message = (*crError).Error()
 		}
-		origCR.(*enterpriseApi.MonitoringConsole).Status.DeepCopyInto(&latestMcCR.Status)
-		return latestMcCR, nil
+		cr.Status.DeepCopyInto(&latestCR.Status)
+		return latestCR, nil
 	}
 
 	return nil, fmt.Errorf("invalid CR Kind")

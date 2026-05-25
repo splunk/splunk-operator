@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/spf13/pflag"
+	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	"github.com/splunk/splunk-operator/internal/controller/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
@@ -55,6 +56,9 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	enterpriseController "github.com/splunk/splunk-operator/internal/controller/enterprise"
+
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	//+kubebuilder:scaffold:imports
 	//extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
@@ -68,6 +72,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
 	utilruntime.Must(enterpriseApiV3.AddToScheme(scheme))
+	utilruntime.Must(cnpgv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 	//utilruntime.Must(extapi.AddToScheme(scheme))
 }
@@ -311,6 +316,37 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Telemetry")
 		os.Exit(1)
+	}
+	pgMetricsRecorder := pgprometheus.NewPrometheusRecorder()
+	if err := pgprometheus.Register(crmetrics.Registry); err != nil {
+		setupLog.Error(err, "unable to register PostgreSQL metrics")
+		os.Exit(1)
+	}
+
+	if config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
+		pgFleetMetricsCollector := pgprometheus.NewFleetCollector()
+
+		if err := (&enterpriseController.PostgresDatabaseReconciler{
+			Client:         mgr.GetClient(),
+			Scheme:         mgr.GetScheme(),
+			Recorder:       mgr.GetEventRecorderFor("postgresdatabase-controller"),
+			Metrics:        pgMetricsRecorder,
+			FleetCollector: pgFleetMetricsCollector,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "PostgresDatabase")
+			os.Exit(1)
+		}
+
+		if err := (&enterpriseController.PostgresClusterReconciler{
+			Client:         mgr.GetClient(),
+			Scheme:         mgr.GetScheme(),
+			Recorder:       mgr.GetEventRecorderFor("postgrescluster-controller"),
+			Metrics:        pgMetricsRecorder,
+			FleetCollector: pgFleetMetricsCollector,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "PostgresCluster")
+			os.Exit(1)
+		}
 	}
 
 	if _, ok := os.LookupEnv("ENABLE_VALIDATION_WEBHOOK"); ok {

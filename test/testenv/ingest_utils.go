@@ -187,7 +187,7 @@ func CopyFileToPod(ctx context.Context, deployment *Deployment, podName string, 
 	if err != nil {
 		return "", "", err
 	}
-	restClient, err := apiutil.RESTClientForGVK(gvk, false, restConfig, serializer.NewCodecFactory(scheme.Scheme), http.DefaultClient)
+	restClient, err := apiutil.RESTClientForGVK(gvk, false, false, restConfig, serializer.NewCodecFactory(scheme.Scheme), http.DefaultClient)
 	if err != nil {
 		return "", "", err
 	}
