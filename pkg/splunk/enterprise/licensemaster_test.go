@@ -1041,6 +1041,12 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		Namespace: licensemaster.Namespace,
 	}
 
+	err = c.Get(ctx, namespacedName, licensemaster)
+	if err != nil {
+		t.Errorf("Unexpected get license manager %v", err)
+		debug.PrintStack()
+	}
+
 	// simulate Ready state
 	licensemaster.Status.Phase = enterpriseApi.PhaseReady
 	licensemaster.Spec.ServiceTemplate.Annotations = map[string]string{

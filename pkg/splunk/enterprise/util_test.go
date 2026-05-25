@@ -1881,7 +1881,7 @@ func TestSetInstallSetForClusterScopedApps(t *testing.T) {
 				FailCount: 0,
 			},
 			ObjectHash: testHashes[index],
-			Size:       uint64(testSizes[index]),
+			Size:       int64(testSizes[index]),
 		}
 	}
 
@@ -2736,7 +2736,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err := fetchCurrentCRWithStatusUpdate(ctx, c, &stdln, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "Standalone" {
+	} else if _, ok := receivedCR.(*enterpriseApi.Standalone); !ok {
 		t.Errorf("Failed to fetch the CR")
 	}
 
@@ -2781,7 +2781,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &lmCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "LicenseMaster" {
+	} else if _, ok := receivedCR.(*enterpriseApiV3.LicenseMaster); !ok {
 		t.Errorf("Failed to fetch the CR")
 	}
 
@@ -2815,7 +2815,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &mcCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "MonitoringConsole" {
+	} else if _, ok := receivedCR.(*enterpriseApi.MonitoringConsole); !ok {
 		t.Errorf("Failed to fetch the CR")
 	}
 
@@ -2849,7 +2849,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &cmCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "ClusterMaster" {
+	} else if _, ok := receivedCR.(*enterpriseApiV3.ClusterMaster); !ok {
 		t.Errorf("Failed to fetch the CR")
 	}
 
@@ -2885,7 +2885,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &idxcCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "IndexerCluster" {
+	} else if _, ok := receivedCR.(*enterpriseApi.IndexerCluster); !ok {
 		t.Errorf("Failed to fetch the CR")
 	}
 
@@ -2921,7 +2921,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &shcCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "SearchHeadCluster" {
+	} else if _, ok := receivedCR.(*enterpriseApi.SearchHeadCluster); !ok {
 		t.Errorf("Failed to fetch the CR")
 	}
 
@@ -2930,7 +2930,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &shcCR, &err)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "SearchHeadCluster" {
+	} else if _, ok := receivedCR.(*enterpriseApi.SearchHeadCluster); !ok {
 		t.Errorf("Failed to fetch the CR")
 	} else if receivedCR.(*enterpriseApi.SearchHeadCluster).Status.Message != "testerror" {
 		t.Errorf("Failed to update error message")
@@ -2969,7 +2969,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &ic, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "IngestorCluster" {
+	} else if _, ok := receivedCR.(*enterpriseApi.IngestorCluster); !ok {
 		t.Errorf("Failed to fetch the CR")
 	}
 }

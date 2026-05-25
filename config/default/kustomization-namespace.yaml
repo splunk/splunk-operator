@@ -132,6 +132,9 @@ patches:
         valueFrom:
           fieldRef:
             fieldPath: metadata.name
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: MANAGER_EXTRA_ARG_VALUE
 # [METRICS] The following patch will enable the metrics endpoint using HTTPS and the port :8443.
 # More info: https://book.kubebuilder.io/reference/metrics
 - path: manager_metrics_patch.yaml

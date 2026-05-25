@@ -4,7 +4,6 @@
   "metadata": {
     "name": "splunk-stack1-cluster-master",
     "namespace": "test",
-    "creationTimestamp": null,
     "labels": {
       "app.kubernetes.io/component": "indexer",
       "app.kubernetes.io/instance": "splunk-stack1-cluster-master",
@@ -35,7 +34,6 @@
     },
     "template": {
       "metadata": {
-        "creationTimestamp": null,
         "labels": {
           "app.kubernetes.io/component": "indexer",
           "app.kubernetes.io/instance": "splunk-stack1-cluster-master",
@@ -241,7 +239,6 @@
         "metadata": {
           "name": "pvc-etc",
           "namespace": "test",
-          "creationTimestamp": null,
           "labels": {
             "app.kubernetes.io/component": "indexer",
             "app.kubernetes.io/instance": "splunk-stack1-cluster-master",
@@ -266,7 +263,6 @@
         "metadata": {
           "name": "pvc-var",
           "namespace": "test",
-          "creationTimestamp": null,
           "labels": {
             "app.kubernetes.io/component": "indexer",
             "app.kubernetes.io/instance": "splunk-stack1-cluster-master",

@@ -3,16 +3,13 @@
   "apiVersion": "apps/v1",
   "metadata": {
     "name": "test-statefulset",
-    "namespace": "test",
-    "creationTimestamp": null
+    "namespace": "test"
   },
   "spec": {
     "replicas": 1,
     "selector": null,
     "template": {
-      "metadata": {
-        "creationTimestamp": null
-      },
+      "metadata": {},
       "spec": {
         "volumes": [
           {
@@ -50,8 +47,7 @@
       {
         "metadata": {
           "name": "pvc-etc",
-          "namespace": "test",
-          "creationTimestamp": null
+          "namespace": "test"
         },
         "spec": {
           "accessModes": [
@@ -68,8 +64,7 @@
       {
         "metadata": {
           "name": "pvc-var",
-          "namespace": "test",
-          "creationTimestamp": null
+          "namespace": "test"
         },
         "spec": {
           "accessModes": [

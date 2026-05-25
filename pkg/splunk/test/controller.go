@@ -249,6 +249,10 @@ func (c MockStatusWriter) Patch(ctx context.Context, obj client.Object, patch cl
 	return c.Err
 }
 
+func (c MockStatusWriter) Apply(ctx context.Context, applyConfig runtime.ApplyConfiguration, opts ...client.SubResourceApplyOption) error {
+	return nil
+}
+
 // blank assignment to verify that MockSubResourceWriter implements client.SubResourceWriter
 var _ client.SubResourceReader = &MockSubResourceReader{}
 
@@ -274,6 +278,10 @@ func (c MockSubResourceWriter) Update(ctx context.Context, obj client.Object, op
 }
 
 func (c MockSubResourceWriter) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+	return nil
+}
+
+func (c MockSubResourceWriter) Apply(ctx context.Context, applyConfig runtime.ApplyConfiguration, opts ...client.SubResourceApplyOption) error {
 	return nil
 }
 
@@ -502,6 +510,16 @@ func (c MockClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...
 // Status returns the mock client's StatusWriter
 func (c MockClient) Status() client.StatusWriter {
 	return c.StatusWriter
+}
+
+// Apply applies the given apply configuration to the mock client's state.
+// Required by client.Client in controller-runtime v0.22+ (k8s.io/client-go v0.34+).
+func (c MockClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorApply]; ok && value != nil {
+		return value
+	}
+	c.Calls["Apply"] = append(c.Calls["Apply"], MockFuncCall{CTX: ctx})
+	return nil
 }
 
 // ResetCalls resets the function call tracker

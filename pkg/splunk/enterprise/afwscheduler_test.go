@@ -1532,7 +1532,7 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 				FailCount: 0,
 			},
 			ObjectHash: testHashes[index],
-			Size:       uint64(testSizes[index]),
+			Size:       int64(testSizes[index]),
 		}
 	}
 
@@ -1666,7 +1666,7 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 				FailCount: 0,
 			},
 			ObjectHash: testHashes[index],
-			Size:       uint64(testSizes[index]),
+			Size:       int64(testSizes[index]),
 		}
 	}
 
@@ -1821,7 +1821,7 @@ func TestScheduleDownloads(t *testing.T) {
 				FailCount: 0,
 			},
 			ObjectHash: testHashes[index],
-			Size:       uint64(testSizes[index]),
+			Size:       int64(testSizes[index]),
 		}
 	}
 
@@ -1853,7 +1853,7 @@ func TestScheduleDownloads(t *testing.T) {
 
 	downloadPhaseWaiter.Add(1)
 	// schedule the download threads to do actual download work
-	go pplnPhase.downloadWorkerHandler(ctx, ppln, uint64(maxWorkers), downloadPhaseWaiter)
+	go pplnPhase.downloadWorkerHandler(ctx, ppln, int64(maxWorkers), downloadPhaseWaiter)
 
 	// add the workers to msgChannel so that scheduleDownlads thread can pick them up
 	for _, downloadWorker := range pplnPhase.q {
@@ -1867,7 +1867,7 @@ func TestScheduleDownloads(t *testing.T) {
 	downloadPhaseWaiter.Add(1)
 	close(ppln.sigTerm)
 	// schedule the download threads to do actual download work
-	go pplnPhase.downloadWorkerHandler(ctx, ppln, uint64(maxWorkers), downloadPhaseWaiter)
+	go pplnPhase.downloadWorkerHandler(ctx, ppln, int64(maxWorkers), downloadPhaseWaiter)
 
 	downloadPhaseWaiter.Wait()
 }
@@ -1941,7 +1941,7 @@ func TestScheduleDownloadsFailRemoteDataClientMgr(t *testing.T) {
 				FailCount: 0,
 			},
 			ObjectHash: testHashes[index],
-			Size:       uint64(testSizes[index]),
+			Size:       int64(testSizes[index]),
 		}
 	}
 
@@ -1971,7 +1971,7 @@ func TestScheduleDownloadsFailRemoteDataClientMgr(t *testing.T) {
 
 	downloadPhaseWaiter.Add(1)
 	// schedule the download threads to do actual download work
-	go pplnPhase.downloadWorkerHandler(ctx, ppln, uint64(maxWorkers), downloadPhaseWaiter)
+	go pplnPhase.downloadWorkerHandler(ctx, ppln, int64(maxWorkers), downloadPhaseWaiter)
 
 	// add the workers to msgChannel so that scheduleDownlads thread can pick them up
 	for _, downloadWorker := range pplnPhase.q {
@@ -1985,7 +1985,7 @@ func TestScheduleDownloadsFailRemoteDataClientMgr(t *testing.T) {
 	downloadPhaseWaiter.Add(1)
 	close(ppln.sigTerm)
 	// schedule the download threads to do actual download work
-	go pplnPhase.downloadWorkerHandler(ctx, ppln, uint64(maxWorkers), downloadPhaseWaiter)
+	go pplnPhase.downloadWorkerHandler(ctx, ppln, int64(maxWorkers), downloadPhaseWaiter)
 
 	downloadPhaseWaiter.Wait()
 }
@@ -2518,7 +2518,7 @@ func TestIDXCRunPlaybook(t *testing.T) {
 				FailCount: 0,
 			},
 			ObjectHash: testHashes[index],
-			Size:       uint64(testSizes[index]),
+			Size:       int64(testSizes[index]),
 		}
 	}
 
@@ -2869,7 +2869,7 @@ func TestSHCRunPlaybook(t *testing.T) {
 				FailCount: 0,
 			},
 			ObjectHash: testHashes[index],
-			Size:       uint64(testSizes[index]),
+			Size:       int64(testSizes[index]),
 		}
 	}
 

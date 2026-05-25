@@ -253,7 +253,7 @@ func TestHandleValidate(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 
 			rr := httptest.NewRecorder()
-			server.handleValidate(rr, req)
+			server.HandleValidate(rr, req)
 
 			if rr.Code != tt.wantStatusCode {
 				t.Errorf("expected status code %d, got %d", tt.wantStatusCode, rr.Code)
@@ -382,7 +382,7 @@ func TestHandleValidateWithWarnings(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
-	server.handleValidate(rr, req)
+	server.HandleValidate(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected status code %d, got %d", http.StatusOK, rr.Code)
