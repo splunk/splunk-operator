@@ -4,7 +4,6 @@
   "metadata": {
     "name": "splunk-stack1-indexer",
     "namespace": "test",
-    "creationTimestamp": null,
     "labels": {
       "app.kubernetes.io/component": "indexer",
       "app.kubernetes.io/instance": "splunk-stack1-indexer",
@@ -35,7 +34,6 @@
     },
     "template": {
       "metadata": {
-        "creationTimestamp": null,
         "labels": {
           "app.kubernetes.io/component": "indexer",
           "app.kubernetes.io/instance": "splunk-stack1-indexer",
@@ -251,7 +249,6 @@
         "metadata": {
           "name": "pvc-etc",
           "namespace": "test",
-          "creationTimestamp": null,
           "labels": {
             "app.kubernetes.io/component": "indexer",
             "app.kubernetes.io/instance": "splunk-stack1-indexer",
@@ -276,7 +273,6 @@
         "metadata": {
           "name": "pvc-var",
           "namespace": "test",
-          "creationTimestamp": null,
           "labels": {
             "app.kubernetes.io/component": "indexer",
             "app.kubernetes.io/instance": "splunk-stack1-indexer",

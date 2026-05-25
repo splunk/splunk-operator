@@ -24,6 +24,10 @@ SPLUNK_GENERAL_TERMS ?= ""
 # NAMESPACE defines default namespace where operator will be installed
 NAMESPACE ?= "splunk-operator"
 
+# MANAGER_EXTRA_ARG allows passing a single additional flag to the operator manager container.
+# Example: make deploy IMG=... MANAGER_EXTRA_ARG="--feature-gates=PostgresController=true"
+MANAGER_EXTRA_ARG ?= ""
+
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
 # To re-generate a bundle for other specific channels without changing the standard setup, you can:
@@ -304,6 +308,7 @@ deploy: manifests kustomize uninstall ## Deploy controller to the K8s cluster sp
 	$(SED) "s/value: WATCH_NAMESPACE_VALUE/value: \"${WATCH_NAMESPACE}\"/g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s/value: SPLUNK_GENERAL_TERMS_VALUE/value: \"${SPLUNK_GENERAL_TERMS}\"/g"  config/${ENVIRONMENT}/kustomization.yaml
+	$(SED) "s|value: MANAGER_EXTRA_ARG_VALUE|value: \"${MANAGER_EXTRA_ARG}\"|g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) 's/\("sokVersion": \)"[^"]*"/\1"$(VERSION)"/' config/manager/controller_manager_telemetry.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} SPLUNK_GENERAL_TERMS=${SPLUNK_GENERAL_TERMS} $(KUSTOMIZE) build config/${ENVIRONMENT} | kubectl apply --server-side --force-conflicts -f -
@@ -311,6 +316,7 @@ deploy: manifests kustomize uninstall ## Deploy controller to the K8s cluster sp
 	$(SED) "s/value: \"${WATCH_NAMESPACE}\"/value: WATCH_NAMESPACE_VALUE/g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s|${SPLUNK_ENTERPRISE_IMAGE}|SPLUNK_ENTERPRISE_IMAGE|g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s/value: \"${SPLUNK_GENERAL_TERMS}\"/value: SPLUNK_GENERAL_TERMS_VALUE/g"  config/${ENVIRONMENT}/kustomization.yaml
+	$(SED) "s|value: \"${MANAGER_EXTRA_ARG}\"|value: MANAGER_EXTRA_ARG_VALUE|g"  config/${ENVIRONMENT}/kustomization.yaml
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/${ENVIRONMENT} | kubectl delete -f -

@@ -4,7 +4,6 @@
   "metadata": {
     "name": "splunk-stack1-monitoring-console",
     "namespace": "test",
-    "creationTimestamp": null,
     "labels": {
       "app.kubernetes.io/component": "monitoring-console",
       "app.kubernetes.io/instance": "splunk-stack1-monitoring-console",
@@ -35,7 +34,6 @@
     },
     "template": {
       "metadata": {
-        "creationTimestamp": null,
         "labels": {
           "app.kubernetes.io/component": "monitoring-console",
           "app.kubernetes.io/instance": "splunk-stack1-monitoring-console",
@@ -277,7 +275,6 @@
         "metadata": {
           "name": "pvc-etc",
           "namespace": "test",
-          "creationTimestamp": null,
           "labels": {
             "app.kubernetes.io/component": "monitoring-console",
             "app.kubernetes.io/instance": "splunk-stack1-monitoring-console",
@@ -303,7 +300,6 @@
         "metadata": {
           "name": "pvc-var",
           "namespace": "test",
-          "creationTimestamp": null,
           "labels": {
             "app.kubernetes.io/component": "monitoring-console",
             "app.kubernetes.io/instance": "splunk-stack1-monitoring-console",

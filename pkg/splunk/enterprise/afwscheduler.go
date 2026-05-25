@@ -517,7 +517,7 @@ func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *P
 }
 
 // downloadWorkerHandler schedules the download workers to download app/s
-func (pplnPhase *PipelinePhase) downloadWorkerHandler(ctx context.Context, ppln *AppInstallPipeline, maxWorkers uint64, scheduleDownloadsWaiter *sync.WaitGroup) {
+func (pplnPhase *PipelinePhase) downloadWorkerHandler(ctx context.Context, ppln *AppInstallPipeline, maxWorkers int64, scheduleDownloadsWaiter *sync.WaitGroup) {
 
 	scopedLog := logging.FromContext(ctx).With("func", "downloadWorkerHandler")
 
@@ -1192,7 +1192,7 @@ func needToRunClusterScopedPlaybook(afwPipeline *AppInstallPipeline) bool {
 	}
 
 	// Its already time to yield the current reconcile
-	if afwPipeline.afwEntryTime+int64(afwPipeline.appDeployContext.AppFrameworkConfig.SchedulerYieldInterval) < time.Now().Unix() {
+	if afwPipeline.afwEntryTime+afwPipeline.appDeployContext.AppFrameworkConfig.SchedulerYieldInterval < time.Now().Unix() {
 		return false
 	}
 

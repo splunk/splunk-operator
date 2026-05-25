@@ -1,0 +1,19 @@
+apiVersion: enterprise.splunk.com/v4
+kind: PostgresDatabase
+metadata:
+  name: test-postgresdatabase 
+  namespace: default
+spec:
+  clusterRef:
+    name: different-cluster  # CHANGED! Should fail with: "clusterRef is immutable"
+  databases:
+    - name: kvstore
+      extensions:
+        - pg_stat_statements
+        - pgcrypto
+      deletionPolicy: Retain
+    - name: analytics
+      extensions:
+        - pg_trgm
+      deletionPolicy: Delete
+    - name: metrics
