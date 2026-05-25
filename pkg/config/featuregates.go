@@ -35,14 +35,16 @@ const (
 	// When enabled, the operator runs a validating webhook that enforces
 	// CR schema rules at admission time.
 	// Replaces the legacy ENABLE_VALIDATION_WEBHOOK env var.
-	ValidationWebhook featuregate.Feature = "ValidationWebhook"
+	ValidationWebhook  featuregate.Feature = "ValidationWebhook"
+	PostgresController featuregate.Feature = "PostgresController"
 )
 
 // defaultFeatureGates is the authoritative registry of all feature gates and
 // their default state / maturity. Each entry here automatically becomes
 // available via --feature-gates on the operator binary.
 var defaultFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
-	ValidationWebhook: {Default: false, PreRelease: featuregate.Alpha},
+	ValidationWebhook:  {Default: false, PreRelease: featuregate.Alpha},
+	PostgresController: {Default: false, PreRelease: featuregate.Alpha},
 }
 
 var DefaultMutableFeatureGate featuregate.MutableFeatureGate = featuregate.NewFeatureGate()
@@ -63,5 +65,17 @@ func applyLegacyValidationWebhookEnv(fg featuregate.MutableFeatureGate) {
 		if err := fg.SetFromMap(map[string]bool{string(ValidationWebhook): true}); err != nil {
 			fmt.Fprintf(os.Stderr, "WARNING: failed to apply legacy env var ENABLE_VALIDATION_WEBHOOK: %v\n", err)
 		}
+	}
+}
+
+// EnableFeatureGate enables the given feature gates on the default mutable gate.
+// Intended for use in test init() functions.
+func EnableFeatureGate(gates ...featuregate.Feature) {
+	enabled := make(map[string]bool, len(gates))
+	for _, g := range gates {
+		enabled[string(g)] = true
+	}
+	if err := DefaultMutableFeatureGate.SetFromMap(enabled); err != nil {
+		panic(err)
 	}
 }

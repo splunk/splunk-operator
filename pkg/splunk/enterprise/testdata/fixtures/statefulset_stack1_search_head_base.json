@@ -4,7 +4,6 @@
   "metadata": {
     "name": "splunk-stack1-search-head",
     "namespace": "test",
-    "creationTimestamp": null,
     "labels": {
       "app.kubernetes.io/component": "search-head",
       "app.kubernetes.io/instance": "splunk-stack1-search-head",
@@ -35,7 +34,6 @@
     },
     "template": {
       "metadata": {
-        "creationTimestamp": null,
         "labels": {
           "app.kubernetes.io/component": "search-head",
           "app.kubernetes.io/instance": "splunk-stack1-search-head",
@@ -249,7 +247,6 @@
         "metadata": {
           "name": "pvc-etc",
           "namespace": "test",
-          "creationTimestamp": null,
           "labels": {
             "app.kubernetes.io/component": "search-head",
             "app.kubernetes.io/instance": "splunk-stack1-search-head",
@@ -274,7 +271,6 @@
         "metadata": {
           "name": "pvc-var",
           "namespace": "test",
-          "creationTimestamp": null,
           "labels": {
             "app.kubernetes.io/component": "search-head",
             "app.kubernetes.io/instance": "splunk-stack1-search-head",

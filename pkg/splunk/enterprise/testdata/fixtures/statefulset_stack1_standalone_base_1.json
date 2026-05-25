@@ -4,7 +4,6 @@
   "metadata": {
     "name": "splunk-stack1-standalone",
     "namespace": "test",
-    "creationTimestamp": null,
     "labels": {
       "app.kubernetes.io/component": "standalone",
       "app.kubernetes.io/instance": "splunk-stack1-standalone",
@@ -35,7 +34,6 @@
     },
     "template": {
       "metadata": {
-        "creationTimestamp": null,
         "labels": {
           "app.kubernetes.io/component": "standalone",
           "app.kubernetes.io/instance": "splunk-stack1-standalone",

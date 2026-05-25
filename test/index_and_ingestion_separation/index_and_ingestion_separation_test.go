@@ -58,7 +58,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
-		It("indexingestionsep, smoke: Splunk Operator can deploy Ingestors and Indexers", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("indingsep, smoke: Splunk Operator can deploy Ingestors and Indexers", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")
@@ -69,7 +69,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			Expect(testenv.DeleteIngestorStack(ctx, deployment)).To(Succeed(), "Unable to delete ingestor stack")
 		})
 
-		It("indexingestionsep, smoke: Splunk Operator can deploy Ingestors and Indexers with additional configurations", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("indingsep, smoke: Splunk Operator can deploy Ingestors and Indexers with additional configurations", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")
@@ -89,7 +89,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			// Deploy Ingestor Cluster with additional configurations (similar to standalone app framework test)
 			appSourceName := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
-			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(5)
+			appFrameworkSpec.MaxConcurrentAppDownloads = int64(5)
 			ic := &enterpriseApi.IngestorCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       deployment.GetName() + "-ingest",
@@ -168,7 +168,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			Expect(testcaseEnvInst.VerifyProbeConfigAndScripts(ctx, deployment, true)).To(Succeed(), "Probe config verification failed")
 		})
 
-		It("indexingestionsep, integration: Splunk Operator can deploy Ingestors and Indexers with correct setup", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("indingsep, integration: Splunk Operator can deploy Ingestors and Indexers with correct setup", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")

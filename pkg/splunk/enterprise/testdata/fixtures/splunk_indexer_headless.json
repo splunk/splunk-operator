@@ -4,7 +4,6 @@
   "metadata": {
     "name": "splunk-stack1-indexer-headless",
     "namespace": "test",
-    "creationTimestamp": null,
     "labels": {
       "app.kubernetes.io/component": "indexer",
       "app.kubernetes.io/managed-by": "splunk-operator",
