@@ -24,40 +24,48 @@ pages-deploy:
   artifacts:
     paths:
       - public
-  pages: true
+  pages:
+    path_prefix: ""
   rules:
     - if: '$SOK_PIPELINE_MODE'
       when: never
     - if: '$CI_COMMIT_BRANCH == "develop"'
       changes:
         - docs/**/*
+        - gitlab-ci/includes/pages.yml
 
-pages:preview:
-  extends: .pages-build
-  stage: test
-  variables:
-    PAGES_PREFIX: "mr-$CI_MERGE_REQUEST_IID"
-  script:
-    - cd docs
-    - gem install bundler
-    - bundle install --jobs 4 --retry 3
-    - bundle exec jekyll build
-        --config _config.yml,splunk_private/_config_gitlab.yml
-        --baseurl "/splunk-operator/$PAGES_PREFIX"
-        -d ../public/$PAGES_PREFIX
-    - echo "/ /splunk-operator/$PAGES_PREFIX/ 302" > ../public/_redirects
-  pages:
-    path_prefix: "$PAGES_PREFIX"
-  artifacts:
-    paths:
-      - public
-  environment:
-    name: "Documentation Preview for $PAGES_PREFIX"
-    url: "https://sok.splunkdev.page/splunk-operator/$PAGES_PREFIX"
-    auto_stop_in: 1 week
-  rules:
-    - if: '$SOK_PIPELINE_MODE'
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      changes:
-        - docs/**/*
+# NOTE: pages:preview is disabled. GitLab parallel deployments (path_prefix per MR) are
+# configured and slots are available, but the feature does not work correctly on Splunk's
+# self-managed GitLab instance (cd.splunkdev.com) — both pages-deploy (path_prefix: "") and
+# pages:preview (path_prefix: "mr-N") end up writing to the same deployment. Re-enable if
+# this is resolved. See: https://docs.gitlab.com/ee/user/project/pages/parallel_deployments.html
+#
+# pages:preview:
+#   extends: .pages-build
+#   stage: test
+#   variables:
+#     PAGES_PREFIX: "mr-$CI_MERGE_REQUEST_IID"
+#   script:
+#     - cd docs
+#     - gem install bundler
+#     - bundle install --jobs 4 --retry 3
+#     - bundle exec jekyll build
+#         --config _config.yml,splunk_private/_config_gitlab.yml
+#         --baseurl "/splunk-operator/$PAGES_PREFIX"
+#         -d ../public/$PAGES_PREFIX
+#   pages:
+#     path_prefix: "$PAGES_PREFIX"
+#   artifacts:
+#     paths:
+#       - public
+#   environment:
+#     name: "Documentation Preview for $PAGES_PREFIX"
+#     url: "https://sok.splunkdev.page/splunk-operator/$PAGES_PREFIX"
+#     auto_stop_in: 1 week
+#   rules:
+#     - if: '$SOK_PIPELINE_MODE'
+#       when: never
+#     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+#       changes:
+#         - docs/**/*
+#         - gitlab-ci/includes/pages.yml
