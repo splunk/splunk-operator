@@ -57,6 +57,7 @@ rules:
   - objectstorages
   - queues
   - searchheadclusters
+  - sharedappruntimes
   - standalones
   verbs:
   - create
@@ -95,6 +96,7 @@ rules:
   - objectstorages/status
   - queues/status
   - searchheadclusters/status
+  - sharedappruntimes/status
   - standalones/status
   verbs:
   - get

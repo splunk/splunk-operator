@@ -133,6 +133,18 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 			return corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "varStorage", err)
 		}
 		storageClassName = spec.VarVolumeStorageConfig.StorageClassName
+
+	case splcommon.BinVolumeStorage:
+		storageCapacity, err = splcommon.ParseResourceQuantity("", splcommon.DefaultBinVolumeStorageCapacity)
+		if err != nil {
+			return corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "binStorage", err)
+		}
+
+	case splcommon.LibVolumeStorage:
+		storageCapacity, err = splcommon.ParseResourceQuantity("", splcommon.DefaultLibVolumeStorageCapacity)
+		if err != nil {
+			return corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "libStorage", err)
+		}
 	}
 
 	if adminManagedPV {
@@ -550,14 +562,6 @@ func addPVCVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec
 			Name:      volumeClaimTemplate.GetName(),
 			MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
 		})
-	// add volume mounts to appruntime sidecar for the PVCs
-	if len(statefulSet.Spec.Template.Spec.InitContainers) > 0 {
-		statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts,
-			corev1.VolumeMount{
-				Name:      volumeClaimTemplate.GetName(),
-				MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
-			})
-	}
 
 	return nil
 }
@@ -579,16 +583,162 @@ func addEphemeralVolumes(statefulSet *appsv1.StatefulSet, volumeType string) err
 			Name:      fmt.Sprintf(splcommon.SplunkMountNamePrefix, volumeType),
 			MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
 		})
-	// add volume mounts to appruntime sidecar for the ephemeral volumes
-	if len(statefulSet.Spec.Template.Spec.InitContainers) > 0 {
-		statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts,
-			corev1.VolumeMount{
-				Name:      fmt.Sprintf(splcommon.SplunkMountNamePrefix, volumeType),
-				MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
-			})
-	}
 
 	return nil
+}
+
+// addSharedAppRuntimePopulateInitContainer appends an init container that
+// one-shot-copies /opt/splunk/bin and /opt/splunk/lib from the Splunk image
+// into the (empty) pvc-bin / pvc-lib volumes, so the (node, app) dispatcher
+// pod can mount them read-only. A marker file makes the copy idempotent on
+// warm PVCs so restarts don't re-copy the ~2.5 GB payload.
+func addSharedAppRuntimePopulateInitContainer(statefulSet *appsv1.StatefulSet, spec *enterpriseApi.CommonSplunkSpec) {
+	const populateCmd = `set -eu
+bin_marker=/opt/splk/bin/.populated
+lib_marker=/opt/splk/lib/.populated
+# cp without -a: we cannot preserve ownership (no CAP_CHOWN when caps are
+# dropped). Preserve mode only - timestamps on the PVC root dir fail without
+# CAP_FOWNER since that dir is owned by root. fsGroup + setgid handle group.
+# A single 'cp --preserve=mode' can still print a warning about the top-level
+# dir's timestamps and exit nonzero on some coreutils; tolerate with || true.
+if [ ! -f "$bin_marker" ]; then
+  rm -rf /opt/splk/bin/* /opt/splk/bin/.[!.]* 2>/dev/null || true
+  cp -R --preserve=mode /opt/splunk/bin/. /opt/splk/bin/ 2>&1 || true
+  test -x /opt/splk/bin/splunk
+  touch "$bin_marker"
+fi
+if [ ! -f "$lib_marker" ]; then
+  rm -rf /opt/splk/lib/* /opt/splk/lib/.[!.]* 2>/dev/null || true
+  cp -R --preserve=mode /opt/splunk/lib/. /opt/splk/lib/ 2>&1 || true
+  touch "$lib_marker"
+fi`
+
+	runAsUser := int64(41812)
+	runAsNonRoot := true
+	privileged := false
+
+	container := corev1.Container{
+		Name:            "populate-shared-bin-lib",
+		Image:           spec.Image,
+		ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
+		Command:         []string{"sh", "-c", populateCmd},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.BinVolumeStorage), MountPath: "/opt/splk/bin"},
+			{Name: fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.LibVolumeStorage), MountPath: "/opt/splk/lib"},
+		},
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("0.25"),
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
+			},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser:                &runAsUser,
+			RunAsNonRoot:             &runAsNonRoot,
+			AllowPrivilegeEscalation: &privileged,
+			Privileged:               &privileged,
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			},
+		},
+	}
+	statefulSet.Spec.Template.Spec.InitContainers = append(statefulSet.Spec.Template.Spec.InitContainers, container)
+}
+
+// addSharedAppRuntimeBootstrapInitContainer seeds the PVC-backed
+// /opt/splunk/etc with a one-shot run of the image entrypoint in
+// `start-and-exit` mode, then stops splunkd. This lets splunk-ansible write
+// /opt/splunk/etc/splunk-launch.conf, generate server.pem under the same
+// uid/caps the main container will run with, and finish KV-store upgrade.
+// Without this, the main container crash-loops on "certificate generation
+// script did not generate the expected certificate file" on cold PVCs.
+// Idempotent via a marker on pvc-etc.
+func addSharedAppRuntimeBootstrapInitContainer(podTemplateSpec *corev1.PodTemplateSpec) {
+	// Find the main splunk container to copy env + VolumeMounts from.
+	var splunkContainer *corev1.Container
+	for i := range podTemplateSpec.Spec.Containers {
+		if podTemplateSpec.Spec.Containers[i].Name == "splunk" {
+			splunkContainer = &podTemplateSpec.Spec.Containers[i]
+			break
+		}
+	}
+	if splunkContainer == nil {
+		return
+	}
+
+	const bootstrapCmd = `set -eu
+marker=/opt/splunk/etc/.sar-bootstrap-done
+if [ -f "$marker" ]; then
+  echo "bootstrap: marker present, skipping"
+  exit 0
+fi
+# start-and-exit runs ansible to seed /opt/splunk/etc + start splunkd in the
+# background. Once it returns, splunkd is running and certs are generated.
+/sbin/entrypoint.sh start-and-exit
+# Stop splunkd cleanly. KV-store upgrade can block stop for a few minutes on
+# first boot; retry until it completes or we hit the 5-min ceiling.
+for i in $(seq 1 60); do
+  if /opt/splunk/bin/splunk stop; then
+    touch "$marker"
+    exit 0
+  fi
+  sleep 5
+done
+echo "bootstrap: splunk stop never succeeded; splunkd still upgrading?" >&2
+exit 1`
+
+	// Only mount the splunk PVCs + splunk-secrets. Skip ep-shim, probe cm,
+	// and any custom user volumes - bootstrap doesn't need them.
+	mounts := []corev1.VolumeMount{}
+	for _, m := range splunkContainer.VolumeMounts {
+		if strings.HasPrefix(m.MountPath, "/opt/splunk/") || m.Name == "mnt-splunk-secrets" {
+			mounts = append(mounts, m)
+		}
+	}
+
+	runAsUser := int64(41812)
+	runAsNonRoot := true
+	privileged := false
+
+	container := corev1.Container{
+		Name:            "bootstrap-splunk-etc",
+		Image:           splunkContainer.Image,
+		ImagePullPolicy: splunkContainer.ImagePullPolicy,
+		Command:         []string{"sh", "-c", bootstrapCmd},
+		Env:             splunkContainer.Env,
+		VolumeMounts:    mounts,
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("0.5"),
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("2"),
+				corev1.ResourceMemory: resource.MustParse("2Gi"),
+			},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser:                &runAsUser,
+			RunAsNonRoot:             &runAsNonRoot,
+			AllowPrivilegeEscalation: &privileged,
+			Privileged:               &privileged,
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+				Add:  []corev1.Capability{"NET_BIND_SERVICE"},
+			},
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			},
+		},
+	}
+	podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, container)
 }
 
 // addStorageVolumes adds storage volumes to the StatefulSet
@@ -619,6 +769,24 @@ func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splc
 		if err != nil {
 			return err
 		}
+	}
+
+	// Shared App Pod runtime: provision per-pod bin/lib PVCs and a one-shot
+	// init container that populates them from the Splunk image. The
+	// SharedAppRuntime controller mounts these into /data/<pod>/{bin,lib} on
+	// the (node, app) dispatcher pod.
+	if annotations := cr.GetAnnotations(); annotations != nil && strings.ToLower(annotations[splcommon.SharedAppRuntimeAnnotation]) == "true" {
+		if err := addPVCVolumes(cr, spec, statefulSet, labels, splcommon.BinVolumeStorage); err != nil {
+			return err
+		}
+		if err := addPVCVolumes(cr, spec, statefulSet, labels, splcommon.LibVolumeStorage); err != nil {
+			return err
+		}
+		addSharedAppRuntimePopulateInitContainer(statefulSet, spec)
+		statefulSet.Spec.Template.Spec.InitContainers = append(
+			statefulSet.Spec.Template.Spec.InitContainers,
+			getAppDiscoverySidecar(),
+		)
 	}
 
 	// Add Splunk Probe config map
@@ -767,7 +935,6 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 				TopologySpreadConstraints: spec.TopologySpreadConstraints,
 				SchedulerName:             spec.SchedulerName,
 				ImagePullSecrets:          spec.ImagePullSecrets,
-				InitContainers:            getAppRuntimeSidecar(instanceType, cr.GetName(), spec.Image),
 				Containers: []corev1.Container{
 					{
 						Image:           spec.Image,
@@ -786,10 +953,10 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 		return statefulSet, err
 	}
 
-	addAppRuntimeVolumes(statefulSet, spec.Image)
-
-	// Set serviceAccountName for AppRuntime supervisor (needs K8s API access to create app pods)
-	if len(statefulSet.Spec.Template.Spec.InitContainers) > 0 {
+	// Shared App Pod mode: the app-discovery sidecar publishes a per-pod
+	// ConfigMap consumed by the SharedAppRuntime controller, which requires
+	// the appruntime-supervisor SA (configmaps create/get/list/update/watch).
+	if annotations := cr.GetAnnotations(); annotations != nil && strings.ToLower(annotations[splcommon.SharedAppRuntimeAnnotation]) == "true" {
 		statefulSet.Spec.Template.Spec.ServiceAccountName = "appruntime-supervisor"
 	}
 
@@ -812,6 +979,22 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 		return statefulSet, err
 	}
 
+	// Shared App Pod mode: inject the env vars the epshim reads to build the
+	// per-(node, app) dispatcher FQDN and the instance-id gRPC metadata. These
+	// must land on the Splunk container itself (not just the init containers)
+	// because it's splunkd that fork/execs epshim for every CSC/scripted input.
+	if annotations := cr.GetAnnotations(); annotations != nil && strings.ToLower(annotations[splcommon.SharedAppRuntimeAnnotation]) == "true" {
+		extraEnv = append(extraEnv,
+			corev1.EnvVar{Name: "APPRUNTIME_SHARED_ENABLED", Value: "true"},
+			corev1.EnvVar{Name: "APPRUNTIME_INSTANCE_ID", ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
+			corev1.EnvVar{Name: "APPRUNTIME_NODE_NAME", ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
+			corev1.EnvVar{Name: "APPRUNTIME_NAMESPACE", ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"}}},
+		)
+	}
+
 	// update statefulset's pod template with common splunk pod config
 	updateSplunkPodTemplateWithConfig(ctx, client, &statefulSet.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName())
 
@@ -821,50 +1004,56 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	return statefulSet, nil
 }
 
-// getAppRuntimeSidecar returns the AppRuntime sidecar init container for Standalone, Indexer, and SearchHead.
-// Returns nil for other instance types.
-// In pod-per-app mode the sidecar runs the supervisor (no containerd), and creates app pods via the K8s API.
-func getAppRuntimeSidecar(instanceType InstanceType, instanceName string, splunkImage string) []corev1.Container {
-	if instanceType != SplunkStandalone && instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
-		return nil
-	}
+// getAppDiscoverySidecar returns the non-privileged sidecar container that
+// watches /opt/splunk/etc/apps/ on a Splunk pod and publishes the app list
+// to a ConfigMap consumed by the SharedAppRuntime controller. Returned as a
+// restart-always sidecar init container so Kubernetes keeps it running for
+// the lifetime of the pod.
+func getAppDiscoverySidecar() corev1.Container {
 	restartAlways := corev1.ContainerRestartPolicyAlways
-	runAsUser := int64(0)
-	runAsNonRoot := false
-	return []corev1.Container{
-		{
-			Image:           getAppRuntimeImage(),
-			ImagePullPolicy: corev1.PullAlways,
-			Name:            "appruntime",
-			Command:         []string{"/usr/bin/splunk-eps"},
-			RestartPolicy:   &restartAlways,
-			Env: []corev1.EnvVar{
-				{Name: "APPRUNTIME_K8S_ENABLED", Value: "true"},
-				{Name: "APPRUNTIME_K8S_NAMESPACE", ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"}}},
-				{Name: "APPRUNTIME_K8S_NODE_NAME", ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
-				{Name: "APPRUNTIME_K8S_POD_NAME", ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
-				{Name: "APPRUNTIME_K8S_INSTANCE_NAME", Value: instanceName},
-				{Name: "APPRUNTIME_K8S_INSTANCE_TYPE", Value: instanceType.ToKind()},
-				{Name: "APPRUNTIME_K8S_SPLUNK_IMAGE", Value: splunkImage},
-				{Name: "APPRUNTIME_K8S_WORKER_IMAGE", Value: getAppRuntimeImage()},
+	runAsUser := int64(41812)
+	runAsNonRoot := true
+	privileged := false
+	return corev1.Container{
+		Name:            "app-discovery",
+		Image:           getAppRuntimeImage(),
+		ImagePullPolicy: corev1.PullAlways,
+		Command:         []string{"/usr/bin/appdiscovery"},
+		RestartPolicy:   &restartAlways,
+		Env: []corev1.EnvVar{
+			{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
+			{Name: "POD_NAMESPACE", ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"}}},
+			{Name: "NODE_NAME", ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
+			{Name: "APPS_DIR", Value: "/opt/splunk/etc/apps"},
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.EtcVolumeStorage), MountPath: "/opt/splunk/etc", ReadOnly: true},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser:                &runAsUser,
+			RunAsNonRoot:             &runAsNonRoot,
+			AllowPrivilegeEscalation: &privileged,
+			Privileged:               &privileged,
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
 			},
-			SecurityContext: &corev1.SecurityContext{
-				RunAsUser:    &runAsUser,
-				RunAsNonRoot: &runAsNonRoot,
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},
 		},
-	}
-}
-
-// addAppRuntimeVolumes adds volumes to the StatefulSet for the AppRuntime sidecar.
-// In pod-per-app mode, no containerd volumes are needed since the supervisor creates
-// separate pods for each app via the K8s API.
-func addAppRuntimeVolumes(statefulSet *appsv1.StatefulSet, splunkImage string) {
-	if len(statefulSet.Spec.Template.Spec.InitContainers) == 0 {
-		return
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("0.05"),
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("0.25"),
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
+			},
+		},
 	}
 }
 
@@ -873,7 +1062,7 @@ func getAppRuntimeImage() string {
 	if image, ok := os.LookupEnv("RELATED_IMAGE_APP_RUNTIME"); ok {
 		return image
 	}
-	return "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/supervisor:v3.1.0-sidecar"
+	return "493245399694.dkr.ecr.us-west-2.amazonaws.com/appruntime/ecr-repo/supervisor:v3.2.1-shared-app-pod"
 }
 
 // getSmartstoreConfigMap returns the smartstore configMap, if it exists and applicable for that instanceType
@@ -1227,6 +1416,15 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},
 		}
+	}
+
+	// Shared App Pod: inject bootstrap init container after the main splunk
+	// container is fully configured (env + volume mounts set). It seeds
+	// /opt/splunk/etc (splunk-launch.conf, certs) and completes first-boot KV
+	// upgrade, which otherwise fails under the main container's dropped-cap
+	// securityContext on cold PVCs.
+	if annotations := cr.GetAnnotations(); annotations != nil && strings.ToLower(annotations[splcommon.SharedAppRuntimeAnnotation]) == "true" {
+		addSharedAppRuntimeBootstrapInitContainer(podTemplateSpec)
 	}
 }
 

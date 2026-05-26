@@ -56,11 +56,33 @@ const (
 	// VarVolumeStorage indicates /opt/splunk/etc volume mounted on Pods
 	VarVolumeStorage = "var"
 
+	// BinVolumeStorage indicates /opt/splunk/bin volume mounted on Pods for the
+	// Shared App Pod runtime. Populated once from the Splunk image by an init
+	// container; shared read-only with the (node, app) dispatcher pod.
+	BinVolumeStorage = "bin"
+
+	// LibVolumeStorage indicates /opt/splunk/lib volume mounted on Pods for the
+	// Shared App Pod runtime. Same lifecycle as BinVolumeStorage.
+	LibVolumeStorage = "lib"
+
 	// DefaultEtcVolumeStorageCapacity represents default storage capacity for etc volume
 	DefaultEtcVolumeStorageCapacity = "10Gi"
 
 	// DefaultVarVolumeStorageCapacity represents default storage capacity for var volume
 	DefaultVarVolumeStorageCapacity = "100Gi"
+
+	// DefaultBinVolumeStorageCapacity represents default storage capacity for the
+	// Shared App Pod bin volume.
+	DefaultBinVolumeStorageCapacity = "4Gi"
+
+	// DefaultLibVolumeStorageCapacity represents default storage capacity for the
+	// Shared App Pod lib volume.
+	DefaultLibVolumeStorageCapacity = "4Gi"
+
+	// SharedAppRuntimeAnnotation, when set to "true" on a Splunk CR, provisions
+	// per-pod bin/lib PVCs plus the populate-once init container that the
+	// SharedAppRuntime controller depends on.
+	SharedAppRuntimeAnnotation = "enterprise.splunk.com/shared-app-runtime"
 
 	// SortFieldContainerPort represents field name ContainerPort for sorting
 	SortFieldContainerPort = "ContainerPort"

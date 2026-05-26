@@ -13,6 +13,7 @@ resources:
 - bases/enterprise.splunk.com_ingestorclusters.yaml
 - bases/enterprise.splunk.com_queues.yaml
 - bases/enterprise.splunk.com_objectstorages.yaml
+- bases/enterprise.splunk.com_sharedappruntimes.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 

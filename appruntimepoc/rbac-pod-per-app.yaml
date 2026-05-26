@@ -13,6 +13,11 @@ rules:
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["create", "delete", "get", "list", "watch"]
+# Shared App Pod: app-discovery sidecar publishes installed-apps list to a
+# per-pod ConfigMap so the SharedAppRuntime controller can aggregate.
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["create", "get", "list", "update", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
