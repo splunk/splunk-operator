@@ -423,7 +423,7 @@ The validation webhook consists of:
 
 ## Adding a New CRD to the Webhook
 
-For a step-by-step guide on extending the webhook to support a new CRD, see the [Webhook Development](../develop/WebhookDevelopment.html) guide.
+For a step-by-step guide on extending the webhook to support a new CRD, see the [Webhook Development](../develop/WebhookDevelopment.md) guide.
 
 ## Disabling the Webhook
 

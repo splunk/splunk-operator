@@ -802,8 +802,8 @@ kubectl -n $NAMESPACE delete pod -l app.kubernetes.io/instance=splunk-local-shc-
 - [About Federated Search for Splunk](https://help.splunk.com/en/splunk-enterprise/search/federated-search/10.2/run-federated-searches-across-other-splunk-deployments/about-federated-search-for-splunk)
 - [Define a Splunk platform federated provider](https://help.splunk.com/en/splunk-enterprise/search/federated-search/10.2/run-federated-searches-across-other-splunk-deployments/define-a-splunk-platform-federated-provider)
 - [Define roles on the Splunk platform with capabilities](https://help.splunk.com/en/splunk-enterprise/administer/manage-users-and-security/10.2/manage-splunk-platform-users-and-roles/define-roles-on-the-splunk-platform-with-capabilities)
-- [App Framework](https://splunk.github.io/splunk-operator/AppFramework.html)
-- [Ingress](https://splunk.github.io/splunk-operator/Ingress.html)
+- [App Framework](../operate/AppFramework.md)
+- [Ingress](Ingress.md)
 - [Azure Workload Identity](https://azure.github.io/azure-workload-identity/)
 
 ---

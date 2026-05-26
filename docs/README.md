@@ -19,7 +19,7 @@ This repository is used to build the Splunk
 for Kubernetes (SOK). If you are just looking for documentation on how to
 deploy and use the latest release, please visit the published
 [Splunk Operator documentation site](https://splunk.github.io/splunk-operator/)
-or review the in-repo [Getting Started Documentation](GettingStarted.html).
+or review the in-repo [Getting Started Documentation](GettingStarted.md).
 
 ## Splunk General Terms Acceptance
 
@@ -35,13 +35,13 @@ By default, the SPLUNK_GENERAL_TERMS environment variable will be set to an empt
 make deploy IMG=docker.io/splunk/splunk-operator:<tag name> WATCH_NAMESPACE="namespace1" RELATED_IMAGE_SPLUNK_ENTERPRISE="splunk/splunk:edge" SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com"
 ```
 
-For more information about this change, see the [Splunk General Terms Migration Documentation](SplunkGeneralTermsMigration.html).
+For more information about this change, see the [Splunk General Terms Migration Documentation](reference/SplunkGeneralTermsMigration.md).
 
 ## Development
 
-If you are interested in building or contributing to the Splunk Operator, see the [Development Setup](develop/DevelopmentSetup.html) and [Contributing](develop/Contributing.html) guides.
+If you are interested in building or contributing to the Splunk Operator, see the [Development Setup](develop/DevelopmentSetup.md) and [Contributing](develop/Contributing.md) guides.
 
-Please see the [Getting Started Documentation](GettingStarted.html) for
+Please see the [Getting Started Documentation](GettingStarted.md) for
 information on how to install and use the operator in your cluster.
 
 
