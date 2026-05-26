@@ -543,7 +543,7 @@ This project is licensed under the [Apache License 2.0](https://www.apache.org/l
 
 ## Contributing
 
-Contributions are welcome! See the [Contributing to kubectl-splunk](../develop/KubectlSplunkContributing.html) guide for details on how to get started.
+Contributions are welcome! See the [Contributing to kubectl-splunk](../develop/KubectlSplunkContributing.md) guide for details on how to get started.
 
 ---
 

@@ -9,7 +9,7 @@ nav_order: 4
 
 *NOTE: The below method is a temporary way of installing SmartStore configuration & indexes. Starting from the Splunk Operator release 1.0.2, an enhanced App installation framework is introduced which is the recommended method to install SmartStore indexes & configuration. The below method may still be used to specify the S3 access keys, which avoids storing them in the S3 buckets (via the App installation framework)*
 
-The Splunk Operator includes a method for configuring a SmartStore remote storage volume with index support using a [Custom Resource](https://splunk.github.io/splunk-operator/CustomResources.html). The SmartStore integration is not implemented as a StorageClass. This feature and its settings rely on support integrated into Splunk Enterprise. See [SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) for information on the feature and implementation considerations.
+The Splunk Operator includes a method for configuring a SmartStore remote storage volume with index support using a [Custom Resource](CustomResources.md). The SmartStore integration is not implemented as a StorageClass. This feature and its settings rely on support integrated into Splunk Enterprise. See [SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) for information on the feature and implementation considerations.
 
  * SmartStore configuration is supported on these Custom Resources: Standalone and ClusterManager.
  * SmartStore support in the Splunk Operator is limited to Amazon S3 & S3-API-compliant object stores only if you are using the CRD configuration for S3 as described below."
@@ -272,7 +272,7 @@ path = <remote_volume_path>
 remote.s3.encryption = sse-s3
 ```
 2. Apply the CR with the necessary & supported Smartstore and Index related configs
-3. Install the App created using the [currently supported methods](https://splunk.github.io/splunk-operator/Examples.html#installing-splunk-apps) (*Note: This can be combined with the previous step*)
+3. Install the App created using the [currently supported methods](../reference/Examples.md#installing-splunk-apps) (*Note: This can be combined with the previous step*)
 
 ## RepFactor for Internal Indexes
 

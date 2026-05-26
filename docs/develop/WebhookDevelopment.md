@@ -6,7 +6,7 @@ nav_order: 7
 
 # Adding Validation for a New CRD
 
-This guide covers how to extend the Splunk Operator's [validation webhook](../reference/ValidationWebhook.html) to support a new Custom Resource Definition.
+This guide covers how to extend the Splunk Operator's [validation webhook](../reference/ValidationWebhook.md) to support a new Custom Resource Definition.
 
 ## 1. Create Validation Functions
 
