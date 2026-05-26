@@ -6,7 +6,7 @@ nav_order: 8
 
 # Contributing to kubectl-splunk
 
-Contributions to the [kubectl-splunk plugin](../platforms/KubectlSplunk.html) are welcome! Please submit issues and pull requests via the project's GitHub repository.
+Contributions to the [kubectl-splunk plugin](../platforms/KubectlSplunk.md) are welcome! Please submit issues and pull requests via the project's GitHub repository.
 
 ## How to Contribute
 
