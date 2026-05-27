@@ -18,8 +18,16 @@ package controller
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
+	"math/big"
 	"strings"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -88,6 +96,57 @@ func seedCNPGClusterServerCASecret(ctx context.Context, c client.Client, cluster
 	return caSecretName
 }
 
+func selfSignedLeafCertPEM(dnsNames []string) []byte {
+	GinkgoHelper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	Expect(err).NotTo(HaveOccurred())
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	Expect(err).NotTo(HaveOccurred())
+	tmpl := &x509.Certificate{
+		SerialNumber: serial,
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		DNSNames:     dnsNames,
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+	if len(dnsNames) > 0 {
+		tmpl.Subject = pkix.Name{CommonName: dnsNames[0]}
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	Expect(err).NotTo(HaveOccurred())
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+}
+
+// ensureCNPGServerTLSLeafSecret seeds the CNPG server TLS Secret so poolerModel can pass
+// the materialized-leaf check (clusterModel.IsServerTLSLeafAlignedWithSpec, the read side
+// of the ClusterRuntimeProbe port) in envtest, where no real CNPG cert controller runs.
+func ensureCNPGServerTLSLeafSecret(ctx context.Context, c client.Client, clusterName, ns string) {
+	GinkgoHelper()
+	cnpg := &cnpgv1.Cluster{}
+	Expect(c.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: ns}, cnpg)).To(Succeed())
+	var dns []string
+	if cnpg.Spec.Certificates != nil && len(cnpg.Spec.Certificates.ServerAltDNSNames) > 0 {
+		dns = append([]string(nil), cnpg.Spec.Certificates.ServerAltDNSNames...)
+	}
+	if len(dns) == 0 {
+		return
+	}
+	secName := clusterName + "-server"
+	pemCert := selfSignedLeafCertPEM(dns)
+	sec := &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: secName, Namespace: ns}}
+	_, err := controllerutil.CreateOrUpdate(ctx, c, sec, func() error {
+		if sec.Data == nil {
+			sec.Data = map[string][]byte{}
+		}
+		sec.Data[v1.TLSCertKey] = pemCert
+		return nil
+	})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(c.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: ns}, cnpg)).To(Succeed())
+	cnpg.Status.Certificates.ServerTLSSecret = secName
+	Expect(c.Status().Update(ctx, cnpg)).To(Succeed())
+}
+
 var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 	const (
@@ -125,6 +184,11 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			Expect(err).NotTo(HaveOccurred())
 		}
 	}
+	// After Actuate applies a CNPG spec patch, clusterModel.Converge may return pending
+	// (RequeueAfter) while status is still PhaseHealthy — PostgresClusterService then returns
+	// before the runtime phase (managed roles, ConfigMap, pooler). A second Reconcile runs
+	// runtime once spec drift is cleared.
+	reconcileAfterCNPGHealthyOrPatch := func() { reconcileNTimes(2) }
 
 	BeforeEach(func() {
 		nameSuffix := fmt.Sprintf("%d-%d-%d",
@@ -354,7 +418,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				cnpg.Status.Phase = cnpgv1.PhaseHealthy
 				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
-				reconcileNTimes(1)
+				reconcileAfterCNPGHealthyOrPatch()
 
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				managedRolesCond := meta.FindStatusCondition(pc.Status.Conditions, "ManagedRolesReady")
@@ -370,7 +434,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					},
 				}
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
-				reconcileNTimes(1)
+				reconcileAfterCNPGHealthyOrPatch()
 
 				// Expect cnpg status progression propagation
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
@@ -453,11 +517,14 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
 				Expect(cnpg.Spec.ImageName).To(Equal("ghcr.io/cloudnative-pg/postgresql:" + postgresVersion))
 
+				// Seed the CNPG server CA Secret + status ref so the access ConfigMap can publish
+				// SERVER_CA_* keys; otherwise configMap converge loops on ConfigMapCAMetadataPending
+				// and the aggregate ClusterReady never settles True.
 				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
 				cnpg.Status.Phase = cnpgv1.PhaseHealthy
 				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
-				reconcileNTimes(1)
+				reconcileAfterCNPGHealthyOrPatch()
 
 				current := &enterprisev4.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
@@ -503,16 +570,24 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
 				cnpg.Status.Phase = cnpgv1.PhaseHealthy
+				// Re-assert the ServerCASecret on this status write; envtest does not run a
+				// CNPG controller to keep it populated across our status mutations.
+				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
-				reconcileNTimes(1)
 
-				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
-				cond = meta.FindStatusCondition(current.Status.Conditions, "ClusterReady")
-				Expect(cond).NotTo(BeNil())
-				Expect(cond.Status).To(Equal(metav1.ConditionTrue))
-				Expect(cond.Reason).To(Equal("CNPGClusterHealthy"))
-				Expect(current.Status.Phase).NotTo(BeNil())
-				Expect(*current.Status.Phase).To(Equal("Ready"))
+				// After upgrade choreography the controller may need several ticks (image rollout
+				// gate, pooler SAN, status writers) before ClusterReady returns True.
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+					cond = meta.FindStatusCondition(current.Status.Conditions, "ClusterReady")
+					g.Expect(cond).NotTo(BeNil())
+					g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+					g.Expect(cond.Reason).To(Equal("CNPGClusterHealthy"))
+					g.Expect(current.Status.Phase).NotTo(BeNil())
+					g.Expect(*current.Status.Phase).To(Equal("Ready"))
+				}).WithTimeout(45 * time.Second).WithPolling(50 * time.Millisecond).Should(Succeed())
 			})
 
 		})
@@ -551,8 +626,9 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				}
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 
-				reconcileNTimes(1)
+				reconcileAfterCNPGHealthyOrPatch()
 
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
 				Expect(cnpg.Spec.InheritedMetadata).NotTo(BeNil())
 				Expect(cnpg.Spec.InheritedMetadata.Annotations).To(HaveKeyWithValue(scrapeAnnotationKey, "true"))
 				Expect(cnpg.Spec.InheritedMetadata.Annotations).To(HaveKeyWithValue(pathAnnotationKey, metricsPath))
@@ -574,7 +650,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					PostgreSQLMetrics: ptr.To(false),
 				}
 				Expect(k8sClient.Update(ctx, current)).To(Succeed())
-				reconcileNTimes(1)
+				reconcileAfterCNPGHealthyOrPatch()
 
 				Eventually(func(g Gomega) {
 					updated := &cnpgv1.Cluster{}
@@ -616,6 +692,9 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				cnpg.Status.Phase = cnpgv1.PhaseHealthy
 				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+				reconcileAfterCNPGHealthyOrPatch()
+				ensureCNPGServerTLSLeafSecret(ctx, k8sClient, clusterName, namespace)
 
 				Eventually(func(g Gomega) {
 					_, err := reconciler.Reconcile(ctx, req)
@@ -915,7 +994,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				cnpg.Status.Phase = cnpgv1.PhaseHealthy
 				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
-				reconcileNTimes(1)
+				reconcileAfterCNPGHealthyOrPatch()
 
 				// Drain baseline events so we don't match the initial "created" event.
 				received := make([]string, 0, 16)
@@ -925,11 +1004,14 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				// Drift the managed ConfigMap.
 				pc := &enterprisev4.PostgresCluster{}
 				Eventually(func() bool {
+					if _, err := reconciler.Reconcile(ctx, req); err != nil {
+						return false
+					}
 					if err := k8sClient.Get(ctx, pgClusterKey, pc); err != nil {
 						return false
 					}
 					return pc.Status.Resources != nil && pc.Status.Resources.ConfigMapRef != nil
-				}, "5s", "100ms").Should(BeTrue())
+				}, "45s", "100ms").Should(BeTrue())
 
 				cmKey := types.NamespacedName{
 					Name:      pc.Status.Resources.ConfigMapRef.Name,
@@ -941,9 +1023,12 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Update(ctx, cm)).To(Succeed())
 
 				// Reconcile and assert updated event.
-				reconcileNTimes(1)
+				reconcileAfterCNPGHealthyOrPatch()
 
 				Eventually(func() bool {
+					if _, err := reconciler.Reconcile(ctx, req); err != nil {
+						return false
+					}
 					CollectEvents(&received, fakeRecorder)
 
 					// reason match
@@ -959,7 +1044,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 						}
 					}
 					return false
-				}, "5s", "100ms").Should(BeTrue(), "events seen: %v", received)
+				}, "15s", "100ms").Should(BeTrue(), "events seen: %v", received)
 			})
 		})
 	})

@@ -18,9 +18,12 @@ package core
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,11 +44,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
+
+var errServerTLSLeafInvalid = errors.New("server TLS secret contains invalid certificate material")
 
 // PostgresClusterService is the application service entry point called by the primary adapter (reconciler).
 func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.Request) (ctrl.Result, error) {
@@ -194,7 +200,9 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	runtimeManager := &componentManager{
 		components: []component{
 			newManagedRolesModel(c, rc.Scheme, rc, updateComponentHealthStatus, runtimeView, postgresCluster, postgresSecretName),
-			newPoolerModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, clusterClass, mergedConfig, cnpgCluster, poolerEnabled, poolerConfigPresent),
+			// clusterComponent satisfies SANPolicy (write) and ClusterRuntimeProbe (read);
+			// passed twice so each side is independently mockable.
+			newPoolerModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, clusterClass, mergedConfig, cnpgCluster, poolerEnabled, poolerConfigPresent, clusterComponent, clusterComponent),
 			newBackupModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, mergedConfig, backupEnabled, backupConfigured),
 			newConfigMapModel(c, rc.Scheme, rc, updateComponentHealthStatus, runtimeView, postgresCluster, postgresSecretName),
 		},
@@ -338,6 +346,7 @@ type poolerEmitter interface {
 type clusterRuntimeView interface {
 	Cluster() *cnpgv1.Cluster
 	IsHealthy() bool
+	IsServerTLSLeafAlignedWithSpec(ctx context.Context) (bool, error)
 }
 
 type clusterRuntimeViewAdapter struct {
@@ -352,6 +361,10 @@ func (v clusterRuntimeViewAdapter) IsHealthy() bool {
 	return v.model.cnpgCluster != nil && v.model.cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy
 }
 
+func (v clusterRuntimeViewAdapter) IsServerTLSLeafAlignedWithSpec(ctx context.Context) (bool, error) {
+	return v.model.IsServerTLSLeafAlignedWithSpec(ctx)
+}
+
 type clusterModel struct {
 	client       client.Client
 	scheme       *runtime.Scheme
@@ -363,7 +376,10 @@ type clusterModel struct {
 	secretName   string
 	cnpgCluster  *cnpgv1.Cluster
 	cnpgCreated  bool
-	cnpgPatched  bool
+	// cnpgPatch classifies this reconcile's CNPG spec change. Converge uses
+	// requiresPhaseGate() to decide whether to hold ClusterReady=Provisioning
+	// while CNPG.Status.Phase still reflects the pre-patch value.
+	cnpgPatch cnpgPatchKind
 
 	metricsEnabled bool
 	health         componentHealth
@@ -396,7 +412,7 @@ func (p *clusterModel) EvaluatePrerequisites(_ context.Context) prerequisiteDeci
 func (p *clusterModel) Actuate(ctx context.Context) {
 	p.actuateErr = nil
 	p.cnpgCreated = false
-	p.cnpgPatched = false
+	p.cnpgPatch = cnpgPatchNone
 
 	desiredSpec := buildCNPGClusterSpec(p.mergedConfig, p.secretName, p.metricsEnabled)
 	existingCNPG := &cnpgv1.Cluster{}
@@ -470,12 +486,19 @@ func (p *clusterModel) Actuate(ctx context.Context) {
 			return
 		}
 		p.events.emitNormal(p.cluster, EventClusterAdopted, fmt.Sprintf("Adopted existing CNPG cluster for PostgresCluster %s", p.cluster.Name))
-		p.cnpgPatched = true
+		p.cnpgPatch = cnpgPatchBody
 	}
 	currentNormalized := normalizeCNPGClusterSpec(p.cnpgCluster.Spec, p.mergedConfig.Spec.PostgreSQLConfig)
 	desiredNormalized := normalizeCNPGClusterSpec(desiredSpec, p.mergedConfig.Spec.PostgreSQLConfig)
 	if !equality.Semantic.DeepEqual(currentNormalized, desiredNormalized) {
 		originalCluster := p.cnpgCluster.DeepCopy()
+
+		// Classify the drift BEFORE the patch is applied so Converge can decide
+		// whether to gate ClusterReady on a CNPG phase transition.
+		patchKind := cnpgPatchMetadata
+		if isClusterDrift(currentNormalized, desiredNormalized) {
+			patchKind = cnpgPatchBody
+		}
 		p.cnpgCluster.Spec = desiredSpec
 		if err := patchObject(ctx, p.client, originalCluster, p.cnpgCluster, "CNPGCluster"); err != nil {
 			msg := fmt.Sprintf("failed to patch CNPG cluster for PostgresCluster %s — check operator logs", p.cluster.Name)
@@ -485,7 +508,7 @@ func (p *clusterModel) Actuate(ctx context.Context) {
 			return
 		}
 		p.events.emitNormal(p.cluster, EventClusterUpdateStarted, fmt.Sprintf("CNPG cluster spec updated for PostgresCluster %s, waiting for healthy state", p.cluster.Name))
-		p.cnpgPatched = true
+		p.cnpgPatch = patchKind
 	}
 
 	if p.cnpgCluster != nil {
@@ -533,7 +556,7 @@ func (p *clusterModel) Converge(_ context.Context) (health componentHealth, err 
 		return p.health, nil
 	}
 
-	if p.cnpgPatched && (p.cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy || p.cnpgCluster.Status.Phase == "") {
+	if p.cnpgPatch.requiresPhaseGate() && (p.cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy || p.cnpgCluster.Status.Phase == "") {
 		p.health = componentHealth{
 			Condition: clusterReady,
 			State:     pgcConstants.Provisioning,
@@ -686,6 +709,205 @@ func (p *clusterModel) Converge(_ context.Context) (health componentHealth, err 
 		}
 	}
 	return p.health, convergeErr
+}
+
+// SANPolicy enforces and verifies the desired DNS identities on the underlying
+// provisioned cluster (spec/desired only; runtime observation lives on
+// ClusterRuntimeProbe).
+type SANPolicy interface {
+	EnsureSANPolicy(ctx context.Context) error
+	IsSANPolicyConverged(ctx context.Context) (bool, error)
+}
+
+// ClusterRuntimeProbe reads materialized runtime state on the underlying
+// provisioned cluster. Read-only by contract; mutating methods belong on a
+// policy port. Intent-first naming keeps the adapter swappable.
+type ClusterRuntimeProbe interface {
+	// IsServerTLSLeafAlignedWithSpec reports whether the materialized server
+	// TLS leaf carries every desired DNS name. poolerModel uses it to gate
+	// readiness while the leaf cert lags spec convergence. See method docstring
+	// for failure modes.
+	IsServerTLSLeafAlignedWithSpec(ctx context.Context) (bool, error)
+}
+
+func (p *clusterModel) poolerEnabledFromMerged() bool {
+	if p.mergedConfig == nil || p.mergedConfig.Spec == nil || p.mergedConfig.Spec.ConnectionPoolerEnabled == nil {
+		return false
+	}
+	return *p.mergedConfig.Spec.ConnectionPoolerEnabled
+}
+
+func (p *clusterModel) getCNPGCluster(ctx context.Context) (*cnpgv1.Cluster, error) {
+	key := types.NamespacedName{Name: p.cluster.Name, Namespace: p.cluster.Namespace}
+	var cnpg cnpgv1.Cluster
+	if err := p.client.Get(ctx, key, &cnpg); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &cnpg, nil
+}
+
+// computeDesiredPoolerSANSet returns the desired serverAltDNSNames sorted
+// lexicographically (EnsureSANPolicy/IsSANPolicyConverged depend on stable
+// order). Pooler-disabled preserves existing entries (union-on-enable) so a
+// transient toggle does not trigger CNPG cert rotation.
+func (p *clusterModel) computeDesiredPoolerSANSet(current []string, clusterName, namespace string) []string {
+	set := make(map[string]struct{}, len(current))
+	for _, s := range current {
+		if s == "" {
+			continue
+		}
+		set[s] = struct{}{}
+	}
+
+	poolerSANs := []string{
+		fmt.Sprintf("%s.%s", poolerResourceName(clusterName, readWriteEndpoint), namespace),
+		fmt.Sprintf("%s.%s%s", poolerResourceName(clusterName, readWriteEndpoint), namespace, poolerSANSuffix),
+		fmt.Sprintf("%s.%s", poolerResourceName(clusterName, readOnlyEndpoint), namespace),
+		fmt.Sprintf("%s.%s%s", poolerResourceName(clusterName, readOnlyEndpoint), namespace, poolerSANSuffix),
+	}
+
+	for _, s := range poolerSANs {
+		set[s] = struct{}{}
+	}
+
+	out := make([]string, 0, len(set))
+	for s := range set {
+		out = append(out, s)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func getServerAltDNSNames(cnpg *cnpgv1.Cluster) []string {
+	if cnpg == nil || cnpg.Spec.Certificates == nil {
+		return nil
+	}
+	return cnpg.Spec.Certificates.ServerAltDNSNames
+}
+
+// EnsureSANPolicy applies a merge patch on CNPG Cluster certificates
+// when pooler-related SANs drift from desired state.
+// Short-circuits on pooler disabled/cnpg errors.
+func (p *clusterModel) EnsureSANPolicy(ctx context.Context) error {
+	if !p.poolerEnabledFromMerged() {
+		return nil
+	}
+	cnpg, err := p.getCNPGCluster(ctx)
+	if err != nil {
+		return err
+	}
+	if cnpg == nil {
+		return fmt.Errorf("cnpgv1.Cluster %s/%s not found while enforcing SAN policy; caller MUST gate on a non-nil cnpgCluster snapshot", p.cluster.Namespace, p.cluster.Name)
+	}
+
+	current := append([]string(nil), getServerAltDNSNames(cnpg)...)
+	desired := p.computeDesiredPoolerSANSet(current, cnpg.Name, cnpg.Namespace)
+	if sets.New(current...).Equal(sets.New(desired...)) {
+		return nil
+	}
+
+	before := cnpg.DeepCopy()
+	if cnpg.Spec.Certificates == nil {
+		cnpg.Spec.Certificates = &cnpgv1.CertificatesConfiguration{}
+	}
+	cnpg.Spec.Certificates.ServerAltDNSNames = desired
+	if err := p.client.Patch(ctx, cnpg, client.MergeFrom(before)); err != nil {
+		return err
+	}
+	return nil
+}
+
+// IsSANPolicyConverged reports whether live CNPG serverAltDNSNames match the
+// desired pooler SAN set (spec only). poolerModel additionally waits on
+// ClusterRuntimeProbe.IsServerTLSLeafAlignedWithSpec so readiness does not
+// advance while the leaf cert lags.
+func (p *clusterModel) IsSANPolicyConverged(ctx context.Context) (bool, error) {
+	if !p.poolerEnabledFromMerged() {
+		return true, nil
+	}
+	cnpg, err := p.getCNPGCluster(ctx)
+	if err != nil {
+		return false, err
+	}
+	if cnpg == nil {
+		return true, nil
+	}
+
+	current := sets.New(getServerAltDNSNames(cnpg)...)
+	desired := sets.New(p.computeDesiredPoolerSANSet(current.UnsortedList(), cnpg.Name, cnpg.Namespace)...)
+	return current.Equal(desired), nil
+}
+
+func serverTLSSecretNameFromCNPG(cnpg *cnpgv1.Cluster) string {
+	if cnpg == nil {
+		return ""
+	}
+	if cnpg.Status.Certificates.ServerTLSSecret != "" {
+		return cnpg.Status.Certificates.ServerTLSSecret
+	}
+	if cnpg.Spec.Certificates != nil && cnpg.Spec.Certificates.ServerTLSSecret != "" {
+		return cnpg.Spec.Certificates.ServerTLSSecret
+	}
+	return ""
+}
+
+// IsServerTLSLeafAlignedWithSpec satisfies ClusterRuntimeProbe. Failure modes:
+//   - apiserver Get error          → (false, err) — propagated.
+//   - no Cluster / no spec SANs    → (true,  nil).
+//   - no Secret / no tls.crt       → (false, nil) — requeue (transient race with CNPG cert-controller).
+//   - SAN mismatch                 → (false, nil) — requeue (normal mid-rotation).
+//   - PEM/x509 parse failure       → (false, %w errServerTLSLeafInvalid) — caller demuxes via
+//     errors.Is to surface reasonPoolerTLSLeafInvalidCert (Failed). Rich diagnostic detail
+//     lives in the wrapped error for logs; do not echo it into events or Condition.Message.
+func (p *clusterModel) IsServerTLSLeafAlignedWithSpec(ctx context.Context) (bool, error) {
+	cnpg, err := p.getCNPGCluster(ctx)
+	if err != nil {
+		return false, err
+	}
+	if cnpg == nil {
+		return true, nil
+	}
+	specSANs := getServerAltDNSNames(cnpg)
+	if len(specSANs) == 0 {
+		return true, nil
+	}
+	secretName := serverTLSSecretNameFromCNPG(cnpg)
+	if secretName == "" {
+		return false, nil
+	}
+	var sec corev1.Secret
+	if err := p.client.Get(ctx, types.NamespacedName{Namespace: p.cluster.Namespace, Name: secretName}, &sec); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	raw := sec.Data[corev1.TLSCertKey]
+	if len(raw) == 0 {
+		return false, nil
+	}
+	block, _ := pem.Decode(raw)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return false, fmt.Errorf("%w: PEM decode failed for secret %s/%s",
+			errServerTLSLeafInvalid, p.cluster.Namespace, secretName)
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return false, fmt.Errorf("%w: x509 parse failed for secret %s/%s: %v",
+			errServerTLSLeafInvalid, p.cluster.Namespace, secretName, err)
+	}
+	for _, alt := range specSANs {
+		if alt == "" {
+			continue
+		}
+		if !slices.Contains(cert.DNSNames, alt) {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (p *clusterModel) getHealthOnMissingSecretRef() (componentHealth, bool) {
@@ -888,9 +1110,15 @@ type poolerModel struct {
 	metricsEnabled bool
 	health         componentHealth
 	actuateErr     error
+
+	// Write side (desired SAN spec) and read side (materialized runtime state).
+	// Usually one *clusterModel satisfies both — split into two fields so the
+	// spec-vs-runtime axis is first-class at the type level.
+	sanPolicy    SANPolicy
+	runtimeProbe ClusterRuntimeProbe
 }
 
-func newPoolerModel(c client.Client, scheme *runtime.Scheme, events poolerEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, clusterClass *enterprisev4.PostgresClusterClass, mergedConfig *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerEnabled bool, poolerConfigPresent bool) *poolerModel {
+func newPoolerModel(c client.Client, scheme *runtime.Scheme, events poolerEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, clusterClass *enterprisev4.PostgresClusterClass, mergedConfig *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerEnabled bool, poolerConfigPresent bool, sanPolicy SANPolicy, runtimeProbe ClusterRuntimeProbe) *poolerModel {
 	model := &poolerModel{
 		client:              c,
 		scheme:              scheme,
@@ -902,6 +1130,8 @@ func newPoolerModel(c client.Client, scheme *runtime.Scheme, events poolerEmitte
 		cnpgCluster:         cnpgCluster,
 		poolerEnabled:       poolerEnabled,
 		poolerConfigPresent: poolerConfigPresent,
+		sanPolicy:           sanPolicy,
+		runtimeProbe:        runtimeProbe,
 	}
 	model.metricsEnabled = isConnectionPoolerMetricsEnabled(cluster, clusterClass)
 	return model
@@ -959,6 +1189,14 @@ func (p *poolerModel) Actuate(ctx context.Context) {
 	case p.cnpgCluster == nil || p.cnpgCluster.Status.Phase != cnpgv1.PhaseHealthy:
 		return
 	default:
+		if err := p.sanPolicy.EnsureSANPolicy(ctx); err != nil {
+			msg := fmt.Sprintf("failed to reconcile pooler SAN policy for PostgresCluster %s — check operator logs", p.cluster.Name)
+			p.events.emitWarning(p.cluster, EventPoolerReconcileFailed, msg)
+			p.health = componentHealth{Condition: poolerReady, State: pgcConstants.Failed, Reason: reasonPoolerReconciliationFailed, Message: msg, Phase: failedClusterPhase}
+			p.actuateErr = err
+			return
+		}
+
 		if err := createOrUpdateConnectionPoolers(ctx, p.client, p.scheme, p.cluster, p.mergedConfig, p.cnpgCluster, p.metricsEnabled); err != nil {
 			msg := fmt.Sprintf("failed to reconcile connection pooler for PostgresCluster %s — check operator logs", p.cluster.Name)
 			p.events.emitWarning(p.cluster, EventPoolerReconcileFailed, msg)
@@ -984,16 +1222,34 @@ func (p *poolerModel) Converge(ctx context.Context) (health componentHealth, err
 		health = p.health
 	}()
 
+	if p.actuateErr != nil {
+		return p.health, p.actuateErr
+	}
+
 	if !p.poolerEnabled {
-		p.health = componentHealth{Condition: poolerReady, State: pgcConstants.Ready, Reason: reasonPoolerDisabled, Message: msgPoolerDisabled}
+		// IsSANPolicyConverged short-circuits to (true, nil) when the pooler is off;
+		// the err/!converged branches below are defensive (survive failing mocks).
+		converged, err := p.sanPolicy.IsSANPolicyConverged(ctx)
+		if err != nil {
+			p.health = componentHealth{
+				Condition: poolerReady, State: pgcConstants.Failed, Reason: reasonPoolerReconciliationFailed,
+				Message: fmt.Sprintf("failed to verify pooler SAN policy for PostgresCluster %s — check operator logs", p.cluster.Name),
+				Phase:   failedClusterPhase}
+			return p.health, err
+		}
+		if !converged {
+			p.health = componentHealth{
+				Condition: poolerReady, State: pgcConstants.Provisioning,
+				Reason: reasonPoolerSANsPending, Message: msgPoolerSANsPending,
+				Phase: provisioningClusterPhase, Result: ctrl.Result{RequeueAfter: retryDelay}}
+			return p.health, nil
+		}
+		p.health = componentHealth{Condition: poolerReady, State: pgcConstants.Ready, Reason: reasonPoolerDisabled, Message: msgPoolerDisabled, Phase: readyClusterPhase}
 		return p.health, nil
 	}
 	if !p.poolerConfigPresent {
 		p.health = componentHealth{Condition: poolerReady, State: pgcConstants.Failed, Reason: reasonPoolerConfigMissing, Message: msgPoolerConfigMissing, Phase: failedClusterPhase}
 		return p.health, fmt.Errorf("pooler config missing")
-	}
-	if p.actuateErr != nil {
-		return p.health, p.actuateErr
 	}
 	if p.cnpgCluster == nil {
 		p.health = componentHealth{Condition: poolerReady, State: pgcConstants.Pending, Reason: reasonCNPGProvisioning, Message: msgCNPGPendingCreation, Phase: pendingClusterPhase, Result: ctrl.Result{RequeueAfter: retryDelay}}
@@ -1002,6 +1258,63 @@ func (p *poolerModel) Converge(ctx context.Context) (health componentHealth, err
 	if p.cnpgCluster.Status.Phase != cnpgv1.PhaseHealthy {
 		p.health = componentHealth{Condition: poolerReady, State: pgcConstants.Provisioning, Reason: reasonCNPGProvisioning, Message: fmt.Sprintf(msgFmtCNPGClusterPhase, p.cnpgCluster.Status.Phase), Phase: provisioningClusterPhase, Result: ctrl.Result{RequeueAfter: retryDelay}}
 		return p.health, nil
+	}
+
+	handleSanCheck := func(b bool, err error, errMsg string, pendingReason conditionReasons, pendingMsg string) (bool, error) {
+		if err != nil {
+			p.events.emitWarning(p.cluster, EventPoolerReconcileFailed, errMsg)
+			p.health = componentHealth{
+				Condition: poolerReady, State: pgcConstants.Failed, Reason: reasonPoolerReconciliationFailed,
+				Message: errMsg, Phase: failedClusterPhase}
+			return true, err
+		}
+		if !b {
+			p.health = componentHealth{
+				Condition: poolerReady, State: pgcConstants.Provisioning,
+				Reason: pendingReason, Message: pendingMsg,
+				Phase: provisioningClusterPhase, Result: ctrl.Result{RequeueAfter: retryDelay}}
+			return true, nil
+		}
+		return false, nil
+	}
+
+	sanConverged, sanErr := p.sanPolicy.IsSANPolicyConverged(ctx)
+	if errorOccurred, err := handleSanCheck(sanConverged, sanErr,
+		fmt.Sprintf("failed to verify pooler SAN policy for PostgresCluster %s — check operator logs", p.cluster.Name),
+		reasonPoolerSANsPending, msgPoolerSANsPending); errorOccurred {
+		return p.health, err
+	}
+
+	// Read-side port: observe materialized leaf, never patch.
+	leafOK, leafErr := p.runtimeProbe.IsServerTLSLeafAlignedWithSpec(ctx)
+	// Structural failure (malformed PEM / x509) → Failed condition with a
+	// distinct reason so the user sees what's wrong instead of an indefinite
+	// PoolerTLSLeafPending loop. Rich detail stays in the log; event +
+	// Condition.Message stay scrubbed and stable.
+	if errors.Is(leafErr, errServerTLSLeafInvalid) {
+		logger := logging.FromContext(ctx)
+		secretName := serverTLSSecretNameFromCNPG(p.cnpgCluster)
+		logger.Error("server TLS secret cannot be parsed; cluster requires investigation",
+			"error", leafErr.Error(),
+			"namespace", p.cluster.Namespace,
+			"pgCluster", p.cluster.Name,
+			"secret", secretName,
+		)
+		msg := fmt.Sprintf(string(msgFmtPoolerTLSLeafInvalidCert), p.cluster.Namespace, secretName)
+		p.events.emitWarning(p.cluster, EventPoolerReconcileFailed, msg)
+		p.health = componentHealth{
+			Condition: poolerReady,
+			State:     pgcConstants.Failed,
+			Reason:    reasonPoolerTLSLeafInvalidCert,
+			Message:   msg,
+			Phase:     failedClusterPhase,
+		}
+		return p.health, leafErr
+	}
+	if errorOccurred, err := handleSanCheck(leafOK, leafErr,
+		fmt.Sprintf("failed to verify server TLS leaf for PostgresCluster %s — check operator logs", p.cluster.Name),
+		reasonPoolerTLSLeafPending, msgPoolerTLSLeafPending); errorOccurred {
+		return p.health, err
 	}
 
 	// TODO: Port material.
@@ -1090,7 +1403,13 @@ func (c *configMapModel) Actuate(ctx context.Context) {
 	if cnpgCluster == nil {
 		return
 	}
-	desiredCM, err := generateConfigMap(ctx, c.client, c.scheme, c.cluster, cnpgCluster, c.secret)
+	// Probe errors degrade to "not aligned"; poolerModel owns the user-facing
+	// PoolerReady routing, so configMapModel just suppresses the keys.
+	tlsLeafAligned, leafErr := c.runtime.IsServerTLSLeafAlignedWithSpec(ctx)
+	if leafErr != nil {
+		tlsLeafAligned = false
+	}
+	desiredCM, err := generateConfigMap(ctx, c.client, c.scheme, c.cluster, cnpgCluster, c.secret, tlsLeafAligned)
 	if err != nil {
 		c.events.emitWarning(c.cluster, EventConfigMapReconcileFailed, fmt.Sprintf("failed to reconcile ConfigMap for PostgresCluster %s — check operator logs", c.cluster.Name))
 		c.health.State = pgcConstants.Failed
@@ -1209,10 +1528,9 @@ func (c *configMapModel) Converge(ctx context.Context) (health componentHealth, 
 		}
 	}
 
-	// If CNPG already published a ServerCASecret in status, keep requeueing until
-	// the access ConfigMap exposes SERVER_CA_* metadata. This prevents a race
-	// where CNPG status is ahead of Secret materialization and the controller
-	// otherwise settles Ready without ever publishing CA discovery fields.
+	// CA discovery race: CNPG may publish ServerCASecret before the access
+	// ConfigMap exposes it. Requeue on missing SERVER_CA_SECRET_REF so we
+	// don't settle Ready without the CA discovery fields.
 	if _, ok := cm.Data[configKeyServerCASecretRef]; !ok {
 		c.health.State = pgcConstants.Provisioning
 		c.health.Reason = reasonConfigMapFailed
@@ -1555,9 +1873,14 @@ func buildCNPGClusterSpec(cfg *MergedConfig, secretName string, postgresMetricsE
 		StorageConfiguration: cnpgv1.StorageConfiguration{
 			Size: cfg.Spec.Storage.String(),
 		},
-		Resources:           *cfg.Spec.Resources,
-		PrimaryUpdateMethod: cnpgv1.PrimaryUpdateMethod(*cfg.CNPG.PrimaryUpdateMethod),
+		Resources: *cfg.Spec.Resources,
 	}
+	if cfg.CNPG != nil && cfg.CNPG.PrimaryUpdateMethod != nil {
+		spec.PrimaryUpdateMethod = cnpgv1.PrimaryUpdateMethod(*cfg.CNPG.PrimaryUpdateMethod)
+	} else {
+		spec.PrimaryUpdateMethod = cnpgv1.PrimaryUpdateMethodRestart
+	}
+
 	annotations := make(map[string]string)
 	if postgresMetricsEnabled {
 		annotations = buildPostgresScrapeAnnotations()
@@ -1608,9 +1931,19 @@ func buildCNPGCluster(scheme *runtime.Scheme, cluster *enterprisev4.PostgresClus
 	return cnpg, nil
 }
 
+// stripImageRefForDrift trims whitespace and strips an OCI digest suffix (@sha256:… / @…)
+// so drift detection matches tag-only desired images against apiserver materialized refs.
+func stripImageRefForDrift(name string) string {
+	name = strings.TrimSpace(name)
+	if i := strings.Index(name, "@"); i >= 0 {
+		return name[:i]
+	}
+	return name
+}
+
 func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec, customDefinedParameters map[string]string) normalizedCNPGClusterSpec {
 	normalized := normalizedCNPGClusterSpec{
-		ImageName:           spec.ImageName,
+		ImageName:           stripImageRefForDrift(spec.ImageName),
 		Instances:           spec.Instances,
 		PrimaryUpdateMethod: string(spec.PrimaryUpdateMethod),
 		StorageSize:         spec.StorageConfiguration.Size,
@@ -1646,6 +1979,32 @@ func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec, customDefinedParameters m
 		}
 	}
 	return normalized
+}
+
+// cnpgPatchKind classifies Actuate's drift outcome so Converge can gate
+// ClusterReady on CNPG.Status.Phase only for material changes — annotation
+// drift propagates via metadata PATCH without a phase transition. See isClusterDrift.
+type cnpgPatchKind int
+
+const (
+	cnpgPatchNone     cnpgPatchKind = iota // no drift detected; nothing patched.
+	cnpgPatchMetadata                      // InheritedAnnotations changed only; metadata-only.
+	cnpgPatchBody                          // structural change; CNPG must observably reconcile.
+)
+
+// requiresPhaseGate reports whether Converge should hold ClusterReady=Provisioning
+// while CNPG.Status.Phase still reflects the pre-patch value. Annotation-only
+// patches do not need this gate (see isClusterDrift).
+func (k cnpgPatchKind) requiresPhaseGate() bool { return k == cnpgPatchBody }
+
+// isClusterDrift reports whether two normalized specs differ in any field CNPG
+// must observably reconcile against. Every field is material except
+// InheritedAnnotations (metadata-only; gating it would deadlock). Pass-by-value
+// is deliberate so nil-ing locals does not mutate the caller's specs.
+func isClusterDrift(a, b normalizedCNPGClusterSpec) bool {
+	a.InheritedAnnotations = nil
+	b.InheritedAnnotations = nil
+	return !equality.Semantic.DeepEqual(a, b)
 }
 
 // reconcileManagedRoles synchronizes ManagedRoles from PostgresCluster spec to CNPG Cluster managed.roles.
@@ -1780,10 +2139,9 @@ func buildCNPGPooler(scheme *runtime.Scheme, cluster *enterprisev4.PostgresClust
 	if poolerMetricsEnabled {
 		poolerAnnotations = buildPoolerScrapeAnnotations()
 	}
-	// Template is always set so that annotation removal is explicit in merge patches.
-	// CNPG's Pooler CRD requires template.spec.containers to be present — a minimal
-	// named container lets CNPG's podspec builder merge in the real PgBouncer
-	// image/command/ports while still carrying our annotations.
+	// Template always set so merge patches can express annotation removal.
+	// CNPG's Pooler CRD requires template.spec.containers; a stub "pgbouncer"
+	// container lets CNPG fill in image/command/ports.
 	pooler.Spec.Template = &cnpgv1.PodTemplateSpec{
 		ObjectMeta: cnpgv1.Metadata{Annotations: poolerAnnotations},
 		Spec: corev1.PodSpec{
@@ -1907,8 +2265,9 @@ func caMetadataForConfigMap(
 	}, true, nil
 }
 
-// generateConfigMap builds a ConfigMap with connection details for the PostgresCluster.
-func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster, secretName string) (*corev1.ConfigMap, error) {
+// generateConfigMap builds a ConfigMap with connection details for the
+// PostgresCluster. tlsLeafAligned gates the CLUSTER_POOLER_* keys.
+func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster, secretName string, tlsLeafAligned bool) (*corev1.ConfigMap, error) {
 	cmName := fmt.Sprintf("%s%s", cluster.Name, defaultConfigMapSuffix)
 	if cluster.Status.Resources != nil && cluster.Status.Resources.ConfigMapRef != nil {
 		cmName = cluster.Status.Resources.ConfigMapRef.Name
@@ -1928,7 +2287,7 @@ func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Sch
 		return nil, fmt.Errorf("failed to get CA metadata for ConfigMap: %w", err)
 	}
 	if ok {
-		data[configKeyServerCASecretRef] = caSecretRef.String()
+		data[configKeyServerCASecretRef] = fmt.Sprintf("%s/%s", caSecretRef.Name, caSecretRef.Key)
 	}
 
 	rwExists, err := poolerExists(ctx, c, cluster, readWriteEndpoint)
@@ -1939,7 +2298,9 @@ func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Sch
 	if err != nil {
 		return nil, fmt.Errorf("failed to check RO pooler existence: %w", err)
 	}
-	if rwExists && roExists {
+	// Gate on tlsLeafAligned so sslmode=verify-full consumers don't dial the
+	// pooler hostname before the leaf carries its SAN.
+	if rwExists && roExists && tlsLeafAligned {
 		data[configKeyPoolerRWEndpoint] = fmt.Sprintf("%s.%s", poolerResourceName(cnpgCluster.Name, readWriteEndpoint), cnpgCluster.Namespace)
 		data[configKeyPoolerROEndpoint] = fmt.Sprintf("%s.%s", poolerResourceName(cnpgCluster.Name, readOnlyEndpoint), cnpgCluster.Namespace)
 	}
