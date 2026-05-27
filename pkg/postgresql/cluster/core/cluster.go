@@ -414,9 +414,11 @@ func (p *clusterModel) Actuate(ctx context.Context) {
 	p.cnpgCreated = false
 	p.cnpgPatch = cnpgPatchNone
 
-	desiredSpec := buildCNPGClusterSpec(p.mergedConfig, p.secretName, p.metricsEnabled)
 	existingCNPG := &cnpgv1.Cluster{}
 	err := p.client.Get(ctx, types.NamespacedName{Name: p.cluster.Name, Namespace: p.cluster.Namespace}, existingCNPG)
+
+	desiredSpec := buildCNPGClusterSpec(existingCNPG.Spec, p.mergedConfig, p.secretName, p.metricsEnabled)
+
 	if err != nil && !apierrors.IsNotFound(err) {
 		p.health = componentHealth{
 			State:   pgcConstants.Failed,
@@ -1853,43 +1855,42 @@ func validatePostgreSQLConfigNoCNPGFixedKeys(params map[string]string) error {
 // otherwise external changes to those fields on the CNPG cluster will be silently ignored.
 // Operator-controlled invariants (e.g. SuperuserSecret, EnableSuperuserAccess) are exempt — they
 // are always the same value and are never exposed in the PostgresCluster CRD.
-func buildCNPGClusterSpec(cfg *MergedConfig, secretName string, postgresMetricsEnabled bool) cnpgv1.ClusterSpec {
-	spec := cnpgv1.ClusterSpec{
-		ImageName: fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", *cfg.Spec.PostgresVersion),
-		Instances: int(*cfg.Spec.Instances),
-		PostgresConfiguration: cnpgv1.PostgresConfiguration{
-			Parameters: maps.Clone(cfg.Spec.PostgreSQLConfig),
-			PgHBA:      cfg.Spec.PgHBA,
-		},
-		SuperuserSecret:       &cnpgv1.LocalObjectReference{Name: secretName},
-		EnableSuperuserAccess: ptr.To(true),
-		Bootstrap: &cnpgv1.BootstrapConfiguration{
-			InitDB: &cnpgv1.BootstrapInitDB{
-				Database: defaultDatabaseName,
-				Owner:    superUsername,
-				Secret:   &cnpgv1.LocalObjectReference{Name: secretName},
-			},
-		},
-		StorageConfiguration: cnpgv1.StorageConfiguration{
-			Size: cfg.Spec.Storage.String(),
-		},
-		Resources: *cfg.Spec.Resources,
+func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, secretName string, postgresMetricsEnabled bool) cnpgv1.ClusterSpec {
+	live.ImageName = fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", *specCfg.Spec.PostgresVersion)
+	live.Instances = int(*specCfg.Spec.Instances)
+	live.PostgresConfiguration = cnpgv1.PostgresConfiguration{
+		Parameters: maps.Clone(specCfg.Spec.PostgreSQLConfig),
+		PgHBA:      specCfg.Spec.PgHBA,
 	}
-	if cfg.CNPG != nil && cfg.CNPG.PrimaryUpdateMethod != nil {
-		spec.PrimaryUpdateMethod = cnpgv1.PrimaryUpdateMethod(*cfg.CNPG.PrimaryUpdateMethod)
+	live.SuperuserSecret = &cnpgv1.LocalObjectReference{Name: secretName}
+	live.EnableSuperuserAccess = ptr.To(true)
+	live.Bootstrap = &cnpgv1.BootstrapConfiguration{
+		InitDB: &cnpgv1.BootstrapInitDB{
+			Database: defaultDatabaseName,
+			Owner:    superUsername,
+			Secret:   &cnpgv1.LocalObjectReference{Name: secretName},
+		},
+	}
+	live.StorageConfiguration = cnpgv1.StorageConfiguration{
+		Size: specCfg.Spec.Storage.String(),
+	}
+	live.Resources = *specCfg.Spec.Resources
+	if specCfg.CNPG != nil && specCfg.CNPG.PrimaryUpdateMethod != nil {
+		live.PrimaryUpdateMethod = cnpgv1.PrimaryUpdateMethod(*specCfg.CNPG.PrimaryUpdateMethod)
 	} else {
-		spec.PrimaryUpdateMethod = cnpgv1.PrimaryUpdateMethodRestart
+		live.PrimaryUpdateMethod = cnpgv1.PrimaryUpdateMethodRestart
 	}
 
 	annotations := make(map[string]string)
 	if postgresMetricsEnabled {
 		annotations = buildPostgresScrapeAnnotations()
 	}
-	spec.InheritedMetadata = &cnpgv1.EmbeddedObjectMetadata{Annotations: annotations}
-	if cfg.Spec.Backup != nil && cfg.Spec.Backup.Enabled != nil && *cfg.Spec.Backup.Enabled && cfg.CNPG != nil && cfg.CNPG.Backup != nil && cfg.CNPG.Backup.VolumeSnapshot != nil {
-		spec.Backup = buildCNPGBackupConfiguration(cfg)
+	live.InheritedMetadata = &cnpgv1.EmbeddedObjectMetadata{Annotations: annotations}
+	live.Backup = nil
+	if specCfg.Spec.Backup != nil && specCfg.Spec.Backup.Enabled != nil && *specCfg.Spec.Backup.Enabled && specCfg.CNPG != nil && specCfg.CNPG.Backup != nil && specCfg.CNPG.Backup.VolumeSnapshot != nil {
+		live.Backup = buildCNPGBackupConfiguration(specCfg)
 	}
-	return spec
+	return live
 }
 
 func buildCNPGBackupConfiguration(cfg *MergedConfig) *cnpgv1.BackupConfiguration {
@@ -1923,7 +1924,7 @@ func buildVolumeSnapshotConfiguration(vs *enterprisev4.CNPGVolumeSnapshotConfig)
 func buildCNPGCluster(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, secretName string, postgresMetricsEnabled bool) (*cnpgv1.Cluster, error) {
 	cnpg := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(cfg, secretName, postgresMetricsEnabled),
+		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, secretName, postgresMetricsEnabled),
 	}
 	if err := ctrl.SetControllerReference(cluster, cnpg, scheme); err != nil {
 		return nil, fmt.Errorf("setting controller reference on CNPG cluster: %w", err)
