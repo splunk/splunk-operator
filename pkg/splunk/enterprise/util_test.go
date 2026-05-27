@@ -36,7 +36,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/splunk/splunk-operator/pkg/logging"
@@ -2625,8 +2624,7 @@ func TestUpdateCRStatus(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
@@ -2689,8 +2687,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 	utilruntime.Must(enterpriseApiV3.AddToScheme(sch))
 
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
@@ -3308,8 +3305,7 @@ func TestGetCurrentImage(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
@@ -3347,7 +3343,7 @@ func TestSecretMissingEvent(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	client := newFakeClientBuilder(sch).Build()
 	ctx := context.TODO()
 
 	recorder := &mockEventRecorder{events: []mockEvent{}}
@@ -3395,7 +3391,7 @@ func TestSecretInvalidEmptyAccessKeyEvent(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	client := newFakeClientBuilder(sch).Build()
 	ctx := context.TODO()
 
 	recorder := &mockEventRecorder{events: []mockEvent{}}
@@ -3454,7 +3450,7 @@ func TestSecretInvalidEmptySecretKeyEvent(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	client := newFakeClientBuilder(sch).Build()
 	ctx := context.TODO()
 
 	recorder := &mockEventRecorder{events: []mockEvent{}}
@@ -3513,7 +3509,7 @@ func TestAppRepositoryConnectionFailedEvent(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	client := newFakeClientBuilder(sch).Build()
 	ctx := context.TODO()
 
 	recorder := &mockEventRecorder{events: []mockEvent{}}
@@ -3705,7 +3701,7 @@ func TestResolveQueueAndObjectStorage(t *testing.T) {
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
 	t.Run("empty refs returns empty config", func(t *testing.T) {
-		client := fake.NewClientBuilder().WithScheme(sch).Build()
+		client := newFakeClientBuilder(sch).Build()
 		cr := &enterpriseApi.IndexerCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
 		}
@@ -3726,7 +3722,7 @@ func TestResolveQueueAndObjectStorage(t *testing.T) {
 	})
 
 	t.Run("queue ref not found returns error", func(t *testing.T) {
-		client := fake.NewClientBuilder().WithScheme(sch).Build()
+		client := newFakeClientBuilder(sch).Build()
 		cr := &enterpriseApi.IndexerCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
 		}
@@ -3739,7 +3735,7 @@ func TestResolveQueueAndObjectStorage(t *testing.T) {
 	})
 
 	t.Run("objectstorage ref not found returns error", func(t *testing.T) {
-		client := fake.NewClientBuilder().WithScheme(sch).Build()
+		client := newFakeClientBuilder(sch).Build()
 		cr := &enterpriseApi.IndexerCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
 		}
@@ -3764,7 +3760,7 @@ func TestResolveQueueAndObjectStorage(t *testing.T) {
 				},
 			},
 		}
-		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(queue).Build()
+		client := newFakeClientBuilder(sch).WithObjects(queue).Build()
 		cr := &enterpriseApi.IndexerCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
 		}
@@ -3796,7 +3792,7 @@ func TestResolveQueueAndObjectStorage(t *testing.T) {
 				},
 			},
 		}
-		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(os).Build()
+		client := newFakeClientBuilder(sch).WithObjects(os).Build()
 		cr := &enterpriseApi.IndexerCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
 		}
@@ -3826,7 +3822,7 @@ func TestResolveQueueAndObjectStorage(t *testing.T) {
 				},
 			},
 		}
-		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(queue).Build()
+		client := newFakeClientBuilder(sch).WithObjects(queue).Build()
 		cr := &enterpriseApi.IndexerCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
 		}
@@ -3866,7 +3862,7 @@ func TestResolveQueueAndObjectStorage(t *testing.T) {
 				},
 			},
 		}
-		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(queue, secret).Build()
+		client := newFakeClientBuilder(sch).WithObjects(queue, secret).Build()
 		cr := &enterpriseApi.IndexerCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
 		}
@@ -3902,7 +3898,7 @@ func TestResolveQueueAndObjectStorage(t *testing.T) {
 				},
 			},
 		}
-		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(queue).Build()
+		client := newFakeClientBuilder(sch).WithObjects(queue).Build()
 		cr := &enterpriseApi.IndexerCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
 		}
@@ -3939,7 +3935,7 @@ func TestResolveQueueAndObjectStorage(t *testing.T) {
 				},
 			},
 		}
-		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(queue).Build()
+		client := newFakeClientBuilder(sch).WithObjects(queue).Build()
 		cr := &enterpriseApi.IndexerCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
 		}
@@ -3973,7 +3969,7 @@ func TestResolveQueueAndObjectStorage(t *testing.T) {
 				},
 			},
 		}
-		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(queue, os).Build()
+		client := newFakeClientBuilder(sch).WithObjects(queue, os).Build()
 		cr := &enterpriseApi.IndexerCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-idxc", Namespace: "test"},
 		}
