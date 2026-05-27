@@ -3,3 +3,5 @@
 # Please update this file with an appropriate okta-group for this project and remove okta-groups/sg-cloud-gitlab-admin.
 * @okta-groups/sg-cloud-gitlab-admin @okta-groups/sg-cloud-sok-developer-platform
 pkg/postgresql/ @okta-groups/sg-cloud-pfm-cse
+docs/postgresql/ @okta-groups/sg-cloud-pfm-cse
+internal/controller/enterprise/postgres* @okta-groups/sg-cloud-pfm-cse

@@ -99,6 +99,7 @@ const (
 	defaultSecretSuffix    string = "-secret"
 	defaultPoolerSuffix    string = "-pooler-"
 	defaultConfigMapSuffix string = "-configmap"
+	poolerSANSuffix        string = ".svc.cluster.local"
 
 	clusterDeletionPolicyDelete string = "Delete"
 	clusterDeletionPolicyRetain string = "Retain"
@@ -152,6 +153,9 @@ const (
 	reasonPoolerConfigMissing        conditionReasons = "PoolerConfigMissing"
 	reasonPoolerCreating             conditionReasons = "PoolerCreating"
 	reasonPoolerDisabled             conditionReasons = "PoolerDisabled"
+	reasonPoolerSANsPending          conditionReasons = "PoolerSANsPending"
+	reasonPoolerTLSLeafPending       conditionReasons = "PoolerTLSLeafPending"
+	reasonPoolerTLSLeafInvalidCert   conditionReasons = "PoolerTLSLeafInvalidCert"
 	reasonAllInstancesReady          conditionReasons = "AllInstancesReady"
 
 	// condition reasons — backupReady
@@ -162,7 +166,6 @@ const (
 	reasonScheduledBackupFailed       conditionReasons = "ScheduledBackupFailed"
 
 	// condition reasons — CNPG cluster phase mapping
-	reasonCNPGClusterNotHealthy  conditionReasons = "CNPGClusterNotHealthy"
 	reasonCNPGClusterHealthy     conditionReasons = "CNPGClusterHealthy"
 	reasonCNPGProvisioning       conditionReasons = "CNPGClusterProvisioning"
 	reasonCNPGSwitchover         conditionReasons = "CNPGSwitchover"
@@ -207,6 +210,9 @@ const (
 	msgWaitRWPoolerObject             statusMessage = "Waiting for RW pooler object"
 	msgWaitROPoolerObject             statusMessage = "Waiting for RO pooler object"
 	msgPoolersNotReady                statusMessage = "Connection poolers are not ready yet"
+	msgPoolerSANsPending              statusMessage = "Waiting for pooler SAN reconcile"
+	msgPoolerTLSLeafPending           statusMessage = "Waiting for pooler server TLS leaf to match spec"
+	msgFmtPoolerTLSLeafInvalidCert    statusMessage = "Server TLS secret %s/%s cannot be parsed; see operator logs"
 	msgPoolersReady                   statusMessage = "Connection poolers are ready"
 	msgConfigMapRefNotPublished       statusMessage = "ConfigMap reference not published yet"
 	msgConfigMapNotFoundYet           statusMessage = "ConfigMap not found yet"
