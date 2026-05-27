@@ -8415,9 +8415,11 @@ spec:
             - message: queueRef and objectStorageRef must both be set or both be empty
               rule: has(self.queueRef) == has(self.objectStorageRef)
             - message: queueRef is immutable once created
-              rule: '!has(oldSelf.queueRef) || self.queueRef == oldSelf.queueRef'
+              rule: '!has(oldSelf.queueRef) || (has(self.queueRef) && self.queueRef
+                == oldSelf.queueRef)'
             - message: objectStorageRef is immutable once created
-              rule: '!has(oldSelf.objectStorageRef) || self.objectStorageRef == oldSelf.objectStorageRef'
+              rule: '!has(oldSelf.objectStorageRef) || (has(self.objectStorageRef)
+                && self.objectStorageRef == oldSelf.objectStorageRef)'
           status:
             description: IndexerClusterStatus defines the observed state of a Splunk
               Enterprise indexer cluster

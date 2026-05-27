@@ -29,7 +29,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="self.sqs.name == oldSelf.sqs.name",message="sqs.name is immutable once created"
 // +kubebuilder:validation:XValidation:rule="self.sqs.authRegion == oldSelf.sqs.authRegion",message="sqs.authRegion is immutable once created"
 // +kubebuilder:validation:XValidation:rule="self.sqs.dlq == oldSelf.sqs.dlq",message="sqs.dlq is immutable once created"
-// +kubebuilder:validation:XValidation:rule="self.sqs.endpoint == oldSelf.sqs.endpoint",message="sqs.endpoint is immutable once created"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.sqs.endpoint) || (has(self.sqs.endpoint) && self.sqs.endpoint == oldSelf.sqs.endpoint)",message="sqs.endpoint is immutable once created"
 // +kubebuilder:validation:XValidation:rule="(self.provider != 'sqs' && self.provider != 'sqs_cp') || has(self.sqs)",message="sqs must be provided when provider is sqs or sqs_cp"
 // QueueSpec defines the desired state of Queue
 type QueueSpec struct {
