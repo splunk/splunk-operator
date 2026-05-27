@@ -18,7 +18,7 @@ variables:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
 default:
-  image: docker.repo.splunkdev.net/ci-cd/ci-container/golang-1.26-aws:5.9.1
+  image: docker.repo.splunkdev.net/ci-cd/ci-container/golang-1.26-aws:5.10.0
   interruptible: true
   before_script:
     - |
