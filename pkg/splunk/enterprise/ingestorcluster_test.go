@@ -35,7 +35,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func init() {
@@ -62,7 +61,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 	_ = enterpriseApi.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := newFakeClientBuilder(scheme).Build()
 
 	// Object definitions
 	provider := "sqs_smartbus"
@@ -786,7 +785,7 @@ func TestIngScaledUpQueueConfigUpdatedIngestorsRestartedScaledDownEvents(t *test
 	_ = enterpriseApi.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := newFakeClientBuilder(scheme).Build()
 
 	queue := &enterpriseApi.Queue{
 		TypeMeta: metav1.TypeMeta{

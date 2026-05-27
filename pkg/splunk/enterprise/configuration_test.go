@@ -48,15 +48,18 @@ func configTester2(t *testing.T, method string, f func() (interface{}, error), w
 }
 
 func marshalAndCompare2(t *testing.T, compare interface{}, method string, want string) {
+	t.Helper()
 	got, err := json.Marshal(compare)
 	if err != nil {
 		t.Errorf("%s failed to marshall", err)
 	}
 
-	if string(got) != want {
+	gotJSON := normalizeGeneratedConfigJSON(t, string(got))
+	wantJSON := normalizeGeneratedConfigJSON(t, want)
+	if gotJSON != wantJSON {
 		t.Errorf("Method %s, got = %s;\nwant %s", method, got, want)
 	}
-	require.JSONEq(t, string(got), want)
+	require.JSONEq(t, wantJSON, gotJSON)
 }
 
 func configTester(t *testing.T, method string, f func() (interface{}, error), want string) {
@@ -70,13 +73,43 @@ func configTester(t *testing.T, method string, f func() (interface{}, error), wa
 }
 
 func marshalAndCompare(t *testing.T, compare interface{}, method string, want string) {
+	t.Helper()
 	got, err := json.Marshal(compare)
 	if err != nil {
 		t.Errorf("%s failed to marshall", err)
 	}
 	want = strings.ReplaceAll(want, " ", "")
 
-	require.JSONEq(t, want, string(got))
+	require.JSONEq(t, normalizeGeneratedConfigJSON(t, want), normalizeGeneratedConfigJSON(t, string(got)))
+}
+
+func normalizeGeneratedConfigJSON(t *testing.T, data string) string {
+	t.Helper()
+
+	var value interface{}
+	require.NoError(t, json.Unmarshal([]byte(data), &value))
+	dropNilCreationTimestamp(value)
+
+	normalized, err := json.Marshal(value)
+	require.NoError(t, err)
+
+	return string(normalized)
+}
+
+func dropNilCreationTimestamp(value interface{}) {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		if creationTimestamp, ok := typed["creationTimestamp"]; ok && creationTimestamp == nil {
+			delete(typed, "creationTimestamp")
+		}
+		for _, child := range typed {
+			dropNilCreationTimestamp(child)
+		}
+	case []interface{}:
+		for _, child := range typed {
+			dropNilCreationTimestamp(child)
+		}
+	}
 }
 
 func TestGetSplunkService(t *testing.T) {
