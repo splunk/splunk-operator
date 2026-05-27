@@ -249,8 +249,12 @@ func (c MockStatusWriter) Patch(ctx context.Context, obj client.Object, patch cl
 	return c.Err
 }
 
+// Apply returns status writer's Err field
 func (c MockStatusWriter) Apply(ctx context.Context, applyConfig runtime.ApplyConfiguration, opts ...client.SubResourceApplyOption) error {
-	return nil
+	c.Calls = append(c.Calls, MockFuncCall{
+		CTX: ctx,
+	})
+	return c.Err
 }
 
 // blank assignment to verify that MockSubResourceWriter implements client.SubResourceWriter
@@ -281,7 +285,7 @@ func (c MockSubResourceWriter) Patch(ctx context.Context, obj client.Object, pat
 	return nil
 }
 
-func (c MockSubResourceWriter) Apply(ctx context.Context, applyConfig runtime.ApplyConfiguration, opts ...client.SubResourceApplyOption) error {
+func (c MockSubResourceWriter) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.SubResourceApplyOption) error {
 	return nil
 }
 

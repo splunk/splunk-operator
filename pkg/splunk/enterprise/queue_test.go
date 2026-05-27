@@ -25,7 +25,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestApplyQueue(t *testing.T) {
@@ -37,7 +36,7 @@ func TestApplyQueue(t *testing.T) {
 	_ = enterpriseApi.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := newFakeClientBuilder(scheme).Build()
 
 	// Object definitions
 	queue := &enterpriseApi.Queue{
