@@ -724,7 +724,7 @@ func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 	}
 	existingCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(currentConfig, "pg1-secret", false),
+		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, "pg1-secret", false),
 	}
 	events := &captureEventEmitter{}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingCNPG).Build()
@@ -743,6 +743,75 @@ func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.Equal(t, cnpgv1.PrimaryUpdateMethodSwitchover, updated.Spec.PrimaryUpdateMethod)
 	assert.Contains(t, events.normals, EventClusterUpdateStarted+":CNPG cluster spec updated for PostgresCluster pg1, waiting for healthy state")
+}
+
+func TestClusterModelActuatePreservesManagedRoles(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	instances := int32(3)
+	version := "15.13"
+	storageSize := resource.MustParse("10Gi")
+
+	cfg := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{
+			Instances:        &instances,
+			PostgresVersion:  &version,
+			Storage:          &storageSize,
+			Resources:        &corev1.ResourceRequirements{},
+			PostgreSQLConfig: map[string]string{},
+			PgHBA:            []string{},
+		},
+		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+	}
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+	}
+	clusterClass := &enterprisev4.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
+	}
+
+	existingCNPG := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
+		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "pg1-secret", false),
+	}
+	// Simulate managed roles having been written by managedRolesModel on a prior reconcile.
+	roleConfig := cnpgv1.ManagedConfiguration{
+		Roles: []cnpgv1.RoleConfiguration{
+			{Name: "app-user", Ensure: cnpgv1.EnsurePresent, Login: true},
+		},
+	}
+	existingCNPG.Spec.Managed = roleConfig.DeepCopy()
+
+	// Trigger a spec drift so clusterModel.Actuate actually patches.
+	updatedInstances := int32(5)
+	driftedCfg := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{
+			Instances:        &updatedInstances,
+			PostgresVersion:  &version,
+			Storage:          &storageSize,
+			Resources:        &corev1.ResourceRequirements{},
+			PostgreSQLConfig: map[string]string{},
+			PgHBA:            []string{},
+		},
+		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingCNPG).Build()
+	model := newClusterModel(c, scheme, &captureEventEmitter{}, nil, cluster, clusterClass, driftedCfg, "pg1-secret")
+	model.Actuate(context.Background())
+
+	require.True(t, model.cnpgPatch.requiresPhaseGate())
+
+	updated := &cnpgv1.Cluster{}
+	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	assert.NotNil(t, updated.Spec.Managed)
+	assert.Equal(t, &roleConfig, updated.Spec.Managed)
 }
 
 func TestGetMergedConfig(t *testing.T) {
@@ -954,7 +1023,7 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 		},
 	}
 
-	spec := buildCNPGClusterSpec(cfg, "my-secret", false)
+	spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "my-secret", false)
 
 	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:18", spec.ImageName)
 	assert.Equal(t, 3, spec.Instances)
@@ -976,12 +1045,77 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 	assert.Empty(t, spec.InheritedMetadata.Annotations)
 
 	t.Run("adds postgres scrape annotations when enabled", func(t *testing.T) {
-		spec := buildCNPGClusterSpec(cfg, "my-secret", true)
+		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "my-secret", true)
 
 		require.NotNil(t, spec.InheritedMetadata)
 		assert.Equal(t, "true", spec.InheritedMetadata.Annotations[prometheusScrapeAnnotation])
 		assert.Equal(t, metricsPath, spec.InheritedMetadata.Annotations[prometheusPathAnnotation])
 		assert.Equal(t, postgresMetricsPortString, spec.InheritedMetadata.Annotations[prometheusPortAnnotation])
+	})
+
+	t.Run("preserves unowned fields from live spec", func(t *testing.T) {
+
+		managedRoles := []cnpgv1.RoleConfiguration{
+			{
+				Name:   "app_user",
+				Ensure: cnpgv1.EnsurePresent,
+			},
+			{
+				Name:   "app_admin",
+				Ensure: cnpgv1.EnsurePresent,
+			},
+		}
+
+		liveCluster := cnpgv1.ClusterSpec{Managed: &cnpgv1.ManagedConfiguration{Roles: managedRoles}}
+		spec := buildCNPGClusterSpec(liveCluster, cfg, "my-secret", true)
+
+		require.NotNil(t, spec.Managed)
+		assert.Equal(t, managedRoles, spec.Managed.Roles)
+		assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:18", spec.ImageName)
+		assert.Equal(t, 3, spec.Instances)
+		require.NotNil(t, spec.SuperuserSecret)
+		assert.Equal(t, "my-secret", spec.SuperuserSecret.Name)
+		assert.Equal(t, "my-secret", spec.Bootstrap.InitDB.Secret.Name)
+
+	})
+
+	t.Run("sets backup when enabled and volume snapshot configured", func(t *testing.T) {
+		t.Parallel()
+		enabled := true
+		className := "csi-snapclass"
+		backupCfg := *cfg
+		backupCfg.Spec.Backup = &enterprisev4.BackupConfig{Enabled: &enabled}
+		backupCfg.CNPG = &enterprisev4.CNPGConfig{
+			PrimaryUpdateMethod: cfg.CNPG.PrimaryUpdateMethod,
+			Backup: &enterprisev4.CNPGBackupConfig{
+				VolumeSnapshot: &enterprisev4.CNPGVolumeSnapshotConfig{
+					ClassName: &className,
+				},
+			},
+		}
+
+		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, &backupCfg, "my-secret", false)
+
+		require.NotNil(t, spec.Backup)
+		require.NotNil(t, spec.Backup.VolumeSnapshot)
+		assert.Equal(t, className, spec.Backup.VolumeSnapshot.ClassName)
+	})
+
+	t.Run("clears stale backup from live spec when backup is disabled", func(t *testing.T) {
+		t.Parallel()
+		// live spec has a backup block left over from when backup was previously enabled
+		staleBackup := &cnpgv1.BackupConfiguration{
+			VolumeSnapshot: &cnpgv1.VolumeSnapshotConfiguration{ClassName: "old-snapclass"},
+		}
+		liveSpec := cnpgv1.ClusterSpec{Backup: staleBackup}
+
+		disabled := false
+		disabledCfg := *cfg
+		disabledCfg.Spec.Backup = &enterprisev4.BackupConfig{Enabled: &disabled}
+
+		spec := buildCNPGClusterSpec(liveSpec, &disabledCfg, "my-secret", false)
+
+		assert.Nil(t, spec.Backup, "stale backup config must be cleared when backup is disabled")
 	})
 
 }
@@ -2051,7 +2185,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 				Name:      cluster.Name,
 				Namespace: cluster.Namespace,
 			},
-			Spec: buildCNPGClusterSpec(mergedConfig, "pg1-secret", false),
+			Spec: buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, mergedConfig, "pg1-secret", false),
 			Status: cnpgv1.ClusterStatus{
 				Phase: cnpgv1.PhaseHealthy,
 			},
@@ -4091,7 +4225,7 @@ func TestBuildCNPGClusterSpec_RoundTripUnderCRDDefaulting(t *testing.T) {
 			t.Parallel()
 
 			cfg := tc.fixture.mergedConfig()
-			desiredSpec := buildCNPGClusterSpec(cfg, "test-secret", tc.fixture.metricsEnabled)
+			desiredSpec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "test-secret", tc.fixture.metricsEnabled)
 
 			// Wrap into a full Cluster so the structural defaulter walks the
 			// real tree (TypeMeta + ObjectMeta + Spec), the same shape the
@@ -4139,7 +4273,7 @@ func TestBuildCNPGClusterSpec_RoundTrip_NegativeControl(t *testing.T) {
 	ss := loadCNPGClusterStructuralSchema(t)
 
 	cfg := defaultRoundTripFixture().mergedConfig()
-	desiredSpec := buildCNPGClusterSpec(cfg, "test-secret", false)
+	desiredSpec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "test-secret", false)
 	desiredSpec.PrimaryUpdateMethod = "" // simulate pre-fix builder.
 
 	beforeRT := &cnpgv1.Cluster{
@@ -4216,7 +4350,7 @@ func TestClusterModelActuateAdoptsOrphanedCNPGCluster(t *testing.T) {
 	// Orphaned CNPG cluster: same name/namespace but no owner reference.
 	orphanedCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(cfg, "pg1-secret", false),
+		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "pg1-secret", false),
 	}
 	events := &captureEventEmitter{}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(orphanedCNPG).Build()

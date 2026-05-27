@@ -674,7 +674,7 @@ func TestBuildCNPGClusterSpec_Backup(t *testing.T) {
 	t.Run("includes backup when enabled", func(t *testing.T) {
 		cfg := newTestMergedConfig(true, "0 2 * * *")
 
-		spec := buildCNPGClusterSpec(cfg, "secret", false)
+		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "secret", false)
 
 		require.NotNil(t, spec.Backup)
 		assert.Equal(t, cnpgv1.BackupTargetStandby, spec.Backup.Target)
@@ -685,7 +685,7 @@ func TestBuildCNPGClusterSpec_Backup(t *testing.T) {
 	t.Run("no backup section when disabled", func(t *testing.T) {
 		cfg := newTestMergedConfig(false, "")
 
-		spec := buildCNPGClusterSpec(cfg, "secret", false)
+		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "secret", false)
 
 		assert.Nil(t, spec.Backup)
 	})
@@ -694,7 +694,7 @@ func TestBuildCNPGClusterSpec_Backup(t *testing.T) {
 		cfg := newTestMergedConfig(true, "0 2 * * *")
 		cfg.CNPG.Backup = nil
 
-		spec := buildCNPGClusterSpec(cfg, "secret", false)
+		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "secret", false)
 
 		assert.Nil(t, spec.Backup)
 	})
