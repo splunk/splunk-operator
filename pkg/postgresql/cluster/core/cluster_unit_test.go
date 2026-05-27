@@ -17,15 +17,32 @@ package core
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/json"
+	"encoding/pem"
+	"errors"
 	"fmt"
+	"math/big"
+	"sort"
 	"testing"
+	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/google/go-cmp/cmp"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
+	structuraldefaulting "k8s.io/apiextensions-apiserver/pkg/apiserver/schema/defaulting"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -36,7 +53,62 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/yaml"
 )
+
+type sanPolicyMock struct {
+	ensureSANPolicyFn      func(context.Context) error
+	isSANPolicyConvergedFn func(context.Context) (bool, error)
+}
+
+func (m *sanPolicyMock) EnsureSANPolicy(ctx context.Context) error {
+	if m.ensureSANPolicyFn == nil {
+		return nil
+	}
+	return m.ensureSANPolicyFn(ctx)
+}
+
+func (m *sanPolicyMock) IsSANPolicyConverged(ctx context.Context) (bool, error) {
+	if m.isSANPolicyConvergedFn == nil {
+		return true, nil
+	}
+	return m.isSANPolicyConvergedFn(ctx)
+}
+
+// clusterRuntimeProbeMock is the read-side counterpart of sanPolicyMock.
+// Zero-value returns (true, nil) so tests that don't care about runtime
+// observations can pass `&clusterRuntimeProbeMock{}` unconfigured.
+type clusterRuntimeProbeMock struct {
+	isServerTLSLeafAlignedWithSpecFn func(context.Context) (bool, error)
+}
+
+func (m *clusterRuntimeProbeMock) IsServerTLSLeafAlignedWithSpec(ctx context.Context) (bool, error) {
+	if m.isServerTLSLeafAlignedWithSpecFn == nil {
+		return true, nil
+	}
+	return m.isServerTLSLeafAlignedWithSpecFn(ctx)
+}
+
+func testSelfSignedLeafCertPEM(t *testing.T, dnsNames []string) []byte {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	require.NoError(t, err)
+	tmpl := &x509.Certificate{
+		SerialNumber: serial,
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		DNSNames:     dnsNames,
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+	if len(dnsNames) > 0 {
+		tmpl.Subject = pkix.Name{CommonName: dnsNames[0]}
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	require.NoError(t, err)
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+}
 
 type configMapNotFoundClient struct {
 	client.Client
@@ -262,6 +334,21 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 			},
 		},
 		{
+			name: "image digest suffix stripped for drift detection",
+			spec: cnpgv1.ClusterSpec{
+				ImageName:            "ghcr.io/cloudnative-pg/postgresql:18@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				Instances:            1,
+				StorageConfiguration: cnpgv1.StorageConfiguration{Size: "10Gi"},
+			},
+			customDefinedParameters: nil,
+			expected: normalizedCNPGClusterSpec{
+				ImageName:           "ghcr.io/cloudnative-pg/postgresql:18",
+				Instances:           1,
+				PrimaryUpdateMethod: "",
+				StorageSize:         "10Gi",
+			},
+		},
+		{
 			name: "primary update method is included in drift detection",
 			spec: cnpgv1.ClusterSpec{
 				ImageName:           "img:18",
@@ -428,6 +515,176 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 	}
 }
 
+// Only cnpgPatchBody may force Converge to hold ClusterReady=Provisioning;
+// cnpgPatchNone / cnpgPatchMetadata must not gate. Add a row when adding a
+// new cnpgPatchKind constant.
+func TestCNPGPatchKind_RequiresPhaseGate(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		kind     cnpgPatchKind
+		wantGate bool
+	}{
+		{"none does not gate", cnpgPatchNone, false},
+		{"annotation-only does not gate", cnpgPatchMetadata, false},
+		{"material drift gates", cnpgPatchBody, true},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.wantGate, tc.kind.requiresPhaseGate())
+		})
+	}
+}
+
+// TestisClusterDrift locks the materiality contract used by Actuate to gate
+// ClusterReady. Adding a new field to normalizedCNPGClusterSpec should add a
+// matching positive-case row here so the contract stays observable in tests.
+func TestIsClusterDrift(t *testing.T) {
+	t.Parallel()
+
+	// clone copies the fields that hold reference types (slices, maps) so each
+	// table row mutates an independent value; otherwise a row that swaps the
+	// annotations map header would still share backing storage with `base`.
+	clone := func(s normalizedCNPGClusterSpec) normalizedCNPGClusterSpec {
+		out := s
+		if s.InheritedAnnotations != nil {
+			out.InheritedAnnotations = make(map[string]string, len(s.InheritedAnnotations))
+			for k, v := range s.InheritedAnnotations {
+				out.InheritedAnnotations[k] = v
+			}
+		}
+		if s.CustomDefinedParameters != nil {
+			out.CustomDefinedParameters = make(map[string]string, len(s.CustomDefinedParameters))
+			for k, v := range s.CustomDefinedParameters {
+				out.CustomDefinedParameters[k] = v
+			}
+		}
+		if s.PgHBA != nil {
+			out.PgHBA = append([]string(nil), s.PgHBA...)
+		}
+		return out
+	}
+
+	base := normalizedCNPGClusterSpec{
+		ImageName:           "ghcr.io/cloudnative-pg/postgresql:17",
+		Instances:           3,
+		PrimaryUpdateMethod: "restart",
+		StorageSize:         "10Gi",
+		Resources:           corev1.ResourceRequirements{},
+		DefaultDatabase:     "app",
+		Owner:               "app",
+		InheritedAnnotations: map[string]string{
+			prometheusScrapeAnnotation: "true",
+			prometheusPortAnnotation:   postgresMetricsPortString,
+		},
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(s *normalizedCNPGClusterSpec)
+		want   bool
+	}{
+		{
+			name:   "identical specs are not material drift",
+			mutate: func(s *normalizedCNPGClusterSpec) {},
+			want:   false,
+		},
+		{
+			name: "annotation-only drift is NOT material",
+			// Prometheus-scrape annotations toggle on/off without recreating pods or
+			// transitioning CNPG phase; gating ready on this would deadlock the gate.
+			mutate: func(s *normalizedCNPGClusterSpec) {
+				s.InheritedAnnotations = map[string]string{
+					prometheusScrapeAnnotation: "false",
+				}
+			},
+			want: false,
+		},
+		{
+			name: "annotation cleared (non-nil → nil) is NOT material",
+			mutate: func(s *normalizedCNPGClusterSpec) {
+				s.InheritedAnnotations = nil
+			},
+			want: false,
+		},
+		{
+			name: "image rollout IS material",
+			mutate: func(s *normalizedCNPGClusterSpec) {
+				s.ImageName = "ghcr.io/cloudnative-pg/postgresql:18"
+			},
+			want: true,
+		},
+		{
+			name: "instance scale IS material",
+			mutate: func(s *normalizedCNPGClusterSpec) {
+				s.Instances = 5
+			},
+			want: true,
+		},
+		{
+			name: "storage resize IS material",
+			mutate: func(s *normalizedCNPGClusterSpec) {
+				s.StorageSize = "20Gi"
+			},
+			want: true,
+		},
+		{
+			name: "PrimaryUpdateMethod drift (\"\" → \"restart\") IS material",
+			// This is the exact shape of the phantom-drift bug; isClusterDrift must
+			// flag it so Converge defers ready until phase reflects the patch.
+			mutate: func(s *normalizedCNPGClusterSpec) {
+				s.PrimaryUpdateMethod = ""
+			},
+			want: true,
+		},
+		{
+			name: "pg_hba change IS material",
+			mutate: func(s *normalizedCNPGClusterSpec) {
+				s.PgHBA = []string{"host all all all md5"}
+			},
+			want: true,
+		},
+		{
+			name: "image change + annotation change together IS material",
+			// Co-occurring material drift must not be hidden by the annotation strip.
+			mutate: func(s *normalizedCNPGClusterSpec) {
+				s.ImageName = "ghcr.io/cloudnative-pg/postgresql:18"
+				s.InheritedAnnotations = map[string]string{prometheusScrapeAnnotation: "false"}
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := clone(base)
+			b := clone(base)
+			tt.mutate(&b)
+			assert.Equal(t, tt.want, isClusterDrift(a, b),
+				"isClusterDrift result mismatch; remember: every normalized field is material EXCEPT InheritedAnnotations")
+		})
+	}
+
+	t.Run("does not mutate caller's specs", func(t *testing.T) {
+		// Pass-by-value is deliberate; this test guards against a future refactor
+		// that "optimizes" the helper into pointer receivers and accidentally
+		// nukes the caller's InheritedAnnotations map header.
+		a := clone(base)
+		b := clone(base)
+		b.ImageName = "different"
+
+		_ = isClusterDrift(a, b)
+
+		require.NotNil(t, a.InheritedAnnotations, "isClusterDrift must not mutate caller's a.InheritedAnnotations")
+		require.NotNil(t, b.InheritedAnnotations, "isClusterDrift must not mutate caller's b.InheritedAnnotations")
+		assert.Equal(t, "true", a.InheritedAnnotations[prometheusScrapeAnnotation])
+		assert.Equal(t, "true", b.InheritedAnnotations[prometheusScrapeAnnotation])
+	})
+}
+
 func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 	t.Parallel()
 
@@ -475,7 +732,11 @@ func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 	model := newClusterModel(c, scheme, events, nil, cluster, clusterClass, desiredConfig, "pg1-secret")
 	model.Actuate(context.Background())
 
-	require.True(t, model.cnpgPatched)
+	// PrimaryUpdateMethod is a material (structural) field — Converge must
+	// gate phase on this patch. Stronger than the previous "cnpgPatched true"
+	// assertion: also locks the classification.
+	require.Equal(t, cnpgPatchBody, model.cnpgPatch)
+	assert.True(t, model.cnpgPatch.requiresPhaseGate())
 	assert.False(t, model.cnpgCreated)
 
 	updated := &cnpgv1.Cluster{}
@@ -1333,7 +1594,7 @@ func TestGenerateConfigMap(t *testing.T) {
 
 	t.Run("base endpoints without poolers", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret")
+		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret", true)
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-configmap", cm.Name)
@@ -1357,7 +1618,7 @@ func TestGenerateConfigMap(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "my-cluster-pooler-ro", Namespace: "default"},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(rwPooler, roPooler).Build()
-		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret")
+		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret", true)
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-pooler-rw.default", cm.Data["CLUSTER_POOLER_RW_ENDPOINT"])
@@ -1371,7 +1632,7 @@ func TestGenerateConfigMap(t *testing.T) {
 			ConfigMapRef: &corev1.LocalObjectReference{Name: "custom-configmap"},
 		}
 
-		cm, err := generateConfigMap(context.Background(), c, scheme, pg, cnpgCluster, "my-secret")
+		cm, err := generateConfigMap(context.Background(), c, scheme, pg, cnpgCluster, "my-secret", true)
 
 		require.NoError(t, err)
 		assert.Equal(t, "custom-configmap", cm.Name)
@@ -1385,19 +1646,19 @@ func TestGenerateConfigMap(t *testing.T) {
 		cnpg := cnpgCluster.DeepCopy()
 		cnpg.Status.Certificates.ServerCASecret = "my-server-ca"
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(caSecret).Build()
-		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpg, "my-secret")
+		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpg, "my-secret", true)
 		require.NoError(t, err)
 		expectedCASecretRef := &corev1.SecretKeySelector{
 			LocalObjectReference: corev1.LocalObjectReference{Name: "my-server-ca"},
 			Key:                  defaultServerCACertKey,
 		}
-		assert.Equal(t, expectedCASecretRef.String(), cm.Data[configKeyServerCASecretRef])
+		assert.Equal(t, fmt.Sprintf("%s/%s", expectedCASecretRef.Name, expectedCASecretRef.Key), cm.Data[configKeyServerCASecretRef])
 		assert.NotContains(t, cm.Data, "SERVER_CA_CERT_KEY")
 	})
 
 	t.Run("omits CA metadata when not available", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret")
+		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret", true)
 		require.NoError(t, err)
 		assert.NotContains(t, cm.Data, configKeyServerCASecretRef)
 		assert.NotContains(t, cm.Data, "SERVER_CA_CERT_KEY")
@@ -1405,7 +1666,7 @@ func TestGenerateConfigMap(t *testing.T) {
 
 	t.Run("omits CA metadata when status is not available", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret")
+		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret", true)
 		require.NoError(t, err)
 		assert.NotContains(t, cm.Data, configKeyServerCASecretRef)
 		assert.NotContains(t, cm.Data, "SERVER_CA_CERT_KEY")
@@ -1413,7 +1674,7 @@ func TestGenerateConfigMap(t *testing.T) {
 
 	t.Run("omits CA metadata when secret is not found", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret")
+		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret", true)
 		require.NoError(t, err)
 		assert.NotContains(t, cm.Data, configKeyServerCASecretRef)
 		assert.NotContains(t, cm.Data, "SERVER_CA_CERT_KEY")
@@ -1477,7 +1738,7 @@ func TestConfigMapConverge_RequeuesWhenCNPGPublishesCASecretButMetadataMissing(t
 		scheme,
 		noopEventEmitter{},
 		nil,
-		clusterRuntimeViewAdapter{model: &clusterModel{cnpgCluster: cnpg}},
+		clusterRuntimeViewAdapter{model: &clusterModel{client: c, cluster: cluster, cnpgCluster: cnpg}},
 		cluster,
 		"pg1-secret",
 	)
@@ -1490,6 +1751,97 @@ func TestConfigMapConverge_RequeuesWhenCNPGPublishesCASecretButMetadataMissing(t
 	assert.Equal(t, msgConfigMapCAMetadataPending, health.Message)
 	assert.Equal(t, provisioningClusterPhase, health.Phase)
 	assert.True(t, health.Result.RequeueAfter > 0)
+}
+
+// Asserts configMapModel.Actuate omits CLUSTER_POOLER_* until the server TLS
+// leaf covers the pooler SANs. Two subtests share one fake apiserver to mirror
+// the live reconcile sequence (stale leaf, then rotated leaf).
+func TestConfigMapActuateGatesPoolerKeysOnTLSLeafAlignment(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+
+	const (
+		clusterName   = "pg1"
+		namespace     = "default"
+		tlsSecretName = "pg1-server-tls"
+		baseRWSAN     = "pg1-rw.default.svc.cluster.local"
+		poolerRWSAN   = "pg1-pooler-rw.default.svc.cluster.local"
+		poolerROSAN   = "pg1-pooler-ro.default.svc.cluster.local"
+		configMapName = clusterName + defaultConfigMapSuffix
+	)
+	desiredSANs := []string{baseRWSAN, poolerRWSAN, poolerROSAN}
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: namespace, UID: "cluster-uid"},
+	}
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: namespace},
+		Spec: cnpgv1.ClusterSpec{
+			Certificates: &cnpgv1.CertificatesConfiguration{ServerAltDNSNames: desiredSANs},
+		},
+		Status: cnpgv1.ClusterStatus{
+			Phase: cnpgv1.PhaseHealthy,
+			Certificates: cnpgv1.CertificatesStatus{
+				CertificatesConfiguration: cnpgv1.CertificatesConfiguration{ServerTLSSecret: tlsSecretName},
+			},
+		},
+	}
+	rwPooler := &cnpgv1.Pooler{
+		ObjectMeta: metav1.ObjectMeta{Name: poolerResourceName(clusterName, readWriteEndpoint), Namespace: namespace},
+	}
+	roPooler := &cnpgv1.Pooler{
+		ObjectMeta: metav1.ObjectMeta{Name: poolerResourceName(clusterName, readOnlyEndpoint), Namespace: namespace},
+	}
+	staleSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: tlsSecretName, Namespace: namespace},
+		Data:       map[string][]byte{corev1.TLSCertKey: testSelfSignedLeafCertPEM(t, []string{baseRWSAN})},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cnpg.DeepCopy(), rwPooler, roPooler, staleSecret).
+		Build()
+
+	model := newConfigMapModel(
+		c,
+		scheme,
+		noopEventEmitter{},
+		nil,
+		clusterRuntimeViewAdapter{model: &clusterModel{client: c, cluster: cluster, cnpgCluster: cnpg}},
+		cluster,
+		"pg1-secret",
+	)
+
+	t.Run("stale_leaf_omits_pooler_keys", func(t *testing.T) {
+		model.Actuate(t.Context())
+		require.NoError(t, model.actuateErr)
+
+		var cm corev1.ConfigMap
+		require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: configMapName, Namespace: namespace}, &cm))
+
+		assert.Equal(t, "pg1-rw.default", cm.Data[configKeyClusterRWEndpoint])
+		assert.Equal(t, "pg1-ro.default", cm.Data[configKeyClusterROEndpoint])
+		assert.NotContains(t, cm.Data, configKeyPoolerRWEndpoint)
+		assert.NotContains(t, cm.Data, configKeyPoolerROEndpoint)
+	})
+
+	t.Run("aligned_leaf_publishes_pooler_keys", func(t *testing.T) {
+		var rotated corev1.Secret
+		require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: tlsSecretName, Namespace: namespace}, &rotated))
+		rotated.Data[corev1.TLSCertKey] = testSelfSignedLeafCertPEM(t, desiredSANs)
+		require.NoError(t, c.Update(t.Context(), &rotated))
+
+		model.Actuate(t.Context())
+		require.NoError(t, model.actuateErr)
+
+		var cm corev1.ConfigMap
+		require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: configMapName, Namespace: namespace}, &cm))
+
+		assert.Equal(t, "pg1-pooler-rw.default", cm.Data[configKeyPoolerRWEndpoint])
+		assert.Equal(t, "pg1-pooler-ro.default", cm.Data[configKeyPoolerROEndpoint])
+	})
 }
 
 func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
@@ -1709,11 +2061,15 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 		return newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster, exampleClusterClass, mergedConfig, "pg1-secret")
 	}
 
-	makeRuntimeView := func(healthy bool) clusterRuntimeView {
+	// client+cluster are required for IsServerTLSLeafAlignedWithSpec to
+	// short-circuit (no CNPG seeded → probe returns true).
+	makeRuntimeView := func(c client.Client, cluster *enterprisev4.PostgresCluster, healthy bool) clusterRuntimeView {
 		if !healthy {
-			return clusterRuntimeViewAdapter{model: &clusterModel{}}
+			return clusterRuntimeViewAdapter{model: &clusterModel{client: c, cluster: cluster}}
 		}
 		return clusterRuntimeViewAdapter{model: &clusterModel{
+			client:  c,
+			cluster: cluster,
 			cnpgCluster: &cnpgv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 				Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
@@ -1721,11 +2077,13 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 		}}
 	}
 
-	makeRuntimeViewWithCA := func(healthy bool) clusterRuntimeView {
+	makeRuntimeViewWithCA := func(c client.Client, cluster *enterprisev4.PostgresCluster, healthy bool) clusterRuntimeView {
 		if !healthy {
-			return clusterRuntimeViewAdapter{model: &clusterModel{}}
+			return clusterRuntimeViewAdapter{model: &clusterModel{client: c, cluster: cluster}}
 		}
 		return clusterRuntimeViewAdapter{model: &clusterModel{
+			client:  c,
+			cluster: cluster,
 			cnpgCluster: &cnpgv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 				Status: cnpgv1.ClusterStatus{
@@ -1765,6 +2123,8 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 					nil,
 					true,
 					true,
+					&sanPolicyMock{},
+					&clusterRuntimeProbeMock{},
 				)
 				return []component{provisioner, pooler}
 			}(),
@@ -1789,17 +2149,20 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 					nil,
 					false,
 					false,
+					&sanPolicyMock{},
+					&clusterRuntimeProbeMock{},
 				)
+				cmClient := configMapNotFoundClient{
+					Client: fake.NewClientBuilder().
+						WithScheme(scheme).
+						Build(),
+				}
 				configMap := newConfigMapModel(
-					configMapNotFoundClient{
-						Client: fake.NewClientBuilder().
-							WithScheme(scheme).
-							Build(),
-					},
+					cmClient,
 					scheme,
 					noopEventEmitter{},
 					nil,
-					makeRuntimeView(true),
+					makeRuntimeView(cmClient, cluster, true),
 					cluster,
 					"pg1-secret",
 				)
@@ -1826,16 +2189,19 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 					nil,
 					false,
 					false,
+					&sanPolicyMock{},
+					&clusterRuntimeProbeMock{},
 				)
+				cmClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(exampleCm, exampleCASecret).
+					Build()
 				configMap := newConfigMapModel(
-					fake.NewClientBuilder().
-						WithScheme(scheme).
-						WithObjects(exampleCm, exampleCASecret).
-						Build(),
+					cmClient,
 					scheme,
 					noopEventEmitter{},
 					nil,
-					makeRuntimeViewWithCA(true),
+					makeRuntimeViewWithCA(cmClient, cluster, true),
 					cluster,
 					"pg1-secret",
 				)
@@ -2261,7 +2627,7 @@ func TestActuateErrorPassdownConvergeHandling(t *testing.T) {
 						},
 					},
 				}
-				return newPoolerModel(errClient, scheme, noopEventEmitter{}, updateStatus, cluster, clusterClass, poolerCfg, cnpg, true, true)
+				return newPoolerModel(errClient, scheme, noopEventEmitter{}, updateStatus, cluster, clusterClass, poolerCfg, cnpg, true, true, &sanPolicyMock{}, &clusterRuntimeProbeMock{})
 			},
 		},
 		{
@@ -2291,7 +2657,7 @@ func TestActuateErrorPassdownConvergeHandling(t *testing.T) {
 					scheme,
 					noopEventEmitter{},
 					updateStatus,
-					clusterRuntimeViewAdapter{model: &clusterModel{cnpgCluster: cnpg}},
+					clusterRuntimeViewAdapter{model: &clusterModel{client: errClient, cluster: cluster, cnpgCluster: cnpg}},
 					cluster,
 					"pg1-secret",
 				)
@@ -2389,6 +2755,8 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 			nil,
 			true,
 			true,
+			&sanPolicyMock{},
+			&clusterRuntimeProbeMock{},
 		)
 
 		health, err := model.Converge(context.Background())
@@ -2439,6 +2807,8 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 			&cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy}},
 			true,
 			true,
+			&sanPolicyMock{},
+			&clusterRuntimeProbeMock{},
 		)
 
 		health, err := model.Converge(context.Background())
@@ -2478,7 +2848,13 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 				return key.Name == rwName
 			},
 		}
-		model := newPoolerModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, &MergedConfig{}, &cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy}}, true, true)
+		model := newPoolerModel(
+			c, scheme, noopEventEmitter{},
+			nil, cluster, clusterClass, &MergedConfig{},
+			&cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy}},
+			true, true,
+			&sanPolicyMock{},
+			&clusterRuntimeProbeMock{})
 
 		health, err := model.Converge(context.Background())
 		require.Error(t, err)
@@ -2516,7 +2892,12 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 				return key.Name == roName
 			},
 		}
-		model := newPoolerModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, &MergedConfig{}, &cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy}}, true, true)
+		model := newPoolerModel(c, scheme, noopEventEmitter{},
+			nil, cluster, clusterClass, &MergedConfig{},
+			&cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy}},
+			true, true,
+			&sanPolicyMock{},
+			&clusterRuntimeProbeMock{})
 
 		health, err := model.Converge(context.Background())
 		require.Error(t, err)
@@ -2554,6 +2935,8 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 			nil,
 			false,
 			false,
+			&sanPolicyMock{},
+			&clusterRuntimeProbeMock{},
 		)
 
 		model.Actuate(context.Background())
@@ -2612,6 +2995,8 @@ func TestPoolerConvergeEmitsReadyEventOnTransition(t *testing.T) {
 		&cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy}},
 		true,
 		true,
+		&sanPolicyMock{},
+		&clusterRuntimeProbeMock{},
 	)
 
 	_, err := model.Converge(context.Background())
@@ -2628,6 +3013,761 @@ func TestPoolerConvergeEmitsReadyEventOnTransition(t *testing.T) {
 	_, err = model.Converge(context.Background())
 	require.NoError(t, err)
 	assert.Empty(t, events.normals)
+}
+
+func TestPoolerModelConvergeWaitsForSANPolicy(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+	}
+	clusterClass := &enterprisev4.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pg1-class",
+			Namespace: "default",
+		},
+		Spec: enterprisev4.PostgresClusterClassSpec{
+			Config: &enterprisev4.PostgresClusterClassConfig{
+				ConnectionPoolerEnabled: ptr.To(true),
+			},
+		},
+	}
+
+	model := newPoolerModel(
+		fake.NewClientBuilder().WithScheme(scheme).Build(),
+		scheme,
+		noopEventEmitter{},
+		nil,
+		cluster,
+		clusterClass,
+		&MergedConfig{},
+		&cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy}},
+		true,
+		true,
+		&sanPolicyMock{
+			isSANPolicyConvergedFn: func(context.Context) (bool, error) { return false, nil },
+		},
+		&clusterRuntimeProbeMock{},
+	)
+
+	health, err := model.Converge(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, pgcConstants.Provisioning, health.State)
+	assert.Equal(t, reasonPoolerSANsPending, health.Reason)
+	assert.Equal(t, msgPoolerSANsPending, health.Message)
+	assert.True(t, health.Result.RequeueAfter > 0)
+}
+
+func TestPoolerModelConvergeWaitsForTLSLeafMaterial(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+	}
+	clusterClass := &enterprisev4.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pg1-class",
+			Namespace: "default",
+		},
+		Spec: enterprisev4.PostgresClusterClassSpec{
+			Config: &enterprisev4.PostgresClusterClassConfig{
+				ConnectionPoolerEnabled: ptr.To(true),
+			},
+		},
+	}
+
+	// Healthy CNPG so upstream gates pass; the ClusterRuntimeProbe mock is the seam.
+	cnpgLive := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Status: cnpgv1.ClusterStatus{
+			Phase: cnpgv1.PhaseHealthy,
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpgLive.DeepCopy()).Build()
+
+	// Asserts the port contract only: probe-false ⇒ PoolerTLSLeafPending + requeue.
+	// Probe internals are covered by TestClusterModelIsServerTLSLeafAlignedWithSpec.
+	model := newPoolerModel(
+		c,
+		scheme,
+		noopEventEmitter{},
+		nil,
+		cluster,
+		clusterClass,
+		&MergedConfig{},
+		cnpgLive,
+		true,
+		true,
+		&sanPolicyMock{
+			isSANPolicyConvergedFn: func(context.Context) (bool, error) { return true, nil },
+		},
+		&clusterRuntimeProbeMock{
+			isServerTLSLeafAlignedWithSpecFn: func(context.Context) (bool, error) { return false, nil },
+		},
+	)
+
+	health, err := model.Converge(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, pgcConstants.Provisioning, health.State)
+	assert.Equal(t, reasonPoolerTLSLeafPending, health.Reason)
+	assert.Equal(t, msgPoolerTLSLeafPending, health.Message)
+	assert.True(t, health.Result.RequeueAfter > 0)
+}
+
+// Drives the structural-failure leg of the TLS-leaf check: probe returns the
+// errServerTLSLeafInvalid sentinel → Converge must surface a Failed condition
+// with the dedicated reason and a SCRUBBED Message/event (no parser internals).
+func TestPoolerModelConvergeTLSLeafInvalidCertEmitsFailed(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "demo"},
+	}
+	clusterClass := &enterprisev4.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "demo"},
+		Spec: enterprisev4.PostgresClusterClassSpec{
+			Config: &enterprisev4.PostgresClusterClassConfig{
+				ConnectionPoolerEnabled: ptr.To(true),
+			},
+		},
+	}
+
+	// Seed Status.Certificates.ServerTLSSecret so the demux can resolve a
+	// secret name independent of the wrapped error string (caller MUST NOT
+	// parse the error to learn the secret name).
+	cnpgLive := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "demo"},
+		Status: cnpgv1.ClusterStatus{
+			Phase: cnpgv1.PhaseHealthy,
+			Certificates: cnpgv1.CertificatesStatus{
+				CertificatesConfiguration: cnpgv1.CertificatesConfiguration{
+					ServerTLSSecret: "pg1-server-tls",
+				},
+			},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpgLive.DeepCopy()).Build()
+
+	events := &captureEventEmitter{}
+	probeSentinel := fmt.Errorf("%w: x509 parse failed for secret demo/pg1-server-tls: x509: malformed certificate", errServerTLSLeafInvalid)
+
+	model := newPoolerModel(
+		c,
+		scheme,
+		events,
+		nil,
+		cluster,
+		clusterClass,
+		&MergedConfig{},
+		cnpgLive,
+		true,
+		true,
+		&sanPolicyMock{
+			isSANPolicyConvergedFn: func(context.Context) (bool, error) { return true, nil },
+		},
+		&clusterRuntimeProbeMock{
+			isServerTLSLeafAlignedWithSpecFn: func(context.Context) (bool, error) {
+				return false, probeSentinel
+			},
+		},
+	)
+
+	health, err := model.Converge(context.Background())
+
+	require.Error(t, err, "structural TLS-leaf failure must propagate so controller-runtime requeues with backoff")
+	assert.True(t, errors.Is(err, errServerTLSLeafInvalid), "returned error must still wrap the sentinel for upstream callers")
+	assert.Equal(t, pgcConstants.Failed, health.State, "structural failure must escalate to Failed, not Provisioning")
+	assert.Equal(t, reasonPoolerTLSLeafInvalidCert, health.Reason, "Failed must use the dedicated reason, not the generic PoolerReconciliationFailed")
+	assert.Equal(t, failedClusterPhase, health.Phase)
+
+	expectedMsg := fmt.Sprintf(string(msgFmtPoolerTLSLeafInvalidCert), "demo", "pg1-server-tls")
+	assert.Equal(t, expectedMsg, health.Message, "Condition.Message must be the canonical scrubbed format, not the wrapped error string")
+	assert.NotContains(t, health.Message, "x509 parse failed", "Condition.Message must NOT leak parser internals")
+	assert.NotContains(t, health.Message, "malformed certificate", "Condition.Message must NOT leak parser internals")
+
+	require.Len(t, events.warnings, 1, "exactly one warning event must be emitted")
+	emitted := events.warnings[0]
+	assert.Contains(t, emitted, string(EventPoolerReconcileFailed)+":")
+	assert.Contains(t, emitted, expectedMsg, "event payload must match Condition.Message exactly")
+	assert.NotContains(t, emitted, "x509 parse failed", "event must NOT leak parser internals")
+	assert.NotContains(t, emitted, "malformed certificate", "event must NOT leak parser internals")
+}
+
+func TestPoolerModelActuatePropagatesSANEnsureFailure(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+	}
+	clusterClass := &enterprisev4.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pg1-class",
+			Namespace: "default",
+		},
+		Spec: enterprisev4.PostgresClusterClassSpec{
+			Config: &enterprisev4.PostgresClusterClassConfig{
+				ConnectionPoolerEnabled: ptr.To(true),
+			},
+		},
+	}
+
+	model := newPoolerModel(
+		fake.NewClientBuilder().WithScheme(scheme).Build(),
+		scheme,
+		noopEventEmitter{},
+		nil,
+		cluster,
+		clusterClass,
+		&MergedConfig{},
+		&cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy}},
+		true,
+		true,
+		&sanPolicyMock{
+			ensureSANPolicyFn: func(context.Context) error { return assert.AnError },
+		},
+		&clusterRuntimeProbeMock{},
+	)
+
+	model.Actuate(context.Background())
+	health, err := model.Converge(context.Background())
+	require.Error(t, err)
+	require.ErrorIs(t, err, assert.AnError)
+	assert.Equal(t, pgcConstants.Failed, health.State)
+	assert.Equal(t, reasonPoolerReconciliationFailed, health.Reason)
+}
+
+// Disabled-branch + nil CNPG snapshot is the bootstrap-race case: user has
+// poolerEnabled=false and the cnpgv1.Cluster has not been reconciled into
+// existence yet. The disabled branch deliberately skips EnsureSANPolicy
+// (SAN policy is a no-op without a pooler), so Actuate must complete
+// cleanly without surfacing a Failed condition or an actuateErr.
+func TestPoolerModelActuateDisabledIsCleanWhenCNPGAbsent(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+	}
+	clusterClass := &enterprisev4.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "default"},
+	}
+
+	// Mock is wired for completeness but the disabled branch must not call
+	// it — SAN policy enforcement is gated out at the orchestration layer.
+	// We're asserting the outcome: no Failed, no error, no warning event.
+	events := &captureEventEmitter{}
+	model := newPoolerModel(
+		fake.NewClientBuilder().WithScheme(scheme).Build(),
+		scheme,
+		events,
+		nil,
+		cluster,
+		clusterClass,
+		&MergedConfig{},
+		nil, // cnpgCluster absent — bootstrap race
+		false,
+		false,
+		&sanPolicyMock{},
+		&clusterRuntimeProbeMock{},
+	)
+
+	model.Actuate(context.Background())
+
+	assert.NoError(t, model.actuateErr, "Actuate must complete cleanly; SAN leaf short-circuits and pooler deletion is CNPG-independent")
+	assert.NotEqual(t, pgcConstants.Failed, model.health.State, "disabled-branch + nil CNPG must not produce a Failed health condition")
+	assert.Empty(t, events.warnings, "no warning events should be emitted on the happy bootstrap-race path")
+}
+
+// EnsureSANPolicy must NOT silently succeed when the cnpgv1.Cluster has
+// vanished between the orchestration-layer snapshot and the leaf's fresh Get
+// (the TOCTOU window). It must surface a real error so the caller can route
+// to Failed and controller-runtime requeues with backoff.
+func TestClusterModelEnsureSANPolicyReturnsErrorWhenCNPGMissing(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+
+	// Empty client → getCNPGCluster returns (nil, nil) → leaf must escalate.
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	model := &clusterModel{
+		client: c,
+		cluster: &enterprisev4.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		},
+		mergedConfig: &MergedConfig{
+			Spec: &enterprisev4.PostgresClusterSpec{
+				ConnectionPoolerEnabled: ptr.To(true),
+			},
+		},
+	}
+
+	err := model.EnsureSANPolicy(context.Background())
+	require.Error(t, err, "missing CNPG MUST escalate; silent nil would lie about idempotent convergence")
+	assert.Contains(t, err.Error(), "default/pg1", "error must identify the offending resource for log search")
+	assert.Contains(t, err.Error(), "not found", "error must name the actual failure mode for the operator")
+}
+
+func TestClusterModelEnsureSANPolicy(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec: cnpgv1.ClusterSpec{
+			Certificates: &cnpgv1.CertificatesConfiguration{
+				ServerAltDNSNames: []string{"existing.example"},
+			},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
+
+	model := &clusterModel{
+		client: c,
+		cluster: &enterprisev4.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		},
+		mergedConfig: &MergedConfig{
+			Spec: &enterprisev4.PostgresClusterSpec{
+				ConnectionPoolerEnabled: ptr.To(true),
+			},
+		},
+	}
+	require.NoError(t, model.EnsureSANPolicy(context.Background()))
+
+	var got cnpgv1.Cluster
+	require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "pg1", Namespace: "default"}, &got))
+	assert.Contains(t, got.Spec.Certificates.ServerAltDNSNames, "existing.example")
+	assert.Contains(t, got.Spec.Certificates.ServerAltDNSNames, "pg1-pooler-rw.default"+poolerSANSuffix)
+	assert.Contains(t, got.Spec.Certificates.ServerAltDNSNames, "pg1-pooler-ro.default"+poolerSANSuffix)
+
+	// Idempotency: the second call must NOT patch the object. Probe via the
+	// fake client's ResourceVersion, which the fake bumps only on writes.
+	rvBefore := got.ResourceVersion
+	require.NoError(t, model.EnsureSANPolicy(context.Background()))
+	require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "pg1", Namespace: "default"}, &got))
+	assert.Equal(t, rvBefore, got.ResourceVersion, "second EnsureSANPolicy call must be a no-op (no patch)")
+}
+
+func TestClusterModelSANPolicyPoolerDisabledRetainsPoolerSANs(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+
+	rwShort := "pg1-pooler-rw.default"
+	roShort := "pg1-pooler-ro.default"
+	initial := []string{
+		"existing.example",
+		rwShort,
+		rwShort + poolerSANSuffix,
+		roShort,
+		roShort + poolerSANSuffix,
+	}
+	// Desired SAN list is always sorted in reconcile; spec order must match for DeepEqual(no-op).
+	specSANs := append([]string(nil), initial...)
+	sort.Strings(specSANs)
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec: cnpgv1.ClusterSpec{
+			Certificates: &cnpgv1.CertificatesConfiguration{
+				ServerAltDNSNames: specSANs,
+			},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
+
+	model := &clusterModel{
+		client: c,
+		cluster: &enterprisev4.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		},
+		mergedConfig: &MergedConfig{
+			Spec: &enterprisev4.PostgresClusterSpec{
+				ConnectionPoolerEnabled: ptr.To(false),
+			},
+		},
+	}
+	require.NoError(t, model.EnsureSANPolicy(context.Background()))
+
+	var got cnpgv1.Cluster
+	require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "pg1", Namespace: "default"}, &got))
+	assert.ElementsMatch(t, initial, got.Spec.Certificates.ServerAltDNSNames, "pooler disabled must not patch SANs away")
+
+	converged, err := model.IsSANPolicyConverged(context.Background())
+	require.NoError(t, err)
+	assert.True(t, converged)
+}
+
+func TestClusterModelSANPolicyPoolerDisabledDoesNotInjectPoolerSANsWhenAbsent(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec: cnpgv1.ClusterSpec{
+			Certificates: &cnpgv1.CertificatesConfiguration{
+				ServerAltDNSNames: []string{"only-custom.example"},
+			},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
+
+	model := &clusterModel{
+		client: c,
+		cluster: &enterprisev4.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		},
+		mergedConfig: &MergedConfig{
+			Spec: &enterprisev4.PostgresClusterSpec{
+				ConnectionPoolerEnabled: ptr.To(false),
+			},
+		},
+	}
+	require.NoError(t, model.EnsureSANPolicy(context.Background()))
+
+	var got cnpgv1.Cluster
+	require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "pg1", Namespace: "default"}, &got))
+	assert.Equal(t, []string{"only-custom.example"}, got.Spec.Certificates.ServerAltDNSNames,
+		"pooler disabled must not add pooler DNS names when they are absent from spec")
+
+	converged, err := model.IsSANPolicyConverged(context.Background())
+	require.NoError(t, err)
+	assert.True(t, converged)
+
+	for _, s := range got.Spec.Certificates.ServerAltDNSNames {
+		assert.NotContains(t, s, "pooler-rw")
+		assert.NotContains(t, s, "pooler-ro")
+	}
+}
+
+func TestClusterModelIsSANPolicyConvergedNilVsEmptyServerAltDNSNames(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec: cnpgv1.ClusterSpec{
+			Certificates: &cnpgv1.CertificatesConfiguration{
+				ServerAltDNSNames: nil,
+			},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
+
+	model := &clusterModel{
+		client: c,
+		cluster: &enterprisev4.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		},
+		mergedConfig: &MergedConfig{
+			Spec: &enterprisev4.PostgresClusterSpec{
+				ConnectionPoolerEnabled: ptr.To(false),
+			},
+		},
+	}
+	require.NoError(t, model.EnsureSANPolicy(context.Background()))
+
+	converged, err := model.IsSANPolicyConverged(context.Background())
+	require.NoError(t, err)
+	assert.True(t, converged)
+}
+
+func TestClusterModelSANPolicyPoolerEnabledAddsShortAndFQDNPoolerSANs(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec: cnpgv1.ClusterSpec{
+			Certificates: &cnpgv1.CertificatesConfiguration{
+				ServerAltDNSNames: []string{"static.example"},
+			},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
+
+	model := &clusterModel{
+		client: c,
+		cluster: &enterprisev4.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		},
+		mergedConfig: &MergedConfig{
+			Spec: &enterprisev4.PostgresClusterSpec{
+				ConnectionPoolerEnabled: ptr.To(true),
+			},
+		},
+	}
+	require.NoError(t, model.EnsureSANPolicy(context.Background()))
+
+	var got cnpgv1.Cluster
+	require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "pg1", Namespace: "default"}, &got))
+	ns := "default"
+	rwShort := "pg1-pooler-rw." + ns
+	roShort := "pg1-pooler-ro." + ns
+	for _, want := range []string{
+		rwShort,
+		rwShort + poolerSANSuffix,
+		roShort,
+		roShort + poolerSANSuffix,
+	} {
+		assert.Contains(t, got.Spec.Certificates.ServerAltDNSNames, want)
+	}
+}
+
+func TestClusterModelIsSANPolicyConvergedPoolerEnabledDetectsDrift(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec: cnpgv1.ClusterSpec{
+			Certificates: &cnpgv1.CertificatesConfiguration{
+				ServerAltDNSNames: []string{"static.example", "pg1-pooler-rw.default"},
+			},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
+
+	model := &clusterModel{
+		client: c,
+		cluster: &enterprisev4.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		},
+		mergedConfig: &MergedConfig{
+			Spec: &enterprisev4.PostgresClusterSpec{
+				ConnectionPoolerEnabled: ptr.To(true),
+			},
+		},
+	}
+	ok, err := model.IsSANPolicyConverged(context.Background())
+	require.NoError(t, err)
+	assert.False(t, ok, "missing RO / fqdn pooler SANs must not converge")
+
+	require.NoError(t, model.EnsureSANPolicy(context.Background()))
+
+	ok, err = model.IsSANPolicyConverged(context.Background())
+	require.NoError(t, err)
+	assert.True(t, ok, "EnsureSANPolicy must have patched the missing pooler SANs")
+}
+
+// When the pooler is disabled, EnsureSANPolicy MUST be a strict no-op: no
+// CNPG Get, no patch, no normalization. Cosmetic sort-order drift introduced
+// by external edits (e.g., kubectl edit reordering ServerAltDNSNames) is
+// intentionally NOT canonicalized in this state — the microseconds saved per
+// reconcile outweigh the defense, because CNPG generates the server cert from
+// the SAN list as a set, so order alone does not trigger rotation. Any
+// structural drift is re-canonicalized when pooler is re-enabled.
+func TestClusterModelSANPolicyPoolerDisabledIsStrictNoOp(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+
+	unsorted := []string{"zebra.internal", "alpha.internal"}
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec: cnpgv1.ClusterSpec{
+			Certificates: &cnpgv1.CertificatesConfiguration{
+				ServerAltDNSNames: append([]string(nil), unsorted...),
+			},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
+
+	model := &clusterModel{
+		client: c,
+		cluster: &enterprisev4.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		},
+		mergedConfig: &MergedConfig{
+			Spec: &enterprisev4.PostgresClusterSpec{
+				ConnectionPoolerEnabled: ptr.To(false),
+			},
+		},
+	}
+
+	// Convergence is trivially true when pooler is disabled — there is no
+	// desired SAN policy to converge to.
+	ok, err := model.IsSANPolicyConverged(context.Background())
+	require.NoError(t, err)
+	assert.True(t, ok, "IsSANPolicyConverged must return true unconditionally when pooler is disabled")
+
+	// EnsureSANPolicy MUST short-circuit on the pooler-disabled fast-path: no
+	// patch is issued, the unsorted spec is preserved verbatim. Probe both via
+	// ResourceVersion (write-detector) and the slice content itself.
+	var preCNPG cnpgv1.Cluster
+	require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "pg1", Namespace: "default"}, &preCNPG))
+	rvBefore := preCNPG.ResourceVersion
+
+	require.NoError(t, model.EnsureSANPolicy(context.Background()))
+
+	var got cnpgv1.Cluster
+	require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "pg1", Namespace: "default"}, &got))
+	assert.Equal(t, rvBefore, got.ResourceVersion, "EnsureSANPolicy must be a strict no-op when pooler is disabled — no patch")
+	assert.Equal(t, unsorted, got.Spec.Certificates.ServerAltDNSNames, "the unsorted spec must be preserved verbatim; pooler-disabled does not normalize")
+
+	// And convergence stays trivially true regardless of the unsorted state.
+	ok, err = model.IsSANPolicyConverged(context.Background())
+	require.NoError(t, err)
+	assert.True(t, ok)
+}
+
+// Drives the ClusterRuntimeProbe.IsServerTLSLeafAlignedWithSpec method against
+// a fake client and locks the PEM/parse soft-fail contract.
+func TestClusterModelIsServerTLSLeafAlignedWithSpec(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	// Minimum shape the method reads: client + cluster Name/Namespace.
+	makeModel := func(c client.Client, name string) *clusterModel {
+		return &clusterModel{
+			client: c,
+			cluster: &enterprisev4.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			},
+		}
+	}
+
+	wantSANs := []string{"pg1-rw.default.svc.cluster.local", "pg1-pooler-rw.default.svc.cluster.local"}
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec: cnpgv1.ClusterSpec{
+			Certificates: &cnpgv1.CertificatesConfiguration{
+				ServerAltDNSNames: wantSANs,
+			},
+		},
+		Status: cnpgv1.ClusterStatus{
+			Certificates: cnpgv1.CertificatesStatus{
+				CertificatesConfiguration: cnpgv1.CertificatesConfiguration{
+					ServerTLSSecret: "pg1-server-tls",
+				},
+			},
+		},
+	}
+
+	t.Run("missing_secret", func(t *testing.T) {
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg.DeepCopy()).Build()
+		ok, err := makeModel(c, "pg1").IsServerTLSLeafAlignedWithSpec(context.Background())
+		require.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("leaf_missing_dns", func(t *testing.T) {
+		sec := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1-server-tls", Namespace: "default"},
+			Data: map[string][]byte{
+				corev1.TLSCertKey: testSelfSignedLeafCertPEM(t, []string{"pg1-rw.default.svc.cluster.local"}),
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg.DeepCopy(), sec).Build()
+		ok, err := makeModel(c, "pg1").IsServerTLSLeafAlignedWithSpec(context.Background())
+		require.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("leaf_aligned", func(t *testing.T) {
+		sec := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1-server-tls", Namespace: "default"},
+			Data: map[string][]byte{
+				corev1.TLSCertKey: testSelfSignedLeafCertPEM(t, wantSANs),
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg.DeepCopy(), sec).Build()
+		ok, err := makeModel(c, "pg1").IsServerTLSLeafAlignedWithSpec(context.Background())
+		require.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	t.Run("empty_spec_sans_skips_secret", func(t *testing.T) {
+		emptySAN := &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg2", Namespace: "default"},
+			Spec:       cnpgv1.ClusterSpec{},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptySAN).Build()
+		ok, err := makeModel(c, "pg2").IsServerTLSLeafAlignedWithSpec(context.Background())
+		require.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	t.Run("cnpg_cluster_not_found_short_circuits_true", func(t *testing.T) {
+		// Missing CNPG Cluster must not gate pooler readiness behind a leaf check.
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		ok, err := makeModel(c, "pg-absent").IsServerTLSLeafAlignedWithSpec(context.Background())
+		require.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	// PEM/parse failures are structural, not transient: caller demuxes the
+	// sentinel to surface reasonPoolerTLSLeafInvalidCert (Failed) instead of
+	// looping forever on PoolerTLSLeafPending. Detail stays in the wrapped
+	// error for logs; the caller scrubs it out of events/Condition.Message.
+	t.Run("malformed_pem_returns_sentinel", func(t *testing.T) {
+		sec := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1-server-tls", Namespace: "default"},
+			Data:       map[string][]byte{corev1.TLSCertKey: []byte("this is not a PEM block")},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg.DeepCopy(), sec).Build()
+		ok, err := makeModel(c, "pg1").IsServerTLSLeafAlignedWithSpec(context.Background())
+		require.Error(t, err, "malformed PEM must escalate via the sentinel so callers can route to Failed")
+		assert.True(t, errors.Is(err, errServerTLSLeafInvalid), "error must wrap errServerTLSLeafInvalid for errors.Is demux at the call site")
+		assert.Contains(t, err.Error(), "PEM decode failed", "wrapped error must carry the sub-cause for logs")
+		assert.Contains(t, err.Error(), "default/pg1-server-tls", "wrapped error must identify the offending Secret for log search")
+		assert.False(t, ok)
+	})
+
+	t.Run("invalid_certificate_bytes_returns_sentinel", func(t *testing.T) {
+		badDER := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("garbage-not-asn1")})
+		sec := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1-server-tls", Namespace: "default"},
+			Data:       map[string][]byte{corev1.TLSCertKey: badDER},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg.DeepCopy(), sec).Build()
+		ok, err := makeModel(c, "pg1").IsServerTLSLeafAlignedWithSpec(context.Background())
+		require.Error(t, err, "x509.ParseCertificate failure must escalate via the sentinel")
+		assert.True(t, errors.Is(err, errServerTLSLeafInvalid), "error must wrap errServerTLSLeafInvalid for errors.Is demux at the call site")
+		assert.Contains(t, err.Error(), "x509 parse failed", "wrapped error must carry the sub-cause for logs")
+		assert.Contains(t, err.Error(), "default/pg1-server-tls", "wrapped error must identify the offending Secret for log search")
+		assert.False(t, ok)
+	})
 }
 
 func TestManagedRolesConvergeDoesNotEmitFailureForPending(t *testing.T) {
@@ -2709,6 +3849,340 @@ func TestManagedRolesConvergeEmitsReadyEventOnTransition(t *testing.T) {
 	assert.Empty(t, events.normals)
 }
 
+// Round-trip invariant for buildCNPGClusterSpec — guards against phantom drift
+// from apiserver-side defaulting:
+//
+//	normalize(build(cfg)) == normalize(read_back(apply(build(cfg))))
+//
+// apply() is approximated by the kube-apiserver structural-schema defaulter
+// run against cnpgClusterDefaultsContractYAML below. To extend the contract,
+// add the field + default to that YAML and assert it in
+// TestCNPGClusterDefaultsContract_HasExpectedDefaults.
+// Rationale: docs/postgres/internal-cnpg-phantom-drift-kt.md (§7, §10).
+
+// cnpgClusterDefaultsContractYAML is a minimal hand-authored CRD schema (not
+// the vendored upstream CRD) that models only the spec defaults
+// buildCNPGClusterSpec must mirror. Unmodelled fields pass through untouched.
+const cnpgClusterDefaultsContractYAML = `
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clusters.postgresql.cnpg.io
+spec:
+  group: postgresql.cnpg.io
+  scope: Namespaced
+  names:
+    kind: Cluster
+    listKind: ClusterList
+    plural: clusters
+    singular: cluster
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                primaryUpdateMethod:
+                  type: string
+                  default: restart
+`
+
+// loadCNPGClusterStructuralSchema parses the contract YAML above and returns
+// the structural schema the apiserver uses to default cnpgv1.Cluster objects
+// — but scoped to the fields this operator promises to mirror. Cheap; call
+// once per test and reuse.
+func loadCNPGClusterStructuralSchema(t *testing.T) *structuralschema.Structural {
+	t.Helper()
+
+	var crd apiextv1.CustomResourceDefinition
+	require.NoError(t,
+		yaml.Unmarshal([]byte(cnpgClusterDefaultsContractYAML), &crd),
+		"parse cnpgClusterDefaultsContractYAML",
+	)
+
+	var v1Schema *apiextv1.JSONSchemaProps
+	for i := range crd.Spec.Versions {
+		v := &crd.Spec.Versions[i]
+		if v.Name == "v1" && v.Schema != nil {
+			v1Schema = v.Schema.OpenAPIV3Schema
+			break
+		}
+	}
+	require.NotNil(t, v1Schema, "defaults contract YAML has no v1 schema")
+
+	var internalSchema apiext.JSONSchemaProps
+	require.NoError(t,
+		apiextv1.Convert_v1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(v1Schema, &internalSchema, nil),
+		"convert v1 -> internal JSONSchemaProps",
+	)
+
+	ss, err := structuralschema.NewStructural(&internalSchema)
+	require.NoError(t, err, "build structural schema from defaults contract")
+	return ss
+}
+
+// applyCRDDefaulting runs CRD structural-schema defaulting over obj (the same
+// code path kube-apiserver runs on Create) and returns a fresh Cluster
+// matching what a subsequent Get would return — restricted to contract fields.
+func applyCRDDefaulting(t *testing.T, ss *structuralschema.Structural, obj *cnpgv1.Cluster) *cnpgv1.Cluster {
+	t.Helper()
+
+	raw, err := json.Marshal(obj)
+	require.NoError(t, err, "marshal Cluster -> JSON")
+
+	asMap := map[string]any{}
+	require.NoError(t, json.Unmarshal(raw, &asMap), "unmarshal JSON -> map[string]any")
+
+	structuraldefaulting.Default(asMap, ss)
+
+	raw2, err := json.Marshal(asMap)
+	require.NoError(t, err, "marshal defaulted map -> JSON")
+
+	out := &cnpgv1.Cluster{}
+	require.NoError(t, json.Unmarshal(raw2, out), "unmarshal defaulted JSON -> Cluster")
+	return out
+}
+
+// roundTripFixture is a small builder for the MergedConfig shapes the table
+// test exercises. Every case starts from the same minimal baseline so each row
+// varies one axis at a time — that keeps a future diff pointing at the
+// case-specific input, not at boilerplate.
+type roundTripFixture struct {
+	instances           int32
+	postgresVersion     string
+	storage             resource.Quantity
+	resources           corev1.ResourceRequirements
+	postgresqlConfig    map[string]string
+	pgHBA               []string
+	primaryUpdateMethod *string // nil = let the builder default it; non-nil = explicit override
+	metricsEnabled      bool
+}
+
+func defaultRoundTripFixture() roundTripFixture {
+	return roundTripFixture{
+		instances:        3,
+		postgresVersion:  "17",
+		storage:          resource.MustParse("10Gi"),
+		resources:        corev1.ResourceRequirements{},
+		postgresqlConfig: map[string]string{},
+		pgHBA:            []string{},
+	}
+}
+
+func (f roundTripFixture) mergedConfig() *MergedConfig {
+	cfg := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{
+			Instances:        ptr.To(f.instances),
+			PostgresVersion:  ptr.To(f.postgresVersion),
+			Storage:          ptr.To(f.storage),
+			Resources:        f.resources.DeepCopy(),
+			PostgreSQLConfig: f.postgresqlConfig,
+			PgHBA:            f.pgHBA,
+		},
+	}
+	if f.primaryUpdateMethod != nil {
+		cfg.CNPG = &enterprisev4.CNPGConfig{PrimaryUpdateMethod: f.primaryUpdateMethod}
+	}
+	return cfg
+}
+
+// Asserts the round-trip invariant across every MergedConfig shape. A failure
+// means a CRD-defaulted field projected by normalizeCNPGClusterSpec is no
+// longer mirrored by buildCNPGClusterSpec — phantom drift.
+func TestBuildCNPGClusterSpec_RoundTripUnderCRDDefaulting(t *testing.T) {
+	t.Parallel()
+
+	ss := loadCNPGClusterStructuralSchema(t)
+
+	cases := []struct {
+		name    string
+		fixture roundTripFixture
+	}{
+		{
+			name:    "default_no_overrides",
+			fixture: defaultRoundTripFixture(),
+		},
+		{
+			name: "primaryUpdateMethod_explicit_restart",
+			fixture: func() roundTripFixture {
+				f := defaultRoundTripFixture()
+				f.primaryUpdateMethod = ptr.To("restart")
+				return f
+			}(),
+		},
+		{
+			name: "primaryUpdateMethod_explicit_switchover",
+			fixture: func() roundTripFixture {
+				f := defaultRoundTripFixture()
+				f.primaryUpdateMethod = ptr.To("switchover")
+				return f
+			}(),
+		},
+		{
+			name: "with_custom_postgres_parameters",
+			fixture: func() roundTripFixture {
+				f := defaultRoundTripFixture()
+				f.postgresqlConfig = map[string]string{
+					"shared_buffers":  "256MB",
+					"max_connections": "200",
+				}
+				return f
+			}(),
+		},
+		{
+			name: "with_pg_hba_rules",
+			fixture: func() roundTripFixture {
+				f := defaultRoundTripFixture()
+				f.pgHBA = []string{
+					"hostnossl all all 0.0.0.0/0 reject",
+					"hostssl   all all 0.0.0.0/0 scram-sha-256",
+				}
+				return f
+			}(),
+		},
+		{
+			name: "with_resource_overrides",
+			fixture: func() roundTripFixture {
+				f := defaultRoundTripFixture()
+				f.resources = corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("100m"),
+						corev1.ResourceMemory: resource.MustParse("256Mi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("500m"),
+						corev1.ResourceMemory: resource.MustParse("512Mi"),
+					},
+				}
+				return f
+			}(),
+		},
+		{
+			name: "with_postgres_metrics_enabled",
+			fixture: func() roundTripFixture {
+				f := defaultRoundTripFixture()
+				f.metricsEnabled = true
+				return f
+			}(),
+		},
+		{
+			name: "everything_set_together",
+			fixture: roundTripFixture{
+				instances:           5,
+				postgresVersion:     "17",
+				storage:             resource.MustParse("50Gi"),
+				postgresqlConfig:    map[string]string{"shared_buffers": "256MB"},
+				pgHBA:               []string{"hostssl all all 0.0.0.0/0 scram-sha-256"},
+				resources:           corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("250m")}},
+				primaryUpdateMethod: ptr.To("switchover"),
+				metricsEnabled:      true,
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := tc.fixture.mergedConfig()
+			desiredSpec := buildCNPGClusterSpec(cfg, "test-secret", tc.fixture.metricsEnabled)
+
+			// Wrap into a full Cluster so the structural defaulter walks the
+			// real tree (TypeMeta + ObjectMeta + Spec), the same shape the
+			// apiserver sees at admission.
+			beforeRT := &cnpgv1.Cluster{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: cnpgv1.SchemeGroupVersion.String(),
+					Kind:       cnpgv1.ClusterKind,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "round-trip",
+					Namespace: "default",
+				},
+				Spec: *desiredSpec.DeepCopy(),
+			}
+			afterRT := applyCRDDefaulting(t, ss, beforeRT)
+
+			left := normalizeCNPGClusterSpec(desiredSpec, cfg.Spec.PostgreSQLConfig)
+			right := normalizeCNPGClusterSpec(afterRT.Spec, cfg.Spec.PostgreSQLConfig)
+
+			if !equality.Semantic.DeepEqual(left, right) {
+				t.Fatalf(
+					"phantom drift: normalized spec diverges across CRD-defaulting round-trip\n"+
+						"--- LEFT  (build output, normalized)\n"+
+						"+++ RIGHT (after CRD defaulting, normalized)\n"+
+						"%s\n"+
+						"This usually means buildCNPGClusterSpec left a field empty that the\n"+
+						"CNPG CRD schema fills in via `default:` (kube-apiserver applies that\n"+
+						"on Create). Mirror the default in buildCNPGClusterSpec, then keep the\n"+
+						"override path. See docs/postgres/internal-cnpg-phantom-drift-kt.md.",
+					cmp.Diff(left, right),
+				)
+			}
+		})
+	}
+}
+
+// TestBuildCNPGClusterSpec_RoundTrip_NegativeControl proves the round-trip has
+// teeth: bypassing the phantom-drift fix (PrimaryUpdateMethod="") MUST detect
+// drift. A passing test implies either the contract YAML lost its
+// `default: restart` marker or the defaulter no longer applies it.
+func TestBuildCNPGClusterSpec_RoundTrip_NegativeControl(t *testing.T) {
+	t.Parallel()
+
+	ss := loadCNPGClusterStructuralSchema(t)
+
+	cfg := defaultRoundTripFixture().mergedConfig()
+	desiredSpec := buildCNPGClusterSpec(cfg, "test-secret", false)
+	desiredSpec.PrimaryUpdateMethod = "" // simulate pre-fix builder.
+
+	beforeRT := &cnpgv1.Cluster{
+		TypeMeta:   metav1.TypeMeta{APIVersion: cnpgv1.SchemeGroupVersion.String(), Kind: cnpgv1.ClusterKind},
+		ObjectMeta: metav1.ObjectMeta{Name: "round-trip-neg", Namespace: "default"},
+		Spec:       *desiredSpec.DeepCopy(),
+	}
+	afterRT := applyCRDDefaulting(t, ss, beforeRT)
+
+	left := normalizeCNPGClusterSpec(desiredSpec, cfg.Spec.PostgreSQLConfig)
+	right := normalizeCNPGClusterSpec(afterRT.Spec, cfg.Spec.PostgreSQLConfig)
+
+	require.Equal(t, "", left.PrimaryUpdateMethod, "precondition: desired-side primaryUpdateMethod must be empty")
+	require.Equal(t, "restart", right.PrimaryUpdateMethod,
+		"CRD-schema defaulting must materialize spec.primaryUpdateMethod=\"restart\"; "+
+			"if this fails, cnpgClusterDefaultsContractYAML lost the default: restart marker for spec.primaryUpdateMethod")
+	require.False(t,
+		equality.Semantic.DeepEqual(left, right),
+		"negative control: empty desired PrimaryUpdateMethod must round-trip to a different value, "+
+			"otherwise the positive test above is asserting nothing",
+	)
+}
+
+// TestCNPGClusterDefaultsContract_HasExpectedDefaults guards the contract
+// YAML: every default the round-trip relies on must be modeled with the
+// exact upstream value. Extend this test when extending the contract YAML.
+func TestCNPGClusterDefaultsContract_HasExpectedDefaults(t *testing.T) {
+	t.Parallel()
+
+	ss := loadCNPGClusterStructuralSchema(t)
+
+	specSchema, ok := ss.Properties["spec"]
+	require.True(t, ok, "defaults contract: top-level spec property missing from cnpgClusterDefaultsContractYAML")
+
+	updateMethodSchema, ok := specSchema.Properties["primaryUpdateMethod"]
+	require.True(t, ok, "defaults contract: spec.primaryUpdateMethod missing from cnpgClusterDefaultsContractYAML")
+
+	require.NotNil(t, updateMethodSchema.Default, "defaults contract: spec.primaryUpdateMethod has no default in cnpgClusterDefaultsContractYAML")
+	assert.Equal(t, "restart", updateMethodSchema.Default.Object,
+		"defaults contract: spec.primaryUpdateMethod default is not \"restart\"; "+
+			"the contract YAML at the top of this section disagrees with the upstream CNPG default we rely on")
+}
+
 func TestClusterModelActuateAdoptsOrphanedCNPGCluster(t *testing.T) {
 	t.Parallel()
 
@@ -2750,7 +4224,7 @@ func TestClusterModelActuateAdoptsOrphanedCNPGCluster(t *testing.T) {
 	model := newClusterModel(c, scheme, events, nil, cluster, clusterClass, cfg, "pg1-secret")
 	model.Actuate(context.Background())
 
-	require.True(t, model.cnpgPatched, "adoption must set cnpgPatched to requeue")
+	require.True(t, model.cnpgPatch.requiresPhaseGate(), "adoption must set cnpgPatched to requeue")
 	assert.False(t, model.cnpgCreated)
 	assert.Nil(t, model.actuateErr)
 

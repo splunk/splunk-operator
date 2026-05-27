@@ -29,30 +29,29 @@ Certificate lifecycle and server-side behaviour follow **[CloudNativePG — Cert
 ## ConfigMap keys (what apps read)
 
 
-| Key                                                                 | Use                                                              |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `**CLUSTER_RW_ENDPOINT**`                                           | Primary / read–write endpoint                                    |
-| `**CLUSTER_RO_ENDPOINT**`                                           | Read-only replica traffic                                        |
-| `**CLUSTER_R_ENDPOINT**`                                            | Any instance                                                     |
-| `**DEFAULT_CLUSTER_PORT**`                                          | Port (usually **5432**)                                          |
-| `**SUPER_USER_NAME`**                                               | Bootstrap superuser (often `**postgres**`)                       |
-| `**SUPER_USER_SECRET_REF**`                                         | Secret **name** for the superuser password                       |
-| `**SERVER_CA_SECRET_REF`**                                          | Secret **name** for the CA used to verify the server certificate |
-| `**SERVER_CA_CERT_KEY`**                                            | Key inside that Secret for the PEM file (often `**ca.crt**`)     |
-| `**CLUSTER_POOLER_RW_ENDPOINT**` / `**CLUSTER_POOLER_RO_ENDPOINT**` | PgBouncer hosts — only if poolers are enabled                    |
+| Key                                                                 | Use                                                                                                                              |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `**CLUSTER_RW_ENDPOINT**`                                           | Primary / read–write endpoint                                                                                                    |
+| `**CLUSTER_RO_ENDPOINT**`                                           | Read-only replica traffic                                                                                                        |
+| `**CLUSTER_R_ENDPOINT**`                                            | Any instance                                                                                                                     |
+| `**DEFAULT_CLUSTER_PORT**`                                          | Port (usually **5432**)                                                                                                          |
+| `**SUPER_USER_NAME`**                                               | Bootstrap superuser (often `**postgres**`)                                                                                       |
+| `**SUPER_USER_SECRET_REF**`                                         | Secret **name** for the superuser password                                                                                       |
+| `**SERVER_CA_SECRET_REF`**                                          | CA reference as `**<secret-name>/<data-key>`** (e.g. `**pg-demo-ca/ca.crt**`) — split on the first `**/**` to mount the PEM file |
+| `**CLUSTER_POOLER_RW_ENDPOINT**` / `**CLUSTER_POOLER_RO_ENDPOINT**` | PgBouncer hosts — only if poolers are enabled                                                                                    |
 
 
-If `**SERVER_CA_***` is missing, the database may still be starting, CNPG has not yet published CA metadata, or the operator has not validated the Secret yet—check `**PostgresCluster**` events and CNPG cluster status, then retry.
+If `**SERVER_CA_SECRET_REF**` is missing, the database may still be starting, CNPG has not yet published CA metadata, or the operator has not validated the Secret yet—check `**PostgresCluster**` events and CNPG cluster status, then retry.
 
 ---
 
 ## Secrets to mount
 
 
-| Purpose                      | Source                                                                                                                                                                             |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Trust anchor (server CA)** | Secret named `**SERVER_CA_SECRET_REF`**, data key `**SERVER_CA_CERT_KEY**` — mount read-only (e.g. `**/etc/postgres-ca/ca.crt**`) and set `**PGSSLROOTCERT**` / `**sslrootcert**`. |
-| **Password**                 | Secret named `**SUPER_USER_SECRET_REF`** — typically key `**password**` (follow your cluster’s conventions if documented elsewhere).                                               |
+| Purpose                      | Source                                                                                                                                                                                                                                                                  |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Trust anchor (server CA)** | Split `**SERVER_CA_SECRET_REF**` on the first `**/**`: left side = Secret name, right side = data key (e.g. `**pg-demo-ca/ca.crt**` → Secret `**pg-demo-ca`**, key `**ca.crt**`). Mount read-only (e.g. `**/etc/postgres-ca/ca.crt**`) and set `**PGSSLROOTCERT**` / `**sslrootcert**`. |
+| **Password**                 | Secret named `**SUPER_USER_SECRET_REF`** — typically key `**password**` (follow your cluster’s conventions if documented elsewhere).                                                                                                                                    |
 
 
 Never copy PEM or passwords into the ConfigMap; keep them in Secrets and restrict RBAC to workloads that need them.
@@ -63,7 +62,7 @@ Never copy PEM or passwords into the ConfigMap; keep them in Secrets and restric
 
 Use the **RW or RO endpoint** from the ConfigMap for strict certificate verification.
 
-1. Mount the CA `**Secret`** named in `**SERVER_CA_SECRET_REF**`, using the file key `**SERVER_CA_CERT_KEY**` (e.g. mount as `**/etc/postgres-ca/ca.crt**`).
+1. Read `**SERVER_CA_SECRET_REF**` from the ConfigMap and split on the first `**/**` — the left side is the **Secret name**, the right side is the **data key** (e.g. `**pg-demo-ca/ca.crt**`). Mount that Secret read-only at, for example, `**/etc/postgres-ca/ca.crt**`.
 2. Load the password from the `**Secret**` named `**SUPER_USER_SECRET_REF**` (convention: key `**password**`).
 3. Point your client at the endpoint and port from the ConfigMap. With `**verify-full**`, the client validates both the CA chain and server certificate identity.
 
@@ -84,16 +83,14 @@ Equivalent libpq connection string parameters: `**sslmode=verify-full**`, `**ssl
 
 ## Pooler and `verify-full`
 
-> **Needs attention — further work:** This subsection is preliminary guidance. Pooler hostnames, CNPG certificate identities, and Splunk Operator behaviour here should be revisited and expanded (including any operator or doc updates) before treating it as complete.
-
 The pooler is a separate Service from direct Postgres. With `**sslmode=verify-full`**, the client checks that the name it connects to matches the server certificate. If that name is the pooler endpoint from `**CLUSTER_POOLER_***`, the certificate presented on that path must include a matching identity.
 
-`**PostgresCluster` / `PostgresClusterClass` do not carry certificate or SAN settings**; CloudNativePG owns server TLS. How identities are chosen or extended is defined in **[CloudNativePG — Certificates](https://cloudnative-pg.io/docs/1.28/certificates)** and your CNPG `**Cluster`** spec, not in this guide.
+Pooler SAN identities are managed by the operator/CNPG reconcile flow when pooler is enabled. Users do not manage individual pooler SAN entries directly. When the pooler is disabled, pooler-derived SANs stay on the server certificate so disabling the pooler does not force an extra certificate rotation.
 
 **Practical defaults:**
 
-- Prefer `**CLUSTER_RW_ENDPOINT`** / `**CLUSTER_RO_ENDPOINT**` when you need `**verify-full**` and want the simplest alignment with typical CNPG server certs.
-- If you must use the pooler and `**verify-full**` fails on name mismatch, adjust CNPG-side certificate configuration (per CNPG docs), or use `**verify-ca**` only if your security policy allows trusting the CA without pinning the server name.
+- Prefer `**CLUSTER_RW_ENDPOINT`** / `**CLUSTER_RO_ENDPOINT**` when you need `**verify-full**` and want the simplest path.
+- If you use pooler endpoints, wait for SAN reconciliation to converge before expecting stable `verify-full` success.
 
 **Operational note:** after server certificate material changes, pooler Pods may need to roll so PgBouncer picks up the new leaf; expect brief TLS errors until clients and poolers converge.
 
@@ -131,7 +128,7 @@ For allowed PostgreSQL parameters in this setup, see **[CloudNativePG — Postgr
 
 | Symptom                                      | Things to check                                                                                                                                                                                              |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `**SERVER_CA_`* missing in ConfigMap**       | CNPG not ready yet; CA Secret not published or not readable by the operator; requeue/reconcile.                                                                                                              |
+| `**SERVER_CA_SECRET_REF`** missing in ConfigMap | CNPG not ready yet; CA Secret not published or not readable by the operator; requeue/reconcile.                                                                                                              |
 | `**verify-full` fails with hostname errors** | Use an endpoint whose name appears in the server cert (often direct RW/RO); or align CNPG server certificate identities with the pooler host per CNPG docs; pooler rollout may be needed after cert changes. |
 | **Password auth fails**                      | Correct Secret name/key; user exists for that database; `pg_hba` allows your client network and SSL method.                                                                                                  |
 
