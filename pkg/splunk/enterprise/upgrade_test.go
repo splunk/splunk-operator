@@ -19,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestUpgradePathValidation(t *testing.T) {
@@ -30,8 +29,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
@@ -633,8 +631,7 @@ func TestUpgradeBlockedVersionMismatchEvent(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.IndexerCluster{})
 

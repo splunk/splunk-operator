@@ -35,7 +35,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func init() {
@@ -895,8 +894,7 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
@@ -1184,8 +1182,7 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
