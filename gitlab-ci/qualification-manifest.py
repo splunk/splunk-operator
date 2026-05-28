@@ -39,10 +39,19 @@ def main() -> int:
         os.environ.get("PIPELINE_HELM_TEST_PROFILE") or os.environ.get("JOB_HELM_TEST_PROFILE") or "full"
     )
     enterprise_image = (
-        os.environ.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE") or "splunk/splunk:latest"
+        os.environ.get("PIPELINE_RUNTIME_ENTERPRISE_IMAGE")
+        or os.environ.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE")
+        or "splunk/splunk:latest"
     )
     fips_cluster_name = os.environ.get("PIPELINE_FIPS_EKS_CLUSTER_NAME", "").strip()
-    qualification_jobs = qualification_jobs_for_environment(include_fips=bool(fips_cluster_name))
+    graviton_requested = os.environ.get("PIPELINE_ENABLE_GRAVITON", "").strip().lower() == "true"
+    graviton_override_image = os.environ.get("PIPELINE_GRAVITON_ENTERPRISE_IMAGE", "").strip()
+    graviton_enabled = graviton_requested or bool(graviton_override_image)
+    graviton_enterprise_image = graviton_override_image or (enterprise_image if graviton_enabled else "")
+    qualification_jobs = qualification_jobs_for_environment(
+        include_fips=bool(fips_cluster_name),
+        include_graviton=graviton_enabled,
+    )
 
     manifest = {
         "schema_version": "v1alpha1",
@@ -66,6 +75,8 @@ def main() -> int:
             "helm_profile": helm_profile,
             "fips_cluster_name": fips_cluster_name,
             "fips_enabled": bool(fips_cluster_name),
+            "graviton_enabled": graviton_enabled,
+            "graviton_enterprise_image": graviton_enterprise_image,
             "required_jobs": qualification_jobs,
         },
     }
@@ -84,6 +95,8 @@ def main() -> int:
                 f"SOK_ENTERPRISE_IMAGE={enterprise_image}",
                 f"SOK_FIPS_ENABLED={'true' if fips_cluster_name else 'false'}",
                 f"SOK_FIPS_CLUSTER_NAME={fips_cluster_name}",
+                f"SOK_GRAVITON_ENABLED={'true' if graviton_enabled else 'false'}",
+                f"SOK_GRAVITON_ENTERPRISE_IMAGE={graviton_enterprise_image}",
             ]
         )
         + "\n",
@@ -102,6 +115,8 @@ def main() -> int:
                 f"- enterprise_image: {enterprise_image}",
                 f"- fips_enabled: {'true' if fips_cluster_name else 'false'}",
                 f"- fips_cluster_name: {fips_cluster_name or 'not-configured'}",
+                f"- graviton_enabled: {'true' if graviton_enabled else 'false'}",
+                f"- graviton_enterprise_image: {graviton_enterprise_image or 'not-configured'}",
                 f"- pipeline_id: {manifest['pipeline']['id']}",
                 f"- pipeline_source: {manifest['pipeline']['source']}",
                 f"- ref: {manifest['pipeline']['ref']}",

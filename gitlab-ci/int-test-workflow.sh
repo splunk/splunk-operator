@@ -46,10 +46,6 @@ if [ -z "${ECR_REGION}" ]; then
   exit 1
 fi
 
-# Enterprise image comes from the repo-owned release image pin.
-resolve_runtime_enterprise_image
-enterprise_image="${RESOLVED_ENTERPRISE_IMAGE}"
-
 requested_profile="$(first_nonempty "${PIPELINE_INT_TEST_PROFILE:-}" "${JOB_INT_TEST_PROFILE:-}" "smoke")"
 resolve_integration_profile "${requested_profile}"
 test_focus="${RESOLVED_INT_TEST_FOCUS}"
@@ -71,30 +67,16 @@ graviton_testing="false"
 if bool_is_true "$(first_nonempty "${PIPELINE_GRAVITON_TESTING:-}" "${JOB_GRAVITON_TESTING:-}" "${use_arm64_cluster}")"; then
   graviton_testing="true"
 fi
-explicit_runtime_enterprise_image="$(first_nonempty \
-  "${PIPELINE_RUNTIME_ENTERPRISE_IMAGE:-}" \
-  "${JOB_RUNTIME_ENTERPRISE_IMAGE:-}" \
-  "${PIPELINE_INT_ENTERPRISE_IMAGE:-}" \
-  "${JOB_INT_ENTERPRISE_IMAGE:-}" \
-  "${PIPELINE_GRAVITON_ENTERPRISE_IMAGE:-}" \
-  "")"
-if [ "${graviton_testing}" = "true" ] && [ -z "${explicit_runtime_enterprise_image}" ]; then
-  echo "Graviton runtime validation requires an explicit arm-compatible enterprise image override" >&2
-  echo "Set PIPELINE_GRAVITON_ENTERPRISE_IMAGE or a runtime enterprise-image override for this job" >&2
-  exit 1
-fi
+graviton_enterprise_image_override="$(first_nonempty "${PIPELINE_GRAVITON_ENTERPRISE_IMAGE:-}" "${JOB_GRAVITON_ENTERPRISE_IMAGE:-}" "")"
 
-requested_graviton_enterprise_image="$(first_nonempty \
-  "${PIPELINE_RUNTIME_ENTERPRISE_IMAGE:-}" \
-  "${JOB_RUNTIME_ENTERPRISE_IMAGE:-}" \
-  "${PIPELINE_INT_ENTERPRISE_IMAGE:-}" \
-  "${JOB_INT_ENTERPRISE_IMAGE:-}" \
-  "")"
-
-if [ "${graviton_testing}" = "true" ] && [ -z "${requested_graviton_enterprise_image}" ]; then
-  echo "Graviton or arm64 runtime validation requires an explicit enterprise image override." >&2
-  echo "Set PIPELINE_GRAVITON_ENTERPRISE_IMAGE to the arm-compatible enterprise image that matches the release under test." >&2
-  exit 1
+# Default to the normal runtime enterprise tag. When the release image is
+# published as a multi-platform manifest list, the container runtime selects the
+# matching linux/arm64 variant automatically on arm64 nodes. Keep a dedicated
+# override only for exceptional cycles where arm64 needs a different tag.
+resolve_runtime_enterprise_image
+enterprise_image="${RESOLVED_ENTERPRISE_IMAGE}"
+if [ "${graviton_testing}" = "true" ] && [ -n "${graviton_enterprise_image_override}" ]; then
+  enterprise_image="$(strip_docker_io_prefix "${graviton_enterprise_image_override}")"
 fi
 
 use_existing_cluster="false"
@@ -133,7 +115,7 @@ else
           cluster_test_type="smoke"
           ;;
         *)
-          cluster_test_type="integration"
+          cluster_test_type="int"
           ;;
       esac
     fi
@@ -195,6 +177,7 @@ append_context "${context_file}" "cluster_nodes" "${CLUSTER_NODES}"
 append_context "${context_file}" "cluster_wide" "${CLUSTER_WIDE}"
 append_context "${context_file}" "use_arm64_cluster" "${use_arm64_cluster}"
 append_context "${context_file}" "graviton_testing" "${graviton_testing}"
+append_context "${context_file}" "graviton_enterprise_image_override" "${graviton_enterprise_image_override}"
 append_context "${context_file}" "eks_instance_type" "${EKS_INSTANCE_TYPE:-}"
 append_context "${context_file}" "test_timeout" "${TEST_TIMEOUT}"
 append_context "${context_file}" "operator_image" "${SPLUNK_OPERATOR_IMAGE}"

@@ -55,12 +55,13 @@ REQUIRED_QUALIFICATION_JOBS = (
 )
 
 
-def qualification_jobs_for_environment(*, include_fips: bool) -> list[str]:
+def qualification_jobs_for_environment(*, include_fips: bool, include_graviton: bool) -> list[str]:
     jobs = list(BASE_REQUIRED_QUALIFICATION_JOBS)
     if include_fips:
         jobs.extend(FIPS_QUALIFICATION_JOBS)
     jobs.extend(DISTROLESS_QUALIFICATION_SUITE_JOBS)
-    jobs.extend(GRAVITON_QUALIFICATION_SUITE_JOBS)
+    if include_graviton:
+        jobs.extend(GRAVITON_QUALIFICATION_SUITE_JOBS)
     return jobs
 
 

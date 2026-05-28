@@ -107,7 +107,7 @@ if [ -n "${PIPELINE_GKE_KUBECONFIG:-}" ]; then
   materialize_file_secret "${PIPELINE_GKE_KUBECONFIG}" "${gke_kubeconfig_file}"
   export KUBECONFIG="${gke_kubeconfig_file}"
 else
-  require_envs PIPELINE_GCP_REGION PIPELINE_GCP_ZONE
+  require_envs PIPELINE_GCP_REGION
 fi
 
 resolve_operator_runtime_source "${build_image_ref_file}" "${released_sok_contract_file}" "splunk/splunk-operator"
@@ -137,8 +137,8 @@ export CLUSTER_NODES="$(first_nonempty "${PIPELINE_GCP_CLUSTER_NODES:-}" "${JOB_
 export CLUSTER_WIDE="$(first_nonempty "${PIPELINE_GCP_CLUSTER_WIDE:-}" "${JOB_CLOUD_CLUSTER_WIDE:-}" "true")"
 export DEPLOYMENT_TYPE="$(first_nonempty "${PIPELINE_GCP_DEPLOYMENT_TYPE:-}" "${JOB_CLOUD_DEPLOYMENT_TYPE:-}" "manifest")"
 export GCP_PROJECT_ID="${PIPELINE_GCP_PROJECT_ID}"
-export GCP_REGION="$(first_nonempty "${PIPELINE_GCP_REGION:-}" "us-west2")"
-export GCP_ZONE="$(first_nonempty "${PIPELINE_GCP_ZONE:-}" "us-west2-a")"
+export GCP_REGION="$(first_nonempty "${JOB_CLOUD_GCP_REGION:-}" "${PIPELINE_GCP_REGION:-}" "us-west2")"
+export GCP_ZONE="$(first_nonempty "${JOB_CLOUD_GCP_ZONE:-}" "${PIPELINE_GCP_ZONE:-}" "${GCP_REGION}-a")"
 export AWS_S3_REGION="${GCP_REGION}"
 export S3_REGION="${GCP_REGION}"
 export GCP_NETWORK="$(first_nonempty "${PIPELINE_GCP_NETWORK:-}" "default")"
