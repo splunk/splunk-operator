@@ -44,6 +44,8 @@ For a one-off manual intake run, trigger a pipeline with `SOK_PIPELINE_MODE=gith
 Develop pipelines also publish prerelease Helm chart snapshots to fixed internal Artifactory Helm repositories once the staged operator image is built. Protected `main` and `develop` refs publish to `https://repo.splunkdev.net/artifactory/helm/sok/splunk-operator`; other stage refs publish to `https://repo.splunkdev.net/artifactory/helm-test/sok/splunk-operator`. Those snapshots use pipeline-derived prerelease chart versions so they do not collide with release chart versions, they keep `splunk-operator` and `splunk-enterprise` on the same version, they repackage `splunk-enterprise` with the matching `splunk-operator` dependency archive, and they default the operator chart to the exact staged internal image from the same pipeline.
 This does not change the other lanes: qualification continues to validate the latest released chart path, and release publish continues to push only immutable validated release chart archives to the shared Artifactory Helm release repository.
 
+Whenever the staged operator image is pushed to an internal Artifactory Docker registry, the same build job also generates a matching `splunk-operator-<image_tag>.tar.gz` deployment archive and publishes it to the generic `splunk-operator/` Artifactory path with the corresponding generic deployer role.
+
 The important rule is that ordinary feature-branch pushes do not run their own GitLab pipeline.
 Branch validation is MR-driven.
 GitLab also suppresses duplicate push pipelines once a branch already has an open MR.

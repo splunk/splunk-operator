@@ -4,7 +4,9 @@ set -eu
 # Runtime contract
 # - Purpose: build the canonical pipeline operator image that downstream scan and runtime jobs consume.
 # - Inputs: registry target variables and registry credentials prepared by the job.
-# - Outputs: ECR and Artifactory image references plus registry-specific digest artifacts under ci-output/.
+# - Outputs: ECR and Artifactory image references, matching generic
+#   Artifactory deployment archives, plus registry-specific digest artifacts
+#   under ci-output/.
 # - Guardrails: commit- or pipeline-scoped tag only, no latest/public registry mutation.
 
 . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
@@ -32,19 +34,17 @@ fi
 export AWS_DEFAULT_REGION="${ECR_REGION}"
 
 # Artifactory Setup
-ARTIFACTORY_TARGET="$(first_nonempty "${PIPELINE_ARTIFACTORY_REPOSITORY:-}" "${JOB_ARTIFACTORY_REPOSITORY:-}" "")"
-if [ -z "${ARTIFACTORY_TARGET}" ]; then
-  case "${CI_COMMIT_REF_NAME:-}" in
-    main|develop)
-      ARTIFACTORY_TARGET="docker.repo.splunkdev.net"
-      ;;
-    *)
-      ARTIFACTORY_TARGET="docker-test.repo.splunkdev.net"
-      ;;
-  esac
-fi
+ARTIFACTORY_TARGET=""
+case "${CI_COMMIT_REF_NAME:-}" in
+  main|develop)
+    ARTIFACTORY_TARGET="docker.repo.splunkdev.net"
+    ;;
+  *)
+    ARTIFACTORY_TARGET="docker-test.repo.splunkdev.net"
+    ;;
+esac
 
-ARTIFACTORY_IMAGE_PATH="$(first_nonempty "${PIPELINE_ARTIFACTORY_IMAGE_PATH:-}" "${JOB_ARTIFACTORY_IMAGE_PATH:-}" "sok/splunk-operator")"
+ARTIFACTORY_IMAGE_PATH="sok/splunk-operator"
 case "${ARTIFACTORY_TARGET}" in
   */*)
     ARTIFACTORY_IMAGE_REPOSITORY="${ARTIFACTORY_TARGET}"
@@ -126,3 +126,24 @@ if [ "${BUILD_DISTROLESS}" = "true" ]; then
     --query 'imageDetails[0].imageDigest' \
     --output text > "ci-output/${WORKFLOW_SLUG}-distroless-digest.txt"
 fi
+
+# Publish .tar.gz artifact to Artifactory
+load_repo_dotenv "${CI_PROJECT_DIR}/.env"
+resolve_makefile_version "${CI_PROJECT_DIR}/Makefile"
+resolve_runtime_enterprise_image
+make generate-artifacts \
+  IMG="${ARTIFACTORY_IMAGE_REF}" \
+  SPLUNK_ENTERPRISE_IMAGE="${RESOLVED_ENTERPRISE_IMAGE}" \
+  SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com"
+
+PACKAGE=splunk-operator-$IMAGE_TAG.tar.gz
+append_context "${context_file}" "artifactory_generic_package" "${PACKAGE}"
+append_context "${context_file}" "artifact_enterprise_image" "${RESOLVED_ENTERPRISE_IMAGE}"
+
+cd "release-${RESOLVED_MAKEFILE_VERSION}"
+tar zcvf "${PACKAGE}" *
+
+echo "Publishing ${PACKAGE} to Artifactory..."
+require_nonempty "${GENERIC_DEPLOYER_PATH:-}" "GENERIC_DEPLOYER_PATH"
+eval "$(creds-helper artifactory --eval "${GENERIC_DEPLOYER_PATH}")"
+artifact-ci publish generic "${PACKAGE}" "splunk-operator/${PACKAGE}"

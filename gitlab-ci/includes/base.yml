@@ -68,9 +68,11 @@ default:
       if [ "${CI_COMMIT_REF_NAME}" = "main" ] || [ "${CI_COMMIT_REF_NAME}" = "develop" ]; then
         export DOCKER_PATH=artifactory:v2/cloud/role/sok-docker-deployer-role
         export HELM_DEPLOYER_PATH=artifactory:v2/cloud/role/helm-deployer-role
+        export GENERIC_DEPLOYER_PATH=artifactory:v2/cloud/role/generic-deployer-role
       else
         export DOCKER_PATH=artifactory:v2/cloud/role/sok-docker-test-deployer-role
         export HELM_DEPLOYER_PATH=artifactory:v2/cloud/role/helm-test-deployer-role
+        export GENERIC_DEPLOYER_PATH=artifactory:v2/cloud/role/generic-test-deployer-role
       fi
     - eval $(creds-helper docker --eval $DOCKER_PATH)
     - eval $(creds-helper artifactory --eval $HELM_DEPLOYER_PATH)
