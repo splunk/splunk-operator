@@ -69,7 +69,7 @@ if [ -z "${ECR_REGION}" ]; then
   exit 1
 fi
 
-resolve_enterprise_release_image
+resolve_runtime_enterprise_image
 enterprise_image="${RESOLVED_ENTERPRISE_IMAGE}"
 
 requested_profile="$(first_nonempty "${PIPELINE_HELM_TEST_PROFILE:-}" "${JOB_HELM_TEST_PROFILE:-}" "full")"
@@ -89,6 +89,8 @@ export SPLUNK_OPERATOR_IMAGE="${RUNTIME_OPERATOR_REPO_IMAGE}"
 export SPLUNK_ENTERPRISE_IMAGE="${enterprise_image}"
 export TEST_CLUSTER_PLATFORM="eks"
 export TEST_CLUSTER_NAME="${cluster_name_prefix}-${CI_JOB_ID}"
+export CLUSTER_NODES="$(first_nonempty "${PIPELINE_HELM_CLUSTER_NODES:-}" "${JOB_HELM_CLUSTER_NODES:-}" "2")"
+export CLUSTER_WORKERS="$(first_nonempty "${PIPELINE_HELM_CLUSTER_WORKERS:-}" "${JOB_HELM_CLUSTER_WORKERS:-}" "5")"
 export CLUSTER_WIDE="$(first_nonempty "${PIPELINE_HELM_CLUSTER_WIDE:-}" "${JOB_HELM_CLUSTER_WIDE:-}" "true")"
 export DEPLOYMENT_TYPE="helm"
 export INSTALL_OPERATOR="true"
@@ -105,6 +107,8 @@ export EKS_CLUSTER_K8_VERSION="$(first_nonempty "${PIPELINE_EKS_CLUSTER_K8_VERSI
 append_operator_runtime_context "${context_file}"
 append_context "${context_file}" "ecr_region" "${ECR_REGION}"
 append_context "${context_file}" "cluster_name" "${TEST_CLUSTER_NAME}"
+append_context "${context_file}" "cluster_nodes" "${CLUSTER_NODES}"
+append_context "${context_file}" "cluster_workers" "${CLUSTER_WORKERS}"
 append_context "${context_file}" "helm_test_profile" "${RESOLVED_HELM_TEST_PROFILE}"
 append_context "${context_file}" "helm_test_dirs" "${RESOLVED_HELM_TEST_DIRS}"
 append_context "${context_file}" "helm_test_timeout" "${RESOLVED_HELM_TEST_TIMEOUT}"

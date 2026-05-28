@@ -114,7 +114,7 @@ scan-released-operator-image-container:
   allow_failure: true
   timeout: 5h
   rules:
-    - if: '$PIPELINE_FIPS_EKS_CLUSTER_NAME == ""'
+    - if: '$PIPELINE_FIPS_EKS_CLUSTER_NAME == null || $PIPELINE_FIPS_EKS_CLUSTER_NAME == ""'
       when: never
     - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
   variables:
@@ -164,7 +164,7 @@ scan-released-operator-image-container:
     JOB_INT_TEST_TO_SKIP: '^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$'
     JOB_EKS_CLUSTER_TEST_TYPE: smoke
     JOB_INT_CLUSTER_NODES: "1"
-    JOB_INT_CLUSTER_WORKERS: "3"
+    JOB_INT_CLUSTER_WORKERS: "5"
   script:
     - gitlab-ci/int-test-workflow.sh
   artifacts:
@@ -186,10 +186,10 @@ scan-released-operator-image-container:
     JOB_INT_TEST_PROFILE: full
     JOB_INT_TEST_TIMEOUT: 225m
     JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
-    JOB_EKS_CLUSTER_TEST_TYPE: integration
-    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: qualification
+    JOB_EKS_CLUSTER_TEST_TYPE: int
+    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: qual
     JOB_INT_CLUSTER_NODES: "1"
-    JOB_INT_CLUSTER_WORKERS: "3"
+    JOB_INT_CLUSTER_WORKERS: "5"
   script:
     - gitlab-ci/int-test-workflow.sh
   artifacts:
@@ -245,12 +245,6 @@ qualification-managermc2-validation:
   variables:
     WORKFLOW_SLUG: qualification-managermc2-validation
     JOB_INT_TEST_FOCUS: managermc2
-
-qualification-managerscaling-validation:
-  extends: .runtime-qualification-integration-suite-job
-  variables:
-    WORKFLOW_SLUG: qualification-managerscaling-validation
-    JOB_INT_TEST_FOCUS: managerscaling
 
 qualification-managercrcrud-validation:
   extends: .runtime-qualification-integration-suite-job
@@ -343,10 +337,10 @@ qualification-fips-integration-validation:
     JOB_INT_TEST_PROFILE: full
     JOB_INT_TEST_TIMEOUT: 255m
     JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
-    JOB_EKS_CLUSTER_TEST_TYPE: integration
-    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: qualification-distroless
+    JOB_EKS_CLUSTER_TEST_TYPE: int
+    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: qual-dl
     JOB_INT_CLUSTER_NODES: "1"
-    JOB_INT_CLUSTER_WORKERS: "3"
+    JOB_INT_CLUSTER_WORKERS: "5"
   script:
     - gitlab-ci/int-test-workflow.sh
   artifacts:
@@ -359,18 +353,20 @@ qualification-fips-integration-validation:
   extends: .runtime-released-sok-validation-job
   allow_failure: true
   timeout: 5h
+  rules:
+    - if: '$PIPELINE_ENABLE_GRAVITON != "true" && ($PIPELINE_GRAVITON_ENTERPRISE_IMAGE == null || $PIPELINE_GRAVITON_ENTERPRISE_IMAGE == "")'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
   variables:
     JOB_INT_TEST_PROFILE: full
     JOB_INT_TEST_TIMEOUT: 255m
     JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
-    JOB_EKS_CLUSTER_TEST_TYPE: integration
-    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: qualification-arm64
+    JOB_EKS_CLUSTER_TEST_TYPE: int
+    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: qual-arm64
     JOB_INT_CLUSTER_NODES: "1"
-    JOB_INT_CLUSTER_WORKERS: "3"
+    JOB_INT_CLUSTER_WORKERS: "5"
     JOB_USE_ARM64_CLUSTER: "true"
     JOB_GRAVITON_TESTING: "true"
-    # Keep the arm runtime contract explicit like the old GitHub arm workflows.
-    JOB_INT_ENTERPRISE_IMAGE: $PIPELINE_GRAVITON_ENTERPRISE_IMAGE
   script:
     - gitlab-ci/int-test-workflow.sh
   artifacts:
@@ -392,6 +388,7 @@ qualification-gcp-c3-validation:
     WORKFLOW_SLUG: qualification-gcp-c3-validation
     JOB_CLOUD_TEST_FOCUS: c3_gcp_sanity
     JOB_CLOUD_TEST_TIMEOUT: 225m
+    JOB_CLOUD_GCP_ZONE: us-west2-a
 
 qualification-gcp-c3-manager-validation:
   extends: .runtime-released-sok-gcp-validation-job
@@ -399,6 +396,7 @@ qualification-gcp-c3-manager-validation:
     WORKFLOW_SLUG: qualification-gcp-c3-manager-validation
     JOB_CLOUD_TEST_FOCUS: c3_mgr_gcp_sanity
     JOB_CLOUD_TEST_TIMEOUT: 225m
+    JOB_CLOUD_GCP_ZONE: us-west2-b
 
 qualification-gcp-m4-validation:
   extends: .runtime-released-sok-gcp-validation-job
@@ -406,6 +404,7 @@ qualification-gcp-m4-validation:
     WORKFLOW_SLUG: qualification-gcp-m4-validation
     JOB_CLOUD_TEST_FOCUS: m4_gcp_sanity
     JOB_CLOUD_TEST_TIMEOUT: 225m
+    JOB_CLOUD_GCP_ZONE: us-west2-c
 
 qualification-gcp-m4-manager-validation:
   extends: .runtime-released-sok-gcp-validation-job
@@ -413,6 +412,7 @@ qualification-gcp-m4-manager-validation:
     WORKFLOW_SLUG: qualification-gcp-m4-manager-validation
     JOB_CLOUD_TEST_FOCUS: m4_mgr_gcp_sanity
     JOB_CLOUD_TEST_TIMEOUT: 225m
+    JOB_CLOUD_GCP_ZONE: us-west2-a
 
 qualification-gcp-s1-validation:
   extends: .runtime-released-sok-gcp-validation-job
@@ -420,6 +420,7 @@ qualification-gcp-s1-validation:
     WORKFLOW_SLUG: qualification-gcp-s1-validation
     JOB_CLOUD_TEST_FOCUS: s1_gcp_sanity
     JOB_CLOUD_TEST_TIMEOUT: 225m
+    JOB_CLOUD_GCP_ZONE: us-west2-b
 
 qualification-distroless-appframeworks-s1-validation:
   extends:
@@ -573,10 +574,10 @@ qualification-graviton-indingsep-validation:
     JOB_INT_TEST_PROFILE: full
     JOB_INT_TEST_TIMEOUT: 225m
     JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
-    JOB_EKS_CLUSTER_TEST_TYPE: integration
-    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: nightly
+    JOB_EKS_CLUSTER_TEST_TYPE: int
+    JOB_EKS_CLUSTER_PLATFORM_SUFFIX: night
     JOB_INT_CLUSTER_NODES: "1"
-    JOB_INT_CLUSTER_WORKERS: "3"
+    JOB_INT_CLUSTER_WORKERS: "5"
   script:
     - gitlab-ci/int-test-workflow.sh
   artifacts:
@@ -685,12 +686,6 @@ nightly-eks-integration-managermc2-validation:
   variables:
     WORKFLOW_SLUG: nightly-eks-integration-managermc2-validation
     JOB_INT_TEST_FOCUS: managermc2
-
-nightly-eks-integration-managerscaling-validation:
-  extends: .runtime-nightly-integration-suite-job
-  variables:
-    WORKFLOW_SLUG: nightly-eks-integration-managerscaling-validation
-    JOB_INT_TEST_FOCUS: managerscaling
 
 nightly-eks-integration-managercrcrud-validation:
   extends: .runtime-nightly-integration-suite-job

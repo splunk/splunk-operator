@@ -89,7 +89,13 @@ default:
       aud: $CICD_VAULT_ADDR
   before_script:
     - creds-helper init
-    - eval $(creds-helper artifactory --eval artifactory:v2/cloud/role/helm-reader-role)
+    - |
+      if [ "${CI_COMMIT_REF_NAME}" = "main" ] || [ "${CI_COMMIT_REF_NAME}" = "develop" ] || printf '%s' "${CI_COMMIT_REF_NAME}" | grep -Eq '^release([/-]).+$'; then
+        export HELM_READER_PATH=artifactory:v2/cloud/role/helm-reader-role
+      else
+        export HELM_READER_PATH=artifactory:v2/cloud/role/helm-test-reader-role
+      fi
+    - eval $(creds-helper artifactory --eval $HELM_READER_PATH)
 
 .runtime-build-job:
   extends:
@@ -235,9 +241,9 @@ default:
 # Expanded runtime validation contract:
 # - PIPELINE_RUNTIME_ENTERPRISE_IMAGE overrides the default runtime enterprise
 #   image pin for any lane that needs a specific enterprise image.
-# - PIPELINE_GRAVITON_ENTERPRISE_IMAGE is required for Graviton or arm64
-#   runtime validation because those jobs must not silently fall back to the
-#   default amd64 enterprise image.
+# - PIPELINE_ENABLE_GRAVITON=true enables the Graviton or arm64 runtime suites.
+# - PIPELINE_GRAVITON_ENTERPRISE_IMAGE optionally overrides the default runtime
+#   enterprise image only when the arm64 cycle needs a different repo:tag.
 # - PIPELINE_FIPS_EKS_CLUSTER_NAME points qualification/release FIPS jobs at the
 #   approved existing EKS cluster. Those jobs are skipped entirely when it is unset.
 # - PIPELINE_AZURE_* configures AKS, ACR, and Azure storage validation.

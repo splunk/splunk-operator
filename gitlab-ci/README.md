@@ -133,7 +133,7 @@ What the qualification automation does:
 - runs Azure validation against the released operator path
 - runs the GCP validation suite set against the released operator path
 - runs distroless runtime validation against the released distroless image
-- runs the Graviton or arm64 runtime suite set from the existing `splunk-operator-cicd` arm64 matrix against the released multi-arch operator image
+- runs the Graviton or arm64 runtime suite set from the existing `splunk-operator-cicd` arm64 matrix against the released multi-arch operator image when `PIPELINE_ENABLE_GRAVITON=true` or `PIPELINE_GRAVITON_ENTERPRISE_IMAGE` is configured
 - runs Helm validation against the released chart path
 - writes the qualification manifest, report, gate result, and compatibility publish plan
 
@@ -146,13 +146,14 @@ What the user needs to do:
 Qualification inputs:
 
 - required trigger: `SOK_PIPELINE_MODE=qualification_lane`
+- required Splunk Enterprise runtime input: `PIPELINE_RUNTIME_ENTERPRISE_IMAGE=<repo:tag>`, for example `splunk/splunk:10.4.0`
+- released SOK baseline: automatically resolved from the latest released `splunk-operator`
 - supported pipeline sources: manual GitLab UI (`web`), direct API (`api`), trigger token (`trigger`), multi-project downstream (`pipeline`), or child pipeline (`parent_pipeline`)
 - EKS runtime inputs: `PIPELINE_AWS_*`, `PIPELINE_EKS_VPC_PUBLIC_SUBNET_STRING`, `PIPELINE_EKS_VPC_PRIVATE_SUBNET_STRING`, `PIPELINE_TEST_BUCKET`, and `PIPELINE_TEST_INDEXES_S3_BUCKET`
 - FIPS existing-cluster input: `PIPELINE_FIPS_EKS_CLUSTER_NAME` when FIPS qualification is part of the cycle
 - Azure runtime inputs: either GitLab OIDC with `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`, or `PIPELINE_AZURE_CREDENTIALS`, plus `PIPELINE_AZURE_ACR_LOGIN_SERVER`, `PIPELINE_AZURE_REGION`, `PIPELINE_AZURE_RESOURCE_GROUP_NAME`, `PIPELINE_AZURE_STORAGE_ACCOUNT`, `PIPELINE_AZURE_STORAGE_ACCOUNT_KEY`, `PIPELINE_AZURE_TEST_CONTAINER`, and `PIPELINE_AZURE_INDEXES_CONTAINER`
 - GCP runtime inputs: either GitLab OIDC with `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT_EMAIL`, or `PIPELINE_GCP_SERVICE_ACCOUNT_KEY`, plus `PIPELINE_GCP_ARTIFACT_REGISTRY`, `PIPELINE_GCP_PROJECT_ID`, `PIPELINE_GCP_REGION`, and `PIPELINE_GCP_ZONE`
-- Graviton runtime input: `PIPELINE_GRAVITON_ENTERPRISE_IMAGE` must point to the arm-compatible enterprise repo:tag for the cycle under test
-- optional released-SOK overrides: `PIPELINE_RELEASED_OPERATOR_IMAGE_REPOSITORY`, `PIPELINE_RELEASED_OPERATOR_IMAGE_TAG`, `PIPELINE_RELEASED_HELM_REPO_URL`, and `PIPELINE_RELEASED_HELM_CHART_VERSION` when the default latest-release discovery is not the intended source
+- Graviton runtime input: set `PIPELINE_ENABLE_GRAVITON=true` to run the arm64 suites against the same `PIPELINE_RUNTIME_ENTERPRISE_IMAGE`; set `PIPELINE_GRAVITON_ENTERPRISE_IMAGE` only when arm64 needs a different repo:tag
 
 Qualification runtime inventory:
 
@@ -182,7 +183,7 @@ What the release validation automation does:
 - runs Azure validation against the staged release candidate
 - runs the GCP validation suite set against the staged release candidate
 - runs distroless runtime validation against the staged distroless candidate image
-- runs the Graviton or arm64 runtime suite set from the existing `splunk-operator-cicd` arm64 matrix against the staged multi-arch candidate image
+- runs the Graviton or arm64 runtime suite set from the existing `splunk-operator-cicd` arm64 matrix against the staged multi-arch candidate image when `PIPELINE_ENABLE_GRAVITON=true` or `PIPELINE_GRAVITON_ENTERPRISE_IMAGE` is configured
 - runs the release Helm validation job
 - packages the release-candidate artifacts only after validation
 - records the PSR qualification plan only; it does not dispatch PSR automatically
@@ -325,7 +326,8 @@ The main variable families for the expanded runtime coverage are:
 - `PIPELINE_AWS_*`, `PIPELINE_EKS_*`, `PIPELINE_TEST_BUCKET`, and `PIPELINE_TEST_INDEXES_S3_BUCKET` for EKS-based runtime jobs
 - `PIPELINE_AZURE_*` for AKS and Azure storage validation
 - `PIPELINE_GCP_*` for GKE, Artifact Registry, and GCS validation
-- `PIPELINE_GRAVITON_ENTERPRISE_IMAGE` when Graviton or arm64 runtime validation must use an arm-compatible Splunk Enterprise image
+- `PIPELINE_ENABLE_GRAVITON=true` to enable Graviton or arm64 runtime validation against the same runtime enterprise tag
+- `PIPELINE_GRAVITON_ENTERPRISE_IMAGE` only when the arm64 runtime needs a different Splunk Enterprise repo:tag
 - `PIPELINE_RUNTIME_ENTERPRISE_IMAGE` when a lane needs to override the default runtime enterprise image pin intentionally
 
 For the cloud-runtime jobs:
