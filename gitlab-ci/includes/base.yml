@@ -65,10 +65,10 @@ default:
   before_script:
     - creds-helper init
     - |
-      if [ "${CI_COMMIT_REF_NAME}" = "main" ] || [ "${CI_COMMIT_REF_NAME}" = "develop" ]; then
+      if [ "${CI_COMMIT_REF_PROTECTED}" = "true" ] && { [ "${CI_COMMIT_REF_NAME}" = "main" ] || [ "${CI_COMMIT_REF_NAME}" = "develop" ] || printf '%s' "${CI_COMMIT_REF_NAME}" | grep -Eq '^release([/-]).+$'; }; then
         export DOCKER_PATH=artifactory:v2/cloud/role/sok-docker-deployer-role
         export HELM_DEPLOYER_PATH=artifactory:v2/cloud/role/helm-deployer-role
-        export GENERIC_DEPLOYER_PATH=artifactory:v2/cloud/role/generic-deployer-role
+        export GENERIC_DEPLOYER_PATH=artifactory:v2/cloud/role/sok-generic-deployer-role
       else
         export DOCKER_PATH=artifactory:v2/cloud/role/sok-docker-test-deployer-role
         export HELM_DEPLOYER_PATH=artifactory:v2/cloud/role/helm-test-deployer-role
@@ -92,7 +92,7 @@ default:
   before_script:
     - creds-helper init
     - |
-      if [ "${CI_COMMIT_REF_NAME}" = "main" ] || [ "${CI_COMMIT_REF_NAME}" = "develop" ] || printf '%s' "${CI_COMMIT_REF_NAME}" | grep -Eq '^release([/-]).+$'; then
+      if [ "${CI_COMMIT_REF_PROTECTED}" = "true" ] && { [ "${CI_COMMIT_REF_NAME}" = "main" ] || [ "${CI_COMMIT_REF_NAME}" = "develop" ] || printf '%s' "${CI_COMMIT_REF_NAME}" | grep -Eq '^release([/-]).+$'; }; then
         export HELM_READER_PATH=artifactory:v2/cloud/role/helm-reader-role
       else
         export HELM_READER_PATH=artifactory:v2/cloud/role/helm-test-reader-role
