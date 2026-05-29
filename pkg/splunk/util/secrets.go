@@ -256,6 +256,19 @@ func GetNamespaceScopedSecret(ctx context.Context, c splcommon.ControllerClient,
 	return &namespaceScopedSecret, nil
 }
 
+// GetAdminPasswordFromNamespaceScopedSecret retrieves the admin password from the namespace-scoped secret.
+func GetAdminPasswordFromNamespaceScopedSecret(ctx context.Context, c splcommon.ControllerClient, namespace string) (string, error) {
+	secret, err := GetNamespaceScopedSecret(ctx, c, namespace)
+	if err != nil {
+		return "", err
+	}
+	adminPwd := string(secret.Data["password"])
+	if adminPwd == "" {
+		return "", fmt.Errorf("admin password is empty in namespace-scoped secret for namespace %s", namespace)
+	}
+	return adminPwd, nil
+}
+
 // GetVersionedSecretVersion checks if the secretName includes the versionedSecretIdentifier and if so, extracts the version
 func GetVersionedSecretVersion(secretName string, versionedSecretIdentifier string) (int, error) {
 	// Extracting version from secret's name
