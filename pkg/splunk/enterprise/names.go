@@ -106,11 +106,13 @@ const (
 
 	manualAppUpdateCMStr = "splunk-%s-manual-app-update"
 
-	applySHCBundleCmdStr = "/opt/splunk/bin/splunk apply shcluster-bundle -target https://%s:8089 -auth admin:`cat /mnt/splunk-secrets/password` --answer-yes -push-default-apps true &> %s &"
+	applySHCBundleCmdStr = "/opt/splunk/bin/splunk apply shcluster-bundle -target https://%s:8089 -auth admin:%s --answer-yes -push-default-apps true &> %s &"
 
 	shcBundlePushCompleteStr = "Bundle has been pushed successfully to all the cluster members.\n"
 
 	shcBundlePushStatusCheckFile = "/operator-staging/appframework/.shcluster_bundle_status.txt"
+
+	applyIdxcBundleCmdStr = "/opt/splunk/bin/splunk apply cluster-bundle -auth admin:%s --skip-validation --answer-yes"
 
 	// splunkFIPSProviderBannerStr is the line written to stderr by the Splunk CLI at
 	// startup on FIPS-enabled clusters.  Because the bundle push command redirects all
@@ -125,9 +127,7 @@ const (
 	// error detection.
 	splunkSSLCertWarnStr = "WARNING: Server Certificate"
 
-	applyIdxcBundleCmdStr = "/opt/splunk/bin/splunk apply cluster-bundle -auth admin:`cat /mnt/splunk-secrets/password` --skip-validation --answer-yes"
-
-	idxcShowClusterBundleStatusStr = "/opt/splunk/bin/splunk show cluster-bundle-status -auth admin:`cat /mnt/splunk-secrets/password`"
+	idxcShowClusterBundleStatusStr = "/opt/splunk/bin/splunk show cluster-bundle-status -auth admin:%s"
 
 	idxcBundleAlreadyPresentStr = "No new bundle will be pushed. The cluster manager and peers already have this bundle"
 
@@ -220,7 +220,7 @@ access = read : [ * ], write : [ admin ]
 	createTelAppShcString = "mkdir -p %s/app_tel_for_sok/default/; mkdir -p %s/app_tel_for_sok/metadata/; printf '%%s' \"%s\" > %s/app_tel_for_sok/default/app.conf; printf '%%s' \"%s\" > %s/app_tel_for_sok/metadata/default.meta"
 
 	// Command to reload app configuration
-	telAppReloadString = "curl -k -u admin:`cat /mnt/splunk-secrets/password` https://localhost:8089/services/apps/local/_reload"
+	telAppReloadString = "curl -k -u admin:%s https://localhost:8089/services/apps/local/_reload"
 
 	// Name of the telemetry configmap: <namePrefix>-manager-telemetry
 	telConfigMapTemplateStr = "%smanager-telemetry"
@@ -237,6 +237,17 @@ const (
 	livenessProbeLevelDefault int = iota
 	livenessProbeLevelOne
 )
+
+// shellQuote wraps s in single quotes for safe shell interpolation.
+// Embedded single quotes are escaped using the sequence: quote, backslash, quote, quote.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// redactSplunkAuth replaces adminPwd in cmd with **** for safe logging.
+func redactSplunkAuth(cmd, adminPwd string) string {
+	return strings.ReplaceAll(cmd, adminPwd, "****")
+}
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.
 func GetSplunkDeploymentName(instanceType InstanceType, identifier string) string {
