@@ -766,7 +766,7 @@ var resetSymbolicLinks = func(ctx context.Context, client splcommon.ControllerCl
 	}
 
 	// Run the commands on Splunk pods
-	err := runCustomCommandOnSplunkPods(ctx, cr, replicas, command, podExecClient)
+	err := runCustomCommandOnSplunkPods(ctx, cr, replicas, command, "", podExecClient)
 	if err != nil {
 		scopedLog.ErrorContext(ctx, "unable to run command on splunk pod", "error", err)
 		return err
