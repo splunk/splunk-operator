@@ -2499,6 +2499,10 @@ func TestIDXCRunPlaybook(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Fatalf("failed to create namespace-scoped secret: %v", err)
+	}
 	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{
 		AppsStatusMaxConcurrentAppDownloads: 10,
 	}
@@ -2534,7 +2538,7 @@ func TestIDXCRunPlaybook(t *testing.T) {
 	kind := cr.GetObjectKind().GroupVersionKind().Kind
 	podExecClient := splutil.GetPodExecClient(c, &cr, targetPodName)
 	playbookContext := getClusterScopePlaybookContext(ctx, c, &cr, afwPipeline, targetPodName, kind, podExecClient)
-	err := playbookContext.runPlaybook(ctx)
+	err = playbookContext.runPlaybook(ctx)
 	if err == nil {
 		t.Errorf("runPlaybook() should have returned error, since we dont get the required output")
 	}
@@ -2542,8 +2546,8 @@ func TestIDXCRunPlaybook(t *testing.T) {
 	// now replace the pod exec client with our mock client
 	podExecCommands := []string{
 		fmt.Sprintf(cmdSetFilePermissionsToRW, idxcAppsLocationOnClusterManager),
-		applyIdxcBundleCmdStr,
-		idxcShowClusterBundleStatusStr,
+		"/opt/splunk/bin/splunk apply cluster-bundle -auth admin:",
+		"/opt/splunk/bin/splunk show cluster-bundle-status -auth admin:",
 	}
 	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
 		{
@@ -2562,7 +2566,7 @@ func TestIDXCRunPlaybook(t *testing.T) {
 		},
 	}
 
-	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: &cr}
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: &cr, Client: c}
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
 	playbookContext = getClusterScopePlaybookContext(ctx, c, &cr, afwPipeline, targetPodName, kind, mockPodExecClient)
@@ -2675,7 +2679,7 @@ func TestSetLivenessProbeLevelForSHC(t *testing.T) {
 		},
 	}
 
-	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cr}
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cr, Client: c}
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
 	playbookContext := &SHCPlaybookContext{
@@ -2758,7 +2762,7 @@ func TestSetLivenessProbeLevelForIDXC(t *testing.T) {
 		},
 	}
 
-	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr, Client: c}
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
 	playbookContext := &IdxcPlaybookContext{
@@ -2850,6 +2854,10 @@ func TestSHCRunPlaybook(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Fatalf("failed to create namespace-scoped secret: %v", err)
+	}
 	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{
 		AppsStatusMaxConcurrentAppDownloads: 10,
 	}
@@ -2918,7 +2926,7 @@ func TestSHCRunPlaybook(t *testing.T) {
 	}
 
 	// now replace the pod exec client with our mock client
-	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cr}
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cr, Client: c}
 
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
@@ -2932,7 +2940,7 @@ func TestSHCRunPlaybook(t *testing.T) {
 
 	// Test2: If the poxExec failed for changing the file permissions, should return an error
 	mockPodExecReturnContexts[0].StdErr = "Failed"
-	err := playbookContext.runPlaybook(ctx)
+	err = playbookContext.runPlaybook(ctx)
 	if err == nil {
 		t.Errorf("runPlaybook() should should return an error if the command %v execution fails", podExecCommands[0])
 	}
@@ -3009,6 +3017,7 @@ func TestSHCRunPlaybook(t *testing.T) {
 
 func TestRunLocalScopedPlaybook(t *testing.T) {
 	ctx := context.TODO()
+
 	// Test for each phase can send the worker to down stream
 	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
@@ -3059,6 +3068,10 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 
 	// Create client and add object
 	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Fatalf("failed to create namespace-scoped secret: %v", err)
+	}
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3111,7 +3124,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	}
 
 	// now replace the pod exec client with our mock client
-	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Client: c}
 
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
@@ -3145,7 +3158,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	// Test1: checkIfFileExistsOnPod returns error
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
-	err := localInstallCtxt.runPlaybook(ctx)
+	err = localInstallCtxt.runPlaybook(ctx)
 	if err == nil {
 		t.Errorf("Failed to detect missingApp pkg")
 	}
@@ -3243,6 +3256,7 @@ func TestCanAppScopeHaveInstallWorker(t *testing.T) {
 
 func TestPremiumAppScopedPlaybook(t *testing.T) {
 	ctx := context.TODO()
+
 	// Test for each phase can send the worker to down stream
 	cr := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
@@ -3296,6 +3310,10 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 
 	// Create client and add object
 	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Fatalf("failed to create namespace-scoped secret: %v", err)
+	}
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3354,7 +3372,7 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 	}
 
 	// now replace the pod exec client with our mock client
-	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Client: c}
 
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
@@ -3397,7 +3415,7 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 	// Test1: checkIfFileExistsOnPod returns error
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
-	err := pCtx.runPlaybook(ctx)
+	err = pCtx.runPlaybook(ctx)
 	if err == nil {
 		t.Errorf("Failed to detect missingApp pkg")
 	}
@@ -4387,6 +4405,12 @@ func TestGetTelAppNameExtension(t *testing.T) {
 func TestAddTelAppCMaster(t *testing.T) {
 	ctx := context.TODO()
 
+	mockClient := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, mockClient, "")
+	if err != nil {
+		t.Fatalf("failed to create namespace-scoped secret: %v", err)
+	}
+
 	// Define CRs
 	cmCr := &enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -4403,7 +4427,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 	// Define mock podexec context
 	podExecCommands := []string{
 		fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString),
-		telAppReloadString,
+		"curl -k -u admin:",
 	}
 
 	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
@@ -4415,11 +4439,11 @@ func TestAddTelAppCMaster(t *testing.T) {
 		},
 	}
 
-	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr, Client: mockClient}
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
 	// Test non-shc
-	err := addTelApp(ctx, mockPodExecClient, 1, cmCr)
+	err = addTelApp(ctx, mockPodExecClient, 1, cmCr)
 	if err != nil {
 		t.Errorf("Tel app not added successfully, error: %v", err)
 	}
@@ -4427,7 +4451,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 	// Test shc
 	podExecCommands = []string{
 		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer),
-		fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(shcCr.GetNamespace(), SplunkSearchHead, shcCr.GetName(), 0, false), "/tmp/status.txt"),
+		fmt.Sprintf("/opt/splunk/bin/splunk apply shcluster-bundle -target https://%s:8089 -auth admin:", GetSplunkStatefulsetURL(shcCr.GetNamespace(), SplunkSearchHead, shcCr.GetName(), 0, false)),
 	}
 
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
@@ -4451,7 +4475,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 		},
 	}
 
-	var mockPodExecClientError1 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
+	var mockPodExecClientError1 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr, Client: mockClient}
 	mockPodExecClientError1.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
 	err = addTelApp(ctx, mockPodExecClientError1, 1, cmCr)
@@ -4463,7 +4487,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 	podExecCommandsError = []string{
 		fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString),
 	}
-	var mockPodExecClientError2 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
+	var mockPodExecClientError2 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr, Client: mockClient}
 	mockPodExecClientError2.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
 	err = addTelApp(ctx, mockPodExecClientError2, 1, cmCr)
@@ -4476,7 +4500,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer),
 	}
 
-	var mockPodExecClientError3 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
+	var mockPodExecClientError3 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr, Client: mockClient}
 	mockPodExecClientError3.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
 	err = addTelApp(ctx, mockPodExecClientError3, 1, shcCr)
@@ -4488,7 +4512,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 	podExecCommandsError = []string{
 		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer),
 	}
-	var mockPodExecClientError4 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
+	var mockPodExecClientError4 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr, Client: mockClient}
 	mockPodExecClientError4.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
 	err = addTelApp(ctx, mockPodExecClientError4, 1, shcCr)
@@ -4499,6 +4523,11 @@ func TestAddTelAppCMaster(t *testing.T) {
 
 func TestAddTelAppCManager(t *testing.T) {
 	ctx := context.TODO()
+	mockClient := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, mockClient, "")
+	if err != nil {
+		t.Fatalf("failed to create namespace-scoped secret: %v", err)
+	}
 
 	// Define CRs
 	cmCr := &enterpriseApi.ClusterManager{
@@ -4516,7 +4545,7 @@ func TestAddTelAppCManager(t *testing.T) {
 	// Define mock podexec context
 	podExecCommands := []string{
 		fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString),
-		telAppReloadString,
+		"curl -k -u admin:",
 	}
 
 	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
@@ -4528,11 +4557,11 @@ func TestAddTelAppCManager(t *testing.T) {
 		},
 	}
 
-	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr, Client: mockClient}
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
 	// Test non-shc
-	err := addTelApp(ctx, mockPodExecClient, 1, cmCr)
+	err = addTelApp(ctx, mockPodExecClient, 1, cmCr)
 	if err != nil {
 		t.Errorf("Tel app not added successfully, error: %v", err)
 	}
@@ -4540,7 +4569,7 @@ func TestAddTelAppCManager(t *testing.T) {
 	// Test shc
 	podExecCommands = []string{
 		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer),
-		fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(shcCr.GetNamespace(), SplunkSearchHead, shcCr.GetName(), 0, false), "/tmp/status.txt"),
+		fmt.Sprintf("/opt/splunk/bin/splunk apply shcluster-bundle -target https://%s:8089 -auth admin:", GetSplunkStatefulsetURL(shcCr.GetNamespace(), SplunkSearchHead, shcCr.GetName(), 0, false)),
 	}
 
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
@@ -4564,7 +4593,7 @@ func TestAddTelAppCManager(t *testing.T) {
 		},
 	}
 
-	var mockPodExecClientError1 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
+	var mockPodExecClientError1 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr, Client: mockClient}
 	mockPodExecClientError1.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
 	err = addTelApp(ctx, mockPodExecClientError1, 1, cmCr)
@@ -4576,7 +4605,7 @@ func TestAddTelAppCManager(t *testing.T) {
 	podExecCommandsError = []string{
 		fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString),
 	}
-	var mockPodExecClientError2 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
+	var mockPodExecClientError2 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr, Client: mockClient}
 	mockPodExecClientError2.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
 	err = addTelApp(ctx, mockPodExecClientError2, 1, cmCr)
@@ -4589,7 +4618,7 @@ func TestAddTelAppCManager(t *testing.T) {
 		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer),
 	}
 
-	var mockPodExecClientError3 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
+	var mockPodExecClientError3 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr, Client: mockClient}
 	mockPodExecClientError3.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
 	err = addTelApp(ctx, mockPodExecClientError3, 1, shcCr)
@@ -4601,7 +4630,7 @@ func TestAddTelAppCManager(t *testing.T) {
 	podExecCommandsError = []string{
 		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer),
 	}
-	var mockPodExecClientError4 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
+	var mockPodExecClientError4 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr, Client: mockClient}
 	mockPodExecClientError4.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
 	err = addTelApp(ctx, mockPodExecClientError4, 1, shcCr)
@@ -4696,6 +4725,12 @@ func TestIsAppAlreadyInstalled(t *testing.T) {
 		},
 	}
 
+	mockClient := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, mockClient, "test")
+	if err != nil {
+		t.Fatalf("failed to create namespace-scoped secret: %v", err)
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a test CR
@@ -4707,7 +4742,7 @@ func TestIsAppAlreadyInstalled(t *testing.T) {
 			}
 
 			// Create mock pod exec client with CR
-			mockPodExecClient := &spltest.MockPodExecClient{Cr: cr}
+			mockPodExecClient := &spltest.MockPodExecClient{Cr: cr, Client: mockClient}
 			mockPodExecClient.SetTargetPodName(ctx, "test-pod")
 
 			// Set up the mock return context
@@ -4717,8 +4752,8 @@ func TestIsAppAlreadyInstalled(t *testing.T) {
 				Err:    tt.err,
 			}
 
-			// Add the mock command and return context - use the exact command pattern
-			command := "/opt/splunk/bin/splunk list app testapp -auth admin:`cat /mnt/splunk-secrets/password`| grep ENABLED"
+			// Use a prefix for matching since the password comes from the namespace-scoped secret (generated)
+			command := "/opt/splunk/bin/splunk list app testapp -auth admin:"
 			mockPodExecClient.AddMockPodExecReturnContexts(ctx, []string{command}, mockReturnContext)
 
 			// Call the function
@@ -4911,7 +4946,7 @@ func TestSHCIsBundlePushComplete(t *testing.T) {
 				appDeployContext: appDeployContext,
 			}
 
-			mockPodExecClient := &spltest.MockPodExecClient{Cr: cr}
+			mockPodExecClient := &spltest.MockPodExecClient{Cr: cr, Client: c}
 
 			podExecCmds := []string{catCmd}
 			mockReturnCtxts := []*spltest.MockPodExecReturnContext{
@@ -5059,6 +5094,10 @@ func TestHandleEsappPostinstallFipsAware(t *testing.T) {
 			}
 
 			c := spltest.NewMockClient()
+			_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+			if err != nil {
+				t.Fatalf("failed to create namespace-scoped secret: %v", err)
+			}
 			var client splcommon.ControllerClient = getConvertedClient(c)
 			var waiter sync.WaitGroup
 
@@ -5090,7 +5129,7 @@ func TestHandleEsappPostinstallFipsAware(t *testing.T) {
 			}
 
 			phaseInfo := &enterpriseApi.PhaseInfo{}
-			err := handleEsappPostinstall(ctx, &pCtx, phaseInfo)
+			err = handleEsappPostinstall(ctx, &pCtx, phaseInfo)
 
 			if tt.expectedError {
 				if err == nil {
