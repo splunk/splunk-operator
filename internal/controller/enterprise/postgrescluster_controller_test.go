@@ -147,6 +147,15 @@ func ensureCNPGServerTLSLeafSecret(ctx context.Context, c client.Client, cluster
 	Expect(c.Status().Update(ctx, cnpg)).To(Succeed())
 }
 
+func markCNPGClusterHealthy(cnpg *cnpgv1.Cluster, clusterName, caSecretName string) {
+	cnpg.Status.Phase = cnpgv1.PhaseHealthy
+	cnpg.Status.WriteService = clusterName + "-rw"
+	cnpg.Status.ReadService = clusterName + "-ro"
+	if caSecretName != "" {
+		cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
+	}
+}
+
 var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 	const (
@@ -415,8 +424,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
 				cnpg := &cnpgv1.Cluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
-				cnpg.Status.Phase = cnpgv1.PhaseHealthy
-				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
+				markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 				reconcileAfterCNPGHealthyOrPatch()
 
@@ -521,8 +529,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				// SERVER_CA_* keys; otherwise configMap converge loops on ConfigMapCAMetadataPending
 				// and the aggregate ClusterReady never settles True.
 				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
-				cnpg.Status.Phase = cnpgv1.PhaseHealthy
-				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
+				markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 				reconcileAfterCNPGHealthyOrPatch()
 
@@ -617,8 +624,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				cnpg := &cnpgv1.Cluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
 
-				cnpg.Status.Phase = cnpgv1.PhaseHealthy
-				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
+				markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
 				cnpg.Status.ManagedRolesStatus = cnpgv1.ManagedRoles{
 					ByStatus: map[cnpgv1.RoleStatus][]string{
 						cnpgv1.RoleStatusReconciled: {"app_user", "app_user_rw"},
@@ -689,8 +695,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
 				cnpg := &cnpgv1.Cluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
-				cnpg.Status.Phase = cnpgv1.PhaseHealthy
-				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
+				markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 
 				reconcileAfterCNPGHealthyOrPatch()
@@ -760,7 +765,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				// Simulate CNPG becoming healthy.
 				cnpg := &cnpgv1.Cluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
-				cnpg.Status.Phase = cnpgv1.PhaseHealthy
+				markCNPGClusterHealthy(cnpg, clusterName, "")
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 				reconcileNTimes(1)
 
@@ -812,7 +817,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				// Make CNPG healthy and reconcile to create the ScheduledBackup.
 				cnpg := &cnpgv1.Cluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
-				cnpg.Status.Phase = cnpgv1.PhaseHealthy
+				markCNPGClusterHealthy(cnpg, clusterName, "")
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 				reconcileNTimes(1)
 
@@ -848,7 +853,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 				cnpg := &cnpgv1.Cluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
-				cnpg.Status.Phase = cnpgv1.PhaseHealthy
+				markCNPGClusterHealthy(cnpg, clusterName, "")
 				cnpg.Status.ManagedRolesStatus = cnpgv1.ManagedRoles{
 					ByStatus: map[cnpgv1.RoleStatus][]string{
 						cnpgv1.RoleStatusReconciled: {"app_user", "app_user_rw"},
@@ -991,8 +996,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
 				cnpg := &cnpgv1.Cluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
-				cnpg.Status.Phase = cnpgv1.PhaseHealthy
-				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
+				markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 				reconcileAfterCNPGHealthyOrPatch()
 
