@@ -161,7 +161,6 @@ scan-released-operator-image-container:
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-ecr-image-ref.txt
     JOB_INT_TEST_PROFILE: smoke
     JOB_INT_TEST_TIMEOUT: 225m
-    JOB_INT_TEST_TO_SKIP: '^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$'
     JOB_EKS_CLUSTER_TEST_TYPE: smoke
     JOB_INT_CLUSTER_NODES: "1"
     JOB_INT_CLUSTER_WORKERS: "5"
@@ -185,7 +184,6 @@ scan-released-operator-image-container:
   variables:
     JOB_INT_TEST_PROFILE: full
     JOB_INT_TEST_TIMEOUT: 225m
-    JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
     JOB_EKS_CLUSTER_TEST_TYPE: int
     JOB_EKS_CLUSTER_PLATFORM_SUFFIX: qual
     JOB_INT_CLUSTER_NODES: "1"
@@ -204,7 +202,7 @@ qualification-appframeworks-s1-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: qualification-appframeworks-s1-validation
-    JOB_INT_TEST_FOCUS: appframeworksS1
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:s1 && feature:appframework && cloud:aws"
 
 qualification-managerappframework-c3-validation:
   extends:
@@ -212,7 +210,7 @@ qualification-managerappframework-c3-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: qualification-managerappframework-c3-validation
-    JOB_INT_TEST_FOCUS: managerappframeworkc3
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:c3 && variant:manager && feature:appframework && cloud:aws"
 
 qualification-managerappframework-m4-validation:
   extends:
@@ -220,49 +218,49 @@ qualification-managerappframework-m4-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: qualification-managerappframework-m4-validation
-    JOB_INT_TEST_FOCUS: managerappframeworkm4
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:m4 && variant:manager && feature:appframework && cloud:aws"
 
 qualification-managersecret-validation:
   extends: .runtime-qualification-integration-suite-job
   variables:
     WORKFLOW_SLUG: qualification-managersecret-validation
-    JOB_INT_TEST_FOCUS: managersecret
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:secret"
 
 qualification-managersmartstore-validation:
   extends: .runtime-qualification-integration-suite-job
   variables:
     WORKFLOW_SLUG: qualification-managersmartstore-validation
-    JOB_INT_TEST_FOCUS: managersmartstore
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:smartstore"
 
 qualification-managermc1-validation:
   extends: .runtime-qualification-integration-suite-job
   variables:
     WORKFLOW_SLUG: qualification-managermc1-validation
-    JOB_INT_TEST_FOCUS: managermc1
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:monitoringconsole && suite:mc1"
 
 qualification-managermc2-validation:
   extends: .runtime-qualification-integration-suite-job
   variables:
     WORKFLOW_SLUG: qualification-managermc2-validation
-    JOB_INT_TEST_FOCUS: managermc2
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:monitoringconsole && suite:mc2"
 
 qualification-managercrcrud-validation:
   extends: .runtime-qualification-integration-suite-job
   variables:
     WORKFLOW_SLUG: qualification-managercrcrud-validation
-    JOB_INT_TEST_FOCUS: managercrcrud
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:crcrud"
 
 qualification-licensemanager-validation:
   extends: .runtime-qualification-integration-suite-job
   variables:
     WORKFLOW_SLUG: qualification-licensemanager-validation
-    JOB_INT_TEST_FOCUS: licensemanager
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:licensemanager"
 
 qualification-indingsep-validation:
   extends: .runtime-qualification-integration-suite-job
   variables:
     WORKFLOW_SLUG: qualification-indingsep-validation
-    JOB_INT_TEST_FOCUS: indingsep
+    JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"
 
 helm-eks-validation:
   extends:
@@ -336,7 +334,6 @@ qualification-fips-integration-validation:
     JOB_RUNTIME_IMAGE_VARIANT: distroless
     JOB_INT_TEST_PROFILE: full
     JOB_INT_TEST_TIMEOUT: 255m
-    JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
     JOB_EKS_CLUSTER_TEST_TYPE: int
     JOB_EKS_CLUSTER_PLATFORM_SUFFIX: qual-dl
     JOB_INT_CLUSTER_NODES: "1"
@@ -360,7 +357,6 @@ qualification-fips-integration-validation:
   variables:
     JOB_INT_TEST_PROFILE: full
     JOB_INT_TEST_TIMEOUT: 255m
-    JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
     JOB_EKS_CLUSTER_TEST_TYPE: int
     JOB_EKS_CLUSTER_PLATFORM_SUFFIX: qual-arm64
     JOB_INT_CLUSTER_NODES: "1"
@@ -379,14 +375,14 @@ qualification-azure-validation:
   extends: .runtime-released-sok-azure-validation-job
   variables:
     WORKFLOW_SLUG: qualification-azure-validation
-    JOB_CLOUD_TEST_FOCUS: azure_sanity
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && cloud:azure"
     JOB_CLOUD_TEST_TIMEOUT: 225m
 
 qualification-gcp-c3-validation:
   extends: .runtime-released-sok-gcp-validation-job
   variables:
     WORKFLOW_SLUG: qualification-gcp-c3-validation
-    JOB_CLOUD_TEST_FOCUS: c3_gcp_sanity
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:c3 && cloud:gcp && variant:master"
     JOB_CLOUD_TEST_TIMEOUT: 225m
     JOB_CLOUD_GCP_ZONE: us-west2-a
 
@@ -394,7 +390,7 @@ qualification-gcp-c3-manager-validation:
   extends: .runtime-released-sok-gcp-validation-job
   variables:
     WORKFLOW_SLUG: qualification-gcp-c3-manager-validation
-    JOB_CLOUD_TEST_FOCUS: c3_mgr_gcp_sanity
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:c3 && cloud:gcp && variant:manager"
     JOB_CLOUD_TEST_TIMEOUT: 225m
     JOB_CLOUD_GCP_ZONE: us-west2-b
 
@@ -402,7 +398,7 @@ qualification-gcp-m4-validation:
   extends: .runtime-released-sok-gcp-validation-job
   variables:
     WORKFLOW_SLUG: qualification-gcp-m4-validation
-    JOB_CLOUD_TEST_FOCUS: m4_gcp_sanity
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:m4 && cloud:gcp && variant:master"
     JOB_CLOUD_TEST_TIMEOUT: 225m
     JOB_CLOUD_GCP_ZONE: us-west2-c
 
@@ -410,7 +406,7 @@ qualification-gcp-m4-manager-validation:
   extends: .runtime-released-sok-gcp-validation-job
   variables:
     WORKFLOW_SLUG: qualification-gcp-m4-manager-validation
-    JOB_CLOUD_TEST_FOCUS: m4_mgr_gcp_sanity
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:m4 && cloud:gcp && variant:manager"
     JOB_CLOUD_TEST_TIMEOUT: 225m
     JOB_CLOUD_GCP_ZONE: us-west2-a
 
@@ -418,7 +414,7 @@ qualification-gcp-s1-validation:
   extends: .runtime-released-sok-gcp-validation-job
   variables:
     WORKFLOW_SLUG: qualification-gcp-s1-validation
-    JOB_CLOUD_TEST_FOCUS: s1_gcp_sanity
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:s1 && cloud:gcp"
     JOB_CLOUD_TEST_TIMEOUT: 225m
     JOB_CLOUD_GCP_ZONE: us-west2-b
 
@@ -428,7 +424,7 @@ qualification-distroless-appframeworks-s1-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: qualification-distroless-appframeworks-s1-validation
-    JOB_INT_TEST_FOCUS: appframeworksS1
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:s1 && feature:appframework && cloud:aws"
 
 qualification-distroless-managerappframework-c3-validation:
   extends:
@@ -436,7 +432,7 @@ qualification-distroless-managerappframework-c3-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: qualification-distroless-managerappframework-c3-validation
-    JOB_INT_TEST_FOCUS: managerappframeworkc3
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:c3 && variant:manager && feature:appframework && cloud:aws"
 
 qualification-distroless-managerappframework-m4-validation:
   extends:
@@ -444,55 +440,55 @@ qualification-distroless-managerappframework-m4-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: qualification-distroless-managerappframework-m4-validation
-    JOB_INT_TEST_FOCUS: managerappframeworkm4
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:m4 && variant:manager && feature:appframework && cloud:aws"
 
 qualification-distroless-managersecret-validation:
   extends: .runtime-released-sok-distroless-suite-job
   variables:
     WORKFLOW_SLUG: qualification-distroless-managersecret-validation
-    JOB_INT_TEST_FOCUS: managersecret
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:secret"
 
 qualification-distroless-managersmartstore-validation:
   extends: .runtime-released-sok-distroless-suite-job
   variables:
     WORKFLOW_SLUG: qualification-distroless-managersmartstore-validation
-    JOB_INT_TEST_FOCUS: managersmartstore
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:smartstore"
 
 qualification-distroless-managermc1-validation:
   extends: .runtime-released-sok-distroless-suite-job
   variables:
     WORKFLOW_SLUG: qualification-distroless-managermc1-validation
-    JOB_INT_TEST_FOCUS: managermc1
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:monitoringconsole && suite:mc1"
 
 qualification-distroless-managermc2-validation:
   extends: .runtime-released-sok-distroless-suite-job
   variables:
     WORKFLOW_SLUG: qualification-distroless-managermc2-validation
-    JOB_INT_TEST_FOCUS: managermc2
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:monitoringconsole && suite:mc2"
 
 qualification-distroless-managercrcrud-validation:
   extends: .runtime-released-sok-distroless-suite-job
   variables:
     WORKFLOW_SLUG: qualification-distroless-managercrcrud-validation
-    JOB_INT_TEST_FOCUS: managercrcrud
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:crcrud"
 
 qualification-distroless-licensemanager-validation:
   extends: .runtime-released-sok-distroless-suite-job
   variables:
     WORKFLOW_SLUG: qualification-distroless-licensemanager-validation
-    JOB_INT_TEST_FOCUS: licensemanager
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:licensemanager"
 
 qualification-distroless-managerdeletecr-validation:
   extends: .runtime-released-sok-distroless-suite-job
   variables:
     WORKFLOW_SLUG: qualification-distroless-managerdeletecr-validation
-    JOB_INT_TEST_FOCUS: managerdeletecr
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:deletecr"
 
 qualification-distroless-indingsep-validation:
   extends: .runtime-released-sok-distroless-suite-job
   variables:
     WORKFLOW_SLUG: qualification-distroless-indingsep-validation
-    JOB_INT_TEST_FOCUS: indingsep
+    JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"
 
 # Keep the arm64 suite set aligned with the proven splunk-operator-cicd
 # Graviton matrix instead of widening it independently in this repo.
@@ -502,55 +498,55 @@ qualification-graviton-appframeworks-s1-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: qualification-graviton-appframeworks-s1-validation
-    JOB_INT_TEST_FOCUS: appframeworksS1
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:s1 && feature:appframework && cloud:aws"
 
 qualification-graviton-managersecret-validation:
   extends: .runtime-released-sok-graviton-suite-job
   variables:
     WORKFLOW_SLUG: qualification-graviton-managersecret-validation
-    JOB_INT_TEST_FOCUS: managersecret
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:secret"
 
 qualification-graviton-managersmartstore-validation:
   extends: .runtime-released-sok-graviton-suite-job
   variables:
     WORKFLOW_SLUG: qualification-graviton-managersmartstore-validation
-    JOB_INT_TEST_FOCUS: managersmartstore
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:smartstore"
 
 qualification-graviton-managermc1-validation:
   extends: .runtime-released-sok-graviton-suite-job
   variables:
     WORKFLOW_SLUG: qualification-graviton-managermc1-validation
-    JOB_INT_TEST_FOCUS: managermc1
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:monitoringconsole && suite:mc1"
 
 qualification-graviton-managermc2-validation:
   extends: .runtime-released-sok-graviton-suite-job
   variables:
     WORKFLOW_SLUG: qualification-graviton-managermc2-validation
-    JOB_INT_TEST_FOCUS: managermc2
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:monitoringconsole && suite:mc2"
 
 qualification-graviton-managercrcrud-validation:
   extends: .runtime-released-sok-graviton-suite-job
   variables:
     WORKFLOW_SLUG: qualification-graviton-managercrcrud-validation
-    JOB_INT_TEST_FOCUS: managercrcrud
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:crcrud"
 
 qualification-graviton-licensemanager-validation:
   extends: .runtime-released-sok-graviton-suite-job
   variables:
     WORKFLOW_SLUG: qualification-graviton-licensemanager-validation
-    JOB_INT_TEST_FOCUS: licensemanager
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:licensemanager"
 
 qualification-graviton-managerdeletecr-validation:
   extends: .runtime-released-sok-graviton-suite-job
   variables:
     WORKFLOW_SLUG: qualification-graviton-managerdeletecr-validation
-    JOB_INT_TEST_FOCUS: managerdeletecr
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:deletecr"
 
 qualification-graviton-indingsep-validation:
   extends: .runtime-released-sok-graviton-suite-job
   variables:
     WORKFLOW_SLUG: qualification-graviton-indingsep-validation
-    JOB_INT_TEST_FOCUS: indingsep
+    JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"
 
 # Nightly integration fan-out follows the old GitHub nightly integration matrix:
 # one suite per job and one EKS cluster per suite instead of a single large run.
@@ -573,7 +569,6 @@ qualification-graviton-indingsep-validation:
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-ecr-image-ref.txt
     JOB_INT_TEST_PROFILE: full
     JOB_INT_TEST_TIMEOUT: 225m
-    JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
     JOB_EKS_CLUSTER_TEST_TYPE: int
     JOB_EKS_CLUSTER_PLATFORM_SUFFIX: night
     JOB_INT_CLUSTER_NODES: "1"
@@ -595,49 +590,58 @@ eks-smoke-basic-validation:
   extends: .runtime-smoke-suite-job
   variables:
     WORKFLOW_SLUG: eks-smoke-basic-validation
-    JOB_INT_TEST_FOCUS: basic
+    JOB_INT_TEST_LABELS: "tier:e2e-pr && feature:basic"
 
 eks-smoke-appframeworks-s1-validation:
-  extends: .runtime-smoke-suite-job
+  extends:
+    - .runtime-smoke-suite-job
+    - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: eks-smoke-appframeworks-s1-validation
-    JOB_INT_TEST_FOCUS: appframeworksS1
+    JOB_INT_TEST_LABELS: "tier:e2e-pr && sva:s1 && feature:appframework && cloud:aws"
+    JOB_INT_CLUSTER_NODES: "1"
 
 eks-smoke-managerappframework-c3-validation:
-  extends: .runtime-smoke-suite-job
+  extends:
+    - .runtime-smoke-suite-job
+    - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: eks-smoke-managerappframework-c3-validation
-    JOB_INT_TEST_FOCUS: managerappframeworkc3
+    JOB_INT_TEST_LABELS: "tier:e2e-pr && sva:c3 && variant:manager && feature:appframework && cloud:aws"
+    JOB_INT_CLUSTER_NODES: "1"
 
 eks-smoke-managerappframework-m4-validation:
-  extends: .runtime-smoke-suite-job
+  extends:
+    - .runtime-smoke-suite-job
+    - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: eks-smoke-managerappframework-m4-validation
-    JOB_INT_TEST_FOCUS: managerappframeworkm4
+    JOB_INT_TEST_LABELS: "tier:e2e-pr && sva:m4 && variant:manager && feature:appframework && cloud:aws"
+    JOB_INT_CLUSTER_NODES: "1"
 
 eks-smoke-managersecret-validation:
   extends: .runtime-smoke-suite-job
   variables:
     WORKFLOW_SLUG: eks-smoke-managersecret-validation
-    JOB_INT_TEST_FOCUS: managersecret
+    JOB_INT_TEST_LABELS: "tier:e2e-pr && variant:manager && feature:secret"
 
 eks-smoke-managermc-validation:
   extends: .runtime-smoke-suite-job
   variables:
     WORKFLOW_SLUG: eks-smoke-managermc-validation
-    JOB_INT_TEST_FOCUS: managermc
+    JOB_INT_TEST_LABELS: "tier:e2e-pr && variant:manager && feature:monitoringconsole"
 
 eks-smoke-indingsep-validation:
   extends: .runtime-smoke-suite-job
   variables:
     WORKFLOW_SLUG: eks-smoke-indingsep-validation
-    JOB_INT_TEST_FOCUS: indingsep
+    JOB_INT_TEST_LABELS: "tier:e2e-pr && feature:indingsep"
 
 eks-smoke-licensemanager-validation:
   extends: .runtime-smoke-suite-job
   variables:
     WORKFLOW_SLUG: eks-smoke-licensemanager-validation
-    JOB_INT_TEST_FOCUS: licensemanager
+    JOB_INT_TEST_LABELS: "tier:e2e-pr && variant:manager && feature:licensemanager"
 
 nightly-eks-integration-appframeworks-s1-validation:
   extends:
@@ -645,7 +649,7 @@ nightly-eks-integration-appframeworks-s1-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: nightly-eks-integration-appframeworks-s1-validation
-    JOB_INT_TEST_FOCUS: appframeworksS1
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:s1 && feature:appframework && cloud:aws"
 
 nightly-eks-integration-managerappframework-c3-validation:
   extends:
@@ -653,7 +657,7 @@ nightly-eks-integration-managerappframework-c3-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: nightly-eks-integration-managerappframework-c3-validation
-    JOB_INT_TEST_FOCUS: managerappframeworkc3
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:c3 && variant:manager && feature:appframework && cloud:aws"
 
 nightly-eks-integration-managerappframework-m4-validation:
   extends:
@@ -661,46 +665,46 @@ nightly-eks-integration-managerappframework-m4-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: nightly-eks-integration-managerappframework-m4-validation
-    JOB_INT_TEST_FOCUS: managerappframeworkm4
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:m4 && variant:manager && feature:appframework && cloud:aws"
 
 nightly-eks-integration-managersecret-validation:
   extends: .runtime-nightly-integration-suite-job
   variables:
     WORKFLOW_SLUG: nightly-eks-integration-managersecret-validation
-    JOB_INT_TEST_FOCUS: managersecret
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:secret"
 
 nightly-eks-integration-managersmartstore-validation:
   extends: .runtime-nightly-integration-suite-job
   variables:
     WORKFLOW_SLUG: nightly-eks-integration-managersmartstore-validation
-    JOB_INT_TEST_FOCUS: managersmartstore
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:smartstore"
 
 nightly-eks-integration-managermc1-validation:
   extends: .runtime-nightly-integration-suite-job
   variables:
     WORKFLOW_SLUG: nightly-eks-integration-managermc1-validation
-    JOB_INT_TEST_FOCUS: managermc1
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:monitoringconsole && suite:mc1"
 
 nightly-eks-integration-managermc2-validation:
   extends: .runtime-nightly-integration-suite-job
   variables:
     WORKFLOW_SLUG: nightly-eks-integration-managermc2-validation
-    JOB_INT_TEST_FOCUS: managermc2
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:monitoringconsole && suite:mc2"
 
 nightly-eks-integration-managercrcrud-validation:
   extends: .runtime-nightly-integration-suite-job
   variables:
     WORKFLOW_SLUG: nightly-eks-integration-managercrcrud-validation
-    JOB_INT_TEST_FOCUS: managercrcrud
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:crcrud"
 
 nightly-eks-integration-licensemanager-validation:
   extends: .runtime-nightly-integration-suite-job
   variables:
     WORKFLOW_SLUG: nightly-eks-integration-licensemanager-validation
-    JOB_INT_TEST_FOCUS: licensemanager
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:licensemanager"
 
 nightly-eks-integration-indingsep-validation:
   extends: .runtime-nightly-integration-suite-job
   variables:
     WORKFLOW_SLUG: nightly-eks-integration-indingsep-validation
-    JOB_INT_TEST_FOCUS: indingsep
+    JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"

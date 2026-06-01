@@ -58,7 +58,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("smoke, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled, install apps then upgrade them", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with App Framework enabled, install apps then upgrade them", Label("tier:e2e-pr", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -203,7 +203,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework and Image Upgrade", func() {
-		It("smoke, c3, managerappframeworkc3t, appframework: can deploy a C3 SVA with App Framework enabled, install apps then upgrade the image and apps", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with App Framework enabled, install apps then upgrade the image and apps", Label("tier:e2e-pr", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			//################## SETUP ####################
 
@@ -293,23 +293,39 @@ var _ = Describe("c3appfw test", func() {
 			err = testcaseEnvInst.WaitForClusterManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), cm.Name, enterpriseApi.PhaseReady, 10*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for ClusterManager to reach Ready phase")
 
-			// Ensure Cluster Manager stays in Ready phase
-			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
+			// Ensure Cluster Manager stays in Ready phase.
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyClusterManagerReady(attemptCtx, deployment)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
 			// Wait for License Manager to be in READY phase
-			Eventually(func() error { return testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "License Manager not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifyLicenseManagerReady(attemptCtx, deployment)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "License Manager not ready")
 
 			// Ensure Search Head Cluster go to Ready phase
-			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifySearchHeadClusterReady(attemptCtx, deployment)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
 
 			// Ensure Indexers go to Ready phase
-			Eventually(func() error { return testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
+			Eventually(func() error {
+				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
+				defer cancel()
+				return testcaseEnvInst.VerifySingleSiteIndexersReady(attemptCtx, deployment)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Indexers not ready")
 
 		})
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It("smoke, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", Label("tier:e2e-pr", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -445,7 +461,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It("integration, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework", "feature:scaling"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -732,7 +748,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("smoke, c3, managerappframeworkc3, appframework: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", Label("tier:e2e-pr", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -861,7 +877,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration, managerappframeworkc3, appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1060,7 +1076,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration, managerappframeworkc3, appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then downgrade them", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then downgrade them", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1271,7 +1287,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3, managerappframeworkc3, appframework: can deploy a C3 SVA instance with App Framework enabled and install above 200MB of apps at once", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA instance with App Framework enabled and install above 200MB of apps at once", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1358,7 +1374,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It("integration, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled for manual update", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with App Framework enabled for manual update", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload V1 apps to S3
@@ -1543,7 +1559,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3, managerappframeworkc3, appframework: can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1717,7 +1733,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration, managerappframeworkc3, appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1929,7 +1945,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3, managerappframeworkc3, appframework: can deploy a C3, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2027,7 +2043,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 	// Vivek need testing
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3, managerappframeworkc3, appframework: can deploy a C3, add new apps to app source while install is in progress and have all apps installed cluster-wide", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3, add new apps to app source while install is in progress and have all apps installed cluster-wide", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2132,7 +2148,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 	// Vivek need testing
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled and reset operator pod while app install is in progress", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with App Framework enabled and reset operator pod while app install is in progress", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2220,7 +2236,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled and reset operator pod while app download is in progress", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with App Framework enabled and reset operator pod while app download is in progress", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2308,7 +2324,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2412,7 +2428,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled and update apps after app download is completed", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with App Framework enabled and update apps after app download is completed", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2529,7 +2545,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration, managerappframeworkc3, appframework: can deploy a C3 SVA and install a bigger volume of apps than the operator PV disk space", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA and install a bigger volume of apps than the operator PV disk space", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2619,7 +2635,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled and delete apps from app directory when download is complete", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with App Framework enabled and delete apps from app directory when download is complete", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2710,7 +2726,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("smoke, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled and check isDeploymentInProgressFlag for CM and SHC CR's", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with App Framework enabled and check isDeploymentInProgressFlag for CM and SHC CR's", Label("tier:e2e-pr", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/*
 			   Test Steps
@@ -2772,7 +2788,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3: can deploy a C3 SVA and a Standalone, then add that Standalone as a Search Head to the cluster", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA and a Standalone, then add that Standalone as a Search Head to the cluster", Label("tier:e2e-full", "sva:c3", "cloud:aws", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ###################
@@ -2835,7 +2851,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3, managerappframeworkc3, appframework: can deploy a C3 SVA and have ES app installed on Search Head Cluster", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA and have ES app installed on Search Head Cluster", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################

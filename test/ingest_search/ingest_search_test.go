@@ -36,11 +36,11 @@ var _ = Describe("Ingest and Search test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("ingest_search, integration, s1: can search internal logs for standalone instance", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("can search internal logs for standalone instance", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:ingestsearch"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			RunS1InternalLogSearchTest(ctx, deployment, testcaseEnvInst)
 		})
 
-		It("ingest_search, integration, s1: can ingest custom data to new index and search", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("can ingest custom data to new index and search", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:ingestsearch"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			RunS1IngestAndSearchTest(ctx, deployment, testcaseEnvInst)
 		})
 	})

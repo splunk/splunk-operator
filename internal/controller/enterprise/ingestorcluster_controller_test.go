@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var _ = Describe("IngestorCluster Controller", func() {
+var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 	BeforeEach(func() {
 		time.Sleep(2 * time.Second)
 	})

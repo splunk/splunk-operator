@@ -25,8 +25,8 @@ import (
 // masterManagerConfigs defines the V3 (master) and V4 (manager) variants
 // shared by the C3 and M4 secret test tables.
 var masterManagerConfigs = []testenv.MasterManagerTestConfig{
-	{NamePrefix: "master", Label: "mastersecret", NewConfig: testenv.NewClusterReadinessConfigV3},
-	{NamePrefix: "", Label: "managersecret", NewConfig: testenv.NewClusterReadinessConfigV4},
+	{NamePrefix: "master", Label: "master", NewConfig: testenv.NewClusterReadinessConfigV3},
+	{NamePrefix: "", Label: "manager", NewConfig: testenv.NewClusterReadinessConfigV4},
 }
 
 var _ = Describe("Secret test", func() {
@@ -47,17 +47,17 @@ var _ = Describe("Secret test", func() {
 			Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 		})
 
-		It("managersecret, integration, s1: Secret update on a standalone instance with LM and MC", func() {
+		It("Secret update on a standalone instance with LM and MC", Label("tier:e2e-full", "sva:s1", "cloud:aws", "variant:manager", "feature:secret"), func() {
 			config := testenv.NewClusterReadinessConfigV4()
 			RunS1SecretUpdateTest(ctx, deployment, testcaseEnvInst, config)
 		})
 
-		It("managersecret, integration, s1: Secret Object is recreated on delete and new secrets are applied to Splunk Pods", func() {
+		It("Secret Object is recreated on delete and new secrets are applied to Splunk Pods", Label("tier:e2e-full", "sva:s1", "cloud:aws", "variant:manager", "feature:secret"), func() {
 			config := testenv.NewClusterReadinessConfigV4()
 			RunS1SecretDeleteTest(ctx, deployment, testcaseEnvInst, config)
 		})
 
-		It("managersecret, smoke, s1: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", func() {
+		It("Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", Label("tier:e2e-pr", "sva:s1", "cloud:aws", "variant:manager", "feature:secret"), func() {
 			config := testenv.NewClusterReadinessConfigV4()
 			RunS1SecretDeleteWithMCRefTest(ctx, deployment, testcaseEnvInst, config)
 		})
@@ -77,7 +77,7 @@ var _ = Describe("Secret test", func() {
 				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(tc.Label+", smoke, c3: secret update on Indexers and Search Head Cluster", func() {
+			It("secret update on Indexers and Search Head Cluster", Label("tier:e2e-pr", "sva:c3", "cloud:aws", "variant:"+tc.Label, "feature:secret"), func() {
 				config := tc.NewConfig()
 				RunC3SecretUpdateTest(ctx, deployment, testcaseEnvInst, config)
 			})
@@ -98,7 +98,7 @@ var _ = Describe("Secret test", func() {
 				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(tc.Label+", integration, m4: secret update on multisite Indexers and Search Head Cluster", func() {
+			It("secret update on multisite Indexers and Search Head Cluster", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:"+tc.Label, "feature:secret"), func() {
 				config := tc.NewConfig()
 				RunM4SecretUpdateTest(ctx, deployment, testcaseEnvInst, config)
 			})

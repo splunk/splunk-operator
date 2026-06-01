@@ -19,7 +19,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-var _ = Describe("MonitoringConsole Controller", func() {
+var _ = Describe("MonitoringConsole Controller", Label("integration"), func() {
 
 	AfterEach(func() {
 

@@ -26,8 +26,8 @@ import (
 // masterManagerCrudConfigs defines the V3 (master) and V4 (manager) variants
 // shared by the C3 and M4 CRUD test tables.
 var masterManagerCrudConfigs = []testenv.MasterManagerTestConfig{
-	{NamePrefix: "master", Label: "mastercrcrud", NewConfig: testenv.NewClusterReadinessConfigV3},
-	{NamePrefix: "", Label: "managercrcrud", NewConfig: testenv.NewClusterReadinessConfigV4},
+	{NamePrefix: "master", Label: "master", NewConfig: testenv.NewClusterReadinessConfigV3},
+	{NamePrefix: "", Label: "manager", NewConfig: testenv.NewClusterReadinessConfigV4},
 }
 
 var _ = Describe("Custom Resource CRUD test", func() {
@@ -54,7 +54,7 @@ var _ = Describe("Custom Resource CRUD test", func() {
 			Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 		})
 
-		It("managercrcrud, integration, s1: can deploy a Standalone instance, change its CR, update the instance", func() {
+		It("can deploy a Standalone instance, change its CR, update the instance", Label("tier:e2e-full", "sva:s1", "cloud:aws", "variant:manager", "feature:crcrud"), func() {
 			RunS1CPUUpdateTest(ctx, deployment, testcaseEnvInst, defaultCPULimits, newCPULimits)
 		})
 	})
@@ -76,12 +76,12 @@ var _ = Describe("Custom Resource CRUD test", func() {
 				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(tc.Label+", integration, c3: can deploy Indexer and Search Head Cluster, change their CR, update the instances", func() {
+			It("can deploy Indexer and Search Head Cluster, change their CR, update the instances", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:"+tc.Label, "feature:crcrud"), func() {
 				config := tc.NewConfig()
 				RunC3CPUUpdateTest(ctx, deployment, testcaseEnvInst, config, defaultCPULimits, newCPULimits)
 			})
 
-			It(tc.Label+", integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", func() {
+			It("can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:"+tc.Label, "feature:crcrud"), func() {
 				config := tc.NewConfig()
 				RunC3PVCDeletionTest(ctx, deployment, testcaseEnvInst, config, verificationTimeout)
 			})
@@ -101,7 +101,7 @@ var _ = Describe("Custom Resource CRUD test", func() {
 			Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 		})
 
-		It("managercrcrud, integration, shc: can deploy Search Head Cluster with Deployer resource spec configured", func() {
+		It("can deploy Search Head Cluster with Deployer resource spec configured", Label("tier:e2e-full", "sva:shc", "cloud:aws", "variant:manager", "feature:crcrud"), func() {
 			RunSHCDeployerResourceSpecTest(ctx, deployment, testcaseEnvInst, defaultCPULimits)
 		})
 	})
@@ -122,7 +122,7 @@ var _ = Describe("Custom Resource CRUD test", func() {
 				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(tc.Label+", integration, m4: can deploy multisite Indexer and Search Head Clusters, change their CR, update the instances", func() {
+			It("can deploy multisite Indexer and Search Head Clusters, change their CR, update the instances", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:"+tc.Label, "feature:crcrud"), func() {
 				config := tc.NewConfig()
 				RunM4CPUUpdateTest(ctx, deployment, testcaseEnvInst, config, defaultCPULimits, newCPULimits)
 			})

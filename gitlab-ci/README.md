@@ -160,11 +160,11 @@ Qualification inputs:
 Qualification runtime inventory:
 
 - EKS full validation: one full released-SOK integration run in one EKS cluster
-- FIPS existing-cluster validation: `smoke`, `managersecret`
-- Azure validation: `azure_sanity`
-- GCP validation: `c3_gcp_sanity`, `c3_mgr_gcp_sanity`, `m4_gcp_sanity`, `m4_mgr_gcp_sanity`, `s1_gcp_sanity`
-- Distroless validation: `appframeworksS1`, `managerappframeworkc3`, `managerappframeworkm4`, `managersecret`, `managersmartstore`, `managermc1`, `managermc2`, `managercrcrud`, `licensemanager`, `managerdeletecr`, `indingsep`
-- Graviton validation: `appframeworksS1`, `managersecret`, `managersmartstore`, `managermc1`, `managermc2`, `managercrcrud`, `licensemanager`, `managerdeletecr`, `indingsep`
+- FIPS existing-cluster validation: `tier:e2e-pr && feature:basic`, `tier:e2e-pr && variant:manager && feature:secret`
+- Azure validation: `tier:e2e-full && cloud:azure`
+- GCP validation: `tier:e2e-full && sva:s1 && cloud:gcp`, `tier:e2e-full && sva:c3 && cloud:gcp && variant:master`, `tier:e2e-full && sva:c3 && cloud:gcp && variant:manager`, `tier:e2e-full && sva:m4 && cloud:gcp && variant:master`, `tier:e2e-full && sva:m4 && cloud:gcp && variant:manager`
+- Distroless validation: per-suite label-filters (`sva:s1 && feature:appframework`, `sva:c3 && variant:manager && feature:appframework`, `sva:m4 && variant:manager && feature:appframework`, `variant:manager && feature:secret`, `variant:manager && feature:smartstore`, `variant:manager && feature:monitoringconsole && suite:mc1`, `variant:manager && feature:monitoringconsole && suite:mc2`, `variant:manager && feature:crcrud`, `variant:manager && feature:licensemanager`, `variant:manager && feature:deletecr`, `feature:indingsep`)
+- Graviton validation: `sva:s1 && feature:appframework`, `variant:manager && feature:secret`, `variant:manager && feature:smartstore`, `variant:manager && feature:monitoringconsole && suite:mc1`, `variant:manager && feature:monitoringconsole && suite:mc2`, `variant:manager && feature:crcrud`, `variant:manager && feature:licensemanager`, `variant:manager && feature:deletecr`, `feature:indingsep`
 - Helm validation: full Helm chart path
 
 ## Release Validation Lane
@@ -199,12 +199,12 @@ What it does not do:
 
 Release runtime inventory:
 
-- EKS integration fanout: `appframeworksS1`, `managerappframeworkc3`, `managerappframeworkm4`, `managersecret`, `managersmartstore`, `managermc1`, `managermc2`, `managercrcrud`, `licensemanager`, `managerdeletecr`, `indingsep`
-- FIPS existing-cluster validation: `smoke`, `managersecret`
-- Azure validation: `azure_sanity`
-- GCP validation: `c3_gcp_sanity`, `c3_mgr_gcp_sanity`, `m4_gcp_sanity`, `m4_mgr_gcp_sanity`, `s1_gcp_sanity`
-- Distroless validation: `appframeworksS1`, `managerappframeworkc3`, `managerappframeworkm4`, `managersecret`, `managersmartstore`, `managermc1`, `managermc2`, `managercrcrud`, `licensemanager`, `managerdeletecr`, `indingsep`
-- Graviton validation: `appframeworksS1`, `managersecret`, `managersmartstore`, `managermc1`, `managermc2`, `managercrcrud`, `licensemanager`, `managerdeletecr`, `indingsep`
+- EKS integration fanout: `sva:s1 && feature:appframework`, `sva:c3 && variant:manager && feature:appframework`, `sva:m4 && variant:manager && feature:appframework`, `variant:manager && feature:secret`, `variant:manager && feature:smartstore`, `variant:manager && feature:monitoringconsole && suite:mc1`, `variant:manager && feature:monitoringconsole && suite:mc2`, `variant:manager && feature:crcrud`, `variant:manager && feature:licensemanager`, `variant:manager && feature:deletecr`, `feature:indingsep`
+- FIPS existing-cluster validation: `tier:e2e-pr && feature:basic`, `tier:e2e-pr && variant:manager && feature:secret`
+- Azure validation: `tier:e2e-full && cloud:azure`
+- GCP validation: `tier:e2e-full && sva:s1 && cloud:gcp`, `tier:e2e-full && sva:c3 && cloud:gcp && variant:master`, `tier:e2e-full && sva:c3 && cloud:gcp && variant:manager`, `tier:e2e-full && sva:m4 && cloud:gcp && variant:master`, `tier:e2e-full && sva:m4 && cloud:gcp && variant:manager`
+- Distroless validation: per-suite label-filters (`sva:s1 && feature:appframework`, `sva:c3 && variant:manager && feature:appframework`, `sva:m4 && variant:manager && feature:appframework`, `variant:manager && feature:secret`, `variant:manager && feature:smartstore`, `variant:manager && feature:monitoringconsole && suite:mc1`, `variant:manager && feature:monitoringconsole && suite:mc2`, `variant:manager && feature:crcrud`, `variant:manager && feature:licensemanager`, `variant:manager && feature:deletecr`, `feature:indingsep`)
+- Graviton validation: `sva:s1 && feature:appframework`, `variant:manager && feature:secret`, `variant:manager && feature:smartstore`, `variant:manager && feature:monitoringconsole && suite:mc1`, `variant:manager && feature:monitoringconsole && suite:mc2`, `variant:manager && feature:crcrud`, `variant:manager && feature:licensemanager`, `variant:manager && feature:deletecr`, `feature:indingsep`
 - Helm validation: full Helm chart path
 
 ## Main Release Publish Lane

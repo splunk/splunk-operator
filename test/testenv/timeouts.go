@@ -87,7 +87,7 @@ const SecretUpdateClusterReadyTimeout = MediumTimeout
 
 // SetupTeardownTimeout limits BeforeEach setup and AfterEach teardown nodes.
 // Prevents hung setup or cleanup from consuming the entire suite timeout.
-const SetupTeardownTimeout = 10 * time.Minute
+const SetupTeardownTimeout = 15 * time.Minute
 
 // CleanupGraceFraction is the fraction of SetupTeardownTimeout used for
 // cleanup context deadlines, leaving the remainder as a grace period so
@@ -109,12 +109,12 @@ const KubectlExecTimeout = 25 * time.Second
 // Each value must accommodate multiple specs running back-to-back.
 const (
 	// ShortSuiteTimeout for lightweight suites:
-	// smartstore, indingsep.
+	// smartstore.
 	ShortSuiteTimeout = 30 * time.Minute
 
 	// MediumSuiteTimeout for moderate suites:
-	// smoke, s1appfw.
-	MediumSuiteTimeout = 90 * time.Minute
+	// smoke, s1appfw, indingsep.
+	MediumSuiteTimeout = 120 * time.Minute
 
 	// MediumLongSuiteTimeout for mid-heavy suites:
 	// mc, lmanager, secret.

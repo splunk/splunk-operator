@@ -32,14 +32,23 @@ echo "Running test using number of nodes: ${NUM_NODES}"
 echo "Running test using these images: ${PRIVATE_SPLUNK_OPERATOR_IMAGE} and ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}..."
 
 
-# Check if test focus is set
-if [[ -z "${TEST_FOCUS}" ]]; then
-  TEST_TO_RUN="${TEST_REGEX}"
-  echo "Test focus not set running smoke test by default :: ${TEST_TO_RUN}"
-else
-  TEST_TO_RUN="${TEST_FOCUS}"
-  echo "Running following test :: ${TEST_TO_RUN}"
+for legacy in TEST_FOCUS TEST_TO_SKIP TEST_REGEX SKIP_REGEX; do
+  if [[ -n "${!legacy:-}" ]]; then
+    echo "ERROR: ${legacy} is no longer supported. Use TEST_LABELS with a Ginkgo label-filter expression instead." >&2
+    exit 2
+  fi
+done
+
+if [[ -z "${TEST_LABELS:-}" ]]; then
+  echo "ERROR: TEST_LABELS is required. Example: TEST_LABELS=\"e2e-pr && c3\"." >&2
+  exit 2
 fi
+
+LABEL_FILTER="${TEST_LABELS}"
+echo "Running tests with --label-filter :: ${LABEL_FILTER}"
+
+# Used only for log lines and the JUnit report filename below.
+TEST_TO_RUN="${TEST_LABELS}"
 
 # Set variables
 export CLUSTER_PROVIDER="${CLUSTER_PROVIDER}"
@@ -128,11 +137,6 @@ if [[ -z "${CLUSTER_NODES}" ]]; then
     echo "Test Cluster Nodes Not Set in Environment Variables. Changing to env.sh value"
     export CLUSTER_NODES="${NUM_NODES}"
 fi
-if [[ -z "${TEST_TO_SKIP}" ]]; then
-  echo "TEST_TO_SKIP not set. Changing to default"
-  export TEST_TO_SKIP="${SKIP_REGEX}"
-fi
-
 if [[ -z "${DEBUG}" ]]; then
   echo "DEBUG not set. Changing to default"
   export DEBUG="${DEBUG_RUN}"
@@ -141,8 +145,6 @@ fi
 # Always set telemetry test to true before running tests
 echo "Setting telemetry test to true"
 kubectl patch configmap splunk-operator-manager-telemetry -n splunk-operator --type merge -p '{"data":{"status":"{\"test\":\"true\",\"lastTransmission\":\"\"}"}}'
-
-echo "Skipping following test :: ${TEST_TO_SKIP}"
 
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 REPORT_LABEL=$(printf '%s' "${TEST_TO_RUN:-all}" | tr ' /,' '_' | tr -s '_' | tr -cd '[:alnum:]_.-')
@@ -154,7 +156,6 @@ REPORT_FILENAME="report-junit-${TIMESTAMP}${RUN_ID:+-${RUN_ID}}-${REPORT_LABEL:-
 # acts only as a CLI-level safety net; per-suite sc.Timeout values take precedence.
 TEST_TIMEOUT="${TEST_TIMEOUT:-225m}"
 
-# Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
 ginkgo_cmd=(
   ginkgo
   run
@@ -166,8 +167,7 @@ ginkgo_cmd=(
   -r
   "--timeout=${TEST_TIMEOUT}"
   "-nodes=${CLUSTER_NODES}"
-  "--focus=${TEST_TO_RUN}"
-  "--skip=${TEST_TO_SKIP}"
+  "--label-filter=${LABEL_FILTER}"
   --output-interceptor-mode=none
   --cover
   "${topdir}/test/"

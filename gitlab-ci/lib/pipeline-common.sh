@@ -486,7 +486,10 @@ build_eks_test_cluster_name() {
   test_name="$3"
   run_id="$4"
 
-  shortened_test_name="$(shorten_eks_test_name "${test_name}")"
+  # Strip Ginkgo-label key prefixes (e.g. "tier:e2e-pr" -> "e2e-pr",
+  # "sva:s1" -> "s1") so cluster names stay short and meaningful.
+  stripped_test_name="$(printf '%s' "${test_name}" | sed -E 's/[[:alnum:]_-]+:/ /g')"
+  shortened_test_name="$(shorten_eks_test_name "${stripped_test_name}")"
   safe_test_type="$(sanitize_slug "${test_type}")"
   safe_platform_suffix="$(sanitize_slug "${platform_suffix}")"
   safe_test_name="$(sanitize_slug "${shortened_test_name}")"
@@ -510,59 +513,49 @@ resolve_integration_profile() {
   case "${requested_profile}" in
     ""|managersecret)
       RESOLVED_INT_TEST_PROFILE="managersecret"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "managersecret")"
-      RESOLVED_INT_TEST_TO_SKIP_DEFAULT='^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
+      RESOLVED_INT_TEST_LABELS="$(first_nonempty "${PIPELINE_INT_TEST_LABELS:-}" "${JOB_INT_TEST_LABELS:-}" "tier:e2e-full && variant:manager && feature:secret")"
       RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_CLUSTER_NODES:-}" "1")"
       RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_CLUSTER_WORKERS:-}" "3")"
       ;;
     managersecret-smoke-s1)
       RESOLVED_INT_TEST_PROFILE="managersecret-smoke-s1"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "managersecret, smoke, s1")"
-      RESOLVED_INT_TEST_TO_SKIP_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_SMOKE_S1_TEST_TO_SKIP:-}" "^$")"
+      RESOLVED_INT_TEST_LABELS="$(first_nonempty "${PIPELINE_INT_TEST_LABELS:-}" "${JOB_INT_TEST_LABELS:-}" "tier:e2e-pr && sva:s1 && variant:manager && feature:secret")"
       RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_SMOKE_S1_CLUSTER_NODES:-}" "1")"
-      RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_SMOKE_S1_CLUSTER_WORKERS:-}" "2")"
+      RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_SMOKE_S1_CLUSTER_WORKERS:-}" "3")"
       ;;
     managersecret-smoke-c3)
       RESOLVED_INT_TEST_PROFILE="managersecret-smoke-c3"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "managersecret, smoke, c3")"
-      RESOLVED_INT_TEST_TO_SKIP_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_SMOKE_C3_TEST_TO_SKIP:-}" "^$")"
+      RESOLVED_INT_TEST_LABELS="$(first_nonempty "${PIPELINE_INT_TEST_LABELS:-}" "${JOB_INT_TEST_LABELS:-}" "tier:e2e-pr && sva:c3 && variant:manager && feature:secret")"
       RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_SMOKE_C3_CLUSTER_NODES:-}" "1")"
       RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_MANAGERSECRET_SMOKE_C3_CLUSTER_WORKERS:-}" "3")"
       ;;
     licensemanager-smoke-s1)
       RESOLVED_INT_TEST_PROFILE="licensemanager-smoke-s1"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "licensemanager, smoke, s1")"
-      RESOLVED_INT_TEST_TO_SKIP_DEFAULT="$(first_nonempty "${PIPELINE_INT_LICENSEMANAGER_SMOKE_S1_TEST_TO_SKIP:-}" "^$")"
+      RESOLVED_INT_TEST_LABELS="$(first_nonempty "${PIPELINE_INT_TEST_LABELS:-}" "${JOB_INT_TEST_LABELS:-}" "tier:e2e-pr && sva:s1 && variant:manager && feature:licensemanager")"
       RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_LICENSEMANAGER_SMOKE_S1_CLUSTER_NODES:-}" "1")"
-      RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_LICENSEMANAGER_SMOKE_S1_CLUSTER_WORKERS:-}" "2")"
+      RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_LICENSEMANAGER_SMOKE_S1_CLUSTER_WORKERS:-}" "3")"
       ;;
     smoke)
       RESOLVED_INT_TEST_PROFILE="smoke"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "smoke")"
-      RESOLVED_INT_TEST_TO_SKIP_DEFAULT="$(first_nonempty "${PIPELINE_INT_SMOKE_TEST_TO_SKIP:-}" "^$")"
+      RESOLVED_INT_TEST_LABELS="$(first_nonempty "${PIPELINE_INT_TEST_LABELS:-}" "${JOB_INT_TEST_LABELS:-}" "tier:e2e-pr && feature:basic")"
       RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_SMOKE_CLUSTER_NODES:-}" "1")"
-      RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_SMOKE_CLUSTER_WORKERS:-}" "2")"
+      RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_SMOKE_CLUSTER_WORKERS:-}" "3")"
       ;;
     appframework)
       RESOLVED_INT_TEST_PROFILE="appframework"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "appframework")"
-      RESOLVED_INT_TEST_TO_SKIP_DEFAULT="$(first_nonempty "${PIPELINE_INT_APPFRAMEWORK_TEST_TO_SKIP:-}" "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$")"
+      RESOLVED_INT_TEST_LABELS="$(first_nonempty "${PIPELINE_INT_TEST_LABELS:-}" "${JOB_INT_TEST_LABELS:-}" "tier:e2e-full && feature:appframework")"
       RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_APPFRAMEWORK_CLUSTER_NODES:-}" "2")"
       RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_APPFRAMEWORK_CLUSTER_WORKERS:-}" "5")"
       ;;
     full)
       RESOLVED_INT_TEST_PROFILE="full"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "integration")"
-      RESOLVED_INT_TEST_TO_SKIP_DEFAULT="$(first_nonempty "${PIPELINE_INT_FULL_TEST_TO_SKIP:-}" "^$")"
+      RESOLVED_INT_TEST_LABELS="$(first_nonempty "${PIPELINE_INT_TEST_LABELS:-}" "${JOB_INT_TEST_LABELS:-}" "tier:e2e-full")"
       RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_FULL_CLUSTER_NODES:-}" "2")"
       RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_FULL_CLUSTER_WORKERS:-}" "5")"
       ;;
     *)
-      RESOLVED_INT_TEST_PROFILE="${requested_profile}"
-      RESOLVED_INT_TEST_FOCUS="$(first_nonempty "${PIPELINE_INT_TEST_FOCUS:-}" "${JOB_INT_TEST_FOCUS:-}" "${requested_profile}")"
-      RESOLVED_INT_TEST_TO_SKIP_DEFAULT="$(first_nonempty "${PIPELINE_INT_TEST_TO_SKIP_DEFAULT:-}" "^$")"
-      RESOLVED_INT_CLUSTER_NODES_DEFAULT="$(first_nonempty "${PIPELINE_INT_CLUSTER_NODES:-}" "1")"
-      RESOLVED_INT_CLUSTER_WORKERS_DEFAULT="$(first_nonempty "${PIPELINE_INT_CLUSTER_WORKERS:-}" "3")"
+      echo "ERROR: unknown integration profile '${requested_profile}'. Add a case arm in resolve_integration_profile or set JOB_INT_TEST_LABELS explicitly." >&2
+      return 2
       ;;
   esac
 }

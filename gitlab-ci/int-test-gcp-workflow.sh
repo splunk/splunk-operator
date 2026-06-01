@@ -123,8 +123,7 @@ operator_image="${operator_registry}/splunk/splunk-operator:${source_operator_im
 resolve_runtime_enterprise_image
 enterprise_source_image="${RESOLVED_ENTERPRISE_IMAGE}"
 cluster_name="gke-${CI_JOB_ID}"
-test_focus="$(first_nonempty "${PIPELINE_GCP_TEST_FOCUS:-}" "${JOB_CLOUD_TEST_FOCUS:-}" "s1_gcp_sanity")"
-test_to_skip="$(first_nonempty "${PIPELINE_GCP_TEST_TO_SKIP:-}" "${JOB_CLOUD_TEST_TO_SKIP:-}" '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$')"
+test_labels="$(first_nonempty "${PIPELINE_GCP_TEST_LABELS:-}" "${JOB_CLOUD_TEST_LABELS:-}" "tier:e2e-full && sva:s1 && cloud:gcp")"
 test_timeout="$(first_nonempty "${PIPELINE_GCP_TEST_TIMEOUT:-}" "${JOB_CLOUD_TEST_TIMEOUT:-}" "7h")"
 gcp_registry_host="$(printf '%s' "${PIPELINE_GCP_ARTIFACT_REGISTRY}" | cut -d/ -f1)"
 
@@ -150,8 +149,7 @@ export PRIVATE_REGISTRY_AUTH_MODE="$(first_nonempty "${PIPELINE_GCP_REGISTRY_PUL
 export GCP_NODE_SERVICE_ACCOUNT_EMAIL="${PIPELINE_GKE_NODE_SERVICE_ACCOUNT_EMAIL:-}"
 export SPLUNK_OPERATOR_IMAGE="${operator_image}"
 export SPLUNK_ENTERPRISE_IMAGE="${enterprise_source_image}"
-export TEST_FOCUS="${test_focus}"
-export TEST_TO_SKIP="${test_to_skip}"
+export TEST_LABELS="${test_labels}"
 export TEST_TIMEOUT="${test_timeout}"
 export TEST_BUCKET="$(first_nonempty "${PIPELINE_TEST_BUCKET:-}" "${PIPELINE_GCP_TEST_CONTAINER:-}" "")"
 export TEST_S3_BUCKET="${TEST_BUCKET}"
@@ -260,8 +258,7 @@ append_context "${context_file}" "gcp_region" "${GCP_REGION}"
 append_context "${context_file}" "gcp_zone" "${GCP_ZONE}"
 append_context "${context_file}" "gcp_registry_pull_mode_effective" "${PRIVATE_REGISTRY_AUTH_MODE}"
 append_context "${context_file}" "gcp_node_service_account_email" "${GCP_NODE_SERVICE_ACCOUNT_EMAIL:-}"
-append_context "${context_file}" "test_focus" "${TEST_FOCUS}"
-append_context "${context_file}" "test_to_skip" "${TEST_TO_SKIP}"
+append_context "${context_file}" "test_labels" "${TEST_LABELS}"
 append_context "${context_file}" "test_timeout" "${TEST_TIMEOUT}"
 
 log_step "gcp:operator-image:promote:start source=${source_operator_image} target=${operator_image}" | tee -a "${build_log}" >/dev/null
@@ -297,7 +294,7 @@ log_step "gcp:deploy-operator:start" | tee -a "${run_log}" >/dev/null
 bash "${CI_PROJECT_DIR}/test/deploy-operator.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" >> "${run_log}" 2>&1
 log_step "gcp:deploy-operator:complete" | tee -a "${run_log}" >/dev/null
 
-log_step "gcp:trigger-tests:start focus=${TEST_FOCUS}" | tee -a "${run_log}" >/dev/null
+log_step "gcp:trigger-tests:start labels=${TEST_LABELS}" | tee -a "${run_log}" >/dev/null
 bash "${CI_PROJECT_DIR}/test/trigger-tests.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" >> "${run_log}" 2>&1
 log_step "gcp:trigger-tests:complete" | tee -a "${run_log}" >/dev/null
 

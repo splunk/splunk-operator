@@ -198,11 +198,23 @@ kubectl get pods -A 2>&1 | tee -a "${cluster_log}"
 # TODO CSPL-4731: replace public GitHub URLs with internal mirror once
 # artifact mirroring is set up for the SOK staging environment.
 log_step "cluster:addons:metrics-server"
-# Remove any pre-existing metrics-server Deployment to avoid conflicts with the
-# upstream manifest (e.g. immutable selector changes or duplicate port names
-# from older bundled versions). The rest of the resources are safely re-applied.
+# Delete any pre-existing metrics-server Deployment and Service so the upstream
+# manifest re-creates them cleanly. Leftover Helm-installed Services have
+# selectors (app.kubernetes.io/name, app.kubernetes.io/instance) that don't
+# match the raw manifest's pod labels, leaving Endpoints empty and the
+# v1beta1.metrics.k8s.io APIService in MissingEndpoints, which later blocks
+# namespace teardown with NamespaceDeletionDiscoveryFailure.
+kubectl -n kube-system delete svc metrics-server --ignore-not-found 2>&1 | tee -a "${cluster_log}"
 kubectl delete deployment metrics-server -n kube-system --ignore-not-found 2>&1 | tee -a "${cluster_log}"
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml 2>&1 | tee -a "${cluster_log}"
+# Tolerate self-signed kubelet serving certs so the APIService becomes Available.
+kubectl -n kube-system patch deployment metrics-server --type=json \
+  -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]' \
+  2>&1 | tee -a "${cluster_log}"
+kubectl -n kube-system rollout status deploy/metrics-server --timeout=180s 2>&1 | tee -a "${cluster_log}"
+kubectl -n kube-system get endpoints metrics-server 2>&1 | tee -a "${cluster_log}"
+kubectl wait --for=condition=Available --timeout=120s apiservice/v1beta1.metrics.k8s.io 2>&1 | tee -a "${cluster_log}"
+kubectl top nodes 2>&1 | tee -a "${cluster_log}" || true
 log_step "cluster:addons:metrics-server:complete"
 
 log_step "cluster:addons:dashboard"

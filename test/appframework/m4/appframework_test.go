@@ -63,7 +63,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
-		It("smoke, m4, masterappframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", Label("tier:e2e-pr", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -203,7 +203,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4, masterappframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled, install apps and downgrade them", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled, install apps and downgrade them", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -333,7 +333,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4, masterappframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -594,7 +594,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4, masterappframeworkm4, appframework: can deploy a M4 SVA and have apps installed locally on Cluster Manager and Deployer", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA and have apps installed locally on Cluster Manager and Deployer", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -717,7 +717,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4, masterappframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled for manual poll", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled for manual poll", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload V1 apps to S3
@@ -910,7 +910,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4, masterappframeworkm4, appframework: can deploy a M4 SVA and have apps installed and updated locally on Cluster Manager and Deployer via manual poll", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA and have apps installed and updated locally on Cluster Manager and Deployer via manual poll", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1084,7 +1084,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("m4, integration, masterappframeworkm4, appframework: can deploy a m4 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a m4 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1297,7 +1297,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) and App Framework", func() {
-		It("integration, m4, masterappframeworkm4, appframework: can deploy a M4, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1402,7 +1402,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (M4) and App Framework", func() {
-		It("smoke, m4, masterappframeworkm4, appframework: can deploy a M4, add new apps to app source while install is in progress and have all apps installed cluster-wide", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4, add new apps to app source while install is in progress and have all apps installed cluster-wide", Label("tier:e2e-pr", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1509,7 +1509,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4, masterappframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled and reset operator pod while app install is in progress", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled and reset operator pod while app install is in progress", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -1592,7 +1592,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4, masterappframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled and reset operator pod while app download is in progress", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled and reset operator pod while app download is in progress", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -1675,7 +1675,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4, masterappframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -1778,7 +1778,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
-		It("integration, m4, masterappframeworkm4, appframework: can deploy a M4 SVA, install apps via manual polling, switch to periodic polling, verify apps are not updated before the end of AppsRepoPollInterval, then updated after", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA, install apps via manual polling, switch to periodic polling, verify apps are not updated before the end of AppsRepoPollInterval, then updated after", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1958,7 +1958,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4, masterappframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled and update apps after app download is completed", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled and update apps after app download is completed", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -2080,7 +2080,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("m4, integration, masterappframeworkm4, appframework: can deploy a M4 SVA and install a bigger volume of apps than the operator PV disk space", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA and install a bigger volume of apps than the operator PV disk space", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2167,7 +2167,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4, masterappframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled and delete apps from app directory when download is complete", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled and delete apps from app directory when download is complete", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -2253,7 +2253,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("smoke, m4, masterappframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled, install apps and check IsDeploymentInProgress for CM and SHC CR's", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled, install apps and check IsDeploymentInProgress for CM and SHC CR's", Label("tier:e2e-pr", "sva:m4", "cloud:aws", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################

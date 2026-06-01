@@ -58,7 +58,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
-		It("indingsep, smoke: Splunk Operator can deploy Ingestors and Indexers", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("Splunk Operator can deploy Ingestors and Indexers", Label("tier:e2e-pr", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")
@@ -69,7 +69,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			Expect(testenv.DeleteIngestorStack(ctx, deployment)).To(Succeed(), "Unable to delete ingestor stack")
 		})
 
-		It("indingsep, smoke: Splunk Operator can deploy Ingestors and Indexers with additional configurations", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("Splunk Operator can deploy Ingestors and Indexers with additional configurations", Label("tier:e2e-pr", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")
@@ -168,7 +168,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			Expect(testcaseEnvInst.VerifyProbeConfigAndScripts(ctx, deployment, true)).To(Succeed(), "Probe config verification failed")
 		})
 
-		It("indingsep, integration: Splunk Operator can deploy Ingestors and Indexers with correct setup", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("Splunk Operator can deploy Ingestors and Indexers with correct setup", Label("tier:e2e-full", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")

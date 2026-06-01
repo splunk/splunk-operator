@@ -48,13 +48,13 @@ fi
 
 requested_profile="$(first_nonempty "${PIPELINE_INT_TEST_PROFILE:-}" "${JOB_INT_TEST_PROFILE:-}" "smoke")"
 resolve_integration_profile "${requested_profile}"
-test_focus="${RESOLVED_INT_TEST_FOCUS}"
-safe_test_focus="$(sanitize_slug "${test_focus}")"
+test_labels="${RESOLVED_INT_TEST_LABELS}"
+safe_test_focus="$(sanitize_slug "${test_labels}")"
 
 cluster_name_prefix="$(first_nonempty "${PIPELINE_EKS_CLUSTER_NAME_PREFIX:-}" "${JOB_EKS_CLUSTER_NAME_PREFIX:-}" "")"
 cluster_test_type="$(first_nonempty "${PIPELINE_EKS_CLUSTER_TEST_TYPE:-}" "${JOB_EKS_CLUSTER_TEST_TYPE:-}" "")"
 cluster_platform_suffix="$(first_nonempty "${PIPELINE_EKS_CLUSTER_PLATFORM_SUFFIX:-}" "${JOB_EKS_CLUSTER_PLATFORM_SUFFIX:-}" "")"
-cluster_test_name="$(first_nonempty "${PIPELINE_EKS_CLUSTER_TEST_NAME:-}" "${JOB_EKS_CLUSTER_TEST_NAME:-}" "${test_focus}")"
+cluster_test_name="$(first_nonempty "${PIPELINE_EKS_CLUSTER_TEST_NAME:-}" "${JOB_EKS_CLUSTER_TEST_NAME:-}" "${test_labels}")"
 cluster_run_id="$(first_nonempty "${PIPELINE_EKS_CLUSTER_RUN_ID:-}" "${JOB_EKS_CLUSTER_RUN_ID:-}" "${CI_PIPELINE_ID:-${CI_JOB_ID:-}}")"
 cluster_nodes="$(first_nonempty "${PIPELINE_INT_CLUSTER_NODES:-}" "${JOB_INT_CLUSTER_NODES:-}" "${RESOLVED_INT_CLUSTER_NODES_DEFAULT}")"
 cluster_workers="$(first_nonempty "${PIPELINE_INT_CLUSTER_WORKERS:-}" "${JOB_INT_CLUSTER_WORKERS:-}" "${RESOLVED_INT_CLUSTER_WORKERS_DEFAULT}")"
@@ -96,8 +96,7 @@ export SPLUNK_ENTERPRISE_IMAGE="${enterprise_image}"
 # namespace limit. Keep the GitLab commit prefix short enough for those suites.
 normalize_testenv_commit_hash "${CI_COMMIT_SHORT_SHA:-${CI_COMMIT_SHA}}" 4
 export COMMIT_HASH="${NORMALIZED_TESTENV_COMMIT_HASH}"
-export TEST_FOCUS="${test_focus}"
-export TEST_TO_SKIP="$(first_nonempty "${PIPELINE_INT_TEST_TO_SKIP:-}" "${JOB_INT_TEST_TO_SKIP:-}" "${RESOLVED_INT_TEST_TO_SKIP_DEFAULT}")"
+export TEST_LABELS="${test_labels}"
 export TEST_CLUSTER_PLATFORM="eks"
 if [ "${use_existing_cluster}" = "true" ]; then
   if [ -z "${existing_cluster_name}" ]; then
@@ -166,8 +165,7 @@ append_operator_runtime_context "${context_file}"
 append_context "${context_file}" "ecr_registry" "${ECR_REGISTRY}"
 append_context "${context_file}" "ecr_region" "${ECR_REGION}"
 append_context "${context_file}" "test_profile" "${RESOLVED_INT_TEST_PROFILE}"
-append_context "${context_file}" "test_focus" "${TEST_FOCUS}"
-append_context "${context_file}" "test_to_skip" "${TEST_TO_SKIP}"
+append_context "${context_file}" "test_labels" "${TEST_LABELS}"
 append_context "${context_file}" "cluster_test_type" "${cluster_test_type}"
 append_context "${context_file}" "cluster_platform_suffix" "${cluster_platform_suffix}"
 append_context "${context_file}" "cluster_name" "${TEST_CLUSTER_NAME}"
@@ -269,11 +267,23 @@ else
   # TODO CSPL-4731: replace public GitHub URLs with internal mirror once
   # artifact mirroring is set up for the SOK staging environment.
   log_step "cluster:addons:metrics-server"
-  # Remove any pre-existing metrics-server Deployment to avoid conflicts with
-  # the upstream manifest (e.g. immutable selector changes or duplicate port
-  # names from older bundled versions). Other resources re-apply safely.
+  # Delete any pre-existing metrics-server Deployment and Service so the upstream
+  # manifest re-creates them cleanly. Leftover Helm-installed Services have
+  # selectors (app.kubernetes.io/name, app.kubernetes.io/instance) that don't
+  # match the raw manifest's pod labels, leaving Endpoints empty and the
+  # v1beta1.metrics.k8s.io APIService in MissingEndpoints, which later blocks
+  # namespace teardown with NamespaceDeletionDiscoveryFailure.
+  kubectl -n kube-system delete svc metrics-server --ignore-not-found 2>&1 | tee -a "${cluster_log}"
   kubectl delete deployment metrics-server -n kube-system --ignore-not-found 2>&1 | tee -a "${cluster_log}"
   kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml 2>&1 | tee -a "${cluster_log}"
+  # Tolerate self-signed kubelet serving certs so the APIService becomes Available.
+  kubectl -n kube-system patch deployment metrics-server --type=json \
+    -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]' \
+    2>&1 | tee -a "${cluster_log}"
+  kubectl -n kube-system rollout status deploy/metrics-server --timeout=180s 2>&1 | tee -a "${cluster_log}"
+  kubectl -n kube-system get endpoints metrics-server 2>&1 | tee -a "${cluster_log}"
+  kubectl wait --for=condition=Available --timeout=120s apiservice/v1beta1.metrics.k8s.io 2>&1 | tee -a "${cluster_log}"
+  kubectl top nodes 2>&1 | tee -a "${cluster_log}" || true
   log_step "cluster:addons:metrics-server:complete"
 
   log_step "cluster:addons:dashboard"
@@ -281,7 +291,7 @@ else
   log_step "cluster:addons:dashboard:complete"
 fi
 
-log_step "tests:int-test:start focus=${TEST_FOCUS}"
+log_step "tests:int-test:start labels=${TEST_LABELS}"
 make int-test
 log_step "tests:int-test:complete"
 
