@@ -36,6 +36,7 @@ import (
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -1512,14 +1513,7 @@ func (c *configMapModel) Converge(ctx context.Context) (health componentHealth, 
 		return c.health, err
 	}
 
-	requiredKeys := []string{
-		configKeyClusterRWEndpoint,
-		configKeyClusterROEndpoint,
-		configKeyClusterREndpoint,
-		configKeyDefaultClusterPort,
-		configKeySuperUserSecretRef,
-	}
-	for _, requiredKey := range requiredKeys {
+	for _, requiredKey := range requiredClusterConfigMapKeys() {
 		if _, ok := cm.Data[requiredKey]; !ok {
 			c.health.State = pgcConstants.Failed
 			c.health.Reason = reasonConfigMapFailed
@@ -1530,10 +1524,11 @@ func (c *configMapModel) Converge(ctx context.Context) (health componentHealth, 
 		}
 	}
 
-	// CA discovery race: CNPG may publish ServerCASecret before the access
-	// ConfigMap exposes it. Requeue on missing SERVER_CA_SECRET_REF so we
-	// don't settle Ready without the CA discovery fields.
-	if _, ok := cm.Data[configKeyServerCASecretRef]; !ok {
+	// If CNPG already published a ServerCASecret in status, keep requeueing until
+	// the access ConfigMap exposes SERVER_CA_* metadata. This prevents a race
+	// where CNPG status is ahead of Secret materialization and the controller
+	// otherwise settles Ready without ever publishing CA discovery fields.
+	if _, ok := cm.Data[configMapKeyServerCASecretRef]; !ok {
 		c.health.State = pgcConstants.Provisioning
 		c.health.Reason = reasonConfigMapFailed
 		c.health.Message = msgConfigMapCAMetadataPending
@@ -2274,23 +2269,6 @@ func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Sch
 		cmName = cluster.Status.Resources.ConfigMapRef.Name
 	}
 
-	data := map[string]string{
-		configKeyClusterRWEndpoint:  fmt.Sprintf("%s-rw.%s", cnpgCluster.Name, cnpgCluster.Namespace),
-		configKeyClusterROEndpoint:  fmt.Sprintf("%s-ro.%s", cnpgCluster.Name, cnpgCluster.Namespace),
-		configKeyClusterREndpoint:   fmt.Sprintf("%s-r.%s", cnpgCluster.Name, cnpgCluster.Namespace),
-		configKeyDefaultClusterPort: defaultPort,
-		configKeySuperUserName:      superUsername,
-		configKeySuperUserSecretRef: secretName,
-	}
-
-	caSecretRef, ok, err := caMetadataForConfigMap(ctx, c, cluster.Namespace, cnpgCluster)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get CA metadata for ConfigMap: %w", err)
-	}
-	if ok {
-		data[configKeyServerCASecretRef] = fmt.Sprintf("%s/%s", caSecretRef.Name, caSecretRef.Key)
-	}
-
 	rwExists, err := poolerExists(ctx, c, cluster, readWriteEndpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check RW pooler existence: %w", err)
@@ -2299,11 +2277,31 @@ func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Sch
 	if err != nil {
 		return nil, fmt.Errorf("failed to check RO pooler existence: %w", err)
 	}
-	// Gate on tlsLeafAligned so sslmode=verify-full consumers don't dial the
-	// pooler hostname before the leaf carries its SAN.
-	if rwExists && roExists && tlsLeafAligned {
-		data[configKeyPoolerRWEndpoint] = fmt.Sprintf("%s.%s", poolerResourceName(cnpgCluster.Name, readWriteEndpoint), cnpgCluster.Namespace)
-		data[configKeyPoolerROEndpoint] = fmt.Sprintf("%s.%s", poolerResourceName(cnpgCluster.Name, readOnlyEndpoint), cnpgCluster.Namespace)
+
+	caSecretRef, ok, err := caMetadataForConfigMap(ctx, c, cluster.Namespace, cnpgCluster)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get CA metadata for ConfigMap: %w", err)
+	}
+	caSecretRefValue := ""
+	if ok {
+		caSecretRefValue = fmt.Sprintf("%s/%s", caSecretRef.Name, caSecretRef.Key)
+	}
+
+	// Gate pooler endpoints on tlsLeafAligned so sslmode=verify-full consumers
+	// don't dial the pooler hostname before the leaf carries its SAN.
+	endpoints, err := pgcnpg.ResolveConnectionEndpoints(
+		cnpgCluster.Name,
+		cnpgCluster.Namespace,
+		cnpgCluster.Status.WriteService,
+		cnpgCluster.Status.ReadService,
+		rwExists && roExists && tlsLeafAligned,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve connection endpoints: %w", err)
+	}
+	data, _, err := buildClusterConfigMapData(endpoints, superUsername, secretName, caSecretRefValue)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build ConfigMap data: %w", err)
 	}
 
 	cm := &corev1.ConfigMap{

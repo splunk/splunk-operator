@@ -233,7 +233,21 @@ func PostgresDatabaseService(
 
 	// Phase: ConnectionMetadata — ConfigMaps carry connection info consumers need as soon
 	// as databases are ready, so they are created alongside secrets.
-	endpoints := resolveClusterEndpoints(cluster, cnpgCluster, postgresDB.Namespace)
+	endpoints, err := resolveClusterEndpoints(cluster, cnpgCluster, postgresDB.Namespace)
+	if err != nil {
+		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictConfigMapsReconcile, "resolving configmap endpoints"); ok {
+			return result, conflictErr
+		}
+		rc.emitWarning(postgresDB, EventAccessConfigFailed, fmt.Sprintf("failed to resolve ConfigMap endpoints for PostgresDatabase %s — check operator logs", postgresDB.Name))
+		if statusErr := updateStatus(configMapsReady, metav1.ConditionFalse, reasonConfigMapsCreationFailed,
+			fmt.Sprintf("Failed to resolve ConfigMap endpoints: %v", err), provisioningDBPhase); statusErr != nil {
+			if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictConfigMapsStatus, "persisting configmaps endpoint failure status"); ok {
+				return result, conflictErr
+			}
+			logger.ErrorContext(ctx, "failed to persist configmaps endpoint failure status", "error", statusErr)
+		}
+		return ctrl.Result{}, err
+	}
 	if err := reconcileRoleConfigMaps(ctx, c, rc.Scheme, postgresDB, endpoints); err != nil {
 		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictConfigMapsReconcile, "reconciling configmaps"); ok {
 			return result, conflictErr
@@ -1148,7 +1162,11 @@ func reconcileRoleConfigMaps(ctx context.Context, c client.Client, scheme *runti
 			},
 		}
 		_, err := controllerutil.CreateOrUpdate(ctx, c, cm, func() error {
-			cm.Data = buildDatabaseConfigMapBody(dbSpec.Name, endpoints)
+			data, _, err := buildDatabaseConfigMapData(dbSpec.Name, endpoints)
+			if err != nil {
+				return fmt.Errorf("building ConfigMap data for database %s: %w", dbSpec.Name, err)
+			}
+			cm.Data = data
 			reAdopted = cm.Annotations[annotationRetainedFrom] == postgresDB.Name
 			if reAdopted {
 				delete(cm.Annotations, annotationRetainedFrom)
@@ -1166,37 +1184,6 @@ func reconcileRoleConfigMaps(ctx context.Context, c client.Client, scheme *runti
 		}
 	}
 	return nil
-}
-
-func buildDatabaseConfigMapBody(dbName string, endpoints clusterEndpoints) map[string]string {
-	data := map[string]string{
-		"dbname":     dbName,
-		"port":       postgresPort,
-		"rw-host":    endpoints.RWHost,
-		"ro-host":    endpoints.ROHost,
-		"admin-user": adminRoleName(dbName),
-		"rw-user":    rwRoleName(dbName),
-	}
-	if endpoints.PoolerRWHost != "" {
-		data["pooler-rw-host"] = endpoints.PoolerRWHost
-	}
-	if endpoints.PoolerROHost != "" {
-		data["pooler-ro-host"] = endpoints.PoolerROHost
-	}
-	return data
-}
-
-func resolveClusterEndpoints(cluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster, namespace string) clusterEndpoints {
-	// FQDN so consumers in other namespaces can resolve without extra config.
-	endpoints := clusterEndpoints{
-		RWHost: fmt.Sprintf("%s.%s.svc.cluster.local", cnpgCluster.Status.WriteService, namespace),
-		ROHost: fmt.Sprintf("%s.%s.svc.cluster.local", cnpgCluster.Status.ReadService, namespace),
-	}
-	if cluster.Status.ConnectionPoolerStatus != nil && cluster.Status.ConnectionPoolerStatus.Enabled {
-		endpoints.PoolerRWHost = fmt.Sprintf("%s-pooler-%s.%s.svc.cluster.local", cnpgCluster.Name, readWriteEndpoint, namespace)
-		endpoints.PoolerROHost = fmt.Sprintf("%s-pooler-%s.%s.svc.cluster.local", cnpgCluster.Name, readOnlyEndpoint, namespace)
-	}
-	return endpoints
 }
 
 func populateDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase) []enterprisev4.DatabaseInfo {

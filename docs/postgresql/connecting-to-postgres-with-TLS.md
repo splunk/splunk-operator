@@ -8,7 +8,9 @@ nav_order: 2
 
 This guide describes how **application workloads** connect to a managed `**PostgresCluster`** using TLS: where to read **non-secret** connection metadata, where **passwords and CA PEM** live, and how to use `**sslmode=verify-full`** safely inside Kubernetes.
 
-**Separation of concerns:** the **cluster access ConfigMap** (same namespace as the `PostgresCluster`, often `**<cluster-name>-configmap`**) holds **connection endpoints and port**—not PEM material or passwords. Those come from Kubernetes **Secrets** referenced by name in the ConfigMap.
+**Shared schema:** both PostgreSQL access ConfigMap families use **UPPER_SNAKE_CASE** keys and publish Service hostnames as full Kubernetes FQDNs: `<service>.<namespace>.svc.cluster.local`.
+
+**Separation of concerns:** the **cluster access ConfigMap** (same namespace as the `PostgresCluster`, often `<cluster-name>-configmap`) owns **infrastructure-level** data such as shared endpoints, port, superuser access, and CA discovery. The **database access ConfigMap** created per `PostgresDatabase.spec.databases[]` extends that same connection schema with **application-level** data such as `DATABASE_NAME`, `ADMIN_USER_NAME`, and `RW_USER_NAME`.
 
 Certificate lifecycle and server-side behaviour follow **[CloudNativePG — Certificates](https://cloudnative-pg.io/docs/1.28/certificates)** (pick the doc version that matches your CNPG release).
 
@@ -29,29 +31,32 @@ Certificate lifecycle and server-side behaviour follow **[CloudNativePG — Cert
 ## ConfigMap keys (what apps read)
 
 
-| Key                                                                 | Use                                                                                                                              |
-| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `**CLUSTER_RW_ENDPOINT**`                                           | Primary / read–write endpoint                                                                                                    |
-| `**CLUSTER_RO_ENDPOINT**`                                           | Read-only replica traffic                                                                                                        |
-| `**CLUSTER_R_ENDPOINT**`                                            | Any instance                                                                                                                     |
-| `**DEFAULT_CLUSTER_PORT**`                                          | Port (usually **5432**)                                                                                                          |
-| `**SUPER_USER_NAME`**                                               | Bootstrap superuser (often `**postgres**`)                                                                                       |
-| `**SUPER_USER_SECRET_REF**`                                         | Secret **name** for the superuser password                                                                                       |
-| `**SERVER_CA_SECRET_REF`**                                          | CA reference as `**<secret-name>/<data-key>`** (e.g. `**pg-demo-ca/ca.crt**`) — split on the first `**/**` to mount the PEM file |
-| `**CLUSTER_POOLER_RW_ENDPOINT**` / `**CLUSTER_POOLER_RO_ENDPOINT**` | PgBouncer hosts — only if poolers are enabled                                                                                    |
+| Key                                                                 | Scope              | Use                                                               |
+| ------------------------------------------------------------------- | ------------------ | ----------------------------------------------------------------- |
+| `CLUSTER_RW_ENDPOINT`                                               | Cluster + Database | Primary / read-write endpoint                                     |
+| `CLUSTER_RO_ENDPOINT`                                               | Cluster + Database | Read-only replica traffic                                         |
+| `CLUSTER_R_ENDPOINT`                                                | Cluster + Database | Any instance                                                      |
+| `DEFAULT_CLUSTER_PORT`                                              | Cluster + Database | Shared client port (currently `5432`) for the published endpoints  |
+| `CLUSTER_POOLER_RW_ENDPOINT` / `CLUSTER_POOLER_RO_ENDPOINT`         | Cluster + Database | PgBouncer hosts — only if poolers are enabled                     |
+| `SUPER_USER_NAME`                                                   | Cluster only       | Bootstrap superuser (often `postgres`)                            |
+| `SUPER_USER_SECRET_REF`                                             | Cluster only       | Secret name for the superuser password                            |
+| `SERVER_CA_SECRET_REF`                                              | Cluster only       | Serialized `SecretKeySelector` for the server CA Secret + key     |
+| `DATABASE_NAME`                                                     | Database only      | Logical database name for the application                         |
+| `ADMIN_USER_NAME`                                                   | Database only      | Application admin role name                                       |
+| `RW_USER_NAME`                                                      | Database only      | Application read-write role name                                  |
 
 
-If `**SERVER_CA_SECRET_REF**` is missing, the database may still be starting, CNPG has not yet published CA metadata, or the operator has not validated the Secret yet—check `**PostgresCluster**` events and CNPG cluster status, then retry.
+If `SERVER_CA_*` is missing, the database may still be starting, CNPG has not yet published CA metadata, or the operator has not validated the Secret yet—check `PostgresCluster` events and CNPG cluster status, then retry.
 
 ---
 
 ## Secrets to mount
 
 
-| Purpose                      | Source                                                                                                                                                                                                                                                                  |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Trust anchor (server CA)** | Split `**SERVER_CA_SECRET_REF**` on the first `**/**`: left side = Secret name, right side = data key (e.g. `**pg-demo-ca/ca.crt**` → Secret `**pg-demo-ca`**, key `**ca.crt**`). Mount read-only (e.g. `**/etc/postgres-ca/ca.crt**`) and set `**PGSSLROOTCERT**` / `**sslrootcert**`. |
-| **Password**                 | Secret named `**SUPER_USER_SECRET_REF`** — typically key `**password**` (follow your cluster’s conventions if documented elsewhere).                                                                                                                                    |
+| Purpose                      | Source                                                                                                                                                           |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Trust anchor (server CA)** | `SERVER_CA_SECRET_REF` publishes a serialized `SecretKeySelector`; use it to locate the CA Secret and key (typically `ca.crt`), then mount read-only. |
+| **Password**                 | Secret named by `SUPER_USER_SECRET_REF` — typically key `password` (follow your cluster’s conventions if documented elsewhere).                       |
 
 
 Never copy PEM or passwords into the ConfigMap; keep them in Secrets and restrict RBAC to workloads that need them.
@@ -62,8 +67,8 @@ Never copy PEM or passwords into the ConfigMap; keep them in Secrets and restric
 
 Use the **RW or RO endpoint** from the ConfigMap for strict certificate verification.
 
-1. Read `**SERVER_CA_SECRET_REF**` from the ConfigMap and split on the first `**/**` — the left side is the **Secret name**, the right side is the **data key** (e.g. `**pg-demo-ca/ca.crt**`). Mount that Secret read-only at, for example, `**/etc/postgres-ca/ca.crt**`.
-2. Load the password from the `**Secret**` named `**SUPER_USER_SECRET_REF**` (convention: key `**password**`).
+1. Resolve the Secret name and key from `SERVER_CA_SECRET_REF`, then mount that CA file read-only (for example as `/etc/postgres-ca/ca.crt`).
+2. Load the password from the Secret named by `SUPER_USER_SECRET_REF` (convention: key `password`).
 3. Point your client at the endpoint and port from the ConfigMap. With `**verify-full**`, the client validates both the CA chain and server certificate identity.
 
 Example environment:
@@ -131,5 +136,3 @@ For allowed PostgreSQL parameters in this setup, see **[CloudNativePG — Postgr
 | `**SERVER_CA_SECRET_REF`** missing in ConfigMap | CNPG not ready yet; CA Secret not published or not readable by the operator; requeue/reconcile.                                                                                                              |
 | `**verify-full` fails with hostname errors** | Use an endpoint whose name appears in the server cert (often direct RW/RO); or align CNPG server certificate identities with the pooler host per CNPG docs; pooler rollout may be needed after cert changes. |
 | **Password auth fails**                      | Correct Secret name/key; user exists for that database; `pg_hba` allows your client network and SSL method.                                                                                                  |
-
-
