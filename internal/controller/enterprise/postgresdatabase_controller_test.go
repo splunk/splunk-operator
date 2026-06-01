@@ -26,7 +26,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	pgdbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
+	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -273,10 +275,13 @@ func expectProvisionedArtifacts(ctx context.Context, scenario readyClusterScenar
 
 	configMap := &corev1.ConfigMap{}
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMapNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, configMap)).To(Succeed())
-	Expect(configMap.Data).To(HaveKeyWithValue("rw-host", "tenant-rw."+scenario.namespace+".svc.cluster.local"))
-	Expect(configMap.Data).To(HaveKeyWithValue("ro-host", "tenant-ro."+scenario.namespace+".svc.cluster.local"))
-	Expect(configMap.Data).To(HaveKeyWithValue("admin-user", adminRoleNameForTest(scenario.dbName)))
-	Expect(configMap.Data).To(HaveKeyWithValue("rw-user", rwRoleNameForTest(scenario.dbName)))
+	Expect(configMap.Data).To(HaveKeyWithValue(pgdbcore.ConfigMapKeyDatabaseName, scenario.dbName))
+	Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyDefaultClusterPort, pgconninfo.DefaultPort))
+	Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterRWEndpoint, "tenant-rw."+scenario.namespace+".svc.cluster.local"))
+	Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterROEndpoint, "tenant-ro."+scenario.namespace+".svc.cluster.local"))
+	Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterREndpoint, scenario.cnpgClusterName+"-r."+scenario.namespace+".svc.cluster.local"))
+	Expect(configMap.Data).To(HaveKeyWithValue(pgdbcore.ConfigMapKeyAdminUser, adminRoleNameForTest(scenario.dbName)))
+	Expect(configMap.Data).To(HaveKeyWithValue(pgdbcore.ConfigMapKeyRWUser, rwRoleNameForTest(scenario.dbName)))
 	Expect(metav1.IsControlledBy(configMap, owner)).To(BeTrue())
 }
 
@@ -305,8 +310,8 @@ func markCNPGDatabaseApplied(ctx context.Context, cnpgDatabase *cnpgv1.Database)
 func expectPoolerConfigMap(ctx context.Context, scenario readyClusterScenario) {
 	configMap := &corev1.ConfigMap{}
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMapNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, configMap)).To(Succeed())
-	Expect(configMap.Data).To(HaveKeyWithValue("pooler-rw-host", scenario.cnpgClusterName+"-pooler-rw."+scenario.namespace+".svc.cluster.local"))
-	Expect(configMap.Data).To(HaveKeyWithValue("pooler-ro-host", scenario.cnpgClusterName+"-pooler-ro."+scenario.namespace+".svc.cluster.local"))
+	Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyPoolerRWEndpoint, scenario.cnpgClusterName+"-pooler-rw."+scenario.namespace+".svc.cluster.local"))
+	Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyPoolerROEndpoint, scenario.cnpgClusterName+"-pooler-ro."+scenario.namespace+".svc.cluster.local"))
 }
 
 func seedMissingClusterScenario(ctx context.Context, namespace, resourceName string, finalizers ...string) types.NamespacedName {
@@ -572,14 +577,14 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 			configMap := &corev1.ConfigMap{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s-config", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, configMap)).To(Succeed())
-			configMap.Data["rw-host"] = "unexpected.example"
+			configMap.Data[pgconninfo.KeyClusterRWEndpoint] = "unexpected.example"
 			Expect(k8sClient.Update(ctx, configMap)).To(Succeed())
 
 			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
 			expectEmptyReconcileResult(result, err)
 
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, configMap)).To(Succeed())
-			Expect(configMap.Data).To(HaveKeyWithValue("rw-host", "tenant-rw."+scenario.namespace+".svc.cluster.local"))
+			Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterRWEndpoint, "tenant-rw."+scenario.namespace+".svc.cluster.local"))
 
 			current := fetchPostgresDatabase(ctx, scenario.requestName)
 			expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
@@ -600,7 +605,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 			configMap := &corev1.ConfigMap{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: scenario.namespace}, configMap)).To(Succeed())
-			Expect(configMap.Data).To(HaveKeyWithValue("rw-host", "tenant-rw."+scenario.namespace+".svc.cluster.local"))
+			Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterRWEndpoint, "tenant-rw."+scenario.namespace+".svc.cluster.local"))
 		})
 
 		It("does not recreate a deleted managed user secret", func() {
@@ -663,7 +668,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 			configMap := &corev1.ConfigMap{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-analytics-config", scenario.resourceName), Namespace: scenario.namespace}, configMap)).To(Succeed())
-			Expect(configMap.Data).To(HaveKeyWithValue("dbname", "analytics"))
+			Expect(configMap.Data).To(HaveKeyWithValue(pgdbcore.ConfigMapKeyDatabaseName, "analytics"))
 
 			existingSecret := &corev1.Secret{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s-admin", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, existingSecret)).To(Succeed())

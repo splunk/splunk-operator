@@ -35,6 +35,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -1724,6 +1725,10 @@ func TestGenerateConfigMap(t *testing.T) {
 			Name:      "my-cluster",
 			Namespace: "default",
 		},
+		Status: cnpgv1.ClusterStatus{
+			WriteService: "my-cluster-rw",
+			ReadService:  "my-cluster-ro",
+		},
 	}
 
 	t.Run("base endpoints without poolers", func(t *testing.T) {
@@ -1733,13 +1738,13 @@ func TestGenerateConfigMap(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-configmap", cm.Name)
 		assert.Equal(t, "default", cm.Namespace)
-		assert.Equal(t, "my-cluster-rw.default", cm.Data["CLUSTER_RW_ENDPOINT"])
-		assert.Equal(t, "my-cluster-ro.default", cm.Data["CLUSTER_RO_ENDPOINT"])
-		assert.Equal(t, "my-cluster-r.default", cm.Data["CLUSTER_R_ENDPOINT"])
-		assert.Equal(t, "5432", cm.Data["DEFAULT_CLUSTER_PORT"])
-		assert.Equal(t, "postgres", cm.Data["SUPER_USER_NAME"])
-		assert.Equal(t, "my-secret", cm.Data["SUPER_USER_SECRET_REF"])
-		assert.NotContains(t, cm.Data, "CLUSTER_POOLER_RW_ENDPOINT")
+		assert.Equal(t, "my-cluster-rw.default.svc.cluster.local", cm.Data[pgconninfo.KeyClusterRWEndpoint])
+		assert.Equal(t, "my-cluster-ro.default.svc.cluster.local", cm.Data[pgconninfo.KeyClusterROEndpoint])
+		assert.Equal(t, "my-cluster-r.default.svc.cluster.local", cm.Data[pgconninfo.KeyClusterREndpoint])
+		assert.Equal(t, pgconninfo.DefaultPort, cm.Data[pgconninfo.KeyDefaultClusterPort])
+		assert.Equal(t, "postgres", cm.Data[configMapKeySuperUserName])
+		assert.Equal(t, "my-secret", cm.Data[configMapKeySuperUserSecretRef])
+		assert.NotContains(t, cm.Data, pgconninfo.KeyPoolerRWEndpoint)
 		require.Len(t, cm.OwnerReferences, 1)
 		assert.Equal(t, "cluster-uid", string(cm.OwnerReferences[0].UID))
 	})
@@ -1755,8 +1760,8 @@ func TestGenerateConfigMap(t *testing.T) {
 		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret", true)
 
 		require.NoError(t, err)
-		assert.Equal(t, "my-cluster-pooler-rw.default", cm.Data["CLUSTER_POOLER_RW_ENDPOINT"])
-		assert.Equal(t, "my-cluster-pooler-ro.default", cm.Data["CLUSTER_POOLER_RO_ENDPOINT"])
+		assert.Equal(t, "my-cluster-pooler-rw.default.svc.cluster.local", cm.Data[pgconninfo.KeyPoolerRWEndpoint])
+		assert.Equal(t, "my-cluster-pooler-ro.default.svc.cluster.local", cm.Data[pgconninfo.KeyPoolerROEndpoint])
 	})
 
 	t.Run("uses existing configmap name from status", func(t *testing.T) {
@@ -1786,7 +1791,7 @@ func TestGenerateConfigMap(t *testing.T) {
 			LocalObjectReference: corev1.LocalObjectReference{Name: "my-server-ca"},
 			Key:                  defaultServerCACertKey,
 		}
-		assert.Equal(t, fmt.Sprintf("%s/%s", expectedCASecretRef.Name, expectedCASecretRef.Key), cm.Data[configKeyServerCASecretRef])
+		assert.Equal(t, fmt.Sprintf("%s/%s", expectedCASecretRef.Name, expectedCASecretRef.Key), cm.Data[configMapKeyServerCASecretRef])
 		assert.NotContains(t, cm.Data, "SERVER_CA_CERT_KEY")
 	})
 
@@ -1794,7 +1799,7 @@ func TestGenerateConfigMap(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret", true)
 		require.NoError(t, err)
-		assert.NotContains(t, cm.Data, configKeyServerCASecretRef)
+		assert.NotContains(t, cm.Data, configMapKeyServerCASecretRef)
 		assert.NotContains(t, cm.Data, "SERVER_CA_CERT_KEY")
 	})
 
@@ -1802,7 +1807,7 @@ func TestGenerateConfigMap(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret", true)
 		require.NoError(t, err)
-		assert.NotContains(t, cm.Data, configKeyServerCASecretRef)
+		assert.NotContains(t, cm.Data, configMapKeyServerCASecretRef)
 		assert.NotContains(t, cm.Data, "SERVER_CA_CERT_KEY")
 	})
 
@@ -1810,8 +1815,19 @@ func TestGenerateConfigMap(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret", true)
 		require.NoError(t, err)
-		assert.NotContains(t, cm.Data, configKeyServerCASecretRef)
+		assert.NotContains(t, cm.Data, configMapKeyServerCASecretRef)
 		assert.NotContains(t, cm.Data, "SERVER_CA_CERT_KEY")
+	})
+
+	t.Run("fails when CNPG service names are not available yet", func(t *testing.T) {
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		cnpg := cnpgCluster.DeepCopy()
+		cnpg.Status.WriteService = ""
+
+		_, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpg, "my-secret", false)
+
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "write service name is required")
 	})
 }
 
@@ -1848,17 +1864,19 @@ func TestConfigMapConverge_RequeuesWhenCNPGPublishesCASecretButMetadataMissing(t
 	existingCM := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-configmap", Namespace: "default"},
 		Data: map[string]string{
-			configKeyClusterRWEndpoint:  "pg1-rw.default",
-			configKeyClusterROEndpoint:  "pg1-ro.default",
-			configKeyClusterREndpoint:   "pg1-r.default",
-			configKeyDefaultClusterPort: "5432",
-			configKeySuperUserSecretRef: "pg1-secret",
+			pgconninfo.KeyClusterRWEndpoint:  "pg1-rw.default.svc.cluster.local",
+			pgconninfo.KeyClusterROEndpoint:  "pg1-ro.default.svc.cluster.local",
+			pgconninfo.KeyClusterREndpoint:   "pg1-r.default.svc.cluster.local",
+			pgconninfo.KeyDefaultClusterPort: pgconninfo.DefaultPort,
+			configMapKeySuperUserSecretRef:   "pg1-secret",
 		},
 	}
 	cnpg := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 		Status: cnpgv1.ClusterStatus{
-			Phase: cnpgv1.PhaseHealthy,
+			Phase:        cnpgv1.PhaseHealthy,
+			WriteService: "pg1-rw",
+			ReadService:  "pg1-ro",
 			Certificates: cnpgv1.CertificatesStatus{
 				CertificatesConfiguration: cnpgv1.CertificatesConfiguration{
 					ServerCASecret: "pg1-server-ca",
@@ -1916,7 +1934,9 @@ func TestConfigMapActuateGatesPoolerKeysOnTLSLeafAlignment(t *testing.T) {
 			Certificates: &cnpgv1.CertificatesConfiguration{ServerAltDNSNames: desiredSANs},
 		},
 		Status: cnpgv1.ClusterStatus{
-			Phase: cnpgv1.PhaseHealthy,
+			Phase:        cnpgv1.PhaseHealthy,
+			WriteService: clusterName + "-rw",
+			ReadService:  clusterName + "-ro",
 			Certificates: cnpgv1.CertificatesStatus{
 				CertificatesConfiguration: cnpgv1.CertificatesConfiguration{ServerTLSSecret: tlsSecretName},
 			},
@@ -1955,10 +1975,10 @@ func TestConfigMapActuateGatesPoolerKeysOnTLSLeafAlignment(t *testing.T) {
 		var cm corev1.ConfigMap
 		require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: configMapName, Namespace: namespace}, &cm))
 
-		assert.Equal(t, "pg1-rw.default", cm.Data[configKeyClusterRWEndpoint])
-		assert.Equal(t, "pg1-ro.default", cm.Data[configKeyClusterROEndpoint])
-		assert.NotContains(t, cm.Data, configKeyPoolerRWEndpoint)
-		assert.NotContains(t, cm.Data, configKeyPoolerROEndpoint)
+		assert.Equal(t, "pg1-rw.default.svc.cluster.local", cm.Data[pgconninfo.KeyClusterRWEndpoint])
+		assert.Equal(t, "pg1-ro.default.svc.cluster.local", cm.Data[pgconninfo.KeyClusterROEndpoint])
+		assert.NotContains(t, cm.Data, pgconninfo.KeyPoolerRWEndpoint)
+		assert.NotContains(t, cm.Data, pgconninfo.KeyPoolerROEndpoint)
 	})
 
 	t.Run("aligned_leaf_publishes_pooler_keys", func(t *testing.T) {
@@ -1973,8 +1993,8 @@ func TestConfigMapActuateGatesPoolerKeysOnTLSLeafAlignment(t *testing.T) {
 		var cm corev1.ConfigMap
 		require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: configMapName, Namespace: namespace}, &cm))
 
-		assert.Equal(t, "pg1-pooler-rw.default", cm.Data[configKeyPoolerRWEndpoint])
-		assert.Equal(t, "pg1-pooler-ro.default", cm.Data[configKeyPoolerROEndpoint])
+		assert.Equal(t, "pg1-pooler-rw.default.svc.cluster.local", cm.Data[pgconninfo.KeyPoolerRWEndpoint])
+		assert.Equal(t, "pg1-pooler-ro.default.svc.cluster.local", cm.Data[pgconninfo.KeyPoolerROEndpoint])
 	})
 }
 
@@ -2121,11 +2141,11 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 			Namespace: "default",
 		},
 		Data: map[string]string{
-			configKeyClusterRWEndpoint:  "pg1-rw.default",
-			configKeyClusterROEndpoint:  "pg1-ro.default",
-			configKeyClusterREndpoint:   "pg1-r.default",
-			configKeyDefaultClusterPort: "5432",
-			configKeySuperUserSecretRef: "pg1-secret",
+			pgconninfo.KeyClusterRWEndpoint:  "pg1-rw.default.svc.cluster.local",
+			pgconninfo.KeyClusterROEndpoint:  "pg1-ro.default.svc.cluster.local",
+			pgconninfo.KeyClusterREndpoint:   "pg1-r.default.svc.cluster.local",
+			pgconninfo.KeyDefaultClusterPort: pgconninfo.DefaultPort,
+			configMapKeySuperUserSecretRef:   "pg1-secret",
 		},
 	}
 	examplePgCluster := &enterprisev4.PostgresCluster{
@@ -2187,7 +2207,9 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 			},
 			Spec: buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, mergedConfig, "pg1-secret", false),
 			Status: cnpgv1.ClusterStatus{
-				Phase: cnpgv1.PhaseHealthy,
+				Phase:        cnpgv1.PhaseHealthy,
+				WriteService: cluster.Name + "-rw",
+				ReadService:  cluster.Name + "-ro",
 			},
 		}
 		require.NoError(t, ctrl.SetControllerReference(cluster, cnpg, scheme))
@@ -2206,7 +2228,11 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 			cluster: cluster,
 			cnpgCluster: &cnpgv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-				Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
+				Status: cnpgv1.ClusterStatus{
+					Phase:        cnpgv1.PhaseHealthy,
+					WriteService: "pg1-rw",
+					ReadService:  "pg1-ro",
+				},
 			},
 		}}
 	}
@@ -2221,7 +2247,9 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 			cnpgCluster: &cnpgv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 				Status: cnpgv1.ClusterStatus{
-					Phase: cnpgv1.PhaseHealthy,
+					Phase:        cnpgv1.PhaseHealthy,
+					WriteService: "pg1-rw",
+					ReadService:  "pg1-ro",
 					Certificates: cnpgv1.CertificatesStatus{
 						CertificatesConfiguration: cnpgv1.CertificatesConfiguration{
 							ServerCASecret: exampleCASecret.Name,
