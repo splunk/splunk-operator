@@ -19,6 +19,7 @@ import (
 	"time"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -42,8 +43,6 @@ type reconcileConflictCategory string
 const (
 	retryDelay                = time.Second * 15
 	clusterNotFoundRetryDelay = time.Second * 30
-
-	postgresPort string = "5432"
 
 	readOnlyEndpoint  string = "ro"
 	readWriteEndpoint string = "rw"
@@ -123,14 +122,7 @@ const (
 	conflictFinalStatus            reconcileConflictCategory = "final_status"
 )
 
-// clusterEndpoints holds fully-resolved connection hostnames for a cluster.
-// PoolerRWHost and PoolerROHost are empty when connection pooling is disabled.
-type clusterEndpoints struct {
-	RWHost       string
-	ROHost       string
-	PoolerRWHost string
-	PoolerROHost string
-}
+type clusterEndpoints = pgconninfo.Endpoints
 
 // deletionPlan separates databases by their DeletionPolicy for the cleanup workflow.
 type deletionPlan struct {

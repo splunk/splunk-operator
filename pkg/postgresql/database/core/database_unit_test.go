@@ -35,6 +35,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
+	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -1432,6 +1433,7 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 	endpoints := clusterEndpoints{
 		RWHost:       "rw.default.svc.cluster.local",
 		ROHost:       "ro.default.svc.cluster.local",
+		RHost:        "r.default.svc.cluster.local",
 		PoolerRWHost: "pooler-rw.default.svc.cluster.local",
 		PoolerROHost: "pooler-ro.default.svc.cluster.local",
 	}
@@ -1458,8 +1460,8 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 		wantOwnerUID := postgresDB.UID
 		wantPaymentsName := "primary-payments-config"
 		wantAnalyticsName := "primary-analytics-config"
-		wantPaymentsData := buildDatabaseConfigMapBody("payments", endpoints)
-		wantAnalyticsData := buildDatabaseConfigMapBody("analytics", endpoints)
+		wantPaymentsData := mustBuildDatabaseConfigMapData(t, "payments", endpoints)
+		wantAnalyticsData := mustBuildDatabaseConfigMapData(t, "analytics", endpoints)
 		c := testClient(t, scheme)
 
 		err := reconcileRoleConfigMaps(context.Background(), c, scheme, postgresDB, endpoints)
@@ -1502,7 +1504,7 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 		wantManagedBy := "splunk-operator"
 		wantOwnerUID := postgresDB.UID
 		wantKeep := "true"
-		wantData := buildDatabaseConfigMapBody("payments", endpoints)
+		wantData := mustBuildDatabaseConfigMapData(t, "payments", endpoints)
 		retained := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      cmName,
@@ -1517,7 +1519,7 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 				},
 			},
 			Data: map[string]string{
-				"dbname": "stale",
+				ConfigMapKeyDatabaseName: "stale",
 			},
 		}
 		c := testClient(t, scheme, retained)
@@ -1568,7 +1570,7 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 				Labels:      map[string]string{labelManagedBy: "splunk-operator"},
 				Annotations: map[string]string{"keep": "true"},
 			},
-			Data: map[string]string{"dbname": "payments"},
+			Data: map[string]string{ConfigMapKeyDatabaseName: "payments"},
 		}
 		c := testClient(t, scheme, existing)
 
@@ -1581,7 +1583,33 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 		assert.Equal(t, "true", got.Annotations["keep"])
 		require.Len(t, got.OwnerReferences, 1)
 		assert.Equal(t, postgresDB.UID, got.OwnerReferences[0].UID)
-		assert.Equal(t, buildDatabaseConfigMapBody("payments", endpoints), got.Data)
+		assert.Equal(t, mustBuildDatabaseConfigMapData(t, "payments", endpoints), got.Data)
+	})
+
+	t.Run("fails when endpoints are incomplete", func(t *testing.T) {
+		postgresDB := &enterprisev4.PostgresDatabase{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: enterprisev4.GroupVersion.String(),
+				Kind:       "PostgresDatabase",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary",
+				Namespace: "dbs",
+				UID:       types.UID("postgresdb-uid"),
+			},
+			Spec: enterprisev4.PostgresDatabaseSpec{
+				Databases: []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			},
+		}
+		c := testClient(t, scheme)
+
+		err := reconcileRoleConfigMaps(context.Background(), c, scheme, postgresDB, clusterEndpoints{
+			RWHost: "rw.default.svc.cluster.local",
+			ROHost: "ro.default.svc.cluster.local",
+		})
+
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "RHost is required")
 	})
 }
 
@@ -1970,25 +1998,28 @@ func TestReconcileExtensions(t *testing.T) {
 	}
 }
 
-func TestBuildDatabaseConfigMapBody(t *testing.T) {
+func TestBuildDatabaseConfigMapData(t *testing.T) {
 	tests := []struct {
 		name      string
 		endpoints clusterEndpoints
 		want      map[string]string
+		wantError string
 	}{
 		{
 			name: "without pooler endpoints",
 			endpoints: clusterEndpoints{
 				RWHost: "rw.default.svc.cluster.local",
 				ROHost: "ro.default.svc.cluster.local",
+				RHost:  "r.default.svc.cluster.local",
 			},
 			want: map[string]string{
-				"dbname":     "payments",
-				"port":       postgresPort,
-				"rw-host":    "rw.default.svc.cluster.local",
-				"ro-host":    "ro.default.svc.cluster.local",
-				"admin-user": "payments_admin",
-				"rw-user":    "payments_rw",
+				ConfigMapKeyDatabaseName:         "payments",
+				pgconninfo.KeyDefaultClusterPort: pgconninfo.DefaultPort,
+				pgconninfo.KeyClusterRWEndpoint:  "rw.default.svc.cluster.local",
+				pgconninfo.KeyClusterROEndpoint:  "ro.default.svc.cluster.local",
+				pgconninfo.KeyClusterREndpoint:   "r.default.svc.cluster.local",
+				ConfigMapKeyAdminUser:            "payments_admin",
+				ConfigMapKeyRWUser:               "payments_rw",
 			},
 		},
 		{
@@ -1996,26 +2027,47 @@ func TestBuildDatabaseConfigMapBody(t *testing.T) {
 			endpoints: clusterEndpoints{
 				RWHost:       "rw.default.svc.cluster.local",
 				ROHost:       "ro.default.svc.cluster.local",
+				RHost:        "r.default.svc.cluster.local",
 				PoolerRWHost: "pooler-rw.default.svc.cluster.local",
 				PoolerROHost: "pooler-ro.default.svc.cluster.local",
 			},
 			want: map[string]string{
-				"dbname":         "payments",
-				"port":           postgresPort,
-				"rw-host":        "rw.default.svc.cluster.local",
-				"ro-host":        "ro.default.svc.cluster.local",
-				"admin-user":     "payments_admin",
-				"rw-user":        "payments_rw",
-				"pooler-rw-host": "pooler-rw.default.svc.cluster.local",
-				"pooler-ro-host": "pooler-ro.default.svc.cluster.local",
+				ConfigMapKeyDatabaseName:         "payments",
+				pgconninfo.KeyDefaultClusterPort: pgconninfo.DefaultPort,
+				pgconninfo.KeyClusterRWEndpoint:  "rw.default.svc.cluster.local",
+				pgconninfo.KeyClusterROEndpoint:  "ro.default.svc.cluster.local",
+				pgconninfo.KeyClusterREndpoint:   "r.default.svc.cluster.local",
+				ConfigMapKeyAdminUser:            "payments_admin",
+				ConfigMapKeyRWUser:               "payments_rw",
+				pgconninfo.KeyPoolerRWEndpoint:   "pooler-rw.default.svc.cluster.local",
+				pgconninfo.KeyPoolerROEndpoint:   "pooler-ro.default.svc.cluster.local",
 			},
+		},
+		{
+			name: "fails when endpoints are incomplete",
+			endpoints: clusterEndpoints{
+				RWHost: "rw.default.svc.cluster.local",
+				ROHost: "ro.default.svc.cluster.local",
+			},
+			wantError: "RHost is required",
 		},
 	}
 
 	for _, tst := range tests {
 		t.Run(tst.name, func(t *testing.T) {
-			got := buildDatabaseConfigMapBody("payments", tst.endpoints)
-			assert.Equal(t, tst.want, got)
+			got, required, err := buildDatabaseConfigMapData("payments", tst.endpoints)
+			if tst.wantError == "" {
+				require.NoError(t, err)
+				assert.Equal(t, tst.want, got)
+				assert.ElementsMatch(t, append(pgconninfo.RequiredKeys(),
+					ConfigMapKeyDatabaseName,
+					ConfigMapKeyAdminUser,
+					ConfigMapKeyRWUser,
+				), required)
+				return
+			}
+			require.Error(t, err)
+			assert.ErrorContains(t, err, tst.wantError)
 		})
 	}
 }
@@ -2027,6 +2079,7 @@ func TestResolveClusterEndpoints(t *testing.T) {
 		cnpg      *cnpgv1.Cluster
 		namespace string
 		want      clusterEndpoints
+		wantError string
 	}{
 		{
 			name:    "without connection pooler",
@@ -2042,7 +2095,15 @@ func TestResolveClusterEndpoints(t *testing.T) {
 			want: clusterEndpoints{
 				RWHost: "primary-rw.dbs.svc.cluster.local",
 				ROHost: "primary-ro.dbs.svc.cluster.local",
+				RHost:  "cnpg-primary-r.dbs.svc.cluster.local",
 			},
+		},
+		{
+			name:      "fails when CNPG service names are not available",
+			cluster:   &enterprisev4.PostgresCluster{},
+			cnpg:      &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "cnpg-primary"}},
+			namespace: "dbs",
+			wantError: "write service name is required",
 		},
 		{
 			name: "with connection pooler",
@@ -2062,6 +2123,7 @@ func TestResolveClusterEndpoints(t *testing.T) {
 			want: clusterEndpoints{
 				RWHost:       "primary-rw.dbs.svc.cluster.local",
 				ROHost:       "primary-ro.dbs.svc.cluster.local",
+				RHost:        "cnpg-primary-r.dbs.svc.cluster.local",
 				PoolerRWHost: "cnpg-primary-pooler-rw.dbs.svc.cluster.local",
 				PoolerROHost: "cnpg-primary-pooler-ro.dbs.svc.cluster.local",
 			},
@@ -2071,10 +2133,24 @@ func TestResolveClusterEndpoints(t *testing.T) {
 	for _, tst := range tests {
 
 		t.Run(tst.name, func(t *testing.T) {
-			got := resolveClusterEndpoints(tst.cluster, tst.cnpg, tst.namespace)
-			assert.Equal(t, tst.want, got)
+			got, err := resolveClusterEndpoints(tst.cluster, tst.cnpg, tst.namespace)
+			if tst.wantError == "" {
+				require.NoError(t, err)
+				assert.Equal(t, tst.want, got)
+				return
+			}
+			require.Error(t, err)
+			assert.ErrorContains(t, err, tst.wantError)
 		})
 	}
+}
+
+func mustBuildDatabaseConfigMapData(t *testing.T, dbName string, endpoints clusterEndpoints) map[string]string {
+	t.Helper()
+
+	data, _, err := buildDatabaseConfigMapData(dbName, endpoints)
+	require.NoError(t, err)
+	return data
 }
 
 func TestPopulateDatabaseStatus(t *testing.T) {
