@@ -191,6 +191,53 @@ function createCluster() {
     eksctl utils write-kubeconfig --cluster=${TEST_CLUSTER_NAME}
   fi
 
+  # Reconcile IRSA + EBS CSI driver addon every run. Doing this outside the
+  # "cluster just created" branch ensures a re-run can heal a cluster whose
+  # role / trust policy / addon got into a bad state, and uses a role name
+  # unique to this cluster (see ebsCsiRoleName) so concurrent pipelines do
+  # not clobber each other's trust policy.
+  eksctl utils associate-iam-oidc-provider --cluster=${TEST_CLUSTER_NAME} --approve
+  account_id=$(aws sts get-caller-identity --query "Account" --output text)
+  oidc_provider=$(aws eks describe-cluster --name ${TEST_CLUSTER_NAME} --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
+  namespace=kube-system
+  service_account=ebs-csi-controller-sa
+  kubectl get serviceaccount ${service_account} --namespace ${namespace} >/dev/null 2>&1 || \
+    kubectl create serviceaccount ${service_account} --namespace ${namespace}
+  echo "{
+    \"Version\": \"2012-10-17\",
+    \"Statement\": [
+      {
+        \"Effect\": \"Allow\",
+        \"Principal\": {
+          \"Federated\": \"arn:aws:iam::${account_id}:oidc-provider/${oidc_provider}\"
+        },
+        \"Action\": \"sts:AssumeRoleWithWebIdentity\",
+        \"Condition\": {
+          \"StringEquals\": {
+            \"${oidc_provider}:aud\": \"sts.amazonaws.com\",
+            \"${oidc_provider}:sub\": \"system:serviceaccount:${namespace}:${service_account}\"
+          }
+        }
+      }
+    ]
+  }"  >aws-ebs-csi-driver-trust-policy.json
+  rolename=$(ebsCsiRoleName "${TEST_CLUSTER_NAME}") || return 1
+  if aws iam get-role --role-name "${rolename}" >/dev/null 2>&1; then
+    echo "IAM role ${rolename} already exists; refreshing trust policy for current cluster OIDC provider"
+    aws iam update-assume-role-policy --role-name "${rolename}" --policy-document file://aws-ebs-csi-driver-trust-policy.json
+  else
+    aws iam create-role --role-name "${rolename}" --assume-role-policy-document file://aws-ebs-csi-driver-trust-policy.json --description "irsa role for ${TEST_CLUSTER_NAME}"
+  fi
+  aws iam attach-role-policy --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy --role-name "${rolename}"
+  kubectl annotate serviceaccount -n ${namespace} ${service_account} eks.amazonaws.com/role-arn=arn:aws:iam::${account_id}:role/${rolename} --overwrite
+  if eksctl get addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} >/dev/null 2>&1; then
+    eksctl update addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::${account_id}:role/${rolename} --force
+  else
+    eksctl create addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::${account_id}:role/${rolename} --force
+  fi
+  # Restart ebs-csi-controller so it picks up updated SA annotation / role.
+  kubectl -n ${namespace} rollout restart deployment ebs-csi-controller >/dev/null 2>&1 || true
+
   echo "Logging in to ECR"
   rc=$(aws ecr get-login-password --region "${region}" | docker login --username AWS --password-stdin "${ECR_REPOSITORY}"/splunk/splunk-operator)
   if [ "$rc" != "Login Succeeded" ]; then

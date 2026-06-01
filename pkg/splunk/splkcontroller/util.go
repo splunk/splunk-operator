@@ -275,12 +275,26 @@ func MergeServiceSpecUpdates(ctx context.Context, current *corev1.ServiceSpec, r
 	scopedLog := logging.FromContext(ctx).With("func", "MergeServiceSpecUpdates", "name", name)
 	result := false
 
-	// check service Type
-	if current.Type != revised.Type {
+	// check service Type. An empty revised.Type means the controller did not
+	// explicitly set one; Kubernetes defaults it to ClusterIP server-side.
+	// Treat the empty value as ClusterIP so we (1) avoid an endless
+	// reconcile->update->watch loop against the API-server-defaulted ClusterIP,
+	// while (2) still driving a previously customized Service (e.g. LoadBalancer
+	// or NodePort set via spec.serviceTemplate) back to the default ClusterIP
+	// when the override is removed from the CR.
+	currentType := current.Type
+	if currentType == "" {
+		currentType = corev1.ServiceTypeClusterIP
+	}
+	revisedType := revised.Type
+	if revisedType == "" {
+		revisedType = corev1.ServiceTypeClusterIP
+	}
+	if currentType != revisedType {
 		scopedLog.InfoContext(ctx, "service Type differs",
 			"current", current.Type,
-			"revised", revised.Type)
-		current.Type = revised.Type
+			"revised", revisedType)
+		current.Type = revisedType
 		result = true
 	}
 

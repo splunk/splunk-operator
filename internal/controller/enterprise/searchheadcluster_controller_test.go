@@ -19,7 +19,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-var _ = Describe("SearchHeadCluster Controller", func() {
+var _ = Describe("SearchHeadCluster Controller", Label("integration"), func() {
 
 	AfterEach(func() {
 

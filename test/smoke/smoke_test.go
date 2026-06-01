@@ -20,7 +20,7 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("Smoke test", func() {
+var _ = Describe("Smoke test", Label("tier:e2e-pr", "cloud:aws", "feature:basic"), func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
@@ -36,35 +36,35 @@ var _ = Describe("Smoke test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("smoke, basic, s1: can deploy a standalone instance", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("can deploy a standalone instance", Label("tier:e2e-pr", "sva:s1", "cloud:aws", "feature:basic"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			_, err := testcaseEnvInst.RunStandaloneDeploymentWorkflow(ctx, deployment)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 		})
 	})
 
 	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
-		It("smoke, basic, c3: can deploy indexers and search head cluster", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
+		It("can deploy indexers and search head cluster", Label("tier:e2e-pr", "sva:c3", "cloud:aws", "feature:basic"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 			_, err := testcaseEnvInst.RunC3DeploymentWorkflow(ctx, deployment, 3, "")
 			Expect(err).To(Succeed(), "Unable to deploy C3 cluster")
 		})
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite Indexer Cluster, Search Head Cluster)", func() {
-		It("smoke, basic, m4: can deploy indexers and search head cluster", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy indexers and search head cluster", Label("tier:e2e-pr", "sva:m4", "cloud:aws", "feature:basic"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			_, err := testcaseEnvInst.RunM4DeploymentWorkflow(ctx, deployment, 1, 3, "")
 			Expect(err).To(Succeed(), "Unable to deploy M4 cluster")
 		})
 	})
 
 	Context("Multisite cluster deployment (M1 - Multisite Indexer Cluster)", func() {
-		It("smoke, basic: can deploy multisite indexers cluster", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy multisite indexers cluster", Label("tier:e2e-pr", "sva:m1", "cloud:aws", "feature:basic"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			_, err := testcaseEnvInst.RunM1DeploymentWorkflow(ctx, deployment, 1, 3)
 			Expect(err).To(Succeed(), "Unable to deploy M1 cluster")
 		})
 	})
 
 	Context("Standalone deployment (S1) with Service Account", func() {
-		It("smoke, basic, s1: can deploy a standalone instance attached to a service account", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("can deploy a standalone instance attached to a service account", Label("tier:e2e-pr", "sva:s1", "cloud:aws", "feature:basic"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			serviceAccountName := "smoke-service-account"
 			_, err := testcaseEnvInst.RunStandaloneWithServiceAccountWorkflow(ctx, deployment, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy standalone with service account")
