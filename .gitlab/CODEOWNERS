@@ -5,6 +5,7 @@
 [Default]
 * @okta-groups/sg-cloud-gitlab-admin @okta-groups/sg-cloud-sok-developer-platform
 !/pkg/postgresql/
+!/api/enterprise/*/postgres*
 !/internal/controller/enterprise/postgres*
 !/docs/postgresql/
 !/config/crd/bases/*postgres*
@@ -13,6 +14,7 @@
 
 [PostgreSQL] @okta-groups/sg-cloud-pfm-cse
 /pkg/postgresql/
+/api/enterprise/*/postgres*
 /internal/controller/enterprise/postgres*
 /docs/postgresql/
 /config/crd/bases/*postgres*
