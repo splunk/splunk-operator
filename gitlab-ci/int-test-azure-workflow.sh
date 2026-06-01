@@ -178,8 +178,7 @@ operator_image="${operator_registry}/splunk/splunk-operator:${source_operator_im
 resolve_runtime_enterprise_image
 enterprise_source_image="${RESOLVED_ENTERPRISE_IMAGE}"
 cluster_name="az${CI_JOB_ID}"
-test_focus="$(first_nonempty "${PIPELINE_AZURE_TEST_FOCUS:-}" "${JOB_CLOUD_TEST_FOCUS:-}" "azure_sanity")"
-test_to_skip="$(first_nonempty "${PIPELINE_AZURE_TEST_TO_SKIP:-}" "${JOB_CLOUD_TEST_TO_SKIP:-}" '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$')"
+test_labels="$(first_nonempty "${PIPELINE_AZURE_TEST_LABELS:-}" "${JOB_CLOUD_TEST_LABELS:-}" "tier:e2e-full && cloud:azure")"
 test_timeout="$(first_nonempty "${PIPELINE_AZURE_TEST_TIMEOUT:-}" "${JOB_CLOUD_TEST_TIMEOUT:-}" "7h")"
 
 export CLUSTER_PROVIDER="azure"
@@ -208,8 +207,7 @@ export PRIVATE_REGISTRY_SECRET_NAME="$(first_nonempty "${PIPELINE_AZURE_PULL_SEC
 export PRIVATE_REGISTRY_AUTH_MODE="$(first_nonempty "${PIPELINE_AZURE_REGISTRY_PULL_MODE:-}" "node")"
 export SPLUNK_OPERATOR_IMAGE="${operator_image}"
 export SPLUNK_ENTERPRISE_IMAGE="${enterprise_source_image}"
-export TEST_FOCUS="${test_focus}"
-export TEST_TO_SKIP="${test_to_skip}"
+export TEST_LABELS="${test_labels}"
 export TEST_TIMEOUT="${test_timeout}"
 export COMMIT_HASH="${CI_COMMIT_SHORT_SHA:-${CI_COMMIT_SHA}}"
 export TEST_CONTAINER="${PIPELINE_AZURE_TEST_CONTAINER}"
@@ -235,8 +233,7 @@ append_context "${context_file}" "azure_container_registry" "${AZURE_CONTAINER_R
 append_context "${context_file}" "azure_region" "${AZURE_REGION}"
 append_context "${context_file}" "azure_auth_mode_requested" "${azure_auth_mode}"
 append_context "${context_file}" "azure_registry_pull_mode_requested" "${PRIVATE_REGISTRY_AUTH_MODE}"
-append_context "${context_file}" "test_focus" "${TEST_FOCUS}"
-append_context "${context_file}" "test_to_skip" "${TEST_TO_SKIP}"
+append_context "${context_file}" "test_labels" "${TEST_LABELS}"
 append_context "${context_file}" "test_timeout" "${TEST_TIMEOUT}"
 
 if [ "${azure_auth_mode}" = "oidc" ]; then
@@ -294,7 +291,7 @@ log_step "azure:deploy-operator:start" | tee -a "${run_log}" >/dev/null
 bash "${CI_PROJECT_DIR}/test/deploy-operator.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" >> "${run_log}" 2>&1
 log_step "azure:deploy-operator:complete" | tee -a "${run_log}" >/dev/null
 
-log_step "azure:trigger-tests:start focus=${TEST_FOCUS}" | tee -a "${run_log}" >/dev/null
+log_step "azure:trigger-tests:start labels=${TEST_LABELS}" | tee -a "${run_log}" >/dev/null
 bash "${CI_PROJECT_DIR}/test/trigger-tests.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" >> "${run_log}" 2>&1
 log_step "azure:trigger-tests:complete" | tee -a "${run_log}" >/dev/null
 

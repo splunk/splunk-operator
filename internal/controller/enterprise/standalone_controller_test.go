@@ -24,7 +24,7 @@ import (
 const timeout = time.Second * 10
 const interval = time.Millisecond * 250
 
-var _ = Describe("Standalone Controller", func() {
+var _ = Describe("Standalone Controller", Label("integration"), func() {
 
 	AfterEach(func() {
 

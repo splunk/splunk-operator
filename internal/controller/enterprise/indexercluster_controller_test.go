@@ -22,7 +22,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-var _ = Describe("IndexerCluster Controller", func() {
+var _ = Describe("IndexerCluster Controller", Label("integration"), func() {
 
 	BeforeEach(func() {
 		time.Sleep(2 * time.Second)

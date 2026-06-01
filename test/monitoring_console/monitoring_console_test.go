@@ -33,7 +33,7 @@ var masterManagerMCConfigs = []testenv.MCVersionConfig{
 	{
 		MCReconfigParams: testenv.MCReconfigParams{CMServiceNameFmt: testenv.ClusterMasterServiceName, CMURLKey: "SPLUNK_CLUSTER_MASTER_URL"},
 		NamePrefix:       "master",
-		Label:            "mastermc",
+		Label:            "master",
 		DeployC3WithMC: func(ctx context.Context, d *testenv.Deployment, name string, replicas int, shc bool, mcRef string) error {
 			return d.DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx, name, replicas, shc, mcRef)
 		},
@@ -50,7 +50,7 @@ var masterManagerMCConfigs = []testenv.MCVersionConfig{
 	{
 		MCReconfigParams: testenv.MCReconfigParams{CMServiceNameFmt: testenv.ClusterManagerServiceName, CMURLKey: splcommon.ClusterManagerURL},
 		NamePrefix:       "",
-		Label:            "managermc",
+		Label:            "manager",
 		DeployC3WithMC: func(ctx context.Context, d *testenv.Deployment, name string, replicas int, shc bool, mcRef string) error {
 			return d.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, name, replicas, shc, mcRef)
 		},
@@ -85,7 +85,7 @@ var _ = Describe("Monitoring Console C3 scale-up tests", func() {
 				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(cfg.Label+", smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+			It("MC can configure SHC, indexer instances after scale up and standalone in a namespace", Label("tier:e2e-pr", "sva:c3", "cloud:aws", "variant:"+cfg.Label, "feature:monitoringconsole"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 				RunC3MCScaleUpTest(ctx, deployment, testcaseEnvInst, cfg)
 			})
 		})
@@ -109,7 +109,7 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 	})
 
 	Context("Deploy Monitoring Console", func() {
-		It("smoke, monitoringconsole: can deploy MC CR and can be configured standalone", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("can deploy MC CR and can be configured standalone", Label("tier:e2e-pr", "cloud:aws", "feature:monitoringconsole"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			/*
 				Test Steps
 				1. Deploy Monitoring Console
@@ -173,13 +173,13 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managermc1, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a MC with standalone instance and update MC with new standalone deployment", Label("tier:e2e-full", "sva:s1", "cloud:aws", "variant:manager", "feature:monitoringconsole", "suite:mc1"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			RunS1StandaloneAddDeleteMCTest(ctx, deployment, testcaseEnvInst, deployment.GetName(), "standalone-"+testenv.RandomDNSName(3))
 		})
 	})
 
 	Context("Standalone deployment with Scale up", func() {
-		It("managermc1, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a MC with standalone instance and update MC when standalone is scaled up", Label("tier:e2e-full", "sva:s1", "cloud:aws", "variant:manager", "feature:monitoringconsole", "suite:mc1"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			/*
 				Test Steps
 				1.  Deploy Standalone
@@ -237,7 +237,7 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managermc2, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", Label("tier:e2e-full", "sva:s1", "cloud:aws", "variant:manager", "feature:monitoringconsole", "suite:mc2"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			RunS1StandaloneAddDeleteMCTest(ctx, deployment, testcaseEnvInst, "search-head-adhoc", "search-head")
 		})
 	})
@@ -264,7 +264,7 @@ var _ = Describe("Monitoring Console reconfig tests", func() {
 				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(cfg.Label+", integration: MC can configure SHC, indexer instances and reconfigure to new MC", NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
+			It("MC can configure SHC, indexer instances and reconfigure to new MC", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:"+cfg.Label, "feature:monitoringconsole"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 				RunC3MCReconfigTest(ctx, deployment, testcaseEnvInst, cfg)
 			})
 		})
@@ -284,7 +284,7 @@ var _ = Describe("Monitoring Console reconfig tests", func() {
 				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(cfg.Label+", integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+			It("MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:"+cfg.Label, "feature:monitoringconsole"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 				RunM4MCReconfigTest(ctx, deployment, testcaseEnvInst, cfg)
 			})
 		})

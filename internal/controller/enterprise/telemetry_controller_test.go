@@ -34,7 +34,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
-var _ = Describe("Telemetry Controller", func() {
+var _ = Describe("Telemetry Controller", Label("integration"), func() {
 	var (
 		ctx    context.Context
 		cmName = "splunk-operator-telemetry"

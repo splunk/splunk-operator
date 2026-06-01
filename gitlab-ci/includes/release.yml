@@ -14,7 +14,6 @@
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-ecr-image-ref.txt
     JOB_INT_TEST_PROFILE: full
     JOB_INT_TEST_TIMEOUT: 255m
-    JOB_INT_TEST_TO_SKIP: '^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
     JOB_EKS_CLUSTER_TEST_TYPE: int
     JOB_EKS_CLUSTER_PLATFORM_SUFFIX: rel
     JOB_INT_CLUSTER_NODES: "1"
@@ -33,7 +32,7 @@ release-appframeworks-s1-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: release-appframeworks-s1-validation
-    JOB_INT_TEST_FOCUS: appframeworksS1
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:s1 && feature:appframework && cloud:aws"
 
 release-managerappframework-c3-validation:
   extends:
@@ -41,7 +40,7 @@ release-managerappframework-c3-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: release-managerappframework-c3-validation
-    JOB_INT_TEST_FOCUS: managerappframeworkc3
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:c3 && variant:manager && feature:appframework && cloud:aws"
 
 release-managerappframework-m4-validation:
   extends:
@@ -49,55 +48,55 @@ release-managerappframework-m4-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: release-managerappframework-m4-validation
-    JOB_INT_TEST_FOCUS: managerappframeworkm4
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:m4 && variant:manager && feature:appframework && cloud:aws"
 
 release-managersecret-validation:
   extends: .release-validation-integration-suite-job
   variables:
     WORKFLOW_SLUG: release-managersecret-validation
-    JOB_INT_TEST_FOCUS: managersecret
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:secret"
 
 release-managersmartstore-validation:
   extends: .release-validation-integration-suite-job
   variables:
     WORKFLOW_SLUG: release-managersmartstore-validation
-    JOB_INT_TEST_FOCUS: managersmartstore
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:smartstore"
 
 release-managermc1-validation:
   extends: .release-validation-integration-suite-job
   variables:
     WORKFLOW_SLUG: release-managermc1-validation
-    JOB_INT_TEST_FOCUS: managermc1
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:monitoringconsole && suite:mc1"
 
 release-managermc2-validation:
   extends: .release-validation-integration-suite-job
   variables:
     WORKFLOW_SLUG: release-managermc2-validation
-    JOB_INT_TEST_FOCUS: managermc2
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:monitoringconsole && suite:mc2"
 
 release-managercrcrud-validation:
   extends: .release-validation-integration-suite-job
   variables:
     WORKFLOW_SLUG: release-managercrcrud-validation
-    JOB_INT_TEST_FOCUS: managercrcrud
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:crcrud"
 
 release-licensemanager-validation:
   extends: .release-validation-integration-suite-job
   variables:
     WORKFLOW_SLUG: release-licensemanager-validation
-    JOB_INT_TEST_FOCUS: licensemanager
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:licensemanager"
 
 release-managerdeletecr-validation:
   extends: .release-validation-integration-suite-job
   variables:
     WORKFLOW_SLUG: release-managerdeletecr-validation
-    JOB_INT_TEST_FOCUS: managerdeletecr
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:deletecr"
 
 release-indingsep-validation:
   extends: .release-validation-integration-suite-job
   variables:
     WORKFLOW_SLUG: release-indingsep-validation
-    JOB_INT_TEST_FOCUS: indingsep
+    JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"
 
 release-helm-validation:
   extends:
@@ -204,14 +203,14 @@ release-azure-validation:
   extends: .release-validation-azure-job
   variables:
     WORKFLOW_SLUG: release-azure-validation
-    JOB_CLOUD_TEST_FOCUS: azure_sanity
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && cloud:azure"
     JOB_CLOUD_TEST_TIMEOUT: 225m
 
 release-gcp-c3-validation:
   extends: .release-validation-gcp-job
   variables:
     WORKFLOW_SLUG: release-gcp-c3-validation
-    JOB_CLOUD_TEST_FOCUS: c3_gcp_sanity
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:c3 && cloud:gcp && variant:master"
     JOB_CLOUD_TEST_TIMEOUT: 225m
     JOB_CLOUD_GCP_ZONE: us-west2-a
 
@@ -219,7 +218,7 @@ release-gcp-c3-manager-validation:
   extends: .release-validation-gcp-job
   variables:
     WORKFLOW_SLUG: release-gcp-c3-manager-validation
-    JOB_CLOUD_TEST_FOCUS: c3_mgr_gcp_sanity
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:c3 && cloud:gcp && variant:manager"
     JOB_CLOUD_TEST_TIMEOUT: 225m
     JOB_CLOUD_GCP_ZONE: us-west2-b
 
@@ -227,7 +226,7 @@ release-gcp-m4-validation:
   extends: .release-validation-gcp-job
   variables:
     WORKFLOW_SLUG: release-gcp-m4-validation
-    JOB_CLOUD_TEST_FOCUS: m4_gcp_sanity
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:m4 && cloud:gcp && variant:master"
     JOB_CLOUD_TEST_TIMEOUT: 225m
     JOB_CLOUD_GCP_ZONE: us-west2-c
 
@@ -235,7 +234,7 @@ release-gcp-m4-manager-validation:
   extends: .release-validation-gcp-job
   variables:
     WORKFLOW_SLUG: release-gcp-m4-manager-validation
-    JOB_CLOUD_TEST_FOCUS: m4_mgr_gcp_sanity
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:m4 && cloud:gcp && variant:manager"
     JOB_CLOUD_TEST_TIMEOUT: 225m
     JOB_CLOUD_GCP_ZONE: us-west2-a
 
@@ -243,7 +242,7 @@ release-gcp-s1-validation:
   extends: .release-validation-gcp-job
   variables:
     WORKFLOW_SLUG: release-gcp-s1-validation
-    JOB_CLOUD_TEST_FOCUS: s1_gcp_sanity
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:s1 && cloud:gcp"
     JOB_CLOUD_TEST_TIMEOUT: 225m
     JOB_CLOUD_GCP_ZONE: us-west2-b
 
@@ -267,7 +266,7 @@ release-distroless-appframeworks-s1-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: release-distroless-appframeworks-s1-validation
-    JOB_INT_TEST_FOCUS: appframeworksS1
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:s1 && feature:appframework && cloud:aws"
 
 release-distroless-managerappframework-c3-validation:
   extends:
@@ -275,7 +274,7 @@ release-distroless-managerappframework-c3-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: release-distroless-managerappframework-c3-validation
-    JOB_INT_TEST_FOCUS: managerappframeworkc3
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:c3 && variant:manager && feature:appframework && cloud:aws"
 
 release-distroless-managerappframework-m4-validation:
   extends:
@@ -283,55 +282,55 @@ release-distroless-managerappframework-m4-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: release-distroless-managerappframework-m4-validation
-    JOB_INT_TEST_FOCUS: managerappframeworkm4
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:m4 && variant:manager && feature:appframework && cloud:aws"
 
 release-distroless-managersecret-validation:
   extends: .release-validation-distroless-suite-job
   variables:
     WORKFLOW_SLUG: release-distroless-managersecret-validation
-    JOB_INT_TEST_FOCUS: managersecret
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:secret"
 
 release-distroless-managersmartstore-validation:
   extends: .release-validation-distroless-suite-job
   variables:
     WORKFLOW_SLUG: release-distroless-managersmartstore-validation
-    JOB_INT_TEST_FOCUS: managersmartstore
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:smartstore"
 
 release-distroless-managermc1-validation:
   extends: .release-validation-distroless-suite-job
   variables:
     WORKFLOW_SLUG: release-distroless-managermc1-validation
-    JOB_INT_TEST_FOCUS: managermc1
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:monitoringconsole && suite:mc1"
 
 release-distroless-managermc2-validation:
   extends: .release-validation-distroless-suite-job
   variables:
     WORKFLOW_SLUG: release-distroless-managermc2-validation
-    JOB_INT_TEST_FOCUS: managermc2
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:monitoringconsole && suite:mc2"
 
 release-distroless-managercrcrud-validation:
   extends: .release-validation-distroless-suite-job
   variables:
     WORKFLOW_SLUG: release-distroless-managercrcrud-validation
-    JOB_INT_TEST_FOCUS: managercrcrud
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:crcrud"
 
 release-distroless-licensemanager-validation:
   extends: .release-validation-distroless-suite-job
   variables:
     WORKFLOW_SLUG: release-distroless-licensemanager-validation
-    JOB_INT_TEST_FOCUS: licensemanager
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:licensemanager"
 
 release-distroless-managerdeletecr-validation:
   extends: .release-validation-distroless-suite-job
   variables:
     WORKFLOW_SLUG: release-distroless-managerdeletecr-validation
-    JOB_INT_TEST_FOCUS: managerdeletecr
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:deletecr"
 
 release-distroless-indingsep-validation:
   extends: .release-validation-distroless-suite-job
   variables:
     WORKFLOW_SLUG: release-distroless-indingsep-validation
-    JOB_INT_TEST_FOCUS: indingsep
+    JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"
 
 # Keep the arm64 suite set aligned with the existing splunk-operator-cicd
 # release validation matrix instead of drifting from the operational baseline.
@@ -341,55 +340,55 @@ release-graviton-appframeworks-s1-validation:
     - .runtime-appframework-suite-job
   variables:
     WORKFLOW_SLUG: release-graviton-appframeworks-s1-validation
-    JOB_INT_TEST_FOCUS: appframeworksS1
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:s1 && feature:appframework && cloud:aws"
 
 release-graviton-managersecret-validation:
   extends: .release-validation-graviton-suite-job
   variables:
     WORKFLOW_SLUG: release-graviton-managersecret-validation
-    JOB_INT_TEST_FOCUS: managersecret
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:secret"
 
 release-graviton-managersmartstore-validation:
   extends: .release-validation-graviton-suite-job
   variables:
     WORKFLOW_SLUG: release-graviton-managersmartstore-validation
-    JOB_INT_TEST_FOCUS: managersmartstore
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:smartstore"
 
 release-graviton-managermc1-validation:
   extends: .release-validation-graviton-suite-job
   variables:
     WORKFLOW_SLUG: release-graviton-managermc1-validation
-    JOB_INT_TEST_FOCUS: managermc1
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:monitoringconsole && suite:mc1"
 
 release-graviton-managermc2-validation:
   extends: .release-validation-graviton-suite-job
   variables:
     WORKFLOW_SLUG: release-graviton-managermc2-validation
-    JOB_INT_TEST_FOCUS: managermc2
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:monitoringconsole && suite:mc2"
 
 release-graviton-managercrcrud-validation:
   extends: .release-validation-graviton-suite-job
   variables:
     WORKFLOW_SLUG: release-graviton-managercrcrud-validation
-    JOB_INT_TEST_FOCUS: managercrcrud
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:crcrud"
 
 release-graviton-licensemanager-validation:
   extends: .release-validation-graviton-suite-job
   variables:
     WORKFLOW_SLUG: release-graviton-licensemanager-validation
-    JOB_INT_TEST_FOCUS: licensemanager
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:licensemanager"
 
 release-graviton-managerdeletecr-validation:
   extends: .release-validation-graviton-suite-job
   variables:
     WORKFLOW_SLUG: release-graviton-managerdeletecr-validation
-    JOB_INT_TEST_FOCUS: managerdeletecr
+    JOB_INT_TEST_LABELS: "tier:e2e-full && variant:manager && feature:deletecr"
 
 release-graviton-indingsep-validation:
   extends: .release-validation-graviton-suite-job
   variables:
     WORKFLOW_SLUG: release-graviton-indingsep-validation
-    JOB_INT_TEST_FOCUS: indingsep
+    JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"
 
 release-candidate-packaging:
   extends:

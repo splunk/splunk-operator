@@ -33,8 +33,8 @@ type smartstoreTestConfig struct {
 // masterManagerSmartstoreConfigs defines the V3 (master) and V4 (manager) variants
 // shared by the S1 and M4 smartstore test tables.
 var masterManagerSmartstoreConfigs = []smartstoreTestConfig{
-	{testenv.MasterManagerTestConfig{NamePrefix: "master", Label: "mastersmartstore", NewConfig: testenv.NewClusterReadinessConfigV3}, 2 * time.Minute},
-	{testenv.MasterManagerTestConfig{NamePrefix: "", Label: "managersmartstore", NewConfig: testenv.NewClusterReadinessConfigV4}, 5 * time.Minute},
+	{testenv.MasterManagerTestConfig{NamePrefix: "master", Label: "master", NewConfig: testenv.NewClusterReadinessConfigV3}, 2 * time.Minute},
+	{testenv.MasterManagerTestConfig{NamePrefix: "", Label: "manager", NewConfig: testenv.NewClusterReadinessConfigV4}, 5 * time.Minute},
 }
 
 var _ = Describe("Smartstore test", func() {
@@ -55,11 +55,11 @@ var _ = Describe("Smartstore test", func() {
 				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(tc.Label+", integration: Can configure multiple indexes through app", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+			It("Can configure multiple indexes through app", Label("tier:e2e-full", "sva:s1", "cloud:aws", "variant:"+tc.Label, "feature:smartstore"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 				RunS1MultipleIndexesTest(ctx, deployment, testcaseEnvInst, tc.S1IndexesTimeout)
 			})
 
-			It(tc.Label+", integration: Can configure indexes which use default volumes through app", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+			It("Can configure indexes which use default volumes through app", Label("tier:e2e-full", "sva:s1", "cloud:aws", "variant:"+tc.Label, "feature:smartstore"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 				RunS1DefaultVolumesTest(ctx, deployment, testcaseEnvInst)
 			})
 		})
@@ -75,7 +75,7 @@ var _ = Describe("Smartstore test", func() {
 				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(tc.Label+", m4, smoke: Can configure indexes and volumes on Multisite Indexer Cluster through app", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+			It("Can configure indexes and volumes on Multisite Indexer Cluster through app", Label("tier:e2e-pr", "sva:m4", "cloud:aws", "variant:"+tc.Label, "feature:smartstore"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 				config := tc.NewConfig()
 				RunM4MultisiteSmartStoreTest(ctx, deployment, testcaseEnvInst, config)
 			})
@@ -93,12 +93,12 @@ var _ = Describe("Smartstore test", func() {
 			Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 		})
 
-		It("integration, s1, smartstore: can deploy a Standalone instance with Ephemeral Etc storage", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("can deploy a Standalone instance with Ephemeral Etc storage", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:smartstore"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			storageConfig := enterpriseApi.StorageClassSpec{StorageClassName: "TestStorageEtcEph", StorageCapacity: "1Gi", EphemeralStorage: true}
 			RunS1EphemeralStorageTest(ctx, deployment, testcaseEnvInst, storageConfig, true)
 		})
 
-		It("integration, s1, smartstore: can deploy a Standalone instance with Ephemeral Var storage", NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("can deploy a Standalone instance with Ephemeral Var storage", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:smartstore"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			storageConfig := enterpriseApi.StorageClassSpec{StorageClassName: "TestStorageVarEph", StorageCapacity: "1Gi", EphemeralStorage: true}
 			RunS1EphemeralStorageTest(ctx, deployment, testcaseEnvInst, storageConfig, false)
 		})

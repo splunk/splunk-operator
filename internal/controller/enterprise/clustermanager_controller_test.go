@@ -23,7 +23,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-var _ = Describe("ClusterManager Controller", func() {
+var _ = Describe("ClusterManager Controller", Label("integration"), func() {
 
 	BeforeEach(func() {
 		time.Sleep(2 * time.Second)

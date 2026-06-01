@@ -20,7 +20,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-var _ = Describe("LicenseMaster Controller", func() {
+var _ = Describe("LicenseMaster Controller", Label("integration"), func() {
 
 	AfterEach(func() {
 
