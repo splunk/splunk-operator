@@ -25,8 +25,8 @@ import (
 // masterManagerLMConfigs defines the V3 (master) and V4 (manager) variants
 // for the license manager tests.
 var masterManagerLMConfigs = []testenv.MasterManagerLMTestConfig{
-	{NamePrefix: "master", Label: "licensemaster", NewConfig: testenv.NewLicenseMasterConfig},
-	{NamePrefix: "", Label: "licensemanager", NewConfig: testenv.NewLicenseManagerConfig},
+	{NamePrefix: "master", Label: "master", NewConfig: testenv.NewLicenseMasterConfig},
+	{NamePrefix: "", Label: "manager", NewConfig: testenv.NewLicenseManagerConfig},
 }
 
 var _ = Describe("License Manager test", func() {
@@ -49,7 +49,7 @@ var _ = Describe("License Manager test", func() {
 				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(tc.Label+", smoke, s1: Splunk Operator can configure LM with Standalone in S1 SVA", func() {
+			It("Splunk Operator can configure LM with Standalone in S1 SVA", Label("tier:e2e-pr", "sva:s1", "cloud:aws", "variant:"+tc.Label, "feature:licensemanager"), func() {
 				RunLMS1Test(ctx, deployment, testcaseEnvInst, tc.NewConfig())
 			})
 		})
@@ -65,7 +65,7 @@ var _ = Describe("License Manager test", func() {
 				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(tc.Label+", integration, c3: Splunk Operator can configure LM with Indexers and Search Heads in C3 SVA", func() {
+			It("Splunk Operator can configure LM with Indexers and Search Heads in C3 SVA", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:"+tc.Label, "feature:licensemanager"), func() {
 				RunLMC3Test(ctx, deployment, testcaseEnvInst, tc.NewConfig())
 			})
 		})
@@ -81,7 +81,7 @@ var _ = Describe("License Manager test", func() {
 				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(tc.Label+", integration, m4: Splunk Operator can configure LM with Indexers and Search Heads in M4 SVA", func() {
+			It("Splunk Operator can configure LM with Indexers and Search Heads in M4 SVA", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:"+tc.Label, "feature:licensemanager"), func() {
 				RunLMM4Test(ctx, deployment, testcaseEnvInst, tc.NewConfig())
 			})
 		})
@@ -97,7 +97,7 @@ var _ = Describe("License Manager test", func() {
 				Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 			})
 
-			It(tc.Label+", integration, c3: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
+			It("Splunk Operator can configure a C3 SVA and have apps installed locally on LM", Label("tier:e2e-full", "sva:c3", "cloud:aws", "variant:"+tc.Label, "feature:licensemanager"), func() {
 				RunLMC3AppFrameworkTest(ctx, deployment, testcaseEnvInst, testenvInstance, tc.NewConfig())
 			})
 		})

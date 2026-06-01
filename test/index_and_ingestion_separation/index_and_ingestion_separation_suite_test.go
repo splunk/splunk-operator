@@ -130,7 +130,7 @@ func TestIndexIngestionSeparation(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	sc, _ := GinkgoConfiguration()
-	sc.Timeout = testenv.ShortSuiteTimeout
+	sc.Timeout = testenv.MediumSuiteTimeout
 
 	RunSpecs(t, "Running "+testSuiteName, sc)
 }

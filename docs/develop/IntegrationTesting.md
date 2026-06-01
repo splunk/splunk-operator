@@ -282,22 +282,34 @@ var _ = Describe("My Feature", func() {
 })
 ```
 
-### Naming Convention for `It` Labels
+### Ginkgo Labels on `It` Blocks
 
-Test names follow a tag-based convention used for `--focus` / `--skip` filtering:
+Test selection is driven by Ginkgo `Label(...)` arguments on `It` blocks and filtered via `--label-filter`. Labels are orthogonal tokens — combine them instead of using compound names. All labels use a `key:value` form. The canonical order is **tier → sva → cloud → variant → feature → extra**.
 
+- A **tier** label: `tier:e2e-pr` (PR gate, fast subset) or `tier:e2e-full` (full validation).
+- An **sva** (topology) label: `sva:s1`, `sva:c3`, `sva:m4`, `sva:m1`, `sva:shc`.
+- A **cloud** provider label: `cloud:aws`, `cloud:gcp`, `cloud:azure` (or `cloud:any` for cloud-agnostic tests).
+- A **variant** label (where a CR has V3/V4 variants): `variant:manager` (ClusterManager / V4) or `variant:master` (ClusterMaster / V3).
+- A **feature** label — exactly one, matching the test's directory:
+  `feature:appframework` (under `test/appframework_*`), `feature:smartstore`, `feature:monitoringconsole`,
+  `feature:secret`, `feature:crcrud`, `feature:deletecr`, `feature:licensemanager`, `feature:ingestsearch`, `feature:indingsep`, `feature:basic`.
+- **Extra / scenario** labels when they carry meaning orthogonal to the above:
+  `suite:mc1` / `suite:mc2` (CI parallelization groups),
+  `feature:scaling` (added in addition to the test's primary `feature:*` label on scale-up/scale-down scenarios so the `managerscaling` CI job can target them).
+
+Example:
+
+```go
+It("can deploy a C3 with App Framework",
+    Label("tier:e2e-pr", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"),
+    func() { /* ... */ })
 ```
-"<mysuite>, <mytag>, <topology>: <human description>"
-```
 
-Examples:
-- `"smoke, basic, s1: can deploy a standalone instance"`
-- `"managercrcrud, integration, c3: can deploy Indexer and Search Head Cluster"`
+CI jobs select tests via `JOB_*_LABELS`, passed verbatim to `ginkgo --label-filter`. Examples:
 
-Tags used in CI filtering:
-- `smoke` — basic deployment checks (run on PRs)
-- `integration` — full integration tests (run on push to develop/main and on PRs from `feature*` branches)
-- Topology: `s1` (standalone), `c3` (clustered indexer + SHC), `m4` (multisite + SHC), `m1` (multisite indexer only)
+- `"tier:e2e-full && sva:c3 && cloud:gcp && variant:manager"` — GCP C3 manager validation
+- `"tier:e2e-full && variant:manager && feature:smartstore"` — SmartStore manager fanout on EKS
+- `"tier:e2e-full && sva:s1 && feature:appframework"` — S1 App Framework suite
 
 ### Common Test Patterns
 
@@ -476,7 +488,7 @@ Per-spec and suite-level timeouts are defined in `test/testenv/timeouts.go`. Use
 | Constant | Duration | Typical Suites |
 |----------|----------|----------------|
 | `ShortSuiteTimeout` | 30 min | SmartStore, index/ingestion separation |
-| `MediumSuiteTimeout` | 90 min | Smoke, S1 app framework |
+| `MediumSuiteTimeout` | 120 min | Smoke, S1 app framework |
 | `MediumLongSuiteTimeout` | 150 min | MC, License Manager, secret |
 | `LongSuiteTimeout` | 225 min | CR CRUD, M4/C3 app framework |
 
@@ -484,8 +496,8 @@ Per-spec and suite-level timeouts are defined in `test/testenv/timeouts.go`. Use
 
 | Constant | Duration | Purpose |
 |----------|----------|---------|
-| `SetupTeardownTimeout` | 10 min | `BeforeEach`/`AfterEach` node timeout |
-| `DefaultTimeout` | 15 min | Infrastructure polls (namespace creation, operator readiness) |
+| `SetupTeardownTimeout` | 15 min | `BeforeEach`/`AfterEach` node timeout |
+| `DefaultTimeout` | 30 min | Infrastructure polls (namespace creation, operator readiness) |
 | `AppInstallTimeout` | 10 min | Waiting for apps to reach Install phase |
 
 ---
@@ -589,7 +601,7 @@ When variables are unset, the tests fall back to the current hardcoded defaults 
 
 ### Run All Integration Tests via Makefile
 
-> **Warning:** Running the full integration suite takes several hours. Tests are not all parallelized, and many suites deploy resource-heavy topologies (multi-site clusters, SHC). Running all suites on a single small cluster can exhaust its resources. In CI, different suites are distributed across separate clusters. For local development, prefer running a specific suite or test with `--focus` instead.
+> **Warning:** Running the full integration suite takes several hours. Tests are not all parallelized, and many suites deploy resource-heavy topologies (multi-site clusters, SHC). Running all suites on a single small cluster can exhaust its resources. In CI, different suites are distributed across separate clusters. For local development, prefer running a specific suite or scoping with `--label-filter` instead.
 
 ```bash
 make int-test
@@ -607,11 +619,19 @@ ginkgo -v ./test/smoke -- \
   -splunk-image=$SPLUNK_IMG
 ```
 
+Scope further with `--label-filter` (e.g. only PR-tier S1 tests):
+
+```bash
+ginkgo -v --label-filter="tier:e2e-pr && sva:s1" ./test/smoke -- \
+  -operator-image=$OPERATOR_IMG \
+  -splunk-image=$SPLUNK_IMG
+```
+
 Suites under `test/appframework_*`, `test/smartstore/`, and `test/index_and_ingestion_separation/` require cloud storage setup (steps 9–10 above).
 
-### Run a Specific Test by Name
+### Run a Specific Test by Name or Label
 
-Use `--focus` with a regex matching the `It` label. Always target a **specific suite directory** — using `-r ./test/` recurses into all suites, which triggers their `BeforeSuite` blocks (including cloud setup) even when focus filters out their tests.
+Use `--focus` with a regex on the `It` description, or `--label-filter` with a Ginkgo label expression. Always target a **specific suite directory** — using `-r ./test/` recurses into all suites, triggering their `BeforeSuite` blocks (including cloud setup) even when filters exclude their tests.
 
 ```bash
 ginkgo -v \
@@ -621,13 +641,19 @@ ginkgo -v \
   -splunk-image=$SPLUNK_IMG
 ```
 
-Tags in `It` labels (e.g. `smoke, basic, s1: can deploy ...`) also work as focus patterns — `--focus="smoke, basic, s1"` matches all tests tagged with those labels.
+```bash
+ginkgo -v \
+  --label-filter="tier:e2e-pr && sva:s1 && feature:appframework" \
+  ./test/appframework_aws/s1 -- \
+  -operator-image=$OPERATOR_IMG \
+  -splunk-image=$SPLUNK_IMG
+```
 
 ### Skip Specific Tests
 
 ```bash
 ginkgo -v \
-  --skip="m4" \
+  --label-filter="tier:e2e-full && !sva:m4" \
   ./test/smoke -- \
   -operator-image=$OPERATOR_IMG \
   -splunk-image=$SPLUNK_IMG
@@ -643,10 +669,10 @@ ginkgo -v -nodes=3 ./test/smoke -- \
 
 ### Using the Script Directly
 
-The `test/trigger-tests.sh` script wraps Ginkgo with environment variable support:
+The `test/trigger-tests.sh` script wraps Ginkgo and selects tests via `TEST_LABELS` (a Ginkgo label-filter expression). The legacy `TEST_FOCUS` / `TEST_REGEX` / `TEST_TO_SKIP` / `SKIP_REGEX` variables are no longer honoured and will cause the script to exit.
 
 ```bash
-export TEST_FOCUS="smoke"
+export TEST_LABELS="tier:e2e-pr && sva:s1"
 export TEST_TIMEOUT="120m"
 ./test/trigger-tests.sh <operator-image> <enterprise-image>
 ```
@@ -742,7 +768,8 @@ If a namespace is stuck in `Terminating`, check for resources with finalizers (s
 ### Run a Single Failing Test in Isolation
 
 ```bash
-ginkgo -v --focus="smoke, basic, s1: can deploy a standalone instance$" \
+ginkgo -v --focus="can deploy a standalone instance$" \
+  --label-filter="tier:e2e-pr && sva:s1" \
   ./test/smoke -- \
   -operator-image=$OPERATOR_IMG \
   -splunk-image=$SPLUNK_IMG
@@ -832,8 +859,7 @@ kubectl get all,pvc --all-namespaces -o json | \
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TEST_FOCUS` / `TEST_REGEX` | `smoke` | Regex to select tests by name |
-| `TEST_TO_SKIP` / `SKIP_REGEX` | _(empty)_ | Regex to exclude tests |
+| `TEST_LABELS` | `tier:e2e-pr` | Ginkgo `--label-filter` expression selecting tests (e.g. `"tier:e2e-pr && sva:c3"`, `"tier:e2e-full && feature:appframework"`). |
 | `TEST_TIMEOUT` | `225m` | Ginkgo suite timeout |
 | `NUM_NODES` | `2` | Ginkgo parallel nodes |
 | `DEBUG` / `DEBUG_RUN` | `False` | If `True`, skip teardown on failure |

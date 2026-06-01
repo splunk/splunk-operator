@@ -20,7 +20,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-var _ = Describe("ClusterMaster Controller", func() {
+var _ = Describe("ClusterMaster Controller", Label("integration"), func() {
 
 	AfterEach(func() {
 

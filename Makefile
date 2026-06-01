@@ -483,6 +483,34 @@ int-test:
 	@echo Run integration test
 	@test/run-tests.sh
 
+# ---------------------------------------------------------------------------
+# Label-driven test entry points 
+# Underlying selection is `ginkgo --label-filter="$(TEST_LABELS)"`.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-unit
+test-unit: ## Run unit tests only (./pkg/splunk/...). No cluster required.
+	go test ./pkg/splunk/... -count=1
+
+.PHONY: test-integration
+test-integration: manifests generate fmt vet setup-envtest ## Run integration tests (envtest, ./internal/controller).
+	REPORT_FILE="$${UNIT_TEST_REPORT_FILE:-integration_test.xml}"; \
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" \
+	  ginkgo --junit-report=$$REPORT_FILE --output-dir=`pwd` -vv --trace --keep-going \
+	  --timeout=$${TEST_TIMEOUT:-30m} --label-filter=integration ./internal/controller
+
+.PHONY: test-smoke
+test-smoke: ## Run in-cluster smoke tests (label=tier:e2e-pr && feature:basic). Requires deployed operator.
+	@TEST_LABELS='tier:e2e-pr && feature:basic' test/run-tests.sh
+
+.PHONY: test-e2e-pr
+test-e2e-pr: ## Run PR-gate e2e tests (label=tier:e2e-pr). Requires deployed operator.
+	@TEST_LABELS=tier:e2e-pr test/run-tests.sh
+
+.PHONY: test-e2e-full
+test-e2e-full: ## Run full nightly e2e tests (label=tier:e2e-full). Requires deployed operator.
+	@TEST_LABELS=tier:e2e-full test/run-tests.sh
+
 .PHONY: helm-package
 helm-package:
 	@rm -f helm-chart/splunk-enterprise/charts/splunk-operator-*.tgz
