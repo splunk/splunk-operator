@@ -26,9 +26,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
-	pgdbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
+	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -275,13 +276,13 @@ func expectProvisionedArtifacts(ctx context.Context, scenario readyClusterScenar
 
 	configMap := &corev1.ConfigMap{}
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMapNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, configMap)).To(Succeed())
-	Expect(configMap.Data).To(HaveKeyWithValue(pgdbcore.ConfigMapKeyDatabaseName, scenario.dbName))
+	Expect(configMap.Data).To(HaveKeyWithValue(dbcore.ConfigMapKeyDatabaseName, scenario.dbName))
 	Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyDefaultClusterPort, pgconninfo.DefaultPort))
 	Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterRWEndpoint, "tenant-rw."+scenario.namespace+".svc.cluster.local"))
 	Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterROEndpoint, "tenant-ro."+scenario.namespace+".svc.cluster.local"))
 	Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterREndpoint, scenario.cnpgClusterName+"-r."+scenario.namespace+".svc.cluster.local"))
-	Expect(configMap.Data).To(HaveKeyWithValue(pgdbcore.ConfigMapKeyAdminUser, adminRoleNameForTest(scenario.dbName)))
-	Expect(configMap.Data).To(HaveKeyWithValue(pgdbcore.ConfigMapKeyRWUser, rwRoleNameForTest(scenario.dbName)))
+	Expect(configMap.Data).To(HaveKeyWithValue(dbcore.ConfigMapKeyAdminUser, adminRoleNameForTest(scenario.dbName)))
+	Expect(configMap.Data).To(HaveKeyWithValue(dbcore.ConfigMapKeyRWUser, rwRoleNameForTest(scenario.dbName)))
 	Expect(metav1.IsControlledBy(configMap, owner)).To(BeTrue())
 }
 
@@ -668,7 +669,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 			configMap := &corev1.ConfigMap{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-analytics-config", scenario.resourceName), Namespace: scenario.namespace}, configMap)).To(Succeed())
-			Expect(configMap.Data).To(HaveKeyWithValue(pgdbcore.ConfigMapKeyDatabaseName, "analytics"))
+			Expect(configMap.Data).To(HaveKeyWithValue(dbcore.ConfigMapKeyDatabaseName, "analytics"))
 
 			existingSecret := &corev1.Secret{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s-admin", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, existingSecret)).To(Succeed())
@@ -766,14 +767,14 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			})).To(BeFalse())
 		})
 
-		It("treats secret create, update, and delete events as drift triggers", func() {
-			pred := predicate.ResourceVersionChangedPredicate{}
+		It("suppresses secret create and update events but triggers on delete", func() {
+			pred := databaseSecretPredicator()
 
-			Expect(pred.Create(event.CreateEvent{})).To(BeTrue())
+			Expect(pred.Create(event.CreateEvent{})).To(BeFalse())
 			Expect(pred.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret", Namespace: "test", ResourceVersion: "1"}},
 				ObjectNew: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret", Namespace: "test", ResourceVersion: "2"}},
-			})).To(BeTrue())
+			})).To(BeFalse())
 			Expect(pred.Delete(event.DeleteEvent{})).To(BeTrue())
 		})
 
@@ -795,6 +796,28 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			}
 			Expect(pred.Create(event.CreateEvent{})).To(BeTrue())
 			Expect(pred.Update(event.UpdateEvent{})).To(BeFalse())
+		})
+
+		It("does not trigger on annotation changes", func() {
+			pred := postgresDatabasePredicator()
+			oldDB := &enterprisev4.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{
+					Generation: 1,
+					Annotations: map[string]string{
+						"some-annotation": "old",
+					},
+				},
+			}
+			newDB := &enterprisev4.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{
+					Generation: 1,
+					Annotations: map[string]string{
+						"some-annotation": "new",
+					},
+				},
+			}
+
+			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldDB, ObjectNew: newDB})).To(BeFalse())
 		})
 	})
 

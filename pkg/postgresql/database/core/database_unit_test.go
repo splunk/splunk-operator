@@ -29,6 +29,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"unicode"
 
@@ -40,6 +41,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -47,6 +49,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -85,12 +88,17 @@ func (r *stubDBRepo) ExecGrants(_ context.Context, dbName string) error {
 
 // boolPtr is a helper to get a pointer to a bool value, used for testing conditions with pointer fields.
 func boolPtr(v bool) *bool {
-	return &v
+	return ptr.To(v)
 }
 
 // strPtr is a helper to get a pointer to a string value, used for testing pointer string fields.
 func strPtr(s string) *string {
-	return &s
+	return ptr.To(s)
+}
+
+// int64Ptr is a helper to get a pointer to an int64 value, used for testing pointer integer fields.
+func int64Ptr(v int64) *int64 {
+	return ptr.To(v)
 }
 
 func databaseNames(defs []enterprisev4.DatabaseDefinition) []string {
@@ -2266,6 +2274,717 @@ func TestNamingHelpers(t *testing.T) {
 
 		t.Run(tst.name, func(t *testing.T) {
 			assert.Equal(t, tst.want, tst.got)
+		})
+	}
+}
+
+func TestDeletionTakesPrecedenceOverCurrentTerminalPrivilegesFailure(t *testing.T) {
+	scheme := testScheme(t)
+	ctx := context.Background()
+	deletionTime := metav1.Now()
+	generation := int64(7)
+	postgresDB := &enterprisev4.PostgresDatabase{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: enterprisev4.GroupVersion.String(),
+			Kind:       "PostgresDatabase",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "primary",
+			Namespace:         "dbs",
+			UID:               types.UID("postgresdb-uid"),
+			Generation:        generation,
+			DeletionTimestamp: &deletionTime,
+			Finalizers:        []string{postgresDatabaseFinalizerName},
+		},
+		Spec: enterprisev4.PostgresDatabaseSpec{
+			ClusterRef: corev1.LocalObjectReference{Name: "primary-cluster"},
+			Databases:  []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+		},
+		Status: enterprisev4.PostgresDatabaseStatus{
+			Phase:                strPtr(string(failedDBPhase)),
+			ObservedGeneration:   int64Ptr(generation),
+			ReconcileFailureType: reconcileFailurePrivileges,
+		},
+	}
+	c := testClient(t, scheme, postgresDB)
+	repoCalls := 0
+	newDBRepo := func(_ context.Context, _, _, _ string) (DBRepo, error) {
+		repoCalls++
+		return &stubDBRepo{}, nil
+	}
+
+	result, err := PostgresDatabaseService(
+		ctx,
+		&ReconcileContext{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+			Metrics:  &pgprometheus.NoopRecorder{},
+		},
+		postgresDB,
+		newDBRepo,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{}, result)
+	assert.Equal(t, 0, repoCalls)
+
+	updated := &enterprisev4.PostgresDatabase{}
+	err = c.Get(ctx, types.NamespacedName{Name: postgresDB.Name, Namespace: postgresDB.Namespace}, updated)
+	if apierrors.IsNotFound(err) {
+		return
+	}
+	require.NoError(t, err)
+	assert.NotContains(t, updated.Finalizers, postgresDatabaseFinalizerName)
+}
+
+func TestPrivilegesTerminalFailureState(t *testing.T) {
+	scheme := testScheme(t)
+	ctx := context.Background()
+	requestName := types.NamespacedName{Name: "primary", Namespace: "dbs"}
+
+	failingGrantRepoFunc := func(dbName string) NewDBRepoFunc {
+		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+			return &stubDBRepo{execErr: fmt.Errorf("grant failed for %s", dbName)}, nil
+		}
+	}
+
+	failingConnectionRepoFunc := func(calls *int, err error) NewDBRepoFunc {
+		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+			(*calls)++
+			return nil, err
+		}
+	}
+
+	failingTerminalRepoFunc := func(errMsg string) NewDBRepoFunc {
+		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+			return nil, fmt.Errorf("%w: %s", ErrTerminal, errMsg)
+		}
+	}
+
+	successfulRepoFunc := func() NewDBRepoFunc {
+		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+			return &stubDBRepo{}, nil
+		}
+	}
+
+	buildObjects := func(tst struct {
+		generation         int64
+		databases          []enterprisev4.DatabaseDefinition
+		statusPhase        *string
+		observedGeneration *int64
+		failureState       bool
+		omitFinalizer      bool
+		statusDatabases    []enterprisev4.DatabaseInfo
+		conditions         []metav1.Condition
+		databaseApplied    *bool
+		omittedSecrets     []string
+	}) []client.Object {
+		reconcileFailureType := ""
+		if tst.failureState {
+			reconcileFailureType = reconcileFailurePrivileges
+		}
+		postgresDB := &enterprisev4.PostgresDatabase{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: enterprisev4.GroupVersion.String(),
+				Kind:       "PostgresDatabase",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       requestName.Name,
+				Namespace:  requestName.Namespace,
+				UID:        types.UID("postgresdb-uid"),
+				Generation: tst.generation,
+			},
+			Spec: enterprisev4.PostgresDatabaseSpec{
+				ClusterRef: corev1.LocalObjectReference{Name: "primary-cluster"},
+				Databases:  tst.databases,
+			},
+			Status: enterprisev4.PostgresDatabaseStatus{
+				Phase:                tst.statusPhase,
+				ObservedGeneration:   tst.observedGeneration,
+				ReconcileFailureType: reconcileFailureType,
+				Databases:            tst.statusDatabases,
+				Conditions:           tst.conditions,
+			},
+		}
+		if !tst.omitFinalizer {
+			postgresDB.Finalizers = []string{postgresDatabaseFinalizerName}
+		}
+
+		postgresCluster := &enterprisev4.PostgresCluster{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: enterprisev4.GroupVersion.String(),
+				Kind:       "PostgresCluster",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary-cluster",
+				Namespace: requestName.Namespace,
+			},
+			Spec: enterprisev4.PostgresClusterSpec{
+				ManagedRoles: buildDesiredRoles(requestName.Name, tst.databases),
+			},
+			Status: enterprisev4.PostgresClusterStatus{
+				Phase: strPtr(string(ClusterReady)),
+				ProvisionerRef: &corev1.ObjectReference{
+					APIVersion: cnpgv1.SchemeGroupVersion.String(),
+					Kind:       "Cluster",
+					Name:       "primary-cnpg",
+					Namespace:  requestName.Namespace,
+				},
+				Resources: &enterprisev4.PostgresClusterResources{
+					SuperUserSecretRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "primary-superuser"},
+						Key:                  secretKeyPassword,
+					},
+				},
+			},
+		}
+
+		cnpgCluster := &cnpgv1.Cluster{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: cnpgv1.SchemeGroupVersion.String(),
+				Kind:       "Cluster",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary-cnpg",
+				Namespace: requestName.Namespace,
+			},
+			Status: cnpgv1.ClusterStatus{
+				ManagedRolesStatus: cnpgv1.ManagedRoles{
+					ByStatus: map[cnpgv1.RoleStatus][]string{
+						cnpgv1.RoleStatusReconciled: getDesiredRoles(postgresDB),
+					},
+				},
+				WriteService: "primary-rw",
+				ReadService:  "primary-ro",
+			},
+		}
+
+		superSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary-superuser",
+				Namespace: requestName.Namespace,
+			},
+			Data: map[string][]byte{secretKeyPassword: []byte("supersecret")},
+		}
+
+		objects := []client.Object{postgresDB, postgresCluster, cnpgCluster, superSecret}
+		omittedSecrets := make(map[string]struct{}, len(tst.omittedSecrets))
+		for _, name := range tst.omittedSecrets {
+			omittedSecrets[name] = struct{}{}
+		}
+		ownerRef := metav1.OwnerReference{
+			APIVersion:         enterprisev4.GroupVersion.String(),
+			Kind:               "PostgresDatabase",
+			Name:               requestName.Name,
+			UID:                postgresDB.UID,
+			Controller:         boolPtr(true),
+			BlockOwnerDeletion: boolPtr(true),
+		}
+		for _, dbInfo := range tst.statusDatabases {
+			adminSecretName := roleSecretName(requestName.Name, dbInfo.Name, secretRoleAdmin)
+			rwSecretName := roleSecretName(requestName.Name, dbInfo.Name, secretRoleRW)
+			if _, omitted := omittedSecrets[adminSecretName]; !omitted {
+				objects = append(objects,
+					&corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            adminSecretName,
+							Namespace:       requestName.Namespace,
+							OwnerReferences: []metav1.OwnerReference{ownerRef},
+						},
+						Data: map[string][]byte{
+							"username":        []byte(adminRoleName(dbInfo.Name)),
+							secretKeyPassword: []byte("admin-password"),
+						},
+					},
+				)
+			}
+			if _, omitted := omittedSecrets[rwSecretName]; !omitted {
+				objects = append(objects,
+					&corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            rwSecretName,
+							Namespace:       requestName.Namespace,
+							OwnerReferences: []metav1.OwnerReference{ownerRef},
+						},
+						Data: map[string][]byte{
+							"username":        []byte(rwRoleName(dbInfo.Name)),
+							secretKeyPassword: []byte("rw-password"),
+						},
+					},
+				)
+			}
+		}
+		for _, dbDef := range tst.databases {
+			databaseApplied := boolPtr(true)
+			if tst.databaseApplied != nil {
+				databaseApplied = tst.databaseApplied
+			}
+			objects = append(objects,
+				&cnpgv1.Database{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      cnpgDatabaseName(requestName.Name, dbDef.Name),
+						Namespace: requestName.Namespace,
+					},
+					Spec: cnpgv1.DatabaseSpec{
+						ClusterRef: corev1.LocalObjectReference{Name: "primary-cnpg"},
+						Name:       dbDef.Name,
+						Owner:      adminRoleName(dbDef.Name),
+					},
+					Status: cnpgv1.DatabaseStatus{Applied: databaseApplied},
+				},
+			)
+		}
+		return objects
+	}
+
+	runService := func(t *testing.T, c client.Client, newDBRepo NewDBRepoFunc) (ctrl.Result, *enterprisev4.PostgresDatabase, error) {
+		t.Helper()
+
+		before := &enterprisev4.PostgresDatabase{}
+		require.NoError(t, c.Get(ctx, requestName, before))
+
+		result, err := PostgresDatabaseService(
+			ctx,
+			&ReconcileContext{
+				Client:   c,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(10),
+				Metrics:  &pgprometheus.NoopRecorder{},
+			},
+			before,
+			newDBRepo,
+		)
+
+		updated := &enterprisev4.PostgresDatabase{}
+		require.NoError(t, c.Get(ctx, requestName, updated))
+		return result, updated, err
+	}
+
+	tests := []struct {
+		name                         string
+		generation                   int64
+		databases                    []enterprisev4.DatabaseDefinition
+		statusPhase                  *string
+		observedGeneration           *int64
+		failureState                 bool
+		omitFinalizer                bool
+		statusDatabases              []enterprisev4.DatabaseInfo
+		conditions                   []metav1.Condition
+		databaseApplied              *bool
+		omittedSecrets               []string
+		newDBRepo                    NewDBRepoFunc
+		reconcileCount               int
+		wantRepoCalls                int
+		wantErr                      bool
+		wantErrContains              []string
+		statusUpdateErrOnReason      conditionReasons
+		statusUpdateConflictOnReason conditionReasons
+		wantResult                   ctrl.Result
+		wantFailureState             bool
+		wantFailureFieldsCleared     bool
+		wantFinalizer                bool
+		wantPhase                    reconcileDBPhases
+		wantConditionType            conditionTypes
+		wantConditionStatus          metav1.ConditionStatus
+		wantConditionReason          conditionReasons
+		wantConditionMessageContains []string
+		wantConditionMessageExcludes []string
+	}{
+		{
+			name:                     "retryable privileges error stays provisioning",
+			generation:               7,
+			databases:                []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:              strPtr(string(readyDBPhase)),
+			newDBRepo:                failingGrantRepoFunc("payments"),
+			wantErr:                  true,
+			wantFailureFieldsCleared: true,
+			wantPhase:                provisioningDBPhase,
+			wantConditionReason:      reasonPrivilegesGrantFailed,
+			wantConditionMessageContains: []string{
+				"Will retry automatically",
+			},
+		},
+		{
+			name:                "retryable connection failures keep retrying",
+			generation:          7,
+			databases:           []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:         strPtr(string(readyDBPhase)),
+			wantPhase:           provisioningDBPhase,
+			wantConditionReason: reasonPrivilegesGrantFailed,
+			reconcileCount:      3,
+			wantRepoCalls:       3,
+			wantErr:             true,
+		},
+		{
+			name:                "retryable failure keeps stale failure marker for retry",
+			generation:          7,
+			databases:           []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:         strPtr(string(readyDBPhase)),
+			failureState:        true,
+			wantRepoCalls:       1,
+			wantErr:             true,
+			wantFailureState:    true,
+			wantPhase:           provisioningDBPhase,
+			wantConditionReason: reasonPrivilegesGrantFailed,
+			wantConditionMessageContains: []string{
+				"Will retry automatically",
+			},
+		},
+		{
+			name:               "does not requeue after current terminal failure",
+			generation:         7,
+			databases:          []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:        strPtr(string(failedDBPhase)),
+			observedGeneration: int64Ptr(7),
+			failureState:       true,
+			conditions: []metav1.Condition{
+				{
+					Type:               string(privilegesReady),
+					Status:             metav1.ConditionFalse,
+					Reason:             string(reasonPrivilegesTerminalFailure),
+					Message:            "Failed to grant RW role privileges. Manual intervention required.",
+					ObservedGeneration: 7,
+				},
+			},
+			wantFailureState: true,
+			wantRepoCalls:    0,
+		},
+		{
+			name:               "repairs missing finalizer before current terminal failure early return",
+			generation:         7,
+			databases:          []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:        strPtr(string(failedDBPhase)),
+			observedGeneration: int64Ptr(7),
+			failureState:       true,
+			omitFinalizer:      true,
+			wantFailureState:   true,
+			wantFinalizer:      true,
+			wantRepoCalls:      0,
+		},
+		{
+			name:         "successful reconcile clears stale failure marker",
+			generation:   7,
+			databases:    []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:  strPtr(string(readyDBPhase)),
+			failureState: true,
+			conditions: []metav1.Condition{
+				{
+					Type:               string(privilegesReady),
+					Status:             metav1.ConditionFalse,
+					Reason:             string(reasonPrivilegesGrantFailed),
+					Message:            "previous grant failed",
+					ObservedGeneration: 7,
+				},
+			},
+			newDBRepo:                successfulRepoFunc(),
+			wantFailureFieldsCleared: true,
+			wantPhase:                readyDBPhase,
+			wantConditionStatus:      metav1.ConditionTrue,
+			wantConditionReason:      reasonPrivilegesGranted,
+			wantConditionMessageContains: []string{
+				"RW role privileges granted for all 1 databases",
+			},
+		},
+		{
+			name:            "marks privileges already current when no new databases require live grants",
+			generation:      7,
+			databases:       []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:     strPtr(string(readyDBPhase)),
+			statusDatabases: []enterprisev4.DatabaseInfo{{Name: "payments"}},
+			conditions: []metav1.Condition{
+				{
+					Type:               string(privilegesReady),
+					Status:             metav1.ConditionTrue,
+					Reason:             string(reasonPrivilegesGranted),
+					Message:            "RW role privileges granted for all 1 databases",
+					ObservedGeneration: 7,
+				},
+			},
+			wantPhase:           readyDBPhase,
+			wantConditionStatus: metav1.ConditionTrue,
+			wantConditionReason: reasonPrivilegesGranted,
+			wantConditionMessageContains: []string{
+				"RW role privileges already current for all 1 databases",
+			},
+		},
+		{
+			name:               "pending database keeps stale failure marker before privileges retry",
+			generation:         8,
+			databases:          []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:        strPtr(string(failedDBPhase)),
+			observedGeneration: int64Ptr(7),
+			failureState:       true,
+			statusDatabases:    []enterprisev4.DatabaseInfo{{Name: "payments"}},
+			conditions: []metav1.Condition{
+				{
+					Type:               string(privilegesReady),
+					Status:             metav1.ConditionFalse,
+					Reason:             string(reasonPrivilegesTerminalFailure),
+					Message:            "Failed to grant RW role privileges. Manual intervention required.",
+					ObservedGeneration: 7,
+				},
+			},
+			databaseApplied:  boolPtr(false),
+			wantFailureState: true,
+			wantResult:       ctrl.Result{RequeueAfter: retryDelay},
+			wantPhase:        provisioningDBPhase,
+			wantRepoCalls:    0,
+		},
+		{
+			name:               "stale terminal recovery reports missing existing secret as drift",
+			generation:         8,
+			databases:          []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:        strPtr(string(failedDBPhase)),
+			observedGeneration: int64Ptr(7),
+			failureState:       true,
+			statusDatabases:    []enterprisev4.DatabaseInfo{{Name: "payments"}},
+			conditions: []metav1.Condition{
+				{
+					Type:               string(privilegesReady),
+					Status:             metav1.ConditionFalse,
+					Reason:             string(reasonPrivilegesTerminalFailure),
+					Message:            "Failed to grant RW role privileges. Manual intervention required.",
+					ObservedGeneration: 7,
+				},
+			},
+			omittedSecrets:      []string{roleSecretName(requestName.Name, "payments", secretRoleRW)},
+			wantFailureState:    true,
+			wantResult:          ctrl.Result{RequeueAfter: retryDelay},
+			wantPhase:           provisioningDBPhase,
+			wantRepoCalls:       0,
+			wantConditionType:   secretsReady,
+			wantConditionStatus: metav1.ConditionFalse,
+			wantConditionReason: reasonSecretsDriftDetected,
+			wantConditionMessageContains: []string{
+				"Managed Secret primary-payments-rw is missing",
+				"previously provisioned role payments_rw",
+			},
+		},
+		{
+			name:               "spec change retries privileges after terminal failure without new databases",
+			generation:         8,
+			databases:          []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:        strPtr(string(failedDBPhase)),
+			observedGeneration: int64Ptr(7),
+			failureState:       true,
+			statusDatabases:    []enterprisev4.DatabaseInfo{{Name: "payments"}},
+			conditions: []metav1.Condition{
+				{
+					Type:               string(privilegesReady),
+					Status:             metav1.ConditionFalse,
+					Reason:             string(reasonPrivilegesTerminalFailure),
+					Message:            "Failed to grant RW role privileges. Manual intervention required.",
+					ObservedGeneration: 7,
+				},
+			},
+			newDBRepo:                successfulRepoFunc(),
+			wantFailureFieldsCleared: true,
+			wantPhase:                readyDBPhase,
+			wantConditionStatus:      metav1.ConditionTrue,
+			wantConditionReason:      reasonPrivilegesGranted,
+			wantConditionMessageContains: []string{
+				"RW role privileges granted for all 1 databases",
+			},
+			wantConditionMessageExcludes: []string{
+				"already current",
+			},
+		},
+		{
+			name:       "spec change restarts from Failed",
+			generation: 8,
+			databases: []enterprisev4.DatabaseDefinition{
+				{Name: "payments"},
+				{Name: "analytics"},
+			},
+			statusPhase:              strPtr(string(failedDBPhase)),
+			observedGeneration:       int64Ptr(7),
+			failureState:             true,
+			newDBRepo:                successfulRepoFunc(),
+			wantFailureFieldsCleared: true,
+			wantPhase:                readyDBPhase,
+		},
+		{
+			name:                "terminal privileges error transitions to Failed",
+			generation:          7,
+			databases:           []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:         strPtr(string(readyDBPhase)),
+			newDBRepo:           failingTerminalRepoFunc("password authentication failed"),
+			wantFailureState:    true,
+			wantPhase:           failedDBPhase,
+			wantConditionReason: reasonPrivilegesTerminalFailure,
+			wantConditionMessageContains: []string{
+				"Manual intervention required",
+				"spec change",
+			},
+			wantConditionMessageExcludes: []string{
+				"password authentication failed",
+			},
+		},
+		{
+			name:                    "returns joined error when non-terminal privileges status update fails",
+			generation:              7,
+			databases:               []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:             strPtr(string(readyDBPhase)),
+			newDBRepo:               failingGrantRepoFunc("payments"),
+			wantErr:                 true,
+			statusUpdateErrOnReason: reasonPrivilegesGrantFailed,
+			wantErrContains: []string{
+				"grant failed for payments",
+				"failed to persist privileges status",
+				"apiserver timeout",
+			},
+		},
+		{
+			name:                         "returns clean requeue when non-terminal privileges status update conflicts",
+			generation:                   7,
+			databases:                    []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:                  strPtr(string(readyDBPhase)),
+			newDBRepo:                    failingGrantRepoFunc("payments"),
+			statusUpdateConflictOnReason: reasonPrivilegesGrantFailed,
+			wantResult:                   ctrl.Result{Requeue: true},
+		},
+		{
+			name:                    "returns error when terminal status update fails",
+			generation:              7,
+			databases:               []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:             strPtr(string(readyDBPhase)),
+			newDBRepo:               failingTerminalRepoFunc("password authentication failed"),
+			wantErr:                 true,
+			statusUpdateErrOnReason: reasonPrivilegesTerminalFailure,
+			wantErrContains: []string{
+				"password authentication failed",
+				"failed to persist terminal privileges status",
+				"apiserver timeout",
+			},
+		},
+		{
+			name:                         "returns clean requeue when terminal status update conflicts",
+			generation:                   7,
+			databases:                    []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:                  strPtr(string(readyDBPhase)),
+			newDBRepo:                    failingTerminalRepoFunc("password authentication failed"),
+			statusUpdateConflictOnReason: reasonPrivilegesTerminalFailure,
+			wantResult:                   ctrl.Result{Requeue: true},
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			objects := buildObjects(struct {
+				generation         int64
+				databases          []enterprisev4.DatabaseDefinition
+				statusPhase        *string
+				observedGeneration *int64
+				failureState       bool
+				omitFinalizer      bool
+				statusDatabases    []enterprisev4.DatabaseInfo
+				conditions         []metav1.Condition
+				databaseApplied    *bool
+				omittedSecrets     []string
+			}{
+				generation:         tst.generation,
+				databases:          tst.databases,
+				statusPhase:        tst.statusPhase,
+				observedGeneration: tst.observedGeneration,
+				failureState:       tst.failureState,
+				omitFinalizer:      tst.omitFinalizer,
+				statusDatabases:    tst.statusDatabases,
+				conditions:         tst.conditions,
+				databaseApplied:    tst.databaseApplied,
+				omittedSecrets:     tst.omittedSecrets,
+			})
+			c := testClient(t, scheme, objects...)
+			if tst.statusUpdateErrOnReason != "" || tst.statusUpdateConflictOnReason != "" {
+				c = fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+					WithObjects(objects...).
+					WithInterceptorFuncs(interceptor.Funcs{
+						SubResourceUpdate: func(ctx context.Context, client client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+							if subResourceName != "status" {
+								return client.SubResource(subResourceName).Update(ctx, obj, opts...)
+							}
+							postgresDB, ok := obj.(*enterprisev4.PostgresDatabase)
+							if ok {
+								condition := meta.FindStatusCondition(postgresDB.Status.Conditions, string(privilegesReady))
+								if condition != nil && condition.Reason == string(tst.statusUpdateErrOnReason) {
+									return errors.New("apiserver timeout")
+								}
+								if condition != nil && condition.Reason == string(tst.statusUpdateConflictOnReason) {
+									return postgresDatabaseConflict(postgresDB.Name)
+								}
+							}
+							return client.SubResource(subResourceName).Update(ctx, obj, opts...)
+						},
+					}).
+					Build()
+			}
+
+			reconcileCount := tst.reconcileCount
+			if reconcileCount == 0 {
+				reconcileCount = 1
+			}
+			repoCalls := 0
+			newDBRepo := tst.newDBRepo
+			if newDBRepo == nil {
+				newDBRepo = failingConnectionRepoFunc(&repoCalls, errors.New("connection refused"))
+			}
+
+			var result ctrl.Result
+			var err error
+			var updated *enterprisev4.PostgresDatabase
+			for i := 1; i <= reconcileCount; i++ {
+				result, updated, err = runService(t, c, newDBRepo)
+				if i < reconcileCount {
+					require.Error(t, err)
+					assert.Equal(t, ctrl.Result{}, result)
+					continue
+				}
+			}
+
+			if tst.wantErr {
+				require.Error(t, err)
+				for _, wantErr := range tst.wantErrContains {
+					assert.Contains(t, err.Error(), wantErr)
+				}
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tst.wantResult, result)
+			assert.Equal(t, tst.wantRepoCalls, repoCalls)
+
+			if tst.wantFailureFieldsCleared {
+				assert.Empty(t, updated.Status.ReconcileFailureType)
+			}
+			if tst.wantFailureState {
+				assert.Equal(t, reconcileFailurePrivileges, updated.Status.ReconcileFailureType)
+			}
+			if tst.wantFinalizer {
+				assert.Contains(t, updated.Finalizers, postgresDatabaseFinalizerName)
+			}
+			if tst.wantPhase != "" {
+				require.NotNil(t, updated.Status.Phase)
+				assert.Equal(t, string(tst.wantPhase), *updated.Status.Phase)
+			}
+			if tst.wantConditionReason != "" {
+				conditionType := tst.wantConditionType
+				if conditionType == "" {
+					conditionType = privilegesReady
+				}
+				condition := meta.FindStatusCondition(updated.Status.Conditions, string(conditionType))
+				require.NotNil(t, condition)
+				if tst.wantConditionStatus != "" {
+					assert.Equal(t, tst.wantConditionStatus, condition.Status)
+				}
+				assert.Equal(t, string(tst.wantConditionReason), condition.Reason)
+				for _, wantMessage := range tst.wantConditionMessageContains {
+					assert.Contains(t, condition.Message, wantMessage)
+				}
+				for _, unwantedMessage := range tst.wantConditionMessageExcludes {
+					assert.NotContains(t, condition.Message, unwantedMessage)
+				}
+			}
 		})
 	}
 }
