@@ -19,6 +19,15 @@ build-stage-image:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
       variables:
         JOB_BUILD_DISTROLESS: "true"
+    # Nightly scheduled runs on develop share a HEAD SHA with the push-triggered
+    # pipeline that already pushed that tag to Artifactory.  Artifactory's
+    # immutable-tag / no-overwrite policy rejects a second push under the same
+    # tag, causing the nightly build to fail even though the image is identical.
+    # Appending the pipeline ID makes the nightly tag unique and avoids the
+    # DELETE-permission collision entirely.
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
+      variables:
+        JOB_IMAGE_TAG: "${CI_COMMIT_SHA}-${CI_PIPELINE_ID}"
     - when: on_success
   needs:
     - unit-tests
