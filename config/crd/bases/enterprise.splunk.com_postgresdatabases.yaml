@@ -262,6 +262,12 @@ spec:
                 type: integer
               phase:
                 type: string
+              reconcileFailureType:
+                description: ReconcileFailureType tracks the terminal condition that
+                  caused the controller to transition to a failure state.
+                enum:
+                - Privileges
+                type: string
             type: object
         type: object
         x-kubernetes-validations:

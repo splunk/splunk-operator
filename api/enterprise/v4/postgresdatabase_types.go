@@ -73,6 +73,10 @@ type PostgresDatabaseStatus struct {
 	// ObservedGeneration represents the .metadata.generation that the status was set based upon.
 	// +optional
 	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`
+	// ReconcileFailureType tracks the terminal condition that caused the controller to transition to a failure state.
+	// +optional
+	// +kubebuilder:validation:Enum=Privileges
+	ReconcileFailureType string `json:"reconcileFailureType,omitempty"`
 }
 
 // +kubebuilder:object:root=true

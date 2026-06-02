@@ -67,19 +67,26 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
               databases:
+                description: Databases to provision on the target cluster.
                 items:
                   properties:
                     deletionPolicy:
                       default: Delete
+                      description: |-
+                        DeletionPolicy controls what happens to the PostgreSQL database when this resource is deleted.
+                        Delete removes the database; Retain leaves it in place.
                       enum:
                       - Delete
                       - Retain
                       type: string
                     extensions:
+                      description: PostgreSQL extensions to install in this database
+                        (e.g. "pg_trgm", "uuid-ossp").
                       items:
                         type: string
                       type: array
                     name:
+                      description: Name of the PostgreSQL database to create.
                       maxLength: 30
                       minLength: 1
                       pattern: ^[a-z_][a-z0-9_]*$
@@ -256,6 +263,12 @@ spec:
                 format: int64
                 type: integer
               phase:
+                type: string
+              reconcileFailureType:
+                description: ReconcileFailureType tracks the terminal condition that
+                  caused the controller to transition to a failure state.
+                enum:
+                - Privileges
                 type: string
             type: object
         type: object

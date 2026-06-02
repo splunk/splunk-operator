@@ -89,7 +89,6 @@ func PostgresDatabaseService(
 	ctx = logging.WithLogger(ctx, logger)
 	logger.DebugContext(ctx, "reconciling PostgresDatabase")
 	wasReady := postgresDB.Status.Phase != nil && *postgresDB.Status.Phase == string(readyDBPhase)
-	previouslyProvisionedDatabases := existingDatabaseStatus(postgresDB)
 
 	updateStatus := func(conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) error {
 		return persistStatus(ctx, c, rc.Metrics, postgresDB, conditionType, conditionStatus, reason, message, phase)
@@ -106,6 +105,7 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{}, nil
 	}
+
 	// Add finalizer if not present.
 	if !controllerutil.ContainsFinalizer(postgresDB, postgresDatabaseFinalizerName) {
 		controllerutil.AddFinalizer(postgresDB, postgresDatabaseFinalizerName)
@@ -117,6 +117,25 @@ func PostgresDatabaseService(
 		}
 		logger.InfoContext(ctx, "finalizer added successfully")
 		return ctrl.Result{}, nil
+	}
+
+	currentReconcileFailure := hasCurrentReconcileFailure(postgresDB)
+
+	// A terminal failure only blocks the generation that observed it. A stale
+	// marker is kept until recovery succeeds because earlier status updates
+	// persist the whole status object and may return before the failed phase.
+	retryAfterStaleReconcileFailure := postgresDB.Status.ReconcileFailureType != "" && !currentReconcileFailure
+	if currentReconcileFailure {
+		return ctrl.Result{}, nil
+	}
+	previouslyProvisionedDatabases := existingDatabaseStatus(postgresDB)
+	if retryAfterStaleReconcileFailure {
+		// During stale terminal recovery the phase is still Failed, but status.databases
+		// records previously provisioned databases whose credentials must not be regenerated.
+		previouslyProvisionedDatabases = make(map[string]struct{}, len(postgresDB.Status.Databases))
+		for _, database := range postgresDB.Status.Databases {
+			previouslyProvisionedDatabases[database.Name] = struct{}{}
+		}
 	}
 
 	// Phase: ClusterValidation
@@ -379,8 +398,10 @@ func PostgresDatabaseService(
 	// Phase: RWRolePrivileges
 	// Skipped when no new databases are detected — ALTER DEFAULT PRIVILEGES covers tables
 	// added by migrations on existing databases. Re-runs for all databases when a new one
-	// is added (idempotent for existing ones, required for the new one).
-	if hasNewDatabases(postgresDB) {
+	// is added, or when a spec change leaves a stale terminal failure to recover.
+	databaseCount := len(postgresDB.Spec.Databases)
+	privilegesMsg := fmt.Sprintf("RW role privileges already current for all %d databases", databaseCount)
+	if hasNewDatabases(postgresDB) || retryAfterStaleReconcileFailure {
 		// Read from our own status — we created this secret and wrote the SecretKeySelector
 		// (name + key) when the cluster was provisioned. This avoids depending on CNPG's
 		// spec field and makes the key explicit.
@@ -406,25 +427,50 @@ func PostgresDatabaseService(
 		}
 
 		if err := reconcileRWRolePrivileges(ctx, endpoints.RWHost, string(pw), dbNames, newDBRepo); err != nil {
-			rc.emitWarning(postgresDB, EventPrivilegesGrantFailed, fmt.Sprintf("failed to grant RW role privileges for PostgresDatabase %s — check operator logs", postgresDB.Name))
+			if failureType, ok := terminalFailureType(err); ok {
+				upsertFailureState(postgresDB, failureType)
+				logger.ErrorContext(ctx, "RW role privileges grant failed terminally", "error", err)
+				msg := "Failed to grant RW role privileges. Manual intervention required: " +
+					"fix the PostgresDatabase spec or referenced configuration, then redeploy with a spec change."
+				eventMsg := fmt.Sprintf("Failed to grant RW role privileges for PostgresDatabase %s. Manual intervention required: "+
+					"fix the PostgresDatabase spec or referenced configuration, then redeploy with a spec change. "+
+					"Check operator logs for details.", postgresDB.Name)
+				rc.emitWarning(postgresDB, EventPrivilegesGrantFailed, eventMsg)
+				if statusErr := updateStatus(privilegesReady, metav1.ConditionFalse, reasonPrivilegesTerminalFailure,
+					msg, failedDBPhase); statusErr != nil {
+					wrappedStatusErr := fmt.Errorf("failed to persist terminal privileges status: %w", statusErr)
+					if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictPrivilegesStatus,
+						"persisting terminal privileges status"); ok {
+						return result, conflictErr
+					}
+					return ctrl.Result{}, stderrors.Join(err, wrappedStatusErr)
+				}
+				return ctrl.Result{}, nil
+			}
+
+			msg := fmt.Sprintf(
+				"Failed to grant RW role privileges: %v. Will retry automatically.", err,
+			)
+			eventMsg := fmt.Sprintf("failed to grant RW role privileges for PostgresDatabase %s — check operator logs", postgresDB.Name)
+			rc.emitWarning(postgresDB, EventPrivilegesGrantFailed, eventMsg)
 			if statusErr := updateStatus(privilegesReady, metav1.ConditionFalse, reasonPrivilegesGrantFailed,
-				fmt.Sprintf("Failed to grant RW role privileges: %v", err), provisioningDBPhase); statusErr != nil {
-				if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictPrivilegesStatus, "persisting privileges failure status"); ok {
+				msg, provisioningDBPhase); statusErr != nil {
+				wrappedStatusErr := fmt.Errorf("failed to persist privileges status: %w", statusErr)
+				if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictPrivilegesStatus,
+					"persisting privileges failure status"); ok {
 					return result, conflictErr
 				}
-				logger.ErrorContext(ctx, "failed to persist privileges status", "error", statusErr)
+				return ctrl.Result{}, stderrors.Join(err, wrappedStatusErr)
 			}
 			return ctrl.Result{}, err
 		}
-		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, privilegesReady, EventPrivilegesReady, fmt.Sprintf("RW role privileges granted for all %d databases", len(postgresDB.Spec.Databases)))
-	}
-	if err := updateStatus(privilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted,
-		fmt.Sprintf("RW role privileges granted for all %d databases", len(postgresDB.Spec.Databases)), readyDBPhase); err != nil {
-		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictPrivilegesStatus, "persisting privileges ready status"); ok {
-			return result, conflictErr
+		if retryAfterStaleReconcileFailure {
+			postgresDB.Status.ReconcileFailureType = ""
 		}
-		return ctrl.Result{}, err
+		privilegesMsg = fmt.Sprintf("RW role privileges granted for all %d databases", databaseCount)
+		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, privilegesReady, EventPrivilegesReady, privilegesMsg)
 	}
+	applyStatus(postgresDB, privilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted, privilegesMsg, readyDBPhase)
 
 	if !wasReady {
 		rc.emitNormal(postgresDB, EventPostgresDatabaseReady, fmt.Sprintf("PostgresDatabase %s is ready", postgresDB.Name))
@@ -505,9 +551,6 @@ func existingDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase) map[strin
 	return existing
 }
 
-// rolesMatchClusterSpec returns true if desired and actual contain the same roles
-// (by name and Exists state), regardless of order.
-
 func getRoleConflicts(postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) []string {
 	myManager := fieldManagerName(postgresDB.Name)
 	desired := make(map[string]struct{}, len(postgresDB.Spec.Databases)*2)
@@ -531,7 +574,7 @@ func managedRoleOwners(managedFields []metav1.ManagedFieldsEntry) map[string]str
 		if mf.FieldsV1 == nil {
 			continue
 		}
-		for _, name := range parseRoleNames(mf.FieldsV1.Raw) {
+		for _, name := range parseRoleNames(mf.FieldsV1.GetRawBytes()) {
 			owners[name] = mf.Manager
 		}
 	}
@@ -560,7 +603,7 @@ func patchManagedRoles(ctx context.Context, c client.Client, fieldManager string
 	if err != nil {
 		return fmt.Errorf("building managed roles patch: %w", err)
 	}
-	if err := c.Patch(ctx, rolePatch, client.Apply, client.FieldOwner(fieldManager)); err != nil {
+	if err := c.Apply(ctx, client.ApplyConfigurationFromUnstructured(rolePatch), client.FieldOwner(fieldManager)); err != nil {
 		return fmt.Errorf("patching managed roles: %w", err)
 	}
 	return nil
@@ -1231,4 +1274,35 @@ func configMapName(postgresDBName, dbName string) string {
 // are unacceptable for credentials that protect live database access.
 func generatePassword() (string, error) {
 	return password.Generate(passwordLength, passwordDigits, passwordSymbols, false, true)
+}
+
+func upsertFailureState(db *enterprisev4.PostgresDatabase, failureType string) {
+	db.Status.ReconcileFailureType = failureType
+}
+
+func terminalFailureType(err error) (string, bool) {
+	if stderrors.Is(err, ErrTerminal) {
+		return reconcileFailurePrivileges, true
+	}
+	return "", false
+}
+
+func hasCurrentReconcileFailure(db *enterprisev4.PostgresDatabase) bool {
+	if db.Status.Phase == nil || *db.Status.Phase != string(failedDBPhase) {
+		return false
+	}
+	if db.Status.ObservedGeneration == nil || *db.Status.ObservedGeneration != db.Generation {
+		return false
+	}
+
+	switch db.Status.ReconcileFailureType {
+	case reconcileFailurePrivileges:
+		condition := meta.FindStatusCondition(db.Status.Conditions, string(privilegesReady))
+		return condition != nil &&
+			condition.Status == metav1.ConditionFalse &&
+			condition.Reason == string(reasonPrivilegesTerminalFailure) &&
+			condition.ObservedGeneration == db.Generation
+	default:
+		return false
+	}
 }
