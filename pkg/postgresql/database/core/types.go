@@ -16,14 +16,14 @@ limitations under the License.
 package core
 
 import (
-	"time"
-
+	"errors"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"time"
 )
 
 // ReconcileContext bundles infrastructure dependencies injected by the controller.
@@ -66,6 +66,9 @@ const (
 	passwordDigits  = 8
 	passwordSymbols = 0
 
+	// Privileges failure handling.
+	reconcileFailurePrivileges = "Privileges"
+
 	// DB reconcile phases
 	readyDBPhase        reconcileDBPhases = "Ready"
 	pendingDBPhase      reconcileDBPhases = "Pending"
@@ -81,27 +84,26 @@ const (
 	privilegesReady conditionTypes = "PrivilegesReady"
 
 	// condition reasons
-	reasonClusterNotFound          conditionReasons = "ClusterNotFound"
-	reasonClusterProvisioning      conditionReasons = "ClusterProvisioning"
-	reasonClusterInfoFetchFailed   conditionReasons = "ClusterInfoFetchNotPossible"
-	reasonClusterAvailable         conditionReasons = "ClusterAvailable"
-	reasonDatabasesAvailable       conditionReasons = "DatabasesAvailable"
-	reasonSecretsCreated           conditionReasons = "SecretsCreated"
-	reasonSecretsCreationFailed    conditionReasons = "SecretsCreationFailed"
-	reasonSecretsDriftDetected     conditionReasons = "SecretsDriftDetected"
-	reasonWaitingForCNPG           conditionReasons = "WaitingForCNPG"
-	reasonRolesCreationFailed      conditionReasons = "RolesCreationFailed"
-	reasonRolesAvailable           conditionReasons = "RolesAvailable"
-	reasonRoleConflict             conditionReasons = "RoleConflict"
-	reasonConfigMapsCreationFailed conditionReasons = "ConfigMapsCreationFailed"
-	reasonConfigMapsCreated        conditionReasons = "ConfigMapsCreated"
-	reasonDatabaseReconcileFailed  conditionReasons = "DatabaseReconcileFailed"
-	reasonPrivilegesGranted        conditionReasons = "PrivilegesGranted"
-	reasonPrivilegesGrantFailed    conditionReasons = "PrivilegesGrantFailed"
+	reasonClusterNotFound           conditionReasons = "ClusterNotFound"
+	reasonClusterProvisioning       conditionReasons = "ClusterProvisioning"
+	reasonClusterInfoFetchFailed    conditionReasons = "ClusterInfoFetchNotPossible"
+	reasonClusterAvailable          conditionReasons = "ClusterAvailable"
+	reasonDatabasesAvailable        conditionReasons = "DatabasesAvailable"
+	reasonSecretsCreated            conditionReasons = "SecretsCreated"
+	reasonSecretsCreationFailed     conditionReasons = "SecretsCreationFailed"
+	reasonSecretsDriftDetected      conditionReasons = "SecretsDriftDetected"
+	reasonWaitingForCNPG            conditionReasons = "WaitingForCNPG"
+	reasonRolesCreationFailed       conditionReasons = "RolesCreationFailed"
+	reasonRolesAvailable            conditionReasons = "RolesAvailable"
+	reasonRoleConflict              conditionReasons = "RoleConflict"
+	reasonConfigMapsCreationFailed  conditionReasons = "ConfigMapsCreationFailed"
+	reasonConfigMapsCreated         conditionReasons = "ConfigMapsCreated"
+	reasonDatabaseReconcileFailed   conditionReasons = "DatabaseReconcileFailed"
+	reasonPrivilegesGranted         conditionReasons = "PrivilegesGranted"
+	reasonPrivilegesGrantFailed     conditionReasons = "PrivilegesGrantFailed"
+	reasonPrivilegesTerminalFailure conditionReasons = "PrivilegesTerminalFailure"
 
-	// ClusterReady sentinel values returned by ensureClusterReady.
-	// Exported so the controller adapter can switch on them if needed.
-	ClusterNotFound         clusterReadyStatus = "NotFound"
+	// ClusterReady sentinel values returned by getClusterReadyStatus.
 	ClusterNotReady         clusterReadyStatus = "NotReady"
 	ClusterNoProvisionerRef clusterReadyStatus = "NoProvisionerRef"
 	ClusterReady            clusterReadyStatus = "Ready"
@@ -129,3 +131,6 @@ type deletionPlan struct {
 	retained []enterprisev4.DatabaseDefinition
 	deleted  []enterprisev4.DatabaseDefinition
 }
+
+// ErrTerminal marks user-actionable errors where retrying the same spec is not expected to succeed.
+var ErrTerminal = errors.New("terminal reconciliation error")

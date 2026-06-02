@@ -19,6 +19,7 @@ package adapter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -26,31 +27,62 @@ import (
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const (
 	superUsername    = "postgres"
 	postgresPort     = "5432"
 	dbConnectTimeout = 10 * time.Second
+
+	pgCodeClassInvalidAuthorizationSpecification = "28"
+	pgCodeInsufficientPrivilege                  = "42501"
 )
+
+var pgxConnectConfig = pgx.ConnectConfig
+
+type dbConn interface {
+	begin(ctx context.Context) (grantTx, error)
+	close(ctx context.Context) error
+}
+
+type grantTx interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Commit(ctx context.Context) error
+}
+
+type pgxDBConn struct {
+	conn *pgx.Conn
+}
+
+func (c pgxDBConn) begin(ctx context.Context) (grantTx, error) {
+	return c.conn.Begin(ctx)
+}
+
+func (c pgxDBConn) close(ctx context.Context) error {
+	return c.conn.Close(ctx)
+}
 
 // pgDBRepository is the pgx-backed adapter for the core.DBRepo port.
 // It owns the full connection lifecycle: open on construction, close on ExecGrants return.
 type pgDBRepository struct {
-	conn *pgx.Conn
+	conn dbConn
 }
 
 // ExecGrants applies all privilege grants needed for the RW role on a single database.
 // GRANT ON ALL TABLES/SEQUENCES covers existing objects; ALTER DEFAULT PRIVILEGES covers
 // future ones created by the admin role (e.g. via migrations).
 func (r *pgDBRepository) ExecGrants(ctx context.Context, dbName string) error {
-	defer r.conn.Close(context.Background())
+	defer r.conn.close(context.Background())
 
 	adminRole := dbName + "_admin"
 	rwRole := dbName + "_rw"
 
-	tx, err := r.conn.Begin(ctx)
+	tx, err := r.conn.begin(ctx)
 	if err != nil {
+		if isTerminalPostgresError(err) {
+			return fmt.Errorf("%w: beginning transaction: %w", dbcore.ErrTerminal, err)
+		}
 		return fmt.Errorf("beginning transaction: %w", err)
 	}
 
@@ -68,11 +100,20 @@ func (r *pgDBRepository) ExecGrants(ctx context.Context, dbName string) error {
 
 	for _, stmt := range stmts {
 		if _, err := tx.Exec(ctx, stmt); err != nil {
+			if isTerminalPostgresError(err) {
+				return fmt.Errorf("%w: executing grant %q: %w", dbcore.ErrTerminal, stmt, err)
+			}
 			return fmt.Errorf("executing grant %q: %w", stmt, err)
 		}
 	}
 
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		if isTerminalPostgresError(err) {
+			return fmt.Errorf("%w: committing grants: %w", dbcore.ErrTerminal, err)
+		}
+		return fmt.Errorf("committing grants: %w", err)
+	}
+	return nil
 }
 
 // NewDBRepository opens a direct superuser connection, bypassing any pooler.
@@ -89,9 +130,30 @@ func NewDBRepository(ctx context.Context, host, dbName, password string) (dbcore
 	}
 	cfg.Password = password
 
-	conn, err := pgx.ConnectConfig(ctx, cfg)
+	conn, err := pgxConnectConfig(ctx, cfg)
 	if err != nil {
+		if isTerminalPostgresError(err) {
+			return nil, fmt.Errorf("%w: connecting to %s/%s: %w", dbcore.ErrTerminal, host, dbName, err)
+		}
 		return nil, fmt.Errorf("connecting to %s/%s: %w", host, dbName, err)
 	}
-	return &pgDBRepository{conn: conn}, nil
+	return &pgDBRepository{conn: pgxDBConn{conn: conn}}, nil
+}
+
+func isTerminalPostgresError(err error) bool {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+		return isTerminalPGCode(pgErr.Code)
+	}
+	return false
+}
+
+func isTerminalPGCode(code string) bool {
+	switch {
+	case strings.HasPrefix(code, pgCodeClassInvalidAuthorizationSpecification):
+		return true
+	case code == pgCodeInsufficientPrivilege:
+		return true
+	default:
+		return false
+	}
 }
