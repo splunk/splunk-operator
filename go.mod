@@ -29,7 +29,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/wk8/go-ordered-map/v2 v2.1.8
 	go.uber.org/zap v1.28.0
-	google.golang.org/api v0.282.0
+	google.golang.org/api v0.283.0
 	k8s.io/api v0.36.1
 	k8s.io/apiextensions-apiserver v0.36.1
 	k8s.io/apimachinery v0.36.1
