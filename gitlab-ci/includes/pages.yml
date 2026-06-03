@@ -17,6 +17,7 @@
     - gem install bundler
     - bundle install --jobs 4 --retry 3
     - bundle exec jekyll build --config _config.yml,splunk_private/_config_gitlab.yml -d ../public
+    - printf "/splunk-operator /splunk-operator/ 301\n" > ../public/_redirects
 
 pages-deploy:
   extends: .pages-build

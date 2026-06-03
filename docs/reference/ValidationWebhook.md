@@ -110,11 +110,13 @@ splunkOperator:
 
 #### Option 2: Use the Webhook-Enabled Kustomize Overlay
 
+To learn more about the \<required value\> for the `SPLUNK_GENERAL_TERMS` variable, please see the [README](../README.md#splunk-general-terms-acceptance) or Splunk Enterprise 10.x image’s README.
+
 Deploy using the `config/default-with-webhook` overlay which includes all necessary webhook components and enables the `ValidationWebhook` feature gate automatically:
 
 ```bash
 make deploy IMG=<your-image> ENVIRONMENT=default-with-webhook \
-  SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com"
+  SPLUNK_GENERAL_TERMS="<required value>"
 ```
 
 This uses the same `make deploy` target as the standard deployment, which substitutes the `WATCH_NAMESPACE`, `SPLUNK_ENTERPRISE_IMAGE`, and `SPLUNK_GENERAL_TERMS` placeholder values before running `kustomize build`.
@@ -132,6 +134,8 @@ kubectl patch deployment splunk-operator-controller-manager -n splunk-operator \
 
 #### Option 4: Modify Default Kustomization
 
+To learn more about the \<required value\> for the `SPLUNK_GENERAL_TERMS` variable, please see the [README](../README.md#splunk-general-terms-acceptance) or Splunk Enterprise 10.x image’s README.
+
 Edit `config/default/kustomization.yaml` to uncomment the webhook-related sections:
 
 1. Uncomment `- ../webhook` in the `bases` section
@@ -143,7 +147,7 @@ Edit `config/default/kustomization.yaml` to uncomment the webhook-related sectio
 Then deploy:
 
 ```bash
-make deploy IMG=<your-image> SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com"
+make deploy IMG=<your-image> SPLUNK_GENERAL_TERMS="<required value>"
 ```
 
 ### Legacy: ENABLE_VALIDATION_WEBHOOK Environment Variable
@@ -429,8 +433,10 @@ For a step-by-step guide on extending the webhook to support a new CRD, see the 
 
 To disable the webhook after it has been enabled, remove the `--feature-gates=ValidationWebhook=true` flag from the container args (or remove the `ENABLE_VALIDATION_WEBHOOK` env var if using the legacy method).
 
+To learn more about the \<required value\> for the `SPLUNK_GENERAL_TERMS` variable, please see the [README](../README.md#splunk-general-terms-acceptance) or Splunk Enterprise 10.x image’s README.
+
 Or redeploy using the default kustomization (without webhook):
 
 ```bash
-make deploy IMG=<your-image> SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com"
+make deploy IMG=<your-image> SPLUNK_GENERAL_TERMS="<required value>"
 ```
