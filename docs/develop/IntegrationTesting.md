@@ -504,8 +504,6 @@ Install the version specified by `GO_VERSION` in `.env`.
 
 You need a cluster with `kubectl` configured and a default StorageClass backed by a CSI driver for dynamic PVC provisioning (Splunk CRs create StatefulSets with PVCs).
 
-**Splunk employees:** see [go/sok-test-setup](http://go/sok-test-setup) for internal instructions on provisioning test clusters.
-
 **3. Install the Ginkgo CLI**
 
 ```bash
@@ -563,8 +561,6 @@ make deploy IMG=$OPERATOR_IMG NAMESPACE=splunk-operator SPLUNK_GENERAL_TERMS=<va
 **8. _(Optional)_ Provide a Splunk Enterprise license file**
 
 Pass `--license-file=<path>` when running tests. Without it, instances use a trial license. **Required** for License Manager / License Master test suites.
-
-**Splunk employees:** see [go/sok-test-setup](http://go/sok-test-setup) for obtaining Enterprise license files.
 
 **9. _(App Framework / SmartStore tests only)_ Configure cloud storage**
 
