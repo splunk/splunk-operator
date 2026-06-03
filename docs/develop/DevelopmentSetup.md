@@ -149,7 +149,7 @@ Key variables used during development and testing:
 | `NAMESPACE` | `splunk-operator` | Target namespace |
 | `WATCH_NAMESPACE` | `""` (all) | Namespaces the operator watches |
 | `SPLUNK_ENTERPRISE_IMAGE` | See `.env` | Splunk Enterprise image |
-| `SPLUNK_GENERAL_TERMS` | `""` | Must be set to `--accept-sgt-current-at-splunk-com` |
+| `SPLUNK_GENERAL_TERMS` | `""` | Must be set to value in [README](../README.md#splunk-general-terms-acceptance) |
 | `LOG_LEVEL` | `info` | Operator log level (`debug`, `info`, `warn`, `error`) |
 | `LOG_FORMAT` | `json` | Log format (`json` or `text`) |
 
