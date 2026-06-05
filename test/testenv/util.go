@@ -35,6 +35,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
@@ -1118,21 +1119,71 @@ func GetPodUIDs(ns string) map[string]string {
 
 // DeleteOperatorPod Delete Operator Pod in the namespace
 func (testcaseEnvInst *TestCaseEnv) DeleteOperatorPod() error {
-	var podName string
-	var ns string
+	var ns, deploymentName string
 	if testcaseEnvInst.clusterWideOperator != "true" {
 		ns = testcaseEnvInst.GetName()
+		deploymentName = testcaseEnvInst.operatorName
 	} else {
 		ns = "splunk-operator"
+		deploymentName = "splunk-operator-controller-manager"
 	}
-	podName = testcaseEnvInst.GetOperatorPodName()
+	podName := testcaseEnvInst.GetOperatorPodName()
+	if podName == "" {
+		return fmt.Errorf("operator pod not found in namespace %s", ns)
+	}
 
-	delCtx, delCancel := context.WithTimeout(context.Background(), KubectlQuickTimeout)
+	delCtx, delCancel := context.WithTimeout(context.Background(), OperatorRestartTimeout)
 	defer delCancel()
-	_, err := exec.CommandContext(delCtx, "kubectl", "delete", "pod", "-n", ns, podName).Output()
+	output, err := exec.CommandContext(delCtx, "kubectl", "delete", "pod", "-n", ns, podName, "--wait=false", "--ignore-not-found=true").CombinedOutput()
 	if err != nil {
-		logf.Log.Error(err, "Failed to delete operator pod ", "podName", podName, "namespace", ns)
+		if delCtx.Err() != nil {
+			err = fmt.Errorf("delete operator pod %s/%s timed out after %s: %w (output: %s)", ns, podName, OperatorRestartTimeout, delCtx.Err(), string(output))
+		} else {
+			err = fmt.Errorf("delete operator pod %s/%s: %w (output: %s)", ns, podName, err, string(output))
+		}
+		logf.Log.Error(err, "Failed to delete operator pod", "podName", podName, "namespace", ns)
 		return err
+	}
+
+	if err := waitForOperatorPodDeletion(ns, podName); err != nil {
+		return err
+	}
+
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), OperatorRestartTimeout)
+	defer waitCancel()
+	output, err = exec.CommandContext(waitCtx, "kubectl", "rollout", "status", fmt.Sprintf("deployment/%s", deploymentName), "-n", ns, fmt.Sprintf("--timeout=%s", OperatorRestartTimeout)).CombinedOutput()
+	if err != nil {
+		if waitCtx.Err() != nil {
+			err = fmt.Errorf("operator deployment %s/%s did not become ready after %s: %w (output: %s)", ns, deploymentName, OperatorRestartTimeout, waitCtx.Err(), string(output))
+		} else {
+			err = fmt.Errorf("operator deployment %s/%s did not become ready: %w (output: %s)", ns, deploymentName, err, string(output))
+		}
+		logf.Log.Error(err, "Failed waiting for operator deployment", "deployment", deploymentName, "namespace", ns)
+		return err
+	}
+
+	newPodName := testcaseEnvInst.GetOperatorPodName()
+	if newPodName == "" {
+		return fmt.Errorf("operator deployment %s/%s is ready, but no operator pod was found", ns, deploymentName)
+	}
+
+	logf.Log.Info("Deleted operator pod and observed replacement", "namespace", ns, "oldPod", podName, "newPod", newPodName)
+	return nil
+}
+
+func waitForOperatorPodDeletion(ns, podName string) error {
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), OperatorRestartTimeout)
+	defer waitCancel()
+
+	err := wait.PollUntilContextTimeout(waitCtx, PollInterval, OperatorRestartTimeout, true, func(ctx context.Context) (bool, error) {
+		output, err := exec.CommandContext(ctx, "kubectl", "get", "pod", "-n", ns, podName, "-o", "name").CombinedOutput()
+		if err != nil {
+			return true, nil
+		}
+		return strings.TrimSpace(string(output)) == "", nil
+	})
+	if err != nil {
+		return fmt.Errorf("operator pod %s/%s did not finish deleting after %s: %w", ns, podName, OperatorRestartTimeout, err)
 	}
 	return nil
 }

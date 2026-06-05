@@ -30,7 +30,7 @@ var (
 	gcpProjectID                 = os.Getenv("GCP_PROJECT_ID")
 	gcpRegion                    = os.Getenv("GCP_REGION")
 	testGCPBucket                = os.Getenv("TEST_BUCKET")
-	testIndexesGCPBucket         = os.Getenv("TEST_INDEXES_GCP_BUCKET")
+	testIndexesGCPBucket         = os.Getenv("TEST_INDEXES_S3_BUCKET")
 	enterpriseLicenseLocationGCP = os.Getenv("ENTERPRISE_LICENSE_LOCATION")
 )
 
@@ -318,15 +318,19 @@ func DeleteFileOnGCP(bucketName, objectName string) error {
 	defer cancel()
 
 	err = client.Client.Bucket(bucketName).Object(objectName).Delete(ctx)
-	if err != nil && err != storage.ErrObjectNotExist {
+	if errors.Is(err, storage.ErrObjectNotExist) {
+		logf.Log.Info("File is already absent on GCP", "fileName", objectName, "bucket", bucketName)
+		return nil
+	}
+	if err != nil {
 		logf.Log.Error(err, "Unable to delete object from bucket", "objectName", objectName, "bucketName", bucketName)
 		return err
 	}
 
 	// Optionally, verify deletion
 	_, err = client.Client.Bucket(bucketName).Object(objectName).Attrs(ctx)
-	if err == storage.ErrObjectNotExist {
-		logf.Log.Info("Deleted file on GCP", "fileName", objectName, "bucket", bucketName)
+	if errors.Is(err, storage.ErrObjectNotExist) {
+		logf.Log.Info("File is already absent on GCP", "fileName", objectName, "bucket", bucketName)
 		return nil
 	}
 	if err != nil {
@@ -429,8 +433,14 @@ func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir strin
 			return err
 		}
 
+		untarredAppRootFolder, err := findExtractedAppRoot(untarredCurrentAppFolder)
+		if err != nil {
+			logf.Log.Error(err, "Failed to locate untarred app root", "App", key)
+			return err
+		}
+
 		// Disable the app by modifying its config file
-		appConfFile := filepath.Join(untarredCurrentAppFolder, "default", "app.conf")
+		appConfFile := filepath.Join(untarredAppRootFolder, "default", "app.conf")
 		err = disableAppConfig(appConfFile)
 		if err != nil {
 			logf.Log.Error(err, "Failed to disable app config", "File", appConfFile)
@@ -456,6 +466,44 @@ func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir strin
 	return nil
 }
 
+func findExtractedAppRoot(extractDir string) (string, error) {
+	rootAppConf := filepath.Join(extractDir, "default", "app.conf")
+	if _, err := os.Stat(rootAppConf); err == nil {
+		return extractDir, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+
+	entries, err := os.ReadDir(extractDir)
+	if err != nil {
+		return "", err
+	}
+
+	var candidates []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		candidate := filepath.Join(extractDir, entry.Name())
+		appConfFile := filepath.Join(candidate, "default", "app.conf")
+		if _, err := os.Stat(appConfFile); err == nil {
+			candidates = append(candidates, candidate)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+	}
+
+	switch len(candidates) {
+	case 0:
+		return "", fmt.Errorf("no app root containing default/app.conf found under %s", extractDir)
+	case 1:
+		return candidates[0], nil
+	default:
+		return "", fmt.Errorf("multiple app roots containing default/app.conf found under %s: %s", extractDir, strings.Join(candidates, ", "))
+	}
+}
+
 // untarFile extracts a tar.gz file to the specified destination
 func untarFile(src, dest string) error {
 	file, err := os.Open(src)
@@ -474,6 +522,9 @@ func untarFile(src, dest string) error {
 
 	for {
 		header, err := tarReader.Next()
+		if errors.Is(err, io.EOF) {
+			break // End of archive
+		}
 		if err != nil {
 			return err
 		}
@@ -482,13 +533,6 @@ func untarFile(src, dest string) error {
 		targetPath := filepath.Join(dest, header.Name)
 		if !strings.HasPrefix(targetPath, filepath.Clean(dest)+string(os.PathSeparator)) {
 			return fmt.Errorf("invalid file path: %s", targetPath)
-		}
-
-		if err == io.EOF {
-			break // End of archive
-		}
-		if err != nil {
-			return err
 		}
 
 		targetPath = filepath.Join(dest, header.Name)
