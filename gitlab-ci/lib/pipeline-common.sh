@@ -438,6 +438,39 @@ ensure_junit_artifact() {
 EOF
 }
 
+copy_integration_junit() {
+  junit_report="$(find "${CI_PROJECT_DIR}" -maxdepth 1 -name 'report-junit-*.xml' -type f | sort | tail -n 1)"
+  ensure_junit_artifact "${integration_junit}" "${CI_PROJECT_DIR}/inttest-junit.xml" "${junit_report}"
+}
+
+run_and_tee() {
+  log_file="$1"
+  shift
+  status_file="$(mktemp /tmp/${WORKFLOW_SLUG:-cloud-workflow}-cmd-status.XXXXXX)"
+
+  # Preserve the command's exit code without relying on non-POSIX pipefail.
+  if (
+    set +e
+    "$@" 2>&1
+    printf '%s\n' "$?" > "${status_file}"
+  ) | tee -a "${log_file}"; then
+    tee_status=0
+  else
+    tee_status="$?"
+  fi
+
+  command_status="$(cat "${status_file}" 2>/dev/null || printf '1')"
+  rm -f "${status_file}"
+  case "${command_status}" in
+    ''|*[!0-9]*) command_status=1 ;;
+  esac
+
+  if [ "${tee_status}" -ne 0 ]; then
+    return "${tee_status}"
+  fi
+  return "${command_status}"
+}
+
 sanitize_slug() {
   printf '%s' "$1" \
     | tr '[:upper:]' '[:lower:]' \

@@ -111,6 +111,7 @@ What the nightly automation does:
 - re-validates the repo baseline on the current `develop` tip
 - reuses the staged image contract instead of rebuilding per suite
 - runs the nightly integration suites in parallel
+- runs Azure validation and the GCP validation suite set against the staged nightly image
 - writes per-suite `ci-output/` evidence for debugging and triage
 
 What the user needs to do:

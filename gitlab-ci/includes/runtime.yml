@@ -590,6 +590,47 @@ qualification-graviton-indingsep-validation:
     reports:
       junit: ci-output/*-inttest-junit.xml
 
+.runtime-nightly-cloud-validation-job:
+  extends: .runtime-integration-job
+  timeout: 10h
+  needs:
+    - job: build-stage-image
+      artifacts: true
+    - job: scan-stage-image-container
+  rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
+  variables:
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-ecr-image-ref.txt
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/*-inttest-junit.xml
+
+.runtime-nightly-azure-validation-job:
+  extends: .runtime-nightly-cloud-validation-job
+  # Match the platform-foundations Azure federated credential audience.
+  id_tokens:
+    AZURE_GITLAB_OIDC_TOKEN:
+      aud: api://AzureADTokenExchange
+  script:
+    - gitlab-ci/int-test-azure-workflow.sh
+
+.runtime-nightly-gcp-validation-job:
+  extends: .runtime-nightly-cloud-validation-job
+  # Match the platform-foundations GCP workload identity provider audience.
+  id_tokens:
+    GCP_GITLAB_OIDC_TOKEN:
+      aud: https://cd.splunkdev.com
+  script:
+    - gitlab-ci/int-test-gcp-workflow.sh
+
 .runtime-appframework-suite-job:
   variables:
     JOB_INT_CLUSTER_NODES: "2"
@@ -717,3 +758,50 @@ nightly-eks-integration-indingsep-validation:
   variables:
     WORKFLOW_SLUG: nightly-eks-integration-indingsep-validation
     JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"
+
+nightly-azure-validation:
+  extends: .runtime-nightly-azure-validation-job
+  variables:
+    WORKFLOW_SLUG: nightly-azure-validation
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && cloud:azure"
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+
+nightly-gcp-c3-validation:
+  extends: .runtime-nightly-gcp-validation-job
+  variables:
+    WORKFLOW_SLUG: nightly-gcp-c3-validation
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:c3 && cloud:gcp && variant:master"
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+    JOB_CLOUD_GCP_ZONE: us-west2-a
+
+nightly-gcp-c3-manager-validation:
+  extends: .runtime-nightly-gcp-validation-job
+  variables:
+    WORKFLOW_SLUG: nightly-gcp-c3-manager-validation
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:c3 && cloud:gcp && variant:manager"
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+    JOB_CLOUD_GCP_ZONE: us-west2-b
+
+nightly-gcp-m4-validation:
+  extends: .runtime-nightly-gcp-validation-job
+  variables:
+    WORKFLOW_SLUG: nightly-gcp-m4-validation
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:m4 && cloud:gcp && variant:master"
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+    JOB_CLOUD_GCP_ZONE: us-west2-c
+
+nightly-gcp-m4-manager-validation:
+  extends: .runtime-nightly-gcp-validation-job
+  variables:
+    WORKFLOW_SLUG: nightly-gcp-m4-manager-validation
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:m4 && cloud:gcp && variant:manager"
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+    JOB_CLOUD_GCP_ZONE: us-west2-a
+
+nightly-gcp-s1-validation:
+  extends: .runtime-nightly-gcp-validation-job
+  variables:
+    WORKFLOW_SLUG: nightly-gcp-s1-validation
+    JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:s1 && cloud:gcp"
+    JOB_CLOUD_TEST_TIMEOUT: 225m
+    JOB_CLOUD_GCP_ZONE: us-west2-b

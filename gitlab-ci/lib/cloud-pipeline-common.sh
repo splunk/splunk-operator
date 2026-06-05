@@ -40,12 +40,6 @@ capture_test_logs() {
   fi
 }
 
-capture_junit_artifact() {
-  src="$1"
-  dest="$2"
-  ensure_junit_artifact "${dest}" "${src}"
-}
-
 materialize_json_secret() {
   secret_value="$1"
   dest_path="$2"

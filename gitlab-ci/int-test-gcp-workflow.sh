@@ -46,7 +46,7 @@ cleanup_and_exit() {
 
   log_step "cleanup:start" | tee -a "${cleanup_log}" >/dev/null
   capture_test_logs "${CI_PROJECT_DIR}/test" "${pod_log_root}"
-  capture_junit_artifact "${CI_PROJECT_DIR}/inttest-junit.xml" "${integration_junit}"
+  copy_integration_junit
 
   log_step "cleanup:make-cleanup" | tee -a "${cleanup_log}" >/dev/null
   make cleanup >> "${cleanup_log}" 2>&1 || cleanup_rc=1
@@ -290,14 +290,14 @@ if [ -f "${CI_PROJECT_DIR}/test/gcp-storageclass.yaml" ]; then
   kubectl apply -f "${CI_PROJECT_DIR}/test/gcp-storageclass.yaml" 2>&1 | tee -a "${cluster_log}"
 fi
 
-log_step "gcp:deploy-operator:start" | tee -a "${run_log}" >/dev/null
-bash "${CI_PROJECT_DIR}/test/deploy-operator.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" >> "${run_log}" 2>&1
-log_step "gcp:deploy-operator:complete" | tee -a "${run_log}" >/dev/null
+log_step "gcp:deploy-operator:start" | tee -a "${run_log}"
+run_and_tee "${run_log}" bash "${CI_PROJECT_DIR}/test/deploy-operator.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
+log_step "gcp:deploy-operator:complete" | tee -a "${run_log}"
 
-log_step "gcp:trigger-tests:start labels=${TEST_LABELS}" | tee -a "${run_log}" >/dev/null
-bash "${CI_PROJECT_DIR}/test/trigger-tests.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" >> "${run_log}" 2>&1
-log_step "gcp:trigger-tests:complete" | tee -a "${run_log}" >/dev/null
+log_step "gcp:trigger-tests:start labels=${TEST_LABELS}" | tee -a "${run_log}"
+run_and_tee "${run_log}" bash "${CI_PROJECT_DIR}/test/trigger-tests.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
+log_step "gcp:trigger-tests:complete" | tee -a "${run_log}"
 
 capture_test_logs "${CI_PROJECT_DIR}/test" "${pod_log_root}"
-capture_junit_artifact "${CI_PROJECT_DIR}/inttest-junit.xml" "${integration_junit}"
+copy_integration_junit
 log_step "gcp:workflow:complete" | tee -a "${run_log}" >/dev/null
