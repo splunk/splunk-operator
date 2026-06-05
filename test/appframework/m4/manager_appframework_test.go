@@ -202,7 +202,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("can deploy a M4 SVA with App Framework enabled, install apps and downgrade them", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled, install apps and downgrade them", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -332,7 +332,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("can deploy a M4 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:manager", "feature:appframework", "feature:scaling"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "variant:manager", "feature:appframework", "feature:scaling"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -593,7 +593,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("can deploy a M4 SVA and have apps installed locally on Cluster Manager and Deployer", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA and have apps installed locally on Cluster Manager and Deployer", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -716,7 +716,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("can deploy a M4 SVA with App Framework enabled for manual poll", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled for manual poll", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload V1 apps to S3
@@ -891,7 +891,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("can deploy a M4 SVA and have apps installed and updated locally on Cluster Manager and Deployer via manual poll", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA and have apps installed and updated locally on Cluster Manager and Deployer via manual poll", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1065,7 +1065,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("can deploy a m4 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a m4 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1141,7 +1141,7 @@ var _ = Describe("m4appfw test", func() {
 			// Create App Framework Spec for Cluster manager with scope local and append cluster scope
 
 			appFrameworkSpecIdxc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 0)
-			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
+			volumeSpecCluster := testcaseEnvInst.GenerateVolumeSpecForProvider(ctx, appSourceVolumeNameIdxcCluster)
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameIdxcCluster,
@@ -1152,7 +1152,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Create App Framework Spec for Search Head cluster with scope local and append cluster scope
 			appFrameworkSpecShc := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 0)
-			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
+			volumeSpecCluster = testcaseEnvInst.GenerateVolumeSpecForProvider(ctx, appSourceVolumeNameShcCluster)
 
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
@@ -1278,7 +1278,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) and App Framework", func() {
-		It("can deploy a M4, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "cloud:azure", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1486,7 +1486,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("can deploy a M4 SVA with App Framework enabled and reset operator pod while app install is in progress", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled and reset operator pod while app install is in progress", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "cloud:azure", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -1569,7 +1569,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("can deploy a M4 SVA with App Framework enabled and reset operator pod while app download is in progress", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled and reset operator pod while app download is in progress", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "cloud:azure", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -1652,7 +1652,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("can deploy a M4 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -1873,7 +1873,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Wait for ClusterManager to reach Ready phase
 			testcaseEnvInst.Log.Info("Wait for ClusterManager and SearchHeadCluster to reach Ready phase")
-			err = testcaseEnvInst.WaitForClusterManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), cm.Name, enterpriseApi.PhaseReady, 2*time.Minute)
+			err = testcaseEnvInst.WaitForClusterManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), cm.Name, enterpriseApi.PhaseReady, 5*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for ClusterManager to reach Ready phase")
 
 			// Verify status is 'ON' in config map for Cluster Manager and Search Head Cluster
@@ -1935,7 +1935,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("can deploy a M4 SVA with App Framework enabled and update apps after app download is completed", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled and update apps after app download is completed", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "cloud:azure", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -2057,7 +2057,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("can deploy a M4 SVA and install a bigger volume of apps than the operator PV disk space", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA and install a bigger volume of apps than the operator PV disk space", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "cloud:azure", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2150,7 +2150,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("can deploy a M4 SVA with App Framework enabled and delete apps from app directory when download is complete", Label("tier:e2e-full", "sva:m4", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled and delete apps from app directory when download is complete", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "cloud:azure", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################

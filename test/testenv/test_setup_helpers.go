@@ -49,7 +49,7 @@ func SetupTestCaseEnv(testenvInstance *TestEnv, namePrefix string, opts ...Setup
 		opt(&o)
 	}
 
-	name := fmt.Sprintf("%s-%s", namePrefix+testenvInstance.GetName(), RandomDNSName(3))
+	name := buildTestCaseEnvName(namePrefix, testenvInstance.GetName(), RandomDNSName(3))
 	testcaseEnvInst, err := NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to create testcaseenv: %w", err)
@@ -65,6 +65,15 @@ func SetupTestCaseEnv(testenvInstance *TestEnv, namePrefix string, opts ...Setup
 	}
 
 	return testcaseEnvInst, deployment, nil
+}
+
+func buildTestCaseEnvName(namePrefix, testEnvName, randomSuffix string) string {
+	base := namePrefix + testEnvName
+	maxBaseLength := maxTestCaseEnvNameLength - len(randomSuffix) - 1
+	if len(base) > maxBaseLength {
+		base = base[:maxBaseLength]
+	}
+	return fmt.Sprintf("%s-%s", base, randomSuffix)
 }
 
 // TeardownTestCaseEnv handles the common teardown logic for test case

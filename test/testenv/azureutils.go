@@ -13,13 +13,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -535,71 +535,48 @@ func (client *AzureBlobClient) DeleteFilesOnAzure(ctx context.Context, endPoint,
 func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []string, containerName string) error {
 
 	// Create a folder named 'untarred_apps' to store untarred apps folders
-	untarredAppsMainFolder := downloadDir + "/untarred_apps"
+	untarredAppsMainFolder := filepath.Join(downloadDir, "untarred_apps")
 	if err := os.MkdirAll(untarredAppsMainFolder, 0755); err != nil {
 		return fmt.Errorf("create %s: %w", untarredAppsMainFolder, err)
 	}
 
 	// Create a folder named 'disabled_apps' to stored disabled apps tgz files
-	disabledAppsFolder := downloadDir + "/disabled_apps"
+	disabledAppsFolder := filepath.Join(downloadDir, "disabled_apps")
 	if err := os.MkdirAll(disabledAppsFolder, 0755); err != nil {
 		return fmt.Errorf("create %s: %w", disabledAppsFolder, err)
 	}
 
 	for _, key := range appFileList {
 		// Create a specific folder for each app in 'untarred_apps'
-		tarfile := downloadDir + "/" + key
-		lastInd := strings.LastIndex(key, ".")
-		untarredCurrentAppFolder := untarredAppsMainFolder + "/" + key[:lastInd]
+		tarfile := filepath.Join(downloadDir, key)
+		appUniqueID := uuid.New().String()
+		untarredCurrentAppFolder := filepath.Join(untarredAppsMainFolder, key+"_"+appUniqueID)
 		if err := os.MkdirAll(untarredCurrentAppFolder, 0755); err != nil {
 			return fmt.Errorf("create %s: %w", untarredCurrentAppFolder, err)
 		}
 
 		// Untar the app
-		if out, err := exec.Command("tar", "-xf", tarfile, "-C", untarredCurrentAppFolder).CombinedOutput(); err != nil {
-			return fmt.Errorf("untar %s into %s: %w (output: %s)", tarfile, untarredCurrentAppFolder, err, string(out))
+		if err := untarFile(tarfile, untarredCurrentAppFolder); err != nil {
+			return fmt.Errorf("untar %s into %s: %w", tarfile, untarredCurrentAppFolder, err)
 		}
 
 		// Disable the app
 		// - Get the name of the untarred app folder (as it could be different from the tgz file)
-		wildcardpath := untarredCurrentAppFolder + "/*/./"
-		bytepath, err := exec.Command("/bin/sh", "-c", "cd "+wildcardpath+"; pwd").Output()
+		untarredAppRootFolder, err := findExtractedAppRoot(untarredCurrentAppFolder)
 		if err != nil {
 			return fmt.Errorf("locate untarred app root under %s: %w", untarredCurrentAppFolder, err)
 		}
-		untarredAppRootFolder := string(bytepath)
-		if len(untarredAppRootFolder) == 0 {
-			return fmt.Errorf("locate untarred app root under %s: empty output", untarredCurrentAppFolder)
-		}
-		untarredAppRootFolder = untarredAppRootFolder[:len(untarredAppRootFolder)-1] //removing \n at the end of folder path
 
 		// - Edit /default/app.conf (add "state = disabled" in [install] stanza)
-		appConfFile := untarredAppRootFolder + "/default/app.conf"
-		input, err := os.ReadFile(appConfFile)
-		if err != nil {
-			return err
-		}
-		lines := strings.Split(string(input), "\n")
-		for i, line := range lines {
-			if strings.Contains(line, "[install]") {
-				lines[i] = "[install]\nstate = disabled"
-			}
-			if strings.Contains(line, "state = enabled") {
-				lines = append(lines[:i], lines[i+1:]...)
-			}
-		}
-		output := strings.Join(lines, "\n")
-		err = os.WriteFile(appConfFile, []byte(output), 0644)
-		if err != nil {
+		appConfFile := filepath.Join(untarredAppRootFolder, "default", "app.conf")
+		if err := disableAppConfig(appConfFile); err != nil {
 			return err
 		}
 
 		// Tar disabled app folder
-		lastInd = strings.LastIndex(untarredAppRootFolder, "/")
-		appFolderName := untarredAppRootFolder[lastInd+1:]
-		tarDestination := disabledAppsFolder + "/" + key
-		if out, err := exec.Command("tar", "-czf", tarDestination, "--directory", untarredCurrentAppFolder, appFolderName).CombinedOutput(); err != nil {
-			return fmt.Errorf("tar %s -> %s: %w (output: %s)", untarredCurrentAppFolder, tarDestination, err, string(out))
+		tarDestination := filepath.Join(disabledAppsFolder, key)
+		if err := tarGzFolder(untarredCurrentAppFolder, tarDestination); err != nil {
+			return fmt.Errorf("tar %s -> %s: %w", untarredCurrentAppFolder, tarDestination, err)
 		}
 	}
 

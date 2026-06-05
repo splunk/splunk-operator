@@ -56,7 +56,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", Label("tier:e2e-pr", "sva:s1", "cloud:aws", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", Label("tier:e2e-pr", "sva:s1", "cloud:aws", "cloud:azure", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -294,7 +294,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", Label("tier:e2e-pr", "sva:s1", "cloud:aws", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", Label("tier:e2e-pr", "sva:s1", "cloud:aws", "cloud:azure", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -446,7 +446,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("can deploy a Standalone instance with App Framework enabled, install apps, scale up, upgrade apps", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("can deploy a Standalone instance with App Framework enabled, install apps, scale up, upgrade apps", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -584,7 +584,7 @@ var _ = Describe("s1appfw test", func() {
 
 	// ES App Installation not supported at the time. Will be added back at a later time.
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("can deploy a Standalone and have ES app installed", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("can deploy a Standalone and have ES app installed", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -692,7 +692,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("can deploy a Standalone instance with App Framework enabled and install around 350MB of apps at once", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("can deploy a Standalone instance with App Framework enabled and install around 350MB of apps at once", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -916,7 +916,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("can deploy Several standalone CRs in the same namespace with App Framework enabled", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("can deploy Several standalone CRs in the same namespace with App Framework enabled", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1024,7 +1024,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("can add new apps to app source while install is in progress and have all apps installed", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can add new apps to app source while install is in progress and have all apps installed", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1104,7 +1104,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1200,7 +1200,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1272,7 +1272,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("can deploy a Standalone instance with App Framework enabled, install an app then disable it and remove it from app source", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("can deploy a Standalone instance with App Framework enabled, install an app then disable it and remove it from app source", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1373,7 +1373,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("can deploy a Standalone instance with App Framework enabled, attempt to update using incorrect S3 credentials", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("can deploy a Standalone instance with App Framework enabled, attempt to update using incorrect S3 credentials", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1518,7 +1518,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("Deploy a Standalone instance with App Framework enabled and update apps after app download is completed", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("Deploy a Standalone instance with App Framework enabled and update apps after app download is completed", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			################## SETUP ####################
@@ -1608,7 +1608,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("can deploy a Standalone instance and install a bigger volume of apps than the operator PV disk space", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("can deploy a Standalone instance and install a bigger volume of apps than the operator PV disk space", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1687,7 +1687,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("Deploy a Standalone instance with App Framework enabled and delete apps from app directory when app download is complete", Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("Deploy a Standalone instance with App Framework enabled and delete apps from app directory when app download is complete", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################

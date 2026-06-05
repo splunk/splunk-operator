@@ -100,6 +100,11 @@ const CleanupGraceFraction = 0.8
 // preventing "running node failed to exit in time" goroutine leaks.
 const KubectlQuickTimeout = 10 * time.Second
 
+// OperatorRestartTimeout bounds intentional operator pod restarts in app
+// framework tests. GKE can take longer than quick inspection helpers to
+// acknowledge pod deletion and roll a replacement pod to Ready.
+const OperatorRestartTimeout = 2 * time.Minute
+
 // KubectlExecTimeout bounds longer `kubectl exec` and `kubectl logs` calls
 // (cat config files, dump pod logs). Still below the 30s Ginkgo grace period.
 const KubectlExecTimeout = 25 * time.Second
