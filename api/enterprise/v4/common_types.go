@@ -299,6 +299,16 @@ type CommonSplunkSpec struct {
 	// See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// Certs lists TLS certificates to mount into Splunk pods.
+	// Each entry references a Kubernetes Secret containing tls.crt and tls.key.
+	// When role is set, the cert is mounted at the fixed platform path
+	// /mnt/tls/splunk-<role>-tls-cert/. When role is unset, the cert is mounted
+	// as-is at /mnt/tls/<secretRef.name>/. At most one entry per role is allowed.
+	// +kubebuilder:validation:MaxItems=10
+	// +kubebuilder:validation:XValidation:rule="self.filter(c, c.role != '').all(c, self.filter(x, x.role == c.role).size() == 1)",message="at most one entry per role is allowed"
+	// +optional
+	Certs []CertSpec `json:"certs,omitempty"`
 }
 
 // StorageClassSpec defines storage class configuration
@@ -726,3 +736,75 @@ const (
 	// StatefulSetScalingDown indicates sts is scaling down
 	StatefulSetScalingDown
 )
+
+// CertRole identifies an Ansible-handled Splunk cert. When set, the cert is
+// mounted at the fixed path /mnt/tls/splunk-<role>-tls-cert/ so Ansible reads
+// from a uniform location regardless of the secret name.
+// When unset, the cert is mounted as-is at /mnt/tls/<secretName>/.
+type CertRole string
+
+const (
+	CertRoleServer CertRole = "server"
+	CertRoleInput  CertRole = "input"
+)
+
+// CertType identifies the type of certificate. Currently only "tls" is supported.
+type CertType string
+
+const (
+	CertTypeTLS CertType = "tls"
+)
+
+// CertSpec declares one certificate that should be mounted into Splunk pods.
+// Phase 1: mount-only. IssuerRef and DNSNames are reserved for Phase 2 (cert generation).
+type CertSpec struct {
+	// SecretRef references the Kubernetes Secret containing the cert material.
+	// The Secret must contain tls.crt and tls.key; ca.crt is optional.
+	// +kubebuilder:validation:Required
+	SecretRef corev1.LocalObjectReference `json:"secretRef"`
+
+	// Role identifies the cert type and determines the fixed platform mount path
+	// /mnt/tls/splunk-<role>-tls-cert/. When unset, the cert is mounted as-is
+	// at /mnt/tls/<secretRef.name>/.
+	// +kubebuilder:validation:Enum=server;input
+	// +optional
+	Role CertRole `json:"role,omitempty"`
+
+	// Type is the certificate type. Only "tls" is supported.
+	// +kubebuilder:default=tls
+	// +kubebuilder:validation:Enum=tls
+	// +optional
+	Type CertType `json:"type,omitempty"`
+}
+
+// GetCerts returns the list of cert declarations from the CR spec.
+// Implemented on each CR type so that the cert-secret watch mapper can
+// retrieve spec.certs[] without importing CRD-specific types.
+
+func (cr *Standalone) GetCerts() []CertSpec {
+	return cr.Spec.Certs
+}
+
+func (cr *IndexerCluster) GetCerts() []CertSpec {
+	return cr.Spec.Certs
+}
+
+func (cr *SearchHeadCluster) GetCerts() []CertSpec {
+	return cr.Spec.Certs
+}
+
+func (cr *ClusterManager) GetCerts() []CertSpec {
+	return cr.Spec.Certs
+}
+
+func (cr *LicenseManager) GetCerts() []CertSpec {
+	return cr.Spec.Certs
+}
+
+func (cr *MonitoringConsole) GetCerts() []CertSpec {
+	return cr.Spec.Certs
+}
+
+func (cr *IngestorCluster) GetCerts() []CertSpec {
+	return cr.Spec.Certs
+}
