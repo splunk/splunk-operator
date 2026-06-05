@@ -62,6 +62,8 @@ type TestCaseEnv struct {
 	teardownCtx context.Context
 }
 
+const maxTestCaseEnvNameLength = 24
+
 // SetTeardownContext sets the parent context used by subsequent Teardown
 // cleanup operations. Callers (typically AfterEach blocks) should pass the
 // Ginkgo SpecContext so cleanup respects NodeTimeout.
@@ -95,7 +97,7 @@ func NewDefaultTestCaseEnv(kubeClient client.Client, name string) (*TestCaseEnv,
 // NewTestCaseEnv creates a new test environment to run tests againsts
 func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string, splunkImage string, licenseFilePath string) (*TestCaseEnv, error) {
 	// The name are used in various resource label and there is a 63 char limit. Do our part to make sure we do not exceed that limit
-	if len(name) > 24 {
+	if len(name) > maxTestCaseEnvNameLength {
 		return nil, fmt.Errorf("name %s has exceeded 24 chars", name)
 	}
 

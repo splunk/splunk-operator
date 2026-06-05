@@ -43,7 +43,7 @@ cleanup_and_exit() {
 
   log_step "cleanup:start" | tee -a "${cleanup_log}" >/dev/null
   capture_test_logs "${CI_PROJECT_DIR}/test" "${pod_log_dir}"
-  capture_junit_artifact "${CI_PROJECT_DIR}/inttest-junit.xml" "${integration_junit}"
+  copy_integration_junit
 
   log_step "cleanup:make-cleanup" | tee -a "${cleanup_log}" >/dev/null
   make cleanup >> "${cleanup_log}" 2>&1 || cleanup_rc=1
@@ -287,14 +287,14 @@ kubectl get pods -A 2>&1 | tee -a "${cluster_log}"
 append_context "${context_file}" "azure_registry_pull_mode_effective" "${PRIVATE_REGISTRY_AUTH_MODE}"
 log_step "azure:registry-pull-mode ${PRIVATE_REGISTRY_AUTH_MODE}" | tee -a "${run_log}" >/dev/null
 
-log_step "azure:deploy-operator:start" | tee -a "${run_log}" >/dev/null
-bash "${CI_PROJECT_DIR}/test/deploy-operator.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" >> "${run_log}" 2>&1
-log_step "azure:deploy-operator:complete" | tee -a "${run_log}" >/dev/null
+log_step "azure:deploy-operator:start" | tee -a "${run_log}"
+run_and_tee "${run_log}" bash "${CI_PROJECT_DIR}/test/deploy-operator.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
+log_step "azure:deploy-operator:complete" | tee -a "${run_log}"
 
-log_step "azure:trigger-tests:start labels=${TEST_LABELS}" | tee -a "${run_log}" >/dev/null
-bash "${CI_PROJECT_DIR}/test/trigger-tests.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" >> "${run_log}" 2>&1
-log_step "azure:trigger-tests:complete" | tee -a "${run_log}" >/dev/null
+log_step "azure:trigger-tests:start labels=${TEST_LABELS}" | tee -a "${run_log}"
+run_and_tee "${run_log}" bash "${CI_PROJECT_DIR}/test/trigger-tests.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
+log_step "azure:trigger-tests:complete" | tee -a "${run_log}"
 
 capture_test_logs "${CI_PROJECT_DIR}/test" "${pod_log_dir}"
-capture_junit_artifact "${CI_PROJECT_DIR}/inttest-junit.xml" "${integration_junit}"
+copy_integration_junit
 log_step "azure:workflow:complete" | tee -a "${run_log}" >/dev/null

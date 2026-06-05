@@ -19,11 +19,6 @@ log_step() {
   printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
 }
 
-copy_integration_junit() {
-  junit_report="$(find "${CI_PROJECT_DIR}" -maxdepth 1 -name 'report-junit-*.xml' -type f | sort | tail -n 1)"
-  ensure_junit_artifact "${integration_junit}" "${CI_PROJECT_DIR}/inttest-junit.xml" "${junit_report}"
-}
-
 : > "${context_file}"
 : > "${cleanup_log}"
 : > "${cluster_log}"
