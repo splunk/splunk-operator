@@ -10,6 +10,12 @@ image:
 splunk-operator:
   enabled: true
 
+# Deploy Splunk Universal Forwarder chart alongside splunk-enterprise
+# Disabled by default; enable with --set splunk-universalforwarder.enabled=true
+# When enabling, also set splunk-universalforwarder.splunkConfig.forwardServer or splunkConfig.deploymentServer
+splunk-universalforwarder:
+  enabled: false
+
 sva:
 
   # Single Server Deployment (S1)

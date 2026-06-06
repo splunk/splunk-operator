@@ -1,0 +1,9 @@
+{{- if and (not .Values.splunkConfig.forwardServer) (not .Values.splunkConfig.deploymentServer) (not .Values.splunkConfig.forwardServers) }}
+{{- fail "splunkConfig.forwardServer or splunkConfig.deploymentServer must be set. A Universal Forwarder with no destination will silently drop all collected logs." }}
+{{- end }}
+{{- if and (not .Values.splunkConfig.existingSecret) (eq .Values.splunkConfig.password "changeme") }}
+{{- fail "splunkConfig.password must be changed from default 'changeme'. Set splunkConfig.password or provide splunkConfig.existingSecret." }}
+{{- end }}
+{{- if and .Values.ingress.enabled (not .Values.service.enabled) }}
+{{- fail "service.enabled must be true when ingress.enabled is true because the Ingress backend targets the chart Service." }}
+{{- end }}

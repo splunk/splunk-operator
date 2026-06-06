@@ -1,0 +1,9 @@
+---
+# Deployment recovers to 1/1 after pod deletion
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: splunk-uf-splunk-universalforwarder
+status:
+  readyReplicas: 1
+  availableReplicas: 1

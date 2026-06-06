@@ -1,0 +1,255 @@
+suite: workload
+templates:
+  - templates/workload.yaml
+tests:
+  - it: should be a Deployment by default
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: should have SPLUNK_START_ARGS hardcoded to --accept-license
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_START_ARGS
+            value: "--accept-license"
+
+  - it: should not have SPLUNK_GENERAL_TERMS hardcoded (must be set by user per Legal)
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_GENERAL_TERMS
+
+  # Mirrors Standalone operator pattern
+  - it: should set SPLUNK_DEFAULTS_URL to /mnt/splunk-secrets/default.yml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_DEFAULTS_URL
+            value: "/mnt/splunk-secrets/default.yml"
+
+  - it: should have SPLUNK_HOME_OWNERSHIP_ENFORCEMENT set to false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_HOME_OWNERSHIP_ENFORCEMENT
+            value: "false"
+
+  # SPLUNK_DECLARATIVE_ADMIN_PASSWORD=true + non-default password avoids REST lockout
+  - it: should have SPLUNK_DECLARATIVE_ADMIN_PASSWORD set to true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_DECLARATIVE_ADMIN_PASSWORD
+            value: "true"
+
+  # SPLUNK_PASSWORD must be set as env var; createdefaults.py otherwise generates
+  # a random value that overrides default.yml and breaks add forward-server -auth
+  - it: should set SPLUNK_PASSWORD from Secret key
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-splunk-universalforwarder-secret
+                key: password
+
+  - it: should use splunkConfig.passwordKey when set
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      splunkConfig.passwordKey: "splunk-password"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-splunk-universalforwarder-secret
+                key: splunk-password
+
+  - it: should use splunkConfig.defaultsUrl when set
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      splunkConfig.defaultsUrl: "https://config-server.example.com/default.yml"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_DEFAULTS_URL
+            value: "https://config-server.example.com/default.yml"
+
+  - it: should default runAsUser to 41812 (splunk uid)
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 41812
+
+  - it: should set fsGroup to 41812
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 41812
+
+  # Default is stateless (emptyDir)
+  - it: should use emptyDir volumes by default (stateless mode)
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: etc-vol
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: var-vol
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: etc-vol
+            mountPath: /opt/splunkforwarder/etc
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: var-vol
+            mountPath: /opt/splunkforwarder/var
+
+  # Durable PVC mode when emptyDir: false
+  - it: should use PVC volumes when storage.emptyDir is false
+    set:
+      storage.emptyDir: false
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: etc-vol
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-splunk-universalforwarder-etc
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: var-vol
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-splunk-universalforwarder-var
+
+  # Standalone pattern: Secret mounted at /mnt/splunk-secrets
+  - it: should mount Secret at /mnt/splunk-secrets
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: mnt-splunk-secrets
+            mountPath: /mnt/splunk-secrets
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: mnt-splunk-secrets
+            secret:
+              secretName: RELEASE-NAME-splunk-universalforwarder-secret
+
+  # fix-ownership always runs first (uid=0): kubelet creates emptyDir as root:root on EKS;
+  # fsGroup alone is not sufficient. Same is true for fresh EBS PVCs.
+  - it: should have fix-ownership (uid=0) first then seed-etc (uid=41812)
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: fix-ownership
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
+          value: 0
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsNonRoot
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: seed-etc
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.runAsUser
+          value: 41812
+
+  - it: should render SPLUNK_DEPLOYMENT_SERVER when deploymentServer is set
+    set:
+      splunkConfig.deploymentServer: "ds.example.com:8089"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_DEPLOYMENT_SERVER
+            value: "ds.example.com:8089"
+
+  - it: should render SPLUNK_DEPLOYMENT_CLIENT_NAME when set
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.deploymentClientName: "my-k8s-node"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_DEPLOYMENT_CLIENT_NAME
+            value: "my-k8s-node"
+
+  - it: should render SPLUNK_ADD when add list is provided
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.add:
+        - "monitor /var/log/syslog"
+        - "udp 514"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_ADD
+            value: "monitor /var/log/syslog,udp 514"
+
+  - it: should not render SPLUNK_DEPLOYMENT_SERVER when deploymentServer is empty
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_DEPLOYMENT_SERVER
+
+  - it: should have spec.replicas matching replicaCount
+    set:
+      replicaCount: 3
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  # DBG-01: SPLUNK_ANSIBLE_DEBUG set when debug.enabled is true
+  - it: should set SPLUNK_ANSIBLE_DEBUG when debug.enabled is true
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      debug.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_ANSIBLE_DEBUG
+            value: "true"
+
+  - it: should not render SPLUNK_ANSIBLE_DEBUG when debug.enabled is false (default)
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_ANSIBLE_DEBUG

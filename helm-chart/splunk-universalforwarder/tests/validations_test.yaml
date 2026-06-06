@@ -1,0 +1,71 @@
+suite: forwarding validation
+templates:
+  - templates/validations.yaml
+tests:
+  - it: should fail when both forwardServer and deploymentServer are empty
+    set:
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - failedTemplate:
+          errorPattern: "splunkConfig.forwardServer or splunkConfig.deploymentServer must be set"
+
+  - it: should not fail when forwardServer is set
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not fail when deploymentServer is set
+    set:
+      splunkConfig.deploymentServer: "ds.example.com:8089"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not fail when forwardServers list is set
+    set:
+      splunkConfig.forwardServers:
+        - "idx1.example.com:9997"
+        - "idx2.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should fail when password is default changeme
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+    asserts:
+      - failedTemplate:
+          errorPattern: "splunkConfig.password must be changed from default"
+
+  - it: should not fail when existingSecret is set with default password
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.existingSecret: "my-secret"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should fail when ingress is enabled but service is disabled
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      ingress.enabled: true
+      service.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "service.enabled must be true when ingress.enabled is true"
+
+  - it: should not fail when both ingress and service are enabled
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      ingress.enabled: true
+      service.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0

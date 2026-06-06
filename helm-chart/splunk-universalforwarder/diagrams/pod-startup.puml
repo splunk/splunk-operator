@@ -1,0 +1,68 @@
+@startuml pod-startup
+skinparam backgroundColor #FAFAFA
+skinparam sequence {
+  ArrowColor #444444
+  ActorBorderColor #444444
+  LifeLineBorderColor #888888
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #5B8DB8
+  BoxBackgroundColor #F0F0F0
+  BoxBorderColor #CCCCCC
+  NoteBackgroundColor #FFFDE7
+  NoteBorderColor #F9A825
+}
+skinparam shadowing false
+
+title Pod Startup Sequence
+
+participant "kubelet" as K
+box "Init Containers" #F5F5F5
+  participant "fix-ownership\n(busybox:1.36.1, uid=0\nrunAsNonRoot=false)" as FO
+  participant "seed-etc\n(splunk/universalforwarder\nuid=41812)" as SE
+end box
+participant "splunk-universalforwarder\n(main container, uid=41812)" as UF
+
+K -> FO : start init container 1\nemptyDir/PVC mounted (root:root)
+activate FO
+note right of FO
+  chown -R 41812:41812
+  /opt/splunkforwarder/etc
+  /opt/splunkforwarder/var
+
+  Required for both emptyDir and PVCs —
+  kubelet creates them as root:root on EKS.
+  fsGroup alone is not applied reliably
+  before init containers run.
+end note
+FO --> K : exit 0\nvolumes now owned by splunk (41812)
+deactivate FO
+
+K -> SE : start init container 2\netc/ now writable by uid=41812
+activate SE
+note right of SE
+  if [ ! -f .../etc/auth/splunk.secret ]
+    cp -a /opt/splunkforwarder-etc/. \
+          /opt/splunkforwarder/etc/
+  fi
+
+  Idempotent — skipped when splunk.secret
+  already exists (durable PVC or restart).
+end note
+SE --> K : exit 0\netc/ skeleton seeded
+deactivate SE
+
+K -> UF : start main container\nboth volumes ready
+activate UF
+UF -> UF : startupProbe fires every 15s\n(up to 40 x 15s = 600s max)
+note right of UF
+  startupProbe blocks liveness and
+  readiness until splunkd is up.
+  Handles slow Ansible init (~75s)
+  + Splunk startup gracefully.
+end note
+UF -> UF : Ansible reads SPLUNK_DEFAULTS_URL\n(/mnt/splunk-secrets/default.yml\nor splunkConfig.defaultsUrl)
+UF -> UF : splunk add forward-server\n<host>:<port> -auth admin:<password>
+UF -> UF : outputs.conf written
+UF -> UF : splunkd starts
+UF -> UF : startupProbe succeeds\nreadinessProbe + livenessProbe activate
+@enduml
