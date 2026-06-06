@@ -1,0 +1,50 @@
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+package ufingest
+
+import (
+	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/splunk/splunk-operator/test/testenv"
+)
+
+var (
+	testenvInstance *testenv.TestEnv
+	testSuiteName   = "ufingest-" + testenv.RandomDNSName(3)
+)
+
+// TestUFIngest is the main entry point for the UF ingest integration suite.
+func TestUFIngest(t *testing.T) {
+	RegisterFailHandler(Fail)
+
+	sc, _ := GinkgoConfiguration()
+	sc.Timeout = testenv.ShortSuiteTimeout
+
+	RunSpecs(t, "Running "+testSuiteName, sc)
+}
+
+var _ = BeforeSuite(func() {
+	var err error
+	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
+	Expect(err).To(Succeed(), "Failed to initialize test environment")
+})
+
+var _ = AfterSuite(func() {
+	if testenvInstance != nil {
+		Expect(testenvInstance.Teardown()).To(Succeed(), "Failed to teardown test environment")
+	}
+})

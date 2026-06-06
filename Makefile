@@ -158,17 +158,33 @@ docs-preview: ## Preview documentation locally with Jekyll (requires Ruby and bu
 ##@ Helm
 
 HELM_OPERATOR_CHART = helm-chart/splunk-operator
+HELM_UF_CHART = helm-chart/splunk-universalforwarder
+HELM_ENTERPRISE_CHART = helm-chart/splunk-enterprise
 
 .PHONY: helm-lint
 helm-lint: ## Lint Helm charts
 	helm lint $(HELM_OPERATOR_CHART)
+	helm lint $(HELM_UF_CHART)
+	helm lint $(HELM_ENTERPRISE_CHART)
 
 .PHONY: helm-test
 helm-test: setup/helm-unittest ## Run Helm chart unit tests
 	helm unittest $(HELM_OPERATOR_CHART)
+	helm unittest $(HELM_UF_CHART)
 
 .PHONY: helm-check
 helm-check: helm-lint helm-test ## Run Helm lint and unit tests
+
+.PHONY: helm-lint-uf
+helm-lint-uf: ## Lint the UF Helm chart
+	helm lint $(HELM_UF_CHART)
+
+.PHONY: helm-test-uf
+helm-test-uf: setup/helm-unittest ## Run UF Helm chart unit tests
+	helm unittest $(HELM_UF_CHART)
+
+.PHONY: helm-check-uf
+helm-check-uf: helm-lint-uf helm-test-uf ## Run UF Helm lint and unit tests
 
 ##@ Build
 
@@ -516,6 +532,9 @@ helm-package:
 	@rm -f helm-chart/splunk-enterprise/charts/splunk-operator-*.tgz
 	@helm package helm-chart/splunk-operator --destination .
 	@mv splunk-operator-*.tgz helm-chart/splunk-enterprise/charts/
+	@rm -f helm-chart/splunk-enterprise/charts/splunk-universalforwarder-*.tgz
+	@helm package helm-chart/splunk-universalforwarder --destination .
+	@mv splunk-universalforwarder-*.tgz helm-chart/splunk-enterprise/charts/
 
 .PHONY: helm-kuttl-test
 helm-kuttl-test:

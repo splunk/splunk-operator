@@ -1,0 +1,28 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Wait for Ansible to write the [tcpout] section — file appears early from "Disable indexing"
+  # task, but forward target isn't written until "splunk add forward-server" completes (~2 min).
+  - command: bash -c "for i in $(seq 1 30); do sleep 15; if kubectl exec -n $NAMESPACE $(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=splunk-universalforwarder -o jsonpath='{.items[0].metadata.name}') -- grep -q tcpout /opt/splunkforwarder/etc/system/local/outputs.conf >/dev/null 2>&1; then echo outputs-conf-tcpout-ready; break; fi; done"
+    namespaced: true
+
+  # Assert outputs.conf has correct forward target (print file on failure for debug)
+  - command: bash -c "kubectl exec -n $NAMESPACE $(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=splunk-universalforwarder -o jsonpath='{.items[0].metadata.name}') -- cat /opt/splunkforwarder/etc/system/local/outputs.conf; kubectl exec -n $NAMESPACE $(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=splunk-universalforwarder -o jsonpath='{.items[0].metadata.name}') -- grep -q splunk-stdln-standalone-service /opt/splunkforwarder/etc/system/local/outputs.conf && echo PASS-outputs-conf-has-correct-forward-target || (echo FAIL-outputs-conf-missing-forward-target; exit 1)"
+    namespaced: true
+
+  # Wait for splunkd to establish forwarding connection (up to 6 min)
+  - command: bash -c "for i in $(seq 1 24); do sleep 15; if kubectl exec -n $NAMESPACE $(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=splunk-universalforwarder -o jsonpath='{.items[0].metadata.name}') -- grep -q AutoLoadBalancedConnectionStrategy /opt/splunkforwarder/var/log/splunk/splunkd.log >/dev/null 2>&1; then echo forwarding-connection-established; break; fi; done"
+    namespaced: true
+
+  # Assert active forwarding connection in splunkd.log
+  - command: bash -c "kubectl exec -n $NAMESPACE $(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=splunk-universalforwarder -o jsonpath='{.items[0].metadata.name}') -- grep -q AutoLoadBalancedConnectionStrategy /opt/splunkforwarder/var/log/splunk/splunkd.log && echo PASS-active-forwarding-connection-confirmed || (echo FAIL-no-forwarding-connection-found; exit 1)"
+    namespaced: true
+
+  # Assert NO PVCs created — stateless emptyDir mode
+  - command: bash -c "[ $(kubectl get pvc -n $NAMESPACE -l app.kubernetes.io/name=splunk-universalforwarder --no-headers 2>/dev/null | wc -l) -eq 0 ] && echo PASS-no-PVCs-created-stateless-mode || (echo FAIL-unexpected-PVCs-found; exit 1)"
+    namespaced: true
+
+  # Assert storage is emptyDir — verify no UF-labeled PVCs (already checked above) and
+  # that etc/var share the same filesystem by checking stat device number matches.
+  - command: bash -c "ETC=$(kubectl exec -n $NAMESPACE $(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=splunk-universalforwarder -o jsonpath='{.items[0].metadata.name}') -- stat -c %d /opt/splunkforwarder/etc); VAR=$(kubectl exec -n $NAMESPACE $(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=splunk-universalforwarder -o jsonpath='{.items[0].metadata.name}') -- stat -c %d /opt/splunkforwarder/var); [ \"$ETC\" = \"$VAR\" ] && echo PASS-emptyDir-confirmed-same-device || (echo FAIL-expected-same-device-etc=$ETC-var=$VAR; exit 1)"
+    namespaced: true

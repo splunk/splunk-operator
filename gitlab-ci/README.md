@@ -73,7 +73,7 @@ The operational check is simple:
 
 The merge request lane is the normal branch-validation path.
 It runs on `merge_request_event`, not on plain feature-branch pushes.
-The lane checks the MR description template, runs repository verification, runs unit and `kubectl-splunk` tests, builds the staged operator image, scans that staged image with the prodsec `.container-scan` template, and runs the smoke fanout on disposable EKS clusters.
+The lane checks the MR description template, runs repository verification, runs unit, `kubectl-splunk`, and `helm-chart-tests` (lint and helm-unittest for all three charts), builds the staged operator image, scans that staged image with the prodsec `.container-scan` template, and runs the smoke fanout on disposable EKS clusters.
 
 In practice this means:
 
@@ -92,6 +92,7 @@ Automation on `develop` does this:
 
 - runs `format-and-vet`
 - runs `unit-tests` and `kubectl-splunk-tests`
+- runs `helm-chart-tests` (lint and helm-unittest across all three charts: splunk-operator, splunk-enterprise, splunk-universalforwarder)
 - runs advisory `oss-scan`
 - builds the staged operator image
 - scans the staged image
@@ -110,7 +111,7 @@ What the nightly automation does:
 
 - re-validates the repo baseline on the current `develop` tip
 - reuses the staged image contract instead of rebuilding per suite
-- runs the nightly integration suites in parallel
+- runs the nightly integration suites in parallel, including `nightly-eks-integration-ufingest-validation` which deploys a `splunk-universalforwarder` Helm DaemonSet, forwards data to a Standalone CR, and asserts the standalone can index and search the forwarded events
 - runs Azure validation and the GCP validation suite set against the staged nightly image
 - writes per-suite `ci-output/` evidence for debugging and triage
 
@@ -350,12 +351,13 @@ The pipeline is designed to collect operator-facing evidence by default instead 
 
 - `unit-tests` publishes `unit_test.xml`, `coverage.out`, and `coverage-summary.txt`
 - `kubectl-splunk-tests` publishes Cobertura coverage plus a text coverage summary
+- `helm-chart-tests` publishes `helm-unittest-operator-junit.xml` and `helm-unittest-uf-junit.xml` for the splunk-operator and splunk-universalforwarder charts respectively; GitLab surfaces both under the pipeline **Tests** tab
 - `oss-scan` publishes the shared scanner output in the job log
 
 ### Build and image scan jobs
 
 - `build-stage-image` writes image-reference and digest files such as `ci-output/build-test-push-workflow-ecr-image-ref.txt`
-- `build-stage-charts` packages prerelease `splunk-operator` and `splunk-enterprise` charts, pins the operator chart to the staged internal operator image from the same pipeline, publishes them to the internal Artifactory Helm test repository, and writes the published chart URLs plus summary under `ci-output/build-stage-charts-*`
+- `build-stage-charts` packages prerelease `splunk-operator`, `splunk-enterprise`, and `splunk-universalforwarder` charts, pins the operator chart to the staged internal operator image from the same pipeline, publishes them to the internal Artifactory Helm test repository, and writes the published chart URLs plus summary under `ci-output/build-stage-charts-*`
 - release-validation builds also write distroless reference and digest files
 - most runtime and publish jobs write `ci-output/*-runtime-context.txt` so the exact inputs are recorded alongside the result
 
@@ -396,6 +398,8 @@ The pipeline is designed to collect operator-facing evidence by default instead 
 
 - `merge-request-description-check`: the MR template is incomplete or the wrong template was used
 - `format-and-vet`, `unit-tests`, `kubectl-splunk-tests`: repository code, formatting, unit tests, or local toolchain assumptions are broken
+- `helm-chart-tests`: a Helm lint error or failing helm-unittest case in the splunk-operator, splunk-enterprise, or splunk-universalforwarder chart; run `make helm-lint` and `make helm-check-uf` locally to reproduce
+- `nightly-eks-integration-ufingest-validation`: the UF DaemonSet did not become ready (check DaemonSet events and image pull), or no forwarded events reached the standalone (check TCP 9997 connectivity between UF and standalone pods, and the UF outputs.conf rendered by the Helm chart)
 - `build-stage-image`: image build, registry auth, or staging-repository configuration is broken
 - `scan-stage-image-container` or `scan-released-operator-image-container`: the prodsec scanner found an issue, could not read `ci-output/build-test-push-workflow-artifactory-image-ref.txt`, or could not scan the exported `CONTAINER_IMAGE`
 - smoke, nightly, qualification, or release runtime jobs: the product behavior, cluster setup, or runtime environment is broken

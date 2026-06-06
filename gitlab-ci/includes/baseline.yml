@@ -74,6 +74,7 @@ helm-chart-tests:
     - .rules-default-validation-lane
   variables:
     HELM_OPERATOR_CHART: helm-chart/splunk-operator
+    HELM_UF_CHART: helm-chart/splunk-universalforwarder
     HELM_DATA_HOME: ${CI_PROJECT_DIR}/.helm-data
     HELM_UNITTEST_VERSION: "v1.0.3"
   cache:
@@ -83,13 +84,17 @@ helm-chart-tests:
   script:
     - make setup/helm-unittest
     - make helm-lint
-    - helm unittest --output-file helm-unittest-junit.xml --output-type JUnit ${HELM_OPERATOR_CHART}
+    - helm unittest --output-file helm-unittest-operator-junit.xml --output-type JUnit ${HELM_OPERATOR_CHART}
+    - helm unittest --output-file helm-unittest-uf-junit.xml --output-type JUnit ${HELM_UF_CHART}
   artifacts:
     when: always
     paths:
-      - helm-unittest-junit.xml
+      - helm-unittest-operator-junit.xml
+      - helm-unittest-uf-junit.xml
     reports:
-      junit: helm-unittest-junit.xml
+      junit:
+        - helm-unittest-operator-junit.xml
+        - helm-unittest-uf-junit.xml
 
 gosec-scan:
   extends:

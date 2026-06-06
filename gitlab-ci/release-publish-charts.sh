@@ -31,16 +31,19 @@ chart_repo="https://repo.splunkdev.net/artifactory/helm/sok/splunk-operator"
 candidate_root="$(first_nonempty "${RELEASE_CANDIDATE_ARTIFACT_ROOT:-}" "ci-output/fetch-release-candidate-output/release-candidate")"
 operator_chart_archive="${candidate_root}/$(first_nonempty "${RELEASE_OPERATOR_CHART_ARCHIVE:-}" "")"
 enterprise_chart_archive="${candidate_root}/$(first_nonempty "${RELEASE_ENTERPRISE_CHART_ARCHIVE:-}" "")"
+uf_chart_archive="${candidate_root}/$(first_nonempty "${RELEASE_UF_CHART_ARCHIVE:-}" "")"
 require_file "${operator_chart_archive}" "validated splunk-operator chart archive"
 require_file "${enterprise_chart_archive}" "validated splunk-enterprise chart archive"
+require_file "${uf_chart_archive}" "validated splunk-universalforwarder chart archive"
 
 : > "${inventory_file}"
 rm -f "${publish_dir}/"*.tgz
 cp "${operator_chart_archive}" "${publish_dir}/"
 cp "${enterprise_chart_archive}" "${publish_dir}/"
+cp "${uf_chart_archive}" "${publish_dir}/"
 require_commands artifact-ci
 artifact-ci publish helm -d "${publish_dir}" sok/splunk-operator
-for chart_archive in "${operator_chart_archive}" "${enterprise_chart_archive}"; do
+for chart_archive in "${operator_chart_archive}" "${enterprise_chart_archive}" "${uf_chart_archive}"; do
   published_chart_url="${chart_repo%/}/$(basename "${chart_archive}")"
   printf '%s\n' "${published_chart_url}" >> "${inventory_file}"
 done

@@ -607,7 +607,7 @@ resolve_helm_test_profile() {
       # `qualification` is a legacy alias; qualification and release both run
       # the full Helm suite now, so normalize the effective profile to `full`.
       RESOLVED_HELM_TEST_PROFILE="full"
-      RESOLVED_HELM_TEST_DIRS="$(first_nonempty "${PIPELINE_HELM_TEST_DIRS:-}" "${JOB_HELM_TEST_DIRS:-}" "./kuttl/tests/helm")"
+      RESOLVED_HELM_TEST_DIRS="$(first_nonempty "${PIPELINE_HELM_TEST_DIRS:-}" "${JOB_HELM_TEST_DIRS:-}" "./kuttl/tests/helm,./kuttl/tests/uf")"
       RESOLVED_HELM_TEST_TIMEOUT="$(first_nonempty "${PIPELINE_HELM_TEST_TIMEOUT:-}" "${JOB_HELM_TEST_TIMEOUT:-}" "7000")"
       RESOLVED_HELM_TEST_PARALLEL="$(first_nonempty "${PIPELINE_HELM_TEST_PARALLEL:-}" "${JOB_HELM_TEST_PARALLEL:-}" "1")"
       ;;

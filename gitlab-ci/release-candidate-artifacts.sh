@@ -133,12 +133,16 @@ make helm-package
 operator_chart_source="$(find "${CI_PROJECT_DIR}/helm-chart/splunk-enterprise/charts" -maxdepth 1 -type f -name 'splunk-operator-*.tgz' | head -n 1)"
 require_file "${operator_chart_source}" "packaged splunk-operator chart"
 cp "${operator_chart_source}" "${candidate_dir}/"
+uf_chart_source="$(find "${CI_PROJECT_DIR}/helm-chart/splunk-enterprise/charts" -maxdepth 1 -type f -name 'splunk-universalforwarder-*.tgz' | head -n 1)"
+require_file "${uf_chart_source}" "packaged splunk-universalforwarder chart"
+cp "${uf_chart_source}" "${candidate_dir}/"
 helm package "${CI_PROJECT_DIR}/helm-chart/splunk-enterprise" --destination "${candidate_dir}"
 operator_chart_archive="$(basename "${operator_chart_source}")"
+uf_chart_archive="$(basename "${uf_chart_source}")"
 enterprise_chart_path="$(find "${candidate_dir}" -maxdepth 1 -type f -name 'splunk-enterprise-*.tgz' | head -n 1)"
 enterprise_chart_archive="$(basename "${enterprise_chart_path}")"
 require_nonempty "${enterprise_chart_archive}" "packaged splunk-enterprise chart"
-printf '%s\n%s\n' "${operator_chart_archive}" "${enterprise_chart_archive}" > "${chart_inventory_file}"
+printf '%s\n%s\n%s\n' "${operator_chart_archive}" "${enterprise_chart_archive}" "${uf_chart_archive}" > "${chart_inventory_file}"
 
 bundle_target="$(first_nonempty "${PIPELINE_BUNDLE_REGISTRY:-}" "")"
 require_nonempty "${bundle_target}" "PIPELINE_BUNDLE_REGISTRY"
@@ -193,6 +197,7 @@ RELEASE_ARTIFACT_DIRECTORY=${release_dir_name}
 RELEASE_ARTIFACT_ARCHIVE=${release_archive_name}
 RELEASE_OPERATOR_CHART_ARCHIVE=${operator_chart_archive}
 RELEASE_ENTERPRISE_CHART_ARCHIVE=${enterprise_chart_archive}
+RELEASE_UF_CHART_ARCHIVE=${uf_chart_archive}
 EOF
 
 cat > "${summary_file}" <<EOF
@@ -209,5 +214,6 @@ Prepared the release-candidate artifact set.
 - release_artifact_archive: ${release_archive_name}
 - operator_chart_archive: ${operator_chart_archive}
 - enterprise_chart_archive: ${enterprise_chart_archive}
+- uf_chart_archive: ${uf_chart_archive}
 - contract_file: ${contract_file}
 EOF

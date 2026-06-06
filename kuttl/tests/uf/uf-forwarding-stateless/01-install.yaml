@@ -1,0 +1,9 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Install splunk-operator + standalone indexer via splunk-enterprise chart.
+  # Image overrides are only passed when the env vars are set (CI injects ECR images;
+  # local runs fall through to chart defaults). Uses $NAMESPACE explicitly because
+  # bash -c wrapping prevents kuttl from appending --namespace automatically.
+  - command: bash -c "OP=''; ENT=''; [ -n \"$KUTTL_SPLUNK_OPERATOR_IMAGE\" ] && OP=\"--set splunk-operator.splunkOperator.image.repository=$KUTTL_SPLUNK_OPERATOR_IMAGE\"; [ -n \"$KUTTL_SPLUNK_ENTERPRISE_IMAGE\" ] && ENT=\"--set splunk-operator.image.repository=$KUTTL_SPLUNK_ENTERPRISE_IMAGE\"; helm install splunk-uf-test ../../../../helm-chart/splunk-enterprise -f uf_config.yaml --namespace $NAMESPACE --set splunk-operator.splunkOperator.clusterWideAccess=false --set splunk-operator.splunkOperator.persistentVolumeClaim.storageClassName=gp2 --set splunk-operator.splunkOperator.splunkGeneralTerms=--accept-sgt-current-at-splunk-com $OP $ENT"
+    namespaced: true

@@ -38,5 +38,9 @@ maintainers:
 dependencies:
 - name: splunk-operator
   version: "3.1.0"
-  repository: "file://splunk-operator/helm-chart/splunk-operator"
+  repository: "file://../splunk-operator"
   condition: splunk-operator.enabled
+- name: splunk-universalforwarder
+  version: "3.1.0"
+  repository: "file://../splunk-universalforwarder"
+  condition: splunk-universalforwarder.enabled
