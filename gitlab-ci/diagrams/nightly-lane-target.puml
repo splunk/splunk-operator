@@ -18,7 +18,7 @@ skinparam Note {
 }
 
 rectangle "Schedule on develop" as trigger
-rectangle "Baseline\nverify and test jobs" as baseline
+rectangle "Baseline\nverify, test, and helm-chart-tests" as baseline
 rectangle "Build\nbuild-stage-image" as build
 rectangle "Image scan\nscan-stage-image-container" as scan
 rectangle "Nightly integration fanout\nall full suites in parallel" as nightly #eefbf1

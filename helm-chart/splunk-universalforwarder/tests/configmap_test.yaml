@@ -1,0 +1,41 @@
+suite: configmap
+templates:
+  - templates/configmap.yaml
+tests:
+  # ConfigMap is optional — only rendered when conf.outputs or conf.inputs is set
+  - it: should not render ConfigMap when no conf overrides are set
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render ConfigMap when conf.outputs is set
+    set:
+      conf.outputs: "[tcpout]\ndefaultGroup = default-autolb-group\n"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - isNotEmpty:
+          path: data["outputs.conf"]
+
+  - it: should render ConfigMap when conf.inputs is set
+    set:
+      conf.inputs: "[monitor:///var/log/syslog]\nindex = main\n"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isNotEmpty:
+          path: data["inputs.conf"]
+
+  - it: should render both outputs.conf and inputs.conf when both set
+    set:
+      conf.outputs: "[tcpout]\ndefaultGroup = default-autolb-group\n"
+      conf.inputs: "[monitor:///var/log/syslog]\nindex = main\n"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isNotEmpty:
+          path: data["outputs.conf"]
+      - isNotEmpty:
+          path: data["inputs.conf"]

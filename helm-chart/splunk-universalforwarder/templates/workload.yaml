@@ -1,0 +1,219 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "splunk-universalforwarder.fullname" . }}-deploy
+  namespace: {{ include "splunk-universalforwarder.namespace" . }}
+  labels:
+    {{- include "splunk-universalforwarder.labels" . | nindent 4 }}
+  {{- with .Values.deploymentAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "splunk-universalforwarder.selectorLabels" . | nindent 6 }}
+  strategy:
+    {{- toYaml .Values.updateStrategy | nindent 4 }}
+  minReadySeconds: {{ .Values.minReadySeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "splunk-universalforwarder.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.image.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "splunk-universalforwarder.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        # fix-ownership runs as root to chown both volumes to uid=41812 before seed-etc writes.
+        # Required for emptyDir (kubelet creates dirs as root:root) and PVCs (fresh EBS volumes
+        # are root-owned at bind time). fsGroup alone is not sufficient on EKS nodes.
+        - name: fix-ownership
+          image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
+          command:
+            - sh
+            - -c
+            - chown -R 41812:41812 /opt/splunkforwarder/etc /opt/splunkforwarder/var
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+          volumeMounts:
+            - name: etc-vol
+              mountPath: /opt/splunkforwarder/etc
+            - name: var-vol
+              mountPath: /opt/splunkforwarder/var
+        # Copies the image's /opt/splunkforwarder-etc skeleton into etc/ on first boot.
+        # Idempotent: skipped when splunk.secret already exists.
+        - name: seed-etc
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command:
+            - sh
+            - -c
+            - |
+              if [ ! -f /opt/splunkforwarder/etc/auth/splunk.secret ]; then
+                cp -a /opt/splunkforwarder-etc/. /opt/splunkforwarder/etc/
+              fi
+          securityContext:
+            runAsUser: 41812
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: etc-vol
+              mountPath: /opt/splunkforwarder/etc
+      containers:
+        - name: splunk-universalforwarder
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.service.enabled }}
+          ports:
+            {{- range .Values.service.ports }}
+            - name: {{ .name }}
+              containerPort: {{ .port }}
+              protocol: {{ .protocol }}
+            {{- end }}
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          startupProbe:
+            exec:
+              command:
+                - /opt/splunkforwarder/bin/splunk
+                - status
+            initialDelaySeconds: {{ .Values.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
+          readinessProbe:
+            exec:
+              command:
+                - /opt/splunkforwarder/bin/splunk
+                - status
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          livenessProbe:
+            exec:
+              command:
+                - /opt/splunkforwarder/bin/splunk
+                - status
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          env:
+            - name: SPLUNK_START_ARGS
+              value: "--accept-license"
+            - name: SPLUNK_ROLE
+              value: "splunk_universal_forwarder"
+            - name: SPLUNK_HOME_OWNERSHIP_ENFORCEMENT
+              value: "false"
+            # Declarative password setup mirrors Standalone operator pattern.
+            # SPLUNK_DECLARATIVE_ADMIN_PASSWORD=true + a non-default password avoids
+            # the "remote login disabled" lockout that triggers when password="changeme".
+            # Ansible reads splunk.password from default.yml (same Secret value) for the
+            # 'splunk add forward-server -auth admin:<password>' CLI call.
+            - name: SPLUNK_DECLARATIVE_ADMIN_PASSWORD
+              value: "true"
+            # SPLUNK_PASSWORD must be set as an env var so environ.py uses it;
+            # createdefaults.py otherwise generates a random value that overrides default.yml.
+            - name: SPLUNK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if .Values.splunkConfig.existingSecret }}{{ .Values.splunkConfig.existingSecret }}{{ else }}{{ include "splunk-universalforwarder.fullname" . }}-secret{{ end }}
+                  key: {{ .Values.splunkConfig.passwordKey }}
+            - name: SPLUNK_DEFAULTS_URL
+              value: {{ default "/mnt/splunk-secrets/default.yml" .Values.splunkConfig.defaultsUrl | quote }}
+            {{- if .Values.splunkConfig.deploymentServer }}
+            - name: SPLUNK_DEPLOYMENT_SERVER
+              value: {{ .Values.splunkConfig.deploymentServer | quote }}
+            {{- end }}
+            {{- if .Values.splunkConfig.deploymentClientName }}
+            - name: SPLUNK_DEPLOYMENT_CLIENT_NAME
+              value: {{ .Values.splunkConfig.deploymentClientName | quote }}
+            {{- end }}
+            {{- if .Values.splunkConfig.add }}
+            - name: SPLUNK_ADD
+              value: {{ .Values.splunkConfig.add | join "," | quote }}
+            {{- end }}
+            {{- if .Values.splunkConfig.ssl.secretName }}
+            - name: SPLUNK_S2S_CERT
+              value: {{ printf "%s/%s" .Values.splunkConfig.ssl.mountPath .Values.splunkConfig.ssl.certKey | quote }}
+            - name: SPLUNK_S2S_CA
+              value: {{ printf "%s/%s" .Values.splunkConfig.ssl.mountPath .Values.splunkConfig.ssl.caKey | quote }}
+            {{- end }}
+            {{- if .Values.debug.enabled }}
+            - name: SPLUNK_ANSIBLE_DEBUG
+              value: "true"
+            {{- end }}
+          volumeMounts:
+            - name: etc-vol
+              mountPath: /opt/splunkforwarder/etc
+            - name: var-vol
+              mountPath: /opt/splunkforwarder/var
+            # Secret at /mnt/splunk-secrets — mirrors Standalone operator pattern
+            - name: mnt-splunk-secrets
+              mountPath: /mnt/splunk-secrets
+              readOnly: true
+            {{- if or .Values.conf.outputs .Values.conf.inputs }}
+            - name: splunk-conf
+              mountPath: /opt/splunkforwarder/etc/system/local
+              readOnly: true
+            {{- end }}
+            {{- if .Values.splunkConfig.ssl.secretName }}
+            - name: splunk-ssl-certs
+              mountPath: {{ .Values.splunkConfig.ssl.mountPath }}
+              readOnly: true
+            {{- end }}
+      volumes:
+        {{- if .Values.storage.emptyDir }}
+        - name: etc-vol
+          emptyDir: {}
+        - name: var-vol
+          emptyDir: {}
+        {{- else }}
+        - name: etc-vol
+          persistentVolumeClaim:
+            claimName: {{ include "splunk-universalforwarder.fullname" . }}-etc
+        - name: var-vol
+          persistentVolumeClaim:
+            claimName: {{ include "splunk-universalforwarder.fullname" . }}-var
+        {{- end }}
+        - name: mnt-splunk-secrets
+          secret:
+            secretName: {{ if .Values.splunkConfig.existingSecret }}{{ .Values.splunkConfig.existingSecret }}{{ else }}{{ include "splunk-universalforwarder.fullname" . }}-secret{{ end }}
+        {{- if or .Values.conf.outputs .Values.conf.inputs }}
+        - name: splunk-conf
+          configMap:
+            name: {{ include "splunk-universalforwarder.fullname" . }}-conf
+        {{- end }}
+        {{- if .Values.splunkConfig.ssl.secretName }}
+        - name: splunk-ssl-certs
+          secret:
+            secretName: {{ .Values.splunkConfig.ssl.secretName }}
+        {{- end }}

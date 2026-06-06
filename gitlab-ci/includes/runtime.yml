@@ -759,6 +759,12 @@ nightly-eks-integration-indingsep-validation:
     WORKFLOW_SLUG: nightly-eks-integration-indingsep-validation
     JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"
 
+nightly-eks-integration-ufingest-validation:
+  extends: .runtime-nightly-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: nightly-eks-integration-ufingest-validation
+    JOB_INT_TEST_LABELS: "feature:uf-ingest"
+
 nightly-azure-validation:
   extends: .runtime-nightly-azure-validation-job
   variables:

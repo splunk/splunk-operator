@@ -1,0 +1,16 @@
+---
+# UF Deployment running
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: splunk-uf-splunk-universalforwarder
+status:
+  readyReplicas: 1
+  availableReplicas: 1
+
+---
+# Secret created with password and default.yml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: splunk-uf-splunk-universalforwarder

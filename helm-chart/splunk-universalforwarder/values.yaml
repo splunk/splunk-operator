@@ -1,0 +1,282 @@
+# Splunk Universal Forwarder image configuration
+image:
+  repository: docker.io/splunk/universalforwarder
+  tag: "10.4.0"
+  pullPolicy: IfNotPresent
+
+  # Set image pull secrets to pull image from a private registry
+  imagePullSecrets: []
+
+# CHANGE 8: Pinned busybox image for fix-ownership init container
+initImage:
+  repository: docker.io/library/busybox
+  tag: "1.36.1"
+  pullPolicy: IfNotPresent
+
+# Splunk configuration for the Universal Forwarder
+splunkConfig:
+
+  # Plaintext password used when chart manages the Secret (see existingSecret below)
+  password: "changeme"
+
+  # Set to name of existing Secret to skip chart-managed Secret creation
+  existingSecret: ""
+
+  # Key within the Secret that holds the password value
+  passwordKey: "password"
+
+  # FWD-01: Comma-separated list of indexer hosts with port (host:9997)
+  # Maps to SPLUNK_INDEXER_URL env var (not SPLUNK_FORWARD_SERVER which does not exist in docker-splunk)
+  # Required unless deploymentServer is set — chart fails at render time if both are empty (FWD-02)
+  forwardServer: ""
+
+  # List of indexer endpoints. Takes precedence over forwardServer when non-empty.
+  # e.g. ["idx1.example.com:9997", "idx2.example.com:9997"]
+  forwardServers: []
+
+  # FWD-03: Deployment Server address (host:8089)
+  # Maps to SPLUNK_DEPLOYMENT_SERVER env var
+  # Required unless forwardServer is set (FWD-02)
+  deploymentServer: ""
+
+  # FWD-04: Optional client name reported to Deployment Server
+  # Maps to SPLUNK_DEPLOYMENT_CLIENT_NAME env var
+  deploymentClientName: ""
+
+  # FWD-05: List of items to add to monitoring via 'splunk add'
+  # e.g. ["monitor /var/log/syslog", "udp 514"]
+  # Maps to SPLUNK_ADD env var (comma-joined list); environ.py splits on ","
+  add: []
+
+  # CONF-02: URL of a remote default.yml for Ansible configuration
+  # Maps to SPLUNK_DEFAULTS_URL env var
+  defaultsUrl: ""
+
+  # HARD-02: S2S SSL certificate configuration for encrypted forwarding.
+  # When ssl.secretName is non-empty, the named Secret is mounted as a volume and
+  # SPLUNK_S2S_CERT and SPLUNK_S2S_CA env vars are auto-wired to <mountPath>/<certKey>
+  # and <mountPath>/<caKey> respectively (D-07).
+  ssl:
+    # Name of a Kubernetes Secret containing the S2S TLS cert and CA.
+    # When non-empty: Secret is mounted + SPLUNK_S2S_CERT/SPLUNK_S2S_CA are set automatically.
+    # Applies to all deployments.
+    secretName: ""
+    # Key within the Secret for the TLS certificate file
+    certKey: tls.crt
+    # Key within the Secret for the CA certificate file
+    caKey: ca.crt
+    # Mount path inside the container for the SSL Secret directory
+    mountPath: /opt/splunkforwarder/etc/auth/s2s
+
+# CONF-01: Optional raw conf file content for outputs.conf and/or inputs.conf
+# Content is mounted at /opt/splunkforwarder/etc/system/local/ via ConfigMap
+# Note: mounting this directory shadows Ansible-written files at that path (acceptable — chart-supplied conf is intentional)
+conf:
+  outputs: ""
+  inputs: ""
+
+# Number of Deployment replicas
+replicaCount: 1
+
+# Optional Kubernetes Service for exposing input ports
+service:
+  enabled: false
+  type: ClusterIP
+  annotations: {}
+  ports:
+    - name: syslog-udp
+      port: 514
+      protocol: UDP
+    - name: syslog-tcp
+      port: 601
+      protocol: TCP
+    - name: splunktcp
+      port: 9997
+      protocol: TCP
+    - name: hec
+      port: 8088
+      protocol: TCP
+
+# Ingress configuration for HEC and other HTTP endpoints
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: ""
+      paths:
+        - path: /services/collector
+          pathType: Prefix
+  tls: []
+
+# PodDisruptionBudget configuration
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# NetworkPolicy configuration
+networkPolicy:
+  enabled: false
+  ingress: []
+  egress: []
+
+# Storage configuration for SPLUNK_HOME directories.
+storage:
+  # When true (default), use emptyDir volumes — fully stateless; pod restart initialises
+  # Splunk from scratch. Suitable for pure forwarding tier with no local file monitoring.
+  # Set to false to use PersistentVolumeClaims, which preserve fishbucket checkpoints and
+  # Splunk config across restarts. Required when splunkConfig.add includes 'monitor' inputs.
+  emptyDir: true
+  # Storage class for PVCs (only used when emptyDir: false).
+  storageClassName: ""
+  # Size of the PVC for /opt/splunkforwarder/etc (only used when emptyDir: false)
+  etcSize: 1Gi
+  # Size of the PVC for /opt/splunkforwarder/var (only used when emptyDir: false)
+  varSize: 5Gi
+
+# HARD-01: Fishbucket checkpoint persistence (Deployment mode).
+# With storage.varSize PVC enabled by default, fishbucket is durable across pod restarts.
+# This legacy hostPath field is kept for backward compat but is unused in Deployment mode.
+persistence:
+  enabled: false
+  # Host path on the node where fishbucket checkpoint data is stored.
+  # Only used when persistence.enabled is true.
+  hostPath: /var/lib/splunk-uf-fishbucket
+  # Container-side mount path matching the Splunk UF default fishbucket location.
+  containerPath: /opt/splunkforwarder/var/lib/splunk
+
+# Set resource requests and limits for the Universal Forwarder container
+# reference: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+resources:
+  limits:
+    cpu: 200m
+    memory: 500Mi
+    # HARD-03: prevent UF log volume from causing node DiskPressure
+    ephemeral-storage: "1Gi"
+  requests:
+    cpu: 100m
+    memory: 200Mi
+
+# HARD-04: Startup probe — guards against slow Ansible init (~75s + Splunk start).
+# Uses 'splunk status' exec probe. failureThreshold * periodSeconds = max startup time (600s).
+startupProbe:
+  initialDelaySeconds: 0
+  periodSeconds: 15
+  failureThreshold: 40
+  timeoutSeconds: 10
+
+# Readiness probe — gates traffic until Splunk is fully up.
+readinessProbe:
+  initialDelaySeconds: 0
+  periodSeconds: 15
+  failureThreshold: 5
+  timeoutSeconds: 10
+
+# HARD-04: Liveness probe configuration.
+# Uses 'splunk status' exec probe. Only fires after startupProbe succeeds.
+# The probe command is hardcoded in workload.yaml; only timing values are user-tunable.
+livenessProbe:
+  # Seconds after container start before the first liveness probe fires.
+  initialDelaySeconds: 0
+  # Frequency of probe checks in seconds
+  periodSeconds: 30
+  # Number of consecutive failures before the container is restarted
+  failureThreshold: 3
+  # Seconds to wait for probe command to complete before counting as failed.
+  # Default Kubernetes value is 1s; 10s recommended for 'splunk status' under load.
+  timeoutSeconds: 10
+
+# Set security context for the Universal Forwarder pod
+# Mirrors the splunk-operator standalone pattern: run as splunk user (41812) with fsGroup 41812.
+# fsGroup causes emptyDir/PVC volumes to be group-owned by splunk, eliminating chown.
+# uid 41812 can still read /var/log/containers on EKS (world-readable, 0644).
+podSecurityContext:
+  runAsUser: 41812
+  runAsNonRoot: true
+  fsGroup: 41812
+  fsGroupChangePolicy: Always
+
+# Set security context for the Universal Forwarder container
+# Mirrors the splunk-operator standalone pattern: drop all caps.
+# reference: https://kubernetes.io/docs/concepts/security/pod-security-policy/#privilege-escalation
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 41812
+  capabilities:
+    drop:
+      - ALL
+
+# Annotations to add to each Pod
+podAnnotations: {}
+
+# Annotations to add to the Deployment
+deploymentAnnotations: {}
+
+# Update strategy for the Deployment
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# Minimum number of seconds for which a newly created pod should be ready
+# before it is considered available
+minReadySeconds: 0
+
+# Specify nodes that can schedule the Universal Forwarder pod
+# reference: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+nodeSelector: {}
+
+# Specify Universal Forwarder pod tolerations
+# Tolerations for pod scheduling
+# reference: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+tolerations: []
+
+# Define affinity scheduling rules
+# reference: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.20/#affinity-v1-core
+affinity: {}
+
+# ServiceAccount configuration
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+  # Annotations to add to the service account
+  annotations: {}
+
+# RBAC configuration
+rbac:
+  # Specifies whether RBAC resources should be created
+  create: true
+  # If true, creates ClusterRole and ClusterRoleBinding instead of Role and RoleBinding
+  clusterScoped: false
+
+# Override the namespace for all resources
+namespaceOverride: ""
+
+# Override the chart name
+nameOverride: ""
+
+# Override the full name
+fullnameOverride: ""
+
+# Debug logging support
+debug:
+  # Set true to enable verbose Ansible output inside the container (SPLUNK_ANSIBLE_DEBUG=true).
+  # Useful for troubleshooting startup failures; leave false in production.
+  enabled: false
+
+# Array with extra yaml to deploy with the chart. Evaluated as a template via tpl.
+# WARNING: values are executed as Go templates — do not use this in multi-tenant
+# environments where chart values come from untrusted sources (template injection risk).
+extraManifests: []
+# extraManifests:
+#  - apiVersion: v1
+#    kind: ConfigMap
+#    metadata:
+#      name: "{{ .Release.Name }}-extra"
+#    data:
+#      key: value
