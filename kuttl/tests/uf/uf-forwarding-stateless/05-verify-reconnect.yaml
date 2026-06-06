@@ -1,0 +1,18 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Wait for Ansible to write [tcpout] after restart (file appears early, tcpout written later)
+  - command: bash -c "for i in $(seq 1 30); do sleep 15; if kubectl exec -n $NAMESPACE $(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=splunk-universalforwarder -o jsonpath='{.items[0].metadata.name}') -- grep -q tcpout /opt/splunkforwarder/etc/system/local/outputs.conf >/dev/null 2>&1; then echo outputs-conf-tcpout-ready-after-restart; break; fi; done"
+    namespaced: true
+
+  # outputs.conf rewritten correctly from Secret after restart
+  - command: bash -c "kubectl exec -n $NAMESPACE $(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=splunk-universalforwarder -o jsonpath='{.items[0].metadata.name}') -- grep -q splunk-stdln-standalone-service /opt/splunkforwarder/etc/system/local/outputs.conf && echo PASS-outputs-conf-rewritten-correctly-after-restart || (echo FAIL-outputs-conf-missing-forward-target-after-restart; exit 1)"
+    namespaced: true
+
+  # Wait for forwarding to reconnect (up to 6 min)
+  - command: bash -c "for i in $(seq 1 24); do sleep 15; if kubectl exec -n $NAMESPACE $(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=splunk-universalforwarder -o jsonpath='{.items[0].metadata.name}') -- grep -q AutoLoadBalancedConnectionStrategy /opt/splunkforwarder/var/log/splunk/splunkd.log >/dev/null 2>&1; then echo forwarding-reconnected; break; fi; done"
+    namespaced: true
+
+  # Forwarding reconnected after stateless restart
+  - command: bash -c "kubectl exec -n $NAMESPACE $(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=splunk-universalforwarder -o jsonpath='{.items[0].metadata.name}') -- grep -q AutoLoadBalancedConnectionStrategy /opt/splunkforwarder/var/log/splunk/splunkd.log && echo PASS-forwarding-reconnected-after-stateless-restart || (echo FAIL-no-forwarding-connection-after-restart; exit 1)"
+    namespaced: true

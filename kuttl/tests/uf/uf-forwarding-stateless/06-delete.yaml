@@ -1,0 +1,7 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: helm uninstall splunk-uf
+    namespaced: true
+  - command: helm uninstall splunk-uf-test
+    namespaced: true

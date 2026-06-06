@@ -23,13 +23,16 @@ import (
 	"math/rand"
 	"os/exec"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	wait "k8s.io/apimachinery/pkg/util/wait"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
@@ -2150,4 +2153,66 @@ func ApplySecretUpdateAndVerifyCMUpdating(ctx context.Context, deployment *Deplo
 		return nil, "", nil, err
 	}
 	return mc, resourceVersion, updatedSecretData, nil
+}
+
+// WaitForDaemonSetPodsReady polls until every scheduled pod in the DaemonSet with the given
+// name is ready (numberReady == desiredNumberScheduled and desiredNumberScheduled > 0).
+func WaitForDaemonSetPodsReady(ctx context.Context, deployment *Deployment, namespace, dsName string) error {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, DefaultTimeout, true, func(ctx context.Context) (bool, error) {
+		ds := &appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      dsName,
+				Namespace: namespace,
+			},
+		}
+		if err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKeyFromObject(ds), ds); err != nil {
+			return false, nil
+		}
+		desired := ds.Status.DesiredNumberScheduled
+		ready := ds.Status.NumberReady
+		return desired > 0 && ready == desired, nil
+	})
+}
+
+// CountSearchResults runs a stats search that returns a single "count" field and returns the
+// integer value. Returns (0, nil) when the search produces no results yet (non-fatal).
+func CountSearchResults(ctx context.Context, deployment *Deployment, podName string, searchString string) (int, error) {
+	resp, err := PerformSearchSync(ctx, deployment, podName, searchString)
+	if err != nil {
+		return 0, err
+	}
+	// The export endpoint streams one JSON object per line; we only need the first result line.
+	for _, line := range strings.Split(resp, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var row map[string]interface{}
+		if jsonErr := json.Unmarshal([]byte(line), &row); jsonErr != nil {
+			continue
+		}
+		result, ok := row["result"]
+		if !ok {
+			continue
+		}
+		resultMap, ok := result.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		countVal, ok := resultMap["count"]
+		if !ok {
+			continue
+		}
+		switch v := countVal.(type) {
+		case string:
+			n, convErr := strconv.Atoi(v)
+			if convErr != nil {
+				return 0, convErr
+			}
+			return n, nil
+		case float64:
+			return int(v), nil
+		}
+	}
+	return 0, nil
 }
