@@ -50,6 +50,7 @@ type normalizedCNPGClusterSpec struct {
 	StorageSize             string
 	Resources               corev1.ResourceRequirements
 	InheritedAnnotations    map[string]string
+	ServerAltDNSNames       []string
 	Backup                  *normalizedBackupSpec
 }
 
@@ -113,6 +114,9 @@ const (
 	secretsReady      conditionTypes = "SecretsReady"
 	configMapsReady   conditionTypes = "ConfigMapsReady"
 
+	// condition reasons — cross-component
+	reasonUpstreamNotReady conditionReasons = "UpstreamNotReady"
+
 	// condition reasons — cluster/provisioner
 	reasonClusterClassNotFound conditionReasons = "ClusterClassNotFound"
 	reasonInvalidConfiguration conditionReasons = "InvalidConfiguration"
@@ -169,6 +173,9 @@ const (
 	reasonCNPGProvisioningFailed conditionReasons = "CNPGProvisioningFailed"
 	reasonCNPGPluginError        conditionReasons = "CNPGPluginError"
 	reasonCNPGImageError         conditionReasons = "CNPGImageError"
+
+	// status messages — cross-component
+	msgUpstreamNotReady statusMessage = "Waiting for upstream components"
 
 	// status messages — provisioner health check
 	msgProvisionerHealthy        statusMessage = "Provisioner cluster is healthy"

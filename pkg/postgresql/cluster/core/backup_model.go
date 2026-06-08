@@ -40,120 +40,97 @@ type backupEmitter interface {
 }
 
 type backupModel struct {
-	client           client.Client
-	scheme           *runtime.Scheme
-	events           backupEmitter
-	updateStatus     healthStatusUpdater
-	cluster          *enterprisev4.PostgresCluster
-	mergedConfig     *MergedConfig
-	backupEnabled    bool
-	backupConfigured bool
-
-	health     componentHealth
-	actuateErr error
+	client       client.Client
+	scheme       *runtime.Scheme
+	events       backupEmitter
+	updateStatus healthStatusUpdater
+	cluster      *enterprisev4.PostgresCluster
+	mergedConfig *MergedConfig
+	contracts    *reconcileContracts
 }
 
-func newBackupModel(c client.Client, scheme *runtime.Scheme, events backupEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, mergedConfig *MergedConfig, backupEnabled bool, backupConfigured bool) *backupModel {
+func newBackupModel(c client.Client, scheme *runtime.Scheme, events backupEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, mergedConfig *MergedConfig, contracts *reconcileContracts) *backupModel {
 	return &backupModel{
-		client:           c,
-		scheme:           scheme,
-		events:           events,
-		updateStatus:     updateStatus,
-		cluster:          cluster,
-		mergedConfig:     mergedConfig,
-		backupEnabled:    backupEnabled,
-		backupConfigured: backupConfigured,
+		client:       c,
+		scheme:       scheme,
+		events:       events,
+		updateStatus: updateStatus,
+		cluster:      cluster,
+		mergedConfig: mergedConfig,
+		contracts:    contracts,
 	}
 }
 
-func (b *backupModel) Name() string { return pgcConstants.ComponentBackup }
-
-func (b *backupModel) EvaluatePrerequisites(_ context.Context) prerequisiteDecision {
-	return prerequisiteDecision{Allowed: true}
+func (b *backupModel) backupEnabled() bool {
+	return b.mergedConfig.Spec.Backup != nil &&
+		b.mergedConfig.Spec.Backup.Enabled != nil &&
+		*b.mergedConfig.Spec.Backup.Enabled
 }
 
-func (b *backupModel) Actuate(ctx context.Context) {
-	b.actuateErr = nil
-	if !b.backupEnabled {
+func (b *backupModel) backupConfigured() bool {
+	return b.mergedConfig.CNPG != nil &&
+		b.mergedConfig.CNPG.Backup != nil &&
+		b.mergedConfig.CNPG.Backup.VolumeSnapshot != nil
+}
+
+func (b *backupModel) Name() string            { return pgcConstants.ComponentBackup }
+func (b *backupModel) Requires() []contractKey { return []contractKey{contractCNPGCluster} }
+func (b *backupModel) Provides() []contractKey { return nil }
+
+func (b *backupModel) CheckContracts() error {
+	if !checkContractsFromRequirements(b.Requires(), b.contracts) {
+		return errContractsNotReady
+	}
+	return nil
+}
+
+func (b *backupModel) Reconcile(ctx context.Context) error {
+
+	if !b.backupEnabled() {
 		if err := b.deleteScheduledBackup(ctx); err != nil {
-			b.health.State = pgcConstants.Failed
-			b.health.Reason = reasonScheduledBackupFailed
-			b.health.Message = fmt.Sprintf(msgFmtScheduledBackupFailed, err)
-			b.health.Phase = failedClusterPhase
-			b.actuateErr = err
-			return
+			return newReconcileFailure(reasonScheduledBackupFailed, err)
 		}
-		b.cluster.Status.BackupStatus = nil
-		return
+		return nil
 	}
 
-	if !b.backupConfigured {
-		b.health.State = pgcConstants.Failed
-		b.health.Reason = reasonBackupVolumeSnapshotMissing
-		b.health.Message = string(msgBackupVolumeSnapshotMissing)
-		b.health.Phase = failedClusterPhase
-		b.actuateErr = fmt.Errorf("backup enabled without cnpg.backup.volumeSnapshot configuration")
-		return
+	if !b.backupConfigured() {
+		return newReconcileFailure(reasonBackupVolumeSnapshotMissing, fmt.Errorf("backup enabled without cnpg.backup.volumeSnapshot configuration"))
 	}
 
 	if err := b.createOrUpdateScheduledBackup(ctx); err != nil {
-		b.events.emitWarning(b.cluster, EventBackupReconcileFailed, fmt.Sprintf("Failed to reconcile scheduled backup: %v", err))
-		b.health.State = pgcConstants.Failed
-		b.health.Reason = reasonScheduledBackupFailed
-		b.health.Message = fmt.Sprintf(msgFmtScheduledBackupFailed, err)
-		b.health.Phase = failedClusterPhase
-		b.actuateErr = err
-		return
+		return newReconcileFailure(reasonScheduledBackupFailed, err)
 	}
+	return nil
 }
 
-func (b *backupModel) Converge(ctx context.Context) (health componentHealth, err error) {
-	b.health.Condition = backupReady
-	oldConditions := append([]metav1.Condition(nil), b.cluster.Status.Conditions...)
-	defer func() {
-		statusErr := writeComponentStatus(b.updateStatus, b.health)
-		if statusErr != nil {
-			if err != nil {
-				err = errors.Join(err, statusErr)
-			} else {
-				err = statusErr
-			}
-		}
-		health = b.health
-	}()
+func (b *backupModel) Observe(ctx context.Context, reconcileErr error) (componentHealth, error) {
+	before := b.cluster.Status.DeepCopy()
+	health, err := b.computeHealth(ctx, reconcileErr)
+	statusErr := writeComponentStatus(b.updateStatus, before, health)
+	return health, errors.Join(err, statusErr)
+}
 
-	if b.actuateErr != nil {
-		return b.health, b.actuateErr
+func (b *backupModel) computeHealth(ctx context.Context, reconcileErr error) (componentHealth, error) {
+	oldConditions := append([]metav1.Condition(nil), b.cluster.Status.Conditions...)
+
+	if h, err, ok := classifyReconcileErr(reconcileErr, backupReady, b.events, b.cluster, EventBackupReconcileFailed, "scheduled backup"); ok {
+		return h, err
 	}
 
-	if !b.backupEnabled {
-		b.health.State = pgcConstants.Ready
-		b.health.Reason = reasonBackupDisabled
-		b.health.Message = msgBackupDisabled
-		b.health.Phase = readyClusterPhase
-		b.health.Result = ctrl.Result{}
-		return b.health, nil
+	if !b.backupEnabled() {
+		b.cluster.Status.BackupStatus = nil
+		return newReadyHealth(backupReady, reasonBackupDisabled, msgBackupDisabled), nil
 	}
 
 	scheduledBackup := &cnpgv1.ScheduledBackup{}
 	sbName := scheduledBackupName(b.cluster.Name)
 	if err := b.client.Get(ctx, types.NamespacedName{Name: sbName, Namespace: b.cluster.Namespace}, scheduledBackup); err != nil {
 		if apierrors.IsNotFound(err) {
-			b.health.State = pgcConstants.Pending
-			b.health.Reason = reasonScheduledBackupCreated
-			b.health.Message = "Waiting for scheduled backup to appear"
-			b.health.Phase = provisioningClusterPhase
-			b.health.Result = ctrl.Result{RequeueAfter: retryDelay}
-			return b.health, nil
+			return newPendingHealth(backupReady, reasonScheduledBackupCreated, "Waiting for scheduled backup to appear"), nil
 		}
-		b.health.State = pgcConstants.Failed
-		b.health.Reason = reasonScheduledBackupFailed
-		b.health.Message = fmt.Sprintf("Failed to get scheduled backup: %v", err)
-		b.health.Phase = failedClusterPhase
-		return b.health, err
+		return newFailedHealth(backupReady, reasonScheduledBackupFailed, fmt.Sprintf("Failed to get scheduled backup: %v", err)), err
 	}
 
-	oldBackupStatus := b.cluster.Status.BackupStatus
 	b.cluster.Status.BackupStatus = &enterprisev4.BackupStatus{
 		VolumeSnapshot: &enterprisev4.VolumeSnapshotBackupStatus{
 			Enabled:          true,
@@ -161,23 +138,9 @@ func (b *backupModel) Converge(ctx context.Context) (health componentHealth, err
 			NextScheduleTime: scheduledBackup.Status.NextScheduleTime,
 		},
 	}
-	if !equality.Semantic.DeepEqual(oldBackupStatus, b.cluster.Status.BackupStatus) {
-		if err := b.client.Status().Update(ctx, b.cluster); err != nil {
-			b.health.State = pgcConstants.Failed
-			b.health.Reason = reasonScheduledBackupFailed
-			b.health.Message = fmt.Sprintf("Failed to update backup status: %v", err)
-			b.health.Phase = failedClusterPhase
-			return b.health, err
-		}
-	}
 
 	b.events.emitBackupReadyTransition(b.cluster, oldConditions)
-	b.health.State = pgcConstants.Ready
-	b.health.Reason = reasonBackupConfigured
-	b.health.Message = msgScheduledBackupReady
-	b.health.Phase = readyClusterPhase
-	b.health.Result = ctrl.Result{}
-	return b.health, nil
+	return newReadyHealth(backupReady, reasonBackupConfigured, msgScheduledBackupReady), nil
 }
 
 func (b *backupModel) createOrUpdateScheduledBackup(ctx context.Context) error {
@@ -193,7 +156,7 @@ func (b *backupModel) createOrUpdateScheduledBackup(ctx context.Context) error {
 		},
 		Spec: cnpgv1.ScheduledBackupSpec{
 			Schedule:             schedule,
-			Cluster:              cnpgv1.LocalObjectReference{Name: b.cluster.Name},
+			Cluster:              cnpgv1.LocalObjectReference{Name: b.contracts.CNPGCluster.Name},
 			Method:               cnpgv1.BackupMethodVolumeSnapshot,
 			Target:               target,
 			BackupOwnerReference: "cluster",
