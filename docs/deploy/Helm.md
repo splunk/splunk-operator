@@ -22,7 +22,7 @@ Users need to deploy the latest CRDs manually. This is a [limitation](https://he
 
 ```
 git clone https://github.com/splunk/splunk-operator.git .
-git checkout release/3.0.0
+git checkout release/3.1.0
 make install
 ```
 
