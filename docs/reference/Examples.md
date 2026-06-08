@@ -34,12 +34,12 @@ This document includes various examples for configuring Splunk Enterprise deploy
     - [Configuring pass4Symmkey:](#configuring-pass4symmkey)
       - [Approach 1](#approach-1)
       - [Approach 2](#approach-2)
-    - [Configuring license\_master\_url:](#configuring-license_master_url)
+    - [Configuring legacy license\_master\_url:](#configuring-license_master_url)
   - [Using an External Indexer Cluster](#using-an-external-indexer-cluster)
     - [Configuring IDXC pass4Symmkey:](#configuring-idxc-pass4symmkey)
       - [Approach 1](#approach-1-1)
       - [Approach 2](#approach-2-1)
-    - [Configuring cluster\_master\_url:](#configuring-cluster_master_url)
+    - [Configuring legacy cluster\_master\_url:](#configuring-cluster_master_url)
   - [Managing global kubernetes secret object](#managing-global-kubernetes-secret-object)
     - [Creating global kubernetes secret object](#creating-global-kubernetes-secret-object)
     - [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object)
@@ -205,7 +205,7 @@ metadata:
   namespace: splunk-operator
 spec:
   scaleTargetRef:
-    apiVersion: enterprise.splunk.com/v3
+    apiVersion: enterprise.splunk.com/v4
     kind: IndexerCluster
     name: example
   minReplicas: 5
@@ -316,7 +316,7 @@ spec:
     storageClassName: customStorageClass
     storageCapacity: 25Gi
 ---
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
 metadata:
   name: idxc-part1
@@ -327,8 +327,12 @@ spec:
   clusterManagerRef:
     name: cm
   replicas: 3
-  storageClassName: local
-  varStorage: "128Gi"
+  etcVolumeStorageConfig:
+    storageClassName: local
+    storageCapacity: 15Gi
+  varVolumeStorageConfig:
+    storageClassName: local
+    storageCapacity: 128Gi
   monitoringConsoleRef:
     name: example-mc
 EOF
@@ -602,7 +606,7 @@ spec:
   licenseManagerRef:
     name: example
 ---
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
 metadata:
   name: example-idc
@@ -640,11 +644,16 @@ spec:
 *Note that this requires using the Splunk Enterprise container version 8.1.0 or later*
 
 The Splunk Operator for Kubernetes allows you to use an external License
-Manager(LM) with the custom resources it manages. To do this, you will
+Manager (LM) with the custom resources it manages. To do this, you will
 share the same `pass4Symmkey` between the global secret object setup by the
-operator & the external LM, and configure the `splunk.license_master_url`.
+operator and the external LM, and configure the `splunk.license_master_url`.
 The operator requires that the external LM have a configured
 pass4SymmKey for authentication.
+
+> Legacy naming note: `license_master_url` is the Splunk configuration key used
+> by this external LM integration. It does not refer to the operator-managed
+> legacy `LicenseMaster` custom resource. For operator-managed licensing, prefer
+> `LicenseManager` and `licenseManagerRef`.
 
 ### Configuring pass4Symmkey:
 
@@ -716,7 +725,12 @@ In the case of an indexer cluster, default.yml will need configuration on the cl
 The Splunk Operator for Kubernetes allows you to use an external cluster of
 indexers with its `Standalone`, `SearchHeadCluster` and `LicenseManager`
 resources. To do this, you will share the same `IDXC pass4Symmkey` between the global secret object setup by the
-operator & the external indexer cluster, and configure the `splunk.cluster_master_url`.
+operator and the external indexer cluster, and configure the `splunk.cluster_master_url`.
+
+> Legacy naming note: `cluster_master_url` is the Splunk configuration key used
+> by this external indexer-cluster integration. It does not refer to the
+> operator-managed legacy `ClusterMaster` custom resource. For operator-managed
+> indexer clusters, prefer `ClusterManager` and `clusterManagerRef`.
 
 
 ### Configuring IDXC pass4Symmkey:
@@ -815,7 +829,7 @@ metadata:
   name: splunk-default-secret
   namespace: splunk-operator
   ownerReferences:
-  - apiVersion: enterprise.splunk.com/v3
+  - apiVersion: enterprise.splunk.com/v4
     controller: false
     kind: SearchHeadCluster
     name: example-shc
