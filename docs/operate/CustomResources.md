@@ -431,7 +431,7 @@ Change of any of the object storage inputs triggers the restart of Splunk so tha
 
 ```yaml
 cat <<EOF | kubectl apply -n splunk-operator -f -
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: MonitoringConsole
 metadata:
   name: example-mc
