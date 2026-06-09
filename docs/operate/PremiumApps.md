@@ -15,7 +15,7 @@ The Splunk Operator automates the installation of Enterprise Security (ES) with 
 
 * You need the ability to utilize the Splunk Operator [app framework](AppFramework.md) method of installation.
 * You need the access to the [Splunk ES](https://splunkbase.splunk.com/app/263/) app package.
-* ES support in Splunk Operator is starting from Splunk Operator Release `2.2.0` which requires Splunk Enterprise `9.0.3-a2` or later. Per the [Splunk Enterprise and Enterprise Security version compatibility matrix](https://docs.splunk.com/Documentation/VersionCompatibility/current/Matrix/CompatMatrix), Splunk ES versions `8.0.2. 7.3.2, 7.1.0, 7.0.2, 7.0.1, 7.0.0 or 6.6.2` are supported currently.
+* ES support in Splunk Operator is starting from Splunk Operator Release `2.2.0` which requires Splunk Enterprise `9.0.3-a2` or later. Per the [Splunk Enterprise and Enterprise Security version compatibility matrix](https://docs.splunk.com/Documentation/VersionCompatibility/current/Matrix/CompatMatrix), Splunk ES versions `8.5.1, 8.4.1, 8.4.0, 8.3.0, 8.2.3, 8.1.1, 8.1.0, 8.0.2, 7.3.2, 7.1.0, 7.0.2, 7.0.1, 7.0.0 or 6.6.2` are supported currently.
 * You need to make sure pod resource specs meet the [ES hardware requirements](https://docs.splunk.com/Documentation/ES/latest/Install/DeploymentPlanning#Hardware_requirements).
 * In the following sections, AWS S3 remote bucket is used for placing the splunk apps, but as given in the [app framework doc](AppFramework.md), you can use Azure Blob remote buckets also.
 * You need to deploy add-ons to forwarders manually (or through your own methods).
