@@ -1,22 +1,10 @@
-# This CODEOWNERS file was generated as a result of compliance remediation.
-# All projects under http://go/gitlab/compliance-projects must have a CODEOWNERS file with a valid okta-group configured.
-# Please update this file with an appropriate okta-group for this project and remove okta-groups/sg-cloud-gitlab-admin.
+* @okta-groups/sg-cloud-sok-developer-platform
 
-[Default]
-* @okta-groups/sg-cloud-gitlab-admin @okta-groups/sg-cloud-sok-developer-platform
-!/pkg/postgresql/
-!/api/enterprise/*/postgres*
-!/internal/controller/enterprise/postgres*
-!/docs/postgresql/
-!/config/crd/bases/*postgres*
-!/config/samples/*postgres*
-!/bundle/manifests/*postgres*
-
-[PostgreSQL] @okta-groups/sg-cloud-pfm-cse
-/pkg/postgresql/
-/api/enterprise/*/postgres*
-/internal/controller/enterprise/postgres*
-/docs/postgresql/
-/config/crd/bases/*postgres*
-/config/samples/*postgres*
-/bundle/manifests/*postgres*
+# PostgreSQL
+/pkg/postgresql/ @okta-groups/sg-cloud-pfm-cse
+/api/enterprise/*/postgres* @okta-groups/sg-cloud-pfm-cse
+/internal/controller/enterprise/postgres* @okta-groups/sg-cloud-pfm-cse
+/docs/postgresql/ @okta-groups/sg-cloud-pfm-cse
+/config/crd/bases/*postgres* @okta-groups/sg-cloud-pfm-cse
+/config/samples/*postgres* @okta-groups/sg-cloud-pfm-cse
+/bundle/manifests/*postgres* @okta-groups/sg-cloud-pfm-cse
