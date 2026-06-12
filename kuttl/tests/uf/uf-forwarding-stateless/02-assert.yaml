@@ -3,7 +3,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: splunk-uf-splunk-universalforwarder
+  name: splunk-uf-splunk-universalforwarder-deploy
 status:
   readyReplicas: 1
   availableReplicas: 1
@@ -13,4 +13,4 @@ status:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: splunk-uf-splunk-universalforwarder
+  name: splunk-uf-splunk-universalforwarder-secret

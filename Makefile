@@ -164,7 +164,11 @@ HELM_ENTERPRISE_CHART = helm-chart/splunk-enterprise
 .PHONY: helm-lint
 helm-lint: ## Lint Helm charts
 	helm lint $(HELM_OPERATOR_CHART)
-	helm lint $(HELM_UF_CHART)
+	helm lint $(HELM_UF_CHART) --set splunkConfig.forwardServer=indexer:9997 --set splunkConfig.password=Test1234!
+	@mkdir -p $(HELM_ENTERPRISE_CHART)/charts
+	@rm -f $(HELM_ENTERPRISE_CHART)/charts/splunk-operator-*.tgz $(HELM_ENTERPRISE_CHART)/charts/splunk-universalforwarder-*.tgz
+	helm package $(HELM_OPERATOR_CHART) --destination $(HELM_ENTERPRISE_CHART)/charts
+	helm package $(HELM_UF_CHART) --destination $(HELM_ENTERPRISE_CHART)/charts
 	helm lint $(HELM_ENTERPRISE_CHART)
 
 .PHONY: helm-test
@@ -177,7 +181,7 @@ helm-check: helm-lint helm-test ## Run Helm lint and unit tests
 
 .PHONY: helm-lint-uf
 helm-lint-uf: ## Lint the UF Helm chart
-	helm lint $(HELM_UF_CHART)
+	helm lint $(HELM_UF_CHART) --set splunkConfig.forwardServer=indexer:9997 --set splunkConfig.password=Test1234!
 
 .PHONY: helm-test-uf
 helm-test-uf: setup/helm-unittest ## Run UF Helm chart unit tests
@@ -529,6 +533,7 @@ test-e2e-full: ## Run full nightly e2e tests (label=tier:e2e-full). Requires dep
 
 .PHONY: helm-package
 helm-package:
+	@mkdir -p helm-chart/splunk-enterprise/charts
 	@rm -f helm-chart/splunk-enterprise/charts/splunk-operator-*.tgz
 	@helm package helm-chart/splunk-operator --destination .
 	@mv splunk-operator-*.tgz helm-chart/splunk-enterprise/charts/
