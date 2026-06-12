@@ -21,6 +21,7 @@ package_dir="${output_dir}/packages"
 summary_file="${output_dir}/summary.txt"
 inventory_file="${output_dir}/published-charts.txt"
 operator_chart_ref_file="ci-output/${WORKFLOW_SLUG}-operator-chart-ref.txt"
+uf_chart_ref_file="ci-output/${WORKFLOW_SLUG}-uf-chart-ref.txt"
 enterprise_chart_ref_file="ci-output/${WORKFLOW_SLUG}-enterprise-chart-ref.txt"
 build_image_ref_file="${BUILD_IMAGE_REF_FILE:-ci-output/build-test-push-workflow-artifactory-image-ref.txt}"
 
@@ -85,8 +86,11 @@ enterprise_dependency_dir="${enterprise_chart_dir}/charts"
 enterprise_chart_yaml="${enterprise_chart_dir}/Chart.yaml"
 operator_values_yaml="${operator_chart_dir}/values.yaml"
 
+uf_chart_dir="${workspace_dir}/helm-chart/splunk-universalforwarder"
+
 mkdir -p "${enterprise_dependency_dir}"
 rm -f "${enterprise_dependency_dir}/splunk-operator-"*.tgz
+rm -f "${enterprise_dependency_dir}/splunk-universalforwarder-"*.tgz
 
 # Keep the develop snapshot chart aligned with the exact staged operator image
 # that passed the same pipeline's build path instead of the checked-in GA
@@ -101,9 +105,18 @@ operator_chart_archive="${package_dir}/splunk-operator-${chart_version}.tgz"
 require_file "${operator_chart_archive}" "packaged splunk-operator chart"
 cp "${operator_chart_archive}" "${enterprise_dependency_dir}/"
 
-# Keep the parent chart dependency metadata aligned with the packaged operator
-# snapshot so Helm does not reject the staged dependency set.
+helm package "${uf_chart_dir}" \
+  --version "${chart_version}" \
+  --app-version "${chart_app_version}" \
+  --destination "${package_dir}"
+uf_chart_archive="${package_dir}/splunk-universalforwarder-${chart_version}.tgz"
+require_file "${uf_chart_archive}" "packaged splunk-universalforwarder chart"
+cp "${uf_chart_archive}" "${enterprise_dependency_dir}/"
+
+# Keep the parent chart dependency metadata aligned with the packaged snapshot
+# versions so Helm does not reject the staged dependency set.
 sed -i -E '/^- name: splunk-operator$/,/^(  repository:|  condition:)/ s/^  version: .*/  version: "'"${chart_version}"'"/' "${enterprise_chart_yaml}"
+sed -i -E '/^- name: splunk-universalforwarder$/,/^(  repository:|  condition:)/ s/^  version: .*/  version: "'"${chart_version}"'"/' "${enterprise_chart_yaml}"
 
 helm package "${enterprise_chart_dir}" \
   --version "${chart_version}" \
@@ -114,12 +127,14 @@ require_file "${enterprise_chart_archive}" "packaged splunk-enterprise chart"
 
 require_commands artifact-ci
 operator_chart_ref="${chart_repo%/}/$(basename "${operator_chart_archive}")"
+uf_chart_ref="${chart_repo%/}/$(basename "${uf_chart_archive}")"
 enterprise_chart_ref="${chart_repo%/}/$(basename "${enterprise_chart_archive}")"
 artifact-ci publish helm -d "${package_dir}" sok/splunk-operator
 
 printf '%s\n' "${operator_chart_ref}" > "${operator_chart_ref_file}"
+printf '%s\n' "${uf_chart_ref}" > "${uf_chart_ref_file}"
 printf '%s\n' "${enterprise_chart_ref}" > "${enterprise_chart_ref_file}"
-printf '%s\n%s\n' "${operator_chart_ref}" "${enterprise_chart_ref}" > "${inventory_file}"
+printf '%s\n%s\n%s\n' "${operator_chart_ref}" "${uf_chart_ref}" "${enterprise_chart_ref}" > "${inventory_file}"
 
 append_context "${context_file}" "chart_repo" "${chart_repo}"
 append_context "${context_file}" "chart_version" "${chart_version}"
@@ -127,6 +142,7 @@ append_context "${context_file}" "chart_app_version" "${chart_app_version}"
 append_context "${context_file}" "chart_channel" "${snapshot_channel}"
 append_context "${context_file}" "stage_operator_image" "${stage_operator_image}"
 append_context "${context_file}" "operator_chart_ref" "${operator_chart_ref}"
+append_context "${context_file}" "uf_chart_ref" "${uf_chart_ref}"
 append_context "${context_file}" "enterprise_chart_ref" "${enterprise_chart_ref}"
 
 cat > "${summary_file}" <<EOF
@@ -138,6 +154,7 @@ Published stage snapshot Helm charts.
 - chart_app_version: ${chart_app_version}
 - stage_operator_image: ${stage_operator_image}
 - operator_chart_ref: ${operator_chart_ref}
+- uf_chart_ref: ${uf_chart_ref}
 - enterprise_chart_ref: ${enterprise_chart_ref}
 - inventory_file: ${inventory_file}
 EOF
