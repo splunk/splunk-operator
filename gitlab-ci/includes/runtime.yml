@@ -765,6 +765,38 @@ nightly-eks-integration-ufingest-validation:
     WORKFLOW_SLUG: nightly-eks-integration-ufingest-validation
     JOB_INT_TEST_LABELS: "feature:uf-ingest"
 
+nightly-helm-validation:
+  extends:
+    - .runtime-integration-job
+    - .release-chart-read-creds-helper-job
+  timeout: 10h
+  needs:
+    - job: build-stage-image
+      artifacts: true
+    - job: build-stage-charts
+      artifacts: true
+    - job: scan-stage-image-container
+  rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "qualification_lane"'
+      when: never
+    - if: '$SOK_PIPELINE_MODE == "release_publish"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"'
+  variables:
+    WORKFLOW_SLUG: nightly-helm-validation
+    BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-ecr-image-ref.txt
+    JOB_HELM_TEST_PROFILE: full
+    JOB_HELM_TEST_TIMEOUT: "7000"
+  script:
+    - gitlab-ci/helm-test-workflow.sh
+  artifacts:
+    paths:
+      - ci-output/
+    reports:
+      junit: ci-output/nightly-helm-validation-kuttl-junit.xml
+
 nightly-azure-validation:
   extends: .runtime-nightly-azure-validation-job
   variables:
