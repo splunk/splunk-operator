@@ -37,11 +37,11 @@ func repoRoot() string {
 }
 
 // RunUFToStandaloneIngestTest deploys a Standalone CR and a splunk-universalforwarder Helm
-// release (DaemonSet mode), then asserts that log events forwarded from the UF pod appear on
+// release (Deployment mode), then asserts that log events forwarded from the UF pod appear on
 // the standalone's search interface within a reasonable timeout.
 //
 // The test exercises:
-//  1. UF Helm chart DaemonSet scheduling and readiness
+//  1. UF Helm chart Deployment scheduling and readiness
 //  2. TCP 9997 forwarding from UF to standalone (outputs.conf via --set)
 //  3. Standalone ingest: events from the UF host land in _internal (or main)
 //  4. Standalone search: CountSearchResults returns > 0 for a host-scoped query
@@ -52,8 +52,9 @@ func RunUFToStandaloneIngestTest(ctx context.Context, deployment *testenv.Deploy
 	standalonePod := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 	ns := testcaseEnvInst.GetName()
 	ufRelease := deployment.GetName() + "-uf"
-	// DaemonSet name produced by the UF chart: <release>-splunk-universalforwarder
-	dsDaemonSetName := ufRelease + "-splunk-universalforwarder"
+	// Deployment name produced by the UF chart: <release>-splunk-universalforwarder-deploy
+	ufFullname := ufRelease + "-splunk-universalforwarder"
+	ufDeploymentName := ufFullname + "-deploy"
 	ufChartPath := filepath.Join(repoRoot(), "helm-chart", "splunk-universalforwarder")
 
 	// Standalone receives forwarded data on its ClusterIP service (port 9997)
@@ -65,6 +66,7 @@ func RunUFToStandaloneIngestTest(ctx context.Context, deployment *testenv.Deploy
 		ufChartPath,
 		"--namespace", ns,
 		"--set", fmt.Sprintf("splunkConfig.forwardServer=%s:9997", standaloneService),
+		"--set", "splunkConfig.password=IntegTest1!",
 		"--wait",
 		"--timeout", "5m",
 	}
@@ -81,21 +83,23 @@ func RunUFToStandaloneIngestTest(ctx context.Context, deployment *testenv.Deploy
 		}
 	})
 
-	// Wait for all DaemonSet pods to be ready
-	Expect(testenv.WaitForDaemonSetPodsReady(ctx, deployment, ns, dsDaemonSetName)).
-		To(Succeed(), "UF DaemonSet %s pods did not become ready in namespace %s", dsDaemonSetName, ns)
+	// Wait for the UF Deployment to roll out (chart renders kind: Deployment, not DaemonSet)
+	rolloutCmd := exec.CommandContext(ctx, "kubectl", "rollout", "status",
+		"deployment/"+ufDeploymentName, "--namespace", ns, "--timeout=5m")
+	rolloutOut, rolloutErr := rolloutCmd.CombinedOutput()
+	Expect(rolloutErr).To(Succeed(), "UF Deployment did not become ready: %s", string(rolloutOut))
 
 	// The UF ships splunkd internal metrics to _internal; wait for those events to appear
 	// on the standalone indexed from a host matching the UF pod name prefix.
 	searchString := fmt.Sprintf(
-		`index=_internal host="%s-*" | stats count`, dsDaemonSetName,
+		`index=_internal host="%s-*" | stats count`, ufFullname,
 	)
 
 	Eventually(func() (int, error) {
 		return testenv.CountSearchResults(ctx, deployment, standalonePod, searchString)
 	}, 5*time.Minute, 15*time.Second).Should(BeNumerically(">", 0),
 		"No _internal events from UF host %s-* appeared on standalone pod %s within timeout",
-		dsDaemonSetName, standalonePod)
+		ufFullname, standalonePod)
 
 	testcaseEnvInst.Log.Info("UF → Standalone forwarding verified: events found on standalone",
 		"ufRelease", ufRelease, "standalone", standalone.Name, "namespace", ns)
