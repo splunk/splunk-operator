@@ -773,8 +773,6 @@ nightly-helm-validation:
   needs:
     - job: build-stage-image
       artifacts: true
-    - job: build-stage-charts
-      artifacts: true
     - job: scan-stage-image-container
   rules:
     - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
