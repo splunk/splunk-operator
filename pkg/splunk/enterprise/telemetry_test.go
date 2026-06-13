@@ -91,7 +91,7 @@ func (c *FakeListClient) List(_ context.Context, list client.ObjectList, _ ...cl
 }
 
 func TestTelemetryCollectResourceTelData_NilMaps(t *testing.T) {
-	data := collectResourceTelData(corev1.ResourceRequirements{})
+	data := collectResourceTelData(crDeploymentSpec{Resources: corev1.ResourceRequirements{}})
 	if data[cpuRequestKey] == "" || data[memoryRequestKey] == "" || data[cpuLimitKey] == "" || data[memoryLimitKey] == "" {
 		t.Errorf("expected default values for nil maps")
 	}
@@ -102,7 +102,7 @@ func TestTelemetryCollectResourceTelData_MissingKeys(t *testing.T) {
 		Requests: corev1.ResourceList{},
 		Limits:   corev1.ResourceList{},
 	}
-	data := collectResourceTelData(reqs)
+	data := collectResourceTelData(crDeploymentSpec{Resources: reqs})
 	if data[cpuRequestKey] == "" || data[memoryRequestKey] == "" || data[cpuLimitKey] == "" || data[memoryLimitKey] == "" {
 		t.Errorf("expected default values for missing keys")
 	}
@@ -119,9 +119,24 @@ func TestTelemetryCollectResourceTelData_ValuesPresent(t *testing.T) {
 			corev1.ResourceMemory: resource.MustParse("1Gi"),
 		},
 	}
-	data := collectResourceTelData(reqs)
+	data := collectResourceTelData(crDeploymentSpec{Resources: reqs})
 	if data[cpuRequestKey] != "123m" || data[memoryRequestKey] != "456Mi" || data[cpuLimitKey] != "789m" || data[memoryLimitKey] != "1Gi" {
 		t.Errorf("unexpected values: got %+v", data)
+	}
+}
+
+func TestTelemetryCollectResourceTelData_ReplicasPresent(t *testing.T) {
+	replicas := int32(5)
+	data := collectResourceTelData(crDeploymentSpec{Resources: corev1.ResourceRequirements{}, Replicas: &replicas})
+	if data[replicasKey] != "5" {
+		t.Errorf("expected replicas=5, got %q", data[replicasKey])
+	}
+}
+
+func TestTelemetryCollectResourceTelData_ReplicasNil(t *testing.T) {
+	data := collectResourceTelData(crDeploymentSpec{Resources: corev1.ResourceRequirements{}})
+	if _, ok := data[replicasKey]; ok {
+		t.Errorf("expected no replicas key when Replicas is nil, got %q", data[replicasKey])
 	}
 }
 
