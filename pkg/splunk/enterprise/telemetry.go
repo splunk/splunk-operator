@@ -30,6 +30,7 @@ const (
 	memoryRequestKey = "memory_request"
 	cpuLimitKey      = "cpu_limit"
 	memoryLimitKey   = "memory_limit"
+	replicasKey      = "replicas"
 )
 
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
@@ -115,7 +116,13 @@ func updateLastTransmissionTime(ctx context.Context, client splcommon.Controller
 	logger.InfoContext(ctx, "updated last transmission time in configmap", "newStatus", cm.Data[telStatusKey])
 }
 
-func collectResourceTelData(resources corev1.ResourceRequirements) map[string]string {
+type crDeploymentSpec struct {
+	Resources corev1.ResourceRequirements
+	Replicas  *int32
+}
+
+func collectResourceTelData(spec crDeploymentSpec) map[string]string {
+	resources := spec.Resources
 	retData := make(map[string]string)
 	defaultResources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
@@ -166,6 +173,9 @@ func collectResourceTelData(resources corev1.ResourceRequirements) map[string]st
 			mem := defaultResources.Limits[corev1.ResourceMemory]
 			retData[memoryLimitKey] = (&mem).String()
 		}
+	}
+	if spec.Replicas != nil {
+		retData[replicasKey] = fmt.Sprintf("%d", *spec.Replicas)
 	}
 	return retData
 }
@@ -232,7 +242,7 @@ func handleStandalones(ctx context.Context, client splcommon.ControllerClient) (
 		if cr.Status.TelAppInstalled {
 			retCRs = append(retCRs, cr)
 		}
-		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+		retData[cr.GetName()] = collectResourceTelData(crDeploymentSpec{Resources: cr.Spec.CommonSplunkSpec.Resources})
 	}
 	return retData, retCRs, nil
 }
@@ -255,7 +265,7 @@ func handleLicenseManagers(ctx context.Context, client splcommon.ControllerClien
 		if cr.Status.TelAppInstalled {
 			retCRs = append(retCRs, cr)
 		}
-		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+		retData[cr.GetName()] = collectResourceTelData(crDeploymentSpec{Resources: cr.Spec.CommonSplunkSpec.Resources})
 	}
 	return retData, retCRs, nil
 }
@@ -278,7 +288,7 @@ func handleLicenseMasters(ctx context.Context, client splcommon.ControllerClient
 		if cr.Status.TelAppInstalled {
 			retCRs = append(retCRs, cr)
 		}
-		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+		retData[cr.GetName()] = collectResourceTelData(crDeploymentSpec{Resources: cr.Spec.CommonSplunkSpec.Resources})
 	}
 	return retData, retCRs, nil
 }
@@ -301,7 +311,7 @@ func handleSearchHeadClusters(ctx context.Context, client splcommon.ControllerCl
 		if cr.Status.TelAppInstalled {
 			retCRs = append(retCRs, cr)
 		}
-		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+		retData[cr.GetName()] = collectResourceTelData(crDeploymentSpec{Resources: cr.Spec.CommonSplunkSpec.Resources, Replicas: &cr.Spec.Replicas})
 	}
 	return retData, retCRs, nil
 }
@@ -320,7 +330,7 @@ func handleIndexerClusters(ctx context.Context, client splcommon.ControllerClien
 	retData := make(map[string]interface{})
 	for i := range list.Items {
 		cr := &list.Items[i]
-		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+		retData[cr.GetName()] = collectResourceTelData(crDeploymentSpec{Resources: cr.Spec.CommonSplunkSpec.Resources, Replicas: &cr.Spec.Replicas})
 	}
 	return retData, nil, nil
 }
@@ -343,7 +353,7 @@ func handleClusterManagers(ctx context.Context, client splcommon.ControllerClien
 		if cr.Status.TelAppInstalled {
 			retCRs = append(retCRs, cr)
 		}
-		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+		retData[cr.GetName()] = collectResourceTelData(crDeploymentSpec{Resources: cr.Spec.CommonSplunkSpec.Resources})
 	}
 	return retData, retCRs, nil
 }
@@ -366,7 +376,7 @@ func handleClusterMasters(ctx context.Context, client splcommon.ControllerClient
 		if cr.Status.TelAppInstalled {
 			retCRs = append(retCRs, cr)
 		}
-		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+		retData[cr.GetName()] = collectResourceTelData(crDeploymentSpec{Resources: cr.Spec.CommonSplunkSpec.Resources})
 	}
 	return retData, retCRs, nil
 }
@@ -385,7 +395,7 @@ func handleMonitoringConsoles(ctx context.Context, client splcommon.ControllerCl
 	retData := make(map[string]interface{})
 	for i := range list.Items {
 		cr := &list.Items[i]
-		retData[cr.GetName()] = collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources)
+		retData[cr.GetName()] = collectResourceTelData(crDeploymentSpec{Resources: cr.Spec.CommonSplunkSpec.Resources})
 	}
 	return retData, nil, nil
 }
