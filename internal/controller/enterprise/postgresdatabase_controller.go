@@ -119,11 +119,7 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ConfigMap{}, builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
 		Watches(&enterprisev4.PostgresCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.enqueuePostgresDatabasesForCluster),
-			builder.WithPredicates(predicate.Funcs{
-				CreateFunc: func(e event.CreateEvent) bool { return true },
-				UpdateFunc: func(e event.UpdateEvent) bool { return false },
-				DeleteFunc: func(e event.DeleteEvent) bool { return false },
-			})).
+			builder.WithPredicates(postgresClusterForDatabasePredicator())).
 		Named("postgresdatabase").
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: DatabaseTotalWorker,
@@ -152,6 +148,35 @@ func postgresDatabasePredicator() predicate.Predicate {
 			},
 		},
 	)
+}
+
+func roUnavailable(readyInstances *int32) bool {
+	return readyInstances == nil || *readyInstances < 2
+}
+
+// postgresClusterForDatabasePredicator wakes PostgresDatabase reconciles when
+// the parent cluster's pooler advertisement changes or when ReadyInstances
+// crosses the <2 threshold (the inputs to resolveClusterEndpoints). The
+// ReadyInstances comparison is threshold-based rather than equality so ticks
+// within the same RO-availability state (e.g. 2→3) don't cause reconcile
+// storms.
+func postgresClusterForDatabasePredicator() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(event.CreateEvent) bool { return true },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldCluster, oldOK := e.ObjectOld.(*enterprisev4.PostgresCluster)
+			newCluster, newOK := e.ObjectNew.(*enterprisev4.PostgresCluster)
+			if !oldOK || !newOK {
+				return false
+			}
+			if !equality.Semantic.DeepEqual(oldCluster.Status.ConnectionPoolerStatus, newCluster.Status.ConnectionPoolerStatus) {
+				return true
+			}
+			return roUnavailable(oldCluster.Status.ReadyInstances) != roUnavailable(newCluster.Status.ReadyInstances)
+		},
+		DeleteFunc:  func(event.DeleteEvent) bool { return false },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+	}
 }
 
 // enqueuePostgresDatabasesForCluster maps a PostgresCluster to all PostgresDatabase CRs

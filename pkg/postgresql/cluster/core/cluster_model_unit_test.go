@@ -724,7 +724,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "default"},
 		Spec: enterprisev4.PostgresClusterClassSpec{
 			Config: &enterprisev4.PostgresClusterClassConfig{
-				ConnectionPoolerEnabled: ptr.To(true),
+				ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
 			},
 		},
 	}
@@ -781,6 +781,10 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 			Phase:        cnpgv1.PhaseHealthy,
 			WriteService: cluster.Name + "-rw",
 			ReadService:  cluster.Name + "-ro",
+			// Settled instance count matching mergedConfig so the scale gate stays
+			// closed — these cases exercise downstream component gating, not scaling.
+			Instances:      int(instances),
+			ReadyInstances: int(instances),
 		}
 		if withCA {
 			cnpgStatus.Certificates = cnpgv1.CertificatesStatus{
@@ -813,7 +817,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 				cnpg := &cnpgv1.Cluster{
 					ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
 					Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, mergedConfig, "pg1-secret", false),
-					Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
+					Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy, Instances: int(instances), ReadyInstances: int(instances)},
 				}
 				require.NoError(t, ctrl.SetControllerReference(cluster, cnpg, scheme))
 				// provisioner gets full contracts; pooler gets empty contracts (no CNPGCluster).
@@ -1221,13 +1225,13 @@ func TestClusterModelReconcilePatchesPoolerSANDrift(t *testing.T) {
 	storageSize := resource.MustParse("10Gi")
 	mergedConfig := &MergedConfig{
 		Spec: &enterprisev4.PostgresClusterSpec{
-			Instances:               &instances,
-			PostgresVersion:         &version,
-			Storage:                 &storageSize,
-			Resources:               &corev1.ResourceRequirements{},
-			PostgreSQLConfig:        map[string]string{},
-			PgHBA:                   []string{},
-			ConnectionPoolerEnabled: ptr.To(true),
+			Instances:        &instances,
+			PostgresVersion:  &version,
+			Storage:          &storageSize,
+			Resources:        &corev1.ResourceRequirements{},
+			PostgreSQLConfig: map[string]string{},
+			PgHBA:            []string{},
+			ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
 		},
 		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
@@ -1245,7 +1249,7 @@ func TestClusterModelReconcilePatchesPoolerSANDrift(t *testing.T) {
 	clusterClass := &enterprisev4.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: &enterprisev4.PostgresClusterClassConfig{ConnectionPoolerEnabled: ptr.To(true)},
+			Config: &enterprisev4.PostgresClusterClassConfig{ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
 		},
 	}
 	model := newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, mergedConfig, contracts)
@@ -1773,7 +1777,9 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 		cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 		cnpg := &cnpgv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-			Status:     cnpgv1.ClusterStatus{Phase: cnpgPhase},
+			// Settled instance count matching cfg so the scale gate does not fire —
+			// this test isolates the patch-kind phase gate.
+			Status: cnpgv1.ClusterStatus{Phase: cnpgPhase, Instances: int(instances), ReadyInstances: int(instances)},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
 		contracts := &reconcileContracts{CNPGCluster: cnpg}
@@ -1868,4 +1874,229 @@ func TestCNPGClusterDefaultsContract_HasExpectedDefaults(t *testing.T) {
 	require.NotNil(t, updateMethodSchema.Default, "defaults contract: spec.primaryUpdateMethod has no default in cnpgClusterDefaultsContractYAML")
 	assert.Equal(t, "restart", updateMethodSchema.Default.Object,
 		"defaults contract: spec.primaryUpdateMethod default must be \"restart\"")
+}
+
+func TestClusterModelScaleInProgress(t *testing.T) {
+	t.Parallel()
+
+	desired := int32(3)
+	cfg := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{Instances: &desired},
+	}
+
+	tests := []struct {
+		name            string
+		mergedConfig    *MergedConfig
+		cnpgCluster     *cnpgv1.Cluster
+		wantDesired     int
+		wantReady       int
+		wantScalingFlag bool
+	}{
+		{
+			name:         "nil merged config falls through",
+			mergedConfig: nil,
+			cnpgCluster:  &cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Instances: 3, ReadyInstances: 3}},
+		},
+		{
+			name:         "nil cnpg cluster falls through",
+			mergedConfig: cfg,
+			cnpgCluster:  nil,
+		},
+		{
+			name:         "fully ready: no scaling",
+			mergedConfig: cfg,
+			cnpgCluster:  &cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Instances: 3, ReadyInstances: 3}},
+		},
+		{
+			name:            "scaling down: ready trails desired",
+			mergedConfig:    cfg,
+			cnpgCluster:     &cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Instances: 3, ReadyInstances: 2}},
+			wantDesired:     3,
+			wantReady:       2,
+			wantScalingFlag: true,
+		},
+		{
+			name:            "scaling out: instances trail desired",
+			mergedConfig:    cfg,
+			cnpgCluster:     &cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Instances: 2, ReadyInstances: 2}},
+			wantDesired:     3,
+			wantReady:       2,
+			wantScalingFlag: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			model := &clusterModel{mergedConfig: tt.mergedConfig, cnpgCluster: tt.cnpgCluster}
+			desired, ready, scaling := model.scaleInProgress()
+			assert.Equal(t, tt.wantScalingFlag, scaling)
+			assert.Equal(t, tt.wantDesired, desired)
+			assert.Equal(t, tt.wantReady, ready)
+		})
+	}
+}
+
+func TestClusterModelComputeHealthMirrorsCNPGStatus(t *testing.T) {
+	t.Parallel()
+
+	desired := int32(3)
+	cfg := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{Instances: &desired, PostgreSQLConfig: map[string]string{}},
+	}
+	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
+	model := &clusterModel{
+		cluster:      cluster,
+		mergedConfig: cfg,
+		cnpgCluster: &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+			Status: cnpgv1.ClusterStatus{
+				Phase:          cnpgv1.PhaseHealthy,
+				Instances:      3,
+				ReadyInstances: 2,
+				CurrentPrimary: "pg1-1",
+			},
+		},
+	}
+
+	_, err := model.computeHealth(nil)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Status.Instances)
+	require.NotNil(t, cluster.Status.ReadyInstances)
+	require.NotNil(t, cluster.Status.CurrentPrimary)
+	assert.Equal(t, int32(3), *cluster.Status.Instances)
+	assert.Equal(t, int32(2), *cluster.Status.ReadyInstances)
+	assert.Equal(t, "pg1-1", *cluster.Status.CurrentPrimary)
+}
+
+// TestClusterModelComputeHealthGatesScale asserts the cluster component reports
+// Provisioning while CNPG holds Phase=Healthy during a scale (ready != desired),
+// so runComponents short-circuits here and downstream components stay gated.
+// Once the count settles it reports Ready.
+func TestClusterModelComputeHealthGatesScale(t *testing.T) {
+	t.Parallel()
+
+	desired := int32(3)
+	cfg := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{Instances: &desired, PostgreSQLConfig: map[string]string{}},
+	}
+	newModel := func(instances, ready int) *clusterModel {
+		return &clusterModel{
+			cluster:      &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}},
+			mergedConfig: cfg,
+			cnpgCluster: &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+				Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy, Instances: instances, ReadyInstances: ready},
+			},
+		}
+	}
+
+	t.Run("scale-out tail: ready trails desired holds Provisioning", func(t *testing.T) {
+		t.Parallel()
+		health, err := newModel(3, 2).computeHealth(nil)
+		require.NoError(t, err)
+		assert.Equal(t, pgcConstants.Provisioning, health.State)
+	})
+
+	t.Run("scale-down: ready trails desired holds Provisioning", func(t *testing.T) {
+		t.Parallel()
+		health, err := newModel(2, 2).computeHealth(nil)
+		require.NoError(t, err)
+		assert.Equal(t, pgcConstants.Provisioning, health.State)
+	})
+
+	t.Run("settled: ready equals desired reaches Ready", func(t *testing.T) {
+		t.Parallel()
+		health, err := newModel(3, 3).computeHealth(nil)
+		require.NoError(t, err)
+		assert.Equal(t, pgcConstants.Ready, health.State)
+	})
+}
+
+// TestValidateCrossResourceScalingGuardrails asserts ValidateCrossResource (the
+// runtime path) enforces switchover-needs-2 but NOT RO-pooler-needs-2 — the
+// latter is admission-only because the reconciler suppresses the RO pooler at
+// instances<2 instead of failing. Hence the readOnly cases expect no error.
+func TestValidateCrossResourceScalingGuardrails(t *testing.T) {
+	t.Parallel()
+
+	switchoverClass := func(classInstances *int32) *enterprisev4.PostgresClusterClass {
+		return &enterprisev4.PostgresClusterClass{
+			ObjectMeta: metav1.ObjectMeta{Name: "switchover-class"},
+			Spec: enterprisev4.PostgresClusterClassSpec{
+				Config: &enterprisev4.PostgresClusterClassConfig{Instances: classInstances},
+				CNPG:   &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("switchover")},
+			},
+		}
+	}
+	poolerClass := func(classInstances *int32) *enterprisev4.PostgresClusterClass {
+		return &enterprisev4.PostgresClusterClass{
+			ObjectMeta: metav1.ObjectMeta{Name: "pooler-class"},
+			Spec: enterprisev4.PostgresClusterClassSpec{
+				Config: &enterprisev4.PostgresClusterClassConfig{Instances: classInstances},
+				CNPG:   &enterprisev4.CNPGConfig{ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{}},
+			},
+		}
+	}
+
+	tests := []struct {
+		name      string
+		class     *enterprisev4.PostgresClusterClass
+		cluster   *enterprisev4.PostgresCluster
+		wantField string // "" means expect no scaling/pooler guardrail error
+	}{
+		{
+			name:      "switchover with cluster instances=1 rejected",
+			class:     switchoverClass(ptr.To(int32(3))),
+			cluster:   &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{Instances: ptr.To(int32(1))}},
+			wantField: "spec.instances",
+		},
+		{
+			name:      "switchover inheriting class default 1 rejected (cluster silent)",
+			class:     switchoverClass(ptr.To(int32(1))),
+			cluster:   &enterprisev4.PostgresCluster{},
+			wantField: "spec.instances",
+		},
+		{
+			name:    "switchover with cluster instances=2 accepted",
+			class:   switchoverClass(ptr.To(int32(1))),
+			cluster: &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{Instances: ptr.To(int32(2))}},
+		},
+		{
+			name:  "readOnly pooler at instances=1 NOT rejected (runtime suppresses RO)",
+			class: poolerClass(ptr.To(int32(1))),
+			cluster: &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{
+				ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(true)},
+			}},
+		},
+		{
+			name:  "readOnly pooler with cluster instances=2 accepted",
+			class: poolerClass(ptr.To(int32(1))),
+			cluster: &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{
+				Instances:        ptr.To(int32(2)),
+				ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(true)},
+			}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			errs := ValidateCrossResource(tt.class, tt.cluster)
+			var found bool
+			for _, e := range errs {
+				if e.Field == tt.wantField {
+					found = true
+				}
+			}
+			if tt.wantField == "" {
+				for _, e := range errs {
+					assert.NotEqual(t, "spec.instances", e.Field, "unexpected scaling error: %s", e.Message)
+					assert.NotEqual(t, "spec.connectionPooler.readOnly", e.Field, "unexpected pooler error: %s", e.Message)
+				}
+				return
+			}
+			assert.True(t, found, "expected guardrail error on %s, got %v", tt.wantField, errs)
+		})
+	}
 }

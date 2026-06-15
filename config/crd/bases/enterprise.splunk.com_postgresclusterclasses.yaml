@@ -187,13 +187,29 @@ spec:
                         pattern: ^(\S+\s+){4}\S+$
                         type: string
                     type: object
-                  connectionPoolerEnabled:
-                    default: false
+                  connectionPooler:
                     description: |-
-                      ConnectionPoolerEnabled controls whether PgBouncer connection pooling is deployed.
-                      When true, creates RW and RO pooler deployments for clusters using this class.
-                      Can be overridden in PostgresCluster CR.
-                    type: boolean
+                      ConnectionPooler controls whether PgBouncer connection pooling is deployed
+                      and which endpoints get a pooler. Sub-fields can be overridden per cluster.
+                    properties:
+                      enabled:
+                        description: |-
+                          Enabled controls whether the connection pooler is deployed at all.
+                          When omitted the pooler is treated as disabled (see isPoolerEnabled).
+                        type: boolean
+                      readOnly:
+                        description: |-
+                          ReadOnly controls whether the RO pooler is reconciled when Enabled is true.
+                          The RO pooler additionally requires the cluster to run with instances >= 2;
+                          the admission webhook rejects readOnly=true with instances<2.
+                          When omitted it is treated as true (see poolerReadOnlyWanted).
+                        type: boolean
+                      readWrite:
+                        description: |-
+                          ReadWrite controls whether the RW pooler is reconciled when Enabled is true.
+                          When omitted it is treated as true (see poolerReadWriteWanted).
+                        type: boolean
+                    type: object
                   instances:
                     default: 1
                     description: |-
@@ -326,11 +342,12 @@ spec:
                     x-kubernetes-int-or-string: true
                 type: object
                 x-kubernetes-validations:
-                - message: connectionPoolerEnabled must be true when monitoring.connectionPoolerMetrics.enabled
+                - message: connectionPooler.enabled must be true when monitoring.connectionPoolerMetrics.enabled
                     is true
                   rule: '!has(self.monitoring) || !has(self.monitoring.connectionPoolerMetrics)
                     || !has(self.monitoring.connectionPoolerMetrics.enabled) || !self.monitoring.connectionPoolerMetrics.enabled
-                    || (has(self.connectionPoolerEnabled) && self.connectionPoolerEnabled)'
+                    || (has(self.connectionPooler) && has(self.connectionPooler.enabled)
+                    && self.connectionPooler.enabled)'
               provisioner:
                 description: |-
                   Provisioner identifies which database provisioner to use.
@@ -346,10 +363,10 @@ spec:
               rule: '!has(self.cnpg) || self.provisioner == ''postgresql.cnpg.io'''
             - message: cnpg config is required when provisioner is postgresql.cnpg.io
               rule: self.provisioner != 'postgresql.cnpg.io' || has(self.cnpg)
-            - message: cnpg.connectionPooler must be set when config.connectionPoolerEnabled
+            - message: cnpg.connectionPooler must be set when config.connectionPooler.enabled
                 is true
-              rule: '!has(self.config) || !has(self.config.connectionPoolerEnabled)
-                || !self.config.connectionPoolerEnabled || (has(self.cnpg) && has(self.cnpg.connectionPooler))'
+              rule: '!has(self.config) || !has(self.config.connectionPooler) || !has(self.config.connectionPooler.enabled)
+                || !self.config.connectionPooler.enabled || (has(self.cnpg) && has(self.cnpg.connectionPooler))'
             - message: cnpg.backup.volumeSnapshot must be set when config.backup.enabled
                 is true
               rule: '!has(self.config) || !has(self.config.backup) || !has(self.config.backup.enabled)

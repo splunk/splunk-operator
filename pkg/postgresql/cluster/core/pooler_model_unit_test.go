@@ -39,7 +39,7 @@ import (
 func poolerEnabledConfig() *MergedConfig {
 	return &MergedConfig{
 		Spec: &enterprisev4.PostgresClusterSpec{
-			ConnectionPoolerEnabled: ptr.To(true),
+			ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
 		},
 		CNPG: &enterprisev4.CNPGConfig{
 			ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{},
@@ -551,7 +551,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 	clusterClass := &enterprisev4.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "default"},
 		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: &enterprisev4.PostgresClusterClassConfig{ConnectionPoolerEnabled: ptr.To(true)},
+			Config: &enterprisev4.PostgresClusterClassConfig{ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
 		},
 	}
 	// healthyCNPG has no SANs in spec so both isSANPolicyConverged (poolerEnabled=true → needs
@@ -607,7 +607,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 
 		// Assert
 		require.NoError(t, err)
-		assert.Equal(t, &enterprisev4.ConnectionPoolerStatus{Enabled: true}, cluster.Status.ConnectionPoolerStatus)
+		assert.Equal(t, &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true}, cluster.Status.ConnectionPoolerStatus)
 		assert.Equal(t, pgcConstants.Ready, health.State)
 	})
 
@@ -712,7 +712,7 @@ func TestPoolerConvergeEmitsReadyEventOnTransition(t *testing.T) {
 	clusterClass := &enterprisev4.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "default"},
 		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: &enterprisev4.PostgresClusterClassConfig{ConnectionPoolerEnabled: ptr.To(true)},
+			Config: &enterprisev4.PostgresClusterClassConfig{ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
 		},
 	}
 	events := &captureEventEmitter{}
@@ -761,7 +761,7 @@ func TestPoolerModelConvergeWaitsForSANPolicy(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "default"},
 		Spec: enterprisev4.PostgresClusterClassSpec{
 			Config: &enterprisev4.PostgresClusterClassConfig{
-				ConnectionPoolerEnabled: ptr.To(true),
+				ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
 			},
 		},
 	}
@@ -801,7 +801,7 @@ func TestPoolerModelConvergeWaitsForTLSLeafMaterial(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "default"},
 		Spec: enterprisev4.PostgresClusterClassSpec{
 			Config: &enterprisev4.PostgresClusterClassConfig{
-				ConnectionPoolerEnabled: ptr.To(true),
+				ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
 			},
 		},
 	}
@@ -837,7 +837,7 @@ func TestPoolerModelConvergeTLSLeafInvalidCertEmitsFailed(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "demo"},
 		Spec: enterprisev4.PostgresClusterClassSpec{
 			Config: &enterprisev4.PostgresClusterClassConfig{
-				ConnectionPoolerEnabled: ptr.To(true),
+				ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
 			},
 		},
 	}
@@ -904,4 +904,108 @@ func TestPoolerModelActuateDisabledIsCleanWhenCNPGAbsent(t *testing.T) {
 	require.NoError(t, err, "disabled-branch + nil CNPG must not produce an error")
 	assert.NotEqual(t, pgcConstants.Failed, health.State, "disabled-branch + nil CNPG must not produce a Failed health condition")
 	assert.Empty(t, events.warnings, "no warning events should be emitted on the happy bootstrap-race path")
+}
+
+func TestPoolerModelROPoolerWanted(t *testing.T) {
+	t.Parallel()
+
+	poolerOptedIn := &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}
+	specWith := func(instances *int32, pooler *enterprisev4.ConnectionPoolerEnableConfig) *enterprisev4.PostgresClusterSpec {
+		return &enterprisev4.PostgresClusterSpec{Instances: instances, ConnectionPooler: pooler}
+	}
+
+	tests := []struct {
+		name      string
+		mergedCfg *MergedConfig
+		want      bool
+	}{
+		{name: "nil merged config", mergedCfg: nil, want: false},
+		{name: "nil spec", mergedCfg: &MergedConfig{}, want: false},
+		{name: "nil instances", mergedCfg: &MergedConfig{Spec: specWith(nil, poolerOptedIn)}, want: false},
+		{name: "ro opted out", mergedCfg: &MergedConfig{Spec: specWith(ptr.To(int32(2)), &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(false)})}, want: false},
+		{name: "instances 1", mergedCfg: &MergedConfig{Spec: specWith(ptr.To(int32(1)), poolerOptedIn)}, want: false},
+		{name: "instances 2", mergedCfg: &MergedConfig{Spec: specWith(ptr.To(int32(2)), poolerOptedIn)}, want: true},
+		{name: "instances 3", mergedCfg: &MergedConfig{Spec: specWith(ptr.To(int32(3)), poolerOptedIn)}, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &poolerModel{mergedConfig: tt.mergedCfg}
+			assert.Equal(t, tt.want, p.roPoolerWanted())
+		})
+	}
+}
+
+func TestPoolerModelRWPoolerWanted(t *testing.T) {
+	t.Parallel()
+
+	specWith := func(pooler *enterprisev4.ConnectionPoolerEnableConfig) *enterprisev4.PostgresClusterSpec {
+		return &enterprisev4.PostgresClusterSpec{ConnectionPooler: pooler}
+	}
+
+	tests := []struct {
+		name      string
+		mergedCfg *MergedConfig
+		want      bool
+	}{
+		{name: "nil merged config", mergedCfg: nil, want: false},
+		{name: "nil spec", mergedCfg: &MergedConfig{}, want: false},
+		{name: "nil pooler config", mergedCfg: &MergedConfig{Spec: specWith(nil)}, want: false},
+		{name: "rw default true", mergedCfg: &MergedConfig{Spec: specWith(&enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)})}, want: true},
+		{name: "rw opted out", mergedCfg: &MergedConfig{Spec: specWith(&enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadWrite: ptr.To(false)})}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &poolerModel{mergedConfig: tt.mergedCfg}
+			assert.Equal(t, tt.want, p.rwPoolerWanted())
+		})
+	}
+}
+
+func TestMergeConnectionPoolerEnable(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		cluster *enterprisev4.ConnectionPoolerEnableConfig
+		class   *enterprisev4.ConnectionPoolerEnableConfig
+		want    *enterprisev4.ConnectionPoolerEnableConfig
+	}{
+		{name: "both nil", cluster: nil, class: nil, want: nil},
+		{
+			name:    "class only",
+			cluster: nil,
+			class:   &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(false)},
+			want:    &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(false)},
+		},
+		{
+			name:    "cluster overrides one field, class supplies the rest",
+			cluster: &enterprisev4.ConnectionPoolerEnableConfig{ReadOnly: ptr.To(false)},
+			class:   &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadWrite: ptr.To(true), ReadOnly: ptr.To(true)},
+			want:    &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadWrite: ptr.To(true), ReadOnly: ptr.To(false)},
+		},
+		{
+			name:    "cluster fully specified ignores class",
+			cluster: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(false), ReadWrite: ptr.To(false), ReadOnly: ptr.To(false)},
+			class:   &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadWrite: ptr.To(true), ReadOnly: ptr.To(true)},
+			want:    &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(false), ReadWrite: ptr.To(false), ReadOnly: ptr.To(false)},
+		},
+		{
+			// Regression for MR1935 P1: a cluster that overrides only readOnly must still
+			// inherit enabled=true from its class. This relies on cluster.Enabled being the
+			// nil "inherit" sentinel — which CRD-level +kubebuilder:default markers would
+			// have destroyed by materializing enabled=false onto the stored cluster object.
+			name:    "cluster overrides only readOnly, inherits enabled from minimal class",
+			cluster: &enterprisev4.ConnectionPoolerEnableConfig{ReadOnly: ptr.To(false)},
+			class:   &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
+			want:    &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(false)},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, mergeConnectionPoolerEnable(tt.cluster, tt.class))
+		})
+	}
 }

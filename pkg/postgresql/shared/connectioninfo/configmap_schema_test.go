@@ -105,6 +105,24 @@ func TestEndpointsValidate(t *testing.T) {
 			},
 			wantError: "pooler endpoints must both be set or both be empty",
 		},
+		{
+			name: "empty ro host allowed when ro unavailable",
+			endpoints: Endpoints{
+				RWHost:        "cluster-rw.default.svc.cluster.local",
+				RHost:         "cluster-r.default.svc.cluster.local",
+				ROUnavailable: true,
+			},
+		},
+		{
+			name: "unpaired pooler host allowed when pooler enabled",
+			endpoints: Endpoints{
+				RWHost:        "cluster-rw.default.svc.cluster.local",
+				ROHost:        "cluster-ro.default.svc.cluster.local",
+				RHost:         "cluster-r.default.svc.cluster.local",
+				PoolerEnabled: true,
+				PoolerRWHost:  "cluster-pooler-rw.default.svc.cluster.local",
+			},
+		},
 	}
 
 	for _, tst := range tests {
@@ -184,6 +202,34 @@ func TestBuildConfigMapData(t *testing.T) {
 
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "RWHost is required")
+	})
+
+	t.Run("publishes empty RO endpoint when RO is unavailable", func(t *testing.T) {
+		got, _, err := BuildConfigMapData(Endpoints{
+			RWHost:        "cluster-rw.default.svc.cluster.local",
+			RHost:         "cluster-r.default.svc.cluster.local",
+			ROUnavailable: true,
+		})
+
+		require.NoError(t, err)
+		assert.Contains(t, got, KeyClusterROEndpoint)
+		assert.Empty(t, got[KeyClusterROEndpoint])
+		assert.NotEmpty(t, got[KeyClusterRWEndpoint])
+	})
+
+	t.Run("publishes both pooler keys when pooler enabled and a side is gated off", func(t *testing.T) {
+		got, _, err := BuildConfigMapData(Endpoints{
+			RWHost:        "cluster-rw.default.svc.cluster.local",
+			ROHost:        "cluster-ro.default.svc.cluster.local",
+			RHost:         "cluster-r.default.svc.cluster.local",
+			PoolerEnabled: true,
+			PoolerRWHost:  "cluster-pooler-rw.default.svc.cluster.local",
+		})
+
+		require.NoError(t, err)
+		assert.Equal(t, "cluster-pooler-rw.default.svc.cluster.local", got[KeyPoolerRWEndpoint])
+		assert.Contains(t, got, KeyPoolerROEndpoint)
+		assert.Empty(t, got[KeyPoolerROEndpoint])
 	})
 }
 

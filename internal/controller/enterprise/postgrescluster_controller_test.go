@@ -151,6 +151,10 @@ func markCNPGClusterHealthy(cnpg *cnpgv1.Cluster, clusterName, caSecretName stri
 	cnpg.Status.Phase = cnpgv1.PhaseHealthy
 	cnpg.Status.WriteService = clusterName + "-rw"
 	cnpg.Status.ReadService = clusterName + "-ro"
+	// Two ready instances so the RO endpoint is published.
+	const healthyReadyInstances = 2
+	cnpg.Status.Instances = healthyReadyInstances
+	cnpg.Status.ReadyInstances = healthyReadyInstances
 	if caSecretName != "" {
 		cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
 	}
@@ -199,6 +203,14 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 	// runtime once spec drift is cleared.
 	reconcileAfterCNPGHealthyOrPatch := func() { reconcileNTimes(2) }
 
+	markCNPGHealthy := func(cnpg *cnpgv1.Cluster, instances int32) {
+		cnpg.Status.Phase = cnpgv1.PhaseHealthy
+		cnpg.Status.Instances = int(instances)
+		cnpg.Status.ReadyInstances = int(instances)
+		cnpg.Status.WriteService = cnpg.Name + "-rw"
+		cnpg.Status.ReadService = cnpg.Name + "-ro"
+	}
+
 	BeforeEach(func() {
 		nameSuffix := fmt.Sprintf("%d-%d-%d",
 			GinkgoParallelProcess(),
@@ -220,10 +232,12 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			Spec: enterprisev4.PostgresClusterClassSpec{
 				Provisioner: provisioner,
 				Config: &enterprisev4.PostgresClusterClassConfig{
-					Instances:               ptr.To(clusterMemberCount),
-					Storage:                 ptr.To(resource.MustParse(storageAmount)),
-					PostgresVersion:         ptr.To(postgresVersion),
-					ConnectionPoolerEnabled: ptr.To(poolerEnabled),
+					Instances:       ptr.To(clusterMemberCount),
+					Storage:         ptr.To(resource.MustParse(storageAmount)),
+					PostgresVersion: ptr.To(postgresVersion),
+					ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{
+						Enabled: ptr.To(poolerEnabled),
+					},
 				},
 				CNPG: &enterprisev4.CNPGConfig{},
 			},
@@ -250,10 +264,12 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			Spec: enterprisev4.PostgresClusterClassSpec{
 				Provisioner: provisioner,
 				Config: &enterprisev4.PostgresClusterClassConfig{
-					Instances:               ptr.To(clusterMemberCount),
-					Storage:                 ptr.To(resource.MustParse(storageAmount)),
-					PostgresVersion:         ptr.To(postgresVersion),
-					ConnectionPoolerEnabled: ptr.To(true),
+					Instances:       ptr.To(clusterMemberCount),
+					Storage:         ptr.To(resource.MustParse(storageAmount)),
+					PostgresVersion: ptr.To(postgresVersion),
+					ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{
+						Enabled: ptr.To(true),
+					},
 					Monitoring: &enterprisev4.PostgresMonitoringClassConfig{
 						ConnectionPoolerMetrics: &enterprisev4.MetricsClassConfig{Enabled: ptr.To(true)},
 					},
@@ -576,7 +592,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(*current.Status.Phase).To(Equal("Configuring"))
 
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
-				cnpg.Status.Phase = cnpgv1.PhaseHealthy
+				markCNPGHealthy(cnpg, clusterMemberCount)
 				// Re-assert the ServerCASecret on this status write; envtest does not run a
 				// CNPG controller to keep it populated across our status mutations.
 				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
@@ -741,6 +757,234 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					g.Expect(poolerReadyCond.Status).To(Equal(metav1.ConditionTrue))
 					g.Expect(poolerReadyCond.Reason).To(Equal("AllInstancesReady"))
 				}, "20s", "250ms").Should(Succeed())
+			})
+
+			It("does not create RO pooler when spec.instances=1 and publishes empty pooler RO endpoint", func() {
+				pgCluster.Spec.Instances = ptr.To(int32(1))
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+
+				rwKey := types.NamespacedName{Name: clusterName + "-pooler-rw", Namespace: namespace}
+				roKey := types.NamespacedName{Name: clusterName + "-pooler-ro", Namespace: namespace}
+
+				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGHealthy(cnpg, 1)
+				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+				reconcileAfterCNPGHealthyOrPatch()
+				ensureCNPGServerTLSLeafSecret(ctx, k8sClient, clusterName, namespace)
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					rw := &cnpgv1.Pooler{}
+					g.Expect(k8sClient.Get(ctx, rwKey, rw)).To(Succeed())
+					g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, roKey, &cnpgv1.Pooler{}))).To(BeTrue())
+
+					if rw.Status.Instances < 2 {
+						rw.Status.Instances = 2
+						g.Expect(k8sClient.Status().Update(ctx, rw)).To(Succeed())
+					}
+				}, "20s", "250ms").Should(Succeed())
+
+				pc := &enterprisev4.PostgresCluster{}
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+					g.Expect(pc.Status.Resources).NotTo(BeNil())
+					g.Expect(pc.Status.Resources.ConfigMapRef).NotTo(BeNil())
+				}, "20s", "250ms").Should(Succeed())
+
+				cm := &v1.ConfigMap{}
+				cmKey := types.NamespacedName{Name: pc.Status.Resources.ConfigMapRef.Name, Namespace: namespace}
+				Expect(k8sClient.Get(ctx, cmKey, cm)).To(Succeed())
+				Expect(cm.Data["CLUSTER_POOLER_RW_ENDPOINT"]).NotTo(BeEmpty())
+				Expect(cm.Data).To(HaveKey("CLUSTER_POOLER_RO_ENDPOINT"))
+				Expect(cm.Data["CLUSTER_POOLER_RO_ENDPOINT"]).To(BeEmpty())
+			})
+
+			It("deletes RO pooler when scaling 2->1", func() {
+				pgCluster.Spec.Instances = ptr.To(int32(2))
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+
+				rwKey := types.NamespacedName{Name: clusterName + "-pooler-rw", Namespace: namespace}
+				roKey := types.NamespacedName{Name: clusterName + "-pooler-ro", Namespace: namespace}
+
+				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGHealthy(cnpg, 2)
+				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					rw := &cnpgv1.Pooler{}
+					ro := &cnpgv1.Pooler{}
+					g.Expect(k8sClient.Get(ctx, rwKey, rw)).To(Succeed())
+					g.Expect(k8sClient.Get(ctx, roKey, ro)).To(Succeed())
+
+					if rw.Status.Instances < 2 {
+						rw.Status.Instances = 2
+						g.Expect(k8sClient.Status().Update(ctx, rw)).To(Succeed())
+					}
+					if ro.Status.Instances < 2 {
+						ro.Status.Instances = 2
+						g.Expect(k8sClient.Status().Update(ctx, ro)).To(Succeed())
+					}
+				}, "20s", "250ms").Should(Succeed())
+
+				pc := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				pc.Spec.Instances = ptr.To(int32(1))
+				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
+
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGHealthy(cnpg, 1)
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(k8sClient.Get(ctx, rwKey, &cnpgv1.Pooler{})).To(Succeed())
+					g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, roKey, &cnpgv1.Pooler{}))).To(BeTrue())
+				}, "20s", "250ms").Should(Succeed())
+			})
+
+			It("respects readOnly=false at instances=2", func() {
+				pgCluster.Spec.Instances = ptr.To(int32(2))
+				pgCluster.Spec.ConnectionPooler = &enterprisev4.ConnectionPoolerEnableConfig{
+					Enabled:  ptr.To(true),
+					ReadOnly: ptr.To(false),
+				}
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+
+				rwKey := types.NamespacedName{Name: clusterName + "-pooler-rw", Namespace: namespace}
+				roKey := types.NamespacedName{Name: clusterName + "-pooler-ro", Namespace: namespace}
+
+				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGHealthy(cnpg, 2)
+				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+				reconcileAfterCNPGHealthyOrPatch()
+				ensureCNPGServerTLSLeafSecret(ctx, k8sClient, clusterName, namespace)
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					rw := &cnpgv1.Pooler{}
+					g.Expect(k8sClient.Get(ctx, rwKey, rw)).To(Succeed())
+					g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, roKey, &cnpgv1.Pooler{}))).To(BeTrue(), "RO pooler must be absent when readOnly=false")
+
+					if rw.Status.Instances < 2 {
+						rw.Status.Instances = 2
+						g.Expect(k8sClient.Status().Update(ctx, rw)).To(Succeed())
+					}
+				}, "20s", "250ms").Should(Succeed())
+
+				pc := &enterprisev4.PostgresCluster{}
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+					g.Expect(pc.Status.Resources).NotTo(BeNil())
+					g.Expect(pc.Status.Resources.ConfigMapRef).NotTo(BeNil())
+				}, "20s", "250ms").Should(Succeed())
+
+				cm := &v1.ConfigMap{}
+				cmKey := types.NamespacedName{Name: pc.Status.Resources.ConfigMapRef.Name, Namespace: namespace}
+				Expect(k8sClient.Get(ctx, cmKey, cm)).To(Succeed())
+				Expect(cm.Data["CLUSTER_POOLER_RW_ENDPOINT"]).NotTo(BeEmpty())
+				Expect(cm.Data).To(HaveKey("CLUSTER_POOLER_RO_ENDPOINT"))
+				Expect(cm.Data["CLUSTER_POOLER_RO_ENDPOINT"]).To(BeEmpty())
+			})
+
+			It("creates RO pooler when scaling 1->2", func() {
+				pgCluster.Spec.Instances = ptr.To(int32(1))
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+
+				rwKey := types.NamespacedName{Name: clusterName + "-pooler-rw", Namespace: namespace}
+				roKey := types.NamespacedName{Name: clusterName + "-pooler-ro", Namespace: namespace}
+
+				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGHealthy(cnpg, 1)
+				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+				reconcileAfterCNPGHealthyOrPatch()
+				ensureCNPGServerTLSLeafSecret(ctx, k8sClient, clusterName, namespace)
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					rw := &cnpgv1.Pooler{}
+					g.Expect(k8sClient.Get(ctx, rwKey, rw)).To(Succeed())
+					g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, roKey, &cnpgv1.Pooler{}))).To(BeTrue())
+
+					if rw.Status.Instances < 2 {
+						rw.Status.Instances = 2
+						g.Expect(k8sClient.Status().Update(ctx, rw)).To(Succeed())
+					}
+				}, "20s", "250ms").Should(Succeed())
+
+				pc := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				pc.Spec.Instances = ptr.To(int32(2))
+				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
+
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGHealthy(cnpg, 2)
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+				reconcileAfterCNPGHealthyOrPatch()
+				ensureCNPGServerTLSLeafSecret(ctx, k8sClient, clusterName, namespace)
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					rw := &cnpgv1.Pooler{}
+					ro := &cnpgv1.Pooler{}
+					g.Expect(k8sClient.Get(ctx, rwKey, rw)).To(Succeed())
+					g.Expect(k8sClient.Get(ctx, roKey, ro)).To(Succeed())
+
+					if ro.Status.Instances < 2 {
+						ro.Status.Instances = 2
+						g.Expect(k8sClient.Status().Update(ctx, ro)).To(Succeed())
+					}
+				}, "20s", "250ms").Should(Succeed())
+
+				pcAfter := &enterprisev4.PostgresCluster{}
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, pcAfter)).To(Succeed())
+					g.Expect(pcAfter.Status.Resources).NotTo(BeNil())
+					g.Expect(pcAfter.Status.Resources.ConfigMapRef).NotTo(BeNil())
+				}, "20s", "250ms").Should(Succeed())
+
+				cm := &v1.ConfigMap{}
+				cmKey := types.NamespacedName{Name: pcAfter.Status.Resources.ConfigMapRef.Name, Namespace: namespace}
+				Expect(k8sClient.Get(ctx, cmKey, cm)).To(Succeed())
+				Expect(cm.Data["CLUSTER_POOLER_RW_ENDPOINT"]).NotTo(BeEmpty())
+				Expect(cm.Data["CLUSTER_POOLER_RO_ENDPOINT"]).NotTo(BeEmpty())
 			})
 		})
 	})
@@ -981,6 +1225,152 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 		})
 
+		Context("when scaling instances on PostgresCluster", func() {
+			It("propagates scale-out to the underlying CNPG cluster", func() {
+				pgCluster.Spec.ManagedRoles = nil
+				pgCluster.Spec.Instances = ptr.To(int32(2))
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				Expect(cnpg.Spec.Instances).To(Equal(2))
+				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
+				markCNPGHealthy(cnpg, 2)
+				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					current := &enterprisev4.PostgresCluster{}
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+					g.Expect(current.Status.Phase).NotTo(BeNil())
+					g.Expect(*current.Status.Phase).To(Equal(string(enterprisev4.PhaseReady)))
+				}, "20s", "250ms").Should(Succeed())
+
+				pc := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				pc.Spec.Instances = ptr.To(int32(3))
+				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+					g.Expect(cnpg.Spec.Instances).To(Equal(3))
+				}, "20s", "250ms").Should(Succeed())
+
+				// CNPG keeps its own phase=Healthy during scale-up while it
+				// builds the new replica; the only signal that the change is
+				// in progress is that ReadyInstances trails the desired count.
+				// Assert the PostgresCluster reflects this as Provisioning so
+				// consumers don't miss the in-progress state.
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				cnpg.Status.Phase = cnpgv1.PhaseHealthy
+				cnpg.Status.Instances = 3
+				cnpg.Status.ReadyInstances = 2
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					current := &enterprisev4.PostgresCluster{}
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+					g.Expect(current.Status.Phase).NotTo(BeNil())
+					g.Expect(*current.Status.Phase).To(Equal("Provisioning"))
+				}, "20s", "250ms").Should(Succeed())
+			})
+
+			It("publishes empty read-only endpoint values when running with a single instance", func() {
+				pgCluster.Spec.ManagedRoles = nil
+				pgCluster.Spec.Instances = ptr.To(int32(1))
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+
+				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGHealthy(cnpg, 1)
+				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+				reconcileNTimes(2)
+
+				pc := &enterprisev4.PostgresCluster{}
+				Eventually(func() bool {
+					if err := k8sClient.Get(ctx, pgClusterKey, pc); err != nil {
+						return false
+					}
+					return pc.Status.Resources != nil && pc.Status.Resources.ConfigMapRef != nil
+				}, "5s", "100ms").Should(BeTrue())
+
+				cm := &v1.ConfigMap{}
+				cmKey := types.NamespacedName{Name: pc.Status.Resources.ConfigMapRef.Name, Namespace: namespace}
+				Expect(k8sClient.Get(ctx, cmKey, cm)).To(Succeed())
+				Expect(cm.Data).To(HaveKey("CLUSTER_RO_ENDPOINT"))
+				Expect(cm.Data["CLUSTER_RO_ENDPOINT"]).To(BeEmpty())
+				Expect(cm.Data["CLUSTER_RW_ENDPOINT"]).NotTo(BeEmpty())
+			})
+
+			It("populates the read-only endpoint when scaling 1->2", func() {
+				pgCluster.Spec.ManagedRoles = nil
+				pgCluster.Spec.Instances = ptr.To(int32(1))
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+
+				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGHealthy(cnpg, 1)
+				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+				reconcileNTimes(2)
+
+				// Confirm RO endpoint is suppressed before scaling out.
+				pc := &enterprisev4.PostgresCluster{}
+				Eventually(func() bool {
+					if err := k8sClient.Get(ctx, pgClusterKey, pc); err != nil {
+						return false
+					}
+					return pc.Status.Resources != nil && pc.Status.Resources.ConfigMapRef != nil
+				}, "5s", "100ms").Should(BeTrue())
+
+				cmKey := types.NamespacedName{Name: pc.Status.Resources.ConfigMapRef.Name, Namespace: namespace}
+				cm := &v1.ConfigMap{}
+				Expect(k8sClient.Get(ctx, cmKey, cm)).To(Succeed())
+				Expect(cm.Data["CLUSTER_RO_ENDPOINT"]).To(BeEmpty())
+
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				pc.Spec.Instances = ptr.To(int32(2))
+				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
+
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGHealthy(cnpg, 2)
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+				reconcileNTimes(3)
+
+				Expect(k8sClient.Get(ctx, cmKey, cm)).To(Succeed())
+				Expect(cm.Data["CLUSTER_RO_ENDPOINT"]).NotTo(BeEmpty())
+			})
+
+			It("allows clearing spec.instances to fall back to the class default", func() {
+				pgCluster.Spec.ManagedRoles = nil
+				pgCluster.Spec.Instances = ptr.To(clusterMemberCount)
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+
+				pc := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				pc.Spec.Instances = nil
+				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
+
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				Expect(pc.Spec.Instances).To(BeNil())
+			})
+		})
+
 		Context("when a configmap spec changes", func() {
 			BeforeEach(func() {
 				// Keep this test focused on ConfigMap behavior; otherwise reconcile can
@@ -992,7 +1382,6 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 
-				// Make sure runtime can proceed (if needed in your fixture)
 				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
 				cnpg := &cnpgv1.Cluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())

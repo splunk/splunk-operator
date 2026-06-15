@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -166,6 +167,10 @@ func createPostgresClusterResource(ctx context.Context, namespace, clusterName s
 }
 
 func markPostgresClusterReady(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, cnpgClusterName, namespace string, poolerEnabled bool) {
+	markPostgresClusterReadyWithPooler(ctx, postgresCluster, cnpgClusterName, namespace, poolerEnabled, poolerEnabled, poolerEnabled)
+}
+
+func markPostgresClusterReadyWithPooler(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, cnpgClusterName, namespace string, poolerEnabled, rwEnabled, roEnabled bool) {
 	clusterPhase := "Ready"
 	postgresCluster.Status.Phase = &clusterPhase
 	postgresCluster.Status.ProvisionerRef = &corev1.ObjectReference{
@@ -175,19 +180,27 @@ func markPostgresClusterReady(ctx context.Context, postgresCluster *enterprisev4
 		Namespace:  namespace,
 	}
 	if poolerEnabled {
-		postgresCluster.Status.ConnectionPoolerStatus = &enterprisev4.ConnectionPoolerStatus{Enabled: true}
+		postgresCluster.Status.ConnectionPoolerStatus = &enterprisev4.ConnectionPoolerStatus{
+			Enabled:          true,
+			ReadWriteEnabled: rwEnabled,
+			ReadOnlyEnabled:  roEnabled,
+		}
 	}
 	Expect(k8sClient.Status().Update(ctx, postgresCluster)).To(Succeed())
 }
 
 func createCNPGClusterResource(ctx context.Context, namespace, cnpgClusterName string) *cnpgv1.Cluster {
+	return createCNPGClusterResourceWithInstances(ctx, namespace, cnpgClusterName, 2)
+}
+
+func createCNPGClusterResourceWithInstances(ctx context.Context, namespace, cnpgClusterName string, instances int) *cnpgv1.Cluster {
 	cnpgCluster := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cnpgClusterName,
 			Namespace: namespace,
 		},
 		Spec: cnpgv1.ClusterSpec{
-			Instances: 1,
+			Instances: instances,
 			StorageConfiguration: cnpgv1.StorageConfiguration{
 				Size: "1Gi",
 			},
@@ -205,6 +218,7 @@ func markCNPGClusterReady(ctx context.Context, cnpgCluster *cnpgv1.Cluster, reco
 	}
 	cnpgCluster.Status.WriteService = writeService
 	cnpgCluster.Status.ReadService = readService
+	cnpgCluster.Status.ReadyInstances = cnpgCluster.Spec.Instances
 	Expect(k8sClient.Status().Update(ctx, cnpgCluster)).To(Succeed())
 }
 
@@ -229,10 +243,17 @@ func newReadyClusterScenario(namespace, resourceName, clusterName, cnpgClusterNa
 }
 
 func seedReadyClusterScenario(ctx context.Context, scenario readyClusterScenario, poolerEnabled bool) {
+	seedReadyClusterScenarioWithInstances(ctx, scenario, poolerEnabled, 2)
+}
+
+func seedReadyClusterScenarioWithInstances(ctx context.Context, scenario readyClusterScenario, poolerEnabled bool, instances int) {
 	createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []enterprisev4.DatabaseDefinition{{Name: scenario.dbName}})
 	postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
-	markPostgresClusterReady(ctx, postgresCluster, scenario.cnpgClusterName, scenario.namespace, poolerEnabled)
-	cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
+	// Mirror the cluster controller's roPoolerWanted gate so the seeded fixture matches what
+	// real reconciliation would publish: RO is suppressed below 2 declared instances.
+	roEnabled := poolerEnabled && instances >= 2
+	markPostgresClusterReadyWithPooler(ctx, postgresCluster, scenario.cnpgClusterName, scenario.namespace, poolerEnabled, poolerEnabled, roEnabled)
+	cnpgCluster := createCNPGClusterResourceWithInstances(ctx, scenario.namespace, scenario.cnpgClusterName, instances)
 	markCNPGClusterReady(ctx, cnpgCluster, []string{adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)}, "tenant-rw", "tenant-ro")
 }
 
@@ -547,6 +568,63 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				expectReconcileResult(result, err, 15*time.Second)
 				expectPoolerConfigMap(ctx, scenario)
 			})
+
+			It("publishes empty pooler-ro-host when the cluster runs with a single instance", func() {
+				scenario := newReadyClusterScenario(namespace, "pooler-single", "pooler-single-postgres", "pooler-single-cnpg", dbAppdb)
+				seedReadyClusterScenarioWithInstances(ctx, scenario, true, 1)
+
+				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectEmptyReconcileResult(result, err)
+
+				current := fetchPostgresDatabase(ctx, scenario.requestName)
+				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+
+				configMap := &corev1.ConfigMap{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMapNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, configMap)).To(Succeed())
+				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyPoolerRWEndpoint, scenario.cnpgClusterName+"-pooler-rw."+scenario.namespace+".svc.cluster.local"))
+				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyPoolerROEndpoint, ""))
+				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterROEndpoint, ""))
+			})
+
+			It("repopulates ro-host and pooler-ro-host when the cluster scales 1->2", func() {
+				scenario := newReadyClusterScenario(namespace, "pooler-scaleup", "pooler-scaleup-postgres", "pooler-scaleup-cnpg", dbAppdb)
+				seedReadyClusterScenarioWithInstances(ctx, scenario, true, 1)
+
+				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectEmptyReconcileResult(result, err)
+
+				current := fetchPostgresDatabase(ctx, scenario.requestName)
+				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+
+				cmKey := types.NamespacedName{Name: configMapNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}
+				configMap := &corev1.ConfigMap{}
+				Expect(k8sClient.Get(ctx, cmKey, configMap)).To(Succeed())
+				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterROEndpoint, ""))
+				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyPoolerROEndpoint, ""))
+
+				postgresCluster := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.clusterName, Namespace: scenario.namespace}, postgresCluster)).To(Succeed())
+				postgresCluster.Status.ConnectionPoolerStatus.ReadOnlyEnabled = true
+				Expect(k8sClient.Status().Update(ctx, postgresCluster)).To(Succeed())
+
+				cnpgCluster := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.cnpgClusterName, Namespace: scenario.namespace}, cnpgCluster)).To(Succeed())
+				cnpgCluster.Status.ReadyInstances = 2
+				Expect(k8sClient.Status().Update(ctx, cnpgCluster)).To(Succeed())
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+
+				Expect(k8sClient.Get(ctx, cmKey, configMap)).To(Succeed())
+				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterROEndpoint, "tenant-ro."+scenario.namespace+".svc.cluster.local"))
+				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyPoolerROEndpoint, scenario.cnpgClusterName+"-pooler-ro."+scenario.namespace+".svc.cluster.local"))
+			})
 		})
 	})
 
@@ -789,13 +867,121 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			Expect(pred.Delete(event.DeleteEvent{})).To(BeTrue())
 		})
 
-		It("passes PostgresCluster create events and blocks all update events", func() {
-			pred := predicate.Funcs{
-				CreateFunc: func(e event.CreateEvent) bool { return true },
-				UpdateFunc: func(e event.UpdateEvent) bool { return false },
-			}
+		It("passes PostgresCluster create events", func() {
+			pred := postgresClusterForDatabasePredicator()
 			Expect(pred.Create(event.CreateEvent{})).To(BeTrue())
-			Expect(pred.Update(event.UpdateEvent{})).To(BeFalse())
+		})
+
+		It("blocks PostgresCluster delete and generic events", func() {
+			pred := postgresClusterForDatabasePredicator()
+			Expect(pred.Delete(event.DeleteEvent{})).To(BeFalse())
+			Expect(pred.Generic(event.GenericEvent{})).To(BeFalse())
+		})
+
+		It("blocks PostgresCluster updates that don't change ConnectionPoolerStatus", func() {
+			pred := postgresClusterForDatabasePredicator()
+			oldCluster := &enterprisev4.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
+				Status: enterprisev4.PostgresClusterStatus{
+					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
+				},
+			}
+			newCluster := oldCluster.DeepCopy()
+			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeFalse())
+		})
+
+		It("passes PostgresCluster updates that introduce ConnectionPoolerStatus", func() {
+			pred := postgresClusterForDatabasePredicator()
+			oldCluster := &enterprisev4.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
+			}
+			newCluster := oldCluster.DeepCopy()
+			newCluster.Status.ConnectionPoolerStatus = &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true}
+			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeTrue())
+		})
+
+		It("passes PostgresCluster updates that toggle ReadOnlyEnabled", func() {
+			pred := postgresClusterForDatabasePredicator()
+			oldCluster := &enterprisev4.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
+				Status: enterprisev4.PostgresClusterStatus{
+					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: false},
+				},
+			}
+			newCluster := oldCluster.DeepCopy()
+			newCluster.Status.ConnectionPoolerStatus.ReadOnlyEnabled = true
+			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeTrue())
+		})
+
+		It("passes PostgresCluster updates that toggle ReadWriteEnabled", func() {
+			pred := postgresClusterForDatabasePredicator()
+			oldCluster := &enterprisev4.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
+				Status: enterprisev4.PostgresClusterStatus{
+					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
+				},
+			}
+			newCluster := oldCluster.DeepCopy()
+			newCluster.Status.ConnectionPoolerStatus.ReadWriteEnabled = false
+			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeTrue())
+		})
+
+		It("blocks PostgresCluster updates that change unrelated status fields", func() {
+			pred := postgresClusterForDatabasePredicator()
+			phaseReady := "Ready"
+			phaseProvisioning := "Provisioning"
+			oldCluster := &enterprisev4.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
+				Status: enterprisev4.PostgresClusterStatus{
+					Phase:                  &phaseReady,
+					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true},
+				},
+			}
+			newCluster := oldCluster.DeepCopy()
+			newCluster.Status.Phase = &phaseProvisioning
+			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeFalse())
+		})
+
+		It("passes PostgresCluster updates when ReadyInstances drops below the RO threshold", func() {
+			pred := postgresClusterForDatabasePredicator()
+			oldCluster := &enterprisev4.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
+				Status: enterprisev4.PostgresClusterStatus{
+					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
+					ReadyInstances:         ptr.To(int32(2)),
+				},
+			}
+			newCluster := oldCluster.DeepCopy()
+			newCluster.Status.ReadyInstances = ptr.To(int32(1))
+			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeTrue())
+		})
+
+		It("passes PostgresCluster updates when ReadyInstances crosses to the RO threshold", func() {
+			pred := postgresClusterForDatabasePredicator()
+			oldCluster := &enterprisev4.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
+				Status: enterprisev4.PostgresClusterStatus{
+					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
+					ReadyInstances:         ptr.To(int32(1)),
+				},
+			}
+			newCluster := oldCluster.DeepCopy()
+			newCluster.Status.ReadyInstances = ptr.To(int32(2))
+			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeTrue())
+		})
+
+		It("blocks PostgresCluster updates when ReadyInstances changes within the same RO-availability state", func() {
+			pred := postgresClusterForDatabasePredicator()
+			oldCluster := &enterprisev4.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
+				Status: enterprisev4.PostgresClusterStatus{
+					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
+					ReadyInstances:         ptr.To(int32(2)),
+				},
+			}
+			newCluster := oldCluster.DeepCopy()
+			newCluster.Status.ReadyInstances = ptr.To(int32(3))
+			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeFalse())
 		})
 
 		It("does not trigger on annotation changes", func() {

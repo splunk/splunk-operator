@@ -40,7 +40,12 @@ type ManagedRole struct {
 }
 
 // PostgresClusterSpec defines the desired state of PostgresCluster.
-// Validation rules ensure immutability of Class, and that Storage and PostgresVersion can only be set once and cannot be removed or downgraded.
+// Validation rules: Class is immutable; Storage cannot decrease and
+// PostgresVersion's major version cannot be downgraded once set, and neither
+// can be removed once set. Instances can be raised, lowered, or cleared
+// (clearing returns to the class default) subject to the scaling rules in
+// scaling-out.md, which the admission webhook enforces against the merged
+// effective instance count.
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.postgresVersion) || (has(self.postgresVersion) && int(self.postgresVersion.split('.')[0]) >= int(oldSelf.postgresVersion.split('.')[0]))",messageExpression="!has(self.postgresVersion) ? 'postgresVersion cannot be removed once set (was: ' + oldSelf.postgresVersion + ')' : 'postgresVersion major version cannot be downgraded (from: ' + oldSelf.postgresVersion + ', to: ' + self.postgresVersion + ')'"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.storage) || (has(self.storage) && quantity(self.storage).compareTo(quantity(oldSelf.storage)) >= 0)",messageExpression="!has(self.storage) ? 'storage cannot be removed once set (was: ' + string(oldSelf.storage) + ')' : 'storage size cannot be decreased (from: ' + string(oldSelf.storage) + ', to: ' + string(self.storage) + ')'"
 
@@ -84,10 +89,10 @@ type PostgresClusterSpec struct {
 	// +optional
 	PgHBA []string `json:"pgHBA,omitempty"`
 
-	// ConnectionPoolerEnabled controls whether PgBouncer connection pooling is deployed for this cluster.
-	// When set, takes precedence over the class-level connectionPoolerEnabled value.
+	// ConnectionPooler controls whether PgBouncer connection pooling is deployed for this cluster.
+	// Sub-fields override the matching values from the class-level connectionPooler config.
 	// +optional
-	ConnectionPoolerEnabled *bool `json:"connectionPoolerEnabled,omitempty"`
+	ConnectionPooler *ConnectionPoolerEnableConfig `json:"connectionPooler,omitempty"`
 
 	// ManagedRoles contains PostgreSQL roles that should be created in the cluster.
 	// This field supports Server-Side Apply with per-role granularity, allowing
@@ -175,6 +180,20 @@ type PostgresClusterStatus struct {
 	// BackupStatus contains the observed state of backup configuration.
 	// +optional
 	BackupStatus *BackupStatus `json:"backupStatus,omitempty"`
+
+	// Instances is the declared instance count reported by the underlying
+	// provisioner.
+	// +optional
+	Instances *int32 `json:"instances,omitempty"`
+
+	// ReadyInstances is the number of instances reported as ready by the
+	// underlying provisioner.
+	// +optional
+	ReadyInstances *int32 `json:"readyInstances,omitempty"`
+
+	// CurrentPrimary is the name of the pod currently hosting the primary.
+	// +optional
+	CurrentPrimary *string `json:"currentPrimary,omitempty"`
 }
 
 // ManagedRolesStatus tracks the state of managed PostgreSQL roles.
@@ -196,6 +215,15 @@ type ManagedRolesStatus struct {
 type ConnectionPoolerStatus struct {
 	// Enabled indicates whether pooler is active for this cluster.
 	Enabled bool `json:"enabled"`
+
+	// ReadWriteEnabled is true when the RW pooler resource is reconciled by the operator.
+	// +optional
+	ReadWriteEnabled bool `json:"readWriteEnabled,omitempty"`
+
+	// ReadOnlyEnabled is true when the RO pooler resource is reconciled by the operator.
+	// Independent consumers should mirror this gate before advertising RO pooler endpoints.
+	// +optional
+	ReadOnlyEnabled bool `json:"readOnlyEnabled,omitempty"`
 }
 
 // BackupStatus contains the observed state of backup configuration.
@@ -224,6 +252,9 @@ type VolumeSnapshotBackupStatus struct {
 // +kubebuilder:resource:scope=Namespaced
 // +kubebuilder:printcolumn:name="Class",type=string,JSONPath=`.spec.class`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
+// +kubebuilder:printcolumn:name="Instances",type=integer,JSONPath=`.status.instances`
+// +kubebuilder:printcolumn:name="Ready",type=integer,JSONPath=`.status.readyInstances`
+// +kubebuilder:printcolumn:name="Primary",type=string,JSONPath=`.status.currentPrimary`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // PostgresCluster is the Schema for the postgresclusters API.
