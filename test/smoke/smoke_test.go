@@ -44,14 +44,14 @@ var _ = Describe("Smoke test", Label("tier:e2e-pr", "cloud:aws", "feature:basic"
 
 	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
 		It("can deploy indexers and search head cluster", Label("tier:e2e-pr", "sva:c3", "cloud:aws", "feature:basic"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
-			_, err := testcaseEnvInst.RunC3DeploymentWorkflow(ctx, deployment, 3, "")
+			_, err := testcaseEnvInst.RunC3DeploymentWorkflow(ctx, deployment, 3)
 			Expect(err).To(Succeed(), "Unable to deploy C3 cluster")
 		})
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite Indexer Cluster, Search Head Cluster)", func() {
 		It("can deploy indexers and search head cluster", Label("tier:e2e-pr", "sva:m4", "cloud:aws", "feature:basic"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
-			_, err := testcaseEnvInst.RunM4DeploymentWorkflow(ctx, deployment, 1, 3, "")
+			_, err := testcaseEnvInst.RunM4DeploymentWorkflow(ctx, deployment, 1, 3)
 			Expect(err).To(Succeed(), "Unable to deploy M4 cluster")
 		})
 	})
