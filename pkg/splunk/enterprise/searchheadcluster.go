@@ -30,6 +30,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -467,11 +468,16 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 // getSearchHeadStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise search heads.
 func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
 
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs))
+	if err != nil {
+		return nil, err
+	}
+
 	// get search head env variables with deployer
 	env := getSearchHeadEnv(cr)
 
 	// get generic statefulset for Splunk Enterprise objects
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, cr.Spec.Replicas, env)
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, cr.Spec.Replicas, env, certMounts)
 	if err != nil {
 		return nil, err
 	}
@@ -513,7 +519,11 @@ func setDeployerConfig(ctx context.Context, cr *enterpriseApi.SearchHeadCluster,
 
 // getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
 func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas))
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs))
+	if err != nil {
+		return nil, err
+	}
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas), certMounts)
 	if err != nil {
 		return ss, err
 	}

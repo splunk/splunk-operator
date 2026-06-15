@@ -477,6 +477,17 @@ func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseMana
 	return deployed.(*enterpriseApi.IndexerCluster), err
 }
 
+// DeployIndexerClusterWithGivenSpec deploys an Indexer Cluster with a fully specified spec.
+func (d *Deployment) DeployIndexerClusterWithGivenSpec(ctx context.Context, name string, spec enterpriseApi.IndexerClusterSpec) (*enterpriseApi.IndexerCluster, error) {
+	d.testenv.Log.Info("Deploying Indexer Cluster with given spec", "name", name)
+	idxc := newIndexerClusterWithGivenSpec(name, d.testenv.namespace, spec)
+	deployed, err := d.deployCR(ctx, name, idxc)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterpriseApi.IndexerCluster), err
+}
+
 // DeployIngestorCluster deploys the Ingestor Cluster
 func (d *Deployment) DeployIngestorCluster(ctx context.Context, name string, count int, queue, os corev1.ObjectReference, serviceAccountName string) (*enterpriseApi.IngestorCluster, error) {
 	d.testenv.Log.Info("Deploying Ingestor Cluster", "name", name)

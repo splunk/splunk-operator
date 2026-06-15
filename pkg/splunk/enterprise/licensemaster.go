@@ -34,6 +34,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
 
 // ApplyLicenseMaster reconciles the state for the Splunk Enterprise license manager.
@@ -187,7 +188,11 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 
 // getLicenseMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
 func getLicenseMasterStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApiV3.LicenseMaster) (*appsv1.StatefulSet, error) {
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, 1, []corev1.EnvVar{})
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs))
+	if err != nil {
+		return nil, err
+	}
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, 1, []corev1.EnvVar{}, certMounts)
 	if err != nil {
 		return ss, err
 	}

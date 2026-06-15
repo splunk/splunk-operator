@@ -30,6 +30,7 @@ import (
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	certs "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -289,6 +290,9 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(
+				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.IndexerClusterList{}))).
 		Named("indexer-cluster-controller").
 		Complete(r)
 }

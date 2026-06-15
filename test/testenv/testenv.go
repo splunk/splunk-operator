@@ -301,6 +301,17 @@ func (testenv *TestEnv) GetName() string {
 	return testenv.name
 }
 
+// GetSplunkImage returns the Splunk Enterprise image configured for this testenv.
+func (testenv *TestEnv) GetSplunkImage() string {
+	return testenv.splunkImage
+}
+
+// HasLicenseFile returns true when a license file path is configured, meaning
+// LicenseManager deployment is expected in cluster-topology tests.
+func (testenv *TestEnv) HasLicenseFile() bool {
+	return testenv.licenseFilePath != ""
+}
+
 // Teardown cleanup the resources use in this testenv
 func (testenv *TestEnv) Teardown() error {
 
