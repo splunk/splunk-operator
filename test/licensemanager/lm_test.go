@@ -102,4 +102,21 @@ var _ = Describe("License Manager test", func() {
 			})
 		})
 	}
+
+	// Cert tests use LicenseManager (V4) only.
+	Context("Standalone deployment (S1) with LicenseManager — cert mounting", func() {
+		BeforeEach(func() {
+			var err error
+			testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+			Expect(err).To(Succeed(), "Failed to setup test case environment")
+		})
+
+		AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+			Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+		})
+
+		It("licensemanager, integration, s1, cert: LicenseManager mounts server-role and no-role certs and detects rotation", func() {
+			RunLMCertTest(ctx, deployment, testcaseEnvInst, testenvInstance)
+		})
+	})
 })

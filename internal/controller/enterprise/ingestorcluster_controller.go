@@ -39,6 +39,7 @@ import (
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	certs "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
 
 // IngestorClusterReconciler reconciles a IngestorCluster object
@@ -260,6 +261,9 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(
+				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.IngestorClusterList{}))).
 		Named("ingestor-cluster-controller").
 		Complete(r)
 }

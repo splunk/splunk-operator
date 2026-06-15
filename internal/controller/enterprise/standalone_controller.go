@@ -36,6 +36,7 @@ import (
 	"github.com/pkg/errors"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	certs "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -168,6 +169,9 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(
+				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.StandaloneList{}))).
 		Named("standalone-controller").
 		Complete(r)
 }

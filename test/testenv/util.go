@@ -950,6 +950,14 @@ func GetConfigMap(ctx context.Context, deployment *Deployment, ns string, config
 }
 
 // newClusterManagerWithGivenSpec creates and initialize the CR for ClusterManager Kind
+func newIndexerClusterWithGivenSpec(name string, ns string, spec enterpriseApi.IndexerClusterSpec) *enterpriseApi.IndexerCluster {
+	return &enterpriseApi.IndexerCluster{
+		TypeMeta:   metav1.TypeMeta{Kind: "IndexerCluster"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Finalizers: []string{"enterprise.splunk.com/delete-pvc"}},
+		Spec:       spec,
+	}
+}
+
 func newClusterManagerWithGivenSpec(name string, ns string, spec enterpriseApi.ClusterManagerSpec) *enterpriseApi.ClusterManager {
 	new := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
