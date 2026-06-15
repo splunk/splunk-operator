@@ -41,12 +41,23 @@ func buildDatabaseConfigMapData(dbName string, endpoints clusterEndpoints) (map[
 	return pgconninfo.BuildConfigMapData(endpoints, withDatabaseIdentity(dbName))
 }
 
+// resolveClusterEndpoints derives the database access endpoints from the cluster
+// status, mapping the pooler reconciliation gates onto PoolerAvailability.
 func resolveClusterEndpoints(cluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster, namespace string) (clusterEndpoints, error) {
+	var pooler pgcnpg.PoolerAvailability
+	if poolerStatus := cluster.Status.ConnectionPoolerStatus; poolerStatus != nil && poolerStatus.Enabled {
+		pooler = pgcnpg.PoolerAvailability{
+			Enabled: true,
+			RWReady: poolerStatus.ReadWriteEnabled,
+			ROReady: poolerStatus.ReadOnlyEnabled,
+		}
+	}
 	return pgcnpg.ResolveConnectionEndpoints(
 		cnpgCluster.Name,
 		namespace,
 		cnpgCluster.Status.WriteService,
 		cnpgCluster.Status.ReadService,
-		cluster.Status.ConnectionPoolerStatus != nil && cluster.Status.ConnectionPoolerStatus.Enabled,
+		cnpgCluster.Status.ReadyInstances,
+		pooler,
 	)
 }

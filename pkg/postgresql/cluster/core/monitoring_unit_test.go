@@ -144,7 +144,9 @@ func TestIsConnectionPoolerMetricsEnabled(t *testing.T) {
 			name: "enabled even when cluster explicitly disables the pooler",
 			cluster: &enterprisev4.PostgresCluster{
 				Spec: enterprisev4.PostgresClusterSpec{
-					ConnectionPoolerEnabled: ptr.To(false),
+					ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{
+						Enabled: ptr.To(false),
+					},
 				},
 			},
 			class: newClassWithMonitoring(
@@ -195,10 +197,9 @@ func newClassWithMonitoring(
 	poolerEnabled *bool,
 	connectionPoolerMetricsEnabled *bool,
 ) *enterprisev4.PostgresClusterClass {
-	return &enterprisev4.PostgresClusterClass{
+	cls := &enterprisev4.PostgresClusterClass{
 		Spec: enterprisev4.PostgresClusterClassSpec{
 			Config: &enterprisev4.PostgresClusterClassConfig{
-				ConnectionPoolerEnabled: poolerEnabled,
 				Monitoring: &enterprisev4.PostgresMonitoringClassConfig{
 					PostgreSQLMetrics:       &enterprisev4.MetricsClassConfig{Enabled: postgresEnabled},
 					ConnectionPoolerMetrics: &enterprisev4.MetricsClassConfig{Enabled: connectionPoolerMetricsEnabled},
@@ -206,4 +207,8 @@ func newClassWithMonitoring(
 			},
 		},
 	}
+	if poolerEnabled != nil {
+		cls.Spec.Config.ConnectionPooler = &enterprisev4.ConnectionPoolerEnableConfig{Enabled: poolerEnabled}
+	}
+	return cls
 }

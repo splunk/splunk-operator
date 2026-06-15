@@ -46,8 +46,9 @@ func TestGenerateConfigMap(t *testing.T) {
 			Namespace: "default",
 		},
 		Status: cnpgv1.ClusterStatus{
-			WriteService: "my-cluster-rw",
-			ReadService:  "my-cluster-ro",
+			WriteService:   "my-cluster-rw",
+			ReadService:    "my-cluster-ro",
+			ReadyInstances: 3,
 		},
 	}
 

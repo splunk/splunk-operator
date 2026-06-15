@@ -25,6 +25,7 @@ import (
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -64,13 +65,102 @@ func newPoolerModel(c client.Client, scheme *runtime.Scheme, events poolerEmitte
 
 func (p *poolerModel) poolerEnabled() bool {
 	return p.mergedConfig != nil && p.mergedConfig.Spec != nil &&
-		p.mergedConfig.Spec.ConnectionPoolerEnabled != nil &&
-		*p.mergedConfig.Spec.ConnectionPoolerEnabled
+		isPoolerEnabled(p.mergedConfig.Spec.ConnectionPooler)
 }
 
 func (p *poolerModel) poolerConfigPresent() bool {
 	return p.mergedConfig != nil && p.mergedConfig.CNPG != nil &&
 		p.mergedConfig.CNPG.ConnectionPooler != nil
+}
+
+// roPoolerWanted reports whether the read-only pooler resource should be
+// reconciled. Combines the user opt-in (connectionPooler.readOnly, default
+// true) with the declared instance count (spec.instances >= the RO threshold).
+// Using the declared count rather than ready replicas avoids resource churn
+// during transient ready-count dips on scale events.
+func (p *poolerModel) roPoolerWanted() bool {
+	if p.mergedConfig == nil || p.mergedConfig.Spec == nil || p.mergedConfig.Spec.Instances == nil {
+		return false
+	}
+	if !poolerReadOnlyWanted(p.mergedConfig.Spec.ConnectionPooler) {
+		return false
+	}
+	return *p.mergedConfig.Spec.Instances >= pgcnpg.MinInstancesForReadOnly
+}
+
+// rwPoolerWanted reports whether the read-write pooler resource should be
+// reconciled. Driven by the user opt-in (connectionPooler.readWrite, default
+// true). Validation rejects "enabled with neither RW nor RO" upstream, so
+// when poolerEnabled is true at least one of rw/ro will be wanted.
+func (p *poolerModel) rwPoolerWanted() bool {
+	if p.mergedConfig == nil || p.mergedConfig.Spec == nil {
+		return false
+	}
+	return poolerReadWriteWanted(p.mergedConfig.Spec.ConnectionPooler)
+}
+
+// isPoolerEnabled reports whether the connection pooler is enabled by the
+// supplied ConnectionPoolerEnableConfig (nil-safe).
+func isPoolerEnabled(c *enterprisev4.ConnectionPoolerEnableConfig) bool {
+	return c != nil && c.Enabled != nil && *c.Enabled
+}
+
+// poolerReadWriteWanted reports whether the RW pooler is opted-in. Default is
+// true when the parent struct exists; consumers should pair this with
+// isPoolerEnabled before acting on it.
+func poolerReadWriteWanted(c *enterprisev4.ConnectionPoolerEnableConfig) bool {
+	if c == nil {
+		return false
+	}
+	return c.ReadWrite == nil || *c.ReadWrite
+}
+
+// poolerReadOnlyWanted reports whether the RO pooler is opted-in. Default is
+// true when the parent struct exists; consumers should pair this with
+// isPoolerEnabled and the instances>=2 check before acting on it.
+func poolerReadOnlyWanted(c *enterprisev4.ConnectionPoolerEnableConfig) bool {
+	if c == nil {
+		return false
+	}
+	return c.ReadOnly == nil || *c.ReadOnly
+}
+
+// PoolerReadOnlyRequested reports whether the merged config opts into the RO
+// pooler. It does not consider instance count — callers enforce >=2 separately.
+func PoolerReadOnlyRequested(merged *MergedConfig) bool {
+	if merged == nil {
+		return false
+	}
+	c := merged.Spec.ConnectionPooler
+	return isPoolerEnabled(c) && poolerReadOnlyWanted(c)
+}
+
+// mergeConnectionPoolerEnable overlays cluster-level ConnectionPoolerEnableConfig
+// on top of the class-level defaults at the sub-field granularity, so cluster
+// overrides one field (e.g. ReadOnly) without dropping the class-supplied
+// values for the rest. Returns nil only when both inputs are nil.
+func mergeConnectionPoolerEnable(cluster, class *enterprisev4.ConnectionPoolerEnableConfig) *enterprisev4.ConnectionPoolerEnableConfig {
+	if cluster == nil && class == nil {
+		return nil
+	}
+	out := &enterprisev4.ConnectionPoolerEnableConfig{}
+	if cluster != nil {
+		out.Enabled = cluster.Enabled
+		out.ReadWrite = cluster.ReadWrite
+		out.ReadOnly = cluster.ReadOnly
+	}
+	if class != nil {
+		if out.Enabled == nil {
+			out.Enabled = class.Enabled
+		}
+		if out.ReadWrite == nil {
+			out.ReadWrite = class.ReadWrite
+		}
+		if out.ReadOnly == nil {
+			out.ReadOnly = class.ReadOnly
+		}
+	}
+	return out
 }
 
 func (p *poolerModel) Name() string            { return pgcConstants.ComponentPooler }
@@ -94,11 +184,40 @@ func (p *poolerModel) Reconcile(ctx context.Context) error {
 	case !p.poolerConfigPresent():
 		return nil
 	default:
-		if err := createOrUpdateConnectionPoolers(ctx, p.client, p.scheme, p.cluster, p.mergedConfig, p.contracts.CNPGCluster, p.metricsEnabled); err != nil {
-			return newReconcileFailure(reasonPoolerReconciliationFailed, err)
+		rwWanted := p.rwPoolerWanted()
+		roWanted := p.roPoolerWanted()
+		// Defense-in-depth: ValidateCrossResource rejects this combination at
+		// admission and at reconciler entry. The runtime guard catches any
+		// future code path that bypasses both validation hooks.
+		if !rwWanted && !roWanted {
+			return newReconcileFailure(reasonPoolerConfigMissing,
+				fmt.Errorf("connection pooler is enabled but no endpoint is opted in (set readWrite and/or readOnly to true)"))
+		}
+		if err := p.reconcilePoolerEndpoint(ctx, readWriteEndpoint, rwWanted); err != nil {
+			return err
+		}
+		if err := p.reconcilePoolerEndpoint(ctx, readOnlyEndpoint, roWanted); err != nil {
+			return err
 		}
 		return nil
 	}
+}
+
+// reconcilePoolerEndpoint creates the pooler resource for poolerType when wanted
+// is true, or deletes it when wanted is false. Reconcile errors are wrapped as
+// *reconcileFailure so classifyReconcileErr surfaces the warning event and
+// failed health in Observe.
+func (p *poolerModel) reconcilePoolerEndpoint(ctx context.Context, poolerType string, wanted bool) error {
+	var err error
+	if wanted {
+		err = createConnectionPooler(ctx, p.client, p.scheme, p.cluster, p.mergedConfig, p.contracts.CNPGCluster, poolerType, p.metricsEnabled)
+	} else {
+		err = deleteConnectionPooler(ctx, p.client, p.cluster, poolerType)
+	}
+	if err == nil {
+		return nil
+	}
+	return newReconcileFailure(reasonPoolerReconciliationFailed, err)
 }
 
 func (p *poolerModel) Observe(ctx context.Context, reconcileErr error) (componentHealth, error) {
@@ -157,52 +276,69 @@ func (p *poolerModel) computeHealth(ctx context.Context, reconcileErr error) (co
 		return newProvisioningHealth(poolerReady, reasonPoolerTLSLeafPending, msgPoolerTLSLeafPending), nil
 	}
 
-	// TODO: Port material.
-	rwExists, err := poolerExists(ctx, p.client, p.cluster, readWriteEndpoint)
-	if err != nil {
-		msg := fmt.Sprintf("failed to sync pooler status for PostgresCluster %s — check operator logs", p.cluster.Name)
-		p.events.emitWarning(p.cluster, EventPoolerReconcileFailed, msg)
-		return newFailedHealth(poolerReady, reasonPoolerReconciliationFailed, fmt.Sprintf("Failed to check RW pooler existence: %v", err)), err
+	rwWanted := p.rwPoolerWanted()
+	roWanted := p.roPoolerWanted()
+	var rwExists, roExists bool
+	var err error
+	if rwWanted {
+		rwExists, err = poolerExists(ctx, p.client, p.cluster, readWriteEndpoint)
+		if err != nil {
+			msg := fmt.Sprintf("failed to sync pooler status for PostgresCluster %s — check operator logs", p.cluster.Name)
+			p.events.emitWarning(p.cluster, EventPoolerReconcileFailed, msg)
+			return newFailedHealth(poolerReady, reasonPoolerReconciliationFailed, fmt.Sprintf("Failed to check RW pooler existence: %v", err)), err
+		}
 	}
-	roExists, err := poolerExists(ctx, p.client, p.cluster, readOnlyEndpoint)
-	if err != nil {
-		msg := fmt.Sprintf("failed to sync pooler status for PostgresCluster %s — check operator logs", p.cluster.Name)
-		p.events.emitWarning(p.cluster, EventPoolerReconcileFailed, msg)
-		return newFailedHealth(poolerReady, reasonPoolerReconciliationFailed, fmt.Sprintf("Failed to check RO pooler existence: %v", err)), err
+	if roWanted {
+		roExists, err = poolerExists(ctx, p.client, p.cluster, readOnlyEndpoint)
+		if err != nil {
+			msg := fmt.Sprintf("failed to sync pooler status for PostgresCluster %s — check operator logs", p.cluster.Name)
+			p.events.emitWarning(p.cluster, EventPoolerReconcileFailed, msg)
+			return newFailedHealth(poolerReady, reasonPoolerReconciliationFailed, fmt.Sprintf("Failed to check RO pooler existence: %v", err)), err
+		}
 	}
-	if !rwExists || !roExists {
+	if (rwWanted && !rwExists) || (roWanted && !roExists) {
 		p.events.emitPoolerCreationTransition(p.cluster, p.cluster.Status.Conditions)
 		return newProvisioningHealth(poolerReady, reasonPoolerCreating, msgPoolersProvisioning), nil
 	}
 
-	rwPooler := &cnpgv1.Pooler{}
-	if err := p.client.Get(ctx, types.NamespacedName{
-		Name:      poolerResourceName(p.cluster.Name, readWriteEndpoint),
-		Namespace: p.cluster.Namespace,
-	}, rwPooler); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return newFailedHealth(poolerReady, reasonPoolerReconciliationFailed, err.Error()), fmt.Errorf("getting RW pooler: %w", err)
+	var rwPooler *cnpgv1.Pooler
+	if rwWanted {
+		rwPooler = &cnpgv1.Pooler{}
+		if err := p.client.Get(ctx, types.NamespacedName{
+			Name:      poolerResourceName(p.cluster.Name, readWriteEndpoint),
+			Namespace: p.cluster.Namespace,
+		}, rwPooler); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return newFailedHealth(poolerReady, reasonPoolerReconciliationFailed, err.Error()), fmt.Errorf("getting RW pooler: %w", err)
+			}
+			p.events.emitPoolerCreationTransition(p.cluster, p.cluster.Status.Conditions)
+			return newPendingHealth(poolerReady, reasonPoolerCreating, msgWaitRWPoolerObject), nil
 		}
-		p.events.emitPoolerCreationTransition(p.cluster, p.cluster.Status.Conditions)
-		return newPendingHealth(poolerReady, reasonPoolerCreating, msgWaitRWPoolerObject), nil
 	}
-	roPooler := &cnpgv1.Pooler{}
-	if err := p.client.Get(ctx, types.NamespacedName{
-		Name:      poolerResourceName(p.cluster.Name, readOnlyEndpoint),
-		Namespace: p.cluster.Namespace,
-	}, roPooler); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return newFailedHealth(poolerReady, reasonPoolerReconciliationFailed, err.Error()), fmt.Errorf("getting RO pooler: %w", err)
+	var roPooler *cnpgv1.Pooler
+	if roWanted {
+		roPooler = &cnpgv1.Pooler{}
+		if err := p.client.Get(ctx, types.NamespacedName{
+			Name:      poolerResourceName(p.cluster.Name, readOnlyEndpoint),
+			Namespace: p.cluster.Namespace,
+		}, roPooler); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return newFailedHealth(poolerReady, reasonPoolerReconciliationFailed, err.Error()), fmt.Errorf("getting RO pooler: %w", err)
+			}
+			p.events.emitPoolerCreationTransition(p.cluster, p.cluster.Status.Conditions)
+			return newPendingHealth(poolerReady, reasonPoolerCreating, msgWaitROPoolerObject), nil
 		}
-		p.events.emitPoolerCreationTransition(p.cluster, p.cluster.Status.Conditions)
-		return newPendingHealth(poolerReady, reasonPoolerCreating, msgWaitROPoolerObject), nil
 	}
 	if !arePoolersReady(rwPooler, roPooler) {
 		p.events.emitPoolerCreationTransition(p.cluster, p.cluster.Status.Conditions)
 		return newPendingHealth(poolerReady, reasonPoolerCreating, msgPoolersNotReady), nil
 	}
 
-	p.cluster.Status.ConnectionPoolerStatus = &enterprisev4.ConnectionPoolerStatus{Enabled: true}
+	p.cluster.Status.ConnectionPoolerStatus = &enterprisev4.ConnectionPoolerStatus{
+		Enabled:          true,
+		ReadWriteEnabled: rwWanted,
+		ReadOnlyEnabled:  roWanted,
+	}
 	h := newReadyHealth(poolerReady, reasonAllInstancesReady, msgPoolersReady)
 	p.events.emitPoolerReadyTransition(p.cluster, oldConditions)
 	return h, nil
@@ -224,8 +360,18 @@ func poolerExists(ctx context.Context, c client.Client, cluster *enterprisev4.Po
 	return err == nil, err
 }
 
+// arePoolersReady reports whether each supplied pooler is ready. A nil
+// pointer for either side means that pooler is not wanted and is skipped.
+// At least one of the two is expected to be non-nil; both nil returns true
+// (the upstream "no endpoint enabled" check is enforced separately).
 func arePoolersReady(rwPooler, roPooler *cnpgv1.Pooler) bool {
-	return isPoolerReady(rwPooler) && isPoolerReady(roPooler)
+	if rwPooler != nil && !isPoolerReady(rwPooler) {
+		return false
+	}
+	if roPooler != nil && !isPoolerReady(roPooler) {
+		return false
+	}
+	return true
 }
 
 // isPoolerReady checks if a pooler has all instances scheduled.
@@ -306,27 +452,35 @@ func buildCNPGPooler(scheme *runtime.Scheme, cluster *enterprisev4.PostgresClust
 
 // deleteConnectionPoolers removes RW and RO poolers if they exist.
 func deleteConnectionPoolers(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster) error {
-	logger := logging.FromContext(ctx).With("func", "deleteConnectionPoolers")
 	for _, poolerType := range []string{readWriteEndpoint, readOnlyEndpoint} {
-		poolerName := poolerResourceName(cluster.Name, poolerType)
-		exist, err := poolerExists(ctx, c, cluster, poolerType)
-		if err != nil {
-			return fmt.Errorf("checking pooler existence: %w", err)
+		if err := deleteConnectionPooler(ctx, c, cluster, poolerType); err != nil {
+			return err
 		}
-		if !exist {
-			continue
+	}
+	return nil
+}
+
+// deleteConnectionPooler removes a single pooler (by type) if it exists.
+func deleteConnectionPooler(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster, poolerType string) error {
+	logger := logging.FromContext(ctx).With("func", "deleteConnectionPooler")
+	poolerName := poolerResourceName(cluster.Name, poolerType)
+	exist, err := poolerExists(ctx, c, cluster, poolerType)
+	if err != nil {
+		return fmt.Errorf("checking pooler existence: %w", err)
+	}
+	if !exist {
+		return nil
+	}
+	pooler := &cnpgv1.Pooler{}
+	if err := c.Get(ctx, types.NamespacedName{Name: poolerName, Namespace: cluster.Namespace}, pooler); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
 		}
-		pooler := &cnpgv1.Pooler{}
-		if err := c.Get(ctx, types.NamespacedName{Name: poolerName, Namespace: cluster.Namespace}, pooler); err != nil {
-			if apierrors.IsNotFound(err) {
-				continue
-			}
-			return fmt.Errorf("getting pooler %s: %w", poolerName, err)
-		}
-		logger.InfoContext(ctx, "CNPG Pooler deletion started", "name", poolerName)
-		if err := c.Delete(ctx, pooler); err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("deleting pooler %s: %w", poolerName, err)
-		}
+		return fmt.Errorf("getting pooler %s: %w", poolerName, err)
+	}
+	logger.InfoContext(ctx, "CNPG Pooler deletion started", "name", poolerName)
+	if err := c.Delete(ctx, pooler); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("deleting pooler %s: %w", poolerName, err)
 	}
 	return nil
 }

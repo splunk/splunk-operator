@@ -28,6 +28,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/config"
 	core "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
+	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
 )
 
 // ValidatePostgresClusterCreate validates a PostgresCluster on CREATE.
@@ -88,10 +89,29 @@ func validateAgainstClass(ctx context.Context, obj *enterpriseApi.PostgresCluste
 		return allErrs
 	}
 
-	merged := core.GetMergedConfig(class, obj)
-	allErrs = append(allErrs, toFieldErrors(core.ValidateMergedConfig(merged, class.Name))...)
+	allErrs = append(allErrs, toFieldErrors(core.ValidateMergedConfig(core.GetMergedConfig(class, obj), class.Name))...)
 	allErrs = append(allErrs, toFieldErrors(core.ValidateCrossResource(class, obj))...)
+	allErrs = append(allErrs, validatePoolerEndpoints(class, obj)...)
 	return allErrs
+}
+
+// validatePoolerEndpoints is admission-only by design: the reconciler suppresses
+// the RO pooler at instances<2 rather than failing, so this fail-fast lives here
+// (not in ValidateCrossResource) to reject explicit readOnly=true the cluster
+// can never satisfy.
+func validatePoolerEndpoints(class *enterpriseApi.PostgresClusterClass, obj *enterpriseApi.PostgresCluster) field.ErrorList {
+	merged := core.GetMergedConfig(class, obj)
+	if !core.PoolerReadOnlyRequested(merged) {
+		return nil
+	}
+	if merged.Spec.Instances != nil && *merged.Spec.Instances < pgcnpg.MinInstancesForReadOnly {
+		return field.ErrorList{field.Invalid(
+			field.NewPath("spec").Child("connectionPooler").Child("readOnly"),
+			true,
+			fmt.Sprintf("connectionPooler.readOnly cannot be true when effective instances=%d (requires >= %d)", *merged.Spec.Instances, pgcnpg.MinInstancesForReadOnly),
+		)}
+	}
+	return nil
 }
 
 func toFieldErrors(errs []core.ConfigValidationError) field.ErrorList {

@@ -199,7 +199,12 @@ func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Sch
 		cnpgCluster.Namespace,
 		cnpgCluster.Status.WriteService,
 		cnpgCluster.Status.ReadService,
-		rwExists && roExists,
+		cnpgCluster.Status.ReadyInstances,
+		pgcnpg.PoolerAvailability{
+			Enabled: rwExists || roExists,
+			RWReady: rwExists,
+			ROReady: roExists,
+		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve connection endpoints: %w", err)

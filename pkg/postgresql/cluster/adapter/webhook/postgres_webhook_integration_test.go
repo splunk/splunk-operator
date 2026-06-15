@@ -596,10 +596,12 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 		Spec: enterpriseApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &enterpriseApi.PostgresClusterClassConfig{
-				Instances:               ptr.To(int32(3)),
-				Storage:                 ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion:         ptr.To("17"),
-				ConnectionPoolerEnabled: ptr.To(false),
+				Instances:       ptr.To(int32(3)),
+				Storage:         ptr.To(resource.MustParse("50Gi")),
+				PostgresVersion: ptr.To("17"),
+				ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					Enabled: ptr.To(false),
+				},
 			},
 		},
 	}
@@ -656,8 +658,10 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 				Spec: enterpriseApi.PostgresClusterSpec{
-					Class:                   "prod",
-					ConnectionPoolerEnabled: ptr.To(true),
+					Class: "prod",
+					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+						Enabled: ptr.To(true),
+					},
 				},
 			},
 			wantAllowed: false,
@@ -697,10 +701,12 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 		Spec: enterpriseApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &enterpriseApi.PostgresClusterClassConfig{
-				Instances:               ptr.To(int32(3)),
-				Storage:                 ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion:         ptr.To("17"),
-				ConnectionPoolerEnabled: ptr.To(false),
+				Instances:       ptr.To(int32(3)),
+				Storage:         ptr.To(resource.MustParse("50Gi")),
+				PostgresVersion: ptr.To("17"),
+				ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					Enabled: ptr.To(false),
+				},
 			},
 		},
 	}
@@ -759,8 +765,10 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 				Spec: enterpriseApi.PostgresClusterSpec{
-					Class:                   "prod",
-					ConnectionPoolerEnabled: ptr.To(true),
+					Class: "prod",
+					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+						Enabled: ptr.To(true),
+					},
 				},
 			},
 			wantAllowed: false,
@@ -785,6 +793,147 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 			ar := newPostgresClusterAdmissionReview(t, "uid-xref-update-"+tt.name, admissionv1.Update, tt.newObj, oldObj)
 			resp := sendAdmissionReview(t, server, ar)
 
+			assert.Equal(t, tt.wantAllowed, resp.Allowed, "unexpected admission result")
+			if tt.wantMessage != "" {
+				require.NotNil(t, resp.Result)
+				assert.Contains(t, resp.Result.Message, tt.wantMessage)
+			}
+		})
+	}
+}
+
+// TestPoolerEndpointAdmissionIntegration covers the readOnly + instances<2
+// rejection end-to-end through the admission webhook server.
+func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
+	classOne := &enterpriseApi.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "single"},
+		Spec: enterpriseApi.PostgresClusterClassSpec{
+			Provisioner: "postgresql.cnpg.io",
+			Config: &enterpriseApi.PostgresClusterClassConfig{
+				Instances:       ptr.To(int32(1)),
+				Storage:         ptr.To(resource.MustParse("10Gi")),
+				PostgresVersion: ptr.To("17"),
+			},
+			CNPG: &enterpriseApi.CNPGConfig{
+				PrimaryUpdateMethod: ptr.To("restart"),
+				ConnectionPooler:    &enterpriseApi.ConnectionPoolerConfig{},
+			},
+		},
+	}
+	classHA := &enterpriseApi.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "ha"},
+		Spec: enterpriseApi.PostgresClusterClassSpec{
+			Provisioner: "postgresql.cnpg.io",
+			Config: &enterpriseApi.PostgresClusterClassConfig{
+				Instances:       ptr.To(int32(2)),
+				Storage:         ptr.To(resource.MustParse("10Gi")),
+				PostgresVersion: ptr.To("17"),
+			},
+			CNPG: &enterpriseApi.CNPGConfig{
+				PrimaryUpdateMethod: ptr.To("switchover"),
+				ConnectionPooler:    &enterpriseApi.ConnectionPoolerConfig{},
+			},
+		},
+	}
+
+	fakeClient := newFakeReader(classOne, classHA).Build()
+	server := validation.NewWebhookServer(validation.WebhookServerOptions{
+		Port:       9443,
+		Validators: validation.DefaultValidators,
+		Client:     fakeClient,
+	})
+
+	tests := []struct {
+		name        string
+		op          admissionv1.Operation
+		obj         *enterpriseApi.PostgresCluster
+		oldObj      *enterpriseApi.PostgresCluster
+		wantAllowed bool
+		wantMessage string
+	}{
+		{
+			name: "create rejected - readOnly=true at instances=1",
+			op:   admissionv1.Create,
+			obj: &enterpriseApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class: "single",
+					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+						Enabled:  ptr.To(true),
+						ReadOnly: ptr.To(true),
+					},
+				},
+			},
+			wantAllowed: false,
+			wantMessage: "connectionPooler.readOnly cannot be true when effective instances=1",
+		},
+		{
+			name: "create allowed - readOnly=false at instances=1",
+			op:   admissionv1.Create,
+			obj: &enterpriseApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class: "single",
+					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+						Enabled:  ptr.To(true),
+						ReadOnly: ptr.To(false),
+					},
+				},
+			},
+			wantAllowed: true,
+		},
+		{
+			name: "create allowed - readOnly=true at instances=2",
+			op:   admissionv1.Create,
+			obj: &enterpriseApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class: "ha",
+					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+						Enabled:  ptr.To(true),
+						ReadOnly: ptr.To(true),
+					},
+				},
+			},
+			wantAllowed: true,
+		},
+		{
+			name: "update rejected - flipping readOnly true at instances=1",
+			op:   admissionv1.Update,
+			oldObj: &enterpriseApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class: "single",
+					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+						Enabled:  ptr.To(true),
+						ReadOnly: ptr.To(false),
+					},
+				},
+			},
+			obj: &enterpriseApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class: "single",
+					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+						Enabled:  ptr.To(true),
+						ReadOnly: ptr.To(true),
+					},
+				},
+			},
+			wantAllowed: false,
+			wantMessage: "connectionPooler.readOnly cannot be true when effective instances=1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ar := newPostgresClusterAdmissionReview(t, "uid-pooler-"+tt.name, tt.op, tt.obj, tt.oldObj)
+			resp := sendAdmissionReview(t, server, ar)
 			assert.Equal(t, tt.wantAllowed, resp.Allowed, "unexpected admission result")
 			if tt.wantMessage != "" {
 				require.NotNil(t, resp.Result)

@@ -30,7 +30,8 @@ func TestResolveConnectionEndpoints(t *testing.T) {
 		namespace        string
 		writeServiceName string
 		readServiceName  string
-		poolerEnabled    bool
+		readyInstances   int
+		pooler           PoolerAvailability
 		want             pgconninfo.Endpoints
 		wantError        string
 	}{
@@ -39,14 +40,16 @@ func TestResolveConnectionEndpoints(t *testing.T) {
 			clusterName:     "tenant",
 			namespace:       "default",
 			readServiceName: "tenant-ro",
-			poolerEnabled:   true,
+			readyInstances:  2,
+			pooler:          PoolerAvailability{Enabled: true, RWReady: true, ROReady: true},
 			wantError:       "write service name is required",
 		},
 		{
-			name:             "requires read service name",
+			name:             "requires read service name when ro is available",
 			clusterName:      "tenant",
 			namespace:        "default",
 			writeServiceName: "tenant-rw",
+			readyInstances:   2,
 			wantError:        "read service name is required",
 		},
 		{
@@ -55,6 +58,7 @@ func TestResolveConnectionEndpoints(t *testing.T) {
 			namespace:        "default",
 			writeServiceName: "custom-rw",
 			readServiceName:  "custom-ro",
+			readyInstances:   2,
 			want: pgconninfo.Endpoints{
 				RWHost: "custom-rw.default.svc.cluster.local",
 				ROHost: "custom-ro.default.svc.cluster.local",
@@ -67,20 +71,67 @@ func TestResolveConnectionEndpoints(t *testing.T) {
 			namespace:        "default",
 			writeServiceName: "tenant-rw",
 			readServiceName:  "tenant-ro",
-			poolerEnabled:    true,
+			readyInstances:   2,
+			pooler:           PoolerAvailability{Enabled: true, RWReady: true, ROReady: true},
 			want: pgconninfo.Endpoints{
-				RWHost:       "tenant-rw.default.svc.cluster.local",
-				ROHost:       "tenant-ro.default.svc.cluster.local",
-				RHost:        "tenant-r.default.svc.cluster.local",
-				PoolerRWHost: "tenant-pooler-rw.default.svc.cluster.local",
-				PoolerROHost: "tenant-pooler-ro.default.svc.cluster.local",
+				RWHost:        "tenant-rw.default.svc.cluster.local",
+				ROHost:        "tenant-ro.default.svc.cluster.local",
+				RHost:         "tenant-r.default.svc.cluster.local",
+				PoolerEnabled: true,
+				PoolerRWHost:  "tenant-pooler-rw.default.svc.cluster.local",
+				PoolerROHost:  "tenant-pooler-ro.default.svc.cluster.local",
+			},
+		},
+		{
+			name:             "suppresses ro endpoint while scaling out",
+			clusterName:      "tenant",
+			namespace:        "default",
+			writeServiceName: "tenant-rw",
+			readServiceName:  "tenant-ro",
+			readyInstances:   1,
+			want: pgconninfo.Endpoints{
+				RWHost:        "tenant-rw.default.svc.cluster.local",
+				RHost:         "tenant-r.default.svc.cluster.local",
+				ROUnavailable: true,
+			},
+		},
+		{
+			name:             "suppresses ro pooler endpoint while scaling out",
+			clusterName:      "tenant",
+			namespace:        "default",
+			writeServiceName: "tenant-rw",
+			readServiceName:  "tenant-ro",
+			readyInstances:   1,
+			pooler:           PoolerAvailability{Enabled: true, RWReady: true, ROReady: true},
+			want: pgconninfo.Endpoints{
+				RWHost:        "tenant-rw.default.svc.cluster.local",
+				RHost:         "tenant-r.default.svc.cluster.local",
+				ROUnavailable: true,
+				PoolerEnabled: true,
+				PoolerRWHost:  "tenant-pooler-rw.default.svc.cluster.local",
+			},
+		},
+		{
+			name:             "publishes only the reconciled pooler side",
+			clusterName:      "tenant",
+			namespace:        "default",
+			writeServiceName: "tenant-rw",
+			readServiceName:  "tenant-ro",
+			readyInstances:   2,
+			pooler:           PoolerAvailability{Enabled: true, RWReady: true},
+			want: pgconninfo.Endpoints{
+				RWHost:        "tenant-rw.default.svc.cluster.local",
+				ROHost:        "tenant-ro.default.svc.cluster.local",
+				RHost:         "tenant-r.default.svc.cluster.local",
+				PoolerEnabled: true,
+				PoolerRWHost:  "tenant-pooler-rw.default.svc.cluster.local",
 			},
 		},
 	}
 
 	for _, tst := range tests {
 		t.Run(tst.name, func(t *testing.T) {
-			got, err := ResolveConnectionEndpoints(tst.clusterName, tst.namespace, tst.writeServiceName, tst.readServiceName, tst.poolerEnabled)
+			got, err := ResolveConnectionEndpoints(tst.clusterName, tst.namespace, tst.writeServiceName, tst.readServiceName, tst.readyInstances, tst.pooler)
 
 			if tst.wantError == "" {
 				require.NoError(t, err)

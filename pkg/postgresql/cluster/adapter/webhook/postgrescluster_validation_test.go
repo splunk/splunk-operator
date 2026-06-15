@@ -266,6 +266,296 @@ func TestValidatePostgresClusterUpdateDeletedClass(t *testing.T) {
 	})
 }
 
+func TestValidatePostgresClusterScaling(t *testing.T) {
+	switchoverClass := &enterpriseApi.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "switchover-class"},
+		Spec: enterpriseApi.PostgresClusterClassSpec{
+			Provisioner: "postgresql.cnpg.io",
+			Config: &enterpriseApi.PostgresClusterClassConfig{
+				Instances:       ptr.To(int32(3)),
+				Storage:         ptr.To(resource.MustParse("50Gi")),
+				PostgresVersion: ptr.To("17"),
+			},
+			CNPG: &enterpriseApi.CNPGConfig{
+				PrimaryUpdateMethod: ptr.To("switchover"),
+			},
+		},
+	}
+	restartClass := &enterpriseApi.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "restart-class"},
+		Spec: enterpriseApi.PostgresClusterClassSpec{
+			Provisioner: "postgresql.cnpg.io",
+			Config: &enterpriseApi.PostgresClusterClassConfig{
+				Instances:       ptr.To(int32(1)),
+				Storage:         ptr.To(resource.MustParse("50Gi")),
+				PostgresVersion: ptr.To("17"),
+			},
+			CNPG: &enterpriseApi.CNPGConfig{
+				PrimaryUpdateMethod: ptr.To("restart"),
+			},
+		},
+	}
+	reader := newFakeReader(switchoverClass, restartClass).Build()
+	readyPhase := "Ready"
+	failedPhase := "Failed"
+
+	makeCluster := func(className string, instances int32, phase *string) *enterpriseApi.PostgresCluster {
+		c := &enterpriseApi.PostgresCluster{
+			Spec: enterpriseApi.PostgresClusterSpec{
+				Class:     className,
+				Instances: ptr.To(instances),
+			},
+		}
+		if phase != nil {
+			c.Status.Phase = phase
+		}
+		return c
+	}
+
+	t.Run("create: switchover with 1 instance rejected", func(t *testing.T) {
+		obj := makeCluster("switchover-class", 1, nil)
+		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, reader)
+		require.NotEmpty(t, errs)
+		assert.Equal(t, "spec.instances", errs[0].Field)
+		assert.Contains(t, errs[0].Detail, "switchover")
+	})
+
+	t.Run("create: switchover with 2 instances allowed", func(t *testing.T) {
+		obj := makeCluster("switchover-class", 2, nil)
+		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, reader)
+		assert.Empty(t, errs)
+	})
+
+	t.Run("create: restart class with 1 instance allowed", func(t *testing.T) {
+		obj := makeCluster("restart-class", 1, nil)
+		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, reader)
+		assert.Empty(t, errs)
+	})
+
+	t.Run("create: switchover, instances unset (inherits class default 3) allowed", func(t *testing.T) {
+		obj := &enterpriseApi.PostgresCluster{
+			Spec: enterpriseApi.PostgresClusterSpec{Class: "switchover-class"},
+		}
+		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, reader)
+		assert.Empty(t, errs)
+	})
+
+	t.Run("update: cluster-level override removed, falls back to class scalar default below switchover floor", func(t *testing.T) {
+		oneClass := &enterpriseApi.PostgresClusterClass{
+			ObjectMeta: metav1.ObjectMeta{Name: "switchover-one"},
+			Spec: enterpriseApi.PostgresClusterClassSpec{
+				Provisioner: "postgresql.cnpg.io",
+				Config: &enterpriseApi.PostgresClusterClassConfig{
+					Instances:       ptr.To(int32(1)),
+					Storage:         ptr.To(resource.MustParse("50Gi")),
+					PostgresVersion: ptr.To("17"),
+				},
+				CNPG: &enterpriseApi.CNPGConfig{PrimaryUpdateMethod: ptr.To("switchover")},
+			},
+		}
+		r := newFakeReader(oneClass).Build()
+		oldObj := makeCluster("switchover-one", 2, &readyPhase)
+		newObj := &enterpriseApi.PostgresCluster{
+			Spec: enterpriseApi.PostgresClusterSpec{Class: "switchover-one"},
+		}
+		newObj.Status.Phase = &readyPhase
+		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), newObj, oldObj, r)
+		require.NotEmpty(t, errs)
+		assert.Equal(t, "spec.instances", errs[0].Field)
+	})
+
+	t.Run("update: switchover scale-down 2->1 while Ready rejected", func(t *testing.T) {
+		oldObj := makeCluster("switchover-class", 2, &readyPhase)
+		newObj := makeCluster("switchover-class", 1, &readyPhase)
+		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), newObj, oldObj, reader)
+		require.NotEmpty(t, errs)
+		assert.Equal(t, "spec.instances", errs[0].Field)
+		assert.Contains(t, errs[0].Detail, "switchover")
+	})
+
+	t.Run("update: editing pre-existing 1-instance switchover cluster (no instance change) rejected", func(t *testing.T) {
+		oldObj := makeCluster("switchover-class", 1, &readyPhase)
+		newObj := makeCluster("switchover-class", 1, &readyPhase)
+		newObj.Spec.PgHBA = []string{"host all all 0.0.0.0/0 scram-sha-256"}
+		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), newObj, oldObj, reader)
+		require.NotEmpty(t, errs)
+		assert.Equal(t, "spec.instances", errs[0].Field)
+		assert.Contains(t, errs[0].Detail, "switchover")
+	})
+
+	t.Run("update: bump 1->2 on switchover class allowed regardless of phase", func(t *testing.T) {
+		oldObj := makeCluster("switchover-class", 1, &failedPhase)
+		newObj := makeCluster("switchover-class", 2, &failedPhase)
+		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), newObj, oldObj, reader)
+		assert.Empty(t, errs)
+	})
+
+	t.Run("update: mid-flight retarget 3->4 while Provisioning allowed (level-based reconciliation)", func(t *testing.T) {
+		provisioningPhase := "Provisioning"
+		oldObj := makeCluster("restart-class", 3, &provisioningPhase)
+		oldObj.Status.Instances = ptr.To(int32(2))
+		oldObj.Status.ReadyInstances = ptr.To(int32(2))
+		newObj := makeCluster("restart-class", 4, &provisioningPhase)
+		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), newObj, oldObj, reader)
+		assert.Empty(t, errs)
+	})
+}
+
+// TestValidatePoolerEndpoints exercises the admission webhook check that
+// rejects connectionPooler.readOnly=true when the effective instance count
+// is below the RO threshold (2). The check applies to both CREATE and UPDATE
+// since validateAgainstClass runs on both paths.
+func TestValidatePoolerEndpoints(t *testing.T) {
+	classOneInstance := &enterpriseApi.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "single"},
+		Spec: enterpriseApi.PostgresClusterClassSpec{
+			Provisioner: "postgresql.cnpg.io",
+			Config: &enterpriseApi.PostgresClusterClassConfig{
+				Instances:       ptr.To(int32(1)),
+				Storage:         ptr.To(resource.MustParse("10Gi")),
+				PostgresVersion: ptr.To("17"),
+			},
+			CNPG: &enterpriseApi.CNPGConfig{
+				PrimaryUpdateMethod: ptr.To("restart"),
+				ConnectionPooler:    &enterpriseApi.ConnectionPoolerConfig{},
+			},
+		},
+	}
+	classTwoInstances := &enterpriseApi.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "ha"},
+		Spec: enterpriseApi.PostgresClusterClassSpec{
+			Provisioner: "postgresql.cnpg.io",
+			Config: &enterpriseApi.PostgresClusterClassConfig{
+				Instances:       ptr.To(int32(2)),
+				Storage:         ptr.To(resource.MustParse("10Gi")),
+				PostgresVersion: ptr.To("17"),
+			},
+			CNPG: &enterpriseApi.CNPGConfig{
+				PrimaryUpdateMethod: ptr.To("switchover"),
+				ConnectionPooler:    &enterpriseApi.ConnectionPoolerConfig{},
+			},
+		},
+	}
+	reader := newFakeReader(classOneInstance, classTwoInstances).Build()
+
+	t.Run("create: readOnly=true with effective instances=1 rejected", func(t *testing.T) {
+		obj := &enterpriseApi.PostgresCluster{
+			Spec: enterpriseApi.PostgresClusterSpec{
+				Class: "single",
+				ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					Enabled:  ptr.To(true),
+					ReadOnly: ptr.To(true),
+				},
+			},
+		}
+		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, reader)
+		require.NotEmpty(t, errs)
+		var found bool
+		for _, e := range errs {
+			if e.Field == "spec.connectionPooler.readOnly" {
+				assert.Contains(t, e.Detail, "requires >= 2")
+				found = true
+			}
+		}
+		assert.True(t, found, "expected readOnly endpoint validation error")
+	})
+
+	t.Run("create: readOnly=false with effective instances=1 accepted", func(t *testing.T) {
+		obj := &enterpriseApi.PostgresCluster{
+			Spec: enterpriseApi.PostgresClusterSpec{
+				Class: "single",
+				ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					Enabled:  ptr.To(true),
+					ReadOnly: ptr.To(false),
+				},
+			},
+		}
+		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, reader)
+		for _, e := range errs {
+			assert.NotEqual(t, "spec.connectionPooler.readOnly", e.Field, "should not flag readOnly when explicitly opted out")
+		}
+	})
+
+	t.Run("create: readOnly=true with effective instances=2 accepted", func(t *testing.T) {
+		obj := &enterpriseApi.PostgresCluster{
+			Spec: enterpriseApi.PostgresClusterSpec{
+				Class: "ha",
+				ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					Enabled:  ptr.To(true),
+					ReadOnly: ptr.To(true),
+				},
+			},
+		}
+		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, reader)
+		for _, e := range errs {
+			assert.NotEqual(t, "spec.connectionPooler.readOnly", e.Field)
+		}
+	})
+
+	t.Run("create: pooler disabled, no readOnly check fires", func(t *testing.T) {
+		obj := &enterpriseApi.PostgresCluster{
+			Spec: enterpriseApi.PostgresClusterSpec{
+				Class: "single",
+				ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					Enabled: ptr.To(false),
+				},
+			},
+		}
+		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, reader)
+		for _, e := range errs {
+			assert.NotEqual(t, "spec.connectionPooler.readOnly", e.Field)
+		}
+	})
+
+	t.Run("update: readOnly=true with effective instances=1 rejected", func(t *testing.T) {
+		readyPhase := "Ready"
+		oldObj := &enterpriseApi.PostgresCluster{
+			Spec: enterpriseApi.PostgresClusterSpec{
+				Class: "single",
+				ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					Enabled:  ptr.To(true),
+					ReadOnly: ptr.To(false),
+				},
+			},
+		}
+		oldObj.Status.Phase = &readyPhase
+		newObj := oldObj.DeepCopy()
+		newObj.Spec.ConnectionPooler.ReadOnly = ptr.To(true)
+		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), newObj, oldObj, reader)
+		require.NotEmpty(t, errs)
+		var found bool
+		for _, e := range errs {
+			if e.Field == "spec.connectionPooler.readOnly" {
+				found = true
+			}
+		}
+		assert.True(t, found, "update path must also reject readOnly=true at instances=1")
+	})
+
+	t.Run("create: readOnly unset with effective instances=1 rejected (nil treated as opted-in)", func(t *testing.T) {
+		// readOnly carries no CRD default (it would break per-field class inheritance),
+		// so an enabled pooler with readOnly unset arrives nil. The webhook treats nil
+		// as opted-in, matching the reconciler's poolerReadOnlyWanted.
+		obj := &enterpriseApi.PostgresCluster{
+			Spec: enterpriseApi.PostgresClusterSpec{
+				Class: "single",
+				ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					Enabled: ptr.To(true),
+				},
+			},
+		}
+		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, reader)
+		require.NotEmpty(t, errs)
+		var found bool
+		for _, e := range errs {
+			if e.Field == "spec.connectionPooler.readOnly" {
+				found = true
+			}
+		}
+		assert.True(t, found, "nil readOnly should be treated as opted-in by the webhook")
+	})
+}
+
 func TestGetPostgresClusterWarningsOnCreate(t *testing.T) {
 	obj := &enterpriseApi.PostgresCluster{
 		Spec: enterpriseApi.PostgresClusterSpec{Class: "dev"},
@@ -289,10 +579,12 @@ func TestValidateAgainstClass(t *testing.T) {
 		Spec: enterpriseApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &enterpriseApi.PostgresClusterClassConfig{
-				Instances:               ptr.To(int32(3)),
-				Storage:                 ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion:         ptr.To("17"),
-				ConnectionPoolerEnabled: ptr.To(false),
+				Instances:       ptr.To(int32(3)),
+				Storage:         ptr.To(resource.MustParse("50Gi")),
+				PostgresVersion: ptr.To("17"),
+				ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					Enabled: ptr.To(false),
+				},
 			},
 		},
 	}
@@ -314,10 +606,12 @@ func TestValidateAgainstClass(t *testing.T) {
 		Spec: enterpriseApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &enterpriseApi.PostgresClusterClassConfig{
-				Instances:               ptr.To(int32(3)),
-				Storage:                 ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion:         ptr.To("17"),
-				ConnectionPoolerEnabled: ptr.To(true),
+				Instances:       ptr.To(int32(3)),
+				Storage:         ptr.To(resource.MustParse("50Gi")),
+				PostgresVersion: ptr.To("17"),
+				ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					Enabled: ptr.To(true),
+				},
 			},
 			CNPG: &enterpriseApi.CNPGConfig{
 				ConnectionPooler: &enterpriseApi.ConnectionPoolerConfig{},
@@ -497,12 +791,14 @@ func TestValidateAgainstClass(t *testing.T) {
 			class: classWithDefaults,
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
-					Class:                   "prod",
-					ConnectionPoolerEnabled: ptr.To(true),
+					Class: "prod",
+					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+						Enabled: ptr.To(true),
+					},
 				},
 			},
 			wantErrCount:  1,
-			wantErrFields: []string{"spec.connectionPoolerEnabled"},
+			wantErrFields: []string{"spec.connectionPooler.enabled"},
 			wantErrMsgs:   []string{"connection pooler requires cnpg.connectionPooler configuration in PostgresClusterClass"},
 			wantErrValues: []any{true},
 		},
@@ -511,8 +807,10 @@ func TestValidateAgainstClass(t *testing.T) {
 			class: classWithDefaults,
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
-					Class:                   "prod",
-					ConnectionPoolerEnabled: ptr.To(false),
+					Class: "prod",
+					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+						Enabled: ptr.To(false),
+					},
 				},
 			},
 			wantErrCount: 0,
@@ -522,8 +820,10 @@ func TestValidateAgainstClass(t *testing.T) {
 			class: classWithPoolerEnabled,
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
-					Class:                   "pooler-class",
-					ConnectionPoolerEnabled: ptr.To(true),
+					Class: "pooler-class",
+					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+						Enabled: ptr.To(true),
+					},
 				},
 			},
 			wantErrCount: 0,
@@ -543,10 +843,12 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: enterpriseApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &enterpriseApi.PostgresClusterClassConfig{
-						Instances:               ptr.To(int32(3)),
-						Storage:                 ptr.To(resource.MustParse("50Gi")),
-						PostgresVersion:         ptr.To("17"),
-						ConnectionPoolerEnabled: ptr.To(true),
+						Instances:       ptr.To(int32(3)),
+						Storage:         ptr.To(resource.MustParse("50Gi")),
+						PostgresVersion: ptr.To("17"),
+						ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+							Enabled: ptr.To(true),
+						},
 					},
 				},
 			},
@@ -554,7 +856,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: enterpriseApi.PostgresClusterSpec{Class: "pooler-no-cnpg"},
 			},
 			wantErrCount:  1,
-			wantErrFields: []string{"spec.connectionPoolerEnabled"},
+			wantErrFields: []string{"spec.connectionPooler.enabled"},
 			wantErrMsgs:   []string{"connection pooler requires cnpg.connectionPooler configuration in PostgresClusterClass"},
 		},
 		{
@@ -567,15 +869,18 @@ func TestValidateAgainstClass(t *testing.T) {
 			},
 			obj: &enterpriseApi.PostgresCluster{
 				Spec: enterpriseApi.PostgresClusterSpec{
-					Class:                   "bare-pooler",
-					Instances:               ptr.To(int32(1)),
-					PostgresVersion:         ptr.To("17"),
-					Storage:                 ptr.To(resource.MustParse("10Gi")),
-					ConnectionPoolerEnabled: ptr.To(true),
+					Class:           "bare-pooler",
+					Instances:       ptr.To(int32(1)),
+					PostgresVersion: ptr.To("17"),
+					Storage:         ptr.To(resource.MustParse("10Gi")),
+					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+						Enabled:  ptr.To(true),
+						ReadOnly: ptr.To(false),
+					},
 				},
 			},
 			wantErrCount:  1,
-			wantErrFields: []string{"spec.connectionPoolerEnabled"},
+			wantErrFields: []string{"spec.connectionPooler.enabled"},
 			wantErrMsgs:   []string{"connection pooler requires cnpg.connectionPooler configuration in PostgresClusterClass"},
 		},
 		{

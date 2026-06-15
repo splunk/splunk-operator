@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -110,16 +111,34 @@ func postgresClusterPredicator() predicate.Predicate {
 	)
 }
 
-// cnpgClusterPredicator triggers on spec changes or phase changes.
-// Generation catches spec drift before CNPG reflects it in status.
+// cnpgClusterPredicator triggers on spec changes, phase changes, scale progress,
+// or primary changes. Generation catches spec drift
+// before CNPG reflects it in status. Instance counts and CurrentPrimary are
+// watched explicitly because CNPG keeps Phase=Healthy during scale-down; the
+// only signal that anything is happening is ReadyInstances ticking down.
 func cnpgClusterPredicator() predicate.Predicate {
 	return predicate.Or(
 		predicate.GenerationChangedPredicate{},
 		predicate.Funcs{
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				oldObj := e.ObjectOld.(*cnpgv1.Cluster)
-				newObj := e.ObjectNew.(*cnpgv1.Cluster)
-				return oldObj.Status.Phase != newObj.Status.Phase
+				oldObj, ok := e.ObjectOld.(*cnpgv1.Cluster)
+				if !ok {
+					slog.Error("predicate type assertion failed",
+						"predicate", "cnpgClusterPredicator", "field", "ObjectOld",
+						"got", fmt.Sprintf("%T", e.ObjectOld))
+					return false
+				}
+				newObj, ok := e.ObjectNew.(*cnpgv1.Cluster)
+				if !ok {
+					slog.Error("predicate type assertion failed",
+						"predicate", "cnpgClusterPredicator", "field", "ObjectNew",
+						"got", fmt.Sprintf("%T", e.ObjectNew))
+					return false
+				}
+				return oldObj.Status.Phase != newObj.Status.Phase ||
+					oldObj.Status.Instances != newObj.Status.Instances ||
+					oldObj.Status.ReadyInstances != newObj.Status.ReadyInstances ||
+					oldObj.Status.CurrentPrimary != newObj.Status.CurrentPrimary
 			},
 		},
 	)
@@ -132,8 +151,20 @@ func cnpgPoolerPredicator() predicate.Predicate {
 		predicate.GenerationChangedPredicate{},
 		predicate.Funcs{
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				oldObj := e.ObjectOld.(*cnpgv1.Pooler)
-				newObj := e.ObjectNew.(*cnpgv1.Pooler)
+				oldObj, ok := e.ObjectOld.(*cnpgv1.Pooler)
+				if !ok {
+					slog.Error("predicate type assertion failed",
+						"predicate", "cnpgPoolerPredicator", "field", "ObjectOld",
+						"got", fmt.Sprintf("%T", e.ObjectOld))
+					return false
+				}
+				newObj, ok := e.ObjectNew.(*cnpgv1.Pooler)
+				if !ok {
+					slog.Error("predicate type assertion failed",
+						"predicate", "cnpgPoolerPredicator", "field", "ObjectNew",
+						"got", fmt.Sprintf("%T", e.ObjectNew))
+					return false
+				}
 				return oldObj.Status.Instances != newObj.Status.Instances
 			},
 		},
@@ -146,8 +177,20 @@ func scheduledBackupPredicator() predicate.Predicate {
 		predicate.GenerationChangedPredicate{},
 		predicate.Funcs{
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				oldObj := e.ObjectOld.(*cnpgv1.ScheduledBackup)
-				newObj := e.ObjectNew.(*cnpgv1.ScheduledBackup)
+				oldObj, ok := e.ObjectOld.(*cnpgv1.ScheduledBackup)
+				if !ok {
+					slog.Error("predicate type assertion failed",
+						"predicate", "scheduledBackupPredicator", "field", "ObjectOld",
+						"got", fmt.Sprintf("%T", e.ObjectOld))
+					return false
+				}
+				newObj, ok := e.ObjectNew.(*cnpgv1.ScheduledBackup)
+				if !ok {
+					slog.Error("predicate type assertion failed",
+						"predicate", "scheduledBackupPredicator", "field", "ObjectNew",
+						"got", fmt.Sprintf("%T", e.ObjectNew))
+					return false
+				}
 				return !oldObj.Status.LastScheduleTime.Equal(newObj.Status.LastScheduleTime) ||
 					!oldObj.Status.NextScheduleTime.Equal(newObj.Status.NextScheduleTime)
 			},
