@@ -2059,6 +2059,44 @@ func TestBuildDatabaseConfigMapData(t *testing.T) {
 			},
 			wantError: "RHost is required",
 		},
+		{
+			name: "publishes pooler keys with empty values when pooler enabled and a side is unavailable",
+			endpoints: clusterEndpoints{
+				RWHost:        "rw.default.svc.cluster.local",
+				ROHost:        "ro.default.svc.cluster.local",
+				RHost:         "r.default.svc.cluster.local",
+				PoolerEnabled: true,
+				PoolerRWHost:  "pooler-rw.default.svc.cluster.local",
+			},
+			want: map[string]string{
+				ConfigMapKeyDatabaseName:         "payments",
+				pgconninfo.KeyDefaultClusterPort: pgconninfo.DefaultPort,
+				pgconninfo.KeyClusterRWEndpoint:  "rw.default.svc.cluster.local",
+				pgconninfo.KeyClusterROEndpoint:  "ro.default.svc.cluster.local",
+				pgconninfo.KeyClusterREndpoint:   "r.default.svc.cluster.local",
+				ConfigMapKeyAdminUser:            "payments_admin",
+				ConfigMapKeyRWUser:               "payments_rw",
+				pgconninfo.KeyPoolerRWEndpoint:   "pooler-rw.default.svc.cluster.local",
+				pgconninfo.KeyPoolerROEndpoint:   "",
+			},
+		},
+		{
+			name: "publishes empty ro endpoint when ro unavailable",
+			endpoints: clusterEndpoints{
+				RWHost:        "rw.default.svc.cluster.local",
+				RHost:         "r.default.svc.cluster.local",
+				ROUnavailable: true,
+			},
+			want: map[string]string{
+				ConfigMapKeyDatabaseName:         "payments",
+				pgconninfo.KeyDefaultClusterPort: pgconninfo.DefaultPort,
+				pgconninfo.KeyClusterRWEndpoint:  "rw.default.svc.cluster.local",
+				pgconninfo.KeyClusterROEndpoint:  "",
+				pgconninfo.KeyClusterREndpoint:   "r.default.svc.cluster.local",
+				ConfigMapKeyAdminUser:            "payments_admin",
+				ConfigMapKeyRWUser:               "payments_rw",
+			},
+		},
 	}
 
 	for _, tst := range tests {
@@ -2095,8 +2133,9 @@ func TestResolveClusterEndpoints(t *testing.T) {
 			cnpg: &cnpgv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "cnpg-primary"},
 				Status: cnpgv1.ClusterStatus{
-					WriteService: "primary-rw",
-					ReadService:  "primary-ro",
+					WriteService:   "primary-rw",
+					ReadService:    "primary-ro",
+					ReadyInstances: 2,
 				},
 			},
 			namespace: "dbs",
@@ -2114,26 +2153,145 @@ func TestResolveClusterEndpoints(t *testing.T) {
 			wantError: "write service name is required",
 		},
 		{
-			name: "with connection pooler",
+			name: "with connection pooler and both endpoints reconciled",
 			cluster: &enterprisev4.PostgresCluster{
 				Status: enterprisev4.PostgresClusterStatus{
-					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true},
+					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{
+						Enabled:          true,
+						ReadWriteEnabled: true,
+						ReadOnlyEnabled:  true,
+					},
+				},
+			},
+			cnpg: &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "cnpg-primary"},
+				Spec:       cnpgv1.ClusterSpec{Instances: 2},
+				Status: cnpgv1.ClusterStatus{
+					WriteService:   "primary-rw",
+					ReadService:    "primary-ro",
+					ReadyInstances: 2,
+				},
+			},
+			namespace: "dbs",
+			want: clusterEndpoints{
+				RWHost:        "primary-rw.dbs.svc.cluster.local",
+				ROHost:        "primary-ro.dbs.svc.cluster.local",
+				RHost:         "cnpg-primary-r.dbs.svc.cluster.local",
+				PoolerEnabled: true,
+				PoolerRWHost:  "cnpg-primary-pooler-rw.dbs.svc.cluster.local",
+				PoolerROHost:  "cnpg-primary-pooler-ro.dbs.svc.cluster.local",
+			},
+		},
+		{
+			name: "with connection pooler but RO disabled in status omits PoolerROHost",
+			cluster: &enterprisev4.PostgresCluster{
+				Status: enterprisev4.PostgresClusterStatus{
+					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{
+						Enabled:          true,
+						ReadWriteEnabled: true,
+					},
+				},
+			},
+			cnpg: &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "cnpg-primary"},
+				Spec:       cnpgv1.ClusterSpec{Instances: 2},
+				Status: cnpgv1.ClusterStatus{
+					WriteService:   "primary-rw",
+					ReadService:    "primary-ro",
+					ReadyInstances: 2,
+				},
+			},
+			namespace: "dbs",
+			want: clusterEndpoints{
+				RWHost:        "primary-rw.dbs.svc.cluster.local",
+				ROHost:        "primary-ro.dbs.svc.cluster.local",
+				RHost:         "cnpg-primary-r.dbs.svc.cluster.local",
+				PoolerEnabled: true,
+				PoolerRWHost:  "cnpg-primary-pooler-rw.dbs.svc.cluster.local",
+			},
+		},
+		{
+			name: "with connection pooler but RW disabled in status omits PoolerRWHost",
+			cluster: &enterprisev4.PostgresCluster{
+				Status: enterprisev4.PostgresClusterStatus{
+					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{
+						Enabled:         true,
+						ReadOnlyEnabled: true,
+					},
+				},
+			},
+			cnpg: &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "cnpg-primary"},
+				Spec:       cnpgv1.ClusterSpec{Instances: 2},
+				Status: cnpgv1.ClusterStatus{
+					WriteService:   "primary-rw",
+					ReadService:    "primary-ro",
+					ReadyInstances: 2,
+				},
+			},
+			namespace: "dbs",
+			want: clusterEndpoints{
+				RWHost:        "primary-rw.dbs.svc.cluster.local",
+				ROHost:        "primary-ro.dbs.svc.cluster.local",
+				RHost:         "cnpg-primary-r.dbs.svc.cluster.local",
+				PoolerEnabled: true,
+				PoolerROHost:  "cnpg-primary-pooler-ro.dbs.svc.cluster.local",
+			},
+		},
+		{
+			name: "clears ROHost when fewer than two instances are ready",
+			cluster: &enterprisev4.PostgresCluster{
+				Status: enterprisev4.PostgresClusterStatus{
+					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{
+						Enabled:          true,
+						ReadWriteEnabled: true,
+						ReadOnlyEnabled:  true,
+					},
 				},
 			},
 			cnpg: &cnpgv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "cnpg-primary"},
 				Status: cnpgv1.ClusterStatus{
-					WriteService: "primary-rw",
-					ReadService:  "primary-ro",
+					WriteService:   "primary-rw",
+					ReadService:    "primary-ro",
+					ReadyInstances: 1,
 				},
 			},
 			namespace: "dbs",
 			want: clusterEndpoints{
-				RWHost:       "primary-rw.dbs.svc.cluster.local",
-				ROHost:       "primary-ro.dbs.svc.cluster.local",
-				RHost:        "cnpg-primary-r.dbs.svc.cluster.local",
-				PoolerRWHost: "cnpg-primary-pooler-rw.dbs.svc.cluster.local",
-				PoolerROHost: "cnpg-primary-pooler-ro.dbs.svc.cluster.local",
+				RWHost:        "primary-rw.dbs.svc.cluster.local",
+				RHost:         "cnpg-primary-r.dbs.svc.cluster.local",
+				ROUnavailable: true,
+				PoolerEnabled: true,
+				PoolerRWHost:  "cnpg-primary-pooler-rw.dbs.svc.cluster.local",
+			},
+		},
+		{
+			name: "clears ROHost and PoolerROHost when no instances are ready",
+			cluster: &enterprisev4.PostgresCluster{
+				Status: enterprisev4.PostgresClusterStatus{
+					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{
+						Enabled:          true,
+						ReadWriteEnabled: true,
+						ReadOnlyEnabled:  true,
+					},
+				},
+			},
+			cnpg: &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "cnpg-primary"},
+				Status: cnpgv1.ClusterStatus{
+					WriteService:   "primary-rw",
+					ReadService:    "primary-ro",
+					ReadyInstances: 0,
+				},
+			},
+			namespace: "dbs",
+			want: clusterEndpoints{
+				RWHost:        "primary-rw.dbs.svc.cluster.local",
+				RHost:         "cnpg-primary-r.dbs.svc.cluster.local",
+				ROUnavailable: true,
+				PoolerEnabled: true,
+				PoolerRWHost:  "cnpg-primary-pooler-rw.dbs.svc.cluster.local",
 			},
 		},
 	}

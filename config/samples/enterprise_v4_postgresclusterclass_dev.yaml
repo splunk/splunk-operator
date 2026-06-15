@@ -25,7 +25,9 @@ spec:
       limits:
         cpu: "1"
         memory: "2Gi"
-    connectionPoolerEnabled: true
+    connectionPooler:
+      enabled: true
+      readOnly: false
     monitoring:
       postgresqlMetrics:
         enabled: true

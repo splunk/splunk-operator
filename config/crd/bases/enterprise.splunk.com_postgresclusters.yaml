@@ -21,6 +21,15 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .status.instances
+      name: Instances
+      type: integer
+    - jsonPath: .status.readyInstances
+      name: Ready
+      type: integer
+    - jsonPath: .status.currentPrimary
+      name: Primary
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -82,11 +91,29 @@ spec:
                 - Delete
                 - Retain
                 type: string
-              connectionPoolerEnabled:
+              connectionPooler:
                 description: |-
-                  ConnectionPoolerEnabled controls whether PgBouncer connection pooling is deployed for this cluster.
-                  When set, takes precedence over the class-level connectionPoolerEnabled value.
-                type: boolean
+                  ConnectionPooler controls whether PgBouncer connection pooling is deployed for this cluster.
+                  Sub-fields override the matching values from the class-level connectionPooler config.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled controls whether the connection pooler is deployed at all.
+                      When omitted the pooler is treated as disabled (see isPoolerEnabled).
+                    type: boolean
+                  readOnly:
+                    description: |-
+                      ReadOnly controls whether the RO pooler is reconciled when Enabled is true.
+                      The RO pooler additionally requires the cluster to run with instances >= 2;
+                      the admission webhook rejects readOnly=true with instances<2.
+                      When omitted it is treated as true (see poolerReadOnlyWanted).
+                    type: boolean
+                  readWrite:
+                    description: |-
+                      ReadWrite controls whether the RW pooler is reconciled when Enabled is true.
+                      When omitted it is treated as true (see poolerReadWriteWanted).
+                    type: boolean
+                type: object
               instances:
                 description: Instances overrides the number of PostgreSQL instances
                   from ClusterClass.
@@ -359,7 +386,26 @@ spec:
                     description: Enabled indicates whether pooler is active for this
                       cluster.
                     type: boolean
+                  readOnlyEnabled:
+                    description: |-
+                      ReadOnlyEnabled is true when the RO pooler resource is reconciled by the operator.
+                      Independent consumers should mirror this gate before advertising RO pooler endpoints.
+                    type: boolean
+                  readWriteEnabled:
+                    description: ReadWriteEnabled is true when the RW pooler resource
+                      is reconciled by the operator.
+                    type: boolean
                 type: object
+              currentPrimary:
+                description: CurrentPrimary is the name of the pod currently hosting
+                  the primary.
+                type: string
+              instances:
+                description: |-
+                  Instances is the declared instance count reported by the underlying
+                  provisioner.
+                format: int32
+                type: integer
               managedRolesStatus:
                 description: ManagedRolesStatus tracks the reconciliation status of
                   managed roles.
@@ -438,6 +484,12 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              readyInstances:
+                description: |-
+                  ReadyInstances is the number of instances reported as ready by the
+                  underlying provisioner.
+                format: int32
+                type: integer
               resources:
                 description: Resources contains references to related Kubernetes resources
                   like ConfigMaps and Secrets.

@@ -82,6 +82,11 @@ const (
 	readOnlyEndpoint  string = "ro"
 	readWriteEndpoint string = "rw"
 
+	// minInstancesForSwitchover is the minimum effective instance count a class
+	// using primaryUpdateMethod=switchover requires: switchover needs a replica
+	// to fail over to.
+	minInstancesForSwitchover = 2
+
 	defaultServerCACertKey string = "ca.crt"
 	defaultDatabaseName    string = "postgres"
 	superUsername          string = "postgres"
@@ -193,6 +198,7 @@ const (
 	msgFmtCNPGPluginError        statusMessage = "CNPG plugin error: %s"
 	msgFmtCNPGImageError         statusMessage = "CNPG image error: %s"
 	msgFmtCNPGClusterPhase       statusMessage = "CNPG cluster phase: %s"
+	msgFmtCNPGScaling            statusMessage = "Scaling cluster: %d/%d instances ready"
 
 	// status messages — backup
 	msgBackupDisabled              statusMessage = "Backup is not enabled"

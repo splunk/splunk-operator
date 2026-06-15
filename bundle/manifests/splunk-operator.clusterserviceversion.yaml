@@ -159,7 +159,21 @@ metadata:
             "name": "postgresql-cluster-dev"
           },
           "spec": {
-            "class": "postgresql-dev"
+            "class": "postgresql-dev",
+            "clusterDeletionPolicy": "Retain",
+            "instances": 3,
+            "postgresVersion": "18.0",
+            "resources": {
+              "limits": {
+                "cpu": "500m",
+                "memory": "1Gi"
+              },
+              "requests": {
+                "cpu": "250m",
+                "memory": "512Mi"
+              }
+            },
+            "storage": "20Gi"
           }
         },
         {
@@ -180,8 +194,18 @@ metadata:
               "primaryUpdateMethod": "restart"
             },
             "config": {
-              "connectionPoolerEnabled": true,
+              "connectionPooler": {
+                "enabled": true
+              },
               "instances": 1,
+              "monitoring": {
+                "connectionPoolerMetrics": {
+                  "enabled": true
+                },
+                "postgresqlMetrics": {
+                  "enabled": true
+                }
+              },
               "postgresVersion": "18",
               "resources": {
                 "limits": {
@@ -277,13 +301,13 @@ metadata:
     capabilities: Seamless Upgrades
     categories: Big Data, Logging & Tracing, Monitoring, Security, AI/Machine Learning
     containerImage: splunk/splunk-operator@sha256:c4e0d314622699496f675760aad314520d050a66627fdf33e1e21fa28ca85d50
-    createdAt: "2026-03-25T20:21:54Z"
+    createdAt: "2026-05-26T14:06:01Z"
     description: The Splunk Operator for Kubernetes enables you to quickly and easily
       deploy Splunk Enterprise on your choice of private or public cloud provider.
       The Operator simplifies scaling and management of Splunk Enterprise by automating
       administrative workflows using Kubernetes best practices.
     olm.properties: '[{"type": "olm.maxOpenShiftVersion", "value": "4.19"}]'
-    operators.operatorframework.io/builder: operator-sdk-v1.42.0
+    operators.operatorframework.io/builder: operator-sdk-v1.42.2
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/splunk/splunk-operator
   name: splunk-operator.v3.1.0
@@ -544,6 +568,7 @@ spec:
           - clusters
           - databases
           - poolers
+          - scheduledbackups
           verbs:
           - create
           - delete
@@ -557,6 +582,7 @@ spec:
           resources:
           - clusters/status
           - poolers/status
+          - scheduledbackups/status
           verbs:
           - get
         - apiGroups:
@@ -600,6 +626,7 @@ spec:
                 - --leader-elect
                 - --health-probe-bind-address=:8081
                 - --pprof
+                - MANAGER_EXTRA_ARG_VALUE
                 command:
                 - /manager
                 env:

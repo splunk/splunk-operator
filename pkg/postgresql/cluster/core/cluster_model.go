@@ -91,7 +91,7 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 	p.cnpgPatch = cnpgPatchNone
 
 	poolerEnabled := p.mergedConfig != nil && p.mergedConfig.Spec != nil &&
-		p.mergedConfig.Spec.ConnectionPoolerEnabled != nil && *p.mergedConfig.Spec.ConnectionPoolerEnabled
+		isPoolerEnabled(p.mergedConfig.Spec.ConnectionPooler)
 
 	existingCNPG := &cnpgv1.Cluster{}
 	err := p.client.Get(ctx, types.NamespacedName{Name: p.cluster.Name, Namespace: p.cluster.Namespace}, existingCNPG)
@@ -176,6 +176,9 @@ func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error
 		Name:       p.cnpgCluster.Name,
 		UID:        p.cnpgCluster.UID,
 	}
+	p.cluster.Status.Instances = ptr.To(int32(p.cnpgCluster.Status.Instances))
+	p.cluster.Status.ReadyInstances = ptr.To(int32(p.cnpgCluster.Status.ReadyInstances))
+	p.cluster.Status.CurrentPrimary = ptr.To(p.cnpgCluster.Status.CurrentPrimary)
 
 	if p.cnpgPatch.requiresPhaseGate() && (p.cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy || p.cnpgCluster.Status.Phase == "") {
 		return newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGClusterPhase, p.cnpgCluster.Status.Phase)), nil
@@ -187,7 +190,17 @@ func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error
 
 	switch phase {
 	case cnpgv1.PhaseHealthy:
-		health = newReadyHealth(clusterReady, reasonCNPGClusterHealthy, msgProvisionerHealthy)
+		// CNPG holds Phase=Healthy throughout scale-down and the scale-out tail
+		// (only Instances/ReadyInstances move). Report Provisioning here so
+		// runComponents short-circuits at this component and the downstream
+		// pooler + configMap never reconcile against a transient ready count —
+		// scaling is owned entirely by the cluster component, and other
+		// components react only once it has settled.
+		if desired, ready, scaling := p.scaleInProgress(); scaling {
+			health = newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGScaling, ready, desired))
+		} else {
+			health = newReadyHealth(clusterReady, reasonCNPGClusterHealthy, msgProvisionerHealthy)
+		}
 	case cnpgv1.PhaseFirstPrimary, cnpgv1.PhaseCreatingReplica, cnpgv1.PhaseWaitingForInstancesToBeActive:
 		health = newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGProvisioning, phase))
 	case cnpgv1.PhaseSwitchover:
@@ -225,6 +238,27 @@ func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error
 	return health, convergeErr
 }
 
+// scaleInProgress reports whether desired and observed/ready instance counts
+// disagree. Returns (_, _, false) when merged config or CNPG status is not yet
+// available. computeHealth uses it to hold ClusterReady=Provisioning while CNPG
+// reports Phase=Healthy during a scale, so downstream components are gated until
+// the count settles.
+func (p *clusterModel) scaleInProgress() (desired, ready int, scaling bool) {
+	if p.mergedConfig == nil || p.mergedConfig.Spec == nil || p.mergedConfig.Spec.Instances == nil {
+		return 0, 0, false
+	}
+	if p.cnpgCluster == nil {
+		return 0, 0, false
+	}
+	desired = int(*p.mergedConfig.Spec.Instances)
+	observed := p.cnpgCluster.Status.Instances
+	ready = p.cnpgCluster.Status.ReadyInstances
+	if desired == observed && desired == ready {
+		return 0, 0, false
+	}
+	return desired, ready, true
+}
+
 // GetMergedConfig overlays PostgresCluster spec on top of the class defaults.
 // Class values are used only where the cluster spec is silent.
 // Returns the merged config without validation — call ValidateMergedConfig separately.
@@ -251,9 +285,7 @@ func GetMergedConfig(class *enterprisev4.PostgresClusterClass, cluster *enterpri
 		if len(result.PgHBA) == 0 {
 			result.PgHBA = defaults.PgHBA
 		}
-		if result.ConnectionPoolerEnabled == nil {
-			result.ConnectionPoolerEnabled = defaults.ConnectionPoolerEnabled
-		}
+		result.ConnectionPooler = mergeConnectionPoolerEnable(result.ConnectionPooler, defaults.ConnectionPooler)
 		if defaults.Backup != nil {
 			if result.Backup == nil {
 				result.Backup = defaults.Backup.DeepCopy()
@@ -307,13 +339,43 @@ func ValidateCrossResource(class *enterprisev4.PostgresClusterClass, cluster *en
 		}
 	}
 
-	poolerEnabled := (cluster.Spec.ConnectionPoolerEnabled != nil && *cluster.Spec.ConnectionPoolerEnabled) ||
-		(class.Spec.Config != nil && class.Spec.Config.ConnectionPoolerEnabled != nil && *class.Spec.Config.ConnectionPoolerEnabled)
+	// The RO-pooler-needs-2 rule is deliberately NOT enforced here: the reconciler
+	// tolerates instances<2 by suppressing the RO pooler (see roPoolerWanted), so
+	// it is an admission-only fail-fast. Switchover has no such graceful path, so
+	// it stays here where both admission and the reconciler enforce it.
+	effectiveInstances := cluster.Spec.Instances
+	if effectiveInstances == nil && class.Spec.Config != nil {
+		effectiveInstances = class.Spec.Config.Instances
+	}
+	switchover := class.Spec.CNPG != nil &&
+		class.Spec.CNPG.PrimaryUpdateMethod != nil &&
+		*class.Spec.CNPG.PrimaryUpdateMethod == "switchover"
+	if switchover && effectiveInstances != nil && *effectiveInstances < minInstancesForSwitchover {
+		errs = append(errs, ConfigValidationError{
+			Field:   "spec.instances",
+			Value:   *effectiveInstances,
+			Message: fmt.Sprintf("instances must be >= %d when PostgresClusterClass %q uses primaryUpdateMethod=switchover", minInstancesForSwitchover, class.Name),
+		})
+	}
+
+	var classPooler *enterprisev4.ConnectionPoolerEnableConfig
+	if class.Spec.Config != nil {
+		classPooler = class.Spec.Config.ConnectionPooler
+	}
+	mergedPooler := mergeConnectionPoolerEnable(cluster.Spec.ConnectionPooler, classPooler)
+	poolerEnabled := isPoolerEnabled(mergedPooler)
 	if poolerEnabled && (class.Spec.CNPG == nil || class.Spec.CNPG.ConnectionPooler == nil) {
 		errs = append(errs, ConfigValidationError{
-			Field:   "spec.connectionPoolerEnabled",
+			Field:   "spec.connectionPooler.enabled",
 			Value:   true,
 			Message: "connection pooler requires cnpg.connectionPooler configuration in PostgresClusterClass",
+		})
+	}
+	if poolerEnabled && !poolerReadWriteWanted(mergedPooler) && !poolerReadOnlyWanted(mergedPooler) {
+		errs = append(errs, ConfigValidationError{
+			Field:   "spec.connectionPooler",
+			Value:   "readWrite=false,readOnly=false",
+			Message: "at least one of readWrite or readOnly must be enabled when connectionPooler.enabled is true",
 		})
 	}
 
