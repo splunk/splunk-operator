@@ -41,6 +41,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	certs "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
 
 // MonitoringConsoleReconciler reconciles a MonitoringConsole object
@@ -178,6 +180,9 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(
+				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.MonitoringConsoleList{}))).
 		Named("monitoring-console-controller").
 		Complete(r)
 }

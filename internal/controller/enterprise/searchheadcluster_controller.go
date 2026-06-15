@@ -40,6 +40,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	certs "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
 
 // SearchHeadClusterReconciler reconciles a SearchHeadCluster object
@@ -162,6 +164,9 @@ func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(
+				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.SearchHeadClusterList{}))).
 		Named("search-head-cluster-controller").
 		Complete(r)
 }

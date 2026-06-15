@@ -128,4 +128,53 @@ var _ = Describe("Custom Resource CRUD test", func() {
 			})
 		})
 	}
+
+	// Cert tests are manager (V4) only — ClusterMaster/LicenseMaster are deprecated.
+	Context("Standalone deployment (S1) — cert mounting", func() {
+		BeforeEach(func() {
+			var err error
+			testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+			Expect(err).To(Succeed(), "Failed to setup test case environment")
+		})
+
+		AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+			Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+		})
+
+		It("managercrcrud, integration, s1, cert: standalone mounts server-role and no-role certs and detects rotation", func() {
+			RunS1CertTest(ctx, deployment, testcaseEnvInst, testenvInstance)
+		})
+	})
+
+	Context("Clustered deployment (C3) — cert mounting", func() {
+		BeforeEach(func() {
+			var err error
+			testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+			Expect(err).To(Succeed(), "Failed to setup test case environment")
+		})
+
+		AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+			Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+		})
+
+		It("managercrcrud, integration, c3, cert: ClusterManager/IndexerCluster/SearchHeadCluster mount server-role and no-role certs and detect rotation", func() {
+			RunC3CertTest(ctx, deployment, testcaseEnvInst, testenvInstance)
+		})
+	})
+
+	Context("Multisite cluster deployment (M4) — cert mounting", func() {
+		BeforeEach(func() {
+			var err error
+			testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+			Expect(err).To(Succeed(), "Failed to setup test case environment")
+		})
+
+		AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+			Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
+		})
+
+		It("managercrcrud, integration, m4, cert: ClusterManager/IndexerCluster/SearchHeadCluster mount server-role and no-role certs in multisite", func() {
+			RunM4CertTest(ctx, deployment, testcaseEnvInst, testenvInstance)
+		})
+	})
 })
