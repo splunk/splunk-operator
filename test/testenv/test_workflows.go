@@ -30,7 +30,7 @@ type WorkflowResult struct {
 
 // RunStandaloneDeploymentWorkflow deploys a Standalone instance and verifies it's ready
 func (testcaseEnvInst *TestCaseEnv) RunStandaloneDeploymentWorkflow(ctx context.Context, deployment *Deployment) (*WorkflowResult, error) {
-	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, "", "")
+	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, "")
 	if err != nil {
 		return nil, err
 	}
@@ -38,8 +38,8 @@ func (testcaseEnvInst *TestCaseEnv) RunStandaloneDeploymentWorkflow(ctx context.
 }
 
 // RunC3DeploymentWorkflow deploys a C3 cluster (CM + IDXC + SHC) and verifies all components are ready
-func (testcaseEnvInst *TestCaseEnv) RunC3DeploymentWorkflow(ctx context.Context, deployment *Deployment, indexerReplicas int, mcRef string) (*WorkflowResult, error) {
-	if err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, true, mcRef); err != nil {
+func (testcaseEnvInst *TestCaseEnv) RunC3DeploymentWorkflow(ctx context.Context, deployment *Deployment, indexerReplicas int) (*WorkflowResult, error) {
+	if err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, true); err != nil {
 		return nil, fmt.Errorf("unable to deploy C3 cluster: %w", err)
 	}
 
@@ -51,8 +51,8 @@ func (testcaseEnvInst *TestCaseEnv) RunC3DeploymentWorkflow(ctx context.Context,
 }
 
 // RunM4DeploymentWorkflow deploys a M4 multisite cluster and verifies all components are ready
-func (testcaseEnvInst *TestCaseEnv) RunM4DeploymentWorkflow(ctx context.Context, deployment *Deployment, indexerReplicas int, siteCount int, mcRef string) (*WorkflowResult, error) {
-	if err := deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), indexerReplicas, siteCount, mcRef); err != nil {
+func (testcaseEnvInst *TestCaseEnv) RunM4DeploymentWorkflow(ctx context.Context, deployment *Deployment, indexerReplicas int, siteCount int) (*WorkflowResult, error) {
+	if err := deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), indexerReplicas, siteCount); err != nil {
 		return nil, fmt.Errorf("unable to deploy M4 cluster: %w", err)
 	}
 
@@ -68,7 +68,7 @@ func (testcaseEnvInst *TestCaseEnv) RunM4DeploymentWorkflow(ctx context.Context,
 
 // RunM1DeploymentWorkflow deploys an M1 multisite Indexer Cluster (no SHC) and verifies components
 func (testcaseEnvInst *TestCaseEnv) RunM1DeploymentWorkflow(ctx context.Context, deployment *Deployment, indexerReplicas int, siteCount int) (*WorkflowResult, error) {
-	if err := deployment.DeployMultisiteCluster(ctx, deployment.GetName(), indexerReplicas, siteCount, ""); err != nil {
+	if err := deployment.DeployMultisiteCluster(ctx, deployment.GetName(), indexerReplicas, siteCount); err != nil {
 		return nil, fmt.Errorf("unable to deploy M1 cluster: %w", err)
 	}
 
@@ -132,7 +132,7 @@ func (testcaseEnvInst *TestCaseEnv) RunDeleteStandaloneWorkflow(ctx context.Cont
 
 // RunDeleteC3Workflow deploys and deletes a C3 cluster
 func (testcaseEnvInst *TestCaseEnv) RunDeleteC3Workflow(ctx context.Context, deployment *Deployment, indexerReplicas int) error {
-	if _, err := testcaseEnvInst.RunC3DeploymentWorkflow(ctx, deployment, indexerReplicas, ""); err != nil {
+	if _, err := testcaseEnvInst.RunC3DeploymentWorkflow(ctx, deployment, indexerReplicas); err != nil {
 		return err
 	}
 

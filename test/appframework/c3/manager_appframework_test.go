@@ -229,11 +229,11 @@ var _ = Describe("c3appfw test", func() {
 			newImage := "splunk/splunk:latest"
 
 			lm, err := deployment.DeployLicenseManager(ctx, deployment.GetName())
-			cm, err := deployment.DeployClusterManager(ctx, deployment.GetName(), lm.GetName(), "", "")
+			cm, err := deployment.DeployClusterManager(ctx, deployment.GetName(), lm.GetName(), "")
 
 			shcName := fmt.Sprintf("%s-shc", deployment.GetName())
 			idxName := fmt.Sprintf("%s-idxc", deployment.GetName())
-			shc, err := deployment.DeploySearchHeadCluster(ctx, shcName, cm.GetName(), lm.GetName(), "", "")
+			shc, err := deployment.DeploySearchHeadCluster(ctx, shcName, cm.GetName(), lm.GetName(), "")
 			idxc, err := deployment.DeployIndexerCluster(ctx, idxName, lm.GetName(), 3, cm.GetName(), "", corev1.ObjectReference{}, corev1.ObjectReference{}, "")
 
 			// Wait for License Manager to be in READY phase
@@ -2801,7 +2801,7 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy C3 CRD
 			indexerReplicas := 3
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster")
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, false, "")
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, false)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster")
 
 			// Create spec with clusterMasterRef for Standalone

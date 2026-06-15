@@ -26,15 +26,14 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-// RunLMS1Test deploys a Standalone with License Manager and Monitoring Console,
-// then verifies LM is configured on the standalone and MC pods.
+// RunLMS1Test deploys a Standalone with License Manager,
+// then verifies LM is configured on the standalone pod.
 func RunLMS1Test(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.LicenseTestConfig) {
 	// Set up license config map
 	Expect(testenv.SetupLicenseConfigMap(ctx, testcaseEnvInst)).To(Succeed(), "Unable to setup license config map")
 
 	// Create Standalone deployment with License Manager/Master
-	mcRef := deployment.GetName()
-	standalone, err := config.DeployStandaloneWithLM(ctx, deployment, deployment.GetName(), mcRef)
+	standalone, err := config.DeployStandaloneWithLM(ctx, deployment, deployment.GetName())
 	Expect(err).To(Succeed(), "Unable to deploy Standalone instance with LM")
 
 	// Wait for License Manager/Master and Standalone to be in READY status
@@ -42,33 +41,28 @@ func RunLMS1Test(ctx context.Context, deployment *testenv.Deployment, testcaseEn
 		return testenv.VerifyLMAndStandaloneReady(ctx, deployment, testcaseEnvInst, config.ClusterReadinessConfig, standalone)
 	}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "License Manager or Standalone not ready")
 
-	// Deploy and verify Monitoring Console
-	_, err = testcaseEnvInst.DeployAndVerifyMonitoringConsole(ctx, deployment, mcRef, deployment.GetName())
-	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
 	// Verify livenessProbe and readinessProbe config object and scripts
 	Expect(testcaseEnvInst.VerifyProbeConfigAndScripts(ctx, deployment, false)).To(Succeed(), "Probe config verification failed")
 
 	// Verify License Manager/Master is configured on Standalone instance
 	standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 	Eventually(func() error { return testenv.VerifyLMConfiguredOnPod(ctx, deployment, standalonePodName) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "LM not configured on Standalone pod")
-
-	// Verify License Manager/Master is configured on Monitoring Console
-	Eventually(func() error { return testenv.VerifyLMConfiguredOnMC(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "LM not configured on MC")
 }
 
-// RunLMC3Test deploys a C3 cluster with License Manager and Monitoring Console,
-// then verifies LM is configured on indexers, search heads, and MC.
+// RunLMC3Test deploys a C3 cluster with License Manager,
+// then verifies LM is configured on indexers and search heads.
 func RunLMC3Test(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.LicenseTestConfig) {
 	// Deploy single site Cluster with License Manager/Master
-	mcRef := deployment.GetName()
-	Expect(config.DeployC3WithLicense(ctx, deployment, testcaseEnvInst, 3, true, mcRef)).To(Succeed(), "Unable to deploy C3 with license")
+	Expect(config.DeployC3WithLicense(ctx, deployment, testcaseEnvInst, 3, true)).To(Succeed(), "Unable to deploy C3 with license")
 
-	Expect(testenv.DeployMCAndVerifyRFSF(ctx, deployment, testcaseEnvInst, mcRef)).To(Succeed(), "Unable to deploy MC and verify RFSF")
+	Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-	// Verify License Manager/Master is configured on indexers, search heads, and MC
+	// Verify License Manager/Master is configured on indexers and search heads
 	indexerPods := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), 3, false, 0)
-	Eventually(func() error { return testenv.VerifyLMConfiguredOnCluster(ctx, deployment, indexerPods) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "LM not configured on cluster pods")
+	shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), 3, false, 0)
+	Eventually(func() error {
+		return testenv.VerifyLMConfiguredOnPods(ctx, deployment, append(indexerPods, shPods...))
+	}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "LM not configured on cluster pods")
 }
 
 // RunLMC3AppFrameworkTest deploys a License Manager with App Framework, verifies V1 apps
@@ -186,16 +180,18 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 	Expect(os.RemoveAll(downloadDirV2)).To(Succeed(), "Unable to delete locally downloaded V2 app files")
 }
 
-// RunLMM4Test deploys a multisite cluster with License Manager and Monitoring Console,
-// then verifies LM is configured on indexers, search heads, and MC.
+// RunLMM4Test deploys a multisite cluster with License Manager,
+// then verifies LM is configured on indexers and search heads.
 func RunLMM4Test(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, config *testenv.LicenseTestConfig) {
 	// Deploy Multisite Cluster with License Manager/Master and Search Head
 	siteCount := 3
-	mcRef := deployment.GetName()
-	Expect(config.DeployM4WithLicense(ctx, deployment, testcaseEnvInst, 1, siteCount, mcRef)).To(Succeed(), "Unable to deploy M4 with license")
-	Expect(testenv.DeployMCAndVerifyRFSF(ctx, deployment, testcaseEnvInst, mcRef)).To(Succeed(), "Unable to deploy MC and verify RFSF")
+	Expect(config.DeployM4WithLicense(ctx, deployment, testcaseEnvInst, 1, siteCount)).To(Succeed(), "Unable to deploy M4 with license")
+	Expect(testcaseEnvInst.VerifyRFSFMet(ctx, deployment)).To(Succeed(), "RF/SF not met")
 
-	// Verify License Manager/Master is configured on indexers, search heads, and MC
+	// Verify License Manager/Master is configured on indexers and search heads
 	indexerPods := testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)
-	Eventually(func() error { return testenv.VerifyLMConfiguredOnCluster(ctx, deployment, indexerPods) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "LM not configured on multisite cluster pods")
+	shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), 3, false, 0)
+	Eventually(func() error {
+		return testenv.VerifyLMConfiguredOnPods(ctx, deployment, append(indexerPods, shPods...))
+	}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "LM not configured on multisite cluster pods")
 }

@@ -2043,8 +2043,7 @@ func SetupS1WithLMAndMC(ctx context.Context, deployment *Deployment, testcaseEnv
 		return S1WithLMSetup{}, err
 	}
 
-	mcRef := deployment.GetName()
-	standalone, err := config.DeployStandaloneWithLM(ctx, deployment, deployment.GetName(), mcRef)
+	standalone, err := config.DeployStandaloneWithLM(ctx, deployment, deployment.GetName())
 	if err != nil {
 		return S1WithLMSetup{}, fmt.Errorf("unable to deploy standalone instance with LM: %w", err)
 	}
