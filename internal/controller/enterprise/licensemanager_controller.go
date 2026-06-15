@@ -40,6 +40,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	certs "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
 
 // LicenseManagerReconciler reconciles a LicenseManager object
@@ -163,6 +165,9 @@ func (r *LicenseManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(
+				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.LicenseManagerList{}))).
 		Named("license-manager-controller").
 		Complete(r)
 }

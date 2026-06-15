@@ -2129,7 +2129,7 @@ func TestSetDeployerConfig(t *testing.T) {
 	shc.Spec.DeployerNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = append(shc.Spec.DeployerNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms, nsTerm)
 
 	// Get deployer STS and set resources
-	depSts, err := getSplunkStatefulSet(ctx, client, &shc, &shc.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(&shc, shc.Spec.Replicas))
+	depSts, err := getSplunkStatefulSet(ctx, client, &shc, &shc.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(&shc, shc.Spec.Replicas), nil)
 	if err != nil {
 		t.Errorf("Failed to get deployer statefulset due to error=%s", err)
 	}
