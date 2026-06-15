@@ -29,8 +29,8 @@ import (
 type ClusterCoordinator interface {
 	LicenseManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) error
 	ClusterManagerReady(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) error
-	DeployStandaloneWithLM(ctx context.Context, deployment *Deployment, name, mcRef string) (*enterpriseApi.Standalone, error)
-	DeployMultisiteCluster(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, mcRef string) error
+	DeployStandaloneWithLM(ctx context.Context, deployment *Deployment, name string) (*enterpriseApi.Standalone, error)
+	DeployMultisiteCluster(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int) error
 	DeployMultisiteClusterWithIndexes(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, secretName string, smartStoreSpec enterpriseApi.SmartStoreSpec) error
 	VerifyClusterManagerPhaseUpdating(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv) error
 	DeleteClusterManager(ctx context.Context, deployment *Deployment) error
@@ -51,12 +51,12 @@ func (c *clusterMasterCoordinator) ClusterManagerReady(ctx context.Context, depl
 	return testcaseEnv.VerifyClusterMasterReady(ctx, deployment)
 }
 
-func (c *clusterMasterCoordinator) DeployStandaloneWithLM(ctx context.Context, deployment *Deployment, name, mcRef string) (*enterpriseApi.Standalone, error) {
-	return deployment.DeployStandaloneWithLMaster(ctx, name, mcRef)
+func (c *clusterMasterCoordinator) DeployStandaloneWithLM(ctx context.Context, deployment *Deployment, name string) (*enterpriseApi.Standalone, error) {
+	return deployment.DeployStandaloneWithLMaster(ctx, name)
 }
 
-func (c *clusterMasterCoordinator) DeployMultisiteCluster(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, mcRef string) error {
-	return deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef)
+func (c *clusterMasterCoordinator) DeployMultisiteCluster(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int) error {
+	return deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, name, indexerReplicas, siteCount)
 }
 
 func (c *clusterMasterCoordinator) DeployMultisiteClusterWithIndexes(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, secretName string, smartStoreSpec enterpriseApi.SmartStoreSpec) error {
@@ -107,12 +107,12 @@ func (c *clusterManagerCoordinator) ClusterManagerReady(ctx context.Context, dep
 	return testcaseEnv.VerifyClusterManagerReady(ctx, deployment)
 }
 
-func (c *clusterManagerCoordinator) DeployStandaloneWithLM(ctx context.Context, deployment *Deployment, name, mcRef string) (*enterpriseApi.Standalone, error) {
-	return deployment.DeployStandaloneWithLM(ctx, name, mcRef)
+func (c *clusterManagerCoordinator) DeployStandaloneWithLM(ctx context.Context, deployment *Deployment, name string) (*enterpriseApi.Standalone, error) {
+	return deployment.DeployStandaloneWithLM(ctx, name)
 }
 
-func (c *clusterManagerCoordinator) DeployMultisiteCluster(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, mcRef string) error {
-	return deployment.DeployMultisiteClusterWithSearchHead(ctx, name, indexerReplicas, siteCount, mcRef)
+func (c *clusterManagerCoordinator) DeployMultisiteCluster(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int) error {
+	return deployment.DeployMultisiteClusterWithSearchHead(ctx, name, indexerReplicas, siteCount)
 }
 
 func (c *clusterManagerCoordinator) DeployMultisiteClusterWithIndexes(ctx context.Context, deployment *Deployment, name string, indexerReplicas, siteCount int, secretName string, smartStoreSpec enterpriseApi.SmartStoreSpec) error {
@@ -199,9 +199,9 @@ func (testcaseenv *TestCaseEnv) DeployMCAndGetVersion(ctx context.Context, deplo
 }
 
 // DeployAndVerifyStandalone deploys a standalone instance and verifies it reaches ready state
-func (testcaseenv *TestCaseEnv) DeployAndVerifyStandalone(ctx context.Context, deployment *Deployment, mcRef string, licenseManagerRef string) (*enterpriseApi.Standalone, error) {
+func (testcaseenv *TestCaseEnv) DeployAndVerifyStandalone(ctx context.Context, deployment *Deployment, licenseManagerRef string) (*enterpriseApi.Standalone, error) {
 	name := deployment.GetName()
-	standalone, err := deployment.DeployStandalone(ctx, name, mcRef, licenseManagerRef)
+	standalone, err := deployment.DeployStandalone(ctx, name, licenseManagerRef)
 	if err != nil {
 		return nil, fmt.Errorf("unable to deploy Standalone instance: %w", err)
 	}
@@ -337,8 +337,8 @@ func (testcaseenv *TestCaseEnv) StandardC3Verification(ctx context.Context, depl
 }
 
 // DeployAndVerifyC3 deploys a C3 single-site cluster and verifies it reaches the ready state.
-func (c *ClusterReadinessConfig) DeployAndVerifyC3(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, replicas int, shc bool, mcRef string) error {
-	if err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), replicas, shc, mcRef); err != nil {
+func (c *ClusterReadinessConfig) DeployAndVerifyC3(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, replicas int, shc bool) error {
+	if err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), replicas, shc); err != nil {
 		return fmt.Errorf("unable to deploy C3 cluster: %w", err)
 	}
 	return c.VerifyC3ClusterReady(ctx, deployment, testcaseEnv)
@@ -346,8 +346,8 @@ func (c *ClusterReadinessConfig) DeployAndVerifyC3(ctx context.Context, deployme
 
 // DeployAndVerifyM4 deploys an M4 multisite cluster and verifies the Cluster Manager
 // and all M4 components reach the ready state.
-func (c *ClusterReadinessConfig) DeployAndVerifyM4(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, indexerReplicas int, siteCount int, mcRef string) error {
-	if err := c.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), indexerReplicas, siteCount, mcRef); err != nil {
+func (c *ClusterReadinessConfig) DeployAndVerifyM4(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, indexerReplicas int, siteCount int) error {
+	if err := c.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), indexerReplicas, siteCount); err != nil {
 		return fmt.Errorf("unable to deploy M4 cluster: %w", err)
 	}
 	return testcaseEnv.VerifyM4ComponentsReady(ctx, deployment, siteCount, func() error {
@@ -357,11 +357,11 @@ func (c *ClusterReadinessConfig) DeployAndVerifyM4(ctx context.Context, deployme
 
 // DeployC3WithLicense sets up the license config map, deploys a C3 cluster,
 // and verifies both the License Manager and cluster reach the ready state.
-func (c *ClusterReadinessConfig) DeployC3WithLicense(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, replicas int, shc bool, mcRef string) error {
+func (c *ClusterReadinessConfig) DeployC3WithLicense(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, replicas int, shc bool) error {
 	if err := SetupLicenseConfigMap(ctx, testcaseEnv); err != nil {
 		return err
 	}
-	if err := c.DeployAndVerifyC3(ctx, deployment, testcaseEnv, replicas, shc, mcRef); err != nil {
+	if err := c.DeployAndVerifyC3(ctx, deployment, testcaseEnv, replicas, shc); err != nil {
 		return err
 	}
 	return c.LicenseManagerReady(ctx, deployment, testcaseEnv)
@@ -369,11 +369,11 @@ func (c *ClusterReadinessConfig) DeployC3WithLicense(ctx context.Context, deploy
 
 // DeployM4WithLicense sets up the license config map, deploys an M4 multisite cluster,
 // and verifies the License Manager, Cluster Manager, and all M4 components reach the ready state.
-func (c *ClusterReadinessConfig) DeployM4WithLicense(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, indexerReplicas int, siteCount int, mcRef string) error {
+func (c *ClusterReadinessConfig) DeployM4WithLicense(ctx context.Context, deployment *Deployment, testcaseEnv *TestCaseEnv, indexerReplicas int, siteCount int) error {
 	if err := SetupLicenseConfigMap(ctx, testcaseEnv); err != nil {
 		return err
 	}
-	if err := c.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), indexerReplicas, siteCount, mcRef); err != nil {
+	if err := c.DeployMultisiteCluster(ctx, deployment, deployment.GetName(), indexerReplicas, siteCount); err != nil {
 		return fmt.Errorf("unable to deploy M4 cluster: %w", err)
 	}
 	if err := c.LicenseManagerReady(ctx, deployment, testcaseEnv); err != nil {

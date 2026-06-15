@@ -180,7 +180,7 @@ func (d *Deployment) Teardown() error {
 }
 
 // DeployStandalone deploys a Standalone Splunk Enterprise instance on the specified testenv
-func (d *Deployment) DeployStandalone(ctx context.Context, name string, mcRef string, LicenseManager string) (*enterpriseApi.Standalone, error) {
+func (d *Deployment) DeployStandalone(ctx context.Context, name string, LicenseManager string) (*enterpriseApi.Standalone, error) {
 	standalone := newStandalone(name, d.testenv.namespace, d.testenv.splunkImage)
 
 	// If license file specified, deploy License Manager
@@ -192,11 +192,6 @@ func (d *Deployment) DeployStandalone(ctx context.Context, name string, mcRef st
 		}
 		LicenseManager = name
 
-	}
-	if mcRef != "" {
-		standalone.Spec.MonitoringConsoleRef = corev1.ObjectReference{
-			Name: mcRef,
-		}
 	}
 	deployed, err := d.deployCR(ctx, name, standalone)
 	if err != nil {
@@ -411,14 +406,9 @@ func (d *Deployment) DeployLicenseMaster(ctx context.Context, name string) (*ent
 }
 
 // DeployClusterManager deploys the Cluster Manager
-func (d *Deployment) DeployClusterManager(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApi.ClusterManager, error) {
+func (d *Deployment) DeployClusterManager(ctx context.Context, name, LicenseManagerName string, ansibleConfig string) (*enterpriseApi.ClusterManager, error) {
 	d.testenv.Log.Info("Deploying Cluster Manager", "name", name, "LicenseRef", LicenseManagerName)
 	cm := newClusterManager(name, d.testenv.namespace, LicenseManagerName, ansibleConfig, d.testenv.splunkImage)
-	if mcRef != "" {
-		cm.Spec.MonitoringConsoleRef = corev1.ObjectReference{
-			Name: mcRef,
-		}
-	}
 	deployed, err := d.deployCR(ctx, name, cm)
 	if err != nil {
 		return nil, err
@@ -431,14 +421,9 @@ func (d *Deployment) DeployClusterManager(ctx context.Context, name, LicenseMana
 }
 
 // DeployClusterMaster deploys the Cluster Master
-func (d *Deployment) DeployClusterMaster(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApiV3.ClusterMaster, error) {
+func (d *Deployment) DeployClusterMaster(ctx context.Context, name, LicenseManagerName string, ansibleConfig string) (*enterpriseApiV3.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying Cluster Master", "name", name, "LicenseRef", LicenseManagerName)
 	cm := newClusterMaster(name, d.testenv.namespace, LicenseManagerName, ansibleConfig, d.testenv.splunkImage)
-	if mcRef != "" {
-		cm.Spec.MonitoringConsoleRef = corev1.ObjectReference{
-			Name: mcRef,
-		}
-	}
 	deployed, err := d.deployCR(ctx, name, cm)
 	if err != nil {
 		return nil, err
@@ -556,14 +541,9 @@ func (d *Deployment) DeployIngestorClusterWithAdditionalConfiguration(ctx contex
 }
 
 // DeploySearchHeadCluster deploys a Search Head Cluster
-func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, ClusterManagerRef, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApi.SearchHeadCluster, error) {
+func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, ClusterManagerRef, LicenseManagerName string, ansibleConfig string) (*enterpriseApi.SearchHeadCluster, error) {
 	d.testenv.Log.Info("Deploying Search Head Cluster", "name", name)
 	sh := newSearchHeadCluster(name, d.testenv.namespace, ClusterManagerRef, LicenseManagerName, ansibleConfig, d.testenv.splunkImage)
-	if mcRef != "" {
-		sh.Spec.MonitoringConsoleRef = corev1.ObjectReference{
-			Name: mcRef,
-		}
-	}
 	deployed, err := d.deployCR(ctx, name, sh)
 	if err != nil {
 		return deployed.(*enterpriseApi.SearchHeadCluster), err
@@ -776,7 +756,7 @@ func (d *Deployment) DeleteCR(ctx context.Context, cr client.Object) error {
 }
 
 // DeploySingleSiteCluster deploys a LM and Indexer Cluster (SHC optional)
-func (d *Deployment) DeploySingleSiteCluster(ctx context.Context, name string, indexerReplicas int, shc bool, mcRef string) error {
+func (d *Deployment) DeploySingleSiteCluster(ctx context.Context, name string, indexerReplicas int, shc bool) error {
 
 	var LicenseManager string
 
@@ -802,13 +782,13 @@ func (d *Deployment) DeploySingleSiteCluster(ctx context.Context, name string, i
 
 	if strings.Contains(name, "master") {
 		// Deploy the Cluster Master
-		_, err := d.DeployClusterMaster(ctx, name, LicenseManager, "", mcRef)
+		_, err := d.DeployClusterMaster(ctx, name, LicenseManager, "")
 		if err != nil {
 			return err
 		}
 	} else {
 		// Deploy the Cluster Manager
-		_, err := d.DeployClusterManager(ctx, name, LicenseManager, "", mcRef)
+		_, err := d.DeployClusterManager(ctx, name, LicenseManager, "")
 		if err != nil {
 			return err
 		}
@@ -822,7 +802,7 @@ func (d *Deployment) DeploySingleSiteCluster(ctx context.Context, name string, i
 
 	// Deploy the SH Cluster
 	if shc {
-		_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, "", mcRef)
+		_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, "")
 		if err != nil {
 			return err
 		}
@@ -832,7 +812,7 @@ func (d *Deployment) DeploySingleSiteCluster(ctx context.Context, name string, i
 }
 
 // DeployMultisiteClusterMasterWithSearchHead deploys a LM, Cluster Manager, indexers in multiple sites and SH Clusters
-func (d *Deployment) DeployMultisiteClusterMasterWithSearchHead(ctx context.Context, name string, indexerReplicas int, siteCount int, mcRef string) error {
+func (d *Deployment) DeployMultisiteClusterMasterWithSearchHead(ctx context.Context, name string, indexerReplicas int, siteCount int) error {
 
 	var LicenseMaster string
 
@@ -859,7 +839,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHead(ctx context.Cont
     search_factor: 2
     replication_factor: 2
 `
-	_, err := d.DeployClusterMaster(ctx, name, LicenseMaster, defaults, mcRef)
+	_, err := d.DeployClusterMaster(ctx, name, LicenseMaster, defaults)
 	if err != nil {
 		return err
 	}
@@ -884,7 +864,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHead(ctx context.Cont
   multisite_master: splunk-%s-%s-service
   site: site0
 `, name, "cluster-master")
-	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseMaster, siteDefaults, mcRef)
+	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseMaster, siteDefaults)
 	if err != nil {
 		return err
 	}
@@ -894,7 +874,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHead(ctx context.Cont
 }
 
 // DeployMultisiteClusterWithSearchHead deploys a LM, Cluster Manager, indexers in multiple sites and SH Clusters
-func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, name string, indexerReplicas int, siteCount int, mcRef string) error {
+func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, name string, indexerReplicas int, siteCount int) error {
 
 	var LicenseManager string
 
@@ -931,7 +911,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
     search_factor: 2
     replication_factor: 2
 `
-	_, err := d.DeployClusterManager(ctx, name, LicenseManager, defaults, mcRef)
+	_, err := d.DeployClusterManager(ctx, name, LicenseManager, defaults)
 	if err != nil {
 		return err
 	}
@@ -956,7 +936,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
   multisite_master: splunk-%s-%s-service
   site: site0
 `, name, "cluster-manager")
-	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, siteDefaults, mcRef)
+	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, siteDefaults)
 	if err != nil {
 		return err
 	}
@@ -966,7 +946,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 }
 
 // DeployMultisiteCluster deploys a LM, Cluster Manager, and indexers in multiple sites
-func (d *Deployment) DeployMultisiteCluster(ctx context.Context, name string, indexerReplicas int, siteCount int, mcRef string) error {
+func (d *Deployment) DeployMultisiteCluster(ctx context.Context, name string, indexerReplicas int, siteCount int) error {
 
 	var LicenseManager string
 
@@ -994,7 +974,7 @@ func (d *Deployment) DeployMultisiteCluster(ctx context.Context, name string, in
     search_factor: 2
     replication_factor: 2
 `
-	_, err := d.DeployClusterManager(ctx, name, LicenseManager, defaults, mcRef)
+	_, err := d.DeployClusterManager(ctx, name, LicenseManager, defaults)
 	if err != nil {
 		return err
 	}
@@ -1016,7 +996,7 @@ func (d *Deployment) DeployMultisiteCluster(ctx context.Context, name string, in
 }
 
 // DeployStandaloneWithLMaster deploys a Standalone Splunk Enterprise instance with License Master on the specified testenv
-func (d *Deployment) DeployStandaloneWithLMaster(ctx context.Context, name string, mcRef string) (*enterpriseApi.Standalone, error) {
+func (d *Deployment) DeployStandaloneWithLMaster(ctx context.Context, name string) (*enterpriseApi.Standalone, error) {
 	var LicenseManager string
 
 	// If license file specified, deploy License Manager
@@ -1030,11 +1010,6 @@ func (d *Deployment) DeployStandaloneWithLMaster(ctx context.Context, name strin
 	}
 
 	standalone := newStandaloneWithLM(name, d.testenv.namespace, LicenseManager, d.testenv.splunkImage)
-	if mcRef != "" {
-		standalone.Spec.MonitoringConsoleRef = corev1.ObjectReference{
-			Name: mcRef,
-		}
-	}
 	deployed, err := d.deployCR(ctx, name, standalone)
 	if err != nil {
 		return nil, err
@@ -1043,7 +1018,7 @@ func (d *Deployment) DeployStandaloneWithLMaster(ctx context.Context, name strin
 }
 
 // DeployStandaloneWithLM deploys a Standalone Splunk Enterprise instance with License Manager on the specified testenv
-func (d *Deployment) DeployStandaloneWithLM(ctx context.Context, name string, mcRef string) (*enterpriseApi.Standalone, error) {
+func (d *Deployment) DeployStandaloneWithLM(ctx context.Context, name string) (*enterpriseApi.Standalone, error) {
 	var LicenseManager string
 
 	// If license file specified, deploy License Manager
@@ -1057,11 +1032,6 @@ func (d *Deployment) DeployStandaloneWithLM(ctx context.Context, name string, mc
 	}
 
 	standalone := newStandaloneWithLM(name, d.testenv.namespace, LicenseManager, d.testenv.splunkImage)
-	if mcRef != "" {
-		standalone.Spec.MonitoringConsoleRef = corev1.ObjectReference{
-			Name: mcRef,
-		}
-	}
 	deployed, err := d.deployCR(ctx, name, standalone)
 	if err != nil {
 		return nil, err
@@ -1152,7 +1122,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(ctx context.
   multisite_master: splunk-%s-%s-service
   site: site0
 `, name, "cluster-manager")
-	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, siteDefaults, "")
+	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, siteDefaults)
 	return err
 }
 
@@ -1207,7 +1177,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndIndexes(ctx co
   multisite_master: splunk-%s-%s-service
   site: site0
 `, name, "cluster-master")
-	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, siteDefaults, "")
+	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, siteDefaults)
 	return err
 }
 
