@@ -19,6 +19,7 @@ package core
 import (
 	"context"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -36,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -97,6 +99,7 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 	err := p.client.Get(ctx, types.NamespacedName{Name: p.cluster.Name, Namespace: p.cluster.Namespace}, existingCNPG)
 
 	desiredSpec := buildCNPGClusterSpec(*existingCNPG.Spec.DeepCopy(), p.mergedConfig, p.contracts.Secret.Name, p.metricsEnabled)
+	desiredSpec.PostgresConfiguration.Parameters = maps.Clone(existingCNPG.Spec.PostgresConfiguration.Parameters)
 	applyPoolerSANs(&desiredSpec, poolerEnabled, p.cluster.Name, p.cluster.Namespace)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return newReconcileFailure(reasonClusterGetFailed, err)
@@ -108,11 +111,21 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 			return newReconcileFailure(reasonClusterBuildFailed, err)
 		}
 		applyPoolerSANs(&newCluster.Spec, poolerEnabled, p.cluster.Name, p.cluster.Namespace)
+		desiredParameters := maps.Clone(newCluster.Spec.PostgresConfiguration.Parameters)
+		newCluster.Spec.PostgresConfiguration.Parameters = nil
 		if err = p.client.Create(ctx, newCluster); err != nil {
 			return newReconcileFailure(reasonClusterBuildFailed, err)
 		}
+		if err := applyPostgreSQLParameters(ctx, p.client, newCluster, desiredParameters); err != nil {
+			return newReconcileFailure(reasonClusterBuildFailed, err)
+		}
+		createdCNPG := &cnpgv1.Cluster{}
+		if err := p.client.Get(ctx, client.ObjectKeyFromObject(newCluster), createdCNPG); err != nil {
+			return newReconcileFailure(reasonClusterGetFailed, err)
+		}
+		p.cnpgPatch = cnpgPatchBody
 		p.events.emitNormal(p.cluster, EventClusterCreationStarted, fmt.Sprintf("CNPG cluster created for PostgresCluster %s, waiting for healthy state", p.cluster.Name))
-		p.cnpgCluster = newCluster
+		p.cnpgCluster = createdCNPG
 		p.cnpgCreated = true
 		return nil
 	}
@@ -133,9 +146,14 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 		p.events.emitNormal(p.cluster, EventClusterAdopted, fmt.Sprintf("Adopted existing CNPG cluster for PostgresCluster %s", p.cluster.Name))
 		p.cnpgPatch = cnpgPatchMetadata
 	}
-	currentNormalized := normalizeCNPGClusterSpec(p.cnpgCluster.Spec, p.mergedConfig.Spec.PostgreSQLConfig)
-	desiredNormalized := normalizeCNPGClusterSpec(desiredSpec, p.mergedConfig.Spec.PostgreSQLConfig)
-	if !equality.Semantic.DeepEqual(currentNormalized, desiredNormalized) {
+
+	currentNormalized := normalizeCNPGClusterSpec(p.cnpgCluster.Spec)
+	desiredNormalized := normalizeCNPGClusterSpec(desiredSpec)
+	specDrift := !equality.Semantic.DeepEqual(currentNormalized, desiredNormalized)
+	updateMessage := fmt.Sprintf("CNPG cluster spec updated for PostgresCluster %s, waiting for healthy state", p.cluster.Name)
+	needsUpdateEvent := false
+
+	if specDrift {
 		originalCluster := p.cnpgCluster.DeepCopy()
 		patchKind := cnpgPatchMetadata
 		if isClusterDrift(currentNormalized, desiredNormalized) {
@@ -145,8 +163,29 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 		if err := patchObject(ctx, p.client, originalCluster, p.cnpgCluster, "CNPGCluster"); err != nil {
 			return newReconcileFailure(reasonClusterPatchFailed, err)
 		}
-		p.events.emitNormal(p.cluster, EventClusterUpdateStarted, fmt.Sprintf("CNPG cluster spec updated for PostgresCluster %s, waiting for healthy state", p.cluster.Name))
-		p.cnpgPatch = patchKind
+		needsUpdateEvent = true
+		if p.cnpgPatch != cnpgPatchBody {
+			p.cnpgPatch = patchKind
+		}
+		if err := p.client.Get(ctx, client.ObjectKeyFromObject(p.cnpgCluster), p.cnpgCluster); err != nil {
+			return newReconcileFailure(reasonClusterGetFailed, err)
+		}
+	}
+	beforeGeneration := p.cnpgCluster.Generation
+	if err := applyPostgreSQLParameters(ctx, p.client, p.cnpgCluster, p.mergedConfig.Spec.PostgreSQLConfig); err != nil {
+		return newReconcileFailure(reasonClusterPatchFailed, err)
+	}
+	updatedCNPG := &cnpgv1.Cluster{}
+	if err := p.client.Get(ctx, client.ObjectKeyFromObject(p.cnpgCluster), updatedCNPG); err != nil {
+		return newReconcileFailure(reasonClusterGetFailed, err)
+	}
+	p.cnpgCluster = updatedCNPG
+	if updatedCNPG.Generation != beforeGeneration {
+		p.cnpgPatch = cnpgPatchBody
+		needsUpdateEvent = true
+	}
+	if needsUpdateEvent {
+		p.events.emitNormal(p.cluster, EventClusterUpdateStarted, updateMessage)
 	}
 
 	p.contracts.CNPGCluster = p.cnpgCluster
@@ -533,19 +572,13 @@ func buildCNPGCluster(scheme *runtime.Scheme, cluster *enterprisev4.PostgresClus
 	return cnpg, nil
 }
 
-func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec, customDefinedParameters map[string]string) normalizedCNPGClusterSpec {
+func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec) normalizedCNPGClusterSpec {
 	normalized := normalizedCNPGClusterSpec{
 		ImageName:           stripImageRefForDrift(spec.ImageName),
 		Instances:           spec.Instances,
 		PrimaryUpdateMethod: string(spec.PrimaryUpdateMethod),
 		StorageSize:         spec.StorageConfiguration.Size,
 		Resources:           spec.Resources,
-	}
-	if len(customDefinedParameters) > 0 {
-		normalized.CustomDefinedParameters = make(map[string]string)
-		for k := range customDefinedParameters {
-			normalized.CustomDefinedParameters[k] = spec.PostgresConfiguration.Parameters[k]
-		}
 	}
 	if len(spec.PostgresConfiguration.PgHBA) > 0 {
 		normalized.PgHBA = spec.PostgresConfiguration.PgHBA
@@ -735,4 +768,168 @@ func isServerTLSLeafAlignedWithSpec(ctx context.Context, c client.Client, namesp
 		}
 	}
 	return true, nil
+}
+
+// buildPostgreSQLParametersPatch builds an SSA payload for CNPG spec.postgresql.parameters.
+func buildPostgreSQLParametersPatch(cluster *cnpgv1.Cluster, params map[string]string) client.Object {
+	parameters := maps.Clone(params)
+	if parameters == nil {
+		parameters = map[string]string{}
+	}
+	paramPatch := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": cnpgv1.SchemeGroupVersion.String(),
+			"kind":       cnpgv1.ClusterKind,
+			"metadata": map[string]any{
+				"name":      cluster.Name,
+				"namespace": cluster.Namespace,
+			},
+			"spec": map[string]any{
+				"postgresql": map[string]any{
+					"parameters": parameters,
+				},
+			},
+		},
+	}
+	return paramPatch
+}
+
+// applyPostgreSQLParametersPatch sends one SSA payload for CNPG spec.postgresql.parameters.
+func applyPostgreSQLParametersPatch(ctx context.Context, c client.Client, cluster *cnpgv1.Cluster, params map[string]string) error {
+	patch := buildPostgreSQLParametersPatch(cluster, params)
+	if err := c.Apply(
+		ctx,
+		client.ApplyConfigurationFromUnstructured(patch.(*unstructured.Unstructured)),
+		client.FieldOwner(postgresqlParametersFieldManager),
+	); err != nil {
+		return fmt.Errorf("applying PostgreSQL parameters: %w", err)
+	}
+
+	return nil
+}
+
+// applyPostgreSQLParameters applies CNPG spec.postgresql.parameters with a dedicated SSA field manager.
+func applyPostgreSQLParameters(ctx context.Context, c client.Client, cluster *cnpgv1.Cluster, params map[string]string) error {
+	adoptionParams := postgreSQLParametersWithLegacyAdoption(cluster, params)
+	if len(adoptionParams) > 0 {
+		if err := applyPostgreSQLParametersPatch(ctx, c, cluster, adoptionParams); err != nil {
+			return err
+		}
+	}
+
+	return applyPostgreSQLParametersPatch(ctx, c, cluster, params)
+}
+
+// postgreSQLParametersWithLegacyAdoption returns a temporary SSA payload that includes parameters
+// previously managed by the operator through MergeFrom patches. The following desired-only apply
+// can then prune those keys because this field manager owns their managedFields entries.
+func postgreSQLParametersWithLegacyAdoption(cluster *cnpgv1.Cluster, desired map[string]string) map[string]string {
+	staleLegacyParameters := staleLegacyPostgreSQLParameters(cluster, desired)
+	if len(staleLegacyParameters) == 0 {
+		return nil
+	}
+
+	adoptionParams := maps.Clone(desired)
+	if adoptionParams == nil {
+		adoptionParams = map[string]string{}
+	}
+	maps.Copy(adoptionParams, staleLegacyParameters)
+	return adoptionParams
+}
+
+// staleLegacyPostgreSQLParameters finds live parameters that were owned by the old merge-patch
+// manager but are absent from desired config. These keys need one managedFields adoption apply
+// before omission can prune them.
+func staleLegacyPostgreSQLParameters(cluster *cnpgv1.Cluster, desired map[string]string) map[string]string {
+	if cluster == nil || len(cluster.Spec.PostgresConfiguration.Parameters) == 0 {
+		return nil
+	}
+
+	legacyOwned := legacyUpdatedPostgreSQLParameterKeys(cluster.ManagedFields)
+	if len(legacyOwned) == 0 {
+		return nil
+	}
+
+	applyOwners := appliedPostgreSQLParameterOwners(cluster.ManagedFields)
+	stale := map[string]string{}
+	for key, value := range cluster.Spec.PostgresConfiguration.Parameters {
+		_, inDesired := desired[key]
+		_, isLegacy := legacyOwned[key]
+
+		applyOwner := applyOwners[key]
+		externallyApplied := applyOwner != "" && applyOwner != postgresqlParametersFieldManager
+
+		if inDesired || !isLegacy || externallyApplied || isCNPGManagedPostgreSQLParameter(key) {
+			continue
+		}
+
+		stale[key] = value
+	}
+	return stale
+}
+
+// legacyUpdatedPostgreSQLParameterKeys returns parameter keys owned by the old controller-runtime
+// update manager used before parameters moved to SSA.
+func legacyUpdatedPostgreSQLParameterKeys(managedFields []metav1.ManagedFieldsEntry) map[string]struct{} {
+	keys := map[string]struct{}{}
+	for _, field := range managedFields {
+		if field.Manager != legacyPostgreSQLParametersUpdateManager ||
+			field.Operation != metav1.ManagedFieldsOperationUpdate ||
+			field.FieldsV1 == nil {
+			continue
+		}
+		for _, key := range parsePostgreSQLParameterFieldNames(field.FieldsV1.GetRawBytes()) {
+			keys[key] = struct{}{}
+		}
+	}
+	return keys
+}
+
+// appliedPostgreSQLParameterOwners returns per-key SSA managers for PostgreSQL parameters.
+func appliedPostgreSQLParameterOwners(managedFields []metav1.ManagedFieldsEntry) map[string]string {
+	owners := map[string]string{}
+	for _, field := range managedFields {
+		if field.Operation != metav1.ManagedFieldsOperationApply || field.FieldsV1 == nil {
+			continue
+		}
+		for _, key := range parsePostgreSQLParameterFieldNames(field.FieldsV1.GetRawBytes()) {
+			owners[key] = field.Manager
+		}
+	}
+	return owners
+}
+
+// parsePostgreSQLParameterFieldNames extracts f:<parameter> keys from managedFields fieldsV1.
+func parsePostgreSQLParameterFieldNames(raw []byte) []string {
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil
+	}
+
+	spec, _ := fields["f:spec"].(map[string]any)
+	postgresql, _ := spec["f:postgresql"].(map[string]any)
+	parameters, _ := postgresql["f:parameters"].(map[string]any)
+	names := make([]string, 0, len(parameters))
+	for key := range parameters {
+		name, found := strings.CutPrefix(key, "f:")
+		if found && name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// isCNPGManagedPostgreSQLParameter reports whether a parameter is known to be CNPG fixed,
+// defaulted, or mandatory and should not be adopted as legacy user intent.
+func isCNPGManagedPostgreSQLParameter(key string) bool {
+	if _, fixed := cnpgpostgres.FixedConfigurationParameters[key]; fixed {
+		return true
+	}
+	if _, defaulted := cnpgpostgres.CnpgConfigurationSettings.GlobalDefaultSettings[key]; defaulted {
+		return true
+	}
+	if _, mandatory := cnpgpostgres.CnpgConfigurationSettings.MandatorySettings[key]; mandatory {
+		return true
+	}
+	return false
 }
