@@ -2670,7 +2670,7 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy C3 CRD
 			indexerReplicas := 3
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster")
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, false, "")
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, false)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster")
 
 			// Create spec with clusterMasterRef for Standalone
