@@ -40,18 +40,17 @@ type ReconcileContext struct {
 // Only fields we set in buildCNPGClusterSpec are included — CNPG-injected defaults are excluded
 // to avoid false-positive drift on every reconcile.
 type normalizedCNPGClusterSpec struct {
-	ImageName               string
-	Instances               int
-	PrimaryUpdateMethod     string
-	CustomDefinedParameters map[string]string
-	PgHBA                   []string
-	DefaultDatabase         string
-	Owner                   string
-	StorageSize             string
-	Resources               corev1.ResourceRequirements
-	InheritedAnnotations    map[string]string
-	ServerAltDNSNames       []string
-	Backup                  *normalizedBackupSpec
+	ImageName            string
+	Instances            int
+	PrimaryUpdateMethod  string
+	PgHBA                []string
+	DefaultDatabase      string
+	Owner                string
+	StorageSize          string
+	Resources            corev1.ResourceRequirements
+	InheritedAnnotations map[string]string
+	ServerAltDNSNames    []string
+	Backup               *normalizedBackupSpec
 }
 
 type normalizedBackupSpec struct {
@@ -103,6 +102,13 @@ const (
 	// PostgresClusterFinalizerName is exported so the primary adapter (controller) can
 	// reference it in event predicates without duplicating the string.
 	PostgresClusterFinalizerName string = "postgresclusters.enterprise.splunk.com/finalizer"
+
+	// postgresqlParametersFieldManager owns only CNPG spec.postgresql.parameters keys applied from PostgresCluster.spec.postgresqlConfig.
+	postgresqlParametersFieldManager string = "splunk-postgrescluster-postgresql-parameters"
+
+	// legacyPostgreSQLParametersUpdateManager is the controller-runtime default manager name used by
+	// pre-SSA MergeFrom patches. It is used only to adopt stale managedFields ownership for parameter keys.
+	legacyPostgreSQLParametersUpdateManager string = "manager"
 
 	// cluster phases
 	readyClusterPhase        reconcileClusterPhases = "Ready"

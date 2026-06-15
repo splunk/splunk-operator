@@ -39,13 +39,147 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/yaml"
 )
+
+func fakeClientWithPostgreSQLParameterApply(t *testing.T, scheme *runtime.Scheme, initiallyOwned map[client.ObjectKey][]string, objects ...client.Object) client.WithWatch {
+	t.Helper()
+
+	managedFields := map[client.ObjectKey][]metav1.ManagedFieldsEntry{}
+	for _, obj := range objects {
+		if _, ok := obj.(*cnpgv1.Cluster); ok && len(obj.GetManagedFields()) > 0 {
+			managedFields[client.ObjectKeyFromObject(obj)] = obj.GetManagedFields()
+		}
+	}
+
+	owned := make(map[client.ObjectKey]map[string]struct{}, len(initiallyOwned))
+	for key, params := range initiallyOwned {
+		owned[key] = make(map[string]struct{}, len(params))
+		for _, param := range params {
+			owned[key][param] = struct{}{}
+		}
+	}
+
+	return fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objects...).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if err := c.Get(ctx, key, obj, opts...); err != nil {
+					return err
+				}
+				if fields, ok := managedFields[key]; ok {
+					if _, isCNPG := obj.(*cnpgv1.Cluster); isCNPG {
+						obj.SetManagedFields(fields)
+					}
+				}
+				return nil
+			},
+			Apply: func(ctx context.Context, c client.WithWatch, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+				applyOptions := &client.ApplyOptions{}
+				applyOptions.ApplyOptions(opts)
+				require.Equal(t, postgresqlParametersFieldManager, applyOptions.FieldManager)
+				require.Nil(t, applyOptions.Force, "postgresql parameter SSA must not force ownership")
+
+				key, desiredParams := postgreSQLParametersFromApplyConfiguration(t, obj)
+				current := &cnpgv1.Cluster{}
+				if err := c.Get(ctx, key, current); err != nil {
+					return err
+				}
+
+				ownedParams := owned[key]
+				if ownedParams == nil {
+					ownedParams = map[string]struct{}{}
+				}
+
+				nextParams := maps.Clone(current.Spec.PostgresConfiguration.Parameters)
+				if nextParams == nil {
+					nextParams = map[string]string{}
+				}
+				for param := range ownedParams {
+					if _, stillDesired := desiredParams[param]; !stillDesired {
+						delete(nextParams, param)
+					}
+				}
+				for param, value := range desiredParams {
+					nextParams[param] = value
+				}
+
+				nextOwnedParams := make(map[string]struct{}, len(desiredParams))
+				for param := range desiredParams {
+					nextOwnedParams[param] = struct{}{}
+				}
+				owned[key] = nextOwnedParams
+
+				if maps.Equal(current.Spec.PostgresConfiguration.Parameters, nextParams) {
+					return nil
+				}
+
+				current.Spec.PostgresConfiguration.Parameters = nextParams
+				current.Generation++
+				return c.Update(ctx, current)
+			},
+		}).
+		Build()
+}
+
+func postgreSQLParametersFromApplyConfiguration(t *testing.T, obj runtime.ApplyConfiguration) (client.ObjectKey, map[string]string) {
+	t.Helper()
+
+	applyObject, ok := obj.(interface {
+		GetName() string
+		GetNamespace() string
+		UnstructuredContent() map[string]any
+	})
+	require.True(t, ok, "postgresql parameter apply payload must be unstructured-backed")
+
+	rawParams, found, err := unstructured.NestedFieldNoCopy(applyObject.UnstructuredContent(), "spec", "postgresql", "parameters")
+	require.NoError(t, err)
+	if !found {
+		return client.ObjectKey{Name: applyObject.GetName(), Namespace: applyObject.GetNamespace()}, map[string]string{}
+	}
+
+	params := map[string]string{}
+	switch typedParams := rawParams.(type) {
+	case map[string]string:
+		maps.Copy(params, typedParams)
+	case map[string]any:
+		for key, value := range typedParams {
+			stringValue, ok := value.(string)
+			require.True(t, ok, "postgresql parameter %q value must be a string", key)
+			params[key] = stringValue
+		}
+	default:
+		require.Failf(t, "unexpected postgresql parameters payload", "got %T", rawParams)
+	}
+
+	return client.ObjectKey{Name: applyObject.GetName(), Namespace: applyObject.GetNamespace()}, params
+}
+
+func postgreSQLParametersFieldsRaw(t *testing.T, params ...string) []byte {
+	t.Helper()
+
+	parameterFields := map[string]any{}
+	for _, param := range params {
+		parameterFields["f:"+param] = map[string]any{}
+	}
+	raw, err := json.Marshal(map[string]any{
+		"f:spec": map[string]any{
+			"f:postgresql": map[string]any{
+				"f:parameters": parameterFields,
+			},
+		},
+	})
+	require.NoError(t, err)
+	return raw
+}
 
 func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 	t.Parallel()
@@ -87,7 +221,7 @@ func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, "pg1-secret", false),
 	}
 	events := &captureEventEmitter{}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingCNPG).Build()
+	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, existingCNPG)
 	contracts := &reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}}
 	model := newClusterModel(c, scheme, events, nil, cluster, clusterClass, desiredConfig, contracts)
 
@@ -100,6 +234,163 @@ func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 	updated := &cnpgv1.Cluster{}
 	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.Equal(t, cnpgv1.PrimaryUpdateMethodSwitchover, updated.Spec.PrimaryUpdateMethod)
+	assert.Contains(t, events.normals, EventClusterUpdateStarted+":CNPG cluster spec updated for PostgresCluster pg1, waiting for healthy state")
+}
+
+func TestClusterModelAppliesPostgreSQLParametersWithSSAOwnership(t *testing.T) {
+	t.Parallel()
+
+	scheme := newTestScheme()
+
+	instances := int32(1)
+	version := "16"
+	storageSize := resource.MustParse("10Gi")
+
+	currentSpec := &enterprisev4.PostgresClusterSpec{
+		Instances:       &instances,
+		PostgresVersion: &version,
+		Storage:         &storageSize,
+		Resources:       &corev1.ResourceRequirements{},
+		PostgreSQLConfig: map[string]string{
+			"shared_buffers":  "256MB",
+			"max_connections": "200",
+		},
+		PgHBA: []string{},
+	}
+	desiredSpec := currentSpec.DeepCopy()
+	desiredSpec.PostgreSQLConfig = map[string]string{
+		"shared_buffers": "256MB",
+	}
+
+	currentConfig := &MergedConfig{
+		Spec: currentSpec,
+		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+	}
+	desiredConfig := &MergedConfig{
+		Spec: desiredSpec,
+		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+	}
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+	}
+	clusterClass := &enterprisev4.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
+	}
+	existingCNPG := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        cluster.Name,
+			Namespace:   cluster.Namespace,
+			Annotations: map[string]string{},
+		},
+		Spec: buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, "pg1-secret", false),
+	}
+	require.NoError(t, ctrl.SetControllerReference(cluster, existingCNPG, scheme))
+	existingCNPG.Spec.PostgresConfiguration.Parameters["cnpg_injected"] = "keep-me"
+
+	c := fakeClientWithPostgreSQLParameterApply(t, scheme, map[client.ObjectKey][]string{
+		client.ObjectKeyFromObject(existingCNPG): {"shared_buffers", "max_connections"},
+	}, existingCNPG)
+	contracts := &reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}}
+	model := newClusterModel(c, scheme, &captureEventEmitter{}, nil, cluster, clusterClass, desiredConfig, contracts)
+
+	require.NoError(t, model.Reconcile(context.Background()))
+
+	updated := &cnpgv1.Cluster{}
+	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	assert.Equal(t, map[string]string{
+		"shared_buffers": "256MB",
+		"cnpg_injected":  "keep-me",
+	}, updated.Spec.PostgresConfiguration.Parameters)
+}
+
+func TestClusterModelAdoptsAndPrunesLegacyPostgreSQLParameters(t *testing.T) {
+	t.Parallel()
+
+	scheme := newTestScheme()
+
+	instances := int32(1)
+	version := "16"
+	storageSize := resource.MustParse("10Gi")
+
+	currentSpec := &enterprisev4.PostgresClusterSpec{
+		Instances:       &instances,
+		PostgresVersion: &version,
+		Storage:         &storageSize,
+		Resources:       &corev1.ResourceRequirements{},
+		PostgreSQLConfig: map[string]string{
+			"shared_buffers":  "256MB",
+			"max_connections": "200",
+		},
+		PgHBA: []string{},
+	}
+	desiredSpec := currentSpec.DeepCopy()
+	desiredSpec.PostgreSQLConfig = map[string]string{
+		"shared_buffers": "256MB",
+	}
+
+	currentConfig := &MergedConfig{
+		Spec: currentSpec,
+		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+	}
+	desiredConfig := &MergedConfig{
+		Spec: desiredSpec,
+		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+	}
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+	}
+	clusterClass := &enterprisev4.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
+	}
+	existingCNPG := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+			ManagedFields: []metav1.ManagedFieldsEntry{
+				{
+					Manager:    "manager",
+					Operation:  metav1.ManagedFieldsOperationUpdate,
+					APIVersion: cnpgv1.SchemeGroupVersion.String(),
+					FieldsType: "FieldsV1",
+					FieldsV1: &metav1.FieldsV1{Raw: postgreSQLParametersFieldsRaw(t,
+						"shared_buffers",
+						"max_connections",
+						"application_name",
+						"archive_mode",
+					)},
+				},
+				{
+					Manager:    "external-postgresql-parameters",
+					Operation:  metav1.ManagedFieldsOperationApply,
+					APIVersion: cnpgv1.SchemeGroupVersion.String(),
+					FieldsType: "FieldsV1",
+					FieldsV1:   &metav1.FieldsV1{Raw: postgreSQLParametersFieldsRaw(t, "application_name")},
+				},
+			},
+		},
+		Spec: buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, "pg1-secret", false),
+	}
+	require.NoError(t, ctrl.SetControllerReference(cluster, existingCNPG, scheme))
+	existingCNPG.Spec.PostgresConfiguration.Parameters["application_name"] = "keep-me"
+	existingCNPG.Spec.PostgresConfiguration.Parameters["archive_mode"] = "on"
+
+	events := &captureEventEmitter{}
+	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, existingCNPG)
+	contracts := &reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}}
+	model := newClusterModel(c, scheme, events, nil, cluster, clusterClass, desiredConfig, contracts)
+
+	require.NoError(t, model.Reconcile(context.Background()))
+
+	updated := &cnpgv1.Cluster{}
+	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	assert.Equal(t, map[string]string{
+		"shared_buffers":   "256MB",
+		"application_name": "keep-me",
+		"archive_mode":     "on",
+	}, updated.Spec.PostgresConfiguration.Parameters)
+	assert.True(t, model.cnpgPatch.requiresPhaseGate())
 	assert.Contains(t, events.normals, EventClusterUpdateStarted+":CNPG cluster spec updated for PostgresCluster pg1, waiting for healthy state")
 }
 
@@ -439,12 +730,153 @@ func TestBuildCNPGCluster(t *testing.T) {
 	assert.Equal(t, postgresMetricsPortString, cluster.Spec.InheritedMetadata.Annotations[prometheusPortAnnotation])
 }
 
+func TestBuildPostgreSQLParametersPatchUsesEmptyMapForNilParameters(t *testing.T) {
+	t.Parallel()
+
+	cluster := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+	}
+
+	patch := buildPostgreSQLParametersPatch(cluster, nil)
+	content := patch.(*unstructured.Unstructured).UnstructuredContent()
+
+	rawParams, found, err := unstructured.NestedFieldNoCopy(content, "spec", "postgresql", "parameters")
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, map[string]string{}, rawParams)
+}
+
+func TestPostgreSQLParametersWithLegacyAdoption(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		cnpgParams    map[string]string
+		managedFields []metav1.ManagedFieldsEntry
+		desired       map[string]string
+		want          map[string]string
+	}{
+		{
+			name: "adopts stale legacy update-owned parameter before pruning",
+			cnpgParams: map[string]string{
+				"shared_buffers":  "256MB",
+				"max_connections": "200",
+			},
+			managedFields: []metav1.ManagedFieldsEntry{
+				{
+					Manager:   "manager",
+					Operation: metav1.ManagedFieldsOperationUpdate,
+					FieldsV1:  &metav1.FieldsV1{Raw: postgreSQLParametersFieldsRaw(t, "shared_buffers", "max_connections")},
+				},
+			},
+			desired: map[string]string{
+				"shared_buffers": "256MB",
+			},
+			want: map[string]string{
+				"shared_buffers":  "256MB",
+				"max_connections": "200",
+			},
+		},
+		{
+			name: "does not adopt externally apply-owned parameter",
+			cnpgParams: map[string]string{
+				"shared_buffers":   "256MB",
+				"application_name": "keep-me",
+			},
+			managedFields: []metav1.ManagedFieldsEntry{
+				{
+					Manager:   "manager",
+					Operation: metav1.ManagedFieldsOperationUpdate,
+					FieldsV1:  &metav1.FieldsV1{Raw: postgreSQLParametersFieldsRaw(t, "shared_buffers", "application_name")},
+				},
+				{
+					Manager:   "external-postgresql-parameters",
+					Operation: metav1.ManagedFieldsOperationApply,
+					FieldsV1:  &metav1.FieldsV1{Raw: postgreSQLParametersFieldsRaw(t, "application_name")},
+				},
+			},
+			desired: map[string]string{
+				"shared_buffers": "256MB",
+			},
+			want: nil,
+		},
+		{
+			name: "does not adopt CNPG managed default parameter",
+			cnpgParams: map[string]string{
+				"shared_buffers": "256MB",
+				"archive_mode":   "on",
+			},
+			managedFields: []metav1.ManagedFieldsEntry{
+				{
+					Manager:   "manager",
+					Operation: metav1.ManagedFieldsOperationUpdate,
+					FieldsV1:  &metav1.FieldsV1{Raw: postgreSQLParametersFieldsRaw(t, "shared_buffers", "archive_mode")},
+				},
+			},
+			desired: map[string]string{
+				"shared_buffers": "256MB",
+			},
+			want: nil,
+		},
+		{
+			name: "does not adopt when no legacy update ownership exists",
+			cnpgParams: map[string]string{
+				"shared_buffers":  "256MB",
+				"max_connections": "200",
+			},
+			managedFields: []metav1.ManagedFieldsEntry{
+				{
+					Manager:   postgresqlParametersFieldManager,
+					Operation: metav1.ManagedFieldsOperationApply,
+					FieldsV1:  &metav1.FieldsV1{Raw: postgreSQLParametersFieldsRaw(t, "shared_buffers")},
+				},
+			},
+			desired: map[string]string{
+				"shared_buffers": "256MB",
+			},
+			want: nil,
+		},
+		{
+			name: "does not adopt parameter updated by non-legacy manager",
+			cnpgParams: map[string]string{
+				"shared_buffers":  "256MB",
+				"max_connections": "200",
+			},
+			managedFields: []metav1.ManagedFieldsEntry{
+				{
+					Manager:   "kubectl-patch",
+					Operation: metav1.ManagedFieldsOperationUpdate,
+					FieldsV1:  &metav1.FieldsV1{Raw: postgreSQLParametersFieldsRaw(t, "max_connections")},
+				},
+			},
+			desired: map[string]string{
+				"shared_buffers": "256MB",
+			},
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{ManagedFields: tt.managedFields},
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{Parameters: tt.cnpgParams},
+				},
+			}
+
+			got := postgreSQLParametersWithLegacyAdoption(cluster, tt.desired)
+
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestNormalizeCNPGClusterSpec(t *testing.T) {
 	tests := []struct {
-		name                    string
-		spec                    cnpgv1.ClusterSpec
-		customDefinedParameters map[string]string
-		expected                normalizedCNPGClusterSpec
+		name     string
+		spec     cnpgv1.ClusterSpec
+		expected normalizedCNPGClusterSpec
 	}{
 		{
 			name: "basic fields are copied",
@@ -453,7 +885,6 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 				Instances:            3,
 				StorageConfiguration: cnpgv1.StorageConfiguration{Size: "10Gi"},
 			},
-			customDefinedParameters: nil,
 			expected: normalizedCNPGClusterSpec{
 				ImageName:           "ghcr.io/cloudnative-pg/postgresql:18",
 				Instances:           3,
@@ -468,7 +899,6 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 				Instances:            1,
 				StorageConfiguration: cnpgv1.StorageConfiguration{Size: "10Gi"},
 			},
-			customDefinedParameters: nil,
 			expected: normalizedCNPGClusterSpec{
 				ImageName:           "ghcr.io/cloudnative-pg/postgresql:18",
 				Instances:           1,
@@ -483,7 +913,6 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 				Instances:           3,
 				PrimaryUpdateMethod: cnpgv1.PrimaryUpdateMethodSwitchover,
 			},
-			customDefinedParameters: nil,
 			expected: normalizedCNPGClusterSpec{
 				ImageName:           "img:18",
 				Instances:           3,
@@ -491,7 +920,7 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 			},
 		},
 		{
-			name: "CNPG-injected parameters are excluded from comparison",
+			name: "postgresql parameters are excluded from normal drift comparison",
 			spec: cnpgv1.ClusterSpec{
 				ImageName: "img:18",
 				Instances: 1,
@@ -503,22 +932,14 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 					},
 				},
 			},
-			customDefinedParameters: map[string]string{
-				"shared_buffers":  "256MB",
-				"max_connections": "200",
-			},
 			expected: normalizedCNPGClusterSpec{
 				ImageName:           "img:18",
 				Instances:           1,
 				PrimaryUpdateMethod: "",
-				CustomDefinedParameters: map[string]string{
-					"shared_buffers":  "256MB",
-					"max_connections": "200",
-				},
 			},
 		},
 		{
-			name: "empty custom params does not populate CustomDefinedParameters",
+			name: "unowned postgresql parameters are excluded from normal drift comparison",
 			spec: cnpgv1.ClusterSpec{
 				ImageName: "img:18",
 				Instances: 1,
@@ -526,7 +947,40 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 					Parameters: map[string]string{"cnpg_injected": "val"},
 				},
 			},
-			customDefinedParameters: map[string]string{},
+			expected: normalizedCNPGClusterSpec{
+				ImageName:           "img:18",
+				Instances:           1,
+				PrimaryUpdateMethod: "",
+			},
+		},
+		{
+			name: "missing postgresql parameter is excluded from normal drift comparison",
+			spec: cnpgv1.ClusterSpec{
+				ImageName: "img:18",
+				Instances: 1,
+				PostgresConfiguration: cnpgv1.PostgresConfiguration{
+					Parameters: map[string]string{
+						"shared_buffers": "256MB",
+					},
+				},
+			},
+			expected: normalizedCNPGClusterSpec{
+				ImageName:           "img:18",
+				Instances:           1,
+				PrimaryUpdateMethod: "",
+			},
+		},
+		{
+			name: "empty parameter value remains present",
+			spec: cnpgv1.ClusterSpec{
+				ImageName: "img:18",
+				Instances: 1,
+				PostgresConfiguration: cnpgv1.PostgresConfiguration{
+					Parameters: map[string]string{
+						"application_name": "",
+					},
+				},
+			},
 			expected: normalizedCNPGClusterSpec{
 				ImageName:           "img:18",
 				Instances:           1,
@@ -637,7 +1091,7 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeCNPGClusterSpec(tt.spec, tt.customDefinedParameters)
+			got := normalizeCNPGClusterSpec(tt.spec)
 
 			assert.Equal(t, tt.expected, got)
 		})
@@ -826,7 +1280,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 				}
 				poolerContracts := &reconcileContracts{} // simulates pooler running before provisioner publishes
 				provisioner := newClusterModel(
-					fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build(),
+					fakeClientWithPostgreSQLParameterApply(t, scheme, nil, cnpg),
 					scheme, noopEventEmitter{}, nil, cluster, exampleClusterClass, mergedConfig, provisionerContracts,
 				)
 				pooler := newPoolerModel(
@@ -847,7 +1301,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 				contracts := makeContracts(cluster, false)
 				contracts.Secret = &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}
 				provisioner := newClusterModel(
-					fake.NewClientBuilder().WithScheme(scheme).WithObjects(contracts.CNPGCluster).Build(),
+					fakeClientWithPostgreSQLParameterApply(t, scheme, nil, contracts.CNPGCluster),
 					scheme, noopEventEmitter{}, nil, cluster, exampleClusterClass, mergedConfig, contracts,
 				)
 				pooler := newPoolerModel(
@@ -872,7 +1326,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 				contracts := makeContracts(cluster, true)
 				contracts.Secret = exampleSecret
 				provisioner := newClusterModel(
-					fake.NewClientBuilder().WithScheme(scheme).WithObjects(contracts.CNPGCluster).Build(),
+					fakeClientWithPostgreSQLParameterApply(t, scheme, nil, contracts.CNPGCluster),
 					scheme, noopEventEmitter{}, nil, cluster, exampleClusterClass, mergedConfig, contracts,
 				)
 				pooler := newPoolerModel(
@@ -1028,10 +1482,6 @@ func TestIsClusterDrift(t *testing.T) {
 		if s.InheritedAnnotations != nil {
 			out.InheritedAnnotations = make(map[string]string, len(s.InheritedAnnotations))
 			maps.Copy(out.InheritedAnnotations, s.InheritedAnnotations)
-		}
-		if s.CustomDefinedParameters != nil {
-			out.CustomDefinedParameters = make(map[string]string, len(s.CustomDefinedParameters))
-			maps.Copy(out.CustomDefinedParameters, s.CustomDefinedParameters)
 		}
 		if s.PgHBA != nil {
 			out.PgHBA = append([]string(nil), s.PgHBA...)
@@ -1201,7 +1651,7 @@ func TestClusterModelActuatePreservesManagedRoles(t *testing.T) {
 		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingCNPG).Build()
+	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, existingCNPG)
 	contracts := &reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}}}
 	model := newClusterModel(c, scheme, &captureEventEmitter{}, nil, cluster, clusterClass, driftedCfg, contracts)
 	require.NoError(t, model.Reconcile(context.Background()))
@@ -1245,7 +1695,7 @@ func TestClusterModelReconcilePatchesPoolerSANDrift(t *testing.T) {
 	contracts := &reconcileContracts{
 		Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}},
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingCNPG).Build()
+	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, existingCNPG)
 	clusterClass := &enterprisev4.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 		Spec: enterprisev4.PostgresClusterClassSpec{
@@ -1705,8 +2155,8 @@ func TestBuildCNPGClusterSpec_RoundTripUnderCRDDefaulting(t *testing.T) {
 			}
 			afterRT := applyCRDDefaulting(t, ss, beforeRT)
 
-			left := normalizeCNPGClusterSpec(desiredSpec, cfg.Spec.PostgreSQLConfig)
-			right := normalizeCNPGClusterSpec(afterRT.Spec, cfg.Spec.PostgreSQLConfig)
+			left := normalizeCNPGClusterSpec(desiredSpec)
+			right := normalizeCNPGClusterSpec(afterRT.Spec)
 
 			if !equality.Semantic.DeepEqual(left, right) {
 				t.Fatalf(
@@ -1740,8 +2190,8 @@ func TestBuildCNPGClusterSpec_RoundTrip_NegativeControl(t *testing.T) {
 	}
 	afterRT := applyCRDDefaulting(t, ss, beforeRT)
 
-	left := normalizeCNPGClusterSpec(desiredSpec, cfg.Spec.PostgreSQLConfig)
-	right := normalizeCNPGClusterSpec(afterRT.Spec, cfg.Spec.PostgreSQLConfig)
+	left := normalizeCNPGClusterSpec(desiredSpec)
+	right := normalizeCNPGClusterSpec(afterRT.Spec)
 
 	require.Equal(t, "", left.PrimaryUpdateMethod, "precondition: desired-side primaryUpdateMethod must be empty")
 	require.Equal(t, "restart", right.PrimaryUpdateMethod,

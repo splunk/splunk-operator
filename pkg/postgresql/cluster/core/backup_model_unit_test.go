@@ -691,7 +691,7 @@ func TestNormalizeCNPGClusterSpec_Backup(t *testing.T) {
 		spec := cnpgv1.ClusterSpec{ImageName: "img:18", Instances: 1}
 
 		// Act
-		normalized := normalizeCNPGClusterSpec(spec, nil)
+		normalized := normalizeCNPGClusterSpec(spec)
 
 		// Assert
 		assert.Nil(t, normalized.Backup)
@@ -716,7 +716,7 @@ func TestNormalizeCNPGClusterSpec_Backup(t *testing.T) {
 		}
 
 		// Act
-		normalized := normalizeCNPGClusterSpec(spec, nil)
+		normalized := normalizeCNPGClusterSpec(spec)
 
 		// Assert
 		require.NotNil(t, normalized.Backup)
@@ -738,7 +738,7 @@ func TestNormalizeCNPGClusterSpec_Backup(t *testing.T) {
 		}
 
 		// Act
-		normalized := normalizeCNPGClusterSpec(spec, nil)
+		normalized := normalizeCNPGClusterSpec(spec)
 
 		// Assert
 		require.NotNil(t, normalized.Backup)

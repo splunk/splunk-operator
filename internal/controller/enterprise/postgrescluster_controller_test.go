@@ -33,6 +33,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/tools/record"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -158,6 +159,28 @@ func markCNPGClusterHealthy(cnpg *cnpgv1.Cluster, clusterName, caSecretName stri
 	if caSecretName != "" {
 		cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
 	}
+}
+
+func applyCNPGPostgreSQLParameters(ctx context.Context, c client.Client, name, namespace, fieldManager string, params map[string]string) {
+	GinkgoHelper()
+
+	patch := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": cnpgv1.SchemeGroupVersion.String(),
+			"kind":       cnpgv1.ClusterKind,
+			"metadata": map[string]any{
+				"name":      name,
+				"namespace": namespace,
+			},
+			"spec": map[string]any{
+				"postgresql": map[string]any{
+					"parameters": params,
+				},
+			},
+		},
+	}
+
+	Expect(c.Apply(ctx, client.ApplyConfigurationFromUnstructured(patch), client.FieldOwner(fieldManager))).To(Succeed())
 }
 
 var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
@@ -1222,6 +1245,45 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				reconcileNTimes(2)
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
 				Expect(cnpg.Spec.Instances).To(Equal(int(clusterMemberCount)))
+			})
+
+			It("removes stale PostgreSQL parameters and preserves externally owned parameters", func() {
+				pgCluster.Spec.ManagedRoles = nil
+				pgCluster.Spec.PostgreSQLConfig = map[string]string{
+					"shared_buffers":  "256MB",
+					"max_connections": "200",
+				}
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				Expect(cnpg.Spec.PostgresConfiguration.Parameters).To(HaveKeyWithValue("shared_buffers", "256MB"))
+				Expect(cnpg.Spec.PostgresConfiguration.Parameters).To(HaveKeyWithValue("max_connections", "200"))
+
+				applyCNPGPostgreSQLParameters(ctx, k8sClient, clusterName, namespace, "external-postgresql-parameters", map[string]string{
+					"application_name": "keep-me",
+				})
+
+				current := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+				current.Spec.PostgreSQLConfig = map[string]string{
+					"shared_buffers": "256MB",
+				}
+				Expect(k8sClient.Update(ctx, current)).To(Succeed())
+
+				Eventually(func(g Gomega) map[string]string {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					updated := &cnpgv1.Cluster{}
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, updated)).To(Succeed())
+					return updated.Spec.PostgresConfiguration.Parameters
+				}, "20s", "100ms").Should(SatisfyAll(
+					HaveKeyWithValue("shared_buffers", "256MB"),
+					HaveKeyWithValue("application_name", "keep-me"),
+					Not(HaveKey("max_connections")),
+				))
 			})
 		})
 
