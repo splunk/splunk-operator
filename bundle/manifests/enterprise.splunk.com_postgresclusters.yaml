@@ -23,6 +23,15 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .status.instances
+      name: Instances
+      type: integer
+    - jsonPath: .status.readyInstances
+      name: Ready
+      type: integer
+    - jsonPath: .status.currentPrimary
+      name: Primary
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -84,11 +93,26 @@ spec:
                 - Delete
                 - Retain
                 type: string
-              connectionPoolerEnabled:
+              connectionPooler:
                 description: |-
-                  ConnectionPoolerEnabled controls whether PgBouncer connection pooling is deployed for this cluster.
-                  When set, takes precedence over the class-level connectionPoolerEnabled value.
-                type: boolean
+                  ConnectionPooler controls whether PgBouncer connection pooling is deployed for this cluster.
+                  Sub-fields override the matching values from the class-level connectionPooler config.
+                properties:
+                  enabled:
+                    description: Enabled controls whether the connection pooler is
+                      deployed at all.
+                    type: boolean
+                  readOnly:
+                    description: |-
+                      ReadOnly controls whether the RO pooler is reconciled when Enabled is true.
+                      The RO pooler additionally requires the cluster to run with instances >= 2;
+                      the admission webhook rejects readOnly=true with instances<2.
+                    type: boolean
+                  readWrite:
+                    description: ReadWrite controls whether the RW pooler is reconciled
+                      when Enabled is true.
+                    type: boolean
+                type: object
               instances:
                 description: Instances overrides the number of PostgreSQL instances
                   from ClusterClass.
@@ -163,7 +187,6 @@ spec:
                     type: boolean
                 type: object
               pgHBA:
-                default: []
                 description: |-
                   PgHBA contains pg_hba.conf host-based authentication rules.
                   Defines client authentication and connection security (cluster-wide).
@@ -180,7 +203,6 @@ spec:
               postgresqlConfig:
                 additionalProperties:
                   type: string
-                default: {}
                 description: |-
                   PostgreSQLConfig overrides PostgreSQL engine parameters from ClusterClass.
                   Maps to postgresql.conf settings.
@@ -364,6 +386,16 @@ spec:
                       cluster.
                     type: boolean
                 type: object
+              currentPrimary:
+                description: CurrentPrimary is the name of the pod currently hosting
+                  the primary.
+                type: string
+              instances:
+                description: |-
+                  Instances is the declared instance count reported by the underlying
+                  provisioner.
+                format: int32
+                type: integer
               managedRolesStatus:
                 description: ManagedRolesStatus tracks the reconciliation status of
                   managed roles.
@@ -442,6 +474,12 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              readyInstances:
+                description: |-
+                  ReadyInstances is the number of instances reported as ready by the
+                  underlying provisioner.
+                format: int32
+                type: integer
               resources:
                 description: Resources contains references to related Kubernetes resources
                   like ConfigMaps and Secrets.
@@ -462,7 +500,7 @@ spec:
                         type: string
                     type: object
                     x-kubernetes-map-type: atomic
-                  secretRef:
+                  superUserSecretRef:
                     description: SuperUserSecretRef references the Secret containing
                       the superuser credentials.
                     properties:

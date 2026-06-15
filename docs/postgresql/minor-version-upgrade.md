@@ -104,7 +104,8 @@ spec:
     instances: 3
     storage: 20Gi
     postgresVersion: "15.10"
-    connectionPoolerEnabled: true
+    connectionPooler:
+      enabled: true
   cnpg:
     primaryUpdateMethod: switchover
     connectionPooler:

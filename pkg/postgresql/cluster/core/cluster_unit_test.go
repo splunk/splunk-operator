@@ -55,7 +55,7 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 	clusterClass := &enterprisev4.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: &enterprisev4.PostgresClusterClassConfig{ConnectionPoolerEnabled: ptr.To(true)},
+			Config: &enterprisev4.PostgresClusterClassConfig{ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
 		},
 	}
 
@@ -134,7 +134,7 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 					},
 				}
 				poolerSpec := mergedConfig.Spec.DeepCopy()
-				poolerSpec.ConnectionPoolerEnabled = ptr.To(true)
+				poolerSpec.ConnectionPooler = &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}
 				poolerCfg := &MergedConfig{
 					Spec: poolerSpec,
 					CNPG: &enterprisev4.CNPGConfig{
@@ -260,7 +260,7 @@ func TestReconcileFailureEmitsWarningFromObserveNotReconcile(t *testing.T) {
 	clusterClass := &enterprisev4.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: &enterprisev4.PostgresClusterClassConfig{ConnectionPoolerEnabled: ptr.To(true)},
+			Config: &enterprisev4.PostgresClusterClassConfig{ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
 		},
 	}
 

@@ -44,14 +44,21 @@ var requiredKeys = []string{
 }
 
 // Endpoints contains the fully qualified service hostnames published in access
-// ConfigMaps. RWHost, ROHost, and RHost are always required. PoolerRWHost and
-// PoolerROHost are optional, but must either both be set or both be empty.
+// ConfigMaps. RWHost and RHost are always required.
+//
+// ROUnavailable publishes the RO key with an empty value (and skips the RO
+// requirement) for scale-out, when CNPG has no usable read-only Service yet.
+//
+// When PoolerEnabled is false, the pooler keys are optional and must be both set
+// or both empty. When true, both keys are always published, a gated-off side empty.
 type Endpoints struct {
-	RWHost       string
-	ROHost       string
-	RHost        string
-	PoolerRWHost string
-	PoolerROHost string
+	RWHost        string
+	ROHost        string
+	RHost         string
+	ROUnavailable bool
+	PoolerEnabled bool
+	PoolerRWHost  string
+	PoolerROHost  string
 }
 
 // Builder accumulates ConfigMap data and tracks which keys must be populated.
@@ -98,13 +105,14 @@ func (e Endpoints) Validate() error {
 	if e.RWHost == "" {
 		return fmt.Errorf("connectioninfo: RWHost is required")
 	}
-	if e.ROHost == "" {
+	if e.ROHost == "" && !e.ROUnavailable {
 		return fmt.Errorf("connectioninfo: ROHost is required")
 	}
 	if e.RHost == "" {
 		return fmt.Errorf("connectioninfo: RHost is required")
 	}
-	if (e.PoolerRWHost == "") != (e.PoolerROHost == "") {
+	// PoolerEnabled publishes both keys, so the pairing rule does not apply.
+	if !e.PoolerEnabled && (e.PoolerRWHost == "") != (e.PoolerROHost == "") {
 		return fmt.Errorf("connectioninfo: pooler endpoints must both be set or both be empty")
 	}
 	return nil
@@ -125,14 +133,23 @@ func BuildConfigMapData(endpoints Endpoints, opts ...Option) (map[string]string,
 		},
 		required: RequiredKeys(),
 	}
-	builder.SetOptional(KeyPoolerRWEndpoint, endpoints.PoolerRWHost)
-	builder.SetOptional(KeyPoolerROEndpoint, endpoints.PoolerROHost)
+	if endpoints.PoolerEnabled {
+		builder.data[KeyPoolerRWEndpoint] = endpoints.PoolerRWHost
+		builder.data[KeyPoolerROEndpoint] = endpoints.PoolerROHost
+	} else {
+		builder.SetOptional(KeyPoolerRWEndpoint, endpoints.PoolerRWHost)
+		builder.SetOptional(KeyPoolerROEndpoint, endpoints.PoolerROHost)
+	}
 
 	for _, opt := range opts {
 		opt(builder)
 	}
 
 	for _, key := range builder.required {
+		// RO key is allowed empty during scale-out.
+		if key == KeyClusterROEndpoint && endpoints.ROUnavailable {
+			continue
+		}
 		if builder.data[key] == "" {
 			return nil, nil, fmt.Errorf("connectioninfo: required key %s is empty", key)
 		}

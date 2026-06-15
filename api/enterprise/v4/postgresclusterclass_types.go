@@ -24,7 +24,7 @@ import (
 
 // +kubebuilder:validation:XValidation:rule="!has(self.cnpg) || self.provisioner == 'postgresql.cnpg.io'",message="cnpg config can only be set when provisioner is postgresql.cnpg.io"
 // +kubebuilder:validation:XValidation:rule="self.provisioner != 'postgresql.cnpg.io' || has(self.cnpg)",message="cnpg config is required when provisioner is postgresql.cnpg.io"
-// +kubebuilder:validation:XValidation:rule="!has(self.config) || !has(self.config.connectionPoolerEnabled) || !self.config.connectionPoolerEnabled || (has(self.cnpg) && has(self.cnpg.connectionPooler))",message="cnpg.connectionPooler must be set when config.connectionPoolerEnabled is true"
+// +kubebuilder:validation:XValidation:rule="!has(self.config) || !has(self.config.connectionPooler) || !has(self.config.connectionPooler.enabled) || !self.config.connectionPooler.enabled || (has(self.cnpg) && has(self.cnpg.connectionPooler))",message="cnpg.connectionPooler must be set when config.connectionPooler.enabled is true"
 // +kubebuilder:validation:XValidation:rule="!has(self.config) || !has(self.config.backup) || !has(self.config.backup.enabled) || !self.config.backup.enabled || (has(self.cnpg) && has(self.cnpg.backup) && has(self.cnpg.backup.volumeSnapshot))",message="cnpg.backup.volumeSnapshot must be set when config.backup.enabled is true"
 // +kubebuilder:validation:XValidation:rule="!has(self.config) || !has(self.config.backup) || !has(self.config.backup.enabled) || !self.config.backup.enabled || (has(self.config.backup.schedule) && self.config.backup.schedule != '')",message="config.backup.schedule is required when config.backup.enabled is true"
 // +kubebuilder:validation:XValidation:rule="self == oldSelf",message="PostgresClusterClass is immutable after creation"
@@ -52,7 +52,7 @@ type PostgresClusterClassSpec struct {
 	CNPG *CNPGConfig `json:"cnpg,omitempty"`
 }
 
-// +kubebuilder:validation:XValidation:rule="!has(self.monitoring) || !has(self.monitoring.connectionPoolerMetrics) || !has(self.monitoring.connectionPoolerMetrics.enabled) || !self.monitoring.connectionPoolerMetrics.enabled || (has(self.connectionPoolerEnabled) && self.connectionPoolerEnabled)",message="connectionPoolerEnabled must be true when monitoring.connectionPoolerMetrics.enabled is true"
+// +kubebuilder:validation:XValidation:rule="!has(self.monitoring) || !has(self.monitoring.connectionPoolerMetrics) || !has(self.monitoring.connectionPoolerMetrics.enabled) || !self.monitoring.connectionPoolerMetrics.enabled || (has(self.connectionPooler) && has(self.connectionPooler.enabled) && self.connectionPooler.enabled)",message="connectionPooler.enabled must be true when monitoring.connectionPoolerMetrics.enabled is true"
 // PostgresClusterClassConfig contains provider-agnostic cluster configuration.
 // These fields define PostgresCluster infrastructure and can be overridden in PostgresCluster CR.
 type PostgresClusterClassConfig struct {
@@ -97,12 +97,10 @@ type PostgresClusterClassConfig struct {
 	// +optional
 	PgHBA []string `json:"pgHBA,omitempty"`
 
-	// ConnectionPoolerEnabled controls whether PgBouncer connection pooling is deployed.
-	// When true, creates RW and RO pooler deployments for clusters using this class.
-	// Can be overridden in PostgresCluster CR.
-	// +kubebuilder:default=false
+	// ConnectionPooler controls whether PgBouncer connection pooling is deployed
+	// and which endpoints get a pooler. Sub-fields can be overridden per cluster.
 	// +optional
-	ConnectionPoolerEnabled *bool `json:"connectionPoolerEnabled,omitempty"`
+	ConnectionPooler *ConnectionPoolerEnableConfig `json:"connectionPooler,omitempty"`
 
 	// Monitoring contains configuration for metrics exposure.
 	// When enabled, creates metrics resources for clusters using this class.
@@ -115,6 +113,37 @@ type PostgresClusterClassConfig struct {
 	// Can be overridden in PostgresCluster CR.
 	// +optional
 	Backup *BackupConfig `json:"backup,omitempty"`
+}
+
+// ConnectionPoolerEnableConfig controls whether PgBouncer connection pooling is
+// deployed and which endpoints get a pooler. Sub-fields are only consulted when
+// Enabled is true.
+//
+// This type is shared by the class config and the per-cluster spec, so its
+// fields intentionally carry NO +kubebuilder:default markers: a CRD default
+// would be materialized onto the stored cluster object by the apiserver, which
+// would overwrite the nil ("inherit from class") sentinel that
+// mergeConnectionPoolerEnable relies on for per-field overrides. Defaulting for
+// omitted fields is owned by the Go layer instead — see isPoolerEnabled
+// (nil enabled → false), poolerReadWriteWanted and poolerReadOnlyWanted
+// (nil → true).
+type ConnectionPoolerEnableConfig struct {
+	// Enabled controls whether the connection pooler is deployed at all.
+	// When omitted the pooler is treated as disabled (see isPoolerEnabled).
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// ReadWrite controls whether the RW pooler is reconciled when Enabled is true.
+	// When omitted it is treated as true (see poolerReadWriteWanted).
+	// +optional
+	ReadWrite *bool `json:"readWrite,omitempty"`
+
+	// ReadOnly controls whether the RO pooler is reconciled when Enabled is true.
+	// The RO pooler additionally requires the cluster to run with instances >= 2;
+	// the admission webhook rejects readOnly=true with instances<2.
+	// When omitted it is treated as true (see poolerReadOnlyWanted).
+	// +optional
+	ReadOnly *bool `json:"readOnly,omitempty"`
 }
 
 // ConnectionPoolerMode defines the PgBouncer connection pooling strategy.

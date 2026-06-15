@@ -57,8 +57,11 @@ spec:
       # Require SSL + password authentication
       - "hostssl all all 0.0.0.0/0 scram-sha-256"
 
-    # Enable connection pooler for clusters using this class
-    connectionPoolerEnabled: true
+    # Enable connection pooler for clusters using this class.
+    # Both readWrite and readOnly default to true; the RO pooler additionally
+    # requires instances >= 2 and is rejected by admission otherwise.
+    connectionPooler:
+      enabled: true
 
   cnpg:
     # Switchover method - minimal downtime via automated failover
