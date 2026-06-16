@@ -27,9 +27,11 @@ import (
 	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/predicates"
 	sharedreconcile "github.com/splunk/splunk-operator/pkg/postgresql/shared/reconcile"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -37,11 +39,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
 	ClusterTotalWorker int = 2
+
+	// indexExternalSuperuserSecret maps a PostgresCluster CR by the external
+	// Secret name it references via spec.passwordConfig.superuserExternalSecretRef.
+	// Used by enqueueClustersForExternalSecret to find clusters that care about
+	// a given Secret when that Secret is not owned by the cluster.
+	indexExternalSuperuserSecret = "spec.passwordConfig.superuserExternalSecretRef.name"
 )
 
 // PostgresClusterReconciler reconciles PostgresCluster resources.
@@ -77,8 +87,19 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	return result, err
 }
 
-// SetupWithManager registers the controller and owned resource watches.
+// SetupWithManager registers the controller, owned resource watches, and an
+// external-secret watch that closes the observability gap for Secrets
+// referenced via spec.passwordConfig but not owned by the PostgresCluster.
 func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&enterprisev4.PostgresCluster{},
+		indexExternalSuperuserSecret,
+		extractExternalSuperuserSecretName,
+	); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		WithEventFilter(predicate.Funcs{GenericFunc: func(event.GenericEvent) bool { return false }}).
 		For(&enterprisev4.PostgresCluster{}, builder.WithPredicates(postgresClusterPredicator())).
@@ -87,6 +108,9 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&cnpgv1.ScheduledBackup{}, builder.WithPredicates(scheduledBackupPredicator())).
 		Owns(&corev1.Secret{}, builder.WithPredicates(secretPredicator())).
 		Owns(&corev1.ConfigMap{}, builder.WithPredicates(configMapPredicator())).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.enqueueClustersForExternalSecret),
+			builder.WithPredicates(predicates.ExternalSecret())).
 		Named("postgresCluster").
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: ClusterTotalWorker,
@@ -218,4 +242,68 @@ func configMapPredicator() predicate.Predicate {
 			return !equality.Semantic.DeepEqual(oldCM.Data, newCM.Data)
 		},
 	}
+}
+
+// extractExternalSuperuserSecretName returns the external Secret name a
+// PostgresCluster references via PasswordConfig, or nil when not in external
+// mode. Used by the controller-runtime field indexer; called per CR on cache
+// hydration and per CR update, so it must be cheap and total (no I/O).
+//
+// Package-private so unit tests can drive it directly without a fake client.
+func extractExternalSuperuserSecretName(obj client.Object) []string {
+	pc, ok := obj.(*enterprisev4.PostgresCluster)
+	if !ok {
+		return nil
+	}
+	if pc.Spec.PasswordConfig == nil {
+		return nil
+	}
+	if name := pc.Spec.PasswordConfig.SuperuserExternalSecretRef.Name; name != "" {
+		return []string{name}
+	}
+	return nil
+}
+
+// enqueueClustersForExternalSecret maps a Secret event to every PostgresCluster
+// in the Secret's namespace whose spec.passwordConfig.superuserExternalSecretRef
+// targets it. Owned Secrets are skipped because Owns(&corev1.Secret{}) already
+// handles them — feeding both paths would queue duplicate reconciles.
+//
+// Runs on the event-source goroutine, so the index lookup is the only allowed
+// work here; no blocking calls.
+func (r *PostgresClusterReconciler) enqueueClustersForExternalSecret(ctx context.Context, obj client.Object) []reconcile.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return nil
+	}
+
+	if owner := metav1.GetControllerOf(secret); owner != nil &&
+		owner.APIVersion == enterprisev4.GroupVersion.String() &&
+		owner.Kind == "PostgresCluster" {
+		return nil
+	}
+
+	logger := logging.FromContext(ctx).With(
+		"controller", "PostgresCluster",
+		"func", "enqueueClustersForExternalSecret",
+		"secret", secret.Name,
+		"namespace", secret.Namespace,
+	)
+
+	var list enterprisev4.PostgresClusterList
+	if err := r.Client.List(ctx, &list,
+		client.InNamespace(secret.Namespace),
+		client.MatchingFields{indexExternalSuperuserSecret: secret.Name},
+	); err != nil {
+		logger.ErrorContext(ctx, "failed to list PostgresClusters for external secret", "error", err)
+		return nil
+	}
+
+	reqs := make([]reconcile.Request, 0, len(list.Items))
+	for _, pc := range list.Items {
+		reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&pc)})
+		logger.InfoContext(ctx, "enqueuing PostgresCluster for external secret event",
+			"postgresCluster", pc.Name)
+	}
+	return reqs
 }

@@ -513,6 +513,197 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				)).To(BeTrue(), "events seen: %v", received)
 			})
 
+			It("reconciles external superuser secret and creates managed resources w/ status refs", func() {
+				received := make([]string, 0, 16)
+
+				pgCluster.Spec.PasswordConfig = &enterprisev4.SuperuserPasswordConfig{
+					SuperuserExternalSecretRef: v1.LocalObjectReference{
+						Name: "external-superuser-secret",
+					},
+				}
+
+				Expect(k8sClient.Create(ctx, &v1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "external-superuser-secret",
+						Namespace: namespace,
+						// The owner of an external secret is responsible for the
+						// cnpg.io/reload label; the operator validates, never stamps it.
+						Labels: map[string]string{"cnpg.io/reload": "true"},
+					},
+					Data: map[string][]byte{
+						"username": []byte("postgres"),
+						"password": []byte("username"),
+					},
+				})).To(Succeed())
+
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				// pass 1: add finalizer; pass 2: create CNPG cluster/secret/status.
+				reconcileNTimes(2)
+
+				pc := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				cond := meta.FindStatusCondition(pc.Status.Conditions, "ClusterReady")
+				Expect(cond).NotTo(BeNil())
+				Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+				Expect(cond.Reason).To(Equal("CNPGClusterProvisioning"))
+
+				secretCond := meta.FindStatusCondition(pc.Status.Conditions, "SecretsReady")
+				Expect(secretCond).NotTo(BeNil())
+				Expect(secretCond.Status).To(Equal(metav1.ConditionTrue))
+				Expect(secretCond.Reason).To(Equal("SuperUserSecretReady"))
+
+				configMapCond := meta.FindStatusCondition(pc.Status.Conditions, "ConfigMapsReady")
+				// ConfigMap converge runs in the runtime phase; at this point reconcile may
+				// still be returning from provisioner pending and not have written it yet.
+				Expect(configMapCond).To(BeNil())
+
+				// ClusterReady must not fire while provisioning — secret convergence must
+				// not promote the overall phase to Ready prematurely.
+				CollectEvents(&received, fakeRecorder)
+				Expect(ContainsEvent(received, v1.EventTypeNormal, core.EventClusterReady)).To(
+					BeFalse(), "ClusterReady must not fire during provisioning, got: %v", received)
+
+				// Simulate CNPG becoming healthy first, but without managed roles status published yet.
+				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+				reconcileAfterCNPGHealthyOrPatch()
+
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				managedRolesCond := meta.FindStatusCondition(pc.Status.Conditions, "ManagedRolesReady")
+				Expect(managedRolesCond).NotTo(BeNil())
+				Expect(managedRolesCond.Status).To(Equal(metav1.ConditionFalse))
+				Expect(managedRolesCond.Reason).To(Equal("ManagedRolesPending"))
+
+				// Simulate external CNPG controller publishing managed roles status.
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				cnpg.Status.ManagedRolesStatus = cnpgv1.ManagedRoles{
+					ByStatus: map[cnpgv1.RoleStatus][]string{
+						cnpgv1.RoleStatusReconciled: {"app_user", "app_user_rw"},
+					},
+				}
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+				reconcileAfterCNPGHealthyOrPatch()
+
+				// Expect cnpg status progression propagation
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				cond = meta.FindStatusCondition(pc.Status.Conditions, "ClusterReady")
+
+				Expect(pc.Status.Resources.SuperUserSecretRef).NotTo(BeNil())
+				Expect(pc.Status.Resources.SuperUserSecretRef.Name).To(Equal("external-superuser-secret"))
+
+				Expect(cond).NotTo(BeNil())
+				Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+				Expect(cond.Reason).To(Equal("CNPGClusterHealthy"))
+
+				secret := &v1.Secret{}
+				Expect(k8sClient.Get(
+					ctx, types.NamespacedName{
+						Name: "external-superuser-secret", Namespace: namespace},
+					secret)).To(Succeed())
+				Expect(secret).NotTo(BeNil())
+				Expect(secret.Labels).To(HaveKeyWithValue("cnpg.io/reload", "true"))
+
+				secretCond = meta.FindStatusCondition(pc.Status.Conditions, "SecretsReady")
+				Expect(secretCond).NotTo(BeNil())
+				Expect(secretCond.Status).To(Equal(metav1.ConditionTrue))
+				Expect(secretCond.Reason).To(Equal("SuperUserSecretReady"))
+
+				configMapCond = meta.FindStatusCondition(pc.Status.Conditions, "ConfigMapsReady")
+				Expect(configMapCond).NotTo(BeNil())
+				Expect(configMapCond.Status).To(Equal(metav1.ConditionTrue))
+				Expect(configMapCond.Reason).To(Equal("ConfigMapReconciled"))
+
+				managedRolesCond = meta.FindStatusCondition(pc.Status.Conditions, "ManagedRolesReady")
+				Expect(managedRolesCond).NotTo(BeNil())
+				Expect(managedRolesCond.Status).To(Equal(metav1.ConditionTrue))
+				Expect(managedRolesCond.Reason).To(Equal("ManagedRolesReconciled"))
+
+				// Pooler is disabled in this suite fixture, but converge publishes PoolerReady=True with disabled message.
+				poolerCond := meta.FindStatusCondition(pc.Status.Conditions, "PoolerReady")
+				Expect(poolerCond).NotTo(BeNil())
+				Expect(poolerCond.Status).To(Equal(metav1.ConditionTrue))
+				Expect(poolerCond.Reason).To(Equal("PoolerDisabled"))
+				Expect(poolerCond.Message).To(Equal("Connection pooler disabled"))
+
+				Expect(pc.Status.ManagedRolesStatus).NotTo(BeNil())
+				Expect(pc.Status.ManagedRolesStatus.Reconciled).To(ContainElements("app_user", "app_user_rw"))
+
+				Expect(pc.Status.Phase).NotTo(BeNil())
+				Expect(*pc.Status.Phase).To(Equal("Ready"))
+				Expect(pc.Status.ProvisionerRef).NotTo(BeNil())
+				Expect(pc.Status.ProvisionerRef.Kind).To(Equal("Cluster"))
+				Expect(pc.Status.ProvisionerRef.Name).To(Equal(clusterName))
+
+				Expect(pc.Status.Resources).NotTo(BeNil())
+				Expect(pc.Status.Resources.SuperUserSecretRef).NotTo(BeNil())
+				Expect(pc.Status.Resources.ConfigMapRef).NotTo(BeNil())
+
+				CollectEvents(&received, fakeRecorder)
+				Expect(ContainsEvent(
+					received,
+					v1.EventTypeNormal, core.EventConfigMapReconciled,
+				)).To(BeTrue(), "events seen: %v", received)
+				Expect(ContainsEvent(
+					received,
+					v1.EventTypeNormal, core.EventClusterReady,
+				)).To(BeTrue(), "events seen: %v", received)
+				// Secret-specific success signal — guards against a regression
+				// where the cluster reaches ClusterReady without secretModel
+				// ever publishing its own Ready event.
+				Expect(ContainsEvent(
+					received,
+					v1.EventTypeNormal, core.EventSecretReady,
+				)).To(BeTrue(), "events seen: %v", received)
+			})
+
+			It("sets secret missing condition when appropriate", func() {
+				received := make([]string, 0, 16)
+
+				pgCluster.Spec.PasswordConfig = &enterprisev4.SuperuserPasswordConfig{
+					SuperuserExternalSecretRef: v1.LocalObjectReference{
+						Name: "missing-superuser-secret-status-failed",
+					},
+				}
+
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				// pass 1: add finalizer; pass 2: secretModel.Actuate hits the
+				// missing-secret branch in externalSecretActuate and bubbles up a
+				// secretReconcileError (reason ExternalSecretMissing) → Converge
+				// writes SecretsReady=False/ExternalSecretMissing.
+				reconciler.Reconcile(ctx, req)
+				_, err := reconciler.Reconcile(ctx, req)
+				Expect(err).To(HaveOccurred())
+
+				pc := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+
+				secretCond := meta.FindStatusCondition(pc.Status.Conditions, "SecretsReady")
+				Expect(secretCond).NotTo(BeNil())
+				Expect(secretCond.Status).To(Equal(metav1.ConditionFalse))
+				Expect(secretCond.Reason).To(Equal("ExternalSecretMissing"))
+
+				CollectEvents(&received, fakeRecorder)
+				Expect(ContainsEvent(
+					received,
+					v1.EventTypeWarning, core.EventSecretReconcileFailed,
+				)).To(BeTrue(),
+					"Warning %s must be emitted when the external superuser secret is missing; events seen: %v",
+					core.EventSecretReconcileFailed, received)
+				Expect(ContainsEvent(
+					received,
+					v1.EventTypeNormal, core.EventClusterReady,
+				)).To(BeFalse(),
+					"ClusterReady must not fire while SecretsReady=ExternalSecretMissing; events seen: %v", received)
+				Expect(ContainsEvent(
+					received,
+					v1.EventTypeNormal, core.EventSecretReady,
+				)).To(BeFalse(),
+					"SecretReady must not fire while the external secret is missing; events seen: %v", received)
+			})
+
 			// PC-07
 			It("is idempotent across repeated reconciles", func() {
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
@@ -1438,6 +1629,16 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					}
 					return false
 				}, "15s", "100ms").Should(BeTrue(), "events seen: %v", received)
+			})
+		})
+		Context("when applying postgrescluster resource", func() {
+			It("should catch password config being empty", func() {
+				pgCluster.Spec.PasswordConfig = &enterprisev4.SuperuserPasswordConfig{
+					SuperuserExternalSecretRef: v1.LocalObjectReference{
+						Name: "",
+					},
+				}
+				Expect(k8sClient.Create(ctx, pgCluster)).NotTo(Succeed())
 			})
 		})
 	})
