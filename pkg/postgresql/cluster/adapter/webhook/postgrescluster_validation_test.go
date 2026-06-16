@@ -20,8 +20,10 @@ import (
 	"context"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -264,6 +266,113 @@ func TestValidatePostgresClusterUpdateDeletedClass(t *testing.T) {
 		assert.Equal(t, "spec.class", errs[0].Field)
 		assert.Contains(t, errs[0].Detail, "referenced PostgresClusterClass not found")
 	})
+}
+
+// TestValidatePostgresClusterExternalSecret pins the admission-time policy for
+func TestValidatePostgresClusterExternalSecret(t *testing.T) {
+	const (
+		ns        = "default"
+		secretRef = "external-superuser"
+		refField  = "spec.passwordConfig.superuserExternalSecretRef.name"
+	)
+
+	validClass := &enterpriseApi.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "dev"},
+		Spec: enterpriseApi.PostgresClusterClassSpec{
+			Provisioner: "postgresql.cnpg.io",
+			Config: &enterpriseApi.PostgresClusterClassConfig{
+				Instances:        ptr.To(int32(3)),
+				Storage:          ptr.To(resource.MustParse("50Gi")),
+				PostgresVersion:  ptr.To("17"),
+				ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{Enabled: ptr.To(false)},
+			},
+		},
+	}
+
+	clusterWithRef := func() *enterpriseApi.PostgresCluster {
+		return &enterpriseApi.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: ns},
+			Spec: enterpriseApi.PostgresClusterSpec{
+				Class: "dev",
+				PasswordConfig: &enterpriseApi.SuperuserPasswordConfig{
+					SuperuserExternalSecretRef: corev1.LocalObjectReference{Name: secretRef},
+				},
+			},
+		}
+	}
+
+	secretWith := func(data map[string][]byte, labels map[string]string) *corev1.Secret {
+		return &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: secretRef, Namespace: ns, Labels: labels},
+			Data:       data,
+		}
+	}
+
+	validData := map[string][]byte{"username": []byte("postgres"), "password": []byte("s3cr3t")}
+	reloadLabel := map[string]string{"cnpg.io/reload": "true"}
+
+	tests := []struct {
+		name       string
+		secret     *corev1.Secret
+		wantErr    bool
+		wantDetail string
+	}{
+		{
+			name:       "missing secret rejected (strict policy)",
+			secret:     nil,
+			wantErr:    true,
+			wantDetail: "does not exist",
+		},
+		{
+			name:    "valid secret passes",
+			secret:  secretWith(validData, reloadLabel),
+			wantErr: false,
+		},
+		{
+			name:       "present but empty data rejected",
+			secret:     secretWith(nil, reloadLabel),
+			wantErr:    true,
+			wantDetail: "External superuser secret is invalid",
+		},
+		{
+			name:       "present but missing password key rejected",
+			secret:     secretWith(map[string][]byte{"username": []byte("postgres")}, reloadLabel),
+			wantErr:    true,
+			wantDetail: "External superuser secret is invalid",
+		},
+		{
+			name:       "present but wrong username rejected",
+			secret:     secretWith(map[string][]byte{"username": []byte("admin"), "password": []byte("x")}, reloadLabel),
+			wantErr:    true,
+			wantDetail: "External superuser secret username is invalid",
+		},
+		{
+			name:       "present but missing reload label rejected",
+			secret:     secretWith(validData, nil),
+			wantErr:    true,
+			wantDetail: "cnpg.io/reload",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objs := []runtime.Object{validClass}
+			if tt.secret != nil {
+				objs = append(objs, tt.secret)
+			}
+			reader := newFakeReader(objs...).Build()
+
+			errs := webhook.ValidatePostgresClusterCreate(context.Background(), clusterWithRef(), reader)
+
+			if !tt.wantErr {
+				assert.Empty(t, errs)
+				return
+			}
+			require.Len(t, errs, 1)
+			assert.Equal(t, refField, errs[0].Field)
+			assert.Contains(t, errs[0].Detail, tt.wantDetail)
+		})
+	}
 }
 
 func TestValidatePostgresClusterScaling(t *testing.T) {

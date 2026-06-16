@@ -40,15 +40,48 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // NewDBRepoFunc constructs a DBRepo adapter for the given host and database.
 // Injected by the controller so the core never imports the pgx adapter directly.
 type NewDBRepoFunc func(ctx context.Context, host, dbName, password string) (DBRepo, error)
 
+// secretReconcileError is the single typed, terminal failure raised while
+// reconciling externally managed or provisioned role secrets — covering both
+// "absent" (reasonExternalSecretMissing) and "present but invalid"/"drift". It
+// carries the conditionReason so the handler branches on reason rather than on a
+// distinct type; message holds only user-facing context.
 type secretReconcileError struct {
 	message string
 	reason  conditionReasons
+}
+
+func (e secretReconcileError) Error() string {
+	return e.message
+}
+
+// Unwraps and searches for reasonExternalSecretMissing in the err chain
+func chooseSecretError(err error) *secretReconcileError {
+	leaves := []error{err}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		leaves = joined.Unwrap()
+	}
+
+	var first *secretReconcileError
+	for _, leaf := range leaves {
+		var se secretReconcileError
+		if !stderrors.As(leaf, &se) {
+			continue
+		}
+		if se.reason == reasonExternalSecretMissing {
+			return &se
+		}
+		if first == nil {
+			first = &se
+		}
+	}
+	return first
 }
 
 type secretMissingPolicy int
@@ -57,10 +90,6 @@ const (
 	createSecretIfMissing secretMissingPolicy = iota
 	reportSecretDriftIfMissing
 )
-
-func (e *secretReconcileError) Error() string {
-	return e.message
-}
 
 func requeueOnConflict(ctx context.Context, err error, category reconcileConflictCategory, action string) (ctrl.Result, error, bool) {
 	if !errors.IsConflict(err) {
@@ -219,11 +248,32 @@ func PostgresDatabaseService(
 		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictSecretsReconcile, "reconciling user secrets"); ok {
 			return result, conflictErr
 		}
-		var secretErr *secretReconcileError
-		if stderrors.As(err, &secretErr) {
-			rc.emitWarning(postgresDB, EventRolesSecretsDriftDetected, secretErr.message)
+
+		// Both "missing" and "invalid/drift" share one typed carrier now; branch
+		// on the embedded reason. chooseSecretError prefers a missing-reason leaf
+		// across the joined admin/RW errors so a missing secret (hard failure)
+		// still wins over a merely invalid one, regardless of ordering.
+		if secretErr := chooseSecretError(err); secretErr != nil {
+			if secretErr.reason == reasonExternalSecretMissing {
+				rc.emitWarning(postgresDB, EventRoleSecretsFailed, fmt.Sprintf("external secret(s) are missing for PostgresDatabase %s — check operator logs", postgresDB.Name))
+				if statusErr := updateStatus(secretsReady, metav1.ConditionFalse, reasonExternalSecretMissing,
+					fmt.Sprintf("external secret(s) are missing: %v", err), failedDBPhase); statusErr != nil {
+					if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictSecretsStatus, "persisting secret failure status"); ok {
+						return result, conflictErr
+					}
+					logger.ErrorContext(ctx, "failed to persist secrets status", "error", statusErr)
+					return ctrl.Result{}, statusErr
+				}
+				// missing external secret == terminal
+				// recovery is driven by the external-Secret watch predicate.
+				return ctrl.Result{}, reconcile.TerminalError(err)
+			}
+
+			// Use err.Error() (not secretErr.message) so a combined admin+RW
+			// failure surfaces both causes rather than just the first match.
+			rc.emitWarning(postgresDB, EventRolesSecretsDriftDetected, err.Error())
 			if statusErr := updateStatus(secretsReady, metav1.ConditionFalse, secretErr.reason,
-				secretErr.message, provisioningDBPhase); statusErr != nil {
+				err.Error(), provisioningDBPhase); statusErr != nil {
 				if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictSecretsStatus, "persisting secret drift status"); ok {
 					return result, conflictErr
 				}
@@ -231,6 +281,7 @@ func PostgresDatabaseService(
 			}
 			return ctrl.Result{RequeueAfter: retryDelay}, nil
 		}
+
 		rc.emitWarning(postgresDB, EventRoleSecretsFailed, fmt.Sprintf("failed to reconcile user secrets for PostgresDatabase %s — check operator logs", postgresDB.Name))
 		if statusErr := updateStatus(secretsReady, metav1.ConditionFalse, reasonSecretsCreationFailed,
 			fmt.Sprintf("Failed to reconcile user secrets: %v", err), provisioningDBPhase); statusErr != nil {
@@ -837,6 +888,10 @@ func orphanConfigMaps(ctx context.Context, c client.Client, postgresDB *enterpri
 func orphanSecrets(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, databases []enterprisev4.DatabaseDefinition) error {
 	logger := logging.FromContext(ctx)
 	for _, dbSpec := range databases {
+		// if external secret is configured, skip
+		if dbSpec.PasswordConfig != nil {
+			continue
+		}
 		for _, role := range []string{secretRoleAdmin, secretRoleRW} {
 			name := roleSecretName(postgresDB.Name, dbSpec.Name, role)
 			secret := &corev1.Secret{}
@@ -898,6 +953,13 @@ func deleteConfigMaps(ctx context.Context, c client.Client, postgresDB *enterpri
 func deleteSecrets(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, databases []enterprisev4.DatabaseDefinition) error {
 	logger := logging.FromContext(ctx)
 	for _, dbSpec := range databases {
+		// We are pure consumers of external secrets. Deleting them would risk data
+		// loss (e.g. when the external ref name collides with our derived name) and
+		// could break other consumers still referencing the same secret. The role
+		// itself is still dropped by CNPG via cleanupManagedRoles.
+		if dbSpec.PasswordConfig != nil {
+			continue
+		}
 		for _, role := range []string{secretRoleAdmin, secretRoleRW} {
 			name := roleSecretName(postgresDB.Name, dbSpec.Name, role)
 			secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: postgresDB.Namespace}}
@@ -971,22 +1033,37 @@ func findRemovedRoleNames(cluster *enterprisev4.PostgresCluster, manager string,
 	return toRemove
 }
 
+func resolveSecretNames(postgresDBName string, dbSpec enterprisev4.DatabaseDefinition) (adminSecretName string, rwSecretName string) {
+	rwSecretName = ""
+	adminSecretName = ""
+
+	if dbSpec.PasswordConfig != nil {
+		rwSecretName = dbSpec.PasswordConfig.ExternalRWSecretRef.Name
+		adminSecretName = dbSpec.PasswordConfig.ExternalAdminSecretRef.Name
+	} else {
+		rwSecretName = roleSecretName(postgresDBName, dbSpec.Name, secretRoleRW)
+		adminSecretName = roleSecretName(postgresDBName, dbSpec.Name, secretRoleAdmin)
+	}
+	return adminSecretName, rwSecretName
+}
+
 // buildDesiredRoles builds the full set of roles that should be present for the given databases.
 // This is the input to findAddedRoleNames and findRemovedRoleNames.
 func buildDesiredRoles(postgresDBName string, databases []enterprisev4.DatabaseDefinition) []enterprisev4.ManagedRole {
 	roles := make([]enterprisev4.ManagedRole, 0, len(databases)*2)
 	for _, dbSpec := range databases {
+		adminSecretName, rwSecretName := resolveSecretNames(postgresDBName, dbSpec)
 		roles = append(roles,
 			enterprisev4.ManagedRole{
 				Name:   adminRoleName(dbSpec.Name),
 				Exists: true,
-				PasswordSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: roleSecretName(postgresDBName, dbSpec.Name, secretRoleAdmin)},
+				PasswordSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: adminSecretName},
 					Key: secretKeyPassword},
 			},
 			enterprisev4.ManagedRole{
 				Name:   rwRoleName(dbSpec.Name),
 				Exists: true,
-				PasswordSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: roleSecretName(postgresDBName, dbSpec.Name, secretRoleRW)},
+				PasswordSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: rwSecretName},
 					Key: secretKeyPassword},
 			},
 		)
@@ -1041,21 +1118,84 @@ func secretMissingPolicyForDB(dbName string, existingDBs map[string]struct{}) se
 func reconcileRoleSecrets(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, existingDatabases map[string]struct{}) error {
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		missingPolicy := secretMissingPolicyForDB(dbSpec.Name, existingDatabases)
-		if err := reconcileRoleSecret(ctx, c, scheme, postgresDB, adminRoleName(dbSpec.Name), roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin), missingPolicy); err != nil {
-			return err
-		}
-		if err := reconcileRoleSecret(ctx, c, scheme, postgresDB, rwRoleName(dbSpec.Name), roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW), missingPolicy); err != nil {
+		adminSecretName, rwSecretName := resolveSecretNames(postgresDB.Name, dbSpec)
+
+		adminErr := reconcileRoleSecret(ctx, c,
+			scheme, postgresDB, adminRoleName(dbSpec.Name),
+			adminSecretName,
+			missingPolicy, dbSpec)
+		rwErr := reconcileRoleSecret(ctx, c,
+			scheme, postgresDB, rwRoleName(dbSpec.Name),
+			rwSecretName,
+			missingPolicy, dbSpec)
+		if err := stderrors.Join(adminErr, rwErr); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func reconcileRoleSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, roleName, secretName string, missingPolicy secretMissingPolicy) error {
-	if missingPolicy == reportSecretDriftIfMissing {
-		return ensureProvisionedSecret(ctx, c, scheme, postgresDB, roleName, secretName)
+func reconcileRoleSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, roleName, secretName string, missingPolicy secretMissingPolicy, dbSpec enterprisev4.DatabaseDefinition) error {
+	if dbSpec.PasswordConfig != nil {
+		return ensureExternalSecret(ctx, c, postgresDB, secretName)
+	} else {
+		if missingPolicy == reportSecretDriftIfMissing {
+			return ensureProvisionedSecret(ctx, c, scheme, postgresDB, roleName, secretName)
+		}
+		return ensureSecret(ctx, c, scheme, postgresDB, roleName, secretName)
 	}
-	return ensureSecret(ctx, c, scheme, postgresDB, roleName, secretName)
+}
+
+func ensureExternalSecret(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, secretName string) error {
+	// generic safety for this codeblock, as strict safety + verbose information
+	// is meant to be provided by kubebuilder validation (which cant be tested here)
+	if secretName == "" {
+		return secretReconcileError{
+			message: "validate external secret refs, empty ref name occured",
+			reason:  reasonExternalSecretInvalid,
+		}
+	}
+
+	secret, err := getSecret(ctx, c, postgresDB.Namespace, secretName)
+	if secret == nil && err == nil {
+		return secretReconcileError{
+			message: fmt.Sprintf("external secret \"%s\" is missing", secretName),
+			reason:  reasonExternalSecretMissing,
+		}
+	}
+	if err != nil {
+		return err
+	}
+
+	return ValidateExternalDatabaseSecret(secret, secretName)
+}
+
+func ValidateExternalDatabaseSecret(secret *corev1.Secret, secretName string) error {
+	if secret.Data == nil {
+		return secretReconcileError{
+			message: fmt.Sprintf("external secret \"%s\" is missing data", secretName),
+			reason:  reasonExternalSecretMissingData,
+		}
+	}
+
+	if secret.Data[secretKeyPassword] == nil ||
+		secret.Data[secretKeyUsername] == nil ||
+		len(secret.Data[secretKeyPassword]) == 0 ||
+		len(secret.Data[secretKeyUsername]) == 0 {
+		return secretReconcileError{
+			message: fmt.Sprintf("external secret \"%s\" is missing required keys", secretName),
+			reason:  reasonExternalSecretMissingKeys,
+		}
+	}
+
+	if secret.Labels[labelCNPGReload] != "true" {
+		return secretReconcileError{
+			message: fmt.Sprintf("external secret %q is missing the %s=\"true\" label", secretName, labelCNPGReload),
+			reason:  reasonExternalSecretMissingLabel,
+		}
+	}
+
+	return nil
 }
 
 func ensureSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, roleName, secretName string) error {
@@ -1075,7 +1215,7 @@ func ensureProvisionedSecret(ctx context.Context, c client.Client, scheme *runti
 		return err
 	}
 	if secret == nil {
-		return &secretReconcileError{
+		return secretReconcileError{
 			message: fmt.Sprintf("Managed Secret %s is missing for previously provisioned role %s", secretName, roleName),
 			reason:  reasonSecretsDriftDetected,
 		}
@@ -1104,7 +1244,7 @@ func reconcileExistingSecret(ctx context.Context, c client.Client, scheme *runti
 		return nil
 	default:
 		owner := metav1.GetControllerOf(secret)
-		return &secretReconcileError{
+		return secretReconcileError{
 			message: fmt.Sprintf("Managed Secret %s is controlled by %s %s", secretName, owner.Kind, owner.Name),
 			reason:  reasonSecretsDriftDetected,
 		}
@@ -1232,11 +1372,12 @@ func reconcileRoleConfigMaps(ctx context.Context, c client.Client, scheme *runti
 func populateDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase) []enterprisev4.DatabaseInfo {
 	databases := make([]enterprisev4.DatabaseInfo, 0, len(postgresDB.Spec.Databases))
 	for _, dbSpec := range postgresDB.Spec.Databases {
+		adminSecretName, rwSecretName := resolveSecretNames(postgresDB.Name, dbSpec)
 		databases = append(databases, enterprisev4.DatabaseInfo{
 			Name:               dbSpec.Name,
 			Ready:              true,
-			AdminUserSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleAdmin)}, Key: secretKeyPassword},
-			RWUserSecretRef:    &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: roleSecretName(postgresDB.Name, dbSpec.Name, secretRoleRW)}, Key: secretKeyPassword},
+			AdminUserSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: adminSecretName}, Key: secretKeyPassword},
+			RWUserSecretRef:    &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: rwSecretName}, Key: secretKeyPassword},
 			ConfigMapRef:       &corev1.LocalObjectReference{Name: configMapName(postgresDB.Name, dbSpec.Name)},
 		})
 	}

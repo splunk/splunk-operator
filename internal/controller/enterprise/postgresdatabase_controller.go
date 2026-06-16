@@ -25,6 +25,7 @@ import (
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/predicates"
 	sharedreconcile "github.com/splunk/splunk-operator/pkg/postgresql/shared/reconcile"
 
 	"log/slog"
@@ -58,6 +59,13 @@ type PostgresDatabaseReconciler struct {
 
 const (
 	DatabaseTotalWorker int = 2
+
+	// indexExternalRoleSecrets maps a PostgresDatabase CR by every external
+	// admin/RW Secret name it references via spec.databases[*].passwordConfig.
+	// A single key covers both admin and rw refs because Secret events arrive
+	// by-name and we only need to know "which PostgresDatabase cares about
+	// this Secret", not which role-side it sits on.
+	indexExternalRoleSecrets = "spec.databases.passwordConfig.externalSecretRefs"
 )
 
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresdatabases,verbs=get;list;watch;create;update;patch;delete
@@ -111,6 +119,16 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	); err != nil {
 		return err
 	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&enterprisev4.PostgresDatabase{},
+		indexExternalRoleSecrets,
+		extractExternalRoleSecretNames,
+	); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		WithEventFilter(predicate.Funcs{GenericFunc: func(event.GenericEvent) bool { return false }}).
 		For(&enterprisev4.PostgresDatabase{}, builder.WithPredicates(postgresDatabasePredicator())).
@@ -120,6 +138,9 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&enterprisev4.PostgresCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.enqueuePostgresDatabasesForCluster),
 			builder.WithPredicates(postgresClusterForDatabasePredicator())).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.enqueuePostgresDatabasesForExternalSecret),
+			builder.WithPredicates(predicates.ExternalSecret())).
 		Named("postgresdatabase").
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: DatabaseTotalWorker,
@@ -211,5 +232,83 @@ func (r *PostgresDatabaseReconciler) enqueuePostgresDatabasesForCluster(ctx cont
 		}
 	}
 
+	return reqs
+}
+
+// extractExternalRoleSecretNames returns the de-duplicated set of external
+// admin + RW Secret names referenced by any DatabaseDefinition in spec that
+// has PasswordConfig set. Each unique name appears once so the index stays
+// compact even when admin and RW refs collide or are reused across DBs.
+//
+// Package-private so unit tests can drive it directly without a fake client.
+func extractExternalRoleSecretNames(obj client.Object) []string {
+	pd, ok := obj.(*enterprisev4.PostgresDatabase)
+	if !ok {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(pd.Spec.Databases)*2)
+	var names []string
+	for _, db := range pd.Spec.Databases {
+		if db.PasswordConfig == nil {
+			continue
+		}
+		for _, name := range [...]string{
+			db.PasswordConfig.ExternalAdminSecretRef.Name,
+			db.PasswordConfig.ExternalRWSecretRef.Name,
+		} {
+			if name == "" {
+				continue
+			}
+			if _, dup := seen[name]; dup {
+				continue
+			}
+			seen[name] = struct{}{}
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// enqueuePostgresDatabasesForExternalSecret maps a Secret event to every
+// PostgresDatabase in the Secret's namespace whose
+// spec.databases[*].passwordConfig references it by name. Owned Secrets are
+// skipped because Owns(&corev1.Secret{}) already handles them.
+//
+// Runs on the event-source goroutine, so the index lookup is the only
+// permitted work here; no blocking calls.
+func (r *PostgresDatabaseReconciler) enqueuePostgresDatabasesForExternalSecret(ctx context.Context, obj client.Object) []reconcile.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return nil
+	}
+
+	if owner := metav1.GetControllerOf(secret); owner != nil &&
+		owner.APIVersion == enterprisev4.GroupVersion.String() &&
+		owner.Kind == "PostgresDatabase" {
+		return nil
+	}
+
+	logger := logging.FromContext(ctx).With(
+		"controller", "PostgresDatabase",
+		"func", "enqueuePostgresDatabasesForExternalSecret",
+		"secret", secret.Name,
+		"namespace", secret.Namespace,
+	)
+
+	var list enterprisev4.PostgresDatabaseList
+	if err := r.Client.List(ctx, &list,
+		client.InNamespace(secret.Namespace),
+		client.MatchingFields{indexExternalRoleSecrets: secret.Name},
+	); err != nil {
+		logger.ErrorContext(ctx, "failed to list PostgresDatabases for external secret", "error", err)
+		return nil
+	}
+
+	reqs := make([]reconcile.Request, 0, len(list.Items))
+	for _, pd := range list.Items {
+		reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&pd)})
+		logger.InfoContext(ctx, "enqueuing PostgresDatabase for external secret event",
+			"postgresDatabase", pd.Name)
+	}
 	return reqs
 }

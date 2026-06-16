@@ -33,6 +33,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type secretModel struct {
@@ -55,6 +56,13 @@ func (s *secretModel) Provides() []contractKey { return []contractKey{contractSe
 func (s *secretModel) CheckContracts() error   { return nil }
 
 func (s *secretModel) Reconcile(ctx context.Context) error {
+	// When the user supplies an external superuser secret, the operator never
+	// creates, owns, or mutates a secret — it only validates the referenced one
+	// (including the required cnpg.io/reload label). See reconcileExternalSecret.
+	if s.cluster.Spec.PasswordConfig != nil {
+		return s.reconcileExternalSecret(ctx)
+	}
+
 	secret := &corev1.Secret{}
 	secretExists, secretErr := clusterSecretExists(ctx, s.client, s.cluster.Namespace, s.name, secret)
 	if secretErr != nil {
@@ -89,13 +97,51 @@ func (s *secretModel) Observe(_ context.Context, reconcileErr error) (componentH
 	before := s.cluster.Status.DeepCopy()
 	health, err := s.computeHealth(reconcileErr)
 	statusErr := writeComponentStatus(s.updateStatus, before, health)
-	return health, errors.Join(err, statusErr)
+	observeErr := errors.Join(err, statusErr)
+
+	// missing external secret == terminal
+	// recovery is driven by the external-Secret watch predicate.
+	var se secretReconcileError
+	if errors.As(reconcileErr, &se) && se.reason == reasonExternalSecretMissing {
+		switch {
+		case apierrors.IsConflict(statusErr):
+			return health, statusErr
+		case statusErr != nil:
+			return health, observeErr
+		default:
+			return health, reconcile.TerminalError(err)
+		}
+	}
+	return health, observeErr
 }
 
 func (s *secretModel) computeHealth(reconcileErr error) (componentHealth, error) {
-	if rf, ok := errors.AsType[*reconcileFailure](reconcileErr); ok {
+
+	if reconcileErr != nil {
 		s.events.emitWarning(s.cluster, EventSecretReconcileFailed, fmt.Sprintf("failed to reconcile superuser secret for PostgresCluster %s — check operator logs", s.cluster.Name))
-		return newFailedHealth(secretsReady, rf.reason, rf.err.Error()), rf.err
+
+		// One typed carrier for both "missing" and "present but invalid": the
+		// embedded reason drives the failed health directly, so a single
+		// errors.As replaces the former missing/invalid type split.
+		var secretErr secretReconcileError
+		if errors.As(reconcileErr, &secretErr) {
+			reason := secretErr.reason
+			if reason == reasonExternalSecretInvalid {
+				reason = reasonSuperUserSecretFailed
+			}
+			return newFailedHealth(secretsReady, reason, secretErr.message), reconcileErr
+		}
+
+		return newFailedHealth(secretsReady, reasonSuperUserSecretFailed, reconcileErr.Error()), reconcileErr
+	}
+
+	// external secret configured
+	if s.cluster.Spec.PasswordConfig != nil {
+		h := newReadyHealth(secretsReady, reasonSuperUserSecretReady, msgSuperuserSecretReady)
+		if !meta.IsStatusConditionTrue(s.cluster.Status.Conditions, string(secretsReady)) {
+			s.events.emitNormal(s.cluster, EventSecretReady, h.Message)
+		}
+		return h, nil
 	}
 
 	secret := s.contracts.Secret
@@ -120,6 +166,59 @@ func (s *secretModel) computeHealth(reconcileErr error) (componentHealth, error)
 		s.events.emitNormal(s.cluster, EventSecretReady, h.Message)
 	}
 	return h, nil
+}
+
+// reconcileExternalSecret validates an externally managed superuser secret and,
+// on success, publishes it on the Secret contract. The operator is a pure
+// consumer: it never writes the secret's .data nor stamps any label —
+// credential ownership and the required cnpg.io/reload label stay with the
+// external manager. Failures are returned as typed errors carrying the precise
+// conditionReason so Observe can map them onto health without re-deriving the
+// cause.
+func (s *secretModel) reconcileExternalSecret(ctx context.Context) error {
+	ref := s.cluster.Spec.PasswordConfig.SuperuserExternalSecretRef.Name
+	if ref == "" {
+		return secretReconcileError{message: string(msgExternalSecretInvalid), reason: reasonExternalSecretInvalid}
+	}
+
+	secret := &corev1.Secret{}
+	err := s.client.Get(ctx, types.NamespacedName{Name: ref, Namespace: s.cluster.Namespace}, secret)
+	if apierrors.IsNotFound(err) {
+		return secretReconcileError{message: string(msgExternalSecretMissing), reason: reasonExternalSecretMissing}
+	}
+	if err != nil {
+		return fmt.Errorf("%s %q: %w", msgExternalSecretGenericFailure, ref, err)
+	}
+
+	if err := ValidateExternalSuperuserSecret(secret); err != nil {
+		return err
+	}
+
+	if s.cluster.Status.Resources.SuperUserSecretRef == nil {
+		s.cluster.Status.Resources.SuperUserSecretRef = &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: ref},
+			Key:                  secretKeyPassword,
+		}
+	}
+
+	// Publish the contract so downstream components wire CNPG to the external secret.
+	s.contracts.Secret = secret
+	return nil
+}
+
+func ValidateExternalSuperuserSecret(secret *corev1.Secret) error {
+	switch {
+	case len(secret.Data) == 0:
+		return secretReconcileError{message: string(msgExternalSecretInvalid), reason: reasonExternalSecretMissingData}
+	case len(secret.Data[secretKeyPassword]) == 0 || len(secret.Data[secretKeyUsername]) == 0:
+		return secretReconcileError{message: string(msgExternalSecretInvalid), reason: reasonExternalSecretMissingKeys}
+	case string(secret.Data[secretKeyUsername]) != requiredSecretUsername:
+		return secretReconcileError{message: string(msgExternalSecretInvalidUsername), reason: reasonExternalSecretInvalidUsername}
+	case secret.Labels[labelCNPGReload] != "true":
+		return secretReconcileError{message: string(msgExternalSecretMissingLabel), reason: reasonExternalSecretMissingLabel}
+	default:
+		return nil
+	}
 }
 
 // ensureClusterSecret creates the superuser secret. Caller must verify it does not already exist.

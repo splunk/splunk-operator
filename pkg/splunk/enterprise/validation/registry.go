@@ -236,8 +236,18 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 		},
 	},
 	PostgresDatabaseGVR: &GenericValidator[*enterpriseApi.PostgresDatabase]{
-		ValidateCreateFunc:   pgdbwebhook.ValidatePostgresDatabaseCreate,
-		ValidateUpdateFunc:   pgdbwebhook.ValidatePostgresDatabaseUpdate,
+		ValidateCreateFunc: func(obj *enterpriseApi.PostgresDatabase) field.ErrorList {
+			return pgdbwebhook.ValidatePostgresDatabaseCreate(context.Background(), obj, nil)
+		},
+		ValidateUpdateFunc: func(obj, oldObj *enterpriseApi.PostgresDatabase) field.ErrorList {
+			return pgdbwebhook.ValidatePostgresDatabaseUpdate(context.Background(), obj, oldObj, nil)
+		},
+		ValidateCreateWithContextFunc: func(obj *enterpriseApi.PostgresDatabase, vc *ValidationContext) field.ErrorList {
+			return pgdbwebhook.ValidatePostgresDatabaseCreate(vc.Ctx, obj, vc.Client)
+		},
+		ValidateUpdateWithContextFunc: func(obj, oldObj *enterpriseApi.PostgresDatabase, vc *ValidationContext) field.ErrorList {
+			return pgdbwebhook.ValidatePostgresDatabaseUpdate(vc.Ctx, obj, oldObj, vc.Client)
+		},
 		WarningsOnCreateFunc: pgdbwebhook.GetPostgresDatabaseWarningsOnCreate,
 		WarningsOnUpdateFunc: pgdbwebhook.GetPostgresDatabaseWarningsOnUpdate,
 		GroupKind: schema.GroupKind{

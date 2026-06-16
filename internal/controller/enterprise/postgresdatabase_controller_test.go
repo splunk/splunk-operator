@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -45,6 +46,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+// Event reasons emitted by the database controller on the external-secret path.
+// Mirrors string constants in pkg/postgresql/database/core/events.go so the
+// envtest can stay decoupled from the core package import.
+const (
+	dbEventRoleSecretsFailed     = "RoleSecretsFailed"
+	dbEventPostgresDatabaseReady = "PostgresDatabaseReady"
+)
+
 const postgresDatabaseFinalizer = "postgresdatabases.enterprise.splunk.com/finalizer"
 
 // condition types
@@ -59,16 +68,17 @@ const (
 
 // condition reasons
 const (
-	reasonClusterNotFound     = "ClusterNotFound"
-	reasonClusterAvailable    = "ClusterAvailable"
-	reasonClusterProvisioning = "ClusterProvisioning"
-	reasonSecretsCreated      = "SecretsCreated"
-	reasonConfigMapsCreated   = "ConfigMapsCreated"
-	reasonRolesAvailable      = "RolesAvailable"
-	reasonDatabasesAvailable  = "DatabasesAvailable"
-	reasonRoleConflict        = "RoleConflict"
-	reasonWaitingForCNPG      = "WaitingForCNPG"
-	reasonPrivilegesGranted   = "PrivilegesGranted"
+	reasonClusterNotFound       = "ClusterNotFound"
+	reasonClusterAvailable      = "ClusterAvailable"
+	reasonClusterProvisioning   = "ClusterProvisioning"
+	reasonExternalSecretMissing = "ExternalSecretMissing"
+	reasonSecretsCreated        = "SecretsCreated"
+	reasonConfigMapsCreated     = "ConfigMapsCreated"
+	reasonRolesAvailable        = "RolesAvailable"
+	reasonDatabasesAvailable    = "DatabasesAvailable"
+	reasonRoleConflict          = "RoleConflict"
+	reasonWaitingForCNPG        = "WaitingForCNPG"
+	reasonPrivilegesGranted     = "PrivilegesGranted"
 )
 
 // phases
@@ -97,6 +107,42 @@ func reconcilePostgresDatabase(ctx context.Context, nn types.NamespacedName) (ct
 		FleetCollector: pgprometheus.NewFleetCollector(),
 	}
 	return reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+}
+
+func reconcilePostgresDatabaseWithRecorder(ctx context.Context, nn types.NamespacedName, recorder record.EventRecorder) (ctrl.Result, error) {
+	reconciler := &PostgresDatabaseReconciler{
+		Client:         k8sClient,
+		Scheme:         k8sClient.Scheme(),
+		Recorder:       recorder,
+		Metrics:        &pgprometheus.NoopRecorder{},
+		FleetCollector: pgprometheus.NewFleetCollector(),
+	}
+	return reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+}
+
+// collectEvents drains every queued event from a FakeRecorder into the
+// provided slice. Non-blocking — returns once the channel is empty.
+func collectEvents(events *[]string, recorder *record.FakeRecorder) {
+	for {
+		select {
+		case e := <-recorder.Events:
+			*events = append(*events, e)
+		default:
+			return
+		}
+	}
+}
+
+// containsEvent matches by both Kubernetes event type (Normal / Warning) and
+// reason name. record.FakeRecorder formats events as
+// "<type> <reason> <message>", so substring matching is sufficient.
+func containsEvent(events []string, eventType, reason string) bool {
+	for _, e := range events {
+		if strings.Contains(e, eventType) && strings.Contains(e, reason) {
+			return true
+		}
+	}
+	return false
 }
 
 func managedRoleNames(roles []enterprisev4.ManagedRole) []string {
@@ -532,6 +578,397 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 				expectReconcileResult(result, err, 15*time.Second)
 				expectProvisionedArtifacts(ctx, scenario, current)
+				expectManagedRolesPatched(ctx, scenario)
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+				cnpgDatabase := expectCNPGDatabaseCreated(ctx, scenario, current)
+				markCNPGDatabaseApplied(ctx, cnpgDatabase)
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectEmptyReconcileResult(result, err)
+
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+				expectStatusCondition(current, condClusterReady, metav1.ConditionTrue, reasonClusterAvailable)
+				expectStatusCondition(current, condSecretsReady, metav1.ConditionTrue, reasonSecretsCreated)
+				expectStatusCondition(current, condConfigMapsReady, metav1.ConditionTrue, reasonConfigMapsCreated)
+				expectStatusCondition(current, condRolesReady, metav1.ConditionTrue, reasonRolesAvailable)
+				expectStatusCondition(current, condDatabasesReady, metav1.ConditionTrue, reasonDatabasesAvailable)
+				expectStatusCondition(current, condPrivilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted)
+			})
+		})
+
+		Context("and external superuser secret is reconciled", func() {
+			It("reconciles external secrets, configmaps, roles, and CNPG databases", func() {
+				scenario := newReadyClusterScenario(namespace, "ready-cluster", "tenant-cluster", "tenant-cnpg", dbAppdb)
+
+				createPostgresDatabaseResource(ctx, scenario.namespace,
+					scenario.resourceName, scenario.clusterName,
+					[]enterprisev4.DatabaseDefinition{{
+						Name: scenario.dbName,
+						PasswordConfig: &enterprisev4.PasswordConfig{
+							ExternalAdminSecretRef: corev1.LocalObjectReference{
+								Name: "external-admin-secret"},
+							ExternalRWSecretRef: corev1.LocalObjectReference{
+								Name: "external-rw-secret"}}}})
+
+				Expect(k8sClient.Create(ctx, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "external-admin-secret",
+						Namespace: scenario.namespace,
+						// The secret owner sets cnpg.io/reload; the operator only validates it.
+						Labels: map[string]string{"cnpg.io/reload": "true"},
+					},
+					Data: map[string][]byte{
+						"username": []byte("password"),
+						"password": []byte("username"),
+					},
+				})).To(Succeed())
+				Expect(k8sClient.Create(ctx, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "external-rw-secret",
+						Namespace: scenario.namespace,
+						// The secret owner sets cnpg.io/reload; the operator only validates it.
+						Labels: map[string]string{"cnpg.io/reload": "true"},
+					},
+					Data: map[string][]byte{
+						"username": []byte("password"),
+						"password": []byte("username"),
+					},
+				})).To(Succeed())
+				postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
+				markPostgresClusterReady(ctx, postgresCluster, scenario.cnpgClusterName, scenario.namespace, false)
+				cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
+				markCNPGClusterReady(ctx, cnpgCluster, []string{adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)}, "tenant-rw", "tenant-ro")
+				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectEmptyReconcileResult(result, err)
+
+				current := expectFinalizerAdded(ctx, scenario.requestName)
+				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+
+				configMap := &corev1.ConfigMap{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMapNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, configMap)).To(Succeed())
+				Expect(configMap.Data).To(HaveKeyWithValue(dbcore.ConfigMapKeyDatabaseName, scenario.dbName))
+				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyDefaultClusterPort, pgconninfo.DefaultPort))
+				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterRWEndpoint, "tenant-rw."+scenario.namespace+".svc.cluster.local"))
+				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterROEndpoint, "tenant-ro."+scenario.namespace+".svc.cluster.local"))
+				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterREndpoint, scenario.cnpgClusterName+"-r."+scenario.namespace+".svc.cluster.local"))
+				Expect(configMap.Data).To(HaveKeyWithValue(dbcore.ConfigMapKeyAdminUser, adminRoleNameForTest(scenario.dbName)))
+				Expect(configMap.Data).To(HaveKeyWithValue(dbcore.ConfigMapKeyRWUser, rwRoleNameForTest(scenario.dbName)))
+				Expect(metav1.IsControlledBy(configMap, current)).To(BeTrue())
+
+				expectManagedRolesPatched(ctx, scenario)
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+				cnpgDatabase := expectCNPGDatabaseCreated(ctx, scenario, current)
+				markCNPGDatabaseApplied(ctx, cnpgDatabase)
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectEmptyReconcileResult(result, err)
+
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+				expectStatusCondition(current, condClusterReady, metav1.ConditionTrue, reasonClusterAvailable)
+				expectStatusCondition(current, condSecretsReady, metav1.ConditionTrue, reasonSecretsCreated)
+
+				for _, dbinfo := range current.Status.Databases {
+					Expect(dbinfo.AdminUserSecretRef).NotTo(BeNil())
+					Expect(dbinfo.RWUserSecretRef).NotTo(BeNil())
+					Expect(dbinfo.AdminUserSecretRef.Name).To(Equal("external-admin-secret"))
+					Expect(dbinfo.RWUserSecretRef.Name).To(Equal("external-rw-secret"))
+				}
+				expectStatusCondition(current, condConfigMapsReady, metav1.ConditionTrue, reasonConfigMapsCreated)
+				expectStatusCondition(current, condRolesReady, metav1.ConditionTrue, reasonRolesAvailable)
+				expectStatusCondition(current, condDatabasesReady, metav1.ConditionTrue, reasonDatabasesAvailable)
+				expectStatusCondition(current, condPrivilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted)
+			})
+
+			It("catches missing external secrets and emits an event", func() {
+				scenario := newReadyClusterScenario(namespace, "ready-cluster", "tenant-cluster", "tenant-cnpg", dbAppdb)
+
+				createPostgresDatabaseResource(ctx, scenario.namespace,
+					scenario.resourceName, scenario.clusterName,
+					[]enterprisev4.DatabaseDefinition{{
+						Name: scenario.dbName,
+						PasswordConfig: &enterprisev4.PasswordConfig{
+							ExternalAdminSecretRef: corev1.LocalObjectReference{
+								Name: "external-admin-secret12"},
+							ExternalRWSecretRef: corev1.LocalObjectReference{
+								Name: "external-rw-secret12"}}}})
+
+				postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
+				markPostgresClusterReady(ctx, postgresCluster, scenario.cnpgClusterName, scenario.namespace, false)
+				cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
+				markCNPGClusterReady(ctx, cnpgCluster, []string{adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)}, "tenant-rw", "tenant-ro")
+
+				// Inject a shared recorder so events survive across reconciles.
+				recorder := record.NewFakeRecorder(100)
+				result, err := reconcilePostgresDatabaseWithRecorder(ctx, scenario.requestName, recorder)
+				expectEmptyReconcileResult(result, err)
+
+				current := expectFinalizerAdded(ctx, scenario.requestName)
+				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
+
+				result, err = reconcilePostgresDatabaseWithRecorder(ctx, scenario.requestName, recorder)
+				Expect(err).NotTo(BeNil())
+
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectStatusCondition(current, condSecretsReady, metav1.ConditionFalse, reasonExternalSecretMissing)
+
+				received := make([]string, 0, 16)
+				collectEvents(&received, recorder)
+				Expect(containsEvent(received, corev1.EventTypeWarning, dbEventRoleSecretsFailed)).To(
+					BeTrue(),
+					"Warning %s must be emitted when external secrets are missing; events seen: %v",
+					dbEventRoleSecretsFailed, received)
+				// The Ready event must not have leaked while we were still
+				// failing — guards against an updateStatus-then-emitNormal
+				// regression where the ready event fires before the
+				// SecretsReady condition is actually True.
+				Expect(containsEvent(received, corev1.EventTypeNormal, dbEventPostgresDatabaseReady)).To(
+					BeFalse(),
+					"PostgresDatabaseReady must not fire while SecretsReady is False; events seen: %v", received)
+			})
+
+			It("recovers SecretsReady when missing external secrets are created", func() {
+				scenario := newReadyClusterScenario(namespace, "ready-cluster", "tenant-cluster", "tenant-cnpg", dbAppdb)
+
+				const (
+					adminSecretName = "recovery-admin-secret"
+					rwSecretName    = "recovery-rw-secret"
+				)
+				createPostgresDatabaseResource(ctx, scenario.namespace,
+					scenario.resourceName, scenario.clusterName,
+					[]enterprisev4.DatabaseDefinition{{
+						Name: scenario.dbName,
+						PasswordConfig: &enterprisev4.PasswordConfig{
+							ExternalAdminSecretRef: corev1.LocalObjectReference{Name: adminSecretName},
+							ExternalRWSecretRef:    corev1.LocalObjectReference{Name: rwSecretName},
+						}}})
+
+				postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
+				markPostgresClusterReady(ctx, postgresCluster, scenario.cnpgClusterName, scenario.namespace, false)
+				cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
+				markCNPGClusterReady(ctx, cnpgCluster, []string{adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)}, "tenant-rw", "tenant-ro")
+
+				recorder := record.NewFakeRecorder(100)
+
+				// Pass 1: finalizer.
+				result, err := reconcilePostgresDatabaseWithRecorder(ctx, scenario.requestName, recorder)
+				expectEmptyReconcileResult(result, err)
+				current := expectFinalizerAdded(ctx, scenario.requestName)
+				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
+
+				// Pass 2: secrets missing — condition flips False, Warning emitted.
+				_, err = reconcilePostgresDatabaseWithRecorder(ctx, scenario.requestName, recorder)
+				Expect(err).To(HaveOccurred())
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectStatusCondition(current, condSecretsReady, metav1.ConditionFalse, reasonExternalSecretMissing)
+
+				received := make([]string, 0, 16)
+				collectEvents(&received, recorder)
+				Expect(containsEvent(received, corev1.EventTypeWarning, dbEventRoleSecretsFailed)).To(BeTrue(),
+					"baseline Warning %s missing; events seen: %v", dbEventRoleSecretsFailed, received)
+
+				// Now create both external Secrets in the cluster — mirrors an
+				// ExternalSecret CR materializing after admission.
+				Expect(k8sClient.Create(ctx, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      adminSecretName,
+						Namespace: scenario.namespace,
+						Labels:    map[string]string{"cnpg.io/reload": "true"},
+					},
+					Data: map[string][]byte{
+						"username": []byte("admin-user"),
+						"password": []byte("admin-pw"),
+					},
+				})).To(Succeed())
+				Expect(k8sClient.Create(ctx, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      rwSecretName,
+						Namespace: scenario.namespace,
+						Labels:    map[string]string{"cnpg.io/reload": "true"},
+					},
+					Data: map[string][]byte{
+						"username": []byte("rw-user"),
+						"password": []byte("rw-pw"),
+					},
+				})).To(Succeed())
+
+				result, err = reconcilePostgresDatabaseWithRecorder(ctx, scenario.requestName, recorder)
+				expectReconcileResult(result, err, 15*time.Second)
+
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectStatusCondition(current, condSecretsReady, metav1.ConditionTrue, reasonSecretsCreated)
+
+				for _, name := range []string{adminSecretName, rwSecretName} {
+					got := &corev1.Secret{}
+					Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: scenario.namespace}, got)).To(Succeed())
+					Expect(got.Labels).To(HaveKeyWithValue("cnpg.io/reload", "true"),
+						"external Secret %s must carry cnpg.io/reload=true after recovery", name)
+				}
+
+				// Drain the recorder once more — no fresh Warning must have
+				// fired during the recovery pass.
+				received = received[:0]
+				collectEvents(&received, recorder)
+				Expect(containsEvent(received, corev1.EventTypeWarning, dbEventRoleSecretsFailed)).To(
+					BeFalse(),
+					"%s must not be re-emitted once external secrets are present; events seen: %v",
+					dbEventRoleSecretsFailed, received)
+			})
+
+			It("flips SecretsReady back to False when an external secret is deleted after ready", func() {
+				scenario := newReadyClusterScenario(namespace, "ready-cluster", "tenant-cluster", "tenant-cnpg", dbAppdb)
+
+				const (
+					adminSecretName = "drift-admin-secret"
+					rwSecretName    = "drift-rw-secret"
+				)
+				createPostgresDatabaseResource(ctx, scenario.namespace,
+					scenario.resourceName, scenario.clusterName,
+					[]enterprisev4.DatabaseDefinition{{
+						Name: scenario.dbName,
+						PasswordConfig: &enterprisev4.PasswordConfig{
+							ExternalAdminSecretRef: corev1.LocalObjectReference{Name: adminSecretName},
+							ExternalRWSecretRef:    corev1.LocalObjectReference{Name: rwSecretName},
+						}}})
+
+				Expect(k8sClient.Create(ctx, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      adminSecretName,
+						Namespace: scenario.namespace,
+						Labels:    map[string]string{"cnpg.io/reload": "true"},
+					},
+					Data: map[string][]byte{
+						"username": []byte("admin-user"),
+						"password": []byte("admin-pw"),
+					},
+				})).To(Succeed())
+				Expect(k8sClient.Create(ctx, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      rwSecretName,
+						Namespace: scenario.namespace,
+						Labels:    map[string]string{"cnpg.io/reload": "true"},
+					},
+					Data: map[string][]byte{
+						"username": []byte("rw-user"),
+						"password": []byte("rw-pw"),
+					},
+				})).To(Succeed())
+
+				postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
+				markPostgresClusterReady(ctx, postgresCluster, scenario.cnpgClusterName, scenario.namespace, false)
+				cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
+				markCNPGClusterReady(ctx, cnpgCluster, []string{adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)}, "tenant-rw", "tenant-ro")
+
+				recorder := record.NewFakeRecorder(100)
+
+				// Drive the standard happy-path bring-up so the resource
+				// reaches SecretsReady=True before we induce drift.
+				result, err := reconcilePostgresDatabaseWithRecorder(ctx, scenario.requestName, recorder)
+				expectEmptyReconcileResult(result, err)
+				current := expectFinalizerAdded(ctx, scenario.requestName)
+				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
+
+				result, err = reconcilePostgresDatabaseWithRecorder(ctx, scenario.requestName, recorder)
+				expectReconcileResult(result, err, 15*time.Second)
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectStatusCondition(current, condSecretsReady, metav1.ConditionTrue, reasonSecretsCreated)
+
+				// Baseline: no Warning event has fired yet on the
+				// SecretsReady path. (We tolerate Warnings from later phases
+				// — the assertion is reason-scoped.)
+				received := make([]string, 0, 16)
+				collectEvents(&received, recorder)
+				Expect(containsEvent(received, corev1.EventTypeWarning, dbEventRoleSecretsFailed)).To(BeFalse(),
+					"%s must not be emitted while SecretsReady is True; events seen: %v",
+					dbEventRoleSecretsFailed, received)
+
+				// Induce drift — delete the admin Secret out from under us.
+				Expect(k8sClient.Delete(ctx, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: adminSecretName, Namespace: scenario.namespace},
+				})).To(Succeed())
+
+				_, err = reconcilePostgresDatabaseWithRecorder(ctx, scenario.requestName, recorder)
+				Expect(err).To(HaveOccurred())
+
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectStatusCondition(current, condSecretsReady, metav1.ConditionFalse, reasonExternalSecretMissing)
+
+				received = received[:0]
+				collectEvents(&received, recorder)
+				Expect(containsEvent(received, corev1.EventTypeWarning, dbEventRoleSecretsFailed)).To(BeTrue(),
+					"deleting an external Secret must re-emit %s; events seen: %v",
+					dbEventRoleSecretsFailed, received)
+			})
+
+			It("reconciles external secrets, cms etc. idempotently", func() {
+				scenario := newReadyClusterScenario(namespace, "ready-cluster", "tenant-cluster", "tenant-cnpg", dbAppdb)
+
+				createPostgresDatabaseResource(ctx, scenario.namespace,
+					scenario.resourceName, scenario.clusterName,
+					[]enterprisev4.DatabaseDefinition{{
+						Name: scenario.dbName,
+						PasswordConfig: &enterprisev4.PasswordConfig{
+							ExternalAdminSecretRef: corev1.LocalObjectReference{
+								Name: "external-admin-secret"},
+							ExternalRWSecretRef: corev1.LocalObjectReference{
+								Name: "external-rw-secret"}}}})
+
+				Expect(k8sClient.Create(ctx, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "external-admin-secret",
+						Namespace: scenario.namespace,
+						// The secret owner sets cnpg.io/reload; the operator only validates it.
+						Labels: map[string]string{"cnpg.io/reload": "true"},
+					},
+					Data: map[string][]byte{
+						"username": []byte("password"),
+						"password": []byte("username"),
+					},
+				})).To(Succeed())
+				Expect(k8sClient.Create(ctx, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "external-rw-secret",
+						Namespace: scenario.namespace,
+						// The secret owner sets cnpg.io/reload; the operator only validates it.
+						Labels: map[string]string{"cnpg.io/reload": "true"},
+					},
+					Data: map[string][]byte{
+						"username": []byte("password"),
+						"password": []byte("username"),
+					},
+				})).To(Succeed())
+				postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
+				markPostgresClusterReady(ctx, postgresCluster, scenario.cnpgClusterName, scenario.namespace, false)
+				cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
+				markCNPGClusterReady(ctx, cnpgCluster, []string{adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)}, "tenant-rw", "tenant-ro")
+				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectEmptyReconcileResult(result, err)
+
+				current := expectFinalizerAdded(ctx, scenario.requestName)
+				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+
+				configMap := &corev1.ConfigMap{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configMapNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, configMap)).To(Succeed())
+				Expect(configMap.Data).To(HaveKeyWithValue(dbcore.ConfigMapKeyDatabaseName, scenario.dbName))
+				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyDefaultClusterPort, pgconninfo.DefaultPort))
+				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterRWEndpoint, "tenant-rw."+scenario.namespace+".svc.cluster.local"))
+				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterROEndpoint, "tenant-ro."+scenario.namespace+".svc.cluster.local"))
+				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterREndpoint, scenario.cnpgClusterName+"-r."+scenario.namespace+".svc.cluster.local"))
+				Expect(configMap.Data).To(HaveKeyWithValue(dbcore.ConfigMapKeyAdminUser, adminRoleNameForTest(scenario.dbName)))
+				Expect(configMap.Data).To(HaveKeyWithValue(dbcore.ConfigMapKeyRWUser, rwRoleNameForTest(scenario.dbName)))
+				Expect(metav1.IsControlledBy(configMap, current)).To(BeTrue())
+
 				expectManagedRolesPatched(ctx, scenario)
 
 				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
@@ -1388,6 +1825,44 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			reqs := reconciler.enqueuePostgresDatabasesForCluster(ctx, cluster)
 
 			Expect(reqs).To(BeEmpty())
+		})
+	})
+	When("a PostgresDatabase resource is created, the kubebuilder validation works and", func() {
+		It("should catch empty secrets", func() {
+			scenario := newReadyClusterScenario(namespace, "password-config-wrong", "tenant-cluster", "tenant-cnpg", dbAppdb)
+			postgresDB := &enterprisev4.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       scenario.resourceName,
+					Namespace:  namespace,
+					Finalizers: []string{dbAppdb},
+				},
+				Spec: enterprisev4.PostgresDatabaseSpec{
+					ClusterRef: corev1.LocalObjectReference{Name: scenario.clusterName},
+					Databases: []enterprisev4.DatabaseDefinition{{Name: scenario.dbName,
+						PasswordConfig: &enterprisev4.PasswordConfig{
+							ExternalAdminSecretRef: corev1.LocalObjectReference{Name: ""},
+							ExternalRWSecretRef:    corev1.LocalObjectReference{Name: ""},
+						}}}},
+			}
+			Expect(k8sClient.Create(ctx, postgresDB)).NotTo(Succeed())
+		})
+		It("should catch indifferent secrets", func() {
+			scenario := newReadyClusterScenario(namespace, "password-config-wrong", "tenant-cluster", "tenant-cnpg", dbAppdb)
+			postgresDB := &enterprisev4.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       scenario.resourceName,
+					Namespace:  namespace,
+					Finalizers: []string{dbAppdb},
+				},
+				Spec: enterprisev4.PostgresDatabaseSpec{
+					ClusterRef: corev1.LocalObjectReference{Name: scenario.clusterName},
+					Databases: []enterprisev4.DatabaseDefinition{{Name: scenario.dbName,
+						PasswordConfig: &enterprisev4.PasswordConfig{
+							ExternalAdminSecretRef: corev1.LocalObjectReference{Name: "indiff"},
+							ExternalRWSecretRef:    corev1.LocalObjectReference{Name: "indiff"},
+						}}}},
+			}
+			Expect(k8sClient.Create(ctx, postgresDB)).NotTo(Succeed())
 		})
 	})
 })
