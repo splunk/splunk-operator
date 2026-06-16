@@ -33,10 +33,13 @@ type PostgresDatabaseSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=10
-	// +kubebuilder:validation:XValidation:rule="self.all(x, self.filter(y, y.name == x.name).size() == 1)",message="database names must be unique"
+	// +listType=map
+	// +listMapKey=name
 	Databases []DatabaseDefinition `json:"databases"`
 }
 
+// +kubebuilder:validation:XValidation:rule="(has(self.passwordConfig) == has(oldSelf.passwordConfig))",message="passwordConfig cannot be altered after creation"
+// +kubebuilder:validation:XValidation:rule="!has(self.passwordConfig) || self.passwordConfig == oldSelf.passwordConfig",message="passwordConfig is immutable once set"
 type DatabaseDefinition struct {
 	// Name of the PostgreSQL database to create.
 	// +kubebuilder:validation:Required
@@ -51,6 +54,21 @@ type DatabaseDefinition struct {
 	// +kubebuilder:validation:Enum=Delete;Retain
 	// +kubebuilder:default=Delete
 	DeletionPolicy string `json:"deletionPolicy,omitempty"`
+
+	// External Admin and RW secret configuration,
+	// if non empty, external secret management is mandatory.
+	// +optional
+	PasswordConfig *PasswordConfig `json:"passwordConfig,omitempty"`
+}
+
+// +kubebuilder:validation:XValidation:rule="self.externalAdminSecretRef.name.size() > 0",message="externalAdminSecretRef.name must not be empty"
+// +kubebuilder:validation:XValidation:rule="self.externalRWSecretRef.name.size() > 0",message="externalRWSecretRef.name must not be empty"
+// +kubebuilder:validation:XValidation:rule="self.externalAdminSecretRef.name != self.externalRWSecretRef.name",message="externalAdminSecretRef and externalRWSecretRef must reference different Secrets"
+type PasswordConfig struct {
+	// +kubebuilder:validation:Required
+	ExternalAdminSecretRef corev1.LocalObjectReference `json:"externalAdminSecretRef"`
+	// +kubebuilder:validation:Required
+	ExternalRWSecretRef corev1.LocalObjectReference `json:"externalRWSecretRef"`
 }
 
 type DatabaseInfo struct {

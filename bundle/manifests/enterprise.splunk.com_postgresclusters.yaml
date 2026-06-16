@@ -186,6 +186,33 @@ spec:
                       When unset, the class-level setting applies.
                     type: boolean
                 type: object
+              passwordConfig:
+                description: |-
+                  External superuser secret configuration,
+                  if non empty, external secret management is mandatory.
+                properties:
+                  superuserExternalSecretRef:
+                    description: |-
+                      LocalObjectReference contains enough information to let you locate the
+                      referenced object inside the same namespace.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                required:
+                - superuserExternalSecretRef
+                type: object
+                x-kubernetes-validations:
+                - message: superuserExternalSecretRef.name must not be empty
+                  rule: self.superuserExternalSecretRef.name.size() > 0
               pgHBA:
                 description: |-
                   PgHBA contains pg_hba.conf host-based authentication rules.
@@ -292,6 +319,10 @@ spec:
                 '' + string(self.storage) + '')'''
               rule: '!has(oldSelf.storage) || (has(self.storage) && quantity(self.storage).compareTo(quantity(oldSelf.storage))
                 >= 0)'
+            - message: passwordConfig cannot be altered after creation
+              rule: (has(self.passwordConfig) == has(oldSelf.passwordConfig))
+            - message: passwordConfig is immutable once set
+              rule: '!has(self.passwordConfig) || self.passwordConfig == oldSelf.passwordConfig'
           status:
             description: PostgresClusterStatus defines the observed state of PostgresCluster.
             properties:

@@ -146,11 +146,17 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		return ctrl.Result{}, errors.Join(fmt.Errorf("failed to merge PostgresCluster configuration: %w", err), statusErr)
 	}
 
-	// Resolve or derive the superuser secret name.
-	if postgresCluster.Status.Resources != nil && postgresCluster.Status.Resources.SuperUserSecretRef != nil {
+	// Resolve or derive the superuser secret name. An external secret reference
+	// from the spec wins: the operator validates and tracks that secret instead
+	// of creating its own (see secretModel.reconcileExternalSecret).
+	switch {
+	case postgresCluster.Spec.PasswordConfig != nil && postgresCluster.Spec.PasswordConfig.SuperuserExternalSecretRef.Name != "":
+		postgresSecretName = postgresCluster.Spec.PasswordConfig.SuperuserExternalSecretRef.Name
+		logger.InfoContext(ctx, "superuser secret resolved from spec", "name", postgresSecretName)
+	case postgresCluster.Status.Resources != nil && postgresCluster.Status.Resources.SuperUserSecretRef != nil:
 		postgresSecretName = postgresCluster.Status.Resources.SuperUserSecretRef.Name
 		logger.InfoContext(ctx, "superuser secret resolved from status", "name", postgresSecretName)
-	} else {
+	default:
 		postgresSecretName = fmt.Sprintf("%s%s", postgresCluster.Name, defaultSecretSuffix)
 		logger.InfoContext(ctx, "superuser secret name derived", "name", postgresSecretName)
 	}

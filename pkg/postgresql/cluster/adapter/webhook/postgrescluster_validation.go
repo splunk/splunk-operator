@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -65,9 +66,37 @@ func validatePostgresCluster(ctx context.Context, obj *enterpriseApi.PostgresClu
 
 	if reader != nil {
 		allErrs = append(allErrs, validateAgainstClass(ctx, obj, reader, specUnchanged)...)
+		if e := validateExternalSuperuserSecret(ctx, obj, reader); e != nil {
+			allErrs = append(allErrs, e)
+		}
 	}
 
 	return allErrs
+}
+
+func validateExternalSuperuserSecret(ctx context.Context, obj *enterpriseApi.PostgresCluster, reader client.Reader) *field.Error {
+	if obj.Spec.PasswordConfig == nil {
+		return nil
+	}
+	ref := obj.Spec.PasswordConfig.SuperuserExternalSecretRef.Name
+	refPath := field.NewPath("spec", "passwordConfig", "superuserExternalSecretRef", "name")
+	if ref == "" {
+		// Empty ref is already rejected by the CRD's required field; nothing to add.
+		return nil
+	}
+
+	secret := &corev1.Secret{}
+	switch err := reader.Get(ctx, client.ObjectKey{Name: ref, Namespace: obj.Namespace}, secret); {
+	case apierrors.IsNotFound(err):
+		return field.Invalid(refPath, ref, "referenced external superuser secret does not exist")
+	case err != nil:
+		return field.InternalError(refPath, err)
+	}
+
+	if err := core.ValidateExternalSuperuserSecret(secret); err != nil {
+		return field.Invalid(refPath, ref, err.Error())
+	}
+	return nil
 }
 
 func validateAgainstClass(ctx context.Context, obj *enterpriseApi.PostgresCluster, reader client.Reader, specUnchanged bool) field.ErrorList {

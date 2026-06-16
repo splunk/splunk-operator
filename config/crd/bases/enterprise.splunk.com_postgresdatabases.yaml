@@ -89,15 +89,69 @@ spec:
                       minLength: 1
                       pattern: ^[a-z_][a-z0-9_]*$
                       type: string
+                    passwordConfig:
+                      description: |-
+                        External Admin and RW secret configuration,
+                        if non empty, external secret management is mandatory.
+                      properties:
+                        externalAdminSecretRef:
+                          description: |-
+                            LocalObjectReference contains enough information to let you locate the
+                            referenced object inside the same namespace.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        externalRWSecretRef:
+                          description: |-
+                            LocalObjectReference contains enough information to let you locate the
+                            referenced object inside the same namespace.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                      required:
+                      - externalAdminSecretRef
+                      - externalRWSecretRef
+                      type: object
+                      x-kubernetes-validations:
+                      - message: externalAdminSecretRef.name must not be empty
+                        rule: self.externalAdminSecretRef.name.size() > 0
+                      - message: externalRWSecretRef.name must not be empty
+                        rule: self.externalRWSecretRef.name.size() > 0
+                      - message: externalAdminSecretRef and externalRWSecretRef must
+                          reference different Secrets
+                        rule: self.externalAdminSecretRef.name != self.externalRWSecretRef.name
                   required:
                   - name
                   type: object
+                  x-kubernetes-validations:
+                  - message: passwordConfig cannot be altered after creation
+                    rule: (has(self.passwordConfig) == has(oldSelf.passwordConfig))
+                  - message: passwordConfig is immutable once set
+                    rule: '!has(self.passwordConfig) || self.passwordConfig == oldSelf.passwordConfig'
                 maxItems: 10
                 minItems: 1
                 type: array
-                x-kubernetes-validations:
-                - message: database names must be unique
-                  rule: self.all(x, self.filter(y, y.name == x.name).size() == 1)
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
             required:
             - clusterRef
             - databases
