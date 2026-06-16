@@ -25,6 +25,7 @@ import (
 
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -583,6 +584,7 @@ func TestPostgresClusterClassPgHBAUpdateIntegration(t *testing.T) {
 func newFakeReader(objects ...runtime.Object) *fake.ClientBuilder {
 	s := runtime.NewScheme()
 	enterpriseApi.AddToScheme(s)
+	corev1.AddToScheme(s)
 	b := fake.NewClientBuilder().WithScheme(s)
 	for _, obj := range objects {
 		b = b.WithRuntimeObjects(obj)

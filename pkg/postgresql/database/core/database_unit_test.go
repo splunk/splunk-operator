@@ -54,6 +54,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // managedRolesFieldsRaw is a helper to construct the raw managed fields JSON for testing parseRoleNames and related functions.
@@ -271,6 +272,150 @@ func TestPostgresDatabaseServiceRequeuesOnConflict(t *testing.T) {
 			assert.Equal(t, ctrl.Result{Requeue: true}, result)
 		})
 	}
+}
+
+// TestPostgresDatabaseServiceTerminalOnMissingExternalSecret verifies that a
+// referenced-but-absent external role secret surfaces as a reconcile.TerminalError
+// from the service entry point. The operator only consumes external secrets, so a
+// missing one is not recoverable by backoff — recovery is driven by the
+// external-Secret watch. controller-runtime must therefore stop requeueing.
+func TestPostgresDatabaseServiceTerminalOnMissingExternalSecret(t *testing.T) {
+	scheme := testScheme(t)
+	ctx := context.Background()
+	const ns = "dbs"
+
+	postgresDB := &enterprisev4.PostgresDatabase{
+		TypeMeta:   metav1.TypeMeta{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresDatabase"},
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: ns, UID: types.UID("pdb-uid"), Generation: 1, Finalizers: []string{postgresDatabaseFinalizerName}},
+		Spec: enterprisev4.PostgresDatabaseSpec{
+			ClusterRef: corev1.LocalObjectReference{Name: "primary-cluster"},
+			Databases: []enterprisev4.DatabaseDefinition{
+				{Name: "payments", PasswordConfig: &enterprisev4.PasswordConfig{
+					ExternalAdminSecretRef: corev1.LocalObjectReference{Name: "external-admin-secret"},
+					ExternalRWSecretRef:    corev1.LocalObjectReference{Name: "external-rw-secret"},
+				}},
+			},
+		},
+		Status: enterprisev4.PostgresDatabaseStatus{
+			Phase:     strPtr(string(readyDBPhase)),
+			Databases: []enterprisev4.DatabaseInfo{{Name: "payments"}},
+		},
+	}
+
+	postgresCluster := &enterprisev4.PostgresCluster{
+		TypeMeta:   metav1.TypeMeta{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresCluster"},
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-cluster", Namespace: ns},
+		Status: enterprisev4.PostgresClusterStatus{
+			Phase: strPtr(string(ClusterReady)),
+			ProvisionerRef: &corev1.ObjectReference{
+				APIVersion: cnpgv1.SchemeGroupVersion.String(),
+				Kind:       "Cluster",
+				Name:       "primary-cnpg",
+				Namespace:  ns,
+			},
+		},
+	}
+
+	cnpgCluster := &cnpgv1.Cluster{
+		TypeMeta:   metav1.TypeMeta{APIVersion: cnpgv1.SchemeGroupVersion.String(), Kind: "Cluster"},
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-cnpg", Namespace: ns},
+	}
+
+	c := testClient(t, scheme, postgresDB, postgresCluster, cnpgCluster)
+
+	// newDBRepo is never reached: we fail during credential provisioning, before
+	// any role is patched.
+	result, err := PostgresDatabaseService(
+		ctx,
+		&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}},
+		postgresDB,
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, reconcile.TerminalError(nil)),
+		"a missing external role secret must surface as a terminal error")
+	assert.Equal(t, ctrl.Result{}, result)
+	// The combined error must name both missing secrets, not just the first.
+	assert.Contains(t, err.Error(), "external-admin-secret")
+	assert.Contains(t, err.Error(), "external-rw-secret")
+}
+
+// TestPostgresDatabaseServiceRequeuesWhenMissingSecretStatusWriteFailsTransiently
+// verifies that when an external role secret is missing AND the SecretsReady=False
+// status write fails for a non-conflict reason (e.g. transient API unavailability),
+// the service stays requeueable rather than terminalizing. Terminalizing would stop
+// controller-runtime retry and leave the status stale until the next Secret event.
+func TestPostgresDatabaseServiceRequeuesWhenMissingSecretStatusWriteFailsTransiently(t *testing.T) {
+	scheme := testScheme(t)
+	ctx := context.Background()
+	const ns = "dbs"
+
+	postgresDB := &enterprisev4.PostgresDatabase{
+		TypeMeta:   metav1.TypeMeta{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresDatabase"},
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: ns, UID: types.UID("pdb-uid"), Generation: 1, Finalizers: []string{postgresDatabaseFinalizerName}},
+		Spec: enterprisev4.PostgresDatabaseSpec{
+			ClusterRef: corev1.LocalObjectReference{Name: "primary-cluster"},
+			Databases: []enterprisev4.DatabaseDefinition{
+				{Name: "payments", PasswordConfig: &enterprisev4.PasswordConfig{
+					ExternalAdminSecretRef: corev1.LocalObjectReference{Name: "external-admin-secret"},
+					ExternalRWSecretRef:    corev1.LocalObjectReference{Name: "external-rw-secret"},
+				}},
+			},
+		},
+		Status: enterprisev4.PostgresDatabaseStatus{
+			Phase:     strPtr(string(readyDBPhase)),
+			Databases: []enterprisev4.DatabaseInfo{{Name: "payments"}},
+		},
+	}
+
+	postgresCluster := &enterprisev4.PostgresCluster{
+		TypeMeta:   metav1.TypeMeta{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresCluster"},
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-cluster", Namespace: ns},
+		Status: enterprisev4.PostgresClusterStatus{
+			Phase: strPtr(string(ClusterReady)),
+			ProvisionerRef: &corev1.ObjectReference{
+				APIVersion: cnpgv1.SchemeGroupVersion.String(),
+				Kind:       "Cluster",
+				Name:       "primary-cnpg",
+				Namespace:  ns,
+			},
+		},
+	}
+
+	cnpgCluster := &cnpgv1.Cluster{
+		TypeMeta:   metav1.TypeMeta{APIVersion: cnpgv1.SchemeGroupVersion.String(), Kind: "Cluster"},
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-cnpg", Namespace: ns},
+	}
+
+	transient := apierrors.NewServiceUnavailable("apiserver is on a coffee break")
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+		WithObjects(postgresDB, postgresCluster, cnpgCluster).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(_ context.Context, _ client.Client, subResourceName string, _ client.Object, _ ...client.SubResourceUpdateOption) error {
+				if subResourceName != "status" {
+					return nil
+				}
+				return transient
+			},
+		}).
+		Build()
+
+	result, err := PostgresDatabaseService(
+		ctx,
+		&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}},
+		postgresDB,
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.False(t, errors.Is(err, reconcile.TerminalError(nil)),
+		"a transient status-write failure must not be terminalized — it must stay requeueable")
+	assert.ErrorIs(t, err, transient,
+		"the returned error must carry the status-write failure so controller-runtime retries")
+	assert.Equal(t, ctrl.Result{}, result)
 }
 
 func TestSecretMissingPolicyForDB(t *testing.T) {
@@ -1012,6 +1157,35 @@ func TestOrphanResourceHelpers(t *testing.T) {
 		assert.Empty(t, updated.OwnerReferences)
 		assert.Equal(t, secret, updated)
 	})
+
+	t.Run("orphanSecrets leaves external secrets untouched", func(t *testing.T) {
+		// The external secret deliberately shares the derived name to exercise the
+		// worst case: without the PasswordConfig guard we would mutate a secret we
+		// do not own.
+		external := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary-payments-admin",
+				Namespace: "dbs",
+				Labels:    map[string]string{labelCNPGReload: "true"},
+			},
+			Data: map[string][]byte{secretKeyUsername: []byte("u"), secretKeyPassword: []byte("p")},
+		}
+		c := testClient(t, scheme, external)
+		externalDatabases := []enterprisev4.DatabaseDefinition{{
+			Name: "payments",
+			PasswordConfig: &enterprisev4.PasswordConfig{
+				ExternalAdminSecretRef: corev1.LocalObjectReference{Name: "primary-payments-admin"},
+				ExternalRWSecretRef:    corev1.LocalObjectReference{Name: "external-rw"},
+			},
+		}}
+
+		require.NoError(t, orphanSecrets(context.Background(), c, postgresDB, externalDatabases))
+
+		updated := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: external.Name, Namespace: external.Namespace}, updated))
+		assert.NotContains(t, updated.Annotations, annotationRetainedFrom, "external secret must not be annotated by retention")
+		assert.Equal(t, external, updated, "external secret must be left byte-for-byte untouched")
+	})
 }
 
 // Uses a fake client because these helpers delete Kubernetes resources and must verify API state.
@@ -1038,6 +1212,29 @@ func TestDeleteResourceHelpers(t *testing.T) {
 		rw := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "primary-payments-rw", Namespace: "dbs"}}
 		c := testClient(t, scheme, admin, rw)
 		require.NoError(t, deleteSecrets(context.Background(), c, postgresDB, databases))
+	})
+
+	t.Run("deleteSecrets never deletes external secrets", func(t *testing.T) {
+		// Name collides with the derived admin secret name on purpose: this is the
+		// exact data-loss case the PasswordConfig guard prevents.
+		external := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "primary-payments-admin", Namespace: "dbs"},
+			Data:       map[string][]byte{secretKeyPassword: []byte("p")},
+		}
+		c := testClient(t, scheme, external)
+		externalDatabases := []enterprisev4.DatabaseDefinition{{
+			Name: "payments",
+			PasswordConfig: &enterprisev4.PasswordConfig{
+				ExternalAdminSecretRef: corev1.LocalObjectReference{Name: "primary-payments-admin"},
+				ExternalRWSecretRef:    corev1.LocalObjectReference{Name: "external-rw"},
+			},
+		}}
+
+		require.NoError(t, deleteSecrets(context.Background(), c, postgresDB, externalDatabases))
+
+		survivor := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: external.Name, Namespace: external.Namespace}, survivor),
+			"external secret must survive PostgresDatabase deletion")
 	})
 }
 
@@ -1253,7 +1450,7 @@ func TestEnsureSecret(t *testing.T) {
 		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
 
 		require.Error(t, err)
-		var driftErr *secretReconcileError
+		var driftErr secretReconcileError
 		require.ErrorAs(t, err, &driftErr)
 		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
 		assert.ErrorContains(t, err, secretName)
@@ -1348,11 +1545,32 @@ func TestEnsureSecret(t *testing.T) {
 		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
 
 		require.Error(t, err)
-		var driftErr *secretReconcileError
+		var driftErr secretReconcileError
 		require.ErrorAs(t, err, &driftErr)
 		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
 		assert.ErrorContains(t, err, secretName)
 	})
+}
+
+// no cnpg reload label added
+func createExternalSecrets(t *testing.T, c client.Client, secretNames []string, namespace string, labels []map[string]string, data []map[string][]byte) error {
+	for i, secretName := range secretNames {
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: namespace,
+			}}
+		if data != nil && data[i] != nil {
+			secret.Data = data[i]
+		}
+		if labels != nil && labels[i] != nil {
+			secret.Labels = labels[i]
+		}
+		if err := c.Create(t.Context(), secret); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Uses a fake client because the helper reconciles multiple Secret objects through the Kubernetes API.
@@ -1374,6 +1592,31 @@ func TestReconcileRoleSecrets(t *testing.T) {
 				{Name: "analytics"},
 			},
 		},
+	}
+
+	provideExternalSecretsPostgresDB := func() *enterprisev4.PostgresDatabase {
+		return &enterprisev4.PostgresDatabase{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: enterprisev4.GroupVersion.String(),
+				Kind:       "PostgresDatabase",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary",
+				Namespace: "dbs",
+			},
+			Spec: enterprisev4.PostgresDatabaseSpec{
+				Databases: []enterprisev4.DatabaseDefinition{
+					{Name: "payments", PasswordConfig: &enterprisev4.PasswordConfig{
+						ExternalAdminSecretRef: corev1.LocalObjectReference{Name: ""},
+						ExternalRWSecretRef:    corev1.LocalObjectReference{Name: ""},
+					}},
+					{Name: "analytics", PasswordConfig: &enterprisev4.PasswordConfig{
+						ExternalAdminSecretRef: corev1.LocalObjectReference{Name: ""},
+						ExternalRWSecretRef:    corev1.LocalObjectReference{Name: ""},
+					}},
+				},
+			},
+		}
 	}
 
 	t.Run("creates secrets for each database role", func(t *testing.T) {
@@ -1429,9 +1672,194 @@ func TestReconcileRoleSecrets(t *testing.T) {
 		err := reconcileRoleSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB))
 
 		require.Error(t, err)
-		var driftErr *secretReconcileError
+		var driftErr secretReconcileError
 		require.ErrorAs(t, err, &driftErr)
 		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+	})
+
+	t.Run("returns error when names are empty", func(t *testing.T) {
+
+		externalSecretsPostgresDB := provideExternalSecretsPostgresDB()
+		externalSecretsPostgresDB.Status.Phase = strPtr(string(readyDBPhase))
+		externalSecretsPostgresDB.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
+
+		c := testClient(t, scheme)
+
+		var invalidSecretErr secretReconcileError
+		err := reconcileRoleSecrets(t.Context(), c, scheme, externalSecretsPostgresDB, existingDatabaseStatus(externalSecretsPostgresDB))
+
+		require.ErrorAs(t, err, &invalidSecretErr)
+		assert.Equal(t, reasonExternalSecretInvalid, invalidSecretErr.reason)
+	})
+
+	t.Run("returns secret missing when k8s api cant fetch", func(t *testing.T) {
+
+		externalSecretsPostgresDB := provideExternalSecretsPostgresDB()
+		externalSecretsPostgresDB.Status.Phase = strPtr(string(readyDBPhase))
+		externalSecretsPostgresDB.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
+
+		externalSecretNames := []string{
+			"external-admin-secret",
+			"external-rw-secret",
+		}
+		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
+		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
+		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
+		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
+
+		c := testClient(t, scheme)
+
+		err := reconcileRoleSecrets(t.Context(), c, scheme, externalSecretsPostgresDB, existingDatabaseStatus(externalSecretsPostgresDB))
+		require.Error(t, err)
+
+		var missingSecretErr secretReconcileError
+		require.ErrorAs(t, err, &missingSecretErr)
+		assert.Equal(t, reasonExternalSecretMissing, missingSecretErr.reason)
+
+		// Both the admin and RW secrets are missing for the same database, so the
+		// combined error must report both rather than only the admin one.
+		assert.Contains(t, err.Error(), externalSecretNames[0])
+		assert.Contains(t, err.Error(), externalSecretNames[1])
+	})
+
+	t.Run("succeeds with user-set reload label, never mutating the external secret", func(t *testing.T) {
+		externalSecretsPostgresDB := provideExternalSecretsPostgresDB()
+		externalSecretsPostgresDB.Status.Phase = strPtr(string(readyDBPhase))
+		externalSecretsPostgresDB.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
+
+		externalSecretNames := []string{
+			"external-admin-secret",
+			"external-rw-secret",
+		}
+		key := "example"
+		value := "karpatka"
+		// The user/owner is responsible for setting cnpg.io/reload — we only validate it.
+		exampleLabels := []map[string]string{
+			{key: value, labelCNPGReload: "true"},
+			{key: value, labelCNPGReload: "true"},
+		}
+		exampleDataValue := "kwas"
+		exampleData := []map[string][]byte{
+			{
+				secretKeyUsername: []byte(exampleDataValue),
+				secretKeyPassword: []byte(exampleDataValue),
+			},
+			{
+				secretKeyPassword: []byte(exampleDataValue),
+				secretKeyUsername: []byte(exampleDataValue),
+			},
+		}
+		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
+		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
+		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
+		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
+
+		c := testClient(t, scheme)
+		createExternalSecrets(t, c, externalSecretNames, externalSecretsPostgresDB.Namespace, exampleLabels, exampleData)
+
+		err := reconcileRoleSecrets(t.Context(), c, scheme, externalSecretsPostgresDB, existingDatabaseStatus(externalSecretsPostgresDB))
+		require.NoError(t, err)
+
+		for _, secretName := range externalSecretNames {
+			got := &corev1.Secret{}
+			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+			assert.Equal(t, exampleDataValue, string(got.Data[secretKeyUsername]))
+			assert.Equal(t, exampleDataValue, string(got.Data[secretKeyPassword]))
+			assert.Equal(t, "true", got.Labels["cnpg.io/reload"])
+			assert.Equal(t, value, got.Labels[key])
+		}
+	})
+
+	t.Run("fails when external secret is missing the reload label — user must set it", func(t *testing.T) {
+		externalSecretsPostgresDB := provideExternalSecretsPostgresDB()
+		externalSecretsPostgresDB.Status.Phase = strPtr(string(readyDBPhase))
+		externalSecretsPostgresDB.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
+
+		externalSecretNames := []string{
+			"external-admin-nolabel",
+			"external-rw-nolabel",
+		}
+		validData := []map[string][]byte{
+			{secretKeyUsername: []byte("u"), secretKeyPassword: []byte("p")},
+			{secretKeyUsername: []byte("u"), secretKeyPassword: []byte("p")},
+		}
+		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
+		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
+		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
+		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
+
+		c := testClient(t, scheme)
+		// Valid data but no cnpg.io/reload label.
+		createExternalSecrets(t, c, externalSecretNames, externalSecretsPostgresDB.Namespace, nil, validData)
+
+		err := reconcileRoleSecrets(t.Context(), c, scheme, externalSecretsPostgresDB, existingDatabaseStatus(externalSecretsPostgresDB))
+		require.Error(t, err)
+
+		var invalidSecretErr secretReconcileError
+		require.ErrorAs(t, err, &invalidSecretErr)
+		assert.Equal(t, reasonExternalSecretMissingLabel, invalidSecretErr.reason)
+
+		// The operator must not have added the label behind the user's back.
+		for _, secretName := range externalSecretNames {
+			got := &corev1.Secret{}
+			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+			assert.NotContains(t, got.Labels, labelCNPGReload)
+		}
+	})
+
+	t.Run("signals the external secret being invalid, missing data keys or data map", func(t *testing.T) {
+		externalSecretsPostgresDB := provideExternalSecretsPostgresDB()
+		externalSecretsPostgresDB.Status.Phase = strPtr(string(readyDBPhase))
+		externalSecretsPostgresDB.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
+
+		externalSecretsNoDataMap := []string{
+			"external-admin-missingdata",
+			"external-rw-missingdata",
+		}
+
+		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretsNoDataMap[0]
+		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalRWSecretRef.Name = externalSecretsNoDataMap[1]
+		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretsNoDataMap[0]
+		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalRWSecretRef.Name = externalSecretsNoDataMap[1]
+
+		c := testClient(t, scheme)
+		createExternalSecrets(t, c, externalSecretsNoDataMap, externalSecretsPostgresDB.Namespace, nil, nil)
+
+		err := reconcileRoleSecrets(t.Context(), c, scheme, externalSecretsPostgresDB, existingDatabaseStatus(externalSecretsPostgresDB))
+
+		require.Error(t, err)
+		var invalidSecretErr secretReconcileError
+		require.ErrorAs(t, err, &invalidSecretErr)
+		assert.Equal(t, reasonExternalSecretMissingData, invalidSecretErr.reason)
+
+		externalSecretDataMapMissingKey := []string{
+			"external-admin-missing-user-key",
+			"external-rw-missing-user-key",
+		}
+
+		exampleDataValue := "kwas"
+		exampleData := []map[string][]byte{
+			{
+				secretKeyPassword: []byte(exampleDataValue),
+			},
+			{
+				secretKeyPassword: []byte(exampleDataValue),
+				secretKeyUsername: []byte(exampleDataValue),
+			},
+		}
+
+		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretDataMapMissingKey[0]
+		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalRWSecretRef.Name = externalSecretDataMapMissingKey[1]
+		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretDataMapMissingKey[0]
+		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalRWSecretRef.Name = externalSecretDataMapMissingKey[1]
+
+		createExternalSecrets(t, c, externalSecretDataMapMissingKey, externalSecretsPostgresDB.Namespace, nil, exampleData)
+
+		err = reconcileRoleSecrets(t.Context(), c, scheme, externalSecretsPostgresDB, existingDatabaseStatus(externalSecretsPostgresDB))
+
+		require.Error(t, err)
+		require.ErrorAs(t, err, &invalidSecretErr)
+		assert.Equal(t, reasonExternalSecretMissingKeys, invalidSecretErr.reason)
 	})
 }
 

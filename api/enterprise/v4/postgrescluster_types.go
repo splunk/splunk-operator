@@ -48,6 +48,8 @@ type ManagedRole struct {
 // effective instance count.
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.postgresVersion) || (has(self.postgresVersion) && int(self.postgresVersion.split('.')[0]) >= int(oldSelf.postgresVersion.split('.')[0]))",messageExpression="!has(self.postgresVersion) ? 'postgresVersion cannot be removed once set (was: ' + oldSelf.postgresVersion + ')' : 'postgresVersion major version cannot be downgraded (from: ' + oldSelf.postgresVersion + ', to: ' + self.postgresVersion + ')'"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.storage) || (has(self.storage) && quantity(self.storage).compareTo(quantity(oldSelf.storage)) >= 0)",messageExpression="!has(self.storage) ? 'storage cannot be removed once set (was: ' + string(oldSelf.storage) + ')' : 'storage size cannot be decreased (from: ' + string(oldSelf.storage) + ', to: ' + string(self.storage) + ')'"
+// +kubebuilder:validation:XValidation:rule="(has(self.passwordConfig) == has(oldSelf.passwordConfig))",message="passwordConfig cannot be altered after creation"
+// +kubebuilder:validation:XValidation:rule="!has(self.passwordConfig) || self.passwordConfig == oldSelf.passwordConfig",message="passwordConfig is immutable once set"
 
 type PostgresClusterSpec struct {
 	// This field is IMMUTABLE after creation.
@@ -116,6 +118,17 @@ type PostgresClusterSpec struct {
 	// Only generic fields (enabled, schedule) can be overridden.
 	// +optional
 	Backup *BackupConfig `json:"backup,omitempty"`
+
+	// External superuser secret configuration,
+	// if non empty, external secret management is mandatory.
+	// +optional
+	PasswordConfig *SuperuserPasswordConfig `json:"passwordConfig,omitempty"`
+}
+
+// +kubebuilder:validation:XValidation:rule="self.superuserExternalSecretRef.name.size() > 0",message="superuserExternalSecretRef.name must not be empty"
+type SuperuserPasswordConfig struct {
+	// +kubebuilder:validation:Required
+	SuperuserExternalSecretRef corev1.LocalObjectReference `json:"superuserExternalSecretRef"`
 }
 
 // PostgresClusterMonitoring overrides monitoring configuration options for PostgresClusterClass.

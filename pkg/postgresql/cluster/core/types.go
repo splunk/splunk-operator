@@ -89,8 +89,11 @@ const (
 	defaultServerCACertKey string = "ca.crt"
 	defaultDatabaseName    string = "postgres"
 	superUsername          string = "postgres"
+	labelCNPGReload        string = "cnpg.io/reload"
 
 	secretKeyPassword      string = "password"
+	secretKeyUsername      string = "username"
+	requiredSecretUsername string = "postgres"
 	defaultSecretSuffix    string = "-secret"
 	defaultPoolerSuffix    string = "-pooler-"
 	defaultConfigMapSuffix string = "-configmap"
@@ -145,10 +148,14 @@ const (
 	reasonConfigMapFailed conditionReasons = "ConfigMapReconciliationFailed"
 
 	// condition reasons — secretsReady
-	reasonUserSecretPending     conditionReasons = "UserSecretPending"
-	reasonUserSecretFailed      conditionReasons = "UserSecretReconciliationFailed"
-	reasonSuperUserSecretReady  conditionReasons = "SuperUserSecretReady"
-	reasonSuperUserSecretFailed conditionReasons = "SuperUserSecretFailed"
+	reasonSuperUserSecretReady          conditionReasons = "SuperUserSecretReady"
+	reasonSuperUserSecretFailed         conditionReasons = "SuperUserSecretFailed"
+	reasonExternalSecretInvalid         conditionReasons = "ExternalSecretInvalid"
+	reasonExternalSecretMissingData     conditionReasons = "ExternalSecretMissingData"
+	reasonExternalSecretMissingKeys     conditionReasons = "ExternalSecretMissingKeys"
+	reasonExternalSecretInvalidUsername conditionReasons = "ExternalSecretInvalidUsername"
+	reasonExternalSecretMissing         conditionReasons = "ExternalSecretMissing"
+	reasonExternalSecretMissingLabel    conditionReasons = "ExternalSecretMissingReloadLabel"
 
 	// condition reasons — lifecycle/finalizer
 	reasonClusterDeleteFailed conditionReasons = "ClusterDeleteFailed"
@@ -228,8 +235,11 @@ const (
 	msgConfigMapCAMetadataPending     statusMessage = "Waiting for CA metadata in access ConfigMap"
 	msgFmtConfigMapMissingRequiredKey statusMessage = "ConfigMap missing required key %q"
 	msgAccessConfigMapReady           statusMessage = "Access ConfigMap is ready"
-	msgSecretRefNotPublished          statusMessage = "Superuser secret reference not published yet"
-	msgSecretNotFoundYet              statusMessage = "Superuser secret not found yet"
+	msgExternalSecretInvalid          statusMessage = "External superuser secret is invalid"
+	msgExternalSecretMissing          statusMessage = "External superuser secret is missing"
+	msgExternalSecretInvalidUsername  statusMessage = "External superuser secret username is invalid"
+	msgExternalSecretGenericFailure   statusMessage = "Failed to fetch external superuser secret"
+	msgExternalSecretMissingLabel     statusMessage = "External superuser secret must carry the cnpg.io/reload=\"true\" label so CNPG reloads on rotation"
 	msgFmtSecretMissingKey            statusMessage = "Superuser secret missing key %q"
 	msgSuperuserSecretReady           statusMessage = "Superuser secret is ready"
 )
