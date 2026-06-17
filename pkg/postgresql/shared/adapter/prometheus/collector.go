@@ -50,6 +50,7 @@ func (fc *FleetCollector) CollectClusterMetrics(ctx context.Context, c client.Cl
 		"reconciled": 0,
 		"pending":    0,
 		"failed":     0,
+		"conflicts":  0,
 	}
 
 	for i := range list.Items {
@@ -67,9 +68,15 @@ func (fc *FleetCollector) CollectClusterMetrics(ctx context.Context, c client.Cl
 			poolerEnabledCount++
 		}
 
-		// Managed users.
-		managedUserStates["desired"] += float64(len(cluster.Spec.ManagedRoles))
+		// Managed users. Desired includes owned roles plus distinct conflicted roles
+		// withheld from ownership, so conflicts remain visible in fleet metrics.
 		if cluster.Status.ManagedRolesStatus != nil {
+			conflictRoles := make(map[string]struct{}, len(cluster.Status.ManagedRolesStatus.Conflicts))
+			for _, conflict := range cluster.Status.ManagedRolesStatus.Conflicts {
+				conflictRoles[conflict.Role] = struct{}{}
+			}
+			managedUserStates["desired"] += float64(len(cluster.Status.ManagedRolesStatus.RoleOwners) + len(conflictRoles))
+			managedUserStates["conflicts"] += float64(len(cluster.Status.ManagedRolesStatus.Conflicts))
 			managedUserStates["reconciled"] += float64(len(cluster.Status.ManagedRolesStatus.Reconciled))
 			managedUserStates["pending"] += float64(len(cluster.Status.ManagedRolesStatus.Pending))
 			managedUserStates["failed"] += float64(len(cluster.Status.ManagedRolesStatus.Failed))

@@ -29,16 +29,55 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func indexedManagedRolesTestClient(scheme *runtime.Scheme, objs ...client.Object) *fake.ClientBuilder {
+	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).WithIndex(
+		&enterprisev4.PostgresDatabase{},
+		enterprisev4.PostgresDatabaseClusterRefNameField,
+		func(obj client.Object) []string {
+			db, ok := obj.(*enterprisev4.PostgresDatabase)
+			if !ok || db.Spec.ClusterRef.Name == "" {
+				return nil
+			}
+			return []string{db.Spec.ClusterRef.Name}
+		},
+	)
+}
+
+func postgresDatabaseWithManagedRoles(name string, roles []managedRole) *enterprisev4.PostgresDatabase {
+	dbRoles := make([]enterprisev4.DatabaseRoleInfo, 0, len(roles))
+	for _, role := range roles {
+		info := enterprisev4.DatabaseRoleInfo{Name: role.Name, Exists: role.Exists}
+		if role.Exists {
+			secretName := role.Name + "-secret"
+			if role.PasswordSecretRef != nil {
+				secretName = role.PasswordSecretRef.Name
+			}
+			info.SecretRef = &corev1.LocalObjectReference{Name: secretName}
+		}
+		dbRoles = append(dbRoles, info)
+	}
+	return &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", UID: types.UID("uid-" + name)},
+		Spec: enterprisev4.PostgresDatabaseSpec{
+			ClusterRef: corev1.LocalObjectReference{Name: "pg"},
+		},
+		Status: enterprisev4.PostgresDatabaseStatus{
+			Databases: []enterprisev4.DatabaseInfo{{Name: "app", Roles: dbRoles}},
+		},
+	}
+}
 
 func TestSyncManagedRolesStatusFromCNPG(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name       string
-		specRoles  []enterprisev4.ManagedRole
+		specRoles  []managedRole
 		cnpgStatus cnpgv1.ManagedRoles
 		reconciled []string
 		pending    []string
@@ -46,7 +85,7 @@ func TestSyncManagedRolesStatusFromCNPG(t *testing.T) {
 	}{
 		{
 			name: "marks unreconciled desired role as pending",
-			specRoles: []enterprisev4.ManagedRole{
+			specRoles: []managedRole{
 				{Name: "app_user", Exists: true},
 			},
 			cnpgStatus: cnpgv1.ManagedRoles{},
@@ -56,7 +95,7 @@ func TestSyncManagedRolesStatusFromCNPG(t *testing.T) {
 		},
 		{
 			name: "maps reconciled and pending roles from CNPG status",
-			specRoles: []enterprisev4.ManagedRole{
+			specRoles: []managedRole{
 				{Name: "app_user", Exists: true},
 				{Name: "app_rw", Exists: true},
 			},
@@ -72,7 +111,7 @@ func TestSyncManagedRolesStatusFromCNPG(t *testing.T) {
 		},
 		{
 			name: "maps cannot reconcile errors as failed",
-			specRoles: []enterprisev4.ManagedRole{
+			specRoles: []managedRole{
 				{Name: "app_user", Exists: true},
 			},
 			cnpgStatus: cnpgv1.ManagedRoles{
@@ -93,18 +132,14 @@ func TestSyncManagedRolesStatusFromCNPG(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			cluster := &enterprisev4.PostgresCluster{
-				Spec: enterprisev4.PostgresClusterSpec{
-					ManagedRoles: tt.specRoles,
-				},
-			}
+			cluster := &enterprisev4.PostgresCluster{}
 			cnpgCluster := &cnpgv1.Cluster{
 				Status: cnpgv1.ClusterStatus{
 					ManagedRolesStatus: tt.cnpgStatus,
 				},
 			}
 
-			syncManagedRolesStatusFromCNPG(cluster, cnpgCluster)
+			syncManagedRolesStatusFromCNPG(cluster, cnpgCluster, tt.specRoles, nil, nil)
 
 			require.NotNil(t, cluster.Status.ManagedRolesStatus)
 			assert.Equal(t, tt.reconciled, cluster.Status.ManagedRolesStatus.Reconciled)
@@ -131,7 +166,7 @@ func TestManagedRolesModelConverge(t *testing.T) {
 	tests := []struct {
 		name           string
 		cnpg           *cnpgv1.Cluster
-		specRoles      []enterprisev4.ManagedRole
+		specRoles      []managedRole
 		expectedState  pgcConstants.State
 		expectedReason conditionReasons
 		expectErr      bool
@@ -141,7 +176,7 @@ func TestManagedRolesModelConverge(t *testing.T) {
 		{
 			name: "returns pending when CNPG cluster is not yet healthy",
 			cnpg: makeCNPG(cnpgv1.PhaseFirstPrimary, cnpgv1.ManagedRoles{}),
-			specRoles: []enterprisev4.ManagedRole{
+			specRoles: []managedRole{
 				{Name: "app_user", Exists: true},
 			},
 			expectedState:  pgcConstants.Pending,
@@ -155,7 +190,7 @@ func TestManagedRolesModelConverge(t *testing.T) {
 					cnpgv1.RoleStatusPendingReconciliation: {"app_user"},
 				},
 			}),
-			specRoles:      []enterprisev4.ManagedRole{{Name: "app_user", Exists: true}},
+			specRoles:      []managedRole{{Name: "app_user", Exists: true}},
 			expectedState:  pgcConstants.Pending,
 			expectedReason: reasonManagedRolesPending,
 			expectPending:  []string{"app_user"},
@@ -165,7 +200,7 @@ func TestManagedRolesModelConverge(t *testing.T) {
 			cnpg: makeCNPG(cnpgv1.PhaseHealthy, cnpgv1.ManagedRoles{
 				CannotReconcile: map[string][]string{"app_user": {"reserved role"}},
 			}),
-			specRoles:      []enterprisev4.ManagedRole{{Name: "app_user", Exists: true}},
+			specRoles:      []managedRole{{Name: "app_user", Exists: true}},
 			expectedState:  pgcConstants.Failed,
 			expectedReason: reasonManagedRolesFailed,
 			expectErr:      true,
@@ -178,7 +213,7 @@ func TestManagedRolesModelConverge(t *testing.T) {
 					cnpgv1.RoleStatusReconciled: {"app_user", "app_user_rw"},
 				},
 			}),
-			specRoles: []enterprisev4.ManagedRole{
+			specRoles: []managedRole{
 				{Name: "app_user", Exists: true},
 				{Name: "app_user_rw", Exists: true},
 			},
@@ -192,15 +227,14 @@ func TestManagedRolesModelConverge(t *testing.T) {
 			t.Parallel()
 
 			// Arrange
-			cluster := &enterprisev4.PostgresCluster{
-				Spec: enterprisev4.PostgresClusterSpec{ManagedRoles: tt.specRoles},
-			}
+			cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
+			postgresDB := postgresDatabaseWithManagedRoles("app-db", tt.specRoles)
 			contracts := &reconcileContracts{
 				CNPGCluster: tt.cnpg,
 				Secret:      &corev1.Secret{},
 			}
 			model := newManagedRolesModel(
-				fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cnpg).Build(), scheme, noopEventEmitter{}, nil, cluster, contracts, nil,
+				indexedManagedRolesTestClient(scheme, tt.cnpg, postgresDB).Build(), scheme, noopEventEmitter{}, nil, cluster, contracts, nil,
 			)
 
 			// Act
@@ -227,11 +261,7 @@ func TestManagedRolesContractsNotReadyIsUpstreamPending(t *testing.T) {
 	t.Parallel()
 
 	// Arrange: contracts has no CNPGCluster — simulates clusterModel not yet ready.
-	cluster := &enterprisev4.PostgresCluster{
-		Spec: enterprisev4.PostgresClusterSpec{
-			ManagedRoles: []enterprisev4.ManagedRole{{Name: "app_user", Exists: true}},
-		},
-	}
+	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
 	contracts := &reconcileContracts{}
 	model := newManagedRolesModel(
 		fake.NewClientBuilder().Build(), nil, noopEventEmitter{}, nil, cluster, contracts, nil,
@@ -254,11 +284,8 @@ func TestManagedRolesConvergeDoesNotEmitFailureForPending(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
-	cluster := &enterprisev4.PostgresCluster{
-		Spec: enterprisev4.PostgresClusterSpec{
-			ManagedRoles: []enterprisev4.ManagedRole{{Name: "app_user", Exists: true}},
-		},
-	}
+	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
+	postgresDB := postgresDatabaseWithManagedRoles("app-db", []managedRole{{Name: "app_user", Exists: true}})
 	events := &captureEventEmitter{}
 	cnpg := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
@@ -269,7 +296,7 @@ func TestManagedRolesConvergeDoesNotEmitFailureForPending(t *testing.T) {
 	require.NoError(t, cnpgv1.AddToScheme(scheme))
 	require.NoError(t, enterprisev4.AddToScheme(scheme))
 	model := newManagedRolesModel(
-		fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build(), scheme, events, nil, cluster, contracts, nil,
+		indexedManagedRolesTestClient(scheme, cnpg, postgresDB).Build(), scheme, events, nil, cluster, contracts, nil,
 	)
 
 	// Act
@@ -285,29 +312,27 @@ func TestManagedRolesConvergeEmitsReadyEventOnTransition(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
-	cluster := &enterprisev4.PostgresCluster{
-		Spec: enterprisev4.PostgresClusterSpec{
-			ManagedRoles: []enterprisev4.ManagedRole{{Name: "app_user", Exists: true}},
-		},
-	}
+	scheme := newTestScheme()
+	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
+	postgresDB := postgresDatabaseWithManagedRoles("app-db", []managedRole{{Name: "app_user", Exists: true}})
 	events := &captureEventEmitter{}
-	contracts := &reconcileContracts{
-		CNPGCluster: &cnpgv1.Cluster{
-			Status: cnpgv1.ClusterStatus{
-				Phase: cnpgv1.PhaseHealthy,
-				ManagedRolesStatus: cnpgv1.ManagedRoles{
-					ByStatus: map[cnpgv1.RoleStatus][]string{
-						cnpgv1.RoleStatusReconciled: {"app_user"},
-					},
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Status: cnpgv1.ClusterStatus{
+			Phase: cnpgv1.PhaseHealthy,
+			ManagedRolesStatus: cnpgv1.ManagedRoles{
+				ByStatus: map[cnpgv1.RoleStatus][]string{
+					cnpgv1.RoleStatusReconciled: {"app_user"},
 				},
 			},
 		},
-		Secret: &corev1.Secret{},
 	}
-	model := newManagedRolesModel(fake.NewClientBuilder().Build(), nil, events, nil, cluster, contracts, nil)
+	contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: &corev1.Secret{}}
+	model := newManagedRolesModel(indexedManagedRolesTestClient(scheme, cnpg, postgresDB).Build(), scheme, events, nil, cluster, contracts, nil)
 
 	// Act: first Observe — condition is False, event must fire.
-	_, err := model.Observe(context.Background(), nil)
+	reconcileErr := model.Reconcile(context.Background())
+	_, err := model.Observe(context.Background(), reconcileErr)
 
 	// Assert
 	require.NoError(t, err)
@@ -324,22 +349,78 @@ func TestManagedRolesConvergeEmitsReadyEventOnTransition(t *testing.T) {
 	assert.Empty(t, events.normals)
 }
 
+func TestManagedRolesModelRetainsOwnersOnEmptyObservation(t *testing.T) {
+	t.Parallel()
+
+	scheme := newTestScheme()
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
+		Spec: cnpgv1.ClusterSpec{Managed: &cnpgv1.ManagedConfiguration{Roles: []cnpgv1.RoleConfiguration{
+			{Name: "app_admin", Ensure: cnpgv1.EnsurePresent, Login: true},
+		}}},
+	}
+	owner := enterprisev4.RoleOwnerReference{Name: "app-db", UID: "app-uid"}
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
+		Status: enterprisev4.PostgresClusterStatus{ManagedRolesStatus: &enterprisev4.ManagedRolesStatus{
+			Reconciled: []string{"app_admin"},
+			RoleOwners: map[string]enterprisev4.RoleOwnerReference{"app_admin": owner},
+		}},
+	}
+	contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: &corev1.Secret{}}
+	model := newManagedRolesModel(
+		indexedManagedRolesTestClient(scheme, cnpg).Build(),
+		scheme, noopEventEmitter{}, nil, cluster, contracts, nil,
+	)
+
+	require.NoError(t, model.Reconcile(context.Background()))
+
+	assert.Equal(t, owner, model.roleOwners["app_admin"])
+	require.Len(t, model.desiredRoles, 1)
+	assert.Equal(t, "app_admin", model.desiredRoles[0].Name)
+	assert.True(t, model.desiredRoles[0].Exists)
+}
+
+func TestManagedRolesModelPreservesCurrentRolesForLegacyDatabaseStatus(t *testing.T) {
+	t.Parallel()
+
+	scheme := newTestScheme()
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
+		Spec: cnpgv1.ClusterSpec{Managed: &cnpgv1.ManagedConfiguration{Roles: []cnpgv1.RoleConfiguration{
+			{Name: "app_admin", Ensure: cnpgv1.EnsurePresent, Login: true, PasswordSecret: &cnpgv1.LocalObjectReference{Name: "admin-secret"}},
+		}}},
+	}
+	legacyDB := postgresDatabaseWithManagedRoles("legacy-db", nil)
+	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
+	contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: &corev1.Secret{}}
+	model := newManagedRolesModel(
+		indexedManagedRolesTestClient(scheme, cnpg, legacyDB).Build(),
+		scheme, noopEventEmitter{}, nil, cluster, contracts, nil,
+	)
+
+	require.NoError(t, model.Reconcile(context.Background()))
+
+	require.Len(t, model.desiredRoles, 1)
+	assert.Equal(t, "app_admin", model.desiredRoles[0].Name)
+	assert.True(t, model.desiredRoles[0].Exists)
+	assert.Empty(t, model.roleOwners)
+}
+
 func TestManagedRolesModelNoOpWhenRolesEmpty(t *testing.T) {
 	t.Parallel()
 
-	// Arrange: cluster has no managed roles — reconcileManagedRoles should return nil immediately
-	// without patching CNPG, and Observe should report Ready.
 	scheme := newTestScheme()
 	cnpg := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
 	}
-	cluster := &enterprisev4.PostgresCluster{
-		Spec: enterprisev4.PostgresClusterSpec{ManagedRoles: nil},
-	}
+	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
 	contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: &corev1.Secret{}}
 	model := newManagedRolesModel(
-		fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build(),
+		indexedManagedRolesTestClient(scheme, cnpg).Build(),
 		scheme, noopEventEmitter{}, nil, cluster, contracts, nil,
 	)
 
@@ -360,13 +441,8 @@ func TestManagedRolesModelNoOpWhenRolesEmpty(t *testing.T) {
 func TestManagedRolesRuntimeGateHealthMatchesConverge(t *testing.T) {
 	t.Parallel()
 
-	cluster := &enterprisev4.PostgresCluster{
-		Spec: enterprisev4.PostgresClusterSpec{
-			ManagedRoles: []enterprisev4.ManagedRole{
-				{Name: "app_user", Exists: true},
-			},
-		},
-	}
+	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
+	postgresDB := postgresDatabaseWithManagedRoles("app-db", []managedRole{{Name: "app_user", Exists: true}})
 	scheme := newTestScheme()
 	cnpg := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
@@ -380,7 +456,7 @@ func TestManagedRolesRuntimeGateHealthMatchesConverge(t *testing.T) {
 		Secret:      &corev1.Secret{},
 	}
 	model := newManagedRolesModel(
-		fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build(),
+		indexedManagedRolesTestClient(scheme, cnpg, postgresDB).Build(),
 		nil,
 		noopEventEmitter{},
 		nil,
@@ -479,7 +555,6 @@ func TestManagedRolesCredentialSweepSuccess(t *testing.T) {
 			BootstrapFrom: &enterprisev4.BootstrapFrom{
 				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: snapName},
 			},
-			ManagedRoles: []enterprisev4.ManagedRole{{Name: "app_user", Exists: true}},
 		},
 	}
 	cnpg := &cnpgv1.Cluster{
@@ -696,4 +771,123 @@ func TestManagedRolesCredentialSweepExecFails(t *testing.T) {
 	// A warning event is emitted by Observe for the failed sweep.
 	require.NotEmpty(t, events.warnings)
 	assert.Contains(t, events.warnings[0], EventUnmanagedRolesSweepFailed)
+}
+
+func roleDB(name, uid, cluster, role, secret string, exists bool) enterprisev4.PostgresDatabase {
+	return enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: name, UID: types.UID(uid)},
+		Spec:       enterprisev4.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: cluster}},
+		Status: enterprisev4.PostgresDatabaseStatus{Databases: []enterprisev4.DatabaseInfo{{
+			Name:  "app",
+			Roles: []enterprisev4.DatabaseRoleInfo{{Name: role, SecretRef: &corev1.LocalObjectReference{Name: secret}, Exists: exists}},
+		}}},
+	}
+}
+
+func TestComputeDesiredRolesIncumbentWins(t *testing.T) {
+	owner := enterprisev4.RoleOwnerReference{Name: "incumbent", UID: "uid-1"}
+	decision := computeDesiredRoles([]enterprisev4.PostgresDatabase{
+		roleDB("incumbent", "uid-1", "pg", "app_admin", "inc-secret", true),
+		roleDB("newcomer", "uid-2", "pg", "app_admin", "new-secret", true),
+	}, map[string]enterprisev4.RoleOwnerReference{"app_admin": owner}, nil, nil)
+
+	assert.Equal(t, owner, decision.RoleOwners["app_admin"])
+	assert.Len(t, decision.Roles, 1)
+	assert.Equal(t, "inc-secret", decision.Roles[0].PasswordSecretRef.Name)
+	assert.Len(t, decision.Conflicts, 1)
+	assert.Equal(t, "newcomer", decision.Conflicts[0].AttemptedBy.Name)
+}
+
+func TestComputeDesiredRolesSimultaneousFirstClaimWithholdsBoth(t *testing.T) {
+	decision := computeDesiredRoles([]enterprisev4.PostgresDatabase{
+		roleDB("a", "uid-a", "pg", "shared_rw", "a-secret", true),
+		roleDB("b", "uid-b", "pg", "shared_rw", "b-secret", true),
+	}, nil, nil, nil)
+
+	assert.Empty(t, decision.Roles)
+	assert.Empty(t, decision.RoleOwners)
+	assert.Len(t, decision.Conflicts, 2)
+}
+
+func TestComputeDesiredRolesExplicitFalseKeepsTombstoneUntilAbsentReconciled(t *testing.T) {
+	owner := enterprisev4.RoleOwnerReference{Name: "db", UID: "uid"}
+	decision := computeDesiredRoles([]enterprisev4.PostgresDatabase{
+		roleDB("db", "uid", "pg", "old_rw", "old-secret", false),
+	}, map[string]enterprisev4.RoleOwnerReference{"old_rw": owner}, nil, nil)
+
+	assert.Equal(t, owner, decision.RoleOwners["old_rw"])
+	assert.Len(t, decision.Roles, 1)
+	assert.Equal(t, "old_rw", decision.Roles[0].Name)
+	assert.False(t, decision.Roles[0].Exists)
+}
+
+func TestComputeDesiredRolesExplicitFalseRemovesTombstoneAfterAbsentReconciled(t *testing.T) {
+	owner := enterprisev4.RoleOwnerReference{Name: "db", UID: "uid"}
+	decision := computeDesiredRoles([]enterprisev4.PostgresDatabase{
+		roleDB("db", "uid", "pg", "old_rw", "old-secret", false),
+	}, map[string]enterprisev4.RoleOwnerReference{"old_rw": owner}, nil, map[string]struct{}{"old_rw": {}})
+
+	assert.Empty(t, decision.RoleOwners)
+	assert.Empty(t, decision.Roles)
+}
+
+func TestComputeDesiredRolesExplicitFalseDropsOwnedRoleWhenConflictingClaimantAlsoDrops(t *testing.T) {
+	owner := enterprisev4.RoleOwnerReference{Name: "incumbent", UID: "uid-1"}
+	decision := computeDesiredRoles([]enterprisev4.PostgresDatabase{
+		roleDB("incumbent", "uid-1", "pg", "shared_rw", "inc-secret", false),
+		roleDB("newcomer", "uid-2", "pg", "shared_rw", "new-secret", false),
+	}, map[string]enterprisev4.RoleOwnerReference{"shared_rw": owner}, nil, nil)
+
+	assert.Equal(t, owner, decision.RoleOwners["shared_rw"])
+	assert.Len(t, decision.Roles, 1)
+	assert.Equal(t, "shared_rw", decision.Roles[0].Name)
+	assert.False(t, decision.Roles[0].Exists)
+}
+
+func TestComputeDesiredRolesNeverDropsOnMereStatusAbsence(t *testing.T) {
+	owner := enterprisev4.RoleOwnerReference{Name: "db", UID: "uid"}
+	decision := computeDesiredRoles([]enterprisev4.PostgresDatabase{{
+		ObjectMeta: metav1.ObjectMeta{Name: "db", UID: types.UID("uid")},
+	}}, map[string]enterprisev4.RoleOwnerReference{"app_rw": owner}, map[string]managedRole{
+		"app_rw": {Name: "app_rw", Exists: true, PasswordSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "rw-secret"}, Key: "password"}},
+	}, nil)
+
+	assert.Equal(t, owner, decision.RoleOwners["app_rw"])
+	assert.Len(t, decision.Roles, 1)
+	assert.True(t, decision.Roles[0].Exists)
+	assert.Equal(t, "rw-secret", decision.Roles[0].PasswordSecretRef.Name)
+}
+
+func TestComputeDesiredRolesOwnerGoneStopsManagingRole(t *testing.T) {
+	owner := enterprisev4.RoleOwnerReference{Name: "gone", UID: "uid"}
+	decision := computeDesiredRoles(nil, map[string]enterprisev4.RoleOwnerReference{"app_rw": owner}, map[string]managedRole{
+		"app_rw": {Name: "app_rw", Exists: true},
+	}, nil)
+
+	assert.Empty(t, decision.RoleOwners)
+	assert.Empty(t, decision.Roles)
+	assert.Empty(t, decision.Conflicts)
+}
+
+func TestComputeDesiredRolesNonCollidingRoleProceedsForConflictedDatabase(t *testing.T) {
+	incumbent := enterprisev4.RoleOwnerReference{Name: "incumbent", UID: "uid-1"}
+	decision := computeDesiredRoles([]enterprisev4.PostgresDatabase{
+		roleDB("incumbent", "uid-1", "pg", "shared_admin", "inc-secret", true),
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "newcomer", UID: types.UID("uid-2")},
+			Status: enterprisev4.PostgresDatabaseStatus{
+				Databases: []enterprisev4.DatabaseInfo{{
+					Roles: []enterprisev4.DatabaseRoleInfo{
+						{Name: "shared_admin", SecretRef: &corev1.LocalObjectReference{Name: "new-shared"}, Exists: true},
+						{Name: "private_rw", SecretRef: &corev1.LocalObjectReference{Name: "private-secret"}, Exists: true},
+					},
+				}},
+			},
+		},
+	}, map[string]enterprisev4.RoleOwnerReference{"shared_admin": incumbent}, nil, nil)
+
+	assert.Equal(t, incumbent, decision.RoleOwners["shared_admin"])
+	assert.Equal(t, enterprisev4.RoleOwnerReference{Name: "newcomer", UID: "uid-2"}, decision.RoleOwners["private_rw"])
+	assert.Len(t, decision.Conflicts, 1)
+	assert.ElementsMatch(t, []string{"shared_admin", "private_rw"}, []string{decision.Roles[0].Name, decision.Roles[1].Name})
 }

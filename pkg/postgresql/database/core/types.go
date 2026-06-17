@@ -43,6 +43,10 @@ type reconcileConflictCategory string
 const (
 	retryDelay                = time.Second * 15
 	clusterNotFoundRetryDelay = time.Second * 30
+	roleCleanupTimeout        = time.Minute * 30
+
+	rolesExist  = true
+	rolesAbsent = false
 
 	readOnlyEndpoint  string = "ro"
 	readWriteEndpoint string = "rw"
@@ -51,8 +55,6 @@ const (
 
 	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"
 	annotationRetainedFrom        string = "enterprise.splunk.com/retained-from"
-
-	fieldManagerPrefix string = "postgresdatabase-"
 
 	secretRoleAdmin   string = "admin"
 	secretRoleRW      string = "rw"
@@ -75,6 +77,7 @@ const (
 	pendingDBPhase      reconcileDBPhases = "Pending"
 	provisioningDBPhase reconcileDBPhases = "Provisioning"
 	failedDBPhase       reconcileDBPhases = "Failed"
+	deletingDBPhase     reconcileDBPhases = "Deleting"
 
 	// condition types
 	clusterReady    conditionTypes = "ClusterReady"
@@ -102,6 +105,9 @@ const (
 	reasonRolesCreationFailed        conditionReasons = "RolesCreationFailed"
 	reasonRolesAvailable             conditionReasons = "RolesAvailable"
 	reasonRoleConflict               conditionReasons = "RoleConflict"
+	reasonRoleReconcileFailed        conditionReasons = "RoleReconcileFailed"
+	reasonRoleCleanupWaiting         conditionReasons = "RoleCleanupWaitingForCluster"
+	reasonRoleCleanupBlocked         conditionReasons = "RoleCleanupBlocked"
 	reasonConfigMapsCreationFailed   conditionReasons = "ConfigMapsCreationFailed"
 	reasonConfigMapsCreated          conditionReasons = "ConfigMapsCreated"
 	reasonDatabaseReconcileFailed    conditionReasons = "DatabaseReconcileFailed"
@@ -122,7 +128,6 @@ const (
 	conflictSecretsStatus          reconcileConflictCategory = "secrets_status"
 	conflictConfigMapsReconcile    reconcileConflictCategory = "configmaps_reconcile"
 	conflictConfigMapsStatus       reconcileConflictCategory = "configmaps_status"
-	conflictManagedRolesPatch      reconcileConflictCategory = "managed_roles_patch"
 	conflictRolesStatus            reconcileConflictCategory = "roles_status"
 	conflictCNPGDatabasesReconcile reconcileConflictCategory = "cnpg_databases_reconcile"
 	conflictDatabasesStatus        reconcileConflictCategory = "databases_status"
@@ -140,3 +145,5 @@ type deletionPlan struct {
 
 // ErrTerminal marks user-actionable errors where retrying the same spec is not expected to succeed.
 var ErrTerminal = errors.New("terminal reconciliation error")
+
+var errRoleCleanupPending = errors.New("waiting for managed role cleanup")

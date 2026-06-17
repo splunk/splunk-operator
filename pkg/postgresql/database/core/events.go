@@ -28,7 +28,6 @@ const (
 	EventClusterValidated              = "ClusterValidated"
 	EventSecretsReady                  = "SecretsReady"
 	EventConfigMapsReady               = "ConfigMapsReady"
-	EventRoleReconciliationStarted     = "RoleReconciliationStarted"
 	EventRolesReady                    = "RolesReady"
 	EventDatabaseReconciliationStarted = "DatabaseReconciliationStarted"
 	EventDatabasesReady                = "DatabasesReady"
@@ -37,14 +36,14 @@ const (
 	EventClusterNotFound               = "ClusterNotFound"
 	EventClusterNotReady               = "ClusterNotReady"
 	EventRoleConflict                  = "RoleConflict"
+	EventRoleReconcileFailed           = "RoleReconcileFailed"
 	EventRoleSecretsFailed             = "RoleSecretsFailed"
 	EventRolesSecretsDriftDetected     = "RolesSecretsDriftDetected"
 	EventAccessConfigFailed            = "AccessConfigFailed"
-	EventManagedRolesPatchFailed       = "ManagedRolesPatchFailed"
-	EventRoleFailed                    = "RoleFailed"
 	EventDatabasesReconcileFailed      = "DatabasesReconcileFailed"
 	EventPrivilegesGrantFailed         = "PrivilegesGrantFailed"
 	EventCleanupFailed                 = "CleanupFailed"
+	EventRoleCleanupBlocked            = "RoleCleanupBlocked"
 )
 
 func (rc *ReconcileContext) emitNormal(obj client.Object, reason, message string) {

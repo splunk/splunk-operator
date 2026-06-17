@@ -10,7 +10,7 @@ This guide explains how to recover a `PostgresDatabase` when the operator stops 
 
 ## When this applies
 
-During `PostgresDatabase` reconciliation, the operator creates database roles, databases, secrets, ConfigMaps, and then grants privileges for each `<database>_rw` role.
+During `PostgresDatabase` reconciliation, the operator creates or validates role Secrets, publishes role intent for the `PostgresCluster` controller to reconcile, creates databases and ConfigMaps, and then grants privileges for each `<database>_rw` role. See [PostgresDatabase Managed Roles](postgresdatabase-managed-roles.md) for the role handoff between controllers.
 
 Most reconciliation errors are treated as retryable and reconciliation continues automatically. Some known user-actionable errors are terminal because retrying the same spec is not expected to succeed without user intervention. When a terminal failure is detected, the operator marks the `PostgresDatabase` as `Failed`, records a failure type in status, and stops retrying that same spec generation.
 
