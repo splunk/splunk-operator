@@ -63,6 +63,19 @@ type normalizedBackupSpec struct {
 	Annotations            map[string]string
 }
 
+// normalizedCNPGPoolerSpec is a subset of cnpgv1.PoolerSpec fields used for drift detection.
+// Only fields we set in buildCNPGPooler are included — CNPG/Kubernetes-injected defaults are
+// excluded to avoid false-positive drift on every reconcile.
+type normalizedCNPGPoolerSpec struct {
+	ClusterName         string
+	Type                string
+	Instances           int32
+	PoolMode            string
+	Parameters          map[string]string
+	TemplateAnnotations map[string]string
+	TemplateContainers  []string
+}
+
 // MergedConfig is the resolved configuration after overlaying PostgresCluster on PostgresClusterClass defaults.
 type MergedConfig struct {
 	Spec *enterprisev4.PostgresClusterSpec
