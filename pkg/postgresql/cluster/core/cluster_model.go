@@ -428,6 +428,15 @@ func ValidateCrossResource(class *enterprisev4.PostgresClusterClass, cluster *en
 		})
 	}
 
+	// The CRD marks volumeSnapshot required under bootstrapFrom, but validate it here too so an
+	// intended restore can never silently fall through to a fresh initdb if the field is absent.
+	if cluster.Spec.BootstrapFrom != nil && cluster.Spec.BootstrapFrom.VolumeSnapshot == nil {
+		errs = append(errs, ConfigValidationError{
+			Field:   "spec.bootstrapFrom.volumeSnapshot",
+			Message: "bootstrapFrom requires volumeSnapshot — it is the only supported recovery source",
+		})
+	}
+
 	return errs
 }
 
@@ -505,13 +514,7 @@ func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, secret
 	}
 	live.SuperuserSecret = &cnpgv1.LocalObjectReference{Name: secretName}
 	live.EnableSuperuserAccess = ptr.To(true)
-	live.Bootstrap = &cnpgv1.BootstrapConfiguration{
-		InitDB: &cnpgv1.BootstrapInitDB{
-			Database: defaultDatabaseName,
-			Owner:    superUsername,
-			Secret:   &cnpgv1.LocalObjectReference{Name: secretName},
-		},
-	}
+	live.Bootstrap = buildBootstrapConfiguration(specCfg, secretName)
 	live.StorageConfiguration = cnpgv1.StorageConfiguration{
 		Size: specCfg.Spec.Storage.String(),
 	}
@@ -561,6 +564,47 @@ func buildVolumeSnapshotConfiguration(vs *enterprisev4.CNPGVolumeSnapshotConfig)
 	return vsCfg
 }
 
+// buildBootstrapConfiguration selects initdb for a fresh cluster, or recovery from the
+// referenced VolumeSnapshot pair when spec.bootstrapFrom is set.
+func buildBootstrapConfiguration(cfg *MergedConfig, secretName string) *cnpgv1.BootstrapConfiguration {
+	// No bootstrapFrom means a fresh cluster (initdb). The bootstrapFrom-set-but-snapshot-nil
+	// case is rejected upstream by ValidateCrossResource, so the nil-snapshot branch here is only
+	// defensive — it must not hand CNPG an empty BootstrapRecovery it would reject.
+	if cfg.Spec.BootstrapFrom == nil || cfg.Spec.BootstrapFrom.VolumeSnapshot == nil {
+		return &cnpgv1.BootstrapConfiguration{
+			InitDB: &cnpgv1.BootstrapInitDB{
+				Database: defaultDatabaseName,
+				Owner:    superUsername,
+				Secret:   &cnpgv1.LocalObjectReference{Name: secretName},
+			},
+		}
+	}
+	return &cnpgv1.BootstrapConfiguration{
+		Recovery: buildBootstrapRecovery(cfg.Spec.BootstrapFrom),
+	}
+}
+
+func buildBootstrapRecovery(b *enterprisev4.BootstrapFrom) *cnpgv1.BootstrapRecovery {
+	recovery := &cnpgv1.BootstrapRecovery{}
+	if b.VolumeSnapshot != nil {
+		recovery.VolumeSnapshots = &cnpgv1.DataSource{
+			Storage: corev1.TypedLocalObjectReference{
+				Name:     b.VolumeSnapshot.Storage,
+				Kind:     "VolumeSnapshot",
+				APIGroup: ptr.To("snapshot.storage.k8s.io"),
+			},
+		}
+		if b.VolumeSnapshot.WalStorage != nil {
+			recovery.VolumeSnapshots.WalStorage = &corev1.TypedLocalObjectReference{
+				Name:     *b.VolumeSnapshot.WalStorage,
+				Kind:     "VolumeSnapshot",
+				APIGroup: ptr.To("snapshot.storage.k8s.io"),
+			}
+		}
+	}
+	return recovery
+}
+
 func buildCNPGCluster(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, secretName string, postgresMetricsEnabled bool) (*cnpgv1.Cluster, error) {
 	cnpg := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
@@ -586,9 +630,14 @@ func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec) normalizedCNPGClusterSpec
 	if spec.InheritedMetadata != nil && len(spec.InheritedMetadata.Annotations) > 0 {
 		normalized.InheritedAnnotations = spec.InheritedMetadata.Annotations
 	}
-	if spec.Bootstrap != nil && spec.Bootstrap.InitDB != nil {
-		normalized.DefaultDatabase = spec.Bootstrap.InitDB.Database
-		normalized.Owner = spec.Bootstrap.InitDB.Owner
+	if spec.Bootstrap != nil {
+		if spec.Bootstrap.InitDB != nil {
+			normalized.BootstrapType = bootstrapInitDB
+			normalized.DefaultDatabase = spec.Bootstrap.InitDB.Database
+			normalized.Owner = spec.Bootstrap.InitDB.Owner
+		} else if spec.Bootstrap.Recovery != nil {
+			normalized.BootstrapType = bootstrapRecovery
+		}
 	}
 	if spec.Certificates != nil && len(spec.Certificates.ServerAltDNSNames) > 0 {
 		normalized.ServerAltDNSNames = spec.Certificates.ServerAltDNSNames

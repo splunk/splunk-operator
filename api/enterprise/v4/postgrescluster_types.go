@@ -39,6 +39,28 @@ type ManagedRole struct {
 	Exists bool `json:"exists"`
 }
 
+// BootstrapFrom defines the source from which a PostgresCluster is bootstrapped via recovery.
+type BootstrapFrom struct {
+	// VolumeSnapshot restores from Kubernetes VolumeSnapshot resources.
+	// Required whenever bootstrapFrom is set — it is the only supported recovery source.
+	// +kubebuilder:validation:Required
+	VolumeSnapshot *VolumeSnapshotSource `json:"volumeSnapshot"`
+}
+
+// VolumeSnapshotSource identifies the VolumeSnapshot resources to use as the base backup.
+type VolumeSnapshotSource struct {
+	// Storage is the name of the VolumeSnapshot containing the PGDATA directory.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Storage string `json:"storage"`
+
+	// WalStorage is the name of the VolumeSnapshot containing the pg_wal directory.
+	// Required only when the source cluster had a separate WAL volume.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	WalStorage *string `json:"walStorage,omitempty"`
+}
+
 // PostgresClusterSpec defines the desired state of PostgresCluster.
 // Validation rules: Class is immutable; Storage cannot decrease and
 // PostgresVersion's major version cannot be downgraded once set, and neither
@@ -119,6 +141,13 @@ type PostgresClusterSpec struct {
 	// +optional
 	Backup *BackupConfig `json:"backup,omitempty"`
 
+	// BootstrapFrom configures recovery-based bootstrapping from an existing backup.
+	// When set, the cluster is initialized from the specified backup source instead of a fresh initdb.
+	// This field is immutable after creation.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="bootstrapFrom is immutable"
+	BootstrapFrom *BootstrapFrom `json:"bootstrapFrom,omitempty"`
+
 	// External superuser secret configuration,
 	// if non empty, external secret management is mandatory.
 	// +optional
@@ -194,6 +223,10 @@ type PostgresClusterStatus struct {
 	// +optional
 	BackupStatus *BackupStatus `json:"backupStatus,omitempty"`
 
+	// Restore contains the observed state of a recovery-bootstrapped cluster.
+	// +optional
+	Restore *RestoreStatus `json:"restore,omitempty"`
+
 	// Instances is the declared instance count reported by the underlying
 	// provisioner.
 	// +optional
@@ -258,6 +291,31 @@ type VolumeSnapshotBackupStatus struct {
 	// NextScheduleTime is the next scheduled backup time.
 	// +optional
 	NextScheduleTime *metav1.Time `json:"nextScheduleTime,omitempty"`
+}
+
+// RestoreStatus contains the observed state of a recovery-bootstrapped cluster.
+type RestoreStatus struct {
+	// Source identifies the backup the cluster was restored from.
+	// +optional
+	Source RestoreSourceStatus `json:"source,omitempty"`
+
+	// CredentialSweep tracks the post-recovery credential sweep.
+	// +optional
+	CredentialSweep RestoreCredentialSweepStatus `json:"credentialSweep,omitempty"`
+}
+
+// RestoreSourceStatus identifies the backup source used during recovery.
+type RestoreSourceStatus struct {
+	// VolumeSnapshot is the name of the VolumeSnapshot the cluster was restored from.
+	// +optional
+	VolumeSnapshot *string `json:"volumeSnapshot,omitempty"`
+}
+
+// RestoreCredentialSweepStatus tracks whether the post-recovery credential sweep has run.
+type RestoreCredentialSweepStatus struct {
+	// Completed is true once the credential sweep has run successfully.
+	// +optional
+	Completed bool `json:"completed,omitempty"`
 }
 
 // +kubebuilder:object:root=true

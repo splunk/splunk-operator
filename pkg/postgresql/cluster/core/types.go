@@ -51,7 +51,17 @@ type normalizedCNPGClusterSpec struct {
 	InheritedAnnotations map[string]string
 	ServerAltDNSNames    []string
 	Backup               *normalizedBackupSpec
+	BootstrapType        bootstrapKind
 }
+
+// bootstrapKind enumerates the CNPG bootstrap strategies the operator selects between.
+// It is an internal drift-detection value (not a CRD field), compared only for equality.
+type bootstrapKind string
+
+const (
+	bootstrapInitDB   bootstrapKind = "initdb"
+	bootstrapRecovery bootstrapKind = "recovery"
+)
 
 type normalizedBackupSpec struct {
 	Target                 string

@@ -25,9 +25,15 @@ import (
 	"time"
 
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+)
+
+var (
+	_ dbcore.DBRepo     = (*pgDBRepository)(nil)
+	_ ports.RoleSweeper = (*pgDBRepository)(nil)
 )
 
 const (
@@ -44,6 +50,15 @@ var pgxConnectConfig = pgx.ConnectConfig
 type dbConn interface {
 	begin(ctx context.Context) (grantTx, error)
 	close(ctx context.Context) error
+	query(ctx context.Context, sql string, args ...any) (pgRows, error)
+	exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+type pgRows interface {
+	Next() bool
+	Scan(dest ...any) error
+	Close()
+	Err() error
 }
 
 type grantTx interface {
@@ -61,6 +76,14 @@ func (c pgxDBConn) begin(ctx context.Context) (grantTx, error) {
 
 func (c pgxDBConn) close(ctx context.Context) error {
 	return c.conn.Close(ctx)
+}
+
+func (c pgxDBConn) query(ctx context.Context, sql string, args ...any) (pgRows, error) {
+	return c.conn.Query(ctx, sql, args...)
+}
+
+func (c pgxDBConn) exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	return c.conn.Exec(ctx, sql, args...)
 }
 
 // pgDBRepository is the pgx-backed adapter for the core.DBRepo port.
@@ -116,10 +139,81 @@ func (r *pgDBRepository) ExecGrants(ctx context.Context, dbName string) error {
 	return nil
 }
 
-// NewDBRepository opens a direct superuser connection, bypassing any pooler.
-// PgBouncer in transaction mode blocks DDL; password is set on the config
-// struct to avoid URL-encoding issues with special characters.
-func NewDBRepository(ctx context.Context, host, dbName, password string) (dbcore.DBRepo, error) {
+// sweepRolesQuery selects all login roles that should have login disabled after recovery.
+// Excluded by explicit name:
+//   - postgres — superuser managed by CNPG
+//   - streaming_replica — replication agent managed by CNPG
+//   - cnpg_pooler_pgbouncer — PgBouncer authentication role managed by CNPG pooler controller
+//   - pg\_% (escaped) — PostgreSQL built-in system roles (pg_monitor, pg_read_all_data, etc.)
+//
+// User-created replication roles are intentionally NOT excluded — they carry restored password
+// hashes and must be swept just like any other application role.
+const sweepRolesQuery = `
+SELECT rolname FROM pg_roles
+WHERE rolcanlogin = true
+  AND rolname NOT IN ('postgres', 'streaming_replica', 'cnpg_pooler_pgbouncer')
+  AND rolname NOT LIKE 'pg\_%' ESCAPE '\'`
+
+// SweepUnmanagedRolesAfterRestore disables login for all non-system login roles after recovery.
+// All roles are disabled — including managed ones. The ManagedRoles reconciler runs
+// immediately after and re-enables managed roles with fresh credentials.
+// CNPG-owned roles (streaming_replica, cnpg_pooler_pgbouncer) are preserved.
+func (r *pgDBRepository) SweepUnmanagedRolesAfterRestore(ctx context.Context) error {
+	// Close on its own background context: if ctx is already cancelled/timed-out (the very
+	// situations where cleanup matters most), passing it here would abort the close itself.
+	defer r.conn.close(context.Background())
+
+	rows, err := r.conn.query(ctx, sweepRolesQuery)
+	if err != nil {
+		return fmt.Errorf("querying pg_roles: %w", err)
+	}
+
+	var toDisable []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			rows.Close()
+			return fmt.Errorf("scanning role name: %w", err)
+		}
+		toDisable = append(toDisable, name)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("iterating pg_roles: %w", err)
+	}
+	// Release the rows before opening the transaction — pgx allows only one active
+	// operation per connection at a time.
+	rows.Close()
+
+	// Disabling the roles in a single transaction keeps the sweep atomic: a failure on any
+	// role rolls back the whole batch rather than leaving the cluster half-swept (some roles
+	// disabled, some still carrying restored credentials).
+	tx, err := r.conn.begin(ctx)
+	if err != nil {
+		return fmt.Errorf("beginning sweep transaction: %w", err)
+	}
+
+	for _, name := range toDisable {
+		// PASSWORD NULL is intentional: it wipes the password hash restored from the source
+		// cluster, so a stale credential can never authenticate again even if the role is later
+		// re-enabled with LOGIN. NOLOGIN alone would leave that hash in pg_authid. The operator
+		// re-provisions managed roles with fresh secrets immediately after.
+		// Identifiers cannot be parameterised — name comes from pg_roles, not user input.
+		if _, err := tx.Exec(ctx, fmt.Sprintf("ALTER ROLE %s NOLOGIN PASSWORD NULL", pgx.Identifier{name}.Sanitize())); err != nil {
+			return fmt.Errorf("disabling role %s: %w", name, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("committing sweep: %w", err)
+	}
+	return nil
+}
+
+// openRepository opens a direct superuser connection and wraps it in the pgx adapter.
+// Terminal connect failures (bad credentials, insufficient privilege) are wrapped with
+// dbcore.ErrTerminal so callers can stop retrying.
+func openRepository(ctx context.Context, host, dbName, password string) (*pgDBRepository, error) {
 	cfg, err := pgx.ParseConfig(fmt.Sprintf(
 		"postgres://%s@%s:%s/%s?sslmode=require&connect_timeout=%d",
 		superUsername, host, postgresPort, dbName,
@@ -138,6 +232,25 @@ func NewDBRepository(ctx context.Context, host, dbName, password string) (dbcore
 		return nil, fmt.Errorf("connecting to %s/%s: %w", host, dbName, err)
 	}
 	return &pgDBRepository{conn: pgxDBConn{conn: conn}}, nil
+}
+
+// NewDBRepository opens a direct superuser connection for database grant reconciliation.
+func NewDBRepository(ctx context.Context, host, dbName, password string) (dbcore.DBRepo, error) {
+	return openRepository(ctx, host, dbName, password)
+}
+
+// NewRoleSweeper opens a direct superuser connection for post-restore credential sweeping.
+// It translates the adapter's terminal-connect signal onto the port sentinel so the cluster
+// domain surfaces Failed without importing database/core.
+func NewRoleSweeper(ctx context.Context, host, dbName, password string) (ports.RoleSweeper, error) {
+	repo, err := openRepository(ctx, host, dbName, password)
+	if err != nil {
+		if errors.Is(err, dbcore.ErrTerminal) {
+			return nil, fmt.Errorf("%w: %w", ports.ErrSweeperConnectTerminal, err)
+		}
+		return nil, err
+	}
+	return repo, nil
 }
 
 func isTerminalPostgresError(err error) bool {

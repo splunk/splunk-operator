@@ -113,7 +113,7 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 				}
 				return newManagedRolesModel(
 					patchErrorClient{Client: fake.NewClientBuilder().WithScheme(scheme).Build(), err: assert.AnError},
-					scheme, noopEventEmitter{}, updateStatus, cluster, contracts,
+					scheme, noopEventEmitter{}, updateStatus, cluster, contracts, nil,
 				)
 			},
 		},
@@ -350,7 +350,7 @@ func TestReconcileFailureEmitsWarningFromObserveNotReconcile(t *testing.T) {
 				contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: &corev1.Secret{}}
 				return newManagedRolesModel(
 					patchErrorClient{Client: fake.NewClientBuilder().WithScheme(scheme).Build(), err: assert.AnError},
-					scheme, events, nil, cluster, contracts,
+					scheme, events, nil, cluster, contracts, nil,
 				)
 			},
 		},
