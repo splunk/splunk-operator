@@ -20,6 +20,14 @@ import "errors"
 var (
 	errContractsNotReady    = errors.New("contracts not ready")
 	errServerTLSLeafInvalid = errors.New("server TLS secret contains invalid certificate material")
+
+	// errSweepConnect marks a transient post-recovery sweep failure: the restored DB is not
+	// reachable yet (still initialising). The component stays Provisioning and requeues to retry.
+	errSweepConnect = errors.New("post-recovery credential sweep cannot connect yet")
+	// errSweepTerminal marks a sweep failure that retrying will not fix — either a terminal
+	// connect failure (bad credentials, insufficient privilege) or a failure disabling roles.
+	// The component surfaces Failed rather than requeuing.
+	errSweepTerminal = errors.New("post-recovery credential sweep failed")
 )
 
 type reconcileFailure struct {
