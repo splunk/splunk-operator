@@ -1036,6 +1036,7 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 				PrimaryUpdateMethod: "",
 				DefaultDatabase:     "mydb",
 				Owner:               "admin",
+				BootstrapType:       "initdb",
 			},
 		},
 		{
@@ -1058,6 +1059,22 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 					prometheusScrapeAnnotation: "true",
 					prometheusPortAnnotation:   postgresMetricsPortString,
 				},
+			},
+		},
+		{
+			name: "recovery bootstrap sets BootstrapType recovery",
+			spec: cnpgv1.ClusterSpec{
+				ImageName: "img:18",
+				Instances: 1,
+				Bootstrap: &cnpgv1.BootstrapConfiguration{
+					Recovery: &cnpgv1.BootstrapRecovery{},
+				},
+			},
+			expected: normalizedCNPGClusterSpec{
+				ImageName:           "img:18",
+				Instances:           1,
+				PrimaryUpdateMethod: "",
+				BootstrapType:       "recovery",
 			},
 		},
 		{
@@ -1412,7 +1429,7 @@ func TestRunComponentsStopsOnObserveError(t *testing.T) {
 	contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: &corev1.Secret{}}
 	secondComponent := newManagedRolesModel(
 		fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build(),
-		scheme, &captureEventEmitter{}, nil, cluster, contracts,
+		scheme, &captureEventEmitter{}, nil, cluster, contracts, nil,
 	)
 	_ = secondRan
 

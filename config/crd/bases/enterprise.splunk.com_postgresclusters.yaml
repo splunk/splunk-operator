@@ -76,6 +76,37 @@ spec:
                     pattern: ^(\S+\s+){4}\S+$
                     type: string
                 type: object
+              bootstrapFrom:
+                description: |-
+                  BootstrapFrom configures recovery-based bootstrapping from an existing backup.
+                  When set, the cluster is initialized from the specified backup source instead of a fresh initdb.
+                  This field is immutable after creation.
+                properties:
+                  volumeSnapshot:
+                    description: |-
+                      VolumeSnapshot restores from Kubernetes VolumeSnapshot resources.
+                      Required whenever bootstrapFrom is set — it is the only supported recovery source.
+                    properties:
+                      storage:
+                        description: Storage is the name of the VolumeSnapshot containing
+                          the PGDATA directory.
+                        minLength: 1
+                        type: string
+                      walStorage:
+                        description: |-
+                          WalStorage is the name of the VolumeSnapshot containing the pg_wal directory.
+                          Required only when the source cluster had a separate WAL volume.
+                        minLength: 1
+                        type: string
+                    required:
+                    - storage
+                    type: object
+                required:
+                - volumeSnapshot
+                type: object
+                x-kubernetes-validations:
+                - message: bootstrapFrom is immutable
+                  rule: self == oldSelf
               class:
                 description: This field is IMMUTABLE after creation.
                 minLength: 1
@@ -566,6 +597,29 @@ spec:
                     - key
                     type: object
                     x-kubernetes-map-type: atomic
+                type: object
+              restore:
+                description: Restore contains the observed state of a recovery-bootstrapped
+                  cluster.
+                properties:
+                  credentialSweep:
+                    description: CredentialSweep tracks the post-recovery credential
+                      sweep.
+                    properties:
+                      completed:
+                        description: Completed is true once the credential sweep has
+                          run successfully.
+                        type: boolean
+                    type: object
+                  source:
+                    description: Source identifies the backup the cluster was restored
+                      from.
+                    properties:
+                      volumeSnapshot:
+                        description: VolumeSnapshot is the name of the VolumeSnapshot
+                          the cluster was restored from.
+                        type: string
+                    type: object
                 type: object
             type: object
         type: object
