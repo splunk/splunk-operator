@@ -375,6 +375,75 @@ func TestValidatePostgresClusterExternalSecret(t *testing.T) {
 	}
 }
 
+func TestValidatePostgresClusterStorageUpdate(t *testing.T) {
+	class := &enterpriseApi.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod"},
+		Spec: enterpriseApi.PostgresClusterClassSpec{
+			Provisioner: "postgresql.cnpg.io",
+			Config: &enterpriseApi.PostgresClusterClassConfig{
+				Instances:       ptr.To(int32(3)),
+				Storage:         ptr.To(resource.MustParse("50Gi")),
+				PostgresVersion: ptr.To("17"),
+			},
+		},
+	}
+	reader := newFakeReader(class).Build()
+
+	tests := []struct {
+		name         string
+		oldStorage   *resource.Quantity
+		newStorage   *resource.Quantity
+		wantErrCount int
+		wantErrMsg   string
+	}{
+		{
+			name:         "reject inherited class storage decrease",
+			newStorage:   ptr.To(resource.MustParse("10Gi")),
+			wantErrCount: 1,
+			wantErrMsg:   "storage size cannot be decreased (from: 50Gi, to: 10Gi)",
+		},
+		{
+			name:       "allow inherited class storage increase",
+			newStorage: ptr.To(resource.MustParse("100Gi")),
+		},
+		{
+			name:       "allow equal storage with different quantity spelling",
+			oldStorage: ptr.To(resource.MustParse("50Gi")),
+			newStorage: ptr.To(resource.MustParse("51200Mi")),
+		},
+		{
+			name:         "reject explicit storage removal when class default is smaller",
+			oldStorage:   ptr.To(resource.MustParse("100Gi")),
+			wantErrCount: 1,
+			wantErrMsg:   "storage size cannot be decreased (from: 100Gi, to: 50Gi)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oldObj := &enterpriseApi.PostgresCluster{
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class:   "prod",
+					Storage: tt.oldStorage,
+				},
+			}
+			newObj := &enterpriseApi.PostgresCluster{
+				Spec: enterpriseApi.PostgresClusterSpec{
+					Class:   "prod",
+					Storage: tt.newStorage,
+				},
+			}
+
+			errs := webhook.ValidatePostgresClusterUpdate(t.Context(), newObj, oldObj, reader)
+			require.Len(t, errs, tt.wantErrCount, "unexpected error count: %v", errs)
+			if tt.wantErrCount > 0 {
+				assert.Equal(t, "spec.storage", errs[0].Field)
+				assert.Contains(t, errs[0].Detail, tt.wantErrMsg)
+			}
+		})
+	}
+}
+
 func TestValidatePostgresClusterScaling(t *testing.T) {
 	switchoverClass := &enterpriseApi.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "switchover-class"},
