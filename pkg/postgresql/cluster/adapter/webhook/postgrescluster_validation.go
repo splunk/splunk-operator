@@ -34,16 +34,16 @@ import (
 
 // ValidatePostgresClusterCreate validates a PostgresCluster on CREATE.
 func ValidatePostgresClusterCreate(ctx context.Context, obj *enterpriseApi.PostgresCluster, reader client.Reader) field.ErrorList {
-	return validatePostgresCluster(ctx, obj, reader, false)
+	return validatePostgresCluster(ctx, obj, nil, reader, false)
 }
 
 // ValidatePostgresClusterUpdate validates a PostgresCluster on UPDATE.
 func ValidatePostgresClusterUpdate(ctx context.Context, obj, oldObj *enterpriseApi.PostgresCluster, reader client.Reader) field.ErrorList {
 	specUnchanged := oldObj != nil && reflect.DeepEqual(obj.Spec, oldObj.Spec)
-	return validatePostgresCluster(ctx, obj, reader, specUnchanged)
+	return validatePostgresCluster(ctx, obj, oldObj, reader, specUnchanged)
 }
 
-func validatePostgresCluster(ctx context.Context, obj *enterpriseApi.PostgresCluster, reader client.Reader, specUnchanged bool) field.ErrorList {
+func validatePostgresCluster(ctx context.Context, obj, oldObj *enterpriseApi.PostgresCluster, reader client.Reader, specUnchanged bool) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if !config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
@@ -65,7 +65,7 @@ func validatePostgresCluster(ctx context.Context, obj *enterpriseApi.PostgresClu
 	}
 
 	if reader != nil {
-		allErrs = append(allErrs, validateAgainstClass(ctx, obj, reader, specUnchanged)...)
+		allErrs = append(allErrs, validateAgainstClass(ctx, obj, oldObj, reader, specUnchanged)...)
 		if e := validateExternalSuperuserSecret(ctx, obj, reader); e != nil {
 			allErrs = append(allErrs, e)
 		}
@@ -99,7 +99,7 @@ func validateExternalSuperuserSecret(ctx context.Context, obj *enterpriseApi.Pos
 	return nil
 }
 
-func validateAgainstClass(ctx context.Context, obj *enterpriseApi.PostgresCluster, reader client.Reader, specUnchanged bool) field.ErrorList {
+func validateAgainstClass(ctx context.Context, obj, oldObj *enterpriseApi.PostgresCluster, reader client.Reader, specUnchanged bool) field.ErrorList {
 	var allErrs field.ErrorList
 
 	class := &enterpriseApi.PostgresClusterClass{}
@@ -120,8 +120,27 @@ func validateAgainstClass(ctx context.Context, obj *enterpriseApi.PostgresCluste
 
 	allErrs = append(allErrs, toFieldErrors(core.ValidateMergedConfig(core.GetMergedConfig(class, obj), class.Name))...)
 	allErrs = append(allErrs, toFieldErrors(core.ValidateCrossResource(class, obj))...)
+	allErrs = append(allErrs, validateStorageTransition(class, obj, oldObj)...)
 	allErrs = append(allErrs, validatePoolerEndpoints(class, obj)...)
 	return allErrs
+}
+
+func validateStorageTransition(class *enterpriseApi.PostgresClusterClass, obj, oldObj *enterpriseApi.PostgresCluster) field.ErrorList {
+	if oldObj == nil {
+		return nil
+	}
+
+	oldStorage := core.GetMergedConfig(class, oldObj).Spec.Storage
+	newStorage := core.GetMergedConfig(class, obj).Spec.Storage
+	if oldStorage == nil || newStorage == nil || oldStorage.Cmp(*newStorage) <= 0 {
+		return nil
+	}
+
+	return field.ErrorList{field.Invalid(
+		field.NewPath("spec").Child("storage"),
+		newStorage.String(),
+		fmt.Sprintf("storage size cannot be decreased (from: %s, to: %s)", oldStorage.String(), newStorage.String()),
+	)}
 }
 
 // validatePoolerEndpoints is admission-only by design: the reconciler suppresses
