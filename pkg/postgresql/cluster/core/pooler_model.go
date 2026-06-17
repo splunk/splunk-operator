@@ -27,6 +27,7 @@ import (
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -210,7 +211,7 @@ func (p *poolerModel) Reconcile(ctx context.Context) error {
 func (p *poolerModel) reconcilePoolerEndpoint(ctx context.Context, poolerType string, wanted bool) error {
 	var err error
 	if wanted {
-		err = createConnectionPooler(ctx, p.client, p.scheme, p.cluster, p.mergedConfig, p.contracts.CNPGCluster, poolerType, p.metricsEnabled)
+		err = createAndUpdateConnectionPooler(ctx, p.client, p.scheme, p.cluster, p.mergedConfig, p.contracts.CNPGCluster, poolerType, p.metricsEnabled)
 	} else {
 		err = deleteConnectionPooler(ctx, p.client, p.cluster, poolerType)
 	}
@@ -386,35 +387,86 @@ func isPoolerReady(pooler *cnpgv1.Pooler) bool {
 
 // createOrUpdateConnectionPoolers creates RW and RO poolers if they don't exist.
 func createOrUpdateConnectionPoolers(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerMetricsEnabled bool) error {
-	if err := createConnectionPooler(ctx, c, scheme, cluster, cfg, cnpgCluster, readWriteEndpoint, poolerMetricsEnabled); err != nil {
+	if err := createAndUpdateConnectionPooler(ctx, c, scheme, cluster, cfg, cnpgCluster, readWriteEndpoint, poolerMetricsEnabled); err != nil {
 		return fmt.Errorf("reconciling RW pooler: %w", err)
 	}
-	if err := createConnectionPooler(ctx, c, scheme, cluster, cfg, cnpgCluster, readOnlyEndpoint, poolerMetricsEnabled); err != nil {
+	if err := createAndUpdateConnectionPooler(ctx, c, scheme, cluster, cfg, cnpgCluster, readOnlyEndpoint, poolerMetricsEnabled); err != nil {
 		return fmt.Errorf("reconciling RO pooler: %w", err)
 	}
 	return nil
 }
 
-func createConnectionPooler(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerType string, poolerMetricsEnabled bool) error {
-	logger := logging.FromContext(ctx).With("func", "createConnectionPooler")
+func createAndUpdateConnectionPooler(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerType string, poolerMetricsEnabled bool) error {
+	logger := logging.FromContext(ctx).With("func", "createAndUpdateConnectionPooler")
 	poolerName := poolerResourceName(cluster.Name, poolerType)
 	existing := &cnpgv1.Pooler{}
 	err := c.Get(ctx, types.NamespacedName{Name: poolerName, Namespace: cluster.Namespace}, existing)
-	if err == nil {
-		return nil // already exists
-	}
-	if !apierrors.IsNotFound(err) {
+	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	logger.InfoContext(ctx, "CNPG Pooler creation started", "name", poolerName, "type", poolerType)
-	pooler, err := buildCNPGPooler(scheme, cluster, cfg, cnpgCluster, poolerType, poolerMetricsEnabled)
+	if apierrors.IsNotFound(err) {
+		desired, err := buildCNPGPooler(scheme, cluster, cfg, cnpgCluster, poolerType, poolerMetricsEnabled)
+		if err != nil {
+			return err
+		}
+		logger.InfoContext(ctx, "CNPG Pooler creation started", "name", poolerName, "type", poolerType)
+		return c.Create(ctx, desired)
+	}
+
+	desired, err := buildCNPGPooler(scheme, cluster, cfg, cnpgCluster, poolerType, poolerMetricsEnabled)
 	if err != nil {
 		return err
 	}
-	return c.Create(ctx, pooler)
+	original := existing.DeepCopy()
+	existing.Spec = desired.Spec
+	if err := ctrl.SetControllerReference(cluster, existing, scheme); err != nil {
+		return fmt.Errorf("setting controller reference on existing CNPG pooler: %w", err)
+	}
+	if equality.Semantic.DeepEqual(normalizeCNPGPoolerSpec(original.Spec), normalizeCNPGPoolerSpec(existing.Spec)) &&
+		equality.Semantic.DeepEqual(original.OwnerReferences, existing.OwnerReferences) {
+		return nil
+	}
+	logger.InfoContext(ctx, "CNPG Pooler update started", "name", poolerName, "type", poolerType)
+	return patchObject(ctx, c, original, existing, "Pooler")
+}
+
+func normalizeCNPGPoolerSpec(spec cnpgv1.PoolerSpec) normalizedCNPGPoolerSpec {
+	normalized := normalizedCNPGPoolerSpec{
+		ClusterName: spec.Cluster.Name,
+		Type:        string(spec.Type),
+	}
+	if normalized.Type == "" {
+		normalized.Type = string(cnpgv1.PoolerTypeRW)
+	}
+	if spec.Instances != nil {
+		normalized.Instances = *spec.Instances
+	} else {
+		normalized.Instances = 1
+	}
+	if spec.PgBouncer != nil {
+		normalized.PoolMode = string(spec.PgBouncer.PoolMode)
+		if normalized.PoolMode == "" {
+			normalized.PoolMode = string(cnpgv1.PgBouncerPoolModeSession)
+		}
+		if len(spec.PgBouncer.Parameters) > 0 {
+			normalized.Parameters = spec.PgBouncer.Parameters
+		}
+	}
+	if spec.Template != nil {
+		if len(spec.Template.ObjectMeta.Annotations) > 0 {
+			normalized.TemplateAnnotations = spec.Template.ObjectMeta.Annotations
+		}
+		for _, container := range spec.Template.Spec.Containers {
+			normalized.TemplateContainers = append(normalized.TemplateContainers, container.Name)
+		}
+	}
+	return normalized
 }
 
 func buildCNPGPooler(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerType string, poolerMetricsEnabled bool) (*cnpgv1.Pooler, error) {
+	if cfg == nil || cfg.CNPG == nil || cfg.CNPG.ConnectionPooler == nil {
+		return nil, fmt.Errorf("connection pooler config is required")
+	}
 	pc := cfg.CNPG.ConnectionPooler
 	instances := *pc.Instances
 	mode := cnpgv1.PgBouncerPoolMode(*pc.Mode)

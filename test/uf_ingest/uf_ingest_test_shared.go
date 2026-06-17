@@ -46,7 +46,7 @@ func repoRoot() string {
 //  3. Standalone ingest: events from the UF host land in _internal (or main)
 //  4. Standalone search: CountSearchResults returns > 0 for a host-scoped query
 func RunUFToStandaloneIngestTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv) {
-	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, "", "")
+	standalone, err := testcaseEnvInst.DeployAndVerifyStandalone(ctx, deployment, "")
 	Expect(err).To(Succeed(), "Failed to deploy and verify Standalone")
 
 	standalonePod := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
