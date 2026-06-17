@@ -107,7 +107,7 @@ func TestValidateComponentOrder(t *testing.T) {
 		components := []component{
 			newSecretModel(c, scheme, noopEventEmitter{}, nil, cluster, "pg1-secret", contracts),
 			newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, mergedConfig, contracts),
-			newManagedRolesModel(c, scheme, noopEventEmitter{}, nil, cluster, contracts),
+			newManagedRolesModel(c, scheme, noopEventEmitter{}, nil, cluster, contracts, nil),
 			newPoolerModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, mergedConfig, contracts),
 			newBackupModel(c, scheme, noopEventEmitter{}, nil, cluster, mergedConfig, contracts),
 			newConfigMapModel(c, scheme, noopEventEmitter{}, nil, cluster, contracts),

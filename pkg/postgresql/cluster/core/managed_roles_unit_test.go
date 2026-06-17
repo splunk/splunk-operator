@@ -17,16 +17,19 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -197,7 +200,7 @@ func TestManagedRolesModelConverge(t *testing.T) {
 				Secret:      &corev1.Secret{},
 			}
 			model := newManagedRolesModel(
-				fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cnpg).Build(), scheme, noopEventEmitter{}, nil, cluster, contracts,
+				fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cnpg).Build(), scheme, noopEventEmitter{}, nil, cluster, contracts, nil,
 			)
 
 			// Act
@@ -231,7 +234,7 @@ func TestManagedRolesContractsNotReadyIsUpstreamPending(t *testing.T) {
 	}
 	contracts := &reconcileContracts{}
 	model := newManagedRolesModel(
-		fake.NewClientBuilder().Build(), nil, noopEventEmitter{}, nil, cluster, contracts,
+		fake.NewClientBuilder().Build(), nil, noopEventEmitter{}, nil, cluster, contracts, nil,
 	)
 
 	// Act
@@ -266,7 +269,7 @@ func TestManagedRolesConvergeDoesNotEmitFailureForPending(t *testing.T) {
 	require.NoError(t, cnpgv1.AddToScheme(scheme))
 	require.NoError(t, enterprisev4.AddToScheme(scheme))
 	model := newManagedRolesModel(
-		fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build(), scheme, events, nil, cluster, contracts,
+		fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build(), scheme, events, nil, cluster, contracts, nil,
 	)
 
 	// Act
@@ -301,7 +304,7 @@ func TestManagedRolesConvergeEmitsReadyEventOnTransition(t *testing.T) {
 		},
 		Secret: &corev1.Secret{},
 	}
-	model := newManagedRolesModel(fake.NewClientBuilder().Build(), nil, events, nil, cluster, contracts)
+	model := newManagedRolesModel(fake.NewClientBuilder().Build(), nil, events, nil, cluster, contracts, nil)
 
 	// Act: first Observe — condition is False, event must fire.
 	_, err := model.Observe(context.Background(), nil)
@@ -337,7 +340,7 @@ func TestManagedRolesModelNoOpWhenRolesEmpty(t *testing.T) {
 	contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: &corev1.Secret{}}
 	model := newManagedRolesModel(
 		fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build(),
-		scheme, noopEventEmitter{}, nil, cluster, contracts,
+		scheme, noopEventEmitter{}, nil, cluster, contracts, nil,
 	)
 
 	// Act
@@ -383,10 +386,314 @@ func TestManagedRolesRuntimeGateHealthMatchesConverge(t *testing.T) {
 		nil,
 		cluster,
 		contracts,
+		nil,
 	)
 
 	reconcileErr := model.Reconcile(context.Background())
 	health, err := model.Observe(context.Background(), reconcileErr)
 	require.NoError(t, err)
 	assert.Equal(t, pgcConstants.Pending, health.State)
+}
+
+// TestManagedRolesNeedsCredentialSweep verifies the gating that makes the post-recovery
+// sweep run exactly once: only for restore-bootstrapped clusters, and only until the sweep
+// is recorded as completed in status.
+func TestManagedRolesNeedsCredentialSweep(t *testing.T) {
+	t.Parallel()
+
+	restoreSource := &enterprisev4.BootstrapFrom{
+		VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "snap-1"},
+	}
+
+	tests := []struct {
+		name    string
+		cluster *enterprisev4.PostgresCluster
+		want    bool
+	}{
+		{
+			name:    "fresh cluster does not need sweep",
+			cluster: &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{}},
+			want:    false,
+		},
+		{
+			name:    "restore cluster without restore status needs sweep",
+			cluster: &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{BootstrapFrom: restoreSource}},
+			want:    true,
+		},
+		{
+			name: "restore cluster with incomplete sweep status needs sweep",
+			cluster: &enterprisev4.PostgresCluster{
+				Spec: enterprisev4.PostgresClusterSpec{BootstrapFrom: restoreSource},
+				Status: enterprisev4.PostgresClusterStatus{
+					Restore: &enterprisev4.RestoreStatus{
+						CredentialSweep: enterprisev4.RestoreCredentialSweepStatus{Completed: false},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "restore cluster with completed sweep status does not need sweep",
+			cluster: &enterprisev4.PostgresCluster{
+				Spec: enterprisev4.PostgresClusterSpec{BootstrapFrom: restoreSource},
+				Status: enterprisev4.PostgresClusterStatus{
+					Restore: &enterprisev4.RestoreStatus{
+						CredentialSweep: enterprisev4.RestoreCredentialSweepStatus{Completed: true},
+					},
+				},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			model := &managedRolesModel{cluster: tt.cluster}
+			assert.Equal(t, tt.want, model.needsCredentialSweep())
+		})
+	}
+}
+
+type stubRoleSweeperOK struct{ sweepCalled *bool }
+
+func (s *stubRoleSweeperOK) SweepUnmanagedRolesAfterRestore(_ context.Context) error {
+	*s.sweepCalled = true
+	return nil
+}
+
+// TestManagedRolesCredentialSweepSuccess verifies that on a restore-bootstrapped cluster:
+//  1. Reconcile runs the sweep (side-effect) and returns nil on success.
+//  2. Observe persists status.restore with the source snapshot and CredentialSweep.Completed,
+//     and returns a Provisioning/requeue health so the next reconcile re-enables managed roles.
+//  3. The CNPG Cluster managed roles are NOT patched during the sweep pass.
+func TestManagedRolesCredentialSweepSuccess(t *testing.T) {
+	t.Parallel()
+
+	scheme := newTestScheme()
+
+	snapName := "source-pg-backup-20260501"
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec: enterprisev4.PostgresClusterSpec{
+			BootstrapFrom: &enterprisev4.BootstrapFrom{
+				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: snapName},
+			},
+			ManagedRoles: []enterprisev4.ManagedRole{{Name: "app_user", Exists: true}},
+		},
+	}
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
+	}
+	contracts := &reconcileContracts{
+		CNPGCluster: cnpg,
+		Secret: &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"},
+			Data:       map[string][]byte{secretKeyPassword: []byte("pw")},
+		},
+	}
+
+	sweepCalled := false
+	stubSweeper := func(_ context.Context, _, _, _ string) (ports.RoleSweeper, error) {
+		return &stubRoleSweeperOK{sweepCalled: &sweepCalled}, nil
+	}
+
+	events := &captureEventEmitter{}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
+	model := newManagedRolesModel(c, scheme, events, nil, cluster, contracts, stubSweeper)
+
+	// Act
+	reconcileErr := model.Reconcile(context.Background())
+	// Boundary: Reconcile must not emit events — that is Observe's job.
+	assert.Empty(t, events.normals, "Reconcile must not emit events — boundary violation")
+	health, err := model.Observe(context.Background(), reconcileErr)
+
+	// Assert: a successful sweep returns nil from Reconcile; the sweep ran.
+	require.NoError(t, reconcileErr)
+	assert.True(t, sweepCalled, "SweepUnmanagedRolesAfterRestore must be called")
+	require.NoError(t, err)
+
+	// Provisioning requeue so the next reconcile re-enables managed roles.
+	assert.Equal(t, pgcConstants.Provisioning, health.State)
+	assert.NotZero(t, health.Result.RequeueAfter)
+
+	// Restore status recorded so the sweep is not repeated.
+	require.NotNil(t, cluster.Status.Restore)
+	assert.True(t, cluster.Status.Restore.CredentialSweep.Completed)
+	require.NotNil(t, cluster.Status.Restore.Source.VolumeSnapshot)
+	assert.Equal(t, snapName, *cluster.Status.Restore.Source.VolumeSnapshot)
+
+	// CNPG managed roles must not be patched during the sweep pass.
+	updatedCNPG := &cnpgv1.Cluster{}
+	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(cnpg), updatedCNPG))
+	assert.Nil(t, updatedCNPG.Spec.Managed)
+
+	// Completion event emitted.
+	require.NotEmpty(t, events.normals)
+	assert.Contains(t, events.normals[0], EventUnmanagedRolesSweepDone)
+}
+
+// TestManagedRolesCredentialSweepConnectWaits verifies that when the restored DB is not
+// reachable yet, the sweep does not fail the cluster: Reconcile returns the transient
+// errSweepConnect, no status is persisted (so the sweep retries), and Observe returns a
+// Provisioning requeue.
+func TestManagedRolesCredentialSweepConnectWaits(t *testing.T) {
+	t.Parallel()
+
+	scheme := newTestScheme()
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec: enterprisev4.PostgresClusterSpec{
+			BootstrapFrom: &enterprisev4.BootstrapFrom{
+				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "snap-1"},
+			},
+		},
+	}
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
+	}
+	contracts := &reconcileContracts{
+		CNPGCluster: cnpg,
+		Secret:      &corev1.Secret{Data: map[string][]byte{secretKeyPassword: []byte("pw")}},
+	}
+
+	failingSweeper := func(_ context.Context, _, _, _ string) (ports.RoleSweeper, error) {
+		return nil, assert.AnError
+	}
+
+	events := &captureEventEmitter{}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
+	model := newManagedRolesModel(c, scheme, events, nil, cluster, contracts, failingSweeper)
+
+	// Act
+	reconcileErr := model.Reconcile(context.Background())
+	// Boundary: Reconcile must not emit events — that is Observe's job.
+	assert.Empty(t, events.warnings, "Reconcile must not emit warnings — boundary violation")
+	health, err := model.Observe(context.Background(), reconcileErr)
+
+	// Assert: a connect failure waits (requeue), it does not fail the cluster.
+	require.ErrorIs(t, reconcileErr, errSweepConnect)
+	require.NoError(t, err)
+	assert.Equal(t, pgcConstants.Provisioning, health.State)
+	assert.NotZero(t, health.Result.RequeueAfter)
+
+	// Status must NOT record completion so the sweep retries next reconcile.
+	assert.Nil(t, cluster.Status.Restore)
+
+	// A warning event is emitted by Observe for the failed connection.
+	require.NotEmpty(t, events.warnings)
+	assert.Contains(t, events.warnings[0], EventUnmanagedRolesSweepFailed)
+}
+
+// TestManagedRolesCredentialSweepConnectTerminal verifies that a terminal connect failure (the
+// sweeper reports ErrSweeperConnectTerminal, e.g. bad superuser credentials) surfaces Failed
+// rather than requeuing forever like a transient connect failure does.
+func TestManagedRolesCredentialSweepConnectTerminal(t *testing.T) {
+	t.Parallel()
+
+	scheme := newTestScheme()
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec: enterprisev4.PostgresClusterSpec{
+			BootstrapFrom: &enterprisev4.BootstrapFrom{
+				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "snap-1"},
+			},
+		},
+	}
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
+	}
+	contracts := &reconcileContracts{
+		CNPGCluster: cnpg,
+		Secret:      &corev1.Secret{Data: map[string][]byte{secretKeyPassword: []byte("pw")}},
+	}
+
+	terminalSweeper := func(_ context.Context, _, _, _ string) (ports.RoleSweeper, error) {
+		return nil, fmt.Errorf("%w: bad credentials", ports.ErrSweeperConnectTerminal)
+	}
+
+	events := &captureEventEmitter{}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
+	model := newManagedRolesModel(c, scheme, events, nil, cluster, contracts, terminalSweeper)
+
+	// Act
+	reconcileErr := model.Reconcile(context.Background())
+	health, err := model.Observe(context.Background(), reconcileErr)
+
+	// Assert: a terminal connect failure is terminal for the pass, not a requeue.
+	require.ErrorIs(t, reconcileErr, errSweepTerminal)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errSweepTerminal)
+	assert.Equal(t, pgcConstants.Failed, health.State)
+
+	// Status must NOT record completion.
+	assert.Nil(t, cluster.Status.Restore)
+
+	// A warning event is emitted by Observe for the failed sweep.
+	require.NotEmpty(t, events.warnings)
+	assert.Contains(t, events.warnings[0], EventUnmanagedRolesSweepFailed)
+}
+
+type stubRoleSweeperExecFails struct{}
+
+func (stubRoleSweeperExecFails) SweepUnmanagedRolesAfterRestore(_ context.Context) error {
+	return assert.AnError
+}
+
+// TestManagedRolesCredentialSweepExecFails verifies that a failed sweep query surfaces as a
+// Failed health with the wrapped error, and — like every other component — the warning is
+// emitted from Observe, not Reconcile.
+func TestManagedRolesCredentialSweepExecFails(t *testing.T) {
+	t.Parallel()
+
+	scheme := newTestScheme()
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec: enterprisev4.PostgresClusterSpec{
+			BootstrapFrom: &enterprisev4.BootstrapFrom{
+				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "snap-1"},
+			},
+		},
+	}
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
+	}
+	contracts := &reconcileContracts{
+		CNPGCluster: cnpg,
+		Secret:      &corev1.Secret{Data: map[string][]byte{secretKeyPassword: []byte("pw")}},
+	}
+	sweeper := func(_ context.Context, _, _, _ string) (ports.RoleSweeper, error) {
+		return stubRoleSweeperExecFails{}, nil
+	}
+
+	events := &captureEventEmitter{}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
+	model := newManagedRolesModel(c, scheme, events, nil, cluster, contracts, sweeper)
+
+	// Act
+	reconcileErr := model.Reconcile(context.Background())
+	// Boundary: Reconcile must not emit events — that is Observe's job.
+	assert.Empty(t, events.warnings, "Reconcile must not emit warnings — boundary violation")
+	health, err := model.Observe(context.Background(), reconcileErr)
+
+	// Assert: a sweep exec failure is terminal for this pass.
+	require.ErrorIs(t, reconcileErr, errSweepTerminal)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errSweepTerminal)
+	assert.Equal(t, pgcConstants.Failed, health.State)
+	assert.Equal(t, reasonManagedRolesFailed, health.Reason)
+
+	// Status must NOT record completion.
+	assert.Nil(t, cluster.Status.Restore)
+
+	// A warning event is emitted by Observe for the failed sweep.
+	require.NotEmpty(t, events.warnings)
+	assert.Contains(t, events.warnings[0], EventUnmanagedRolesSweepFailed)
 }

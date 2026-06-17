@@ -9,12 +9,15 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 type fakeDBConn struct {
 	tx        *fakeGrantTx
+	rows      *fakeRows
+	queryErr  error
 	beginErr  error
 	closeErr  error
 	closed    bool
@@ -32,6 +35,47 @@ func (c *fakeDBConn) begin(ctx context.Context) (grantTx, error) {
 func (c *fakeDBConn) close(ctx context.Context) error {
 	c.closed = true
 	return c.closeErr
+}
+
+func (c *fakeDBConn) query(_ context.Context, _ string, _ ...any) (pgRows, error) {
+	if c.queryErr != nil {
+		return nil, c.queryErr
+	}
+	if c.rows == nil {
+		return &fakeRows{}, nil
+	}
+	return c.rows, nil
+}
+
+type fakeRows struct {
+	names   []string
+	idx     int
+	scanErr error
+	errErr  error
+	closed  bool
+}
+
+func (r *fakeRows) Next() bool {
+	if r.idx >= len(r.names) {
+		return false
+	}
+	r.idx++
+	return true
+}
+
+func (r *fakeRows) Scan(dest ...any) error {
+	if r.scanErr != nil {
+		return r.scanErr
+	}
+	*(dest[0].(*string)) = r.names[r.idx-1]
+	return nil
+}
+
+func (r *fakeRows) Close()     { r.closed = true }
+func (r *fakeRows) Err() error { return r.errErr }
+
+func (c *fakeDBConn) exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
 }
 
 type fakeGrantTx struct {
@@ -200,6 +244,124 @@ func TestNewDBRepository(t *testing.T) {
 		assert.NotErrorIs(t, err, dbcore.ErrTerminal)
 		assert.ErrorIs(t, err, connectErr)
 		assert.Contains(t, err.Error(), "connecting to postgres.example.com/appdb")
+	})
+}
+
+func TestNewRoleSweeper(t *testing.T) {
+	originalConnectConfig := pgxConnectConfig
+	t.Cleanup(func() {
+		pgxConnectConfig = originalConnectConfig
+	})
+
+	t.Run("returns sweeper", func(t *testing.T) {
+		pgxConnectConfig = func(ctx context.Context, cfg *pgx.ConnConfig) (*pgx.Conn, error) {
+			return nil, nil
+		}
+
+		sweeper, err := NewRoleSweeper(context.Background(), "postgres.example.com", "appdb", "secret")
+
+		require.NoError(t, err)
+		require.NotNil(t, sweeper)
+	})
+
+	t.Run("wraps terminal connect error as port sentinel", func(t *testing.T) {
+		connectErr := &pgconn.PgError{Code: "28P01", Message: "password authentication failed"}
+		pgxConnectConfig = func(ctx context.Context, cfg *pgx.ConnConfig) (*pgx.Conn, error) {
+			return nil, connectErr
+		}
+
+		sweeper, err := NewRoleSweeper(context.Background(), "postgres.example.com", "appdb", "secret")
+
+		require.Error(t, err)
+		assert.Nil(t, sweeper)
+		assert.ErrorIs(t, err, ports.ErrSweeperConnectTerminal)
+		assert.ErrorIs(t, err, connectErr)
+	})
+
+	t.Run("returns retryable connect error unwrapped", func(t *testing.T) {
+		connectErr := errors.New("connection reset")
+		pgxConnectConfig = func(ctx context.Context, cfg *pgx.ConnConfig) (*pgx.Conn, error) {
+			return nil, connectErr
+		}
+
+		sweeper, err := NewRoleSweeper(context.Background(), "postgres.example.com", "appdb", "secret")
+
+		require.Error(t, err)
+		assert.Nil(t, sweeper)
+		assert.NotErrorIs(t, err, ports.ErrSweeperConnectTerminal)
+		assert.ErrorIs(t, err, connectErr)
+	})
+}
+
+func TestSweepUnmanagedRolesAfterRestoreSuccess(t *testing.T) {
+	tx := &fakeGrantTx{}
+	conn := &fakeDBConn{
+		tx:   tx,
+		rows: &fakeRows{names: []string{"app_user", "reporting"}},
+	}
+	repo := &pgDBRepository{conn: conn}
+
+	err := repo.SweepUnmanagedRolesAfterRestore(context.Background())
+
+	require.NoError(t, err)
+	assert.True(t, conn.closed)
+	assert.True(t, conn.rows.closed, "rows must be closed before the transaction begins")
+	assert.Equal(t, 1, conn.beginCall)
+	assert.True(t, tx.committed)
+	assert.Equal(t, []string{
+		`ALTER ROLE "app_user" NOLOGIN PASSWORD NULL`,
+		`ALTER ROLE "reporting" NOLOGIN PASSWORD NULL`,
+	}, tx.stmts)
+}
+
+func TestSweepUnmanagedRolesAfterRestoreNoRoles(t *testing.T) {
+	tx := &fakeGrantTx{}
+	conn := &fakeDBConn{tx: tx, rows: &fakeRows{}}
+	repo := &pgDBRepository{conn: conn}
+
+	err := repo.SweepUnmanagedRolesAfterRestore(context.Background())
+
+	require.NoError(t, err)
+	assert.True(t, tx.committed)
+	assert.Empty(t, tx.stmts)
+}
+
+func TestSweepUnmanagedRolesAfterRestoreErrors(t *testing.T) {
+	t.Run("query error", func(t *testing.T) {
+		conn := &fakeDBConn{queryErr: errors.New("boom")}
+		repo := &pgDBRepository{conn: conn}
+
+		err := repo.SweepUnmanagedRolesAfterRestore(context.Background())
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "querying pg_roles")
+		assert.Equal(t, 0, conn.beginCall, "no transaction should start when the query fails")
+		assert.True(t, conn.closed)
+	})
+
+	t.Run("exec error aborts the batch", func(t *testing.T) {
+		tx := &fakeGrantTx{execErrAt: 1, execErr: errors.New("permission denied")}
+		conn := &fakeDBConn{tx: tx, rows: &fakeRows{names: []string{"app_user", "reporting"}}}
+		repo := &pgDBRepository{conn: conn}
+
+		err := repo.SweepUnmanagedRolesAfterRestore(context.Background())
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "disabling role app_user")
+		assert.False(t, tx.committed, "a failed role disable must not commit a half-swept batch")
+		assert.True(t, conn.closed)
+	})
+
+	t.Run("commit error", func(t *testing.T) {
+		tx := &fakeGrantTx{commitErr: errors.New("connection reset")}
+		conn := &fakeDBConn{tx: tx, rows: &fakeRows{names: []string{"app_user"}}}
+		repo := &pgDBRepository{conn: conn}
+
+		err := repo.SweepUnmanagedRolesAfterRestore(context.Background())
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "committing sweep")
+		assert.True(t, conn.closed)
 	})
 }
 

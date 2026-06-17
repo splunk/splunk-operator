@@ -1704,4 +1704,110 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 		})
 	})
+
+	When("restoring a cluster from a volume snapshot", func() {
+		// PC-10: while CNPG not yet healthy, ClusterReady stays False (provisioning)
+		It("keeps ClusterReady=False/Provisioning while CNPG is not yet healthy", func() {
+			pgCluster.Spec.BootstrapFrom = &enterprisev4.BootstrapFrom{
+				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{
+					Storage: "source-pg-backup-20260501120000",
+				},
+			}
+			pgCluster.Spec.ManagedRoles = nil
+			Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+			// pass 1: finalizer; pass 2: CNPG cluster created, provisioner returns pending
+			reconcileNTimes(2)
+
+			pc := &enterprisev4.PostgresCluster{}
+			Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+
+			clusterReadyCond := meta.FindStatusCondition(pc.Status.Conditions, "ClusterReady")
+			Expect(clusterReadyCond).NotTo(BeNil())
+			Expect(clusterReadyCond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(*pc.Status.Phase).NotTo(Equal("Ready"))
+		})
+
+		// PC-11: sweep blocks Phase=Ready while CNPG is healthy but sweep has not run
+		It("keeps Phase out of Ready while sweep is incomplete, even after CNPG is healthy", func() {
+			pgCluster.Spec.BootstrapFrom = &enterprisev4.BootstrapFrom{
+				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{
+					Storage: "source-pg-backup-20260501120000",
+				},
+			}
+			pgCluster.Spec.ManagedRoles = nil
+			Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+			reconcileNTimes(2)
+
+			// Simulate CNPG becoming healthy with all instances ready, so the cluster
+			// component settles to ClusterReady=True and reconciliation proceeds to the
+			// managedRoles component — where the sweep gate is exercised.
+			cnpg := &cnpgv1.Cluster{}
+			Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+			cnpg.Status.Phase = cnpgv1.PhaseHealthy
+			cnpg.Status.Instances = int(clusterMemberCount)
+			cnpg.Status.ReadyInstances = int(clusterMemberCount)
+			Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+			reconcileNTimes(1)
+
+			pc := &enterprisev4.PostgresCluster{}
+			Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+
+			// Primary assertion: ManagedRolesReady is False — envtest has no real DB, so the
+			// connection attempt inside runCredentialSweep fails and the sweep gate stays pending.
+			managedRolesCond := meta.FindStatusCondition(pc.Status.Conditions, "ManagedRolesReady")
+			Expect(managedRolesCond).NotTo(BeNil())
+			Expect(managedRolesCond.Status).To(Equal(metav1.ConditionFalse))
+
+			// Because the sweep gate is pending, the aggregate Phase must not reach Ready.
+			Expect(pc.Status.Phase).NotTo(BeNil())
+			Expect(*pc.Status.Phase).NotTo(Equal("Ready"))
+
+			// ClusterReady tracks only CNPG provisioner health, so it is True here even though
+			// the cluster is not Ready overall — the sweep gates Phase, not ClusterReady.
+			clusterReadyCond := meta.FindStatusCondition(pc.Status.Conditions, "ClusterReady")
+			Expect(clusterReadyCond).NotTo(BeNil())
+			Expect(clusterReadyCond.Status).To(Equal(metav1.ConditionTrue))
+		})
+
+		// PC-12: once sweep is marked complete (simulated via status patch), cluster proceeds to Ready
+		It("proceeds to Ready once status.restore.credentialSweep.completed is true", func() {
+			snapName := "source-pg-backup-20260501120000"
+			pgCluster.Spec.BootstrapFrom = &enterprisev4.BootstrapFrom{
+				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{
+					Storage: snapName,
+				},
+			}
+			pgCluster.Spec.ManagedRoles = nil
+			Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+			reconcileNTimes(2)
+
+			// Simulate CNPG becoming healthy and mark sweep done directly on status
+			// (as runSweepIfNeeded would do after a real DB connection).
+			caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
+			cnpg := &cnpgv1.Cluster{}
+			Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+			markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
+			Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+			pc := &enterprisev4.PostgresCluster{}
+			Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+			pc.Status.Restore = &enterprisev4.RestoreStatus{
+				Source:          enterprisev4.RestoreSourceStatus{VolumeSnapshot: &snapName},
+				CredentialSweep: enterprisev4.RestoreCredentialSweepStatus{Completed: true},
+			}
+			Expect(k8sClient.Status().Update(ctx, pc)).To(Succeed())
+
+			reconcileNTimes(1)
+
+			Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+			// With sweep completed and no managed roles, cluster should be fully Ready.
+			clusterReadyCond := meta.FindStatusCondition(pc.Status.Conditions, "ClusterReady")
+			Expect(clusterReadyCond).NotTo(BeNil())
+			Expect(clusterReadyCond.Status).To(Equal(metav1.ConditionTrue))
+			Expect(clusterReadyCond.Reason).To(Equal("CNPGClusterHealthy"))
+
+			Expect(pc.Status.Phase).NotTo(BeNil())
+			Expect(*pc.Status.Phase).To(Equal("Ready"))
+		})
+	})
 })
