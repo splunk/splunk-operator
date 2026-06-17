@@ -161,6 +161,24 @@ func markCNPGClusterHealthy(cnpg *cnpgv1.Cluster, clusterName, caSecretName stri
 	}
 }
 
+func seedClusterScopedDatabaseRoles(ctx context.Context, namespace, name, clusterName string, roleNames ...string) {
+	GinkgoHelper()
+	db := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: enterprisev4.PostgresDatabaseSpec{
+			ClusterRef: v1.LocalObjectReference{Name: clusterName},
+			Databases:  []enterprisev4.DatabaseDefinition{{Name: "app"}},
+		},
+	}
+	Expect(k8sClient.Create(ctx, db)).To(Succeed())
+	roles := make([]enterprisev4.DatabaseRoleInfo, 0, len(roleNames))
+	for _, r := range roleNames {
+		roles = append(roles, enterprisev4.DatabaseRoleInfo{Name: r, SecretRef: &v1.LocalObjectReference{Name: name + "-" + r}, Exists: true})
+	}
+	db.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "app", Roles: roles}}
+	Expect(k8sClient.Status().Update(ctx, db)).To(Succeed())
+}
+
 func applyCNPGPostgreSQLParameters(ctx context.Context, c client.Client, name, namespace, fieldManager string, params map[string]string) {
 	GinkgoHelper()
 
@@ -341,10 +359,6 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			Spec: enterprisev4.PostgresClusterSpec{
 				Class:                 className,
 				ClusterDeletionPolicy: ptr.To(deletePolicy),
-				ManagedRoles: []enterprisev4.ManagedRole{
-					{Name: "app_user", Exists: true},
-					{Name: "app_user_rw", Exists: true},
-				},
 			},
 		}
 		fakeRecorder = record.NewFakeRecorder(100)
@@ -433,6 +447,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				received := make([]string, 0, 16)
 
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				seedClusterScopedDatabaseRoles(ctx, namespace, "managed-roles-db-pc01", clusterName, "app_user", "app_user_rw")
 				// pass 1: add finalizer; pass 2: create CNPG cluster/secret/status.
 				reconcileNTimes(2)
 
@@ -560,6 +575,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				})).To(Succeed())
 
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				seedClusterScopedDatabaseRoles(ctx, namespace, "managed-roles-db-ext", clusterName, "app_user", "app_user_rw")
 				// pass 1: add finalizer; pass 2: create CNPG cluster/secret/status.
 				reconcileNTimes(2)
 
@@ -746,8 +762,6 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 			It("patches the CNPG image and reports configuring state during a minor PostgreSQL upgrade", func() {
 				const upgradedPostgresVersion = "15.13"
-
-				pgCluster.Spec.ManagedRoles = nil
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 
@@ -843,7 +857,6 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		Context("with PostgreSQL metrics enabled in class", func() {
 			BeforeEach(func() {
 				pgCluster.Spec.Class = classNameMetrics
-				pgCluster.Spec.ManagedRoles = nil
 			})
 
 			It("adds scrape annotations to the CNPG Cluster", func() {
@@ -902,7 +915,6 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		Context("with connection pooler metrics enabled in class", func() {
 			BeforeEach(func() {
 				pgCluster.Spec.Class = classNamePooler
-				pgCluster.Spec.ManagedRoles = nil
 			})
 
 			It("adds scrape annotations to poolers only after the CNPG cluster becomes healthy", func() {
@@ -1207,7 +1219,6 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		Context("with backup enabled in class", func() {
 			BeforeEach(func() {
 				pgCluster.Spec.Class = classNameBackup
-				pgCluster.Spec.ManagedRoles = nil
 			})
 
 			It("creates a ScheduledBackup and sets BackupReady condition after CNPG becomes healthy", func() {
@@ -1439,7 +1450,6 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 
 			It("removes stale PostgreSQL parameters and preserves externally owned parameters", func() {
-				pgCluster.Spec.ManagedRoles = nil
 				pgCluster.Spec.PostgreSQLConfig = map[string]string{
 					"shared_buffers":  "256MB",
 					"max_connections": "200",
@@ -1480,7 +1490,6 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 		Context("when scaling instances on PostgresCluster", func() {
 			It("propagates scale-out to the underlying CNPG cluster", func() {
-				pgCluster.Spec.ManagedRoles = nil
 				pgCluster.Spec.Instances = ptr.To(int32(2))
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
@@ -1539,7 +1548,6 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 
 			It("publishes empty read-only endpoint values when running with a single instance", func() {
-				pgCluster.Spec.ManagedRoles = nil
 				pgCluster.Spec.Instances = ptr.To(int32(1))
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
@@ -1569,7 +1577,6 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 
 			It("populates the read-only endpoint when scaling 1->2", func() {
-				pgCluster.Spec.ManagedRoles = nil
 				pgCluster.Spec.Instances = ptr.To(int32(1))
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
@@ -1610,7 +1617,6 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 
 			It("allows clearing spec.instances to fall back to the class default", func() {
-				pgCluster.Spec.ManagedRoles = nil
 				pgCluster.Spec.Instances = ptr.To(clusterMemberCount)
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 
@@ -1625,12 +1631,6 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		})
 
 		Context("when a configmap spec changes", func() {
-			BeforeEach(func() {
-				// Keep this test focused on ConfigMap behavior; otherwise reconcile can
-				// stop on ManagedRolesPending before ConfigMap status is written.
-				pgCluster.Spec.ManagedRoles = nil
-			})
-
 			It("emits ConfigMapReconciled event on configmap update", func() {
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
@@ -1713,7 +1713,6 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					Storage: "source-pg-backup-20260501120000",
 				},
 			}
-			pgCluster.Spec.ManagedRoles = nil
 			Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 			// pass 1: finalizer; pass 2: CNPG cluster created, provisioner returns pending
 			reconcileNTimes(2)
@@ -1734,7 +1733,6 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					Storage: "source-pg-backup-20260501120000",
 				},
 			}
-			pgCluster.Spec.ManagedRoles = nil
 			Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 			reconcileNTimes(2)
 
@@ -1777,7 +1775,6 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					Storage: snapName,
 				},
 			}
-			pgCluster.Spec.ManagedRoles = nil
 			Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 			reconcileNTimes(2)
 

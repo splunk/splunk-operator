@@ -18,19 +18,17 @@ package core
 // The following functions are intentionally not tested directly here.
 // Their business logic is covered by narrower helper tests where practical,
 // and the remaining behavior is mostly controller-runtime orchestration:
-// - patchManagedRoles
 // - reconcileCNPGDatabases
 // - handleDeletion
 // - orphanRetainedResources
 // - deleteRemovedResources
-// - cleanupManagedRoles
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 	"unicode"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -56,25 +54,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
-
-// managedRolesFieldsRaw is a helper to construct the raw managed fields JSON for testing parseRoleNames and related functions.
-func managedRolesFieldsRaw(t *testing.T, keys ...string) []byte {
-	t.Helper()
-
-	managedRoles := make(map[string]any, len(keys))
-	for _, key := range keys {
-		managedRoles[key] = map[string]any{}
-	}
-
-	raw, err := json.Marshal(map[string]any{
-		"f:spec": map[string]any{
-			"f:managedRoles": managedRoles,
-		},
-	})
-	require.NoError(t, err)
-
-	return raw
-}
 
 type stubDBRepo struct {
 	execErr error
@@ -467,214 +446,6 @@ func TestGetDesiredRoles(t *testing.T) {
 	got := getDesiredRoles(postgresDB)
 
 	assert.Equal(t, want, got)
-}
-
-func TestParseRoleNames(t *testing.T) {
-	validKey, err := json.Marshal(map[string]string{"name": "main_db_admin"})
-	require.NoError(t, err)
-	ignoredKey, err := json.Marshal(map[string]string{"other": "value"})
-	require.NoError(t, err)
-
-	tests := []struct {
-		name string
-		raw  []byte
-		want []string
-	}{
-		{
-			name: "extracts role names from managed roles fields",
-			raw: managedRolesFieldsRaw(
-				t,
-				"k:"+string(validKey),
-				"k:"+string(ignoredKey),
-				"plain-key",
-			),
-			want: []string{"main_db_admin"},
-		},
-		{
-			name: "returns nil on invalid json",
-			raw:  []byte(`{"f:spec"`),
-			want: nil,
-		},
-		{
-			name: "returns empty when managed roles missing",
-			raw:  []byte(`{"f:spec":{}}`),
-			want: nil,
-		},
-		{
-			name: "returns empty when spec field is missing entirely",
-			raw:  []byte(`{"f:metadata":{}}`),
-			want: nil,
-		},
-	}
-
-	for _, tst := range tests {
-
-		t.Run(tst.name, func(t *testing.T) {
-			got := parseRoleNames(tst.raw)
-
-			assert.ElementsMatch(t, tst.want, got)
-		})
-	}
-}
-
-func TestManagedRoleOwners(t *testing.T) {
-	roleKey, err := json.Marshal(map[string]string{"name": "main_db_admin"})
-	require.NoError(t, err)
-	secondRoleKey, err := json.Marshal(map[string]string{"name": "main_db_rw"})
-	require.NoError(t, err)
-
-	managedFields := []metav1.ManagedFieldsEntry{
-		{Manager: "ignored"},
-		{
-			Manager: "postgresdatabase-other",
-			FieldsV1: &metav1.FieldsV1{
-				Raw: managedRolesFieldsRaw(
-					t,
-					"k:"+string(roleKey),
-					"k:"+string(secondRoleKey),
-				),
-			},
-		},
-		{
-			Manager: "postgresdatabase-newer",
-			FieldsV1: &metav1.FieldsV1{
-				Raw: managedRolesFieldsRaw(t, "k:"+string(roleKey)),
-			},
-		},
-	}
-	want := map[string]string{
-		"main_db_admin": "postgresdatabase-newer",
-		"main_db_rw":    "postgresdatabase-other",
-	}
-
-	got := managedRoleOwners(managedFields)
-
-	assert.Equal(t, want, got)
-}
-
-func TestGetRoleConflicts(t *testing.T) {
-	roleKey, err := json.Marshal(map[string]string{"name": "main_db_admin"})
-	require.NoError(t, err)
-	sameOwnerKey, err := json.Marshal(map[string]string{"name": "main_db_rw"})
-	require.NoError(t, err)
-	unrelatedKey, err := json.Marshal(map[string]string{"name": "audit_admin"})
-	require.NoError(t, err)
-
-	postgresDB := &enterprisev4.PostgresDatabase{
-		ObjectMeta: metav1.ObjectMeta{Name: "primary"},
-		Spec: enterprisev4.PostgresDatabaseSpec{
-			Databases: []enterprisev4.DatabaseDefinition{{Name: "main_db"}},
-		},
-	}
-	cluster := &enterprisev4.PostgresCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			ManagedFields: []metav1.ManagedFieldsEntry{
-				{
-					Manager: "postgresdatabase-legacy",
-					FieldsV1: &metav1.FieldsV1{
-						Raw: managedRolesFieldsRaw(
-							t,
-							"k:"+string(roleKey),
-							"k:"+string(unrelatedKey),
-						),
-					},
-				},
-				{
-					Manager: fieldManagerName(postgresDB.Name),
-					FieldsV1: &metav1.FieldsV1{
-						Raw: managedRolesFieldsRaw(t, "k:"+string(sameOwnerKey)),
-					},
-				},
-			},
-		},
-	}
-	want := []string{"main_db_admin (owned by postgresdatabase-legacy)"}
-
-	got := getRoleConflicts(postgresDB, cluster)
-
-	assert.ElementsMatch(t, want, got)
-}
-
-func TestVerifyRolesReady(t *testing.T) {
-	tests := []struct {
-		name          string
-		expectedRoles []string
-		cluster       *cnpgv1.Cluster
-		wantNotReady  []string
-		wantErr       string
-	}{
-		{
-			name:          "returns error when a role cannot reconcile",
-			expectedRoles: []string{"main_db_admin", "main_db_rw"},
-			cluster: &cnpgv1.Cluster{
-				Status: cnpgv1.ClusterStatus{
-					ManagedRolesStatus: cnpgv1.ManagedRoles{
-						CannotReconcile: map[string][]string{
-							"main_db_rw": {"reserved role"},
-						},
-					},
-				},
-			},
-			wantErr: "reconciling user main_db_rw: [reserved role]",
-		},
-		{
-			name:          "returns missing roles that are not reconciled yet",
-			expectedRoles: []string{"main_db_admin", "main_db_rw", "analytics_admin"},
-			cluster: &cnpgv1.Cluster{
-				Status: cnpgv1.ClusterStatus{
-					ManagedRolesStatus: cnpgv1.ManagedRoles{
-						ByStatus: map[cnpgv1.RoleStatus][]string{
-							cnpgv1.RoleStatusReconciled: {"main_db_admin", "analytics_admin"},
-						},
-					},
-				},
-			},
-			wantNotReady: []string{"main_db_rw"},
-		},
-		{
-			name:          "returns pending reconciliation roles as not ready",
-			expectedRoles: []string{"main_db_admin", "main_db_rw"},
-			cluster: &cnpgv1.Cluster{
-				Status: cnpgv1.ClusterStatus{
-					ManagedRolesStatus: cnpgv1.ManagedRoles{
-						ByStatus: map[cnpgv1.RoleStatus][]string{
-							cnpgv1.RoleStatusReconciled:            {"main_db_admin"},
-							cnpgv1.RoleStatusPendingReconciliation: {"main_db_rw"},
-						},
-					},
-				},
-			},
-			wantNotReady: []string{"main_db_rw"},
-		},
-		{
-			name:          "returns empty when all roles are reconciled",
-			expectedRoles: []string{"main_db_admin"},
-			cluster: &cnpgv1.Cluster{
-				Status: cnpgv1.ClusterStatus{
-					ManagedRolesStatus: cnpgv1.ManagedRoles{
-						ByStatus: map[cnpgv1.RoleStatus][]string{
-							cnpgv1.RoleStatusReconciled: {"main_db_admin"},
-						},
-					},
-				},
-			},
-			wantNotReady: nil,
-		},
-	}
-
-	for _, tst := range tests {
-
-		t.Run(tst.name, func(t *testing.T) {
-			gotNotReady, err := verifyRolesReady(context.Background(), tst.expectedRoles, tst.cluster)
-			if tst.wantErr != "" {
-				require.Error(t, err)
-				assert.Equal(t, tst.wantErr, err.Error())
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tst.wantNotReady, gotNotReady)
-		})
-	}
 }
 
 func TestReconcileRWRolePrivileges(t *testing.T) {
@@ -2064,219 +1835,6 @@ func TestBuildDeletionPlan(t *testing.T) {
 	assert.ElementsMatch(t, wantDeletedNames, databaseNames(got.deleted))
 }
 
-func TestBuildManagedRoles(t *testing.T) {
-	databases := []enterprisev4.DatabaseDefinition{
-		{Name: "payments"},
-		{Name: "analytics"},
-	}
-	want := []enterprisev4.ManagedRole{
-		{
-			Name:   "payments_admin",
-			Exists: true,
-			PasswordSecretRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "primary-payments-admin"},
-				Key:                  secretKeyPassword,
-			},
-		},
-		{
-			Name:   "payments_rw",
-			Exists: true,
-			PasswordSecretRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "primary-payments-rw"},
-				Key:                  secretKeyPassword,
-			},
-		},
-		{
-			Name:   "analytics_admin",
-			Exists: true,
-			PasswordSecretRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "primary-analytics-admin"},
-				Key:                  secretKeyPassword,
-			},
-		},
-		{
-			Name:   "analytics_rw",
-			Exists: true,
-			PasswordSecretRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "primary-analytics-rw"},
-				Key:                  secretKeyPassword,
-			},
-		},
-	}
-
-	got := buildDesiredRoles("primary", databases)
-
-	assert.Equal(t, want, got)
-}
-
-func TestBuildManagedRolesPatch(t *testing.T) {
-	scheme := testScheme(t)
-	cluster := &enterprisev4.PostgresCluster{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: enterprisev4.GroupVersion.String(),
-			Kind:       "PostgresCluster",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "primary",
-			Namespace: "dbs",
-		},
-	}
-	roles := buildDesiredRoles("primary", []enterprisev4.DatabaseDefinition{{Name: "payments"}})
-	c := testClient(t, scheme, cluster)
-
-	got, err := buildManagedRolesPatch(cluster, roles, c.Scheme())
-	require.NoError(t, err)
-
-	assert.Equal(t, cluster.APIVersion, got.Object["apiVersion"])
-	assert.Equal(t, cluster.Kind, got.Object["kind"])
-	assert.Equal(t, map[string]any{"name": cluster.Name, "namespace": cluster.Namespace}, got.Object["metadata"])
-	assert.Equal(t, map[string]any{"managedRoles": roles}, got.Object["spec"])
-}
-
-func TestFindAddedRoleNames(t *testing.T) {
-	desired := buildDesiredRoles("primary", []enterprisev4.DatabaseDefinition{{Name: "payments"}, {Name: "api"}})
-
-	tests := []struct {
-		name    string
-		current []enterprisev4.ManagedRole
-		want    []string
-	}{
-		{
-			name:    "all missing from cluster",
-			current: nil,
-			want:    []string{"payments_admin", "payments_rw", "api_admin", "api_rw"},
-		},
-		{
-			name: "some already present",
-			current: []enterprisev4.ManagedRole{
-				{Name: "payments_admin", Exists: true},
-				{Name: "payments_rw", Exists: true},
-			},
-			want: []string{"api_admin", "api_rw"},
-		},
-		{
-			name: "role present but marked absent — should be re-added",
-			current: []enterprisev4.ManagedRole{
-				{Name: "payments_admin", Exists: false},
-				{Name: "payments_rw", Exists: true},
-			},
-			want: []string{"payments_admin", "api_admin", "api_rw"},
-		},
-		{
-			name: "all already present",
-			current: []enterprisev4.ManagedRole{
-				{Name: "payments_admin", Exists: true},
-				{Name: "payments_rw", Exists: true},
-				{Name: "api_admin", Exists: true},
-				{Name: "api_rw", Exists: true},
-			},
-			want: nil,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			cluster := &enterprisev4.PostgresCluster{
-				Spec: enterprisev4.PostgresClusterSpec{ManagedRoles: tc.current},
-			}
-			got := findAddedRoleNames(cluster, desired)
-			assert.ElementsMatch(t, tc.want, got)
-		})
-	}
-}
-
-type roleFieldOwner struct {
-	manager string
-	roles   []string
-}
-
-func TestFindRemovedRoleNames(t *testing.T) {
-	manager := "splunk-operator-primary"
-	desired := buildDesiredRoles("primary", []enterprisev4.DatabaseDefinition{{Name: "payments"}})
-
-	tests := []struct {
-		name        string
-		fieldOwners []roleFieldOwner
-		want        []string
-	}{
-		{
-			name:        "no roles owned by any manager",
-			fieldOwners: nil,
-			want:        nil,
-		},
-		{
-			name:        "owned roles still in desired — nothing to remove",
-			fieldOwners: []roleFieldOwner{{manager: manager, roles: []string{"payments_admin", "payments_rw"}}},
-			want:        nil,
-		},
-		{
-			name:        "owned role no longer in desired — should be removed",
-			fieldOwners: []roleFieldOwner{{manager: manager, roles: []string{"payments_admin", "payments_rw", "api_admin", "api_rw"}}},
-			want:        []string{"api_admin", "api_rw"},
-		},
-		{
-			name:        "role owned by different manager — ignored",
-			fieldOwners: []roleFieldOwner{{manager: "other-manager", roles: []string{"api_admin", "api_rw"}}},
-			want:        nil,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			var managedFields []metav1.ManagedFieldsEntry
-			for _, fo := range tc.fieldOwners {
-				keys := make([]string, len(fo.roles))
-				for i, r := range fo.roles {
-					keys[i] = `k:{"name":"` + r + `"}`
-				}
-				managedFields = append(managedFields, metav1.ManagedFieldsEntry{
-					Manager:   fo.manager,
-					FieldsV1:  &metav1.FieldsV1{Raw: managedRolesFieldsRaw(t, keys...)},
-					Operation: metav1.ManagedFieldsOperationApply,
-				})
-			}
-			cluster := &enterprisev4.PostgresCluster{
-				ObjectMeta: metav1.ObjectMeta{ManagedFields: managedFields},
-			}
-			got := findRemovedRoleNames(cluster, manager, desired)
-			assert.ElementsMatch(t, tc.want, got)
-		})
-	}
-}
-
-func TestBuildRolesToRemove(t *testing.T) {
-	tests := []struct {
-		name    string
-		deleted []enterprisev4.DatabaseDefinition
-		want    []enterprisev4.ManagedRole
-	}{
-		{
-			name:    "nothing to remove",
-			deleted: nil,
-			want:    []enterprisev4.ManagedRole{},
-		},
-		{
-			name:    "single database removed",
-			deleted: []enterprisev4.DatabaseDefinition{{Name: "api"}},
-			want:    []enterprisev4.ManagedRole{{Name: "api_admin", Exists: false}, {Name: "api_rw", Exists: false}},
-		},
-		{
-			name:    "multiple databases removed",
-			deleted: []enterprisev4.DatabaseDefinition{{Name: "api"}, {Name: "payments"}},
-			want: []enterprisev4.ManagedRole{
-				{Name: "api_admin", Exists: false}, {Name: "api_rw", Exists: false},
-				{Name: "payments_admin", Exists: false}, {Name: "payments_rw", Exists: false},
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, buildRolesToRemove(tc.deleted))
-		})
-	}
-}
-
 func TestStripOwnerReference(t *testing.T) {
 	obj := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2848,7 +2406,6 @@ func TestNamingHelpers(t *testing.T) {
 		got  string
 		want string
 	}{
-		{name: "field manager", got: fieldManagerName("primary"), want: "postgresdatabase-primary"},
 		{name: "admin role", got: adminRoleName("payments"), want: "payments_admin"},
 		{name: "rw role", got: rwRoleName("payments"), want: "payments_rw"},
 		{name: "cnpg database", got: cnpgDatabaseName("primary", "payments"), want: "primary-payments"},
@@ -2997,6 +2554,11 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			postgresDB.Finalizers = []string{postgresDatabaseFinalizerName}
 		}
 
+		roleOwners := make(map[string]enterprisev4.RoleOwnerReference, len(getDesiredRoles(postgresDB)))
+		for _, roleName := range getDesiredRoles(postgresDB) {
+			roleOwners[roleName] = enterprisev4.RoleOwnerReference{Name: postgresDB.Name, UID: string(postgresDB.UID)}
+		}
+
 		postgresCluster := &enterprisev4.PostgresCluster{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: enterprisev4.GroupVersion.String(),
@@ -3005,9 +2567,6 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "primary-cluster",
 				Namespace: requestName.Namespace,
-			},
-			Spec: enterprisev4.PostgresClusterSpec{
-				ManagedRoles: buildDesiredRoles(requestName.Name, tst.databases),
 			},
 			Status: enterprisev4.PostgresClusterStatus{
 				Phase: strPtr(string(ClusterReady)),
@@ -3022,6 +2581,10 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 						LocalObjectReference: corev1.LocalObjectReference{Name: "primary-superuser"},
 						Key:                  secretKeyPassword,
 					},
+				},
+				ManagedRolesStatus: &enterprisev4.ManagedRolesStatus{
+					Reconciled: getDesiredRoles(postgresDB),
+					RoleOwners: roleOwners,
 				},
 			},
 		}
@@ -3572,5 +3135,131 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func gateDB() *enterprisev4.PostgresDatabase {
+	return &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "orders", UID: types.UID("db-uid")},
+		Spec:       enterprisev4.PostgresDatabaseSpec{Databases: []enterprisev4.DatabaseDefinition{{Name: "app"}}},
+	}
+}
+
+func TestEvaluateRoleGateProceedWhenReconciledAndOwnedBySelf(t *testing.T) {
+	decision := evaluateRoleGate(gateDB(), &enterprisev4.ManagedRolesStatus{
+		Reconciled: []string{"app_admin", "app_rw"},
+		RoleOwners: map[string]enterprisev4.RoleOwnerReference{
+			"app_admin": {Name: "orders", UID: "db-uid"},
+			"app_rw":    {Name: "orders", UID: "db-uid"},
+		},
+	})
+	assert.Equal(t, roleGateProceed, decision.State)
+}
+
+func TestEvaluateRoleGateConflictForAttemptedBySelf(t *testing.T) {
+	decision := evaluateRoleGate(gateDB(), &enterprisev4.ManagedRolesStatus{
+		Conflicts: []enterprisev4.RoleConflict{{Role: "app_admin", AttemptedBy: enterprisev4.RoleOwnerReference{Name: "orders", UID: "db-uid"}}},
+	})
+	assert.Equal(t, roleGateConflict, decision.State)
+}
+
+func TestEvaluateRoleGatePendingUntilOwnedAndReconciled(t *testing.T) {
+	decision := evaluateRoleGate(gateDB(), &enterprisev4.ManagedRolesStatus{
+		Reconciled: []string{"app_admin"},
+		RoleOwners: map[string]enterprisev4.RoleOwnerReference{
+			"app_admin": {Name: "orders", UID: "db-uid"},
+		},
+	})
+	assert.Equal(t, roleGatePending, decision.State)
+}
+
+func TestEvaluateRoleGateFailedSurfacesCNPGFailure(t *testing.T) {
+	decision := evaluateRoleGate(gateDB(), &enterprisev4.ManagedRolesStatus{
+		RoleOwners: map[string]enterprisev4.RoleOwnerReference{
+			"app_admin": {Name: "orders", UID: "db-uid"},
+			"app_rw":    {Name: "orders", UID: "db-uid"},
+		},
+		Failed: map[string]string{"app_admin": "permission denied for role app_admin"},
+	})
+	assert.Equal(t, roleGateFailed, decision.State)
+	assert.Contains(t, decision.Message, "app_admin")
+	assert.Contains(t, decision.Message, "permission denied for role app_admin")
+}
+
+func TestEvaluateRoleGateIgnoresFailureForUnrelatedRole(t *testing.T) {
+	decision := evaluateRoleGate(gateDB(), &enterprisev4.ManagedRolesStatus{
+		Reconciled: []string{"app_admin", "app_rw"},
+		RoleOwners: map[string]enterprisev4.RoleOwnerReference{
+			"app_admin": {Name: "orders", UID: "db-uid"},
+			"app_rw":    {Name: "orders", UID: "db-uid"},
+		},
+		Failed: map[string]string{"other_admin": "some error"},
+	})
+	assert.Equal(t, roleGateProceed, decision.State)
+}
+
+func TestCleanupManagedRolesPublishesAbsentRolesAndWaitsForClusterDrop(t *testing.T) {
+	ctx := t.Context()
+	scheme := testScheme(t)
+	deletionTime := metav1.NewTime(time.Now().Add(-roleCleanupTimeout - time.Minute))
+	postgresDB := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "default", UID: types.UID("db-uid"), DeletionTimestamp: &deletionTime, Finalizers: []string{postgresDatabaseFinalizerName}},
+		Spec: enterprisev4.PostgresDatabaseSpec{
+			ClusterRef: corev1.LocalObjectReference{Name: "pg"},
+			Databases:  []enterprisev4.DatabaseDefinition{{Name: "app"}},
+		},
+	}
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
+		Status: enterprisev4.PostgresClusterStatus{ManagedRolesStatus: &enterprisev4.ManagedRolesStatus{RoleOwners: map[string]enterprisev4.RoleOwnerReference{
+			"app_admin": {Name: "orders", UID: "db-uid"},
+			"app_rw":    {Name: "orders", UID: "db-uid"},
+		}}},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&enterprisev4.PostgresDatabase{}).WithObjects(postgresDB, cluster).Build()
+	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+	err := cleanupManagedRoles(ctx, rc, postgresDB, deletionPlan{deleted: []enterprisev4.DatabaseDefinition{{Name: "app"}}})
+	require.ErrorIs(t, err, errRoleCleanupPending)
+
+	updated := &enterprisev4.PostgresDatabase{}
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: "orders", Namespace: "default"}, updated))
+	require.Len(t, updated.Status.Databases, 1)
+	assert.False(t, updated.Status.Databases[0].Ready)
+	require.Len(t, updated.Status.Databases[0].Roles, 2)
+	for _, role := range updated.Status.Databases[0].Roles {
+		assert.False(t, role.Exists)
+	}
+	require.NotNil(t, updated.Status.Phase)
+	assert.Equal(t, string(deletingDBPhase), *updated.Status.Phase)
+	condition := meta.FindStatusCondition(updated.Status.Conditions, string(rolesReady))
+	require.NotNil(t, condition)
+	assert.Equal(t, string(reasonRoleCleanupBlocked), condition.Reason)
+	assert.Contains(t, condition.Message, "retaining finalizer")
+}
+
+func TestCleanupManagedRolesReleasesWhenClusterNoLongerOwnsRoles(t *testing.T) {
+	ctx := t.Context()
+	scheme := testScheme(t)
+	postgresDB := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "default", UID: types.UID("db-uid")},
+		Spec:       enterprisev4.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}, Databases: []enterprisev4.DatabaseDefinition{{Name: "app"}}},
+	}
+	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}, Status: enterprisev4.PostgresClusterStatus{ManagedRolesStatus: &enterprisev4.ManagedRolesStatus{}}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&enterprisev4.PostgresDatabase{}).WithObjects(postgresDB, cluster).Build()
+	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+	err := cleanupManagedRoles(ctx, rc, postgresDB, deletionPlan{deleted: []enterprisev4.DatabaseDefinition{{Name: "app"}}})
+	require.NoError(t, err)
+
+	updated := &enterprisev4.PostgresDatabase{}
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: "orders", Namespace: "default"}, updated))
+	require.Len(t, updated.Status.Databases, 1)
+	for _, role := range updated.Status.Databases[0].Roles {
+		assert.False(t, role.Exists)
+	}
+	condition := meta.FindStatusCondition(updated.Status.Conditions, string(rolesReady))
+	if condition != nil {
+		assert.NotEqual(t, string(reasonRoleCleanupBlocked), condition.Reason)
 	}
 }

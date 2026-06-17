@@ -7,4 +7,4 @@ permalink: /docs/postgresql/
 ---
 
 Guides for deploying and operating PostgreSQL databases managed by the Splunk Operator,
-including backups, upgrades, TLS connectivity, and observability.
+including backups, upgrades, TLS connectivity, managed database roles, and observability.

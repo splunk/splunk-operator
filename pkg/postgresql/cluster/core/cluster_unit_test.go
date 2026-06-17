@@ -99,11 +99,9 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 			expectedReason:    reasonManagedRolesFailed,
 			build: func(updateStatus healthStatusUpdater) component {
 				cluster := &enterprisev4.PostgresCluster{
-					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-					Spec: enterprisev4.PostgresClusterSpec{
-						ManagedRoles: []enterprisev4.ManagedRole{{Name: "app_user", Exists: true}},
-					},
+					ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
 				}
+				postgresDB := postgresDatabaseWithManagedRoles("app-db", []managedRole{{Name: "app_user", Exists: true}})
 				contracts := &reconcileContracts{
 					CNPGCluster: &cnpgv1.Cluster{
 						ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
@@ -112,7 +110,7 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 					Secret: &corev1.Secret{},
 				}
 				return newManagedRolesModel(
-					patchErrorClient{Client: fake.NewClientBuilder().WithScheme(scheme).Build(), err: assert.AnError},
+					patchErrorClient{Client: indexedManagedRolesTestClient(scheme, postgresDB).Build(), err: assert.AnError},
 					scheme, noopEventEmitter{}, updateStatus, cluster, contracts, nil,
 				)
 			},
@@ -341,15 +339,13 @@ func TestReconcileFailureEmitsWarningFromObserveNotReconcile(t *testing.T) {
 			name: "managed roles component emits warning from Observe",
 			build: func(events *captureEventEmitter) component {
 				cluster := &enterprisev4.PostgresCluster{
-					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-					Spec: enterprisev4.PostgresClusterSpec{
-						ManagedRoles: []enterprisev4.ManagedRole{{Name: "app_user", Exists: true}},
-					},
+					ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
 				}
+				postgresDB := postgresDatabaseWithManagedRoles("app-db", []managedRole{{Name: "app_user", Exists: true}})
 				cnpg := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 				contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: &corev1.Secret{}}
 				return newManagedRolesModel(
-					patchErrorClient{Client: fake.NewClientBuilder().WithScheme(scheme).Build(), err: assert.AnError},
+					patchErrorClient{Client: indexedManagedRolesTestClient(scheme, postgresDB).Build(), err: assert.AnError},
 					scheme, events, nil, cluster, contracts, nil,
 				)
 			},

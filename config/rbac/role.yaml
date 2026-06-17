@@ -98,7 +98,6 @@ rules:
   - monitoringconsoles/status
   - objectstorages/status
   - postgresclusters/status
-  - postgresdatabases/status
   - queues/status
   - searchheadclusters/status
   - standalones/status
@@ -113,6 +112,16 @@ rules:
   verbs:
   - get
   - list
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - postgresdatabases/status
+  verbs:
+  - get
+  - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - postgresql.cnpg.io
