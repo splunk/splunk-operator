@@ -99,18 +99,21 @@ spec:
                   Sub-fields override the matching values from the class-level connectionPooler config.
                 properties:
                   enabled:
-                    description: Enabled controls whether the connection pooler is
-                      deployed at all.
+                    description: |-
+                      Enabled controls whether the connection pooler is deployed at all.
+                      When omitted the pooler is treated as disabled (see isPoolerEnabled).
                     type: boolean
                   readOnly:
                     description: |-
                       ReadOnly controls whether the RO pooler is reconciled when Enabled is true.
                       The RO pooler additionally requires the cluster to run with instances >= 2;
                       the admission webhook rejects readOnly=true with instances<2.
+                      When omitted it is treated as true (see poolerReadOnlyWanted).
                     type: boolean
                   readWrite:
-                    description: ReadWrite controls whether the RW pooler is reconciled
-                      when Enabled is true.
+                    description: |-
+                      ReadWrite controls whether the RW pooler is reconciled when Enabled is true.
+                      When omitted it is treated as true (see poolerReadWriteWanted).
                     type: boolean
                 type: object
               instances:
@@ -120,57 +123,6 @@ spec:
                 maximum: 10
                 minimum: 1
                 type: integer
-              managedRoles:
-                description: |-
-                  ManagedRoles contains PostgreSQL roles that should be created in the cluster.
-                  This field supports Server-Side Apply with per-role granularity, allowing
-                  multiple PostgresDatabase controllers to manage different roles independently.
-                items:
-                  description: ManagedRole represents a PostgreSQL role to be created
-                    and managed in the cluster.
-                  properties:
-                    exists:
-                      default: true
-                      description: Exists controls whether the role should be present
-                        (true) or absent (false) in PostgreSQL.
-                      type: boolean
-                    name:
-                      description: Name of the role/user to create.
-                      maxLength: 63
-                      minLength: 1
-                      type: string
-                    passwordSecretRef:
-                      description: PasswordSecretRef references a Secret and the key
-                        within it containing the password for this role.
-                      properties:
-                        key:
-                          description: The key of the secret to select from.  Must
-                            be a valid secret key.
-                          type: string
-                        name:
-                          default: ""
-                          description: |-
-                            Name of the referent.
-                            This field is effectively required, but due to backwards compatibility is
-                            allowed to be empty. Instances of this type with an empty value here are
-                            almost certainly wrong.
-                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                          type: string
-                        optional:
-                          description: Specify whether the Secret or its key must
-                            be defined
-                          type: boolean
-                      required:
-                      - key
-                      type: object
-                      x-kubernetes-map-type: atomic
-                  required:
-                  - name
-                  type: object
-                type: array
-                x-kubernetes-list-map-keys:
-                - name
-                x-kubernetes-list-type: map
               monitoring:
                 description: Monitoring contains configuration for metrics exposure
                   features.
@@ -416,6 +368,15 @@ spec:
                     description: Enabled indicates whether pooler is active for this
                       cluster.
                     type: boolean
+                  readOnlyEnabled:
+                    description: |-
+                      ReadOnlyEnabled is true when the RO pooler resource is reconciled by the operator.
+                      Independent consumers should mirror this gate before advertising RO pooler endpoints.
+                    type: boolean
+                  readWriteEnabled:
+                    description: ReadWriteEnabled is true when the RW pooler resource
+                      is reconciled by the operator.
+                    type: boolean
                 type: object
               currentPrimary:
                 description: CurrentPrimary is the name of the pod currently hosting
@@ -431,6 +392,52 @@ spec:
                 description: ManagedRolesStatus tracks the reconciliation status of
                   managed roles.
                 properties:
+                  conflicts:
+                    description: Conflicts contains non-fatal role ownership conflicts
+                      detected while computing desired roles.
+                    items:
+                      description: RoleConflict records a role-level ownership conflict.
+                      properties:
+                        attemptedBy:
+                          description: AttemptedBy is the PostgresDatabase whose claim
+                            was withheld.
+                          properties:
+                            name:
+                              description: Name is the owning PostgresDatabase name.
+                              minLength: 1
+                              type: string
+                            uid:
+                              description: UID is the owning PostgresDatabase UID.
+                              minLength: 1
+                              type: string
+                          required:
+                          - name
+                          - uid
+                          type: object
+                        claimedBy:
+                          description: ClaimedBy is the incumbent or winner, when
+                            one exists.
+                          properties:
+                            name:
+                              description: Name is the owning PostgresDatabase name.
+                              minLength: 1
+                              type: string
+                            uid:
+                              description: UID is the owning PostgresDatabase UID.
+                              minLength: 1
+                              type: string
+                          required:
+                          - name
+                          - uid
+                          type: object
+                        role:
+                          description: Role is the contested PostgreSQL role name.
+                          minLength: 1
+                          type: string
+                      required:
+                      - role
+                      type: object
+                    type: array
                   failed:
                     additionalProperties:
                       type: string
@@ -449,6 +456,26 @@ spec:
                     items:
                       type: string
                     type: array
+                  roleOwners:
+                    additionalProperties:
+                      description: RoleOwnerReference identifies the PostgresDatabase
+                        that owns a managed role.
+                      properties:
+                        name:
+                          description: Name is the owning PostgresDatabase name.
+                          minLength: 1
+                          type: string
+                        uid:
+                          description: UID is the owning PostgresDatabase UID.
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      - uid
+                      type: object
+                    description: RoleOwners is the durable incumbency map from role
+                      name to owning PostgresDatabase.
+                    type: object
                 type: object
               observedGeneration:
                 description: ObservedGeneration represents the .metadata.generation

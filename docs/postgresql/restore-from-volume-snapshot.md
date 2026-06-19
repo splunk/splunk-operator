@@ -149,10 +149,10 @@ spec:
 
 The operator will:
 1. Create new role secrets with fresh passwords.
-2. Re-enable login for the managed roles (`myapp_admin`, `myapp_rw`).
+2. Publish role intent on the `PostgresDatabase` and wait for the `PostgresCluster` to reconcile the managed roles (`myapp_admin`, `myapp_rw`).
 3. Grant the appropriate privileges on the database.
 
-Your application can then connect using the newly created secrets. The data is immediately accessible — the credential sweep does not affect the data itself, only the ability to authenticate.
+Your application can then connect using the generated secrets. The data is immediately accessible — the credential sweep does not affect the data itself, only the ability to authenticate. For more detail, see [PostgresDatabase Managed Roles](postgresdatabase-managed-roles.md).
 
 ---
 

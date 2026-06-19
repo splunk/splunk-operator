@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -35,7 +34,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
@@ -145,10 +143,12 @@ func containsEvent(events []string, eventType, reason string) bool {
 	return false
 }
 
-func managedRoleNames(roles []enterprisev4.ManagedRole) []string {
-	names := make([]string, 0, len(roles))
-	for _, role := range roles {
-		names = append(names, role.Name)
+func publishedRoleNames(postgresDB *enterprisev4.PostgresDatabase) []string {
+	var names []string
+	for _, db := range postgresDB.Status.Databases {
+		for _, role := range db.Roles {
+			names = append(names, role.Name)
+		}
 	}
 	return names
 }
@@ -354,9 +354,21 @@ func expectProvisionedArtifacts(ctx context.Context, scenario readyClusterScenar
 }
 
 func expectManagedRolesPatched(ctx context.Context, scenario readyClusterScenario) {
-	updatedCluster := &enterprisev4.PostgresCluster{}
-	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.clusterName, Namespace: scenario.namespace}, updatedCluster)).To(Succeed())
-	Expect(managedRoleNames(updatedCluster.Spec.ManagedRoles)).To(ConsistOf(adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)))
+	current := fetchPostgresDatabase(ctx, scenario.requestName)
+	Expect(publishedRoleNames(current)).To(ConsistOf(adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)))
+	simulateClusterRoleOwnership(ctx, scenario.clusterName, scenario.namespace, current,
+		adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName))
+}
+
+func simulateClusterRoleOwnership(ctx context.Context, clusterName, namespace string, owner *enterprisev4.PostgresDatabase, roleNames ...string) {
+	cluster := &enterprisev4.PostgresCluster{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, cluster)).To(Succeed())
+	owners := make(map[string]enterprisev4.RoleOwnerReference, len(roleNames))
+	for _, roleName := range roleNames {
+		owners[roleName] = enterprisev4.RoleOwnerReference{Name: owner.Name, UID: string(owner.UID)}
+	}
+	cluster.Status.ManagedRolesStatus = &enterprisev4.ManagedRolesStatus{Reconciled: roleNames, RoleOwners: owners}
+	Expect(k8sClient.Status().Update(ctx, cluster)).To(Succeed())
 }
 
 func expectCNPGDatabaseCreated(ctx context.Context, scenario readyClusterScenario, owner *enterprisev4.PostgresDatabase) *cnpgv1.Database {
@@ -390,7 +402,10 @@ func seedMissingClusterScenario(ctx context.Context, namespace, resourceName str
 func seedConflictScenario(ctx context.Context, namespace, resourceName, clusterName string) types.NamespacedName {
 	createPostgresDatabaseResource(ctx, namespace, resourceName, clusterName, []enterprisev4.DatabaseDefinition{{Name: dbAppdb}}, postgresDatabaseFinalizer)
 	postgresCluster := createPostgresClusterResource(ctx, namespace, clusterName)
-	markPostgresClusterReady(ctx, postgresCluster, "unused-cnpg", namespace, false)
+	cnpgClusterName := clusterName + "-cnpg"
+	markPostgresClusterReady(ctx, postgresCluster, cnpgClusterName, namespace, false)
+	cnpgCluster := createCNPGClusterResource(ctx, namespace, cnpgClusterName)
+	markCNPGClusterReady(ctx, cnpgCluster, nil, "tenant-rw", "tenant-ro")
 	return types.NamespacedName{Name: resourceName, Namespace: namespace}
 }
 
@@ -444,10 +459,12 @@ func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, cl
 	}
 }
 
-func expectManagedRoleExists(cluster *enterprisev4.PostgresCluster, roleName string, exists bool) {
-	rolesByName := make(map[string]enterprisev4.ManagedRole, len(cluster.Spec.ManagedRoles))
-	for _, r := range cluster.Spec.ManagedRoles {
-		rolesByName[r.Name] = r
+func expectPublishedRoleExists(postgresDB *enterprisev4.PostgresDatabase, roleName string, exists bool) {
+	rolesByName := make(map[string]enterprisev4.DatabaseRoleInfo)
+	for _, db := range postgresDB.Status.Databases {
+		for _, role := range db.Roles {
+			rolesByName[role.Name] = role
+		}
 	}
 	Expect(rolesByName).To(HaveKey(roleName))
 	Expect(rolesByName[roleName].Exists).To(Equal(exists), "role %s: expected Exists=%v", roleName, exists)
@@ -1444,46 +1461,102 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 		})
 	})
 
+	When("role ownership inversion is active", func() {
+		It("drives the status handshake from credential publication through the role gate", func() {
+			scenario := newReadyClusterScenario(namespace, "handshake-db", "handshake-pg", "handshake-cnpg", dbAppdb)
+			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []enterprisev4.DatabaseDefinition{{Name: scenario.dbName}})
+			postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
+			markPostgresClusterReady(ctx, postgresCluster, scenario.cnpgClusterName, scenario.namespace, false)
+			cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
+			markCNPGClusterReady(ctx, cnpgCluster, nil, "tenant-rw", "tenant-ro")
+
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectEmptyReconcileResult(result, err)
+			current := expectFinalizerAdded(ctx, scenario.requestName)
+			seedExistingDatabaseStatus(ctx, current, scenario.dbName)
+
+			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+			current = fetchPostgresDatabase(ctx, scenario.requestName)
+			Expect(publishedRoleNames(current)).To(ConsistOf(adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)))
+			expectStatusCondition(current, condRolesReady, metav1.ConditionFalse, reasonWaitingForCNPG)
+
+			simulateClusterRoleOwnership(ctx, scenario.clusterName, scenario.namespace, current,
+				adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName))
+
+			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectReconcileResult(result, err, 15*time.Second)
+			cnpgDatabase := expectCNPGDatabaseCreated(ctx, scenario, current)
+			markCNPGDatabaseApplied(ctx, cnpgDatabase)
+
+			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectEmptyReconcileResult(result, err)
+			current = fetchPostgresDatabase(ctx, scenario.requestName)
+			expectStatusCondition(current, condRolesReady, metav1.ConditionTrue, reasonRolesAvailable)
+		})
+
+		It("surfaces cluster-published role conflicts on each offending database", func() {
+			clusterName := "conflict-pg"
+			cnpgClusterName := "conflict-cnpg"
+			postgresCluster := createPostgresClusterResource(ctx, namespace, clusterName)
+			markPostgresClusterReady(ctx, postgresCluster, cnpgClusterName, namespace, false)
+			cnpgCluster := createCNPGClusterResource(ctx, namespace, cnpgClusterName)
+			markCNPGClusterReady(ctx, cnpgCluster, nil, "tenant-rw", "tenant-ro")
+
+			first := createPostgresDatabaseResource(ctx, namespace, "conflict-a", clusterName, []enterprisev4.DatabaseDefinition{{Name: dbAppdb}}, postgresDatabaseFinalizer)
+			second := createPostgresDatabaseResource(ctx, namespace, "conflict-b", clusterName, []enterprisev4.DatabaseDefinition{{Name: dbAppdb}}, postgresDatabaseFinalizer)
+
+			for _, nn := range []types.NamespacedName{{Name: first.Name, Namespace: namespace}, {Name: second.Name, Namespace: namespace}} {
+				result, err := reconcilePostgresDatabase(ctx, nn)
+				expectReconcileResult(result, err, 15*time.Second)
+			}
+
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, postgresCluster)).To(Succeed())
+			postgresCluster.Status.ManagedRolesStatus = &enterprisev4.ManagedRolesStatus{Conflicts: []enterprisev4.RoleConflict{
+				{Role: adminRoleNameForTest(dbAppdb), AttemptedBy: enterprisev4.RoleOwnerReference{Name: first.Name, UID: string(first.UID)}},
+				{Role: rwRoleNameForTest(dbAppdb), AttemptedBy: enterprisev4.RoleOwnerReference{Name: first.Name, UID: string(first.UID)}},
+				{Role: adminRoleNameForTest(dbAppdb), AttemptedBy: enterprisev4.RoleOwnerReference{Name: second.Name, UID: string(second.UID)}},
+				{Role: rwRoleNameForTest(dbAppdb), AttemptedBy: enterprisev4.RoleOwnerReference{Name: second.Name, UID: string(second.UID)}},
+			}}
+			Expect(k8sClient.Status().Update(ctx, postgresCluster)).To(Succeed())
+
+			for _, db := range []*enterprisev4.PostgresDatabase{first, second} {
+				result, err := reconcilePostgresDatabase(ctx, types.NamespacedName{Name: db.Name, Namespace: namespace})
+				expectReconcileResult(result, err, 15*time.Second)
+				current := fetchPostgresDatabase(ctx, types.NamespacedName{Name: db.Name, Namespace: namespace})
+				condition := meta.FindStatusCondition(current.Status.Conditions, condRolesReady)
+				Expect(condition).NotTo(BeNil())
+				Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(condition.Reason).To(Equal(reasonRoleConflict))
+			}
+		})
+	})
+
 	When("role ownership conflicts exist", func() {
 		It("marks the resource failed and stops provisioning dependent resources", func() {
 			resourceName := "conflict-cluster"
 			clusterName := "conflict-postgres"
 			requestName := seedConflictScenario(ctx, namespace, resourceName, clusterName)
 
-			conflictPatch := &unstructured.Unstructured{
-				Object: map[string]any{
-					"apiVersion": enterprisev4.GroupVersion.String(),
-					"kind":       "PostgresCluster",
-					"metadata": map[string]any{
-						"name":      clusterName,
-						"namespace": namespace,
-					},
-					"spec": map[string]any{
-						"managedRoles": []map[string]any{
-							{"name": adminRoleNameForTest(dbAppdb), "exists": true},
-							{"name": rwRoleNameForTest(dbAppdb), "exists": true},
-						},
-					},
+			current := fetchPostgresDatabase(ctx, requestName)
+			cluster := &enterprisev4.PostgresCluster{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, cluster)).To(Succeed())
+			incumbent := enterprisev4.RoleOwnerReference{Name: "other-db", UID: "other-uid"}
+			self := enterprisev4.RoleOwnerReference{Name: current.Name, UID: string(current.UID)}
+			cluster.Status.ManagedRolesStatus = &enterprisev4.ManagedRolesStatus{
+				Conflicts: []enterprisev4.RoleConflict{
+					{Role: adminRoleNameForTest(dbAppdb), ClaimedBy: &incumbent, AttemptedBy: self},
+					{Role: rwRoleNameForTest(dbAppdb), ClaimedBy: &incumbent, AttemptedBy: self},
 				},
 			}
-			Expect(k8sClient.Patch(ctx, conflictPatch, client.Apply, client.FieldOwner("postgresdatabase-legacy"))).To(Succeed())
+			Expect(k8sClient.Status().Update(ctx, cluster)).To(Succeed())
 
 			result, err := reconcilePostgresDatabase(ctx, requestName)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("role conflict detected"))
-			Expect(result).To(Equal(ctrl.Result{}))
+			expectReconcileResult(result, err, 15*time.Second)
 
-			current := fetchPostgresDatabase(ctx, requestName)
+			current = fetchPostgresDatabase(ctx, requestName)
 			expectStatusPhase(current, phaseFailed)
 			expectStatusCondition(current, condRolesReady, metav1.ConditionFalse, reasonRoleConflict)
-
-			rolesReady := meta.FindStatusCondition(current.Status.Conditions, condRolesReady)
-			Expect(rolesReady.Message).To(ContainSubstring(adminRoleNameForTest(dbAppdb)))
-			Expect(rolesReady.Message).To(ContainSubstring("postgresdatabase-legacy"))
-
-			configMap := &corev1.ConfigMap{}
-			err = k8sClient.Get(ctx, types.NamespacedName{Name: configMapNameForTest("conflict-cluster", dbAppdb), Namespace: namespace}, configMap)
-			Expect(apierrors.IsNotFound(err)).To(BeTrue())
 
 			cnpgDatabase := &cnpgv1.Database{}
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest("conflict-cluster", dbAppdb), Namespace: namespace}, cnpgDatabase)
@@ -1492,7 +1565,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 	})
 
 	When("a database is removed from spec.databases while the CR stays alive", func() {
-		It("marks the removed database roles as absent in postgres cluster and keeps the retained roles present", func() {
+		It("stops publishing the removed database's roles and keeps the retained roles published", func() {
 			resourceName := "live-db-removal"
 			clusterName := "live-db-removal-postgres"
 			cnpgClusterName := "live-db-removal-cnpg"
@@ -1512,24 +1585,11 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				adminRoleNameForTest(dbDropdb), rwRoleNameForTest(dbDropdb),
 			}, "tenant-rw", "tenant-ro")
 
-			initialRolesPatch := &unstructured.Unstructured{
-				Object: map[string]any{
-					"apiVersion": enterprisev4.GroupVersion.String(),
-					"kind":       "PostgresCluster",
-					"metadata":   map[string]any{"name": clusterName, "namespace": namespace},
-					"spec": map[string]any{
-						"managedRoles": []map[string]any{
-							{"name": adminRoleNameForTest(dbKeepdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbKeepdb + "-admin", "key": "password"}},
-							{"name": rwRoleNameForTest(dbKeepdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbKeepdb + "-rw", "key": "password"}},
-							{"name": adminRoleNameForTest(dbDropdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbDropdb + "-admin", "key": "password"}},
-							{"name": rwRoleNameForTest(dbDropdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbDropdb + "-rw", "key": "password"}},
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Patch(ctx, initialRolesPatch, client.Apply, client.FieldOwner("postgresdatabase-"+resourceName))).To(Succeed())
-
 			seedOwnedDatabaseArtifacts(ctx, namespace, resourceName, clusterName, postgresDB, dbKeepdb, dbDropdb)
+
+			simulateClusterRoleOwnership(ctx, clusterName, namespace, postgresDB,
+				adminRoleNameForTest(dbKeepdb), rwRoleNameForTest(dbKeepdb),
+				adminRoleNameForTest(dbDropdb), rwRoleNameForTest(dbDropdb))
 
 			postgresDB.Spec.Databases = []enterprisev4.DatabaseDefinition{{Name: dbKeepdb}}
 			Expect(k8sClient.Update(ctx, postgresDB)).To(Succeed())
@@ -1537,13 +1597,10 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			result, err := reconcilePostgresDatabase(ctx, requestName)
 			expectReconcileResult(result, err, 15*time.Second)
 
-			updatedCluster := &enterprisev4.PostgresCluster{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, updatedCluster)).To(Succeed())
-
-			expectManagedRoleExists(updatedCluster, adminRoleNameForTest(dbKeepdb), true)
-			expectManagedRoleExists(updatedCluster, rwRoleNameForTest(dbKeepdb), true)
-			expectManagedRoleExists(updatedCluster, adminRoleNameForTest(dbDropdb), false)
-			expectManagedRoleExists(updatedCluster, rwRoleNameForTest(dbDropdb), false)
+			updatedDB := fetchPostgresDatabase(ctx, requestName)
+			Expect(publishedRoleNames(updatedDB)).To(ConsistOf(adminRoleNameForTest(dbKeepdb), rwRoleNameForTest(dbKeepdb)))
+			expectPublishedRoleExists(updatedDB, adminRoleNameForTest(dbKeepdb), true)
+			expectPublishedRoleExists(updatedDB, rwRoleNameForTest(dbKeepdb), true)
 		})
 	})
 
@@ -1562,32 +1619,16 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 				createPostgresClusterResource(ctx, namespace, clusterName)
 
-				initialRolesPatch := &unstructured.Unstructured{
-					Object: map[string]any{
-						"apiVersion": enterprisev4.GroupVersion.String(),
-						"kind":       "PostgresCluster",
-						"metadata": map[string]any{
-							"name":      clusterName,
-							"namespace": namespace,
-						},
-						"spec": map[string]any{
-							"managedRoles": []map[string]any{
-								{"name": adminRoleNameForTest(dbKeepdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbKeepdb + "-admin", "key": "password"}},
-								{"name": rwRoleNameForTest(dbKeepdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbKeepdb + "-rw", "key": "password"}},
-								{"name": adminRoleNameForTest(dbDropdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbDropdb + "-admin", "key": "password"}},
-								{"name": rwRoleNameForTest(dbDropdb), "exists": true, "passwordSecretRef": map[string]any{"name": resourceName + "-" + dbDropdb + "-rw", "key": "password"}},
-							},
-						},
-					},
-				}
-				Expect(k8sClient.Patch(ctx, initialRolesPatch, client.Apply, client.FieldOwner("postgresdatabase-"+resourceName))).To(Succeed())
-
 				seedOwnedDatabaseArtifacts(ctx, namespace, resourceName, clusterName, postgresDB, dbKeepdb, dbDropdb)
+
+				simulateClusterRoleOwnership(ctx, clusterName, namespace, postgresDB,
+					adminRoleNameForTest(dbKeepdb), rwRoleNameForTest(dbKeepdb),
+					adminRoleNameForTest(dbDropdb), rwRoleNameForTest(dbDropdb))
 
 				Expect(k8sClient.Delete(ctx, postgresDB)).To(Succeed())
 
 				result, err := reconcilePostgresDatabase(ctx, requestName)
-				expectEmptyReconcileResult(result, err)
+				expectReconcileResult(result, err, 15*time.Second)
 
 				expectRetainedArtifact(ctx, configMapNameForTest(resourceName, dbKeepdb), namespace, resourceName, &corev1.ConfigMap{})
 				expectRetainedArtifact(ctx, adminSecretNameForTest(resourceName, dbKeepdb), namespace, resourceName, &corev1.Secret{})
@@ -1599,17 +1640,19 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				expectDeletedArtifact(ctx, rwSecretNameForTest(resourceName, dbDropdb), namespace, &corev1.Secret{})
 				expectDeletedArtifact(ctx, cnpgDatabaseNameForTest(resourceName, dbDropdb), namespace, &cnpgv1.Database{})
 
-				updatedCluster := &enterprisev4.PostgresCluster{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, updatedCluster)).To(Succeed())
+				blocked := fetchPostgresDatabase(ctx, requestName)
+				expectPublishedRoleExists(blocked, adminRoleNameForTest(dbDropdb), false)
+				expectPublishedRoleExists(blocked, rwRoleNameForTest(dbDropdb), false)
+				expectStatusPhase(blocked, "Deleting")
+				Expect(blocked.Finalizers).To(ContainElement(postgresDatabaseFinalizer))
 
-				expectManagedRoleExists(updatedCluster, adminRoleNameForTest(dbKeepdb), true)
-				expectManagedRoleExists(updatedCluster, rwRoleNameForTest(dbKeepdb), true)
-				expectManagedRoleExists(updatedCluster, adminRoleNameForTest(dbDropdb), false)
-				expectManagedRoleExists(updatedCluster, rwRoleNameForTest(dbDropdb), false)
+				simulateClusterRoleOwnership(ctx, clusterName, namespace, postgresDB)
 
-				current := &enterprisev4.PostgresDatabase{}
-				err = k8sClient.Get(ctx, requestName, current)
-				Expect(apierrors.IsNotFound(err) || !slices.Contains(current.Finalizers, postgresDatabaseFinalizer)).To(BeTrue())
+				result, err = reconcilePostgresDatabase(ctx, requestName)
+				expectEmptyReconcileResult(result, err)
+
+				err = k8sClient.Get(ctx, requestName, &enterprisev4.PostgresDatabase{})
+				Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			})
 		})
 	})
@@ -1630,6 +1673,9 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
 			expectReconcileResult(result, err, 15*time.Second)
+
+			simulateClusterRoleOwnership(ctx, scenario.clusterName, scenario.namespace, current,
+				adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName))
 
 			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 			expectReconcileResult(result, err, 15*time.Second)
@@ -1655,21 +1701,19 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			current := fetchPostgresDatabase(ctx, scenario.requestName)
 			seedExistingDatabaseStatus(ctx, current, scenario.dbName)
 
-			// First reconcile: provision secrets, configmaps, roles
 			reconcilePostgresDatabase(ctx, scenario.requestName)
-			// Second reconcile: creates CNPG Database with both extensions present
+			simulateClusterRoleOwnership(ctx, scenario.clusterName, scenario.namespace, current,
+				adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName))
 			reconcilePostgresDatabase(ctx, scenario.requestName)
 
 			cnpgDatabase := &cnpgv1.Database{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
 			markCNPGDatabaseApplied(ctx, cnpgDatabase)
 
-			// Remove unaccent from the spec
 			current = fetchPostgresDatabase(ctx, scenario.requestName)
 			current.Spec.Databases[0].Extensions = []string{"pg_trgm"}
 			Expect(k8sClient.Update(ctx, current)).To(Succeed())
 
-			// Third Reconcile: reads existing CNPG Database extensions, marks unaccent absent
 			reconcilePostgresDatabase(ctx, scenario.requestName)
 
 			cnpgDatabase = &cnpgv1.Database{}
@@ -1679,7 +1723,6 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				cnpgv1.ExtensionSpec{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "unaccent", Ensure: cnpgv1.EnsureAbsent}},
 			))
 
-			// Fourth Reconcile: make sure that requeue doesn't change Extension Spec and remove unaccent completely
 			reconcilePostgresDatabase(ctx, scenario.requestName)
 			cnpgDatabase = &cnpgv1.Database{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
@@ -1764,6 +1807,8 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			markPostgresClusterReady(ctx, newPostgresCluster, scenario.cnpgClusterName, scenario.namespace, false)
 			newCNPGCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
 			markCNPGClusterReady(ctx, newCNPGCluster, []string{adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)}, "tenant-rw", "tenant-ro")
+			simulateClusterRoleOwnership(ctx, scenario.clusterName, scenario.namespace, current,
+				adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName))
 
 			// Mark the CNPG Database as applied (simulating CNPG reconciliation)
 			cnpgDatabase := &cnpgv1.Database{}

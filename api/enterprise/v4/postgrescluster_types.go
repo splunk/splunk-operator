@@ -22,23 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ManagedRole represents a PostgreSQL role to be created and managed in the cluster.
-type ManagedRole struct {
-	// Name of the role/user to create.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	Name string `json:"name"`
-
-	// PasswordSecretRef references a Secret and the key within it containing the password for this role.
-	// +optional
-	PasswordSecretRef *corev1.SecretKeySelector `json:"passwordSecretRef,omitempty"`
-
-	// Exists controls whether the role should be present (true) or absent (false) in PostgreSQL.
-	// +kubebuilder:default=true
-	Exists bool `json:"exists"`
-}
-
 // BootstrapFrom defines the source from which a PostgresCluster is bootstrapped via recovery.
 type BootstrapFrom struct {
 	// VolumeSnapshot restores from Kubernetes VolumeSnapshot resources.
@@ -117,14 +100,6 @@ type PostgresClusterSpec struct {
 	// Sub-fields override the matching values from the class-level connectionPooler config.
 	// +optional
 	ConnectionPooler *ConnectionPoolerEnableConfig `json:"connectionPooler,omitempty"`
-
-	// ManagedRoles contains PostgreSQL roles that should be created in the cluster.
-	// This field supports Server-Side Apply with per-role granularity, allowing
-	// multiple PostgresDatabase controllers to manage different roles independently.
-	// +optional
-	// +listType=map
-	// +listMapKey=name
-	ManagedRoles []ManagedRole `json:"managedRoles,omitempty"`
 
 	// ClusterDeletionPolicy controls the deletion behavior of the underlying CNPG Cluster when the PostgresCluster is deleted.
 	// +kubebuilder:validation:Enum=Delete;Retain
@@ -255,6 +230,42 @@ type ManagedRolesStatus struct {
 	// Failed contains roles that failed to reconcile with error messages.
 	// +optional
 	Failed map[string]string `json:"failed,omitempty"`
+
+	// RoleOwners is the durable incumbency map from role name to owning PostgresDatabase.
+	// +optional
+	RoleOwners map[string]RoleOwnerReference `json:"roleOwners,omitempty"`
+
+	// Conflicts contains non-fatal role ownership conflicts detected while computing desired roles.
+	// +optional
+	Conflicts []RoleConflict `json:"conflicts,omitempty"`
+}
+
+// RoleOwnerReference identifies the PostgresDatabase that owns a managed role.
+type RoleOwnerReference struct {
+	// Name is the owning PostgresDatabase name.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// UID is the owning PostgresDatabase UID.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	UID string `json:"uid"`
+}
+
+// RoleConflict records a role-level ownership conflict.
+type RoleConflict struct {
+	// Role is the contested PostgreSQL role name.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Role string `json:"role"`
+
+	// ClaimedBy is the incumbent or winner, when one exists.
+	// +optional
+	ClaimedBy *RoleOwnerReference `json:"claimedBy,omitempty"`
+
+	// AttemptedBy is the PostgresDatabase whose claim was withheld.
+	AttemptedBy RoleOwnerReference `json:"attemptedBy"`
 }
 
 // ConnectionPoolerStatus contains the observed state of the connection pooler.

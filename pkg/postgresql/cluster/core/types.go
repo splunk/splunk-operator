@@ -26,6 +26,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// managedRole is the cluster controller's in-memory representation of a PostgreSQL
+// role it computes from PostgresDatabase status and feeds into CNPG managed.roles.
+// It is internal controller state, not a served CRD field.
+type managedRole struct {
+	// Name of the role/user to create.
+	Name string
+
+	// PasswordSecretRef references a Secret and the key within it containing the password for this role.
+	PasswordSecretRef *corev1.SecretKeySelector
+
+	// Exists controls whether the role should be present (true) or absent (false) in PostgreSQL.
+	Exists bool
+}
+
 // ReconcileContext bundles infrastructure dependencies injected by the controller
 // shell (primary adapter). The service layer declares what it needs via this struct
 // rather than reaching into context — keeping ports explicit and testable.

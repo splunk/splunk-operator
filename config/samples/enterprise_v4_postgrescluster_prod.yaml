@@ -9,6 +9,6 @@ metadata:
   name: postgresql-cluster-prod
 spec:
   class: postgresql-prod
+  # Create PostgresDatabase resources that reference this cluster for application databases and roles.
   instances: 1
-  
 

@@ -68,6 +68,8 @@ type PostgresClusterReconciler struct {
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters/finalizers,verbs=update
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusterclasses,verbs=get;list;watch
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresdatabases,verbs=get;list;watch
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresdatabases/status,verbs=get;list;watch
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters/status,verbs=get
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=poolers,verbs=get;list;watch;create;update;patch;delete
@@ -109,6 +111,9 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&cnpgv1.ScheduledBackup{}, builder.WithPredicates(scheduledBackupPredicator())).
 		Owns(&corev1.Secret{}, builder.WithPredicates(secretPredicator())).
 		Owns(&corev1.ConfigMap{}, builder.WithPredicates(configMapPredicator())).
+		Watches(&enterprisev4.PostgresDatabase{},
+			handler.EnqueueRequestsFromMapFunc(mapDatabaseToCluster),
+			builder.WithPredicates(postgresDatabaseForClusterPredicator())).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.enqueueClustersForExternalSecret),
 			builder.WithPredicates(predicates.ExternalSecret())).
@@ -117,6 +122,39 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			MaxConcurrentReconciles: ClusterTotalWorker,
 		}).
 		Complete(r)
+}
+
+func mapDatabaseToCluster(_ context.Context, obj client.Object) []reconcile.Request {
+	db, ok := obj.(*enterprisev4.PostgresDatabase)
+	if !ok || db.Spec.ClusterRef.Name == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: client.ObjectKey{Namespace: db.Namespace, Name: db.Spec.ClusterRef.Name}}}
+}
+
+func postgresDatabaseForClusterPredicator() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			db, ok := e.Object.(*enterprisev4.PostgresDatabase)
+			return ok && len(db.Status.Databases) > 0
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldDB, oldOK := e.ObjectOld.(*enterprisev4.PostgresDatabase)
+			newDB, newOK := e.ObjectNew.(*enterprisev4.PostgresDatabase)
+			if !oldOK || !newOK {
+				return false
+			}
+			if oldDB.Spec.ClusterRef.Name != newDB.Spec.ClusterRef.Name {
+				return true
+			}
+			if !equality.Semantic.DeepEqual(oldDB.GetDeletionTimestamp(), newDB.GetDeletionTimestamp()) {
+				return true
+			}
+			return !equality.Semantic.DeepEqual(oldDB.Status.Databases, newDB.Status.Databases)
+		},
+		DeleteFunc:  func(event.DeleteEvent) bool { return true },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+	}
 }
 
 // postgresClusterPredicator triggers on spec changes, deletion, and finalizer transitions.
