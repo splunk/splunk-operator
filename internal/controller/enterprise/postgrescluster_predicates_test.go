@@ -15,11 +15,66 @@ import (
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
+
+func dbWithStatusRoles(name, cluster string, roleNames ...string) *enterprisev4.PostgresDatabase {
+	roles := make([]enterprisev4.DatabaseRoleInfo, 0, len(roleNames))
+	for _, r := range roleNames {
+		roles = append(roles, enterprisev4.DatabaseRoleInfo{Name: r, Exists: true})
+	}
+	return &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns"},
+		Spec:       enterprisev4.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: cluster}},
+		Status:     enterprisev4.PostgresDatabaseStatus{Databases: []enterprisev4.DatabaseInfo{{Name: "app", Roles: roles}}},
+	}
+}
+
+func TestMapDatabaseToCluster(t *testing.T) {
+	ctx := t.Context()
+	reqs := mapDatabaseToCluster(ctx, dbWithStatusRoles("db", "pg"))
+	if assert.Len(t, reqs, 1) {
+		assert.Equal(t, "pg", reqs[0].Name)
+		assert.Equal(t, "ns", reqs[0].Namespace)
+	}
+
+	assert.Empty(t, mapDatabaseToCluster(ctx, dbWithStatusRoles("db", "")))
+	assert.Empty(t, mapDatabaseToCluster(ctx, &corev1.Secret{}))
+}
+
+func TestExtractPostgresDatabaseClusterRefName(t *testing.T) {
+	assert.Equal(t, []string{"pg"}, extractPostgresDatabaseClusterRefName(dbWithStatusRoles("db", "pg")))
+	assert.Nil(t, extractPostgresDatabaseClusterRefName(dbWithStatusRoles("db", "")))
+	assert.Nil(t, extractPostgresDatabaseClusterRefName(&corev1.Secret{}))
+}
+
+func TestPostgresDatabaseForClusterPredicator(t *testing.T) {
+	pred := postgresDatabaseForClusterPredicator()
+
+	assert.True(t, pred.Create(event.CreateEvent{Object: dbWithStatusRoles("db", "pg", "app_admin")}))
+	assert.False(t, pred.Create(event.CreateEvent{Object: &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "ns"},
+		Spec:       enterprisev4.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}},
+	}}))
+
+	assert.True(t, pred.Delete(event.DeleteEvent{Object: dbWithStatusRoles("db", "pg")}))
+
+	old := dbWithStatusRoles("db", "pg", "app_admin")
+	updated := dbWithStatusRoles("db", "pg", "app_admin", "app_rw")
+	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}))
+
+	deleting := dbWithStatusRoles("db", "pg", "app_admin")
+	now := metav1.Now()
+	deleting.DeletionTimestamp = &now
+	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: deleting}))
+
+	assert.False(t, pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: dbWithStatusRoles("db", "pg", "app_admin")}))
+	assert.False(t, pred.Update(event.UpdateEvent{ObjectOld: &corev1.Secret{}, ObjectNew: &corev1.Secret{}}))
+}
 
 func TestCNPGClusterPredicator(t *testing.T) {
 	t.Parallel()

@@ -129,6 +129,15 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&enterprisev4.PostgresDatabase{},
+		enterprisev4.PostgresDatabaseClusterRefNameField,
+		extractPostgresDatabaseClusterRefName,
+	); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		WithEventFilter(predicate.Funcs{GenericFunc: func(event.GenericEvent) bool { return false }}).
 		For(&enterprisev4.PostgresDatabase{}, builder.WithPredicates(postgresDatabasePredicator())).
@@ -193,6 +202,9 @@ func postgresClusterForDatabasePredicator() predicate.Predicate {
 			if !equality.Semantic.DeepEqual(oldCluster.Status.ConnectionPoolerStatus, newCluster.Status.ConnectionPoolerStatus) {
 				return true
 			}
+			if !equality.Semantic.DeepEqual(oldCluster.Status.ManagedRolesStatus, newCluster.Status.ManagedRolesStatus) {
+				return true
+			}
 			return roUnavailable(oldCluster.Status.ReadyInstances) != roUnavailable(newCluster.Status.ReadyInstances)
 		},
 		DeleteFunc:  func(event.DeleteEvent) bool { return false },
@@ -200,9 +212,6 @@ func postgresClusterForDatabasePredicator() predicate.Predicate {
 	}
 }
 
-// enqueuePostgresDatabasesForCluster maps a PostgresCluster to all PostgresDatabase CRs
-// in the same namespace that reference it via spec.clusterRef.name.
-// This wakes dormant PostgresDatabase controllers when their parent cluster is recreated.
 func (r *PostgresDatabaseReconciler) enqueuePostgresDatabasesForCluster(ctx context.Context, obj client.Object) []reconcile.Request {
 	cluster, ok := obj.(*enterprisev4.PostgresCluster)
 	if !ok {
@@ -216,23 +225,35 @@ func (r *PostgresDatabaseReconciler) enqueuePostgresDatabasesForCluster(ctx cont
 	)
 
 	var list enterprisev4.PostgresDatabaseList
-	if err := r.Client.List(ctx, &list, client.InNamespace(cluster.Namespace)); err != nil {
-		logger.ErrorContext(ctx, "failed to list PostgresDatabases for cluster", "error", err)
-		return nil
-	}
-
-	var reqs []reconcile.Request
-	for _, db := range list.Items {
-		if db.Spec.ClusterRef.Name == cluster.Name {
-			reqs = append(reqs, reconcile.Request{
-				NamespacedName: client.ObjectKeyFromObject(&db),
-			})
-			logger.InfoContext(ctx, "enqueuing PostgresDatabase for cluster recreation",
-				"postgresDatabase", db.Name)
+	if err := r.Client.List(ctx, &list,
+		client.InNamespace(cluster.Namespace),
+		client.MatchingFields{enterprisev4.PostgresDatabaseClusterRefNameField: cluster.Name},
+	); err != nil {
+		logger.WarnContext(ctx, "indexed PostgresDatabase list failed, falling back to namespace list", "error", err)
+		if fallbackErr := r.Client.List(ctx, &list, client.InNamespace(cluster.Namespace)); fallbackErr != nil {
+			logger.ErrorContext(ctx, "failed to list PostgresDatabases for cluster", "error", fallbackErr)
+			return nil
 		}
 	}
 
+	reqs := make([]reconcile.Request, 0, len(list.Items))
+	for _, db := range list.Items {
+		if db.Spec.ClusterRef.Name != cluster.Name {
+			continue
+		}
+		reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&db)})
+		logger.InfoContext(ctx, "enqueuing PostgresDatabase for cluster recreation", "postgresDatabase", db.Name)
+	}
+
 	return reqs
+}
+
+func extractPostgresDatabaseClusterRefName(obj client.Object) []string {
+	pd, ok := obj.(*enterprisev4.PostgresDatabase)
+	if !ok || pd.Spec.ClusterRef.Name == "" {
+		return nil
+	}
+	return []string{pd.Spec.ClusterRef.Name}
 }
 
 // extractExternalRoleSecretNames returns the de-duplicated set of external

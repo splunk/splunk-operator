@@ -1,3 +1,8 @@
+# Sample PostgresDatabase for application databases on a PostgresCluster.
+# For each database entry, the operator manages two PostgreSQL login roles:
+# <database>_admin and <database>_rw. Role intent is published on
+# PostgresDatabase.status.databases[].roles and reconciled by the referenced
+# PostgresCluster.
 apiVersion: enterprise.splunk.com/v4
 kind: PostgresDatabase
 metadata:
@@ -12,6 +17,13 @@ spec:
         - pg_stat_statements
         - pgcrypto
       deletionPolicy: Delete
+      # Optional: use externally managed Secrets instead of operator-generated
+      # role Secrets. The Secret data must include username and password keys.
+      # passwordConfig:
+      #   externalAdminSecretRef:
+      #     name: kvstore-admin-credentials
+      #   externalRWSecretRef:
+      #     name: kvstore-rw-credentials
     - name: analytics
       extensions:
         - pg_trgm

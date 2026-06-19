@@ -17,11 +17,9 @@ package core
 
 import (
 	"context"
-	"encoding/json"
 	stderrors "errors"
 	"fmt"
-	"slices"
-	"strings"
+	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/sethvargo/go-password/password"
@@ -33,12 +31,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -126,6 +122,9 @@ func PostgresDatabaseService(
 	// Finalizer: cleanup on deletion, register on creation.
 	if postgresDB.GetDeletionTimestamp() != nil {
 		if err := handleDeletion(ctx, rc, postgresDB); err != nil {
+			if stderrors.Is(err, errRoleCleanupPending) {
+				return ctrl.Result{RequeueAfter: retryDelay}, nil
+			}
 			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDeletion, "handling deletion"); ok {
 				return result, conflictErr
 			}
@@ -213,27 +212,6 @@ func PostgresDatabaseService(
 		}
 	}
 
-	// Phase: RoleConflictCheck — verify no other SSA field manager already owns our roles.
-	roleConflicts := getRoleConflicts(postgresDB, cluster)
-	if len(roleConflicts) > 0 {
-		conflictMsg := fmt.Sprintf("Role conflict in PostgresDatabase %s: %s. "+
-			"If you deleted a previous PostgresDatabase, recreate it with the original name to re-adopt the orphaned resources.",
-			postgresDB.Name, strings.Join(roleConflicts, ", "))
-		conflictErr := fmt.Errorf("role conflict detected: %s", strings.Join(roleConflicts, ", "))
-		rc.emitWarning(postgresDB, EventRoleConflict, conflictMsg)
-		errs := []error{conflictErr}
-		if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonRoleConflict, conflictMsg, failedDBPhase); statusErr != nil {
-			if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictRoleConflictStatus, "persisting role conflict status"); ok {
-				return result, conflictErr
-			}
-			logger.ErrorContext(ctx, "failed to persist role conflict status", "error", statusErr)
-			errs = append(errs, fmt.Errorf("failed to update status: %w", statusErr))
-		}
-		return ctrl.Result{}, stderrors.Join(errs...)
-	}
-
-	// We need the CNPG Cluster directly because PostgresCluster status does not yet
-	// surface managed role reconciliation state.
 	cnpgCluster := &cnpgv1.Cluster{}
 	if err := c.Get(ctx, types.NamespacedName{
 		Name:      cluster.Status.ProvisionerRef.Name,
@@ -300,6 +278,13 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{}, err
 	}
+	// Publish credential-ready roles for cluster-side role reconciliation.
+	if err := persistDatabaseInfos(ctx, c, postgresDB, false, rolesExist); err != nil {
+		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictSecretsStatus, "publishing credential-ready role status"); ok {
+			return result, conflictErr
+		}
+		return ctrl.Result{}, err
+	}
 
 	// Phase: ConnectionMetadata — ConfigMaps carry connection info consumers need as soon
 	// as databases are ready, so they are created alongside secrets.
@@ -341,54 +326,31 @@ func PostgresDatabaseService(
 		return ctrl.Result{}, err
 	}
 
-	// Phase: RoleProvisioning
-	fieldManager := fieldManagerName(postgresDB.Name)
-	desired := buildDesiredRoles(postgresDB.Name, postgresDB.Spec.Databases)
-	rolesToAdd := findAddedRoleNames(cluster, desired)
-	rolesToRemove := absentRolesByName(findRemovedRoleNames(cluster, fieldManager, desired))
-	allRoles := append(desired, rolesToRemove...)
-
-	if len(rolesToAdd) > 0 || len(rolesToRemove) > 0 {
-		logger.InfoContext(ctx, "managed roles patch started", "addCount", len(rolesToAdd), "removeCount", len(rolesToRemove))
-		if err := patchManagedRoles(ctx, c, fieldManager, cluster, allRoles); err != nil {
-			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictManagedRolesPatch, "patching managed roles"); ok {
+	switch gate := evaluateRoleGate(postgresDB, cluster.Status.ManagedRolesStatus); gate.State {
+	case roleGateConflict:
+		conflictMsg := fmt.Sprintf("Role conflict in PostgresDatabase %s: %s", postgresDB.Name, gate.Message)
+		rc.emitWarnOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, rolesReady, EventRoleConflict, conflictMsg)
+		if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonRoleConflict, conflictMsg, failedDBPhase); statusErr != nil {
+			if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictRoleConflictStatus, "persisting role conflict status"); ok {
 				return result, conflictErr
 			}
-			rc.emitWarning(postgresDB, EventManagedRolesPatchFailed, fmt.Sprintf("failed to patch managed roles for PostgresDatabase %s — check operator logs", postgresDB.Name))
-			if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonRolesCreationFailed,
-				fmt.Sprintf("Failed to patch managed roles: %v", err), failedDBPhase); statusErr != nil {
-				logger.ErrorContext(ctx, "failed to persist roles status", "error", statusErr)
-			}
-			return ctrl.Result{}, fmt.Errorf("failed to patch managed roles: %w", err)
-		}
-		logger.InfoContext(ctx, "managed roles patched", "roleCount", len(allRoles))
-		rc.emitNormal(postgresDB, EventRoleReconciliationStarted, fmt.Sprintf("Patched managed roles for PostgresDatabase %s: %d to add, %d to remove", postgresDB.Name, len(rolesToAdd), len(rolesToRemove)))
-		if err := updateStatus(rolesReady, metav1.ConditionFalse, reasonWaitingForCNPG,
-			fmt.Sprintf("Waiting for roles to be reconciled: %d to add, %d to remove", len(rolesToAdd), len(rolesToRemove)), provisioningDBPhase); err != nil {
-			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictRolesStatus, "persisting roles waiting status"); ok {
-				return result, conflictErr
-			}
-			return ctrl.Result{}, err
+			logger.ErrorContext(ctx, "failed to persist role conflict status", "error", statusErr)
+			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
-	}
-
-	roleNames := getDesiredRoles(postgresDB)
-	notReadyRoles, err := verifyRolesReady(ctx, roleNames, cnpgCluster)
-	if err != nil {
-		rc.emitWarning(postgresDB, EventRoleFailed, fmt.Sprintf("role reconciliation failed for PostgresDatabase %s — check operator logs", postgresDB.Name))
-		if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonRolesCreationFailed,
-			fmt.Sprintf("Role creation failed: %v", err), failedDBPhase); statusErr != nil {
-			if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictRolesStatus, "persisting role failure status"); ok {
+	case roleGateFailed:
+		failedMsg := fmt.Sprintf("Role reconciliation failed for PostgresDatabase %s: %s", postgresDB.Name, gate.Message)
+		rc.emitWarnOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, rolesReady, EventRoleReconcileFailed, failedMsg)
+		if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonRoleReconcileFailed, failedMsg, failedDBPhase); statusErr != nil {
+			if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictRolesStatus, "persisting role reconcile failed status"); ok {
 				return result, conflictErr
 			}
-			logger.ErrorContext(ctx, "failed to persist roles status", "error", statusErr)
+			logger.ErrorContext(ctx, "failed to persist role reconcile failed status", "error", statusErr)
+			return ctrl.Result{}, statusErr
 		}
-		return ctrl.Result{}, err
-	}
-	if len(notReadyRoles) > 0 {
-		if err := updateStatus(rolesReady, metav1.ConditionFalse, reasonWaitingForCNPG,
-			fmt.Sprintf("Waiting for roles to be reconciled: %v", notReadyRoles), provisioningDBPhase); err != nil {
+		return ctrl.Result{RequeueAfter: retryDelay}, nil
+	case roleGatePending:
+		if err := updateStatus(rolesReady, metav1.ConditionFalse, reasonWaitingForCNPG, gate.Message, provisioningDBPhase); err != nil {
 			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictRolesStatus, "persisting roles pending status"); ok {
 				return result, conflictErr
 			}
@@ -396,9 +358,9 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	}
-	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, rolesReady, EventRolesReady, fmt.Sprintf("Roles reconciled: %d active, %d removed", len(rolesToAdd), len(rolesToRemove)))
+	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, rolesReady, EventRolesReady, fmt.Sprintf("Roles reconciled: %d active", len(getDesiredRoles(postgresDB))))
 	if err := updateStatus(rolesReady, metav1.ConditionTrue, reasonRolesAvailable,
-		fmt.Sprintf("Roles reconciled: %d active, %d removed", len(rolesToAdd), len(rolesToRemove)), provisioningDBPhase); err != nil {
+		fmt.Sprintf("Roles reconciled: %d active", len(getDesiredRoles(postgresDB))), provisioningDBPhase); err != nil {
 		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictRolesStatus, "persisting roles ready status"); ok {
 			return result, conflictErr
 		}
@@ -526,7 +488,7 @@ func PostgresDatabaseService(
 	if !wasReady {
 		rc.emitNormal(postgresDB, EventPostgresDatabaseReady, fmt.Sprintf("PostgresDatabase %s is ready", postgresDB.Name))
 	}
-	postgresDB.Status.Databases = populateDatabaseStatus(postgresDB)
+	postgresDB.Status.Databases = populateDatabaseStatus(postgresDB, true, rolesExist)
 	postgresDB.Status.ObservedGeneration = &postgresDB.Generation
 
 	if err := c.Status().Update(ctx, postgresDB); err != nil {
@@ -602,80 +564,57 @@ func existingDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase) map[strin
 	return existing
 }
 
-func getRoleConflicts(postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) []string {
-	myManager := fieldManagerName(postgresDB.Name)
-	desired := make(map[string]struct{}, len(postgresDB.Spec.Databases)*2)
-	for _, dbSpec := range postgresDB.Spec.Databases {
-		desired[adminRoleName(dbSpec.Name)] = struct{}{}
-		desired[rwRoleName(dbSpec.Name)] = struct{}{}
-	}
-	roleOwners := managedRoleOwners(cluster.ManagedFields)
-	var conflicts []string
-	for roleName := range desired {
-		if owner, exists := roleOwners[roleName]; exists && owner != myManager {
-			conflicts = append(conflicts, fmt.Sprintf("%s (owned by %s)", roleName, owner))
-		}
-	}
-	return conflicts
+type roleGateState string
+
+const (
+	roleGateProceed  roleGateState = "Proceed"
+	roleGatePending  roleGateState = "Pending"
+	roleGateConflict roleGateState = "Conflict"
+	roleGateFailed   roleGateState = "Failed"
+)
+
+type roleGateDecision struct {
+	State   roleGateState
+	Message string
 }
 
-func managedRoleOwners(managedFields []metav1.ManagedFieldsEntry) map[string]string {
-	owners := make(map[string]string)
-	for _, mf := range managedFields {
-		if mf.FieldsV1 == nil {
-			continue
-		}
-		for _, name := range parseRoleNames(mf.FieldsV1.GetRawBytes()) {
-			owners[name] = mf.Manager
+func evaluateRoleGate(postgresDB *enterprisev4.PostgresDatabase, status *enterprisev4.ManagedRolesStatus) roleGateDecision {
+	if status == nil {
+		return roleGateDecision{State: roleGatePending, Message: "Waiting for cluster to publish managed role status"}
+	}
+	self := enterprisev4.RoleOwnerReference{Name: postgresDB.Name, UID: string(postgresDB.UID)}
+	roleSet := make(map[string]struct{}, len(getDesiredRoles(postgresDB)))
+	for _, role := range getDesiredRoles(postgresDB) {
+		roleSet[role] = struct{}{}
+	}
+	for _, conflict := range status.Conflicts {
+		if _, wanted := roleSet[conflict.Role]; wanted && sameRoleOwner(conflict.AttemptedBy, self) {
+			return roleGateDecision{State: roleGateConflict, Message: fmt.Sprintf("role %s is already claimed", conflict.Role)}
 		}
 	}
-	return owners
+	for role := range roleSet {
+		if reason, failed := status.Failed[role]; failed {
+			return roleGateDecision{State: roleGateFailed, Message: fmt.Sprintf("role %s failed to reconcile: %s", role, reason)}
+		}
+	}
+	reconciled := make(map[string]struct{}, len(status.Reconciled))
+	for _, role := range status.Reconciled {
+		reconciled[role] = struct{}{}
+	}
+	for role := range roleSet {
+		owner, owned := status.RoleOwners[role]
+		if !owned || !sameRoleOwner(owner, self) {
+			return roleGateDecision{State: roleGatePending, Message: fmt.Sprintf("Waiting for role %s to be owned by this PostgresDatabase", role)}
+		}
+		if _, ok := reconciled[role]; !ok {
+			return roleGateDecision{State: roleGatePending, Message: fmt.Sprintf("Waiting for role %s to be reconciled", role)}
+		}
+	}
+	return roleGateDecision{State: roleGateProceed, Message: "Roles are reconciled and owned by this PostgresDatabase"}
 }
 
-func parseRoleNames(raw []byte) []string {
-	var fields map[string]any
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return nil
-	}
-	spec, _ := fields["f:spec"].(map[string]any)
-	roles, _ := spec["f:managedRoles"].(map[string]any)
-	var names []string
-	for key := range roles {
-		var k struct{ Name string }
-		if err := json.Unmarshal([]byte(strings.TrimPrefix(key, "k:")), &k); err == nil && k.Name != "" {
-			names = append(names, k.Name)
-		}
-	}
-	return names
-}
-
-func patchManagedRoles(ctx context.Context, c client.Client, fieldManager string, cluster *enterprisev4.PostgresCluster, roles []enterprisev4.ManagedRole) error {
-	rolePatch, err := buildManagedRolesPatch(cluster, roles, c.Scheme())
-	if err != nil {
-		return fmt.Errorf("building managed roles patch: %w", err)
-	}
-	if err := c.Apply(ctx, client.ApplyConfigurationFromUnstructured(rolePatch), client.FieldOwner(fieldManager)); err != nil {
-		return fmt.Errorf("patching managed roles: %w", err)
-	}
-	return nil
-}
-
-func verifyRolesReady(_ context.Context, expectedRoles []string, cnpgCluster *cnpgv1.Cluster) ([]string, error) {
-	if cnpgCluster.Status.ManagedRolesStatus.CannotReconcile != nil {
-		for _, userName := range expectedRoles {
-			if errs, exists := cnpgCluster.Status.ManagedRolesStatus.CannotReconcile[userName]; exists {
-				return nil, fmt.Errorf("reconciling user %s: %v", userName, errs)
-			}
-		}
-	}
-	reconciled := cnpgCluster.Status.ManagedRolesStatus.ByStatus[cnpgv1.RoleStatusReconciled]
-	var notReady []string
-	for _, userName := range expectedRoles {
-		if !slices.Contains(reconciled, userName) {
-			notReady = append(notReady, userName)
-		}
-	}
-	return notReady, nil
+func sameRoleOwner(a, b enterprisev4.RoleOwnerReference) bool {
+	return a.Name == b.Name && a.UID == b.UID
 }
 
 func reconcileCNPGDatabases(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) ([]string, error) {
@@ -773,7 +712,7 @@ func handleDeletion(ctx context.Context, rc *ReconcileContext, postgresDB *enter
 	if err := deleteRemovedResources(ctx, c, postgresDB, plan.deleted); err != nil {
 		return err
 	}
-	if err := cleanupManagedRoles(ctx, c, postgresDB, plan); err != nil {
+	if err := cleanupManagedRoles(ctx, rc, postgresDB, plan); err != nil {
 		return err
 	}
 	controllerutil.RemoveFinalizer(postgresDB, postgresDatabaseFinalizerName)
@@ -808,10 +747,14 @@ func deleteRemovedResources(ctx context.Context, c client.Client, postgresDB *en
 	return deleteSecrets(ctx, c, postgresDB, deleted)
 }
 
-func cleanupManagedRoles(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, plan deletionPlan) error {
+// cleanupManagedRoles publishes drop intent and retains the finalizer until the cluster stops owning deleted roles.
+func cleanupManagedRoles(ctx context.Context, rc *ReconcileContext, postgresDB *enterprisev4.PostgresDatabase, plan deletionPlan) error {
+	c := rc.Client
 	logger := logging.FromContext(ctx)
 	if len(plan.deleted) == 0 {
-		return nil
+		postgresDB.Status.Databases = nil
+		postgresDB.Status.ObservedGeneration = &postgresDB.Generation
+		return c.Status().Update(ctx, postgresDB)
 	}
 	cluster := &enterprisev4.PostgresCluster{}
 	if err := c.Get(ctx, types.NamespacedName{Name: postgresDB.Spec.ClusterRef.Name, Namespace: postgresDB.Namespace}, cluster); err != nil {
@@ -821,12 +764,42 @@ func cleanupManagedRoles(ctx context.Context, c client.Client, postgresDB *enter
 		logger.InfoContext(ctx, "PostgresCluster already deleted, skipping managed roles cleanup")
 		return nil
 	}
-	fieldManager := fieldManagerName(postgresDB.Name)
-	retainedRoles := buildDesiredRoles(postgresDB.Name, plan.retained)
-	rolesToRemove := buildRolesToRemove(plan.deleted)
-	allRoles := append(retainedRoles, rolesToRemove...)
-	if err := patchManagedRoles(ctx, c, fieldManager, cluster, allRoles); err != nil {
+	if cluster.GetDeletionTimestamp() != nil {
+		logger.InfoContext(ctx, "PostgresCluster is deleting, skipping managed roles cleanup")
+		return nil
+	}
+
+	stillOwned := rolesStillOwnedBySelf(postgresDB, cluster.Status.ManagedRolesStatus, plan.deleted)
+	priorRolesCond := meta.FindStatusCondition(postgresDB.Status.Conditions, string(rolesReady))
+
+	postgresDB.Status.Databases = populateDatabaseStatusForDefinitions(postgresDB, plan.deleted, false, rolesAbsent)
+	postgresDB.Status.ObservedGeneration = &postgresDB.Generation
+	if stillOwned {
+		reason := reasonRoleCleanupWaiting
+		message := "Waiting for PostgresCluster to drop managed roles"
+		if roleCleanupTimedOut(postgresDB) {
+			reason = reasonRoleCleanupBlocked
+			message = fmt.Sprintf("Managed role cleanup is still pending after %s; retaining finalizer to avoid leaking roles", roleCleanupTimeout)
+			logger.WarnContext(ctx, "managed role cleanup timed out; retaining finalizer", "timeout", roleCleanupTimeout.String())
+		}
+		deleting := string(deletingDBPhase)
+		postgresDB.Status.Phase = &deleting
+		meta.SetStatusCondition(&postgresDB.Status.Conditions, metav1.Condition{
+			Type:               string(rolesReady),
+			Status:             metav1.ConditionFalse,
+			Reason:             string(reason),
+			Message:            message,
+			ObservedGeneration: postgresDB.Generation,
+		})
+		if priorRolesCond == nil || priorRolesCond.Reason != string(reason) {
+			rc.emitWarning(postgresDB, EventRoleCleanupBlocked, fmt.Sprintf("PostgresDatabase %s deletion is %s", postgresDB.Name, message))
+		}
+	}
+	if err := c.Status().Update(ctx, postgresDB); err != nil {
 		return err
+	}
+	if stillOwned {
+		return errRoleCleanupPending
 	}
 	return nil
 }
@@ -953,10 +926,7 @@ func deleteConfigMaps(ctx context.Context, c client.Client, postgresDB *enterpri
 func deleteSecrets(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, databases []enterprisev4.DatabaseDefinition) error {
 	logger := logging.FromContext(ctx)
 	for _, dbSpec := range databases {
-		// We are pure consumers of external secrets. Deleting them would risk data
-		// loss (e.g. when the external ref name collides with our derived name) and
-		// could break other consumers still referencing the same secret. The role
-		// itself is still dropped by CNPG via cleanupManagedRoles.
+		// Do not delete externally managed Secrets; they may have other consumers.
 		if dbSpec.PasswordConfig != nil {
 			continue
 		}
@@ -975,62 +945,23 @@ func deleteSecrets(ctx context.Context, c client.Client, postgresDB *enterprisev
 	return nil
 }
 
-// buildRolesToRemove produces Exists:false entries for the given databases so CNPG drops their roles.
-func buildRolesToRemove(databases []enterprisev4.DatabaseDefinition) []enterprisev4.ManagedRole {
-	roles := make([]enterprisev4.ManagedRole, 0, len(databases)*2)
+func roleCleanupTimedOut(postgresDB *enterprisev4.PostgresDatabase) bool {
+	return postgresDB.DeletionTimestamp != nil && time.Since(postgresDB.DeletionTimestamp.Time) > roleCleanupTimeout
+}
+
+func rolesStillOwnedBySelf(postgresDB *enterprisev4.PostgresDatabase, status *enterprisev4.ManagedRolesStatus, databases []enterprisev4.DatabaseDefinition) bool {
+	if status == nil {
+		return true
+	}
+	self := enterprisev4.RoleOwnerReference{Name: postgresDB.Name, UID: string(postgresDB.UID)}
 	for _, dbSpec := range databases {
-		roles = append(roles,
-			enterprisev4.ManagedRole{Name: adminRoleName(dbSpec.Name), Exists: false},
-			enterprisev4.ManagedRole{Name: rwRoleName(dbSpec.Name), Exists: false},
-		)
-	}
-	return roles
-}
-
-// absentRolesByName produces Exists:false entries from a list of raw role names.
-// Used by the normal reconcile path where names come from SSA field manager parsing.
-func absentRolesByName(names []string) []enterprisev4.ManagedRole {
-	roles := make([]enterprisev4.ManagedRole, 0, len(names))
-	for _, name := range names {
-		roles = append(roles, enterprisev4.ManagedRole{Name: name, Exists: false})
-	}
-	return roles
-}
-
-// findAddedRoleNames returns role names from the desired list that are missing
-// from the cluster spec or currently marked absent.
-func findAddedRoleNames(cluster *enterprisev4.PostgresCluster, desired []enterprisev4.ManagedRole) []string {
-	current := make(map[string]bool, len(cluster.Spec.ManagedRoles))
-	for _, r := range cluster.Spec.ManagedRoles {
-		current[r.Name] = r.Exists
-	}
-	var toAdd []string
-	for _, r := range desired {
-		exists, found := current[r.Name]
-		if !found || !exists {
-			toAdd = append(toAdd, r.Name)
-		}
-	}
-	return toAdd
-}
-
-// findRemovedRoleNames returns role names currently owned by this field manager
-// in the cluster spec that are absent from the desired list.
-func findRemovedRoleNames(cluster *enterprisev4.PostgresCluster, manager string, desired []enterprisev4.ManagedRole) []string {
-	desiredSet := make(map[string]struct{}, len(desired))
-	for _, r := range desired {
-		desiredSet[r.Name] = struct{}{}
-	}
-	owners := managedRoleOwners(cluster.ManagedFields)
-	var toRemove []string
-	for name, owner := range owners {
-		if owner == manager {
-			if _, ok := desiredSet[name]; !ok {
-				toRemove = append(toRemove, name)
+		for _, role := range []string{adminRoleName(dbSpec.Name), rwRoleName(dbSpec.Name)} {
+			if owner, ok := status.RoleOwners[role]; ok && sameRoleOwner(owner, self) {
+				return true
 			}
 		}
 	}
-	return toRemove
+	return false
 }
 
 func resolveSecretNames(postgresDBName string, dbSpec enterprisev4.DatabaseDefinition) (adminSecretName string, rwSecretName string) {
@@ -1045,45 +976,6 @@ func resolveSecretNames(postgresDBName string, dbSpec enterprisev4.DatabaseDefin
 		adminSecretName = roleSecretName(postgresDBName, dbSpec.Name, secretRoleAdmin)
 	}
 	return adminSecretName, rwSecretName
-}
-
-// buildDesiredRoles builds the full set of roles that should be present for the given databases.
-// This is the input to findAddedRoleNames and findRemovedRoleNames.
-func buildDesiredRoles(postgresDBName string, databases []enterprisev4.DatabaseDefinition) []enterprisev4.ManagedRole {
-	roles := make([]enterprisev4.ManagedRole, 0, len(databases)*2)
-	for _, dbSpec := range databases {
-		adminSecretName, rwSecretName := resolveSecretNames(postgresDBName, dbSpec)
-		roles = append(roles,
-			enterprisev4.ManagedRole{
-				Name:   adminRoleName(dbSpec.Name),
-				Exists: true,
-				PasswordSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: adminSecretName},
-					Key: secretKeyPassword},
-			},
-			enterprisev4.ManagedRole{
-				Name:   rwRoleName(dbSpec.Name),
-				Exists: true,
-				PasswordSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: rwSecretName},
-					Key: secretKeyPassword},
-			},
-		)
-	}
-	return roles
-}
-
-func buildManagedRolesPatch(cluster *enterprisev4.PostgresCluster, roles []enterprisev4.ManagedRole, scheme *runtime.Scheme) (*unstructured.Unstructured, error) {
-	gvk, err := apiutil.GVKForObject(cluster, scheme)
-	if err != nil {
-		return nil, fmt.Errorf("getting GVK for Cluster: %w", err)
-	}
-	return &unstructured.Unstructured{
-		Object: map[string]any{
-			"apiVersion": gvk.GroupVersion().String(),
-			"kind":       gvk.Kind,
-			"metadata":   map[string]any{"name": cluster.Name, "namespace": cluster.Namespace},
-			"spec":       map[string]any{"managedRoles": roles},
-		},
-	}, nil
 }
 
 func stripOwnerReference(obj metav1.Object, ownerUID types.UID) {
@@ -1369,17 +1261,58 @@ func reconcileRoleConfigMaps(ctx context.Context, c client.Client, scheme *runti
 	return nil
 }
 
-func populateDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase) []enterprisev4.DatabaseInfo {
-	databases := make([]enterprisev4.DatabaseInfo, 0, len(postgresDB.Spec.Databases))
-	for _, dbSpec := range postgresDB.Spec.Databases {
+func persistDatabaseInfos(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, ready bool, exists bool) error {
+	before := postgresDB.Status.DeepCopy()
+	postgresDB.Status.Databases = populateDatabaseStatus(postgresDB, ready, exists)
+	postgresDB.Status.ObservedGeneration = &postgresDB.Generation
+	if equality.Semantic.DeepEqual(*before, postgresDB.Status) {
+		return nil
+	}
+	return c.Status().Update(ctx, postgresDB)
+}
+
+func populateDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase, flags ...bool) []enterprisev4.DatabaseInfo {
+	ready := true
+	exists := true
+	includeRoles := false
+	if len(flags) > 0 {
+		ready = flags[0]
+		includeRoles = true
+	}
+	if len(flags) > 1 {
+		exists = flags[1]
+	}
+	return populateDatabaseStatusForDefinitions(postgresDB, postgresDB.Spec.Databases, ready, exists, includeRoles)
+}
+
+func populateDatabaseStatusForDefinitions(postgresDB *enterprisev4.PostgresDatabase, definitions []enterprisev4.DatabaseDefinition, ready bool, exists bool, includeRoles ...bool) []enterprisev4.DatabaseInfo {
+	publishRoles := true
+	if len(includeRoles) > 0 {
+		publishRoles = includeRoles[0]
+	}
+	existingReady := make(map[string]bool, len(postgresDB.Status.Databases))
+	for _, existing := range postgresDB.Status.Databases {
+		if existing.Ready || len(existing.Roles) == 0 {
+			existingReady[existing.Name] = true
+		}
+	}
+	databases := make([]enterprisev4.DatabaseInfo, 0, len(definitions))
+	for _, dbSpec := range definitions {
 		adminSecretName, rwSecretName := resolveSecretNames(postgresDB.Name, dbSpec)
-		databases = append(databases, enterprisev4.DatabaseInfo{
+		info := enterprisev4.DatabaseInfo{
 			Name:               dbSpec.Name,
-			Ready:              true,
+			Ready:              ready || (exists && existingReady[dbSpec.Name]),
 			AdminUserSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: adminSecretName}, Key: secretKeyPassword},
 			RWUserSecretRef:    &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: rwSecretName}, Key: secretKeyPassword},
 			ConfigMapRef:       &corev1.LocalObjectReference{Name: configMapName(postgresDB.Name, dbSpec.Name)},
-		})
+		}
+		if publishRoles {
+			info.Roles = []enterprisev4.DatabaseRoleInfo{
+				{Name: adminRoleName(dbSpec.Name), SecretRef: &corev1.LocalObjectReference{Name: adminSecretName}, Exists: exists},
+				{Name: rwRoleName(dbSpec.Name), SecretRef: &corev1.LocalObjectReference{Name: rwSecretName}, Exists: exists},
+			}
+		}
+		databases = append(databases, info)
 	}
 	return databases
 }
@@ -1387,7 +1320,10 @@ func populateDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase) []enterpr
 func hasNewDatabases(postgresDB *enterprisev4.PostgresDatabase) bool {
 	existing := make(map[string]bool, len(postgresDB.Status.Databases))
 	for _, dbInfo := range postgresDB.Status.Databases {
-		existing[dbInfo.Name] = true
+		// Entries with no role status are treated as provisioned database status.
+		if dbInfo.Ready || len(dbInfo.Roles) == 0 {
+			existing[dbInfo.Name] = true
+		}
 	}
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		if !existing[dbSpec.Name] {
@@ -1398,9 +1334,8 @@ func hasNewDatabases(postgresDB *enterprisev4.PostgresDatabase) bool {
 }
 
 // Naming helpers — single source of truth shared by creation and status wiring.
-func fieldManagerName(postgresDBName string) string { return fieldManagerPrefix + postgresDBName }
-func adminRoleName(dbName string) string            { return dbName + "_admin" }
-func rwRoleName(dbName string) string               { return dbName + "_rw" }
+func adminRoleName(dbName string) string { return dbName + "_admin" }
+func rwRoleName(dbName string) string    { return dbName + "_rw" }
 func cnpgDatabaseName(postgresDBName, dbName string) string {
 	return fmt.Sprintf("%s-%s", postgresDBName, dbName)
 }

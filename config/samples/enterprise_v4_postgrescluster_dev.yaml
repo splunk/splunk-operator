@@ -11,6 +11,7 @@ metadata:
 spec:
   # Reference the ClusterClass to inherit defaults - this is required, immutable, and must match the name of an existing ClusterClass
   class: postgresql-dev
+  # Create PostgresDatabase resources that reference this cluster for application databases and roles.
   clusterDeletionPolicy: Retain
   instances: 3
   # Storage and PostgreSQL version are overridden from the ClusterClass defaults. Validation rules on the PostgresCluster resource will prevent removing these fields or setting them to lower values than the original overrides.

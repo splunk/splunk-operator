@@ -21,6 +21,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const PostgresDatabaseClusterRefNameField = "spec.clusterRef.name"
+
 // PostgresDatabaseSpec defines the desired state of PostgresDatabase.
 // +kubebuilder:validation:XValidation:rule="self.clusterRef == oldSelf.clusterRef",message="clusterRef is immutable"
 // +kubebuilder:validation:XValidation:rule="self.clusterRef.name.size() > 0",message="clusterRef.name must not be empty"
@@ -78,6 +80,23 @@ type DatabaseInfo struct {
 	AdminUserSecretRef *corev1.SecretKeySelector    `json:"adminUserSecretRef,omitempty"`
 	RWUserSecretRef    *corev1.SecretKeySelector    `json:"rwUserSecretRef,omitempty"`
 	ConfigMapRef       *corev1.LocalObjectReference `json:"configMapRef,omitempty"`
+	Roles              []DatabaseRoleInfo           `json:"roles,omitempty"`
+}
+
+// DatabaseRoleInfo is the committed credential-ready role surface published by
+// the PostgresDatabase controller for the PostgresCluster controller to consume.
+// +kubebuilder:validation:XValidation:rule="!self.exists || (has(self.secretRef) && self.secretRef.name.size() > 0)",message="secretRef.name is required when exists is true"
+type DatabaseRoleInfo struct {
+	// Name is an opaque PostgreSQL role name.
+	Name string `json:"name"`
+
+	// SecretRef references the Secret containing the role password. CNPG reads its
+	// conventional password key, so only the Secret name crosses this boundary.
+	// +optional
+	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// Exists declares whether this role should exist. false is an explicit drop signal.
+	Exists bool `json:"exists"`
 }
 
 // PostgresDatabaseStatus defines the observed state of PostgresDatabase.
