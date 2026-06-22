@@ -1216,8 +1216,9 @@ spec:
                 type: array
                 x-kubernetes-validations:
                 - message: at most one entry per role is allowed
-                  rule: self.filter(c, c.role != '').all(c, self.filter(x, x.role
-                    == c.role).size() == 1)
+                  rule: self.filter(c, has(c.role) && c.role == 'server').size() <=
+                    1 && self.filter(c, has(c.role) && c.role == 'input').size() <=
+                    1
               clusterManagerRef:
                 description: ClusterManagerRef refers to a Splunk Enterprise indexer
                   cluster managed by the operator within Kubernetes
@@ -6141,8 +6142,9 @@ spec:
                 type: array
                 x-kubernetes-validations:
                 - message: at most one entry per role is allowed
-                  rule: self.filter(c, c.role != '').all(c, self.filter(x, x.role
-                    == c.role).size() == 1)
+                  rule: self.filter(c, has(c.role) && c.role == 'server').size() <=
+                    1 && self.filter(c, has(c.role) && c.role == 'input').size() <=
+                    1
               clusterManagerRef:
                 description: ClusterManagerRef refers to a Splunk Enterprise indexer
                   cluster managed by the operator within Kubernetes
