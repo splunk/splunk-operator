@@ -116,8 +116,8 @@ spec:
             - message: sqs.dlq is immutable once created
               rule: self.sqs.dlq == oldSelf.sqs.dlq
             - message: sqs.endpoint is immutable once created
-              rule: '!has(oldSelf.sqs.endpoint) || (has(self.sqs.endpoint) && self.sqs.endpoint
-                == oldSelf.sqs.endpoint)'
+              rule: (has(self.sqs.endpoint) == has(oldSelf.sqs.endpoint)) && (!has(self.sqs.endpoint)
+                || self.sqs.endpoint == oldSelf.sqs.endpoint)
             - message: sqs must be provided when provider is sqs or sqs_cp
               rule: (self.provider != 'sqs' && self.provider != 'sqs_cp') || has(self.sqs)
           status:

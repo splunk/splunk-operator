@@ -366,6 +366,104 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 			Expect(k8sClient.Delete(context.Background(), queue)).Should(Succeed())
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
+
+		It("should reject update that adds endpoint after creation", func() {
+			namespace := "ns-imm-queue-5"
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+
+			queue := &enterpriseApi.Queue{
+				ObjectMeta: metav1.ObjectMeta{Name: "queue-add-ep", Namespace: namespace},
+				Spec: enterpriseApi.QueueSpec{
+					Provider: "sqs",
+					SQS: enterpriseApi.SQSSpec{
+						Name:       "test-queue",
+						AuthRegion: "us-west-2",
+						DLQ:        "test-dlq",
+					},
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), queue)).Should(Succeed())
+
+			fetched := &enterpriseApi.Queue{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{
+				Name: queue.Name, Namespace: namespace,
+			}, fetched)).Should(Succeed())
+
+			fetched.Spec.SQS.Endpoint = "https://sqs.us-west-2.amazonaws.com"
+			err := k8sClient.Update(context.Background(), fetched)
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).Should(ContainSubstring("sqs.endpoint is immutable once created"))
+
+			Expect(k8sClient.Delete(context.Background(), queue)).Should(Succeed())
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+
+		It("should reject update that removes endpoint after creation", func() {
+			namespace := "ns-imm-queue-6"
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+
+			queue := &enterpriseApi.Queue{
+				ObjectMeta: metav1.ObjectMeta{Name: "queue-remove-ep", Namespace: namespace},
+				Spec: enterpriseApi.QueueSpec{
+					Provider: "sqs",
+					SQS: enterpriseApi.SQSSpec{
+						Name:       "test-queue",
+						AuthRegion: "us-west-2",
+						DLQ:        "test-dlq",
+						Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+					},
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), queue)).Should(Succeed())
+
+			fetched := &enterpriseApi.Queue{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{
+				Name: queue.Name, Namespace: namespace,
+			}, fetched)).Should(Succeed())
+
+			fetched.Spec.SQS.Endpoint = ""
+			err := k8sClient.Update(context.Background(), fetched)
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).Should(ContainSubstring("sqs.endpoint is immutable once created"))
+
+			Expect(k8sClient.Delete(context.Background(), queue)).Should(Succeed())
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+
+		It("should allow metadata update when endpoint is unset (regression)", func() {
+			namespace := "ns-imm-queue-7"
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+
+			queue := &enterpriseApi.Queue{
+				ObjectMeta: metav1.ObjectMeta{Name: "queue-meta", Namespace: namespace},
+				Spec: enterpriseApi.QueueSpec{
+					Provider: "sqs",
+					SQS: enterpriseApi.SQSSpec{
+						Name:       "test-queue",
+						AuthRegion: "us-west-2",
+						DLQ:        "test-dlq",
+					},
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), queue)).Should(Succeed())
+
+			fetched := &enterpriseApi.Queue{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{
+				Name: queue.Name, Namespace: namespace,
+			}, fetched)).Should(Succeed())
+
+			if fetched.Labels == nil {
+				fetched.Labels = map[string]string{}
+			}
+			fetched.Labels["foo"] = "bar"
+			Expect(k8sClient.Update(context.Background(), fetched)).Should(Succeed())
+
+			Expect(k8sClient.Delete(context.Background(), queue)).Should(Succeed())
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
 	})
 
 	Context("IndexerCluster spec immutability", func() {
@@ -483,6 +581,150 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 			Expect(k8sClient.Update(context.Background(), fetched)).Should(Succeed())
 
 			Expect(k8sClient.Delete(context.Background(), fetched)).Should(Succeed())
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+	})
+
+	Context("CommonSplunkSpec certs uniqueness", func() {
+
+		It("should accept a resource with no certs entries", func() {
+			namespace := "ns-certs-0"
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+
+			idxc := &enterpriseApi.IndexerCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "idxc-certs-empty", Namespace: namespace},
+				Spec: enterpriseApi.IndexerClusterSpec{
+					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+						Spec: enterpriseApi.Spec{ImagePullPolicy: "IfNotPresent"},
+					},
+					Replicas: 1,
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), idxc)).Should(Succeed())
+
+			fetched := &enterpriseApi.IndexerCluster{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{
+				Name: idxc.Name, Namespace: namespace,
+			}, fetched)).Should(Succeed())
+			Expect(fetched.Spec.Certs).To(BeEmpty())
+
+			fetched.Spec.Certs = []enterpriseApi.CertSpec{}
+			Expect(k8sClient.Update(context.Background(), fetched)).Should(Succeed())
+
+			Expect(k8sClient.Delete(context.Background(), idxc)).Should(Succeed())
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+
+		It("should accept one server, one input and multiple no-role certs", func() {
+			namespace := "ns-certs-1"
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+
+			idxc := &enterpriseApi.IndexerCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "idxc-certs-ok", Namespace: namespace},
+				Spec: enterpriseApi.IndexerClusterSpec{
+					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+						Spec: enterpriseApi.Spec{ImagePullPolicy: "IfNotPresent"},
+						Certs: []enterpriseApi.CertSpec{
+							{SecretRef: corev1.LocalObjectReference{Name: "server-cert"}, Role: enterpriseApi.CertRoleServer},
+							{SecretRef: corev1.LocalObjectReference{Name: "input-cert"}, Role: enterpriseApi.CertRoleInput},
+							{SecretRef: corev1.LocalObjectReference{Name: "ca-1"}},
+							{SecretRef: corev1.LocalObjectReference{Name: "ca-2"}},
+						},
+					},
+					Replicas: 1,
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), idxc)).Should(Succeed())
+
+			Expect(k8sClient.Delete(context.Background(), idxc)).Should(Succeed())
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+
+		It("should reject two certs with role=server", func() {
+			namespace := "ns-certs-2"
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+
+			idxc := &enterpriseApi.IndexerCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "idxc-certs-dup-server", Namespace: namespace},
+				Spec: enterpriseApi.IndexerClusterSpec{
+					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+						Spec: enterpriseApi.Spec{ImagePullPolicy: "IfNotPresent"},
+						Certs: []enterpriseApi.CertSpec{
+							{SecretRef: corev1.LocalObjectReference{Name: "server-a"}, Role: enterpriseApi.CertRoleServer},
+							{SecretRef: corev1.LocalObjectReference{Name: "server-b"}, Role: enterpriseApi.CertRoleServer},
+						},
+					},
+					Replicas: 1,
+				},
+			}
+			err := k8sClient.Create(context.Background(), idxc)
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).Should(ContainSubstring("at most one entry per role is allowed"))
+
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+
+		It("should reject two certs with role=input", func() {
+			namespace := "ns-certs-3"
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+
+			idxc := &enterpriseApi.IndexerCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "idxc-certs-dup-input", Namespace: namespace},
+				Spec: enterpriseApi.IndexerClusterSpec{
+					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+						Spec: enterpriseApi.Spec{ImagePullPolicy: "IfNotPresent"},
+						Certs: []enterpriseApi.CertSpec{
+							{SecretRef: corev1.LocalObjectReference{Name: "input-a"}, Role: enterpriseApi.CertRoleInput},
+							{SecretRef: corev1.LocalObjectReference{Name: "input-b"}, Role: enterpriseApi.CertRoleInput},
+						},
+					},
+					Replicas: 1,
+				},
+			}
+			err := k8sClient.Create(context.Background(), idxc)
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).Should(ContainSubstring("at most one entry per role is allowed"))
+
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+
+		It("should reject duplicate role added by update", func() {
+			namespace := "ns-certs-4"
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+
+			idxc := &enterpriseApi.IndexerCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "idxc-certs-update", Namespace: namespace},
+				Spec: enterpriseApi.IndexerClusterSpec{
+					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+						Spec: enterpriseApi.Spec{ImagePullPolicy: "IfNotPresent"},
+						Certs: []enterpriseApi.CertSpec{
+							{SecretRef: corev1.LocalObjectReference{Name: "server-a"}, Role: enterpriseApi.CertRoleServer},
+						},
+					},
+					Replicas: 1,
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), idxc)).Should(Succeed())
+
+			fetched := &enterpriseApi.IndexerCluster{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{
+				Name: idxc.Name, Namespace: namespace,
+			}, fetched)).Should(Succeed())
+
+			fetched.Spec.Certs = append(fetched.Spec.Certs, enterpriseApi.CertSpec{
+				SecretRef: corev1.LocalObjectReference{Name: "server-b"},
+				Role:      enterpriseApi.CertRoleServer,
+			})
+			err := k8sClient.Update(context.Background(), fetched)
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).Should(ContainSubstring("at most one entry per role is allowed"))
+
+			Expect(k8sClient.Delete(context.Background(), idxc)).Should(Succeed())
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 	})

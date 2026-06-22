@@ -306,7 +306,7 @@ type CommonSplunkSpec struct {
 	// /mnt/tls/splunk-<role>-tls-cert/. When role is unset, the cert is mounted
 	// as-is at /mnt/tls/<secretRef.name>/. At most one entry per role is allowed.
 	// +kubebuilder:validation:MaxItems=10
-	// +kubebuilder:validation:XValidation:rule="self.filter(c, c.role != '').all(c, self.filter(x, x.role == c.role).size() == 1)",message="at most one entry per role is allowed"
+	// +kubebuilder:validation:XValidation:rule="self.filter(c, has(c.role) && c.role == 'server').size() <= 1 && self.filter(c, has(c.role) && c.role == 'input').size() <= 1",message="at most one entry per role is allowed"
 	// +optional
 	Certs []CertSpec `json:"certs,omitempty"`
 }
