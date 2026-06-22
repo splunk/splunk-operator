@@ -456,6 +456,87 @@ func TestAddURLsConfigMapMultipleEnvVars(t *testing.T) {
 			}
 		}
 	})
+
+	// Regression: reconciling a CR whose name is a prefix of another's must
+	// not evict the longer-named CR's pod URLs ("search-head" vs "search-head-adhoc").
+	t.Run("CR name is prefix of another CR name does not evict peer", func(t *testing.T) {
+		configMap := &corev1.ConfigMap{
+			Data: map[string]string{
+				"SPLUNK_STANDALONE_URL": "splunk-search-head-adhoc-standalone-0",
+			},
+		}
+		newURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_STANDALONE_URL", Value: "splunk-search-head-standalone-0"},
+		}
+		AddURLsConfigMap(configMap, "search-head", newURLs)
+
+		got := configMap.Data["SPLUNK_STANDALONE_URL"]
+		if !strings.Contains(got, "splunk-search-head-adhoc-standalone-0") {
+			t.Errorf("adhoc CR URL was incorrectly evicted by prefix-named CR. Got: %q", got)
+		}
+		if !strings.Contains(got, "splunk-search-head-standalone-0") {
+			t.Errorf("new CR URL was not added. Got: %q", got)
+		}
+
+		// Reverse direction: reconciling the longer-named CR must not touch the sibling.
+		adhocURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_STANDALONE_URL", Value: "splunk-search-head-adhoc-standalone-0"},
+		}
+		AddURLsConfigMap(configMap, "search-head-adhoc", adhocURLs)
+
+		got = configMap.Data["SPLUNK_STANDALONE_URL"]
+		if !strings.Contains(got, "splunk-search-head-adhoc-standalone-0") {
+			t.Errorf("adhoc CR URL missing after self-reconcile. Got: %q", got)
+		}
+		if !strings.Contains(got, "splunk-search-head-standalone-0") {
+			t.Errorf("sibling CR URL was incorrectly evicted by adhoc reconcile. Got: %q", got)
+		}
+	})
+
+	// Regression: same prefix-name ambiguity for service URLs ("cm" vs "cm-extra").
+	t.Run("Service URL with prefix CR name does not evict sibling", func(t *testing.T) {
+		configMap := &corev1.ConfigMap{
+			Data: map[string]string{
+				"SPLUNK_CLUSTER_MANAGER_URL": "splunk-cm-extra-cluster-manager-service",
+			},
+		}
+		newURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_CLUSTER_MANAGER_URL", Value: "splunk-cm-cluster-manager-service"},
+		}
+		AddURLsConfigMap(configMap, "cm", newURLs)
+
+		got := configMap.Data["SPLUNK_CLUSTER_MANAGER_URL"]
+		if !strings.Contains(got, "splunk-cm-extra-cluster-manager-service") {
+			t.Errorf("sibling service URL was incorrectly evicted. Got: %q", got)
+		}
+		if !strings.Contains(got, "splunk-cm-cluster-manager-service") {
+			t.Errorf("new service URL was not added. Got: %q", got)
+		}
+	})
+
+	// Regression: a sibling CR whose name embeds the shorter CR's kind segment
+	// ("cm" vs "cm-cluster-manager-extra") yields a URL that contains the
+	// shorter CR's derived prefix as a substring; ownership must compare
+	// derived prefixes for equality, not via substring.
+	t.Run("Sibling CR embedding shorter kind segment is not evicted", func(t *testing.T) {
+		configMap := &corev1.ConfigMap{
+			Data: map[string]string{
+				"SPLUNK_CLUSTER_MANAGER_URL": "splunk-cm-cluster-manager-extra-cluster-manager-service",
+			},
+		}
+		newURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_CLUSTER_MANAGER_URL", Value: "splunk-cm-cluster-manager-service"},
+		}
+		AddURLsConfigMap(configMap, "cm", newURLs)
+
+		got := configMap.Data["SPLUNK_CLUSTER_MANAGER_URL"]
+		if !strings.Contains(got, "splunk-cm-cluster-manager-extra-cluster-manager-service") {
+			t.Errorf("sibling CR URL was incorrectly evicted by prefix substring match. Got: %q", got)
+		}
+		if !strings.Contains(got, "splunk-cm-cluster-manager-service") {
+			t.Errorf("new CR URL was not added. Got: %q", got)
+		}
+	})
 }
 
 func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
