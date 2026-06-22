@@ -1,56 +1,22 @@
 ---
-title: What is SOK?
+title: What Is SOK?
 parent: Internal Onboarding
 nav_order: 1
 ---
 
-# Required Kubernetes Knowledge
+# What Is SOK?
 
-This section is a living onboarding checklist. It will be updated as the team's
-supported platforms evolve.
+## Table of Contents
 
-## Baseline knowledge
+- [What SOK Is](#what-sok-is)
+- [What SOK Is Not](#what-sok-is-not)
+- [Relationship to Kubernetes and Splunk Enterprise](#relationship-to-kubernetes-and-splunk-enterprise)
+- [Required Kubernetes Knowledge](#required-kubernetes-knowledge)
+  - [Baseline Knowledge](#baseline-knowledge)
+  - [How to Gain Baseline Knowledge](#how-to-gain-baseline-knowledge)
+- [Public-Facing Docs to Start From](#public-facing-docs-to-start-from)
 
-You should be comfortable with the following before making non-trivial SOK code
-changes:
-
-- `kubectl` workflows: `get`, `describe`, `apply`, `delete`, `logs`, `exec`,
-  `port-forward`, JSONPath output, and YAML output.
-- Workloads and pod lifecycle: Pods, Deployments, StatefulSets, init
-  containers, container readiness, restart behavior, image pulls, probes, and
-  events.
-- Storage basics: PersistentVolumes, PersistentVolumeClaims, StorageClasses,
-  volume mounts, access modes, and how storage failures appear in pods and
-  events.
-- Configuration and secrets: ConfigMaps, Secrets, projected volumes,
-  environment variables, image pull secrets, and the risks around logging or
-  committing secret values.
-- RBAC and identity: ServiceAccounts, Roles, ClusterRoles, RoleBindings,
-  ClusterRoleBindings, and how operator permissions differ between
-  namespace-scoped and cluster-wide installs.
-- CRDs and the operator pattern: custom resources, `spec` as desired state,
-  `status` as observed state, reconciliation loops, status conditions,
-  watches, owner references, and finalizer-driven cleanup.
-
-## How to gain it
-
-See the official Kubernetes documentation:
-
-- Read the Kubernetes [concepts overview](https://kubernetes.io/docs/concepts/overview/),
-  [kubectl quick reference](https://kubernetes.io/docs/reference/kubectl/quick-reference/),
-  [debugging applications](https://kubernetes.io/docs/tasks/debug/debug-application/),
-  [custom resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/),
-  [operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/),
-  and [StatefulSets](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/)
-  pages.
-- For beginners, take the [Coursera Kubernetes for Beginners](https://www.coursera.org/learn/kubernetes-for-absolute-beginners)
-  course, including hands-on labs. Cisco offers a free [Coursera Subscription](https://cisco.edcast.com/insights/ECL-206ca16e-7798-4da3-8cce-dc67792cb955),
-  paid by the ELT level.
-- For more advanced users, take the [Certified Kubernetes Application Developer (CKAD)](https://www.oreilly.com/videos/certified-kubernetes-application/9780138086558/)
-  course on O'Reilly. Cisco offers a free [O'Reilly subscription](https://cisco.edcast.com/insights/ECL-3799144b-6da6-4242-8793-cabc08087dda),
-  paid by the ELT level. Taking this course prepares you for the CKAD exam, but does not give you the cerification.
-
-# What is SOK?
+---
 
 SOK is the Splunk Operator for Kubernetes. Operators are software extensions
 to Kubernetes that make use of custom resources to manage applications and
@@ -62,11 +28,11 @@ and Splunk configuration.
 This page is written for internal Splunk engineers building SOK operators,
 controllers, CRDs, tests, and supporting automation. It explains the operating
 boundaries of SOK and the layer model to keep in mind when changing controller
-behavior. It is intended to enhance public (customer) SOK documentation, and contribution
-expectations. All documentation on this page NOT included in this "Internal Onboarding"
-section is available to the public on [GitHub](https://splunk.github.io/splunk-operator/).
+behavior. It supplements the public SOK documentation with internal development
+context and contribution expectations. Documentation outside this Internal
+Onboarding section is available to the public on [GitHub](https://splunk.github.io/splunk-operator/).
 
-## What SOK is
+## What SOK Is
 
 SOK is:
 
@@ -85,7 +51,7 @@ and SOK drives Kubernetes and Splunk-side setup toward that declared state. The
 operator owns the workflows it implements, such as creating StatefulSets,
 Services, ConfigMaps, Secrets, PVCs, and related Splunk orchestration steps.
 
-## What SOK is not
+## What SOK Is Not
 
 SOK is not:
 
@@ -142,9 +108,53 @@ storage attachment, networking primitives, and container lifecycle. Splunk
 Enterprise remains responsible for Splunk runtime behavior inside the
 containers.
 
-## Public-facing docs to start from
+## Required Kubernetes Knowledge
 
-<!-- TODO: Update these as more consolidated documentation happens. -->
+This section is a living onboarding checklist. It will be updated as the team's
+supported platforms evolve.
+
+### Baseline Knowledge
+
+You should be comfortable with the following before making non-trivial SOK code
+changes:
+
+- `kubectl` workflows: `get`, `describe`, `apply`, `delete`, `logs`, `exec`,
+  `port-forward`, JSONPath output, and YAML output.
+- Workloads and pod lifecycle: Pods, Deployments, StatefulSets, init
+  containers, container readiness, restart behavior, image pulls, probes, and
+  events.
+- Storage basics: PersistentVolumes, PersistentVolumeClaims, StorageClasses,
+  volume mounts, access modes, and how storage failures appear in pods and
+  events.
+- Configuration and secrets: ConfigMaps, Secrets, projected volumes,
+  environment variables, image pull secrets, and the risks around logging or
+  committing secret values.
+- RBAC and identity: ServiceAccounts, Roles, ClusterRoles, RoleBindings,
+  ClusterRoleBindings, and how operator permissions differ between
+  namespace-scoped and cluster-wide installs.
+- CRDs and the operator pattern: custom resources, `spec` as desired state,
+  `status` as observed state, reconciliation loops, status conditions,
+  watches, owner references, and finalizer-driven cleanup.
+
+### How to Gain Baseline Knowledge
+
+See the official Kubernetes documentation:
+
+- Read the Kubernetes [concepts overview](https://kubernetes.io/docs/concepts/overview/),
+  [kubectl quick reference](https://kubernetes.io/docs/reference/kubectl/quick-reference/),
+  [debugging applications](https://kubernetes.io/docs/tasks/debug/debug-application/),
+  [custom resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/),
+  [operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/),
+  and [StatefulSets](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/)
+  pages.
+- For beginners, take the [Coursera Kubernetes for Beginners](https://www.coursera.org/learn/kubernetes-for-absolute-beginners)
+  course, including hands-on labs. Cisco offers a free [Coursera subscription](https://cisco.edcast.com/insights/ECL-206ca16e-7798-4da3-8cce-dc67792cb955),
+  paid by the ELT level.
+- For more advanced users, take the [Certified Kubernetes Application Developer (CKAD)](https://www.oreilly.com/videos/certified-kubernetes-application/9780138086558/)
+  course on O'Reilly. Cisco offers a free [O'Reilly subscription](https://cisco.edcast.com/insights/ECL-3799144b-6da6-4242-8793-cabc08087dda),
+  paid by the ELT level. Taking this course prepares you for the CKAD exam, but it does not grant certification.
+
+## Public-Facing Docs to Start From
 
 Use the public docs as the source of truth for supported user workflows. Use
 this internal documentation to connect those workflows to development setup,
