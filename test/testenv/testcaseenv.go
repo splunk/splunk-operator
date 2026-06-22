@@ -85,6 +85,17 @@ func (testenv *TestCaseEnv) GetKubeClient() client.Client {
 	return testenv.kubeClient
 }
 
+// OperatorDeployment returns the (namespace, name) of the active operator
+// Deployment. Cluster-wide installs live at splunk-operator/splunk-operator-controller-manager;
+// per-testcase installs (-cluster-wide=false) live at splunk-op-<testcase> in
+// the testcase namespace.
+func (testenv *TestCaseEnv) OperatorDeployment() (namespace, name string) {
+	if testenv.clusterWideOperator != "true" {
+		return testenv.namespace, testenv.operatorName
+	}
+	return "splunk-operator", "splunk-operator-controller-manager"
+}
+
 // NewDefaultTestCaseEnv creates a default test environment
 func NewDefaultTestCaseEnv(kubeClient client.Client, name string) (*TestCaseEnv, error) {
 	if os.Getenv("GRAVITON_TESTING") == "true" {

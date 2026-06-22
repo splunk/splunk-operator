@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -34,6 +35,39 @@ func repoRoot() string {
 	_, thisFile, _, _ := runtime.Caller(0)
 	// thisFile is .../test/uf_ingest/uf_ingest_test_shared.go — go up 2 levels
 	return filepath.Join(filepath.Dir(thisFile), "..", "..")
+}
+
+// truncateToN mirrors helm's `trunc N | trimSuffix "-"` pipeline so we can
+// compute resource names that match the chart's _helpers.tpl exactly.
+func truncateToN(s string, n int) string {
+	if len(s) > n {
+		s = s[:n]
+	}
+	return strings.TrimSuffix(s, "-")
+}
+
+// readOperatorSGT returns the SPLUNK_GENERAL_TERMS env value configured on the
+// active operator Deployment (resolved via TestCaseEnv.OperatorDeployment so it
+// works for both cluster-wide and per-testcase installs). The operator reads
+// the same env (see pkg/splunk/enterprise/configuration.go) and propagates it
+// to CR-managed pods, so reusing it here keeps SGT acceptance an operator-level
+// concern. Returns "" when the deployment cannot be queried or the env is unset.
+func readOperatorSGT(ctx context.Context, testcaseEnvInst *testenv.TestCaseEnv) string {
+	ns, name := testcaseEnvInst.OperatorDeployment()
+	jsonpath := `{.spec.template.spec.containers[*].env[?(@.name=="SPLUNK_GENERAL_TERMS")].value}`
+	cmd := exec.CommandContext(ctx, "kubectl", "get", "deployment",
+		"-n", ns, name,
+		"-o", "jsonpath="+jsonpath)
+	// Use Output() (stdout only) — kubectl may emit unrelated warnings on stderr
+	// (e.g. deprecation notices) that would otherwise pollute the env value.
+	out, err := cmd.Output()
+	if err != nil {
+		testcaseEnvInst.Log.Info("could not read SPLUNK_GENERAL_TERMS from operator deployment", "namespace", ns, "name", name, "err", err, "stdout", string(out))
+		return ""
+	}
+	sgt := strings.TrimSpace(string(out))
+	testcaseEnvInst.Log.Info("resolved SPLUNK_GENERAL_TERMS from operator deployment", "namespace", ns, "name", name, "value", sgt)
+	return sgt
 }
 
 // RunUFToStandaloneIngestTest deploys a Standalone CR and a splunk-universalforwarder Helm
@@ -52,28 +86,39 @@ func RunUFToStandaloneIngestTest(ctx context.Context, deployment *testenv.Deploy
 	standalonePod := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 	ns := testcaseEnvInst.GetName()
 	ufRelease := deployment.GetName() + "-uf"
-	// Deployment name produced by the UF chart: <release>-splunk-universalforwarder-deploy
-	ufFullname := ufRelease + "-splunk-universalforwarder"
+	// Deployment name produced by the UF chart: <fullname>-deploy where <fullname>
+	// is `<release>-splunk-universalforwarder` truncated to 44 chars (see the
+	// chart's splunk-universalforwarder.fullname helper). Replicate that truncation
+	// here so kubectl set env / rollout status target the actual resource name.
+	ufFullname := truncateToN(ufRelease+"-splunk-universalforwarder", 44)
 	ufDeploymentName := ufFullname + "-deploy"
 	ufChartPath := filepath.Join(repoRoot(), "helm-chart", "splunk-universalforwarder")
 
 	// Standalone receives forwarded data on its ClusterIP service (port 9997)
 	standaloneService := fmt.Sprintf("splunk-%s-standalone-service.%s.svc.cluster.local", standalone.Name, ns)
 
-	// Deploy the UF chart into the test namespace, pointing at the standalone
+	// Deploy the UF chart into the test namespace, pointing at the standalone.
 	installArgs := []string{
 		"install", ufRelease,
 		ufChartPath,
 		"--namespace", ns,
 		"--set", fmt.Sprintf("splunkConfig.forwardServer=%s:9997", standaloneService),
 		"--set", "splunkConfig.password=IntegTest1!",
-		"--wait",
-		"--timeout", "5m",
 	}
 	installCmd := exec.CommandContext(ctx, "helm", installArgs...)
 	out, installErr := installCmd.CombinedOutput()
 	testcaseEnvInst.Log.Info("helm install UF", "output", string(out))
 	Expect(installErr).To(Succeed(), "helm install splunk-universalforwarder failed: %s", string(out))
+
+	// Inject SPLUNK_GENERAL_TERMS from the operator deployment so the UF pod
+	// accepts the Splunk General Terms without the chart having to hardcode it.
+	sgt := readOperatorSGT(ctx, testcaseEnvInst)
+	Expect(sgt).NotTo(BeEmpty(), "SPLUNK_GENERAL_TERMS not set on operator deployment; cannot accept SGT for UF")
+	setEnvCmd := exec.CommandContext(ctx, "kubectl", "set", "env",
+		"-n", ns, "deployment/"+ufDeploymentName, "SPLUNK_GENERAL_TERMS="+sgt)
+	setEnvOut, setEnvErr := setEnvCmd.CombinedOutput()
+	testcaseEnvInst.Log.Info("kubectl set env SPLUNK_GENERAL_TERMS on UF deployment", "output", string(setEnvOut))
+	Expect(setEnvErr).To(Succeed(), "kubectl set env failed: %s", string(setEnvOut))
 
 	// Register Helm uninstall so the release is cleaned up even on failure
 	DeferCleanup(func() {

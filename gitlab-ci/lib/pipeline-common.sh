@@ -491,21 +491,38 @@ normalize_testenv_commit_hash() {
 }
 
 shorten_eks_test_name() {
+  # Globs must match regardless of whether sva (c3/m4/s1) appears before or
+  # after the feature keyword, since label order varies across job definitions.
   case "$1" in
-    managerappframeworkc3)
+    *c3*manager*appframework*|*c3*appframework*|*manager*appframework*c3*|*appframework*c3*)
       printf '%s' "mgr-appfw-c3"
       ;;
-    managerappframeworkm4)
+    *m4*manager*appframework*|*m4*appframework*|*manager*appframework*m4*|*appframework*m4*)
       printf '%s' "mgr-appfw-m4"
       ;;
-    appframeworksS1)
+    *s1*appframework*|*appframework*s1*|*s1*appfw*|*appfw*s1*)
       printf '%s' "appfw-s1"
       ;;
-    managersecret)
+    *manager*secret*)
       printf '%s' "mgr-secret"
       ;;
-    managermc)
+    *manager*monitoringconsole*mc1*|*monitoringconsole*mc1*|*manager*mc1*)
+      printf '%s' "mgr-mc1"
+      ;;
+    *manager*monitoringconsole*mc2*|*monitoringconsole*mc2*|*manager*mc2*)
+      printf '%s' "mgr-mc2"
+      ;;
+    *manager*monitoringconsole*|*manager*mc*)
       printf '%s' "mgr-mc"
+      ;;
+    *manager*crcrud*)
+      printf '%s' "mgr-crcrud"
+      ;;
+    *manager*smartstore*)
+      printf '%s' "mgr-smartstore"
+      ;;
+    *manager*licensemanager*)
+      printf '%s' "mgr-licmgr"
       ;;
     *)
       printf '%s' "$1"
@@ -522,15 +539,33 @@ build_eks_test_cluster_name() {
   # Strip Ginkgo-label key prefixes (e.g. "tier:e2e-pr" -> "e2e-pr",
   # "sva:s1" -> "s1") so cluster names stay short and meaningful.
   stripped_test_name="$(printf '%s' "${test_name}" | sed -E 's/[[:alnum:]_-]+:/ /g')"
-  shortened_test_name="$(shorten_eks_test_name "${stripped_test_name}")"
   safe_test_type="$(sanitize_slug "${test_type}")"
   safe_platform_suffix="$(sanitize_slug "${platform_suffix}")"
-  safe_test_name="$(sanitize_slug "${shortened_test_name}")"
+  safe_test_name="$(shorten_eks_test_name "$(sanitize_slug "${stripped_test_name}")")"
   safe_run_id="$(printf '%s' "${run_id}" | tr -cd '[:alnum:]')"
 
   if [ -z "${safe_test_type}" ] || [ -z "${safe_test_name}" ] || [ -z "${safe_run_id}" ]; then
     echo "EKS cluster naming requires non-empty test_type, test_name, and run_id" >&2
     return 1
+  fi
+
+  # Kubernetes label values (e.g. alpha.eksctl.io/cluster-name) are capped at
+  # 63 chars. Truncate only test_name so run_id (which ensures uniqueness across
+  # concurrent runs) is always preserved in full.
+  if [ -n "${safe_platform_suffix}" ]; then
+    # "eks-test-" (9) + type + "-" + suffix + "-" + name + "-" + run_id
+    fixed_len=$(( 9 + ${#safe_test_type} + 1 + ${#safe_platform_suffix} + 1 + 1 + ${#safe_run_id} ))
+  else
+    # "eks-test-" (9) + type + "-" + name + "-" + run_id
+    fixed_len=$(( 9 + ${#safe_test_type} + 1 + 1 + ${#safe_run_id} ))
+  fi
+  max_name_len=$(( 63 - fixed_len ))
+  if [ "${max_name_len}" -lt 1 ]; then
+    echo "EKS cluster naming leaves no room for test_name; shorten test_type, platform_suffix, or run_id" >&2
+    return 1
+  fi
+  if [ ${#safe_test_name} -gt "${max_name_len}" ]; then
+    safe_test_name="$(printf '%s' "${safe_test_name}" | cut -c1-"${max_name_len}" | sed 's/-$//')"
   fi
 
   if [ -n "${safe_platform_suffix}" ]; then

@@ -614,9 +614,15 @@ func (testenv *TestCaseEnv) VerifyConfOnPod(ctx context.Context, podName string,
 	})
 }
 
-// VerifySearchHeadClusterPhase verify the phase of SHC matches given phase
+// VerifySearchHeadClusterPhase verify the phase of SHC matches given phase.
+// Transient phases use PhaseTransitionTimeout so a missed phase fails fast.
+// Poll body avoids in-loop kubectl exec to keep polling latency low.
 func (testenv *TestCaseEnv) VerifySearchHeadClusterPhase(ctx context.Context, deployment *Deployment, phase enterpriseApi.Phase) error {
-	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
+	timeout := deployment.GetTimeout()
+	if phase != enterpriseApi.PhaseReady {
+		timeout = PhaseTransitionTimeout
+	}
+	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		shc := &enterpriseApi.SearchHeadCluster{}
 		shcName := deployment.GetName() + "-shc"
 		err := deployment.GetInstance(ctx, shcName, shc)
@@ -624,35 +630,42 @@ func (testenv *TestCaseEnv) VerifySearchHeadClusterPhase(ctx context.Context, de
 			return false, nil
 		}
 		testenv.Log.Info("Waiting for Search Head Cluster Phase", "instance", shc.ObjectMeta.Name, "expected", phase, "phase", shc.Status.Phase)
-		DumpGetPods(testenv.GetName())
 		return shc.Status.Phase == phase, nil
 	})
 }
 
-// VerifyIndexerClusterPhase verify the phase of idxc matches the given phase
+// VerifyIndexerClusterPhase verify the phase of idxc matches the given phase.
+// See VerifySearchHeadClusterPhase for timeout/poll-body rationale.
 func (testenv *TestCaseEnv) VerifyIndexerClusterPhase(ctx context.Context, deployment *Deployment, phase enterpriseApi.Phase, idxcName string) error {
-	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
+	timeout := deployment.GetTimeout()
+	if phase != enterpriseApi.PhaseReady {
+		timeout = PhaseTransitionTimeout
+	}
+	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		idxc := &enterpriseApi.IndexerCluster{}
 		err := deployment.GetInstance(ctx, idxcName, idxc)
 		if err != nil {
 			return false, nil
 		}
 		testenv.Log.Info("Waiting for Indexer Cluster Phase", "instance", idxc.ObjectMeta.Name, "expected", phase, "phase", idxc.Status.Phase)
-		DumpGetPods(testenv.GetName())
 		return idxc.Status.Phase == phase, nil
 	})
 }
 
-// VerifyStandalonePhase verify the phase of Standalone CR
+// VerifyStandalonePhase verify the phase of Standalone CR.
+// See VerifySearchHeadClusterPhase for timeout/poll-body rationale.
 func (testenv *TestCaseEnv) VerifyStandalonePhase(ctx context.Context, deployment *Deployment, phase enterpriseApi.Phase) error {
-	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
+	timeout := deployment.GetTimeout()
+	if phase != enterpriseApi.PhaseReady {
+		timeout = PhaseTransitionTimeout
+	}
+	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		standalone := &enterpriseApi.Standalone{}
 		err := deployment.GetInstance(ctx, deployment.GetName(), standalone)
 		if err != nil {
 			return false, nil
 		}
 		testenv.Log.Info("Waiting for Standalone status", "instance", standalone.ObjectMeta.Name, "expected", phase, "actualPhase", standalone.Status.Phase)
-		DumpGetPods(testenv.GetName())
 		return standalone.Status.Phase == phase, nil
 	})
 }
@@ -1194,21 +1207,31 @@ func (testenv *TestCaseEnv) WaitForAppInstall(ctx context.Context, deployment *D
 	return nil
 }
 
-// VerifyPodsInMCConfigMap checks if given pod names are present in given KEY of given MC's Config Map
+// VerifyPodsInMCConfigMap checks if given pod names are present in given KEY
+// of given MC's Config Map. The MC config map can lag briefly behind the MC
+// CR's Ready phase, so this helper polls instead of asserting on a single read.
 func (testenv *TestCaseEnv) VerifyPodsInMCConfigMap(ctx context.Context, deployment *Deployment, pods []string, key string, mcName string, expected bool) error {
-	// Get contents of MC config map
-	mcConfigMap, err := GetMCConfigMap(ctx, deployment, testenv.GetName(), mcName)
-	if err != nil {
-		return fmt.Errorf("unable to get MC config map: %w", err)
-	}
-	for _, podName := range pods {
-		testenv.Log.Info("Checking for POD on MC Config Map", "podName", podName, "data", mcConfigMap.Data)
-		found := CheckPodNameInString(podName, mcConfigMap.Data[key])
-		if found != expected {
-			return fmt.Errorf("verify pod in MC Config Map failed: pod %s, found=%v, expected=%v", podName, found, expected)
+	var lastErr error
+	pollErr := wait.PollUntilContextTimeout(ctx, ShortPollInterval, MCConfigMapPollTimeout, true, func(ctx context.Context) (bool, error) {
+		mcConfigMap, err := GetMCConfigMap(ctx, deployment, testenv.GetName(), mcName)
+		if err != nil {
+			lastErr = fmt.Errorf("unable to get MC config map: %w", err)
+			return false, nil
 		}
+		for _, podName := range pods {
+			found := CheckPodNameInString(podName, mcConfigMap.Data[key])
+			if found != expected {
+				lastErr = fmt.Errorf("verify pod in MC Config Map failed: pod %s, found=%v, expected=%v", podName, found, expected)
+				testenv.Log.Info("Pod not yet in expected state in MC Config Map", "podName", podName, "found", found, "expected", expected, "data", mcConfigMap.Data)
+				return false, nil
+			}
+		}
+		return true, nil
+	})
+	if pollErr != nil && lastErr != nil {
+		return lastErr
 	}
-	return nil
+	return pollErr
 }
 
 // VerifyPodsInMCConfigString checks if given pod names are present in given KEY of given MC's Config Map
