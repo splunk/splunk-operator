@@ -105,6 +105,16 @@ const KubectlQuickTimeout = 10 * time.Second
 // acknowledge pod deletion and roll a replacement pod to Ready.
 const OperatorRestartTimeout = 2 * time.Minute
 
+// MCConfigMapPollTimeout bounds polls that wait for the Monitoring Console env
+// config map to reflect a newly added/removed peer. The config map can lag
+// briefly behind the MC CR's resource-version bump and Ready phase.
+const MCConfigMapPollTimeout = 5 * time.Minute
+
+// PhaseTransitionTimeout bounds polls that wait for a CR to enter a transient
+// phase (ScalingUp/ScalingDown/Updating). Kept short so a missed transient
+// phase surfaces as the real symptom instead of a Ginkgo NodeTimeout.
+const PhaseTransitionTimeout = 10 * time.Minute
+
 // KubectlExecTimeout bounds longer `kubectl exec` and `kubectl logs` calls
 // (cat config files, dump pod logs). Still below the 30s Ginkgo grace period.
 const KubectlExecTimeout = 25 * time.Second

@@ -315,6 +315,47 @@ func ApplyMonitoringConsoleEnvConfigMap(ctx context.Context, client splcommon.Co
 	return &current, nil
 }
 
+// crPodNamePrefix derives the per-CR resource-name prefix "splunk-<id>-<kind>-"
+// from the first entry of a comma-separated MC URL value. Supports statefulset
+// pod URLs (suffix "-<digits>") and service URLs (suffix "-service"/"-headless").
+// Returns "" when the prefix cannot be derived; callers then fall back to crName.
+func crPodNamePrefix(value string) string {
+	if value == "" {
+		return ""
+	}
+	// Pod/service name has no '.', strip any DNS suffix and trailing entries.
+	name := strings.SplitN(strings.SplitN(value, ",", 2)[0], ".", 2)[0]
+	idx := strings.LastIndex(name, "-")
+	if idx <= 0 || idx == len(name)-1 {
+		return ""
+	}
+	suffix := name[idx+1:]
+	if suffix != "service" && suffix != "headless" {
+		for _, r := range suffix {
+			if r < '0' || r > '9' {
+				return ""
+			}
+		}
+	}
+	return name[:idx+1]
+}
+
+// crOwnsURL reports whether `curr` belongs to the CR identified by crPrefix.
+// Ownership requires the derived prefix of `curr` to equal crPrefix: a plain
+// substring check is unsafe when one CR's name (or kind segment) is contained
+// in another's (e.g. "search-head" vs "search-head-adhoc", or "cm" vs
+// "cm-cluster-manager-extra"). Falls back to a crName substring match when no
+// prefix can be derived.
+func crOwnsURL(curr, crPrefix, crName string) bool {
+	if crPrefix == "" {
+		return strings.Contains(curr, crName)
+	}
+	if currPrefix := crPodNamePrefix(curr); currPrefix != "" {
+		return currPrefix == crPrefix
+	}
+	return strings.Contains(curr, crPrefix)
+}
+
 // AddURLsConfigMap for adding new server peers to the monitoring console or scaling up
 func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar) {
 	for _, url := range newURLs {
@@ -323,6 +364,7 @@ func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1
 			revised.Data[url.Name] = url.Value
 		} else {
 			newInsURLs := strings.Split(url.Value, ",")
+			crPrefix := crPodNamePrefix(url.Value)
 			// 1. Count CR-owned URLs currently present in the configmap for this key.
 			//    We compare counts (not string lengths) because string-length comparison
 			//    is unreliable: it depends on whether new entries are a subset of current,
@@ -330,7 +372,7 @@ func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1
 			currentURLs := strings.Split(revised.Data[url.Name], ",")
 			currentCRCount := 0
 			for _, curr := range currentURLs {
-				if strings.Contains(curr, crName) {
+				if crOwnsURL(curr, crPrefix, crName) {
 					currentCRCount++
 				}
 			}
@@ -368,13 +410,14 @@ func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1
 // DeleteURLsConfigMap for deleting server peers to the monitoring console or scaling down
 func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar, deleteCR bool) {
 	for _, url := range newURLs {
+		crPrefix := crPodNamePrefix(url.Value)
 		currentURLs := strings.Split(revised.Data[url.Name], ",")
 		sort.Strings(currentURLs)
 		for _, curr := range currentURLs {
 			//scale DOWN
-			if strings.Contains(curr, crName) && !strings.Contains(url.Value, curr) && !deleteCR {
+			if crOwnsURL(curr, crPrefix, crName) && !strings.Contains(url.Value, curr) && !deleteCR {
 				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], curr, "")
-			} else if strings.Contains(curr, crName) && deleteCR {
+			} else if crOwnsURL(curr, crPrefix, crName) && deleteCR {
 				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], url.Value, "")
 			}
 			//if deleting "SPLUNK_MULTISITE_MASTER" delete "SPLUNK_SITE"
