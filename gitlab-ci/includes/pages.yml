@@ -30,10 +30,7 @@ pages-deploy:
   rules:
     - if: '$SOK_PIPELINE_MODE'
       when: never
-    - if: '$CI_COMMIT_BRANCH == "develop"'
-      changes:
-        - docs/**/*
-        - gitlab-ci/includes/pages.yml
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "develop"'
 
 # NOTE: pages:preview is disabled. GitLab parallel deployments (path_prefix per MR) are
 # configured and slots are available, but the feature does not work correctly on Splunk's
