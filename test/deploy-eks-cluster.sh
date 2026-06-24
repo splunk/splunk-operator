@@ -22,12 +22,18 @@ fi
 
 function ebsCsiRoleName() {
   local cluster_name="$1"
-  local safe_cluster_name
+  local safe_cluster_name hash body
 
   safe_cluster_name=$(printf '%s' "${cluster_name}" | tr -c 'A-Za-z0-9+=,.@_-' '_')
-  if [ $((${#safe_cluster_name} + 4)) -gt 64 ]; then
-    echo "EBS CSI role name would exceed 64 characters: EBS_${safe_cluster_name}" >&2
-    return 1
+
+  # IAM role names are capped at 64 chars. "EBS_" is 4 chars, so the
+  # sanitized cluster name portion must fit in 60 chars. When it is longer,
+  # truncate to 53 chars and append a 6-char hash so the name stays unique.
+  if [ "${#safe_cluster_name}" -gt 60 ]; then
+    hash="$(printf '%s' "${safe_cluster_name}" | sha256sum | cut -c1-6)"
+    body="$(printf '%s' "${safe_cluster_name}" | cut -c1-53)"
+    body="$(printf '%s' "${body}" | sed 's/_$//')"
+    safe_cluster_name="${body}_${hash}"
   fi
 
   printf 'EBS_%s' "${safe_cluster_name}"
@@ -230,11 +236,40 @@ function createCluster() {
   fi
   aws iam attach-role-policy --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy --role-name "${rolename}"
   kubectl annotate serviceaccount -n ${namespace} ${service_account} eks.amazonaws.com/role-arn=arn:aws:iam::${account_id}:role/${rolename} --overwrite
+  # Wait for any in-progress addon operation to settle before update/create.
+  # An addon in CREATING state rejects UpdateAddon with HTTP 409.
+  # `aws eks wait addon-active` polls every 10s for up to ~10 minutes (60
+  # checks) and exits 0 only when the addon reaches ACTIVE — no fixed timeout
+  # to tune.  Skip the wait if the addon doesn't exist yet (NOT_FOUND is fine).
+  addon_current_status=$(aws eks describe-addon \
+    --cluster-name "${TEST_CLUSTER_NAME}" \
+    --addon-name aws-ebs-csi-driver \
+    --query "addon.status" --output text 2>/dev/null || echo "NOT_FOUND")
+  if [ "${addon_current_status}" != "NOT_FOUND" ] && [ "${addon_current_status}" != "ACTIVE" ]; then
+    echo "aws-ebs-csi-driver is in ${addon_current_status} state; waiting for ACTIVE before proceeding..."
+    if ! aws eks wait addon-active \
+      --cluster-name "${TEST_CLUSTER_NAME}" \
+      --addon-name aws-ebs-csi-driver; then
+      echo "aws-ebs-csi-driver did not reach ACTIVE within the wait period (status=${addon_current_status}); aborting to avoid HTTP 409" >&2
+      return 1
+    fi
+  fi
+
   if eksctl get addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} >/dev/null 2>&1; then
     eksctl update addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::${account_id}:role/${rolename} --force
   else
     eksctl create addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::${account_id}:role/${rolename} --force
   fi
+
+  # Wait for the addon to reach ACTIVE before restarting the controller.
+  echo "Waiting for aws-ebs-csi-driver to become ACTIVE..."
+  if ! aws eks wait addon-active \
+    --cluster-name "${TEST_CLUSTER_NAME}" \
+    --addon-name aws-ebs-csi-driver; then
+    echo "aws-ebs-csi-driver did not become ACTIVE after create/update; cluster bootstrap may be degraded" >&2
+    return 1
+  fi
+
   # Restart ebs-csi-controller so it picks up updated SA annotation / role.
   kubectl -n ${namespace} rollout restart deployment ebs-csi-controller >/dev/null 2>&1 || true
 
