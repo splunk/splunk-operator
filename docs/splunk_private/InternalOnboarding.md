@@ -20,3 +20,15 @@ Use these channels:
 
 Please note:
 - Commitments and agreements need to be tracked in #sok-platform — private conversations won't be treated as binding
+
+## Get Access to the SOK Project in GitLab
+Please submit an access request using the steps below:
+1. Open http://go/fast
+2. Click **Access Request**
+3. Select **GitLab Invite Group to Project Request**
+4. Enter the required details, including the GitLab group that needs access
+5. Submit the request
+
+Once submitted, an admin will review the request and add the provided group to the project.
+
+**Tip:** Please make sure the GitLab group name is correct before submitting to avoid delays.
