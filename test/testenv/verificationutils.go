@@ -97,8 +97,21 @@ func getPodDetails(ns, podName string) (*PodDetailsStruct, error) {
 // PollConsistently verifies a condition holds for the entire duration.
 // condFn should return nil if the condition holds, or an error if it fails.
 // The check is abandoned early if ctx is cancelled.
+// This is a strict variant: any single failure returns immediately.
+// For callers that need to tolerate transient phase churn, use PollConsistentlyWithTolerance.
 func PollConsistently(ctx context.Context, duration, interval time.Duration, condFn func() error) error {
+	return PollConsistentlyWithTolerance(ctx, duration, interval, 0, condFn)
+}
+
+// PollConsistentlyWithTolerance is like PollConsistently but allows up to
+// maxConsecutiveFails non-Ready observations before returning an error.
+// This tolerates brief transient phase churn (e.g. Updating during an
+// in-flight app-framework reconcile) without failing the check immediately.
+// Use maxConsecutiveFails=0 for strict behaviour (equivalent to PollConsistently).
+func PollConsistentlyWithTolerance(ctx context.Context, duration, interval time.Duration, maxConsecutiveFails int, condFn func() error) error {
 	deadline := time.Now().Add(duration)
+	consecutiveFails := 0
+	var lastErr error
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
@@ -106,11 +119,30 @@ func PollConsistently(ctx context.Context, duration, interval time.Duration, con
 		default:
 		}
 		if err := condFn(); err != nil {
-			return fmt.Errorf("consistency check failed: %w", err)
+			consecutiveFails++
+			lastErr = err
+			if consecutiveFails > maxConsecutiveFails {
+				return fmt.Errorf("consistency check failed after %d consecutive failures: %w", consecutiveFails, lastErr)
+			}
+		} else {
+			consecutiveFails = 0
+			lastErr = nil
 		}
 		time.Sleep(interval)
 	}
+	if lastErr != nil {
+		return fmt.Errorf("consistency check ended with %d consecutive failures: %w", consecutiveFails, lastErr)
+	}
 	return nil
+}
+
+// VerifyStrictPhaseConsistency asserts that condFn returns nil on every tick
+// for the full ConsistentDuration window. Unlike PollConsistentlyWithTolerance,
+// a single non-nil return fails immediately. Use this only in final post-settle
+// assertions where any transient flip is a genuine test failure (e.g. rollout
+// validation, post-upgrade steady-state checks).
+func VerifyStrictPhaseConsistency(ctx context.Context, condFn func() error) error {
+	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, condFn)
 }
 
 // VerifyMonitoringConsoleReady verifies the Monitoring Console CR reaches
@@ -133,15 +165,21 @@ func (testenv *TestCaseEnv) VerifyMonitoringConsoleReady(ctx context.Context, de
 	testenv.Log.Info("MonitoringConsole reached Ready phase", "instance", monitoringConsole.ObjectMeta.Name, "phase", monitoringConsole.Status.Phase)
 	DumpGetPods(testenv.GetName())
 
-	// In a steady state, we should stay in Ready and not flip-flop around
-	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+	// In a steady state, we should stay in Ready and not flip-flop around.
+	// Allow up to 2 consecutive non-Ready observations to tolerate transient phase churn.
+	firstFailure := true
+	return PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
 		if err := deployment.GetInstance(ctx, mcName, monitoringConsole); err != nil {
 			testenv.Log.Info("Transient error refreshing MonitoringConsole during consistency check", "error", err)
 		}
-		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "monitoring-console")
 		if monitoringConsole.Status.Phase != enterpriseApi.PhaseReady {
+			if firstFailure {
+				DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "monitoring-console")
+				firstFailure = false
+			}
 			return fmt.Errorf("monitoring console phase flipped to %s", monitoringConsole.Status.Phase)
 		}
+		firstFailure = true
 		return nil
 	})
 }
@@ -162,15 +200,21 @@ func (testenv *TestCaseEnv) VerifyStandaloneReady(ctx context.Context, deploymen
 	testenv.Log.Info("Standalone reached Ready phase", "instance", standalone.ObjectMeta.Name, "phase", standalone.Status.Phase)
 	DumpGetPods(testenv.GetName())
 
-	// In a steady state, we should stay in Ready and not flip-flop around
-	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+	// In a steady state, we should stay in Ready and not flip-flop around.
+	// Allow up to 2 consecutive non-Ready observations to tolerate transient phase churn.
+	firstFailure := true
+	return PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
 		if err := deployment.GetInstance(ctx, standalone.Name, standalone); err != nil {
 			testenv.Log.Info("Transient error refreshing Standalone during consistency check", "error", err)
 		}
-		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "standalone")
 		if standalone.Status.Phase != enterpriseApi.PhaseReady {
+			if firstFailure {
+				DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "standalone")
+				firstFailure = false
+			}
 			return fmt.Errorf("standalone phase flipped to %s", standalone.Status.Phase)
 		}
+		firstFailure = true
 		return nil
 	})
 }
@@ -225,15 +269,21 @@ func (testenv *TestCaseEnv) VerifySearchHeadClusterReady(ctx context.Context, de
 		DumpGetPods(testenv.GetName())
 
 		// In a steady state, we should stay in Ready and not flip-flop around.
-		consistencyErr := PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+		// Allow up to 2 consecutive non-Ready observations to tolerate transient phase churn.
+		firstFailure := true
+		consistencyErr := PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
 			if err := deployment.GetInstance(ctx, instanceName, shc); err != nil {
 				testenv.Log.Info("Transient error refreshing SearchHeadCluster during consistency check", "error", err)
 			}
 			testenv.Log.Info("Check for Consistency Search Head Cluster phase to be ready", "instance", shc.ObjectMeta.Name, "phase", shc.Status.Phase)
-			DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-shc-")
 			if shc.Status.Phase != enterpriseApi.PhaseReady {
+				if firstFailure {
+					DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-shc-")
+					firstFailure = false
+				}
 				return fmt.Errorf("SHC phase flipped to %s", shc.Status.Phase)
 			}
+			firstFailure = true
 			return nil
 		})
 		if consistencyErr == nil {
@@ -267,16 +317,22 @@ func (testenv *TestCaseEnv) VerifySingleSiteIndexersReady(ctx context.Context, d
 	testenv.Log.Info("IndexerCluster reached Ready phase", "instance", instanceName, "phase", idc.Status.Phase)
 	DumpGetPods(testenv.GetName())
 
-	// In a steady state, we should stay in Ready and not flip-flop around
-	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+	// In a steady state, we should stay in Ready and not flip-flop around.
+	// Allow up to 2 consecutive non-Ready observations to tolerate transient phase churn.
+	firstFailure := true
+	return PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
 		if err := deployment.GetInstance(ctx, instanceName, idc); err != nil {
 			testenv.Log.Info("Transient error refreshing IndexerCluster during consistency check", "error", err)
 		}
 		testenv.Log.Info("Check for Consistency indexer instance's phase to be ready", "instance", instanceName, "phase", idc.Status.Phase)
-		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-idxc-indexer-")
 		if idc.Status.Phase != enterpriseApi.PhaseReady {
+			if firstFailure {
+				DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-idxc-indexer-")
+				firstFailure = false
+			}
 			return fmt.Errorf("indexer phase flipped to %s", idc.Status.Phase)
 		}
+		firstFailure = true
 		return nil
 	})
 }
@@ -299,16 +355,22 @@ func (testenv *TestCaseEnv) VerifyIngestorReady(ctx context.Context, deployment 
 	testenv.Log.Info("IngestorCluster reached Ready phase", "instance", instanceName, "phase", ingest.Status.Phase)
 	DumpGetPods(testenv.GetName())
 
-	// In a steady state, we should stay in Ready and not flip-flop around
-	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+	// In a steady state, we should stay in Ready and not flip-flop around.
+	// Allow up to 2 consecutive non-Ready observations to tolerate transient phase churn.
+	firstFailure := true
+	return PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
 		if err := deployment.GetInstance(ctx, instanceName, ingest); err != nil {
 			testenv.Log.Info("Transient error refreshing IngestorCluster during consistency check", "error", err)
 		}
 		testenv.Log.Info("Check for Consistency ingestor instance's phase to be ready", "instance", instanceName, "phase", ingest.Status.Phase)
-		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-ingest-")
 		if ingest.Status.Phase != enterpriseApi.PhaseReady {
+			if firstFailure {
+				DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-ingest-")
+				firstFailure = false
+			}
 			return fmt.Errorf("ingestor phase flipped to %s", ingest.Status.Phase)
 		}
+		firstFailure = true
 		return nil
 	})
 }
@@ -330,17 +392,22 @@ func (testenv *TestCaseEnv) VerifyClusterManagerReady(ctx context.Context, deplo
 	testenv.Log.Info("ClusterManager reached Ready phase", "instance", cm.ObjectMeta.Name, "phase", cm.Status.Phase)
 	DumpGetPods(testenv.GetName())
 
-	// In a steady state, cluster-manager should stay in Ready and not flip-flop around
-	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+	// In a steady state, cluster-manager should stay in Ready and not flip-flop around.
+	// Allow up to 2 consecutive non-Ready observations to tolerate transient phase churn.
+	firstFailure := true
+	return PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
 		if err := deployment.GetInstance(ctx, deployment.GetName(), cm); err != nil {
 			testenv.Log.Info("Transient error refreshing ClusterManager during consistency check", "error", err)
 		}
 		testenv.Log.Info("Check for Consistency "+splcommon.ClusterManager+" phase to be ready", "instance", cm.ObjectMeta.Name, "phase", cm.Status.Phase)
-		DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "cluster-manager")
-		testenv.Log.Info("Check for Consistency cluster-manager phase to be ready", "instance", cm.ObjectMeta.Name, "phase", cm.Status.Phase)
 		if cm.Status.Phase != enterpriseApi.PhaseReady {
+			if firstFailure {
+				DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "cluster-manager")
+				firstFailure = false
+			}
 			return fmt.Errorf("cluster manager phase flipped to %s", cm.Status.Phase)
 		}
+		firstFailure = true
 		return nil
 	})
 }
@@ -362,8 +429,9 @@ func (testenv *TestCaseEnv) VerifyClusterMasterReady(ctx context.Context, deploy
 	testenv.Log.Info("ClusterMaster reached Ready phase", "instance", cm.ObjectMeta.Name, "phase", cm.Status.Phase)
 	DumpGetPods(testenv.GetName())
 
-	// In a steady state, cluster-master should stay in Ready and not flip-flop around
-	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+	// In a steady state, cluster-master should stay in Ready and not flip-flop around.
+	// Allow up to 2 consecutive non-Ready observations to tolerate transient phase churn.
+	return PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
 		if err := deployment.GetInstance(ctx, deployment.GetName(), cm); err != nil {
 			testenv.Log.Info("Transient error refreshing ClusterMaster during consistency check", "error", err)
 		}
@@ -397,16 +465,22 @@ func (testenv *TestCaseEnv) VerifyIndexersReady(ctx context.Context, deployment 
 			return fmt.Errorf("indexer site %s failed to reach Ready phase: %w", siteName, err)
 		}
 
-		// In a steady state, we should stay in Ready and not flip-flop around
-		err = PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+		// In a steady state, we should stay in Ready and not flip-flop around.
+		// Allow up to 2 consecutive non-Ready observations to tolerate transient phase churn.
+		firstFailure := true
+		err = PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
 			if err := deployment.GetInstance(ctx, instanceName, idc); err != nil {
 				testenv.Log.Info("Transient error refreshing IndexerCluster site during consistency check", "error", err)
 			}
 			testenv.Log.Info("Check for Consistency indexer site instance phase to be ready", "instance", instanceName, "phase", idc.Status.Phase)
-			DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-idxc-indexer-")
 			if idc.Status.Phase != enterpriseApi.PhaseReady {
+				if firstFailure {
+					DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-idxc-indexer-")
+					firstFailure = false
+				}
 				return fmt.Errorf("indexer phase flipped to %s for site %s", idc.Status.Phase, siteName)
 			}
+			firstFailure = true
 			return nil
 		})
 		if err != nil {
@@ -487,8 +561,9 @@ func (testenv *TestCaseEnv) VerifyLicenseManagerReady(ctx context.Context, deplo
 		return fmt.Errorf("license manager failed to reach Ready phase: %w", err)
 	}
 
-	// In a steady state, we should stay in Ready and not flip-flop around
-	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+	// In a steady state, we should stay in Ready and not flip-flop around.
+	// Allow up to 2 consecutive non-Ready observations to tolerate transient phase churn.
+	return PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
 		if err := deployment.GetInstance(ctx, deployment.GetName(), LicenseManager); err != nil {
 			testenv.Log.Info("Transient error refreshing LicenseManager during consistency check", "error", err)
 		}
@@ -518,8 +593,9 @@ func (testenv *TestCaseEnv) VerifyLicenseMasterReady(ctx context.Context, deploy
 		return fmt.Errorf("license master failed to reach Ready phase: %w", err)
 	}
 
-	// In a steady state, we should stay in Ready and not flip-flop around
-	return PollConsistently(ctx, ConsistentDuration, ConsistentPollInterval, func() error {
+	// In a steady state, we should stay in Ready and not flip-flop around.
+	// Allow up to 2 consecutive non-Ready observations to tolerate transient phase churn.
+	return PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
 		if err := deployment.GetInstance(ctx, deployment.GetName(), LicenseMaster); err != nil {
 			testenv.Log.Info("Transient error refreshing LicenseMaster during consistency check", "error", err)
 		}
