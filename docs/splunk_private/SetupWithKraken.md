@@ -30,24 +30,14 @@ Kraken is the internal tool created to support the Kubernetes First push by prov
 ### Create an Empty vCluster Kubernetes Environment
 
 1. [Download](https://kraken.splunkdev.page/kraken-docs/cli-preview/) and [install](https://kraken.splunkdev.page/kraken-docs/cli-preview/#1-install-the-cli) the Kraken CLI.
-2. Create a [vCluster-only mode](https://kraken.splunkdev.page/kraken-docs/cli-preview/) deployment.
+2. Create a kraken deployment
+   1. For a simple deployment, create a [vCluster-only mode](https://kraken.splunkdev.page/kraken-docs/cli-commands/create-vcluster-only/) deployment.
+   2. For a deployment requiring app framework, create a vCluster-only mode with [app framework infrastructure](https://kraken.splunkdev.page/kraken-docs/cli-commands/create-app-framework/) deployment. Follow the entire page for credentials to the app framework s3 bucket.
 3. Export the deployment ID for the cluster. The deployment ID is in the `id` field of the JSON output from the `kraken create` command.
    ```bash
    export DEPLOYMENT_ID=<deployment ID>
    ```
-4. Point your local kubeconfig to this deployment.
-   <!-- TODO: Remove this when it gets added to the Kraken docs -->
-   ```bash
-   mkdir -p ~/.kube/kraken
-
-   kraken connection "$DEPLOYMENT_ID" \
-   | jq -r '.kubeconfig' \
-   > ~/.kube/kraken/"$DEPLOYMENT_ID".yaml
-
-   chmod 600 ~/.kube/kraken/"$DEPLOYMENT_ID".yaml
-
-   export KUBECONFIG=~/.kube/kraken/"$DEPLOYMENT_ID".yaml
-   ```
+4. Follow the workflow to [access the kraken connection](https://kraken.splunkdev.page/kraken-docs/cli-commands/connection-accessing-vcluster/) in your terminal.
 
 ## Deploy SOK
 
@@ -64,20 +54,7 @@ Kraken is the internal tool created to support the Kubernetes First push by prov
    ```bash
    kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/<release version>/splunk-operator-crds.yaml --server-side --force-conflicts
    ```
-3. Create a `kraken-dev-values.yaml` file to set resource limits for the Kraken setup.
-   ```bash
-   cat > kraken-dev-values.yaml <<'EOF'
-   splunkOperator:
-     resources:
-       requests:
-         cpu: 100m
-         memory: 256Mi
-       limits:
-         cpu: 500m
-         memory: 512Mi
-   EOF
-   ```
-4. Deploy the Splunk Operator.
+3. Deploy the Splunk Operator.
 
    **Note:** Customers are redirected to the README to find the value for the `SPLUNK_GENERAL_TERMS` environment variable. This is so they see the link to the terms they are accepting. For developer use, the value is included here.
    ```bash
@@ -85,7 +62,6 @@ Kraken is the internal tool created to support the Kubernetes First push by prov
       splunk/splunk-operator \
       --version <release version> \
       --set splunkOperator.splunkGeneralTerms="--accept-sgt-current-at-splunk-com" \
-      -f kraken-dev-values.yaml \
       --create-namespace
    ```
 
@@ -103,14 +79,6 @@ Kraken is the internal tool created to support the Kubernetes First push by prov
      -n splunk-operator \
      SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com"
    ```
-3. Set resource limits for the Kraken setup.
-   ```bash
-   kubectl set resources deployment/splunk-operator-controller-manager \
-     -n splunk-operator \
-     -c manager \
-     --requests=cpu=100m,memory=256Mi \
-     --limits=cpu=500m,memory=512Mi
-   ```
 
 ### Deploy a Pre-Release Version
 
@@ -124,20 +92,7 @@ Kraken is the internal tool created to support the Kubernetes First push by prov
     ```bash
     make install
     ```
-4. Create a `kraken-dev-values.yaml` file to set resource limits for the Kraken setup.
-   ```bash
-   cat > kraken-dev-values.yaml <<'EOF'
-   splunkOperator:
-     resources:
-       requests:
-         cpu: 100m
-         memory: 256Mi
-       limits:
-         cpu: 500m
-         memory: 512Mi
-   EOF
-   ```
-5. Deploy the Splunk Operator with the pre-release image. Replace `<artifactory image>` with the full operator image from step 1, and replace `<splunk enterprise image>` with the Splunk Enterprise image under test. Find Splunk Enterprise images on [DockerHub](https://hub.docker.com/repository/docker/splunk/splunk/general), [Artifactory](https://repo.splunkdev.net/ui/repos/tree/General/docker/eng-effectiveness/docker-splunk/dev), or [Artifactory Test](https://repo.splunkdev.net/ui/repos/tree/General/docker-test/eng-effectiveness/docker-splunk/dev).
+4. Deploy the Splunk Operator with the pre-release image. Replace `<artifactory image>` with the full operator image from step 1, and replace `<splunk enterprise image>` with the Splunk Enterprise image under test. Find Splunk Enterprise images on [DockerHub](https://hub.docker.com/repository/docker/splunk/splunk/general), [Artifactory](https://repo.splunkdev.net/ui/repos/tree/General/docker/eng-effectiveness/docker-splunk/dev), or [Artifactory Test](https://repo.splunkdev.net/ui/repos/tree/General/docker-test/eng-effectiveness/docker-splunk/dev).
 
    **Note:** Customers are redirected to the README to find the value for the `SPLUNK_GENERAL_TERMS` environment variable. This is so they see the link to the terms they are accepting. For developer use, the value is included here.
    ```bash
@@ -146,7 +101,6 @@ Kraken is the internal tool created to support the Kubernetes First push by prov
       --set splunkOperator.image.repository="<artifactory image>" \
       --set image.repository="<splunk enterprise image>" \
       --set splunkOperator.splunkGeneralTerms="--accept-sgt-current-at-splunk-com" \
-      -f kraken-dev-values.yaml \
       --create-namespace
    ```
 
@@ -165,14 +119,6 @@ Kraken is the internal tool created to support the Kubernetes First push by prov
      SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com" \
      WATCH_NAMESPACE="" \
      ENVIRONMENT=debug
-   ```
-4. Set resource limits for the Kraken setup.
-   ```bash
-   kubectl set resources deployment/splunk-operator-controller-manager \
-     -n splunk-operator \
-     -c manager \
-     --requests=cpu=100m,memory=256Mi \
-     --limits=cpu=500m,memory=512Mi
    ```
 
 ### Verify the Splunk Operator Deployment

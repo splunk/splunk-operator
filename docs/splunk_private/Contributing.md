@@ -16,7 +16,7 @@ nav_order: 5
 
 ---
 
-This page describes how SOK developers should contribute to this repo.
+This page describes how SOK developers should contribute to this repo. Follow the steps on the [Main Page](./InternalOnboarding.md#get-access-to-the-sok-project-in-gitlab) to get access to the project.
 
 ## Internal Developer Contribution Path
 

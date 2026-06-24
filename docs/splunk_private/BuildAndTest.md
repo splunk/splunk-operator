@@ -31,6 +31,8 @@ git clone git@cd.splunkdev.com:sok/splunk-operator.git
 cd splunk-operator
 ```
 
+Follow the steps on the [Main Page](./InternalOnboarding.md#get-access-to-the-sok-project-in-gitlab) to get access to the project.
+
 ## Internal Setup Additions
 
 ### Artifactory Authentication
