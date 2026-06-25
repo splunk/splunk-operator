@@ -36,9 +36,11 @@ var _ = Describe("Smoke test", Label("tier:e2e-pr", "cloud:aws", "feature:basic"
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("can deploy a standalone instance", Label("tier:e2e-pr", "sva:s1", "cloud:aws", "feature:basic"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
-			_, err := testcaseEnvInst.RunStandaloneDeploymentWorkflow(ctx, deployment)
+		It("can deploy a standalone instance", Label("sva:s1"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+			result, err := testcaseEnvInst.RunStandaloneDeploymentWorkflow(ctx, deployment)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
+
+			Expect(testcaseEnvInst.VerifyStandaloneConditionReady(ctx, deployment, result.Standalone)).To(Succeed(), "Standalone Ready condition not met")
 		})
 	})
 
@@ -46,6 +48,8 @@ var _ = Describe("Smoke test", Label("tier:e2e-pr", "cloud:aws", "feature:basic"
 		It("can deploy indexers and search head cluster", Label("tier:e2e-pr", "sva:c3", "cloud:aws", "feature:basic"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 			_, err := testcaseEnvInst.RunC3DeploymentWorkflow(ctx, deployment, 3)
 			Expect(err).To(Succeed(), "Unable to deploy C3 cluster")
+
+			Expect(testcaseEnvInst.VerifyC3ConditionsReady(ctx, deployment)).To(Succeed(), "C3 Ready conditions not met")
 		})
 	})
 
@@ -53,6 +57,8 @@ var _ = Describe("Smoke test", Label("tier:e2e-pr", "cloud:aws", "feature:basic"
 		It("can deploy indexers and search head cluster", Label("tier:e2e-pr", "sva:m4", "cloud:aws", "feature:basic"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			_, err := testcaseEnvInst.RunM4DeploymentWorkflow(ctx, deployment, 1, 3)
 			Expect(err).To(Succeed(), "Unable to deploy M4 cluster")
+
+			Expect(testcaseEnvInst.VerifyM4ConditionsReady(ctx, deployment, 3)).To(Succeed(), "M4 Ready conditions not met")
 		})
 	})
 
@@ -60,14 +66,18 @@ var _ = Describe("Smoke test", Label("tier:e2e-pr", "cloud:aws", "feature:basic"
 		It("can deploy multisite indexers cluster", Label("tier:e2e-pr", "sva:m1", "cloud:aws", "feature:basic"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			_, err := testcaseEnvInst.RunM1DeploymentWorkflow(ctx, deployment, 1, 3)
 			Expect(err).To(Succeed(), "Unable to deploy M1 cluster")
+
+			Expect(testcaseEnvInst.VerifyM1ConditionsReady(ctx, deployment, 3)).To(Succeed(), "M1 Ready conditions not met")
 		})
 	})
 
 	Context("Standalone deployment (S1) with Service Account", func() {
 		It("can deploy a standalone instance attached to a service account", Label("tier:e2e-pr", "sva:s1", "cloud:aws", "feature:basic"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			serviceAccountName := "smoke-service-account"
-			_, err := testcaseEnvInst.RunStandaloneWithServiceAccountWorkflow(ctx, deployment, serviceAccountName)
+			result, err := testcaseEnvInst.RunStandaloneWithServiceAccountWorkflow(ctx, deployment, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy standalone with service account")
+
+			Expect(testcaseEnvInst.VerifyStandaloneConditionReady(ctx, deployment, result.Standalone)).To(Succeed(), "Standalone Ready condition not met")
 		})
 	})
 })

@@ -40,6 +40,54 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
+// VerifyCRCondition checks that the given condition type exists and has the expected status.
+func VerifyCRCondition(crKind, crName string, conditions []metav1.Condition, conditionType enterpriseApi.ConditionType, expectedStatus metav1.ConditionStatus) error {
+	cond := splcommon.GetCondition(conditions, conditionType)
+	if cond == nil {
+		return fmt.Errorf("%s %s: %s condition not found", crKind, crName, conditionType)
+	}
+	if cond.Status != expectedStatus {
+		return fmt.Errorf("%s %s: %s condition is %s, expected %s (reason: %s, message: %s)",
+			crKind, crName, conditionType, cond.Status, expectedStatus, cond.Reason, cond.Message)
+	}
+	return nil
+}
+
+// VerifyCRConditionsForPhase verifies that all conditions (Ready, Progressing, Paused)
+// are consistent with the given phase. Phase and conditions are set atomically by
+// SetPhaseAndConditions, so any inconsistency indicates a real bug.
+func VerifyCRConditionsForPhase(crKind, crName string, conditions []metav1.Condition, phase enterpriseApi.Phase) error {
+	if len(conditions) == 0 {
+		return fmt.Errorf("%s %s: no conditions published for phase %s (expected Ready/Progressing/Paused)", crKind, crName, phase)
+	}
+
+	var expectedReady, expectedProgressing metav1.ConditionStatus
+
+	switch phase {
+	case enterpriseApi.PhaseReady:
+		expectedReady = metav1.ConditionTrue
+		expectedProgressing = metav1.ConditionFalse
+	case enterpriseApi.PhasePending, enterpriseApi.PhaseUpdating,
+		enterpriseApi.PhaseScalingUp, enterpriseApi.PhaseScalingDown,
+		enterpriseApi.PhaseTerminating:
+		expectedReady = metav1.ConditionFalse
+		expectedProgressing = metav1.ConditionTrue
+	case enterpriseApi.PhaseError:
+		expectedReady = metav1.ConditionFalse
+		expectedProgressing = metav1.ConditionFalse
+	default:
+		return nil
+	}
+
+	if err := VerifyCRCondition(crKind, crName, conditions, enterpriseApi.ConditionReady, expectedReady); err != nil {
+		return fmt.Errorf("phase %s: %w", phase, err)
+	}
+	if err := VerifyCRCondition(crKind, crName, conditions, enterpriseApi.ConditionProgressing, expectedProgressing); err != nil {
+		return fmt.Errorf("phase %s: %w", phase, err)
+	}
+	return VerifyCRCondition(crKind, crName, conditions, enterpriseApi.ConditionPaused, metav1.ConditionFalse)
+}
+
 // PodDetailsStruct captures output of kubectl get pods podname -o json
 type PodDetailsStruct struct {
 	Metadata struct {
@@ -180,7 +228,7 @@ func (testenv *TestCaseEnv) VerifyMonitoringConsoleReady(ctx context.Context, de
 			return fmt.Errorf("monitoring console phase flipped to %s", monitoringConsole.Status.Phase)
 		}
 		firstFailure = true
-		return nil
+		return VerifyCRConditionsForPhase("MonitoringConsole", mcName, monitoringConsole.Status.Conditions, enterpriseApi.PhaseReady)
 	})
 }
 
@@ -215,7 +263,7 @@ func (testenv *TestCaseEnv) VerifyStandaloneReady(ctx context.Context, deploymen
 			return fmt.Errorf("standalone phase flipped to %s", standalone.Status.Phase)
 		}
 		firstFailure = true
-		return nil
+		return VerifyCRConditionsForPhase("Standalone", standalone.Name, standalone.Status.Conditions, enterpriseApi.PhaseReady)
 	})
 }
 
@@ -284,7 +332,7 @@ func (testenv *TestCaseEnv) VerifySearchHeadClusterReady(ctx context.Context, de
 				return fmt.Errorf("SHC phase flipped to %s", shc.Status.Phase)
 			}
 			firstFailure = true
-			return nil
+			return VerifyCRConditionsForPhase("SearchHeadCluster", instanceName, shc.Status.Conditions, enterpriseApi.PhaseReady)
 		})
 		if consistencyErr == nil {
 			return nil
@@ -333,7 +381,7 @@ func (testenv *TestCaseEnv) VerifySingleSiteIndexersReady(ctx context.Context, d
 			return fmt.Errorf("indexer phase flipped to %s", idc.Status.Phase)
 		}
 		firstFailure = true
-		return nil
+		return VerifyCRConditionsForPhase("IndexerCluster", instanceName, idc.Status.Conditions, enterpriseApi.PhaseReady)
 	})
 }
 
@@ -371,7 +419,7 @@ func (testenv *TestCaseEnv) VerifyIngestorReady(ctx context.Context, deployment 
 			return fmt.Errorf("ingestor phase flipped to %s", ingest.Status.Phase)
 		}
 		firstFailure = true
-		return nil
+		return VerifyCRConditionsForPhase("IngestorCluster", instanceName, ingest.Status.Conditions, enterpriseApi.PhaseReady)
 	})
 }
 
@@ -408,7 +456,7 @@ func (testenv *TestCaseEnv) VerifyClusterManagerReady(ctx context.Context, deplo
 			return fmt.Errorf("cluster manager phase flipped to %s", cm.Status.Phase)
 		}
 		firstFailure = true
-		return nil
+		return VerifyCRConditionsForPhase("ClusterManager", cm.ObjectMeta.Name, cm.Status.Conditions, enterpriseApi.PhaseReady)
 	})
 }
 
@@ -459,7 +507,13 @@ func (testenv *TestCaseEnv) VerifyIndexersReady(ctx context.Context, deployment 
 			}
 			testenv.Log.Info("Waiting for indexer site instance phase to be ready", "instance", instanceName, "phase", idc.Status.Phase)
 			DumpGetPods(testenv.GetName())
-			return idc.Status.Phase == enterpriseApi.PhaseReady, nil
+			if idc.Status.Phase != enterpriseApi.PhaseReady {
+				return false, nil
+			}
+			if err := VerifyCRConditionsForPhase("IndexerCluster", instanceName, idc.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
+				return false, err
+			}
+			return true, nil
 		})
 		if err != nil {
 			return fmt.Errorf("indexer site %s failed to reach Ready phase: %w", siteName, err)
@@ -481,7 +535,7 @@ func (testenv *TestCaseEnv) VerifyIndexersReady(ctx context.Context, deployment 
 				return fmt.Errorf("indexer phase flipped to %s for site %s", idc.Status.Phase, siteName)
 			}
 			firstFailure = true
-			return nil
+			return VerifyCRConditionsForPhase("IndexerCluster", instanceName, idc.Status.Conditions, enterpriseApi.PhaseReady)
 		})
 		if err != nil {
 			return err
@@ -570,7 +624,7 @@ func (testenv *TestCaseEnv) VerifyLicenseManagerReady(ctx context.Context, deplo
 		if LicenseManager.Status.Phase != enterpriseApi.PhaseReady {
 			return fmt.Errorf("license manager phase flipped to %s", LicenseManager.Status.Phase)
 		}
-		return nil
+		return VerifyCRConditionsForPhase("LicenseManager", deployment.GetName(), LicenseManager.Status.Conditions, enterpriseApi.PhaseReady)
 	})
 }
 
@@ -691,12 +745,13 @@ func (testenv *TestCaseEnv) VerifyConfOnPod(ctx context.Context, podName string,
 }
 
 // VerifySearchHeadClusterPhase verify the phase of SHC matches given phase.
-// Transient phases use PhaseTransitionTimeout so a missed phase fails fast.
-// Poll body avoids in-loop kubectl exec to keep polling latency low.
+// Uses PhaseTransitionTimeout for transient phases (ScalingUp/ScalingDown/Updating)
+// so a missed transient phase surfaces quickly. Uses deployment.GetTimeout() for
+// PhaseReady so a valid Ready transition is not prematurely failed.
 func (testenv *TestCaseEnv) VerifySearchHeadClusterPhase(ctx context.Context, deployment *Deployment, phase enterpriseApi.Phase) error {
-	timeout := deployment.GetTimeout()
-	if phase != enterpriseApi.PhaseReady {
-		timeout = PhaseTransitionTimeout
+	timeout := PhaseTransitionTimeout
+	if phase == enterpriseApi.PhaseReady {
+		timeout = deployment.GetTimeout()
 	}
 	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		shc := &enterpriseApi.SearchHeadCluster{}
@@ -706,16 +761,25 @@ func (testenv *TestCaseEnv) VerifySearchHeadClusterPhase(ctx context.Context, de
 			return false, nil
 		}
 		testenv.Log.Info("Waiting for Search Head Cluster Phase", "instance", shc.ObjectMeta.Name, "expected", phase, "phase", shc.Status.Phase)
-		return shc.Status.Phase == phase, nil
+		DumpGetPods(testenv.GetName())
+		if shc.Status.Phase != phase {
+			return false, nil
+		}
+		if err := VerifyCRConditionsForPhase("SearchHeadCluster", shcName, shc.Status.Conditions, phase); err != nil {
+			return false, err
+		}
+		return true, nil
 	})
 }
 
 // VerifyIndexerClusterPhase verify the phase of idxc matches the given phase.
-// See VerifySearchHeadClusterPhase for timeout/poll-body rationale.
+// Uses PhaseTransitionTimeout for transient phases (ScalingUp/ScalingDown/Updating)
+// so a missed transient phase surfaces quickly. Uses deployment.GetTimeout() for
+// PhaseReady so a valid Ready transition is not prematurely failed.
 func (testenv *TestCaseEnv) VerifyIndexerClusterPhase(ctx context.Context, deployment *Deployment, phase enterpriseApi.Phase, idxcName string) error {
-	timeout := deployment.GetTimeout()
-	if phase != enterpriseApi.PhaseReady {
-		timeout = PhaseTransitionTimeout
+	timeout := PhaseTransitionTimeout
+	if phase == enterpriseApi.PhaseReady {
+		timeout = deployment.GetTimeout()
 	}
 	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		idxc := &enterpriseApi.IndexerCluster{}
@@ -724,16 +788,26 @@ func (testenv *TestCaseEnv) VerifyIndexerClusterPhase(ctx context.Context, deplo
 			return false, nil
 		}
 		testenv.Log.Info("Waiting for Indexer Cluster Phase", "instance", idxc.ObjectMeta.Name, "expected", phase, "phase", idxc.Status.Phase)
-		return idxc.Status.Phase == phase, nil
+		DumpGetPods(testenv.GetName())
+		if idxc.Status.Phase != phase {
+			return false, nil
+		}
+		if err := VerifyCRConditionsForPhase("IndexerCluster", idxcName, idxc.Status.Conditions, phase); err != nil {
+			return false, err
+		}
+		return true, nil
 	})
 }
 
 // VerifyStandalonePhase verify the phase of Standalone CR.
-// See VerifySearchHeadClusterPhase for timeout/poll-body rationale.
+// Uses PhaseTransitionTimeout for transient phases (ScalingUp/ScalingDown/Updating)
+// so a missed transient phase surfaces quickly. Uses deployment.GetTimeout() for
+// PhaseReady so a scale-up/down that legitimately takes longer than
+// PhaseTransitionTimeout is not prematurely failed.
 func (testenv *TestCaseEnv) VerifyStandalonePhase(ctx context.Context, deployment *Deployment, phase enterpriseApi.Phase) error {
-	timeout := deployment.GetTimeout()
-	if phase != enterpriseApi.PhaseReady {
-		timeout = PhaseTransitionTimeout
+	timeout := PhaseTransitionTimeout
+	if phase == enterpriseApi.PhaseReady {
+		timeout = deployment.GetTimeout()
 	}
 	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		standalone := &enterpriseApi.Standalone{}
@@ -742,7 +816,14 @@ func (testenv *TestCaseEnv) VerifyStandalonePhase(ctx context.Context, deploymen
 			return false, nil
 		}
 		testenv.Log.Info("Waiting for Standalone status", "instance", standalone.ObjectMeta.Name, "expected", phase, "actualPhase", standalone.Status.Phase)
-		return standalone.Status.Phase == phase, nil
+		DumpGetPods(testenv.GetName())
+		if standalone.Status.Phase != phase {
+			return false, nil
+		}
+		if err := VerifyCRConditionsForPhase("Standalone", standalone.Name, standalone.Status.Conditions, phase); err != nil {
+			return false, err
+		}
+		return true, nil
 	})
 }
 
@@ -756,7 +837,13 @@ func (testenv *TestCaseEnv) VerifyMonitoringConsolePhase(ctx context.Context, de
 		}
 		testenv.Log.Info("Waiting for Monitoring Console CR status", "instance", mc.ObjectMeta.Name, "expected", phase, "actualPhase", mc.Status.Phase)
 		DumpGetPods(testenv.GetName())
-		return mc.Status.Phase == phase, nil
+		if mc.Status.Phase != phase {
+			return false, nil
+		}
+		if err := VerifyCRConditionsForPhase("MonitoringConsole", crName, mc.Status.Conditions, phase); err != nil {
+			return false, err
+		}
+		return true, nil
 	})
 }
 
@@ -836,7 +923,13 @@ func (testenv *TestCaseEnv) VerifyClusterManagerPhase(ctx context.Context, deplo
 		}
 		testenv.Log.Info("Waiting for Cluster Manager Phase", "instance", cm.ObjectMeta.Name, "phase", cm.Status.Phase, "expected", phase)
 		DumpGetPods(testenv.GetName())
-		return cm.Status.Phase == phase, nil
+		if cm.Status.Phase != phase {
+			return false, nil
+		}
+		if err := VerifyCRConditionsForPhase("ClusterManager", deployment.GetName(), cm.Status.Conditions, phase); err != nil {
+			return false, err
+		}
+		return true, nil
 	})
 }
 
@@ -2251,6 +2344,141 @@ func ApplySecretUpdateAndVerifyCMUpdating(ctx context.Context, deployment *Deplo
 		return nil, "", nil, err
 	}
 	return mc, resourceVersion, updatedSecretData, nil
+}
+
+// VerifyLicenseManagerConditionReady fetches the v4 LicenseManager CR and verifies its Ready
+// condition is True. If the v4 object is not present (i.e. the test is running the v3
+// LicenseMaster variant), this is a no-op since v3 CRs do not publish a Conditions field.
+func (testenv *TestCaseEnv) VerifyLicenseManagerConditionReady(ctx context.Context, deployment *Deployment) error {
+	lm := &enterpriseApi.LicenseManager{}
+	if err := deployment.GetInstance(ctx, deployment.GetName(), lm); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to get LicenseManager instance: %w", err)
+	}
+	return VerifyCRConditionsForPhase("LicenseManager", deployment.GetName(), lm.Status.Conditions, enterpriseApi.PhaseReady)
+}
+
+// VerifyMonitoringConsoleConditionReady fetches the MonitoringConsole CR and verifies its Ready condition is True.
+func (testenv *TestCaseEnv) VerifyMonitoringConsoleConditionReady(ctx context.Context, deployment *Deployment, mcName string) error {
+	mc := &enterpriseApi.MonitoringConsole{}
+	if err := deployment.GetInstance(ctx, mcName, mc); err != nil {
+		return fmt.Errorf("failed to get MonitoringConsole instance: %w", err)
+	}
+	return VerifyCRConditionsForPhase("MonitoringConsole", mcName, mc.Status.Conditions, enterpriseApi.PhaseReady)
+}
+
+// VerifyStandaloneConditionReady fetches the Standalone CR and verifies its Ready condition is True.
+func (testenv *TestCaseEnv) VerifyStandaloneConditionReady(ctx context.Context, deployment *Deployment, standalone *enterpriseApi.Standalone) error {
+	if err := deployment.GetInstance(ctx, standalone.Name, standalone); err != nil {
+		return fmt.Errorf("failed to get Standalone instance: %w", err)
+	}
+	return VerifyCRConditionsForPhase("Standalone", standalone.Name, standalone.Status.Conditions, enterpriseApi.PhaseReady)
+}
+
+// VerifyC3ConditionsReady fetches ClusterManager, IndexerCluster, and SearchHeadCluster
+// by convention name and verifies all have Ready condition True. If the v4 ClusterManager
+// object is not present (i.e. the test is running the v3 ClusterMaster variant), this is
+// a no-op since v3 CRs do not publish a Conditions field.
+func (testenv *TestCaseEnv) VerifyC3ConditionsReady(ctx context.Context, deployment *Deployment) error {
+	name := deployment.GetName()
+
+	cm := &enterpriseApi.ClusterManager{}
+	if err := deployment.GetInstance(ctx, name, cm); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to get ClusterManager instance: %w", err)
+	}
+	if err := VerifyCRConditionsForPhase("ClusterManager", name, cm.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
+		return err
+	}
+
+	idxcName := name + "-idxc"
+	idc := &enterpriseApi.IndexerCluster{}
+	if err := deployment.GetInstance(ctx, idxcName, idc); err != nil {
+		return fmt.Errorf("failed to get IndexerCluster instance: %w", err)
+	}
+	if err := VerifyCRConditionsForPhase("IndexerCluster", idxcName, idc.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
+		return err
+	}
+
+	shcName := name + "-shc"
+	shc := &enterpriseApi.SearchHeadCluster{}
+	if err := deployment.GetInstance(ctx, shcName, shc); err != nil {
+		return fmt.Errorf("failed to get SearchHeadCluster instance: %w", err)
+	}
+	return VerifyCRConditionsForPhase("SearchHeadCluster", shcName, shc.Status.Conditions, enterpriseApi.PhaseReady)
+}
+
+// VerifyM4ConditionsReady fetches ClusterManager, per-site IndexerClusters, and
+// SearchHeadCluster and verifies all have Ready condition True. If the v4 ClusterManager
+// object is not present (i.e. the test is running the v3 ClusterMaster variant), this is
+// a no-op since v3 CRs do not publish a Conditions field.
+func (testenv *TestCaseEnv) VerifyM4ConditionsReady(ctx context.Context, deployment *Deployment, siteCount int) error {
+	name := deployment.GetName()
+
+	cm := &enterpriseApi.ClusterManager{}
+	if err := deployment.GetInstance(ctx, name, cm); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to get ClusterManager instance: %w", err)
+	}
+	if err := VerifyCRConditionsForPhase("ClusterManager", name, cm.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
+		return err
+	}
+
+	for site := 1; site <= siteCount; site++ {
+		instanceName := fmt.Sprintf("%s-site%d", name, site)
+		idc := &enterpriseApi.IndexerCluster{}
+		if err := deployment.GetInstance(ctx, instanceName, idc); err != nil {
+			return fmt.Errorf("failed to get IndexerCluster instance %s: %w", instanceName, err)
+		}
+		if err := VerifyCRConditionsForPhase("IndexerCluster", instanceName, idc.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
+			return err
+		}
+	}
+
+	shcName := name + "-shc"
+	shc := &enterpriseApi.SearchHeadCluster{}
+	if err := deployment.GetInstance(ctx, shcName, shc); err != nil {
+		return fmt.Errorf("failed to get SearchHeadCluster instance: %w", err)
+	}
+	return VerifyCRConditionsForPhase("SearchHeadCluster", shcName, shc.Status.Conditions, enterpriseApi.PhaseReady)
+}
+
+// VerifyM1ConditionsReady fetches ClusterManager and per-site IndexerClusters
+// and verifies all have Ready condition True. If the v4 ClusterManager object is not
+// present (i.e. the test is running the v3 ClusterMaster variant), this is a no-op
+// since v3 CRs do not publish a Conditions field.
+func (testenv *TestCaseEnv) VerifyM1ConditionsReady(ctx context.Context, deployment *Deployment, siteCount int) error {
+	name := deployment.GetName()
+
+	cm := &enterpriseApi.ClusterManager{}
+	if err := deployment.GetInstance(ctx, name, cm); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to get ClusterManager instance: %w", err)
+	}
+	if err := VerifyCRConditionsForPhase("ClusterManager", name, cm.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
+		return err
+	}
+
+	for site := 1; site <= siteCount; site++ {
+		instanceName := fmt.Sprintf("%s-site%d", name, site)
+		idc := &enterpriseApi.IndexerCluster{}
+		if err := deployment.GetInstance(ctx, instanceName, idc); err != nil {
+			return fmt.Errorf("failed to get IndexerCluster instance %s: %w", instanceName, err)
+		}
+		if err := VerifyCRConditionsForPhase("IndexerCluster", instanceName, idc.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // WaitForDaemonSetPodsReady polls until every scheduled pod in the DaemonSet with the given
