@@ -256,7 +256,10 @@ func (testcaseenv *TestCaseEnv) VerifyM4ComponentsReady(ctx context.Context, dep
 	if err := testcaseenv.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount); err != nil {
 		return err
 	}
-	return testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
+	if err := testcaseenv.VerifySearchHeadClusterReady(ctx, deployment); err != nil {
+		return err
+	}
+	return testcaseenv.VerifyM4ConditionsReady(ctx, deployment, siteCount)
 }
 
 // VerifyMCVersionChangedAndReady waits for the MC resource version to change then verifies MC is ready.

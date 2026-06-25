@@ -166,6 +166,9 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 
 			// Verify probe configuration
 			Expect(testcaseEnvInst.VerifyProbeConfigAndScripts(ctx, deployment, true)).To(Succeed(), "Probe config verification failed")
+
+			Expect(deployment.GetInstance(ctx, ic.Name, ic)).To(Succeed(), "Failed to re-fetch IngestorCluster")
+			Expect(testenv.VerifyCRConditionsForPhase("IngestorCluster", ic.Name, ic.Status.Conditions, enterpriseApi.PhaseReady)).To(Succeed(), "IngestorCluster conditions not met")
 		})
 
 		It("Splunk Operator can deploy Ingestors and Indexers with correct setup", Label("tier:e2e-full", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
@@ -223,6 +226,9 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 					Expect(testenv.VerifyConfFileContent(pod, "opt/splunk/etc/system/local/inputs.conf", deployment.GetName(), inputs, "Failed to get inputs.conf from Indexer Cluster pod")).To(Succeed(), "inputs.conf verification failed")
 				}
 			}
+
+			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-ingest", ingest)).To(Succeed(), "Failed to re-fetch IngestorCluster")
+			Expect(testenv.VerifyCRConditionsForPhase("IngestorCluster", ingest.Name, ingest.Status.Conditions, enterpriseApi.PhaseReady)).To(Succeed(), "IngestorCluster conditions not met")
 		})
 	})
 })

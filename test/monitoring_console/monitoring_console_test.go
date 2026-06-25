@@ -171,6 +171,7 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 			testcaseEnvInst.Log.Info("Checking for Standalone NOT ON FIRST MC after Standalone RECONFIG")
 			Expect(testcaseEnvInst.VerifyStandaloneInMC(ctx, deployment, standaloneOneName, mcName, false)).To(Succeed(), "Standalone still configured in MC One after reconfig")
 
+			Expect(testcaseEnvInst.VerifyStandaloneConditionReady(ctx, deployment, standaloneOne)).To(Succeed(), "Standalone Ready condition not met")
 		})
 
 		It("mastermc, integration, cert: MonitoringConsole mounts server-role and no-role certs and detects rotation", func() {
@@ -272,6 +273,8 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 			// Check both Standalone pods are configured in MC after scale up
 			testcaseEnvInst.Log.Info("Checking for Standalone Pods on MC after scale up")
 			Expect(testenv.VerifyStandalonePodsInMC(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true)).To(Succeed(), "Standalone pods not found in MC after scale up")
+
+			Expect(testcaseEnvInst.VerifyStandaloneConditionReady(ctx, deployment, standalone)).To(Succeed(), "Standalone Ready condition not met")
 		})
 	})
 

@@ -60,6 +60,8 @@ func RunM4MCReconfigTest(ctx context.Context, deployment *testenv.Deployment, te
 
 	Expect(testenv.VerifyMCTwoAfterCMReconfig(ctx, deployment, testcaseEnvInst, cfg.MCReconfigParams, mcTwoName, shPods, indexerPods, false)).To(Succeed(), "MC Two verification failed after CM reconfig")
 	Expect(testenv.VerifyMCOneAfterCMReconfig(ctx, deployment, testcaseEnvInst, cfg.MCReconfigParams, mcName, mc, shPods, true)).To(Succeed(), "MC One verification failed after CM reconfig")
+
+	Expect(testcaseEnvInst.VerifyM4ConditionsReady(ctx, deployment, siteCount)).To(Succeed(), "M4 Ready conditions not met")
 }
 
 // c3MCSetupResult holds the common state produced by deployAndVerifyC3WithMC.
@@ -138,6 +140,8 @@ func RunC3MCReconfigTest(ctx context.Context, deployment *testenv.Deployment, te
 
 	// ############################  VERIFICATION FOR MONITORING CONSOLE ONE POST SHC RECONFIG ###############################
 	Expect(testenv.VerifyMCOneAfterSHCReconfig(ctx, deployment, testcaseEnvInst, cfg.MCReconfigParams, setup.mcName, setup.mc, setup.shPods, cfg.SHCReconfigTimeout)).To(Succeed(), "MC One verification failed after SHC reconfig")
+
+	Expect(testcaseEnvInst.VerifyC3ConditionsReady(ctx, deployment)).To(Succeed(), "C3 Ready conditions not met")
 }
 
 // RunC3MCScaleUpTest deploys a C3 cluster with a Monitoring Console, verifies MC
@@ -182,6 +186,8 @@ func RunC3MCScaleUpTest(ctx context.Context, deployment *testenv.Deployment, tes
 	shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas, false, 0)
 	indexerPods := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas, false, 0)
 	Expect(testenv.VerifyMCConfigForCluster(ctx, deployment, testcaseEnvInst, cfg, setup.mcName, shPods, indexerPods)).To(Succeed(), "MC config verification failed after scale up")
+
+	Expect(testcaseEnvInst.VerifyC3ConditionsReady(ctx, deployment)).To(Succeed(), "C3 Ready conditions not met")
 }
 
 // RunS1StandaloneAddDeleteMCTest deploys two standalone instances with a Monitoring Console,
@@ -258,4 +264,8 @@ func RunS1StandaloneAddDeleteMCTest(ctx context.Context, deployment *testenv.Dep
 
 	testcaseEnvInst.Log.Info("Checking for Standalone Two Pod NOT in MC Config Map after deleting second standalone")
 	Expect(testenv.VerifyStandalonePodsInMC(ctx, deployment, testcaseEnvInst, standalonePods, mcName, false)).To(Succeed(), "Standalone Two still found in MC config after deletion")
+
+	standaloneCR := &enterpriseApi.Standalone{}
+	Expect(deployment.GetInstance(ctx, standaloneOneName, standaloneCR)).To(Succeed(), "Failed to get Standalone instance")
+	Expect(testcaseEnvInst.VerifyStandaloneConditionReady(ctx, deployment, standaloneCR)).To(Succeed(), "Standalone Ready condition not met")
 }
