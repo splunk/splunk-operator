@@ -100,6 +100,8 @@ func TestCNPGClusterPredicator(t *testing.T) {
 		{name: "instances change", mutate: func(c *cnpgv1.Cluster) { c.Status.Instances = 4 }, want: true},
 		{name: "ready instances change", mutate: func(c *cnpgv1.Cluster) { c.Status.ReadyInstances = 2 }, want: true},
 		{name: "current primary change", mutate: func(c *cnpgv1.Cluster) { c.Status.CurrentPrimary = "pg1-2" }, want: true},
+		{name: "resizing pvc added", mutate: func(c *cnpgv1.Cluster) { c.Status.ResizingPVC = []string{"pg1-1"} }, want: true},
+		{name: "resizing pvc count reduced", mutate: func(c *cnpgv1.Cluster) { c.Status.ResizingPVC = []string{"pg1-1", "pg1-2"} }, want: true},
 	}
 
 	for _, tc := range cases {

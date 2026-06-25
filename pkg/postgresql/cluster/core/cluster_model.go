@@ -237,6 +237,8 @@ func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error
 		// components react only once it has settled.
 		if desired, ready, scaling := p.scaleInProgress(); scaling {
 			health = newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGScaling, ready, desired))
+		} else if pending, total, resizing := p.storageResizeInProgress(); resizing {
+			health = newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGStorageResizing, pending, total))
 		} else {
 			health = newReadyHealth(clusterReady, reasonCNPGClusterHealthy, msgProvisionerHealthy)
 		}
@@ -296,6 +298,16 @@ func (p *clusterModel) scaleInProgress() (desired, ready int, scaling bool) {
 		return 0, 0, false
 	}
 	return desired, ready, true
+}
+
+// storageResizeInProgress reports whether CNPG is still resizing instance PVCs.
+// Returns (pending, total, true) while Status.ResizingPVC is non-empty.
+// Returns (0, 0, false) when the CNPG cluster is unavailable or no resize is in progress.
+func (p *clusterModel) storageResizeInProgress() (pending, total int, resizing bool) {
+	if p.cnpgCluster == nil || len(p.cnpgCluster.Status.ResizingPVC) == 0 {
+		return 0, 0, false
+	}
+	return len(p.cnpgCluster.Status.ResizingPVC), p.cnpgCluster.Status.Instances, true
 }
 
 // GetMergedConfig overlays PostgresCluster spec on top of the class defaults.

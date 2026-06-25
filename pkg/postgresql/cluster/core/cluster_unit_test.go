@@ -370,6 +370,109 @@ func TestReconcileFailureEmitsWarningFromObserveNotReconcile(t *testing.T) {
 	}
 }
 
+func TestClusterModelStorageResizeInProgress(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	instances := int32(3)
+	version := "15.13"
+	storageSize := resource.MustParse("10Gi")
+	cfg := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{
+			Instances:        &instances,
+			PostgresVersion:  &version,
+			Storage:          &storageSize,
+			Resources:        &corev1.ResourceRequirements{},
+			PostgreSQLConfig: map[string]string{},
+			PgHBA:            []string{},
+		},
+		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+	}
+
+	cases := []struct {
+		name         string
+		resizingPVCs []string
+		instances    int
+		wantPending  int
+		wantTotal    int
+		wantResizing bool
+	}{
+		{
+			name:         "no resize in progress",
+			resizingPVCs: nil,
+			instances:    3,
+			wantResizing: false,
+		},
+		{
+			name:         "all PVCs resizing",
+			resizingPVCs: []string{"pg1-1", "pg1-2", "pg1-3"},
+			instances:    3,
+			wantPending:  3,
+			wantTotal:    3,
+			wantResizing: true,
+		},
+		{
+			name:         "partial resize: some PVCs still pending",
+			resizingPVCs: []string{"pg1-2", "pg1-3"},
+			instances:    3,
+			wantPending:  2,
+			wantTotal:    3,
+			wantResizing: true,
+		},
+		{
+			name:         "single instance resize",
+			resizingPVCs: []string{"pg1-1"},
+			instances:    1,
+			wantPending:  1,
+			wantTotal:    1,
+			wantResizing: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cluster := &enterprisev4.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+				Status: enterprisev4.PostgresClusterStatus{
+					Resources: &enterprisev4.PostgresClusterResources{
+						SuperUserSecretRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "pg1-secret"},
+							Key:                  "password",
+						},
+					},
+				},
+			}
+			model := newClusterModel(
+				fake.NewClientBuilder().WithScheme(scheme).Build(),
+				scheme, noopEventEmitter{}, nil, cluster,
+				&enterprisev4.PostgresClusterClass{},
+				cfg, &reconcileContracts{Secret: &corev1.Secret{}},
+			)
+			model.cnpgCluster = &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
+				Status: cnpgv1.ClusterStatus{
+					Phase:       cnpgv1.PhaseHealthy,
+					Instances:   tc.instances,
+					ResizingPVC: tc.resizingPVCs,
+				},
+			}
+
+			pending, total, resizing := model.storageResizeInProgress()
+			assert.Equal(t, tc.wantResizing, resizing)
+			if tc.wantResizing {
+				assert.Equal(t, tc.wantPending, pending)
+				assert.Equal(t, tc.wantTotal, total)
+			}
+		})
+	}
+}
+
 func TestHandleFinalizerUnknownDeletionPolicy(t *testing.T) {
 	t.Parallel()
 
