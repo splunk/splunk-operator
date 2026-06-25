@@ -20,6 +20,35 @@ if [[ -z "${EKS_CLUSTER_K8_VERSION}" ]]; then
   export EKS_CLUSTER_K8_VERSION="1.26"
 fi
 
+# Wait for the aws-ebs-csi-driver addon to leave CREATING/UPDATING state before
+# attempting an update. EKS returns 409 ResourceInUseException when UpdateAddon
+# is called while the addon is still converging.
+function waitForEbsCsiAddonActive() {
+  local cluster="$1"
+  local max_wait=180
+  local interval=10
+  local elapsed=0
+  local status
+  while [ "${elapsed}" -lt "${max_wait}" ]; do
+    status=$(aws eks describe-addon \
+      --cluster-name "${cluster}" \
+      --addon-name aws-ebs-csi-driver \
+      --query "addon.status" --output text 2>/dev/null || echo "UNKNOWN")
+    case "${status}" in
+      ACTIVE) return 0 ;;
+      CREATE_FAILED|UPDATE_FAILED|DELETE_FAILED|DEGRADED)
+        echo "EBS CSI addon is in terminal failed state: ${status}" >&2
+        return 1
+        ;;
+    esac
+    echo "Waiting for EBS CSI addon to become ACTIVE (current: ${status}, ${elapsed}s elapsed)"
+    sleep "${interval}"
+    elapsed=$((elapsed + interval))
+  done
+  echo "Timed out waiting for EBS CSI addon to become ACTIVE after ${max_wait}s" >&2
+  return 1
+}
+
 function ebsCsiRoleName() {
   local cluster_name="$1"
   local safe_cluster_name hash body
@@ -256,6 +285,10 @@ function createCluster() {
   fi
 
   if eksctl get addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} >/dev/null 2>&1; then
+    # Wait for any in-progress create/update to finish before issuing a new
+    # update. EKS returns 409 ResourceInUseException when UpdateAddon is called
+    # while the addon is in CREATING or UPDATING state (races on fresh clusters).
+    waitForEbsCsiAddonActive "${TEST_CLUSTER_NAME}" || return 1
     eksctl update addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::${account_id}:role/${rolename} --force
   else
     eksctl create addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::${account_id}:role/${rolename} --force
