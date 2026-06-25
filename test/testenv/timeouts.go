@@ -86,12 +86,14 @@ const PasswordSyncEventTimeout = 2 * time.Minute
 const SecretUpdateClusterReadyTimeout = MediumTimeout
 
 // SetupTeardownTimeout limits BeforeEach setup and AfterEach teardown nodes.
-// Prevents hung setup or cleanup from consuming the entire suite timeout.
-const SetupTeardownTimeout = 15 * time.Minute
+// Sized to cover observed namespace Terminating durations of 16-18 minutes on
+// loaded EKS nodes (CI job 226294339, 2026-05-27) while leaving a grace margin.
+const SetupTeardownTimeout = 25 * time.Minute
 
 // CleanupGraceFraction is the fraction of SetupTeardownTimeout used for
 // cleanup context deadlines, leaving the remainder as a grace period so
 // cleanup can fail gracefully before Ginkgo's NodeTimeout forcibly kills the node.
+// 0.8 × 25m = 20m cleanup budget, 5m grace for the surrounding AfterEach node.
 const CleanupGraceFraction = 0.8
 
 // KubectlQuickTimeout bounds short-lived `kubectl get/delete` invocations used
