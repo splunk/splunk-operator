@@ -533,6 +533,9 @@ func (pplnPhase *PipelinePhase) downloadWorkerHandler(ctx context.Context, ppln 
 downloadWork:
 	for {
 		select {
+		case <-ctx.Done():
+			scopedLog.InfoContext(ctx, "context cancelled, stopping download worker handler")
+			break downloadWork
 		// get an idle worker
 		case downloadWorkersRunPool <- struct{}{}:
 			select {
@@ -1056,6 +1059,9 @@ func (pplnPhase *PipelinePhase) podCopyWorkerHandler(ctx context.Context, handle
 podCopyHandler:
 	for {
 		select {
+		case <-ctx.Done():
+			scopedLog.InfoContext(ctx, "context cancelled, stopping pod copy worker handler")
+			break podCopyHandler
 		// get an idle worker
 		case podCopyWorkerPool <- struct{}{}:
 			select {
@@ -1240,6 +1246,9 @@ func (pplnPhase *PipelinePhase) installWorkerHandler(ctx context.Context, ppln *
 installHandler:
 	for {
 		select {
+		case <-ctx.Done():
+			scopedLog.InfoContext(ctx, "context cancelled, stopping install worker handler")
+			break installHandler
 		case installWorker, channelOpen := <-pplnPhase.msgChannel:
 			if !channelOpen {
 				// Channel is closed, so, do not handle any more workers

@@ -143,10 +143,32 @@ var (
 	specifiedSkipTeardown    = false
 	specifiedLicenseFilePath = ""
 	specifiedCommitHash      = ""
+	specifiedJobID           = ""
 	// SpecifiedTestTimeout exported test timeout time as this can be
 	// configured per test case if needed
 	SpecifiedTestTimeout       = defaultTestTimeout
 	installOperatorClusterWide = defaultOperatorInstallation
+)
+
+// Label keys applied to every test namespace at creation time.
+//
+// SokSmokeJobLabel (value = CI_JOB_ID) is used for bulk post-job namespace
+// cleanup on existing-cluster jobs (e.g. FIPS lane) where the cluster is not
+// torn down between runs:
+//
+//	kubectl delete ns -l sok-smoke-job=<CI_JOB_ID> --wait=false
+//
+// On ephemeral EKS jobs the entire cluster is deleted post-run, so this label
+// is informational only (useful for kubectl debugging during a live run).
+//
+// SokSmokeSuiteLabel (value = <testenv-name>-<CI_JOB_ID>, e.g. "4d9f-s1appfw-xyz-12345678")
+// is a finer-grained label that uniquely identifies a single suite instance
+// within a job.  Two parallel specs from different suites (S1 and C3) in the
+// same job get different SokSmokeSuiteLabel values, so a targeted suite
+// cleanup does not touch sibling suites.
+const (
+	SokSmokeJobLabel   = "sok-smoke-job"
+	SokSmokeSuiteLabel = "sok-smoke-suite"
 )
 
 // OperatorFSGroup is the fsGroup value for Splunk Operator
@@ -203,6 +225,7 @@ func init() {
 	flag.BoolVar(&specifiedSkipTeardown, "skip-teardown", false, "True to skip tearing down the test env after use")
 	flag.IntVar(&SpecifiedTestTimeout, "test-timeout", defaultTestTimeout, "Max test timeout in seconds to use")
 	flag.StringVar(&specifiedCommitHash, "commit-hash", "", "commit hash string to use as part of the name")
+	flag.StringVar(&specifiedJobID, "job-id", os.Getenv("CI_JOB_ID"), "CI job ID used to label test namespaces for isolated post-job cleanup")
 	flag.StringVar(&installOperatorClusterWide, "cluster-wide", "true", "install operator clusterwide, if not install per test case")
 }
 
