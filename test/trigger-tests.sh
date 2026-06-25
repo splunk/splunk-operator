@@ -176,6 +176,7 @@ ginkgo_cmd=(
   "-operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}"
   "-splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
   "-cluster-wide=${CLUSTER_WIDE}"
+  "-job-id=${CI_JOB_ID:-}"
 )
 
 printf '%q ' "${ginkgo_cmd[@]}"

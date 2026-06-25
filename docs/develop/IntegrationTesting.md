@@ -496,7 +496,7 @@ Per-spec and suite-level timeouts are defined in `test/testenv/timeouts.go`. Use
 
 | Constant | Duration | Purpose |
 |----------|----------|---------|
-| `SetupTeardownTimeout` | 15 min | `BeforeEach`/`AfterEach` node timeout |
+| `SetupTeardownTimeout` | 25 min | `BeforeEach`/`AfterEach` node timeout (0.8× = 20 min cleanup budget, 5 min grace) |
 | `DefaultTimeout` | 30 min | Infrastructure polls (namespace creation, operator readiness) |
 | `AppInstallTimeout` | 10 min | Waiting for apps to reach Install phase |
 
