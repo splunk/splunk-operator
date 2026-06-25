@@ -175,10 +175,11 @@ func postgresClusterPredicator() predicate.Predicate {
 }
 
 // cnpgClusterPredicator triggers on spec changes, phase changes, scale progress,
-// or primary changes. Generation catches spec drift
+// primary changes, or storage resize progress. Generation catches spec drift
 // before CNPG reflects it in status. Instance counts and CurrentPrimary are
 // watched explicitly because CNPG keeps Phase=Healthy during scale-down; the
 // only signal that anything is happening is ReadyInstances ticking down.
+// ResizingPVC is watched so the reconciler wakes when PVC expansion completes.
 func cnpgClusterPredicator() predicate.Predicate {
 	return predicate.Or(
 		predicate.GenerationChangedPredicate{},
@@ -201,7 +202,8 @@ func cnpgClusterPredicator() predicate.Predicate {
 				return oldObj.Status.Phase != newObj.Status.Phase ||
 					oldObj.Status.Instances != newObj.Status.Instances ||
 					oldObj.Status.ReadyInstances != newObj.Status.ReadyInstances ||
-					oldObj.Status.CurrentPrimary != newObj.Status.CurrentPrimary
+					oldObj.Status.CurrentPrimary != newObj.Status.CurrentPrimary ||
+					len(oldObj.Status.ResizingPVC) != len(newObj.Status.ResizingPVC)
 			},
 		},
 	)
