@@ -78,6 +78,8 @@ func RunS1MultipleIndexesTest(ctx context.Context, deployment *testenv.Deploymen
 		Expect(testenv.RollHotToWarm(ctx, deployment, podName, indexName)).To(BeTrue(), "Unable to roll hot to warm")
 		Expect(testcaseEnvInst.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)).To(Succeed(), "Index not found on S3")
 	}
+
+	Expect(testcaseEnvInst.VerifyStandaloneConditionReady(ctx, deployment, standalone)).To(Succeed(), "Standalone Ready condition not met")
 }
 
 // RunS1DefaultVolumesTest runs the standard S1 default volumes SmartStore test workflow
@@ -142,6 +144,8 @@ func RunS1DefaultVolumesTest(ctx context.Context, deployment *testenv.Deployment
 
 	// Validate EvictionPolicy
 	Expect(testcaseEnvInst.VerifyConfOnPod(ctx, podName, serverConfPath, "eviction_policy", cacheManagerSmartStoreSpec.EvictionPolicy)).To(Succeed(), "EvictionPolicy mismatch")
+
+	Expect(testcaseEnvInst.VerifyStandaloneConditionReady(ctx, deployment, standalone)).To(Succeed(), "Standalone Ready condition not met")
 }
 
 // RunS1EphemeralStorageTest deploys a Standalone with one ephemeral storage volume configured and verifies it is ready.
@@ -166,6 +170,8 @@ func RunS1EphemeralStorageTest(ctx context.Context, deployment *testenv.Deployme
 	Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App Framework")
 
 	Expect(testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)).To(Succeed(), "Standalone not ready")
+
+	Expect(testcaseEnvInst.VerifyStandaloneConditionReady(ctx, deployment, standalone)).To(Succeed(), "Standalone Ready condition not met")
 }
 
 // RunM4MultisiteSmartStoreTest runs the standard M4 multisite SmartStore test workflow
@@ -223,4 +229,6 @@ func RunM4MultisiteSmartStoreTest(ctx context.Context, deployment *testenv.Deplo
 	// Use multisite workflow helper for the new index
 	testcaseEnvInst.Log.Info("Ingesting data on index", "Index Name", indexNameTwo)
 	Expect(testcaseEnvInst.MultisiteIndexerWorkflow(ctx, deployment, siteCount, indexNameTwo)).To(Succeed(), "Multisite indexer workflow failed for new index")
+
+	Expect(testcaseEnvInst.VerifyM4ConditionsReady(ctx, deployment, siteCount)).To(Succeed(), "M4 Ready conditions not met")
 }

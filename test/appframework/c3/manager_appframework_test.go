@@ -238,6 +238,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Wait for License Manager to be in READY phase
 			Eventually(func() error { return testcaseEnvInst.VerifyLicenseManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "License Manager not ready")
+			Expect(testcaseEnvInst.VerifyLicenseManagerConditionReady(ctx, deployment)).To(Succeed(), "LicenseManager Ready condition not met")
 
 			// Ensure Cluster Manager goes to Ready phase
 			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
@@ -306,6 +307,7 @@ var _ = Describe("c3appfw test", func() {
 				defer cancel()
 				return testcaseEnvInst.VerifyLicenseManagerReady(attemptCtx, deployment)
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "License Manager not ready")
+			Expect(testcaseEnvInst.VerifyLicenseManagerConditionReady(ctx, deployment)).To(Succeed(), "LicenseManager Ready condition not met")
 
 			// Ensure Search Head Cluster go to Ready phase
 			Eventually(func() error {
