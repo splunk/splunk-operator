@@ -154,7 +154,10 @@ func (testcaseenv *TestCaseEnv) VerifyM1ClusterReady(ctx context.Context, deploy
 	if err := testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount); err != nil {
 		return err
 	}
-	return testcaseenv.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)
+	if err := testcaseenv.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount); err != nil {
+		return err
+	}
+	return testcaseenv.VerifyM1ConditionsReady(ctx, deployment, siteCount)
 }
 
 // VerifyM4ClusterReady verifies the cluster coordinator, indexers, multisite status, and SHC are ready.
@@ -173,7 +176,10 @@ func (testcaseenv *TestCaseEnv) VerifyM4IndexersAndSHCReady(ctx context.Context,
 	if err := testcaseenv.VerifyIndexersReady(ctx, deployment, siteCount); err != nil {
 		return err
 	}
-	return testcaseenv.VerifySearchHeadClusterReady(ctx, deployment)
+	if err := testcaseenv.VerifySearchHeadClusterReady(ctx, deployment); err != nil {
+		return err
+	}
+	return testcaseenv.VerifyM4ConditionsReady(ctx, deployment, siteCount)
 }
 
 // VerifyC3ClusterReady verifies the cluster coordinator, SHC, and single-site indexers are ready.
@@ -184,7 +190,10 @@ func (testcaseenv *TestCaseEnv) VerifyC3ClusterReady(ctx context.Context, deploy
 	if err := testcaseenv.VerifySearchHeadClusterReady(ctx, deployment); err != nil {
 		return err
 	}
-	return testcaseenv.VerifySingleSiteIndexersReady(ctx, deployment)
+	if err := testcaseenv.VerifySingleSiteIndexersReady(ctx, deployment); err != nil {
+		return err
+	}
+	return testcaseenv.VerifyC3ConditionsReady(ctx, deployment)
 }
 
 // IngestDataOnIndexers ingests test data on all indexer pods

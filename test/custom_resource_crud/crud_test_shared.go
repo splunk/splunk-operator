@@ -52,6 +52,8 @@ func RunS1CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 
 	// Verify CPU limits on Standalone after updating the CR
 	Expect(testcaseEnvInst.VerifyCPULimits(deployment, standalonePodName, newCPULimits)).To(Succeed(), "Standalone CPU limits mismatch after CR update")
+
+	Expect(testcaseEnvInst.VerifyStandaloneConditionReady(ctx, deployment, standalone)).To(Succeed(), "Standalone Ready condition not met")
 }
 
 // RunC3CPUUpdateTest runs the standard C3 CPU limit update test workflow
@@ -110,6 +112,8 @@ func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 
 	// Verify CPU limits on Search Heads after updating the CR
 	Expect(testcaseEnvInst.VerifySearchHeadCPULimits(deployment, searchHeadCount, newCPULimits)).To(Succeed(), "Search Head CPU limits mismatch after CR update")
+
+	Expect(testcaseEnvInst.VerifyC3ConditionsReady(ctx, deployment)).To(Succeed(), "C3 Ready conditions not met")
 }
 
 // RunC3PVCDeletionTest runs the standard C3 PVC deletion test workflow
@@ -177,6 +181,10 @@ func RunSHCDeployerResourceSpecTest(ctx context.Context, deployment *testenv.Dep
 
 	// Verify modified deployer spec
 	Expect(testcaseEnvInst.VerifyResourceConstraints(deployment, deployerPodName, depResSpec)).To(Succeed(), "Deployer resource constraints mismatch")
+
+	shcCR := &enterpriseApi.SearchHeadCluster{}
+	Expect(deployment.GetInstance(ctx, shcName, shcCR)).To(Succeed(), "Failed to get SHC instance")
+	Expect(testenv.VerifyCRConditionsForPhase("SearchHeadCluster", shcName, shcCR.Status.Conditions, enterpriseApi.PhaseReady)).To(Succeed(), "SHC conditions not met")
 }
 
 // RunM4CPUUpdateTest runs the standard M4 CPU limit update test workflow
@@ -218,4 +226,6 @@ func RunM4CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 
 	// Verify CPU limits after updating the CR
 	Expect(testcaseEnvInst.VerifyCPULimitsOnAllSites(deployment, siteCount, newCPULimits)).To(Succeed(), "Multisite Indexer CPU limits mismatch after CR update")
+
+	Expect(testcaseEnvInst.VerifyM4ConditionsReady(ctx, deployment, siteCount)).To(Succeed(), "M4 Ready conditions not met")
 }
