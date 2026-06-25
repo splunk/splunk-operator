@@ -249,6 +249,7 @@ const (
 	msgFmtCNPGImageError         statusMessage = "CNPG image error: %s"
 	msgFmtCNPGClusterPhase       statusMessage = "CNPG cluster phase: %s"
 	msgFmtCNPGScaling            statusMessage = "Scaling cluster: %d/%d instances ready"
+	msgFmtCNPGStorageResizing    statusMessage = "Resizing storage: %d/%d PVCs pending"
 
 	// status messages — backup
 	msgBackupDisabled              statusMessage = "Backup is not enabled"

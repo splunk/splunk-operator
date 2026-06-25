@@ -1547,6 +1547,67 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				}, "20s", "250ms").Should(Succeed())
 			})
 
+			It("holds phase=Provisioning while CNPG is resizing PVCs", func() {
+				pgCluster.Spec.Instances = ptr.To(int32(1))
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+
+				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGHealthy(cnpg, 1)
+				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					current := &enterprisev4.PostgresCluster{}
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+					g.Expect(current.Status.Phase).NotTo(BeNil())
+					g.Expect(*current.Status.Phase).To(Equal(string(enterprisev4.PhaseReady)))
+				}, "20s", "250ms").Should(Succeed())
+
+				// Simulate a storage resize: CNPG has applied the new size but
+				// PVCs are still expanding. CNPG reports this via Status.ResizingPVC.
+				// The operator should hold phase=Provisioning until it is empty.
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				cnpg.Status.ResizingPVC = []string{cnpg.Name + "-1"}
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					current := &enterprisev4.PostgresCluster{}
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+					g.Expect(current.Status.Phase).NotTo(BeNil())
+					g.Expect(*current.Status.Phase).To(Equal("Provisioning"))
+
+					cond := meta.FindStatusCondition(current.Status.Conditions, "ClusterReady")
+					g.Expect(cond).NotTo(BeNil())
+					g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(cond.Reason).To(Equal("CNPGClusterProvisioning"))
+					g.Expect(cond.Message).To(Equal("Resizing storage: 1/1 PVCs pending"))
+				}, "20s", "250ms").Should(Succeed())
+
+				// Once all PVCs have resized (ResizingPVC cleared), phase should return to Ready.
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				cnpg.Status.ResizingPVC = nil
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					current := &enterprisev4.PostgresCluster{}
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+					g.Expect(current.Status.Phase).NotTo(BeNil())
+					g.Expect(*current.Status.Phase).To(Equal(string(enterprisev4.PhaseReady)))
+				}, "20s", "250ms").Should(Succeed())
+			})
+
 			It("publishes empty read-only endpoint values when running with a single instance", func() {
 				pgCluster.Spec.Instances = ptr.To(int32(1))
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
