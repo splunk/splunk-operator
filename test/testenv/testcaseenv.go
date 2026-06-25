@@ -245,9 +245,21 @@ func (testenv *TestCaseEnv) popCleanupFunc() (cleanupFunc, error) {
 func (testenv *TestCaseEnv) createNamespace() error {
 	ctx := context.Background()
 
+	labels := map[string]string{}
+	if specifiedJobID != "" {
+		// Job-level label — matches all namespaces for this CI job, used by the
+		// post-job bulk cleanup in int-test-workflow.sh.
+		labels[SokSmokeJobLabel] = specifiedJobID
+		// Suite-level label — value embeds the testenv name (which contains the
+		// suite slug, e.g. "4d9f-s1appfw-xyz") so parallel specs from different
+		// suites within the same job get distinct values and a targeted cleanup
+		// cannot inadvertently delete sibling suite namespaces.
+		labels[SokSmokeSuiteLabel] = testenv.name + "-" + specifiedJobID
+	}
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: testenv.namespace,
+			Name:   testenv.namespace,
+			Labels: labels,
 		},
 	}
 

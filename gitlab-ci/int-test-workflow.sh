@@ -198,6 +198,12 @@ cleanup_and_exit() {
   make clean >> "${cleanup_log}" 2>&1 || cleanup_rc=1
   if [ "${use_existing_cluster}" = "true" ]; then
     log_step "cleanup:cluster-down:skipped-existing-cluster" | tee -a "${cleanup_log}" >/dev/null
+    # Cluster persists across jobs (e.g. FIPS lane); clean up any test namespaces
+    # this job left behind so they don't accumulate across runs.
+    if [ -n "${CI_JOB_ID:-}" ]; then
+      log_step "cleanup:namespaces" | tee -a "${cleanup_log}" >/dev/null
+      kubectl delete ns -l "sok-smoke-job=${CI_JOB_ID}" --wait=false --ignore-not-found >> "${cleanup_log}" 2>&1 || true
+    fi
   else
     log_step "cleanup:cluster-down" | tee -a "${cleanup_log}" >/dev/null
     make cluster-down >> "${cleanup_log}" 2>&1 || cleanup_rc=1
