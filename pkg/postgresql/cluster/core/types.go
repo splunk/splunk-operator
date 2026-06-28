@@ -217,6 +217,7 @@ const (
 	// condition reasons — CNPG cluster phase mapping
 	reasonCNPGClusterHealthy     conditionReasons = "CNPGClusterHealthy"
 	reasonCNPGProvisioning       conditionReasons = "CNPGClusterProvisioning"
+	reasonCNPGRecovery           conditionReasons = "CNPGClusterRecovery"
 	reasonCNPGSwitchover         conditionReasons = "CNPGSwitchover"
 	reasonCNPGFailingOver        conditionReasons = "CNPGFailingOver"
 	reasonCNPGRestarting         conditionReasons = "CNPGRestarting"

@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -470,6 +471,224 @@ func TestClusterModelStorageResizeInProgress(t *testing.T) {
 				assert.Equal(t, tc.wantTotal, total)
 			}
 		})
+	}
+}
+
+func TestPhaseWaitingForInstancesToBeActive(t *testing.T) {
+	t.Parallel()
+
+	readyPhase := string(readyClusterPhase)
+	provisioningPhase := string(provisioningClusterPhase)
+	pendingPhase := string(pendingClusterPhase)
+
+	tests := []struct {
+		name          string
+		clusterPhase  *string
+		cnpgInstances int
+		setPatch      bool
+		wantPhase     reconcileClusterPhases
+		wantReason    conditionReasons
+		wantEvent     string // non-empty: assert ClusterDegraded event contains this string
+	}{
+		{
+			name:          "requiresPhaseGate holds provisioning",
+			clusterPhase:  &readyPhase,
+			cnpgInstances: 2,
+			setPatch:      true,
+			wantPhase:     provisioningClusterPhase,
+			wantReason:    reasonCNPGProvisioning,
+		},
+		{
+			name:          "desired!=actual holds provisioning",
+			clusterPhase:  &readyPhase,
+			cnpgInstances: 1, // desired=2
+			wantPhase:     provisioningClusterPhase,
+			wantReason:    reasonCNPGProvisioning,
+		},
+		{
+			name:          "alreadyProvisioning holds provisioning",
+			clusterPhase:  &provisioningPhase,
+			cnpgInstances: 2, // desired=2, equal — only alreadyProvisioning guard fires
+			wantPhase:     provisioningClusterPhase,
+			wantReason:    reasonCNPGProvisioning,
+		},
+		{
+			name:          "pod crash emits ClusterDegraded",
+			clusterPhase:  &readyPhase,
+			cnpgInstances: 2, // desired=2, equal — no guards fire
+			wantPhase:     pendingClusterPhase,
+			wantReason:    reasonCNPGRecovery,
+			wantEvent:     "Cluster entered recovery phase: Pending: " + string(cnpgv1.PhaseWaitingForInstancesToBeActive),
+		},
+		{
+			name:          "non-ready to non-ready emits no event",
+			clusterPhase:  &pendingPhase,
+			cnpgInstances: 2, // desired=2, equal — no guards fire
+			wantPhase:     pendingClusterPhase,
+			wantReason:    reasonCNPGRecovery,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			scheme := newTestScheme()
+			cluster := &enterprisev4.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+				Spec:       enterprisev4.PostgresClusterSpec{},
+				Status: enterprisev4.PostgresClusterStatus{
+					Phase: tt.clusterPhase,
+					Conditions: []metav1.Condition{{
+						Type:    string(clusterReady),
+						Status:  metav1.ConditionTrue,
+						Reason:  string(reasonCNPGClusterHealthy),
+						Message: msgProvisionerHealthy,
+					}},
+				},
+			}
+			cnpg := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+				Status: cnpgv1.ClusterStatus{
+					Phase:          cnpgv1.PhaseWaitingForInstancesToBeActive,
+					Instances:      tt.cnpgInstances,
+					ReadyInstances: tt.cnpgInstances - 1,
+				},
+			}
+			c := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithStatusSubresource(&enterprisev4.PostgresCluster{}).
+				WithObjects(cluster).
+				Build()
+			recorder := record.NewFakeRecorder(10)
+			rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: recorder}
+			updateStatus := func(before *enterprisev4.PostgresClusterStatus, health componentHealth) error {
+				oldPhase := ""
+				if cluster.Status.Phase != nil {
+					oldPhase = *cluster.Status.Phase
+				}
+				if err := setStatusFromHealth(ctx, c, nil, cluster, before, health); err != nil {
+					return err
+				}
+				newPhase := ""
+				if cluster.Status.Phase != nil {
+					newPhase = *cluster.Status.Phase
+				}
+				rc.emitClusterPhaseTransition(cluster, oldPhase, newPhase, health.Reason, health.Message)
+				return nil
+			}
+			instances := int32(2)
+			model := newClusterModel(
+				c,
+				scheme,
+				rc,
+				updateStatus,
+				cluster,
+				&enterprisev4.PostgresClusterClass{},
+				&MergedConfig{Spec: &enterprisev4.PostgresClusterSpec{Instances: &instances}},
+				&reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}}},
+			)
+			model.cnpgCluster = cnpg
+			if tt.setPatch {
+				model.cnpgPatch = cnpgPatchBody
+			}
+
+			health, err := model.Observe(ctx, nil)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantPhase, health.Phase)
+			assert.Equal(t, tt.wantReason, health.Reason)
+			if tt.wantEvent != "" {
+				assert.NotEmpty(t, health.Message)
+				select {
+				case event := <-recorder.Events:
+					assert.Contains(t, event, corev1.EventTypeWarning)
+					assert.Contains(t, event, EventClusterDegraded)
+					assert.Contains(t, event, tt.wantEvent)
+				default:
+					t.Fatal("expected ClusterDegraded warning event")
+				}
+			}
+			select {
+			case extra := <-recorder.Events:
+				t.Errorf("unexpected extra event: %s", extra)
+			default:
+			}
+		})
+	}
+}
+
+func TestPhaseFailOverEmitsClusterDegraded(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	scheme := newTestScheme()
+	readyPhase := string(readyClusterPhase)
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Status: enterprisev4.PostgresClusterStatus{
+			Phase: &readyPhase,
+			Conditions: []metav1.Condition{{
+				Type:    string(clusterReady),
+				Status:  metav1.ConditionTrue,
+				Reason:  string(reasonCNPGClusterHealthy),
+				Message: msgProvisionerHealthy,
+			}},
+		},
+	}
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseFailOver},
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&enterprisev4.PostgresCluster{}).
+		WithObjects(cluster).
+		Build()
+	recorder := record.NewFakeRecorder(10)
+	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: recorder}
+	updateStatus := func(before *enterprisev4.PostgresClusterStatus, health componentHealth) error {
+		oldPhase := ""
+		if cluster.Status.Phase != nil {
+			oldPhase = *cluster.Status.Phase
+		}
+		if err := setStatusFromHealth(ctx, c, nil, cluster, before, health); err != nil {
+			return err
+		}
+		newPhase := ""
+		if cluster.Status.Phase != nil {
+			newPhase = *cluster.Status.Phase
+		}
+		rc.emitClusterPhaseTransition(cluster, oldPhase, newPhase, health.Reason, health.Message)
+		return nil
+	}
+	model := newClusterModel(
+		c, scheme, rc, updateStatus, cluster,
+		&enterprisev4.PostgresClusterClass{},
+		&MergedConfig{},
+		&reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}}},
+	)
+	model.cnpgCluster = cnpg
+
+	health, err := model.Observe(ctx, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, pendingClusterPhase, health.Phase)
+	assert.Equal(t, reasonCNPGFailingOver, health.Reason)
+	assert.NotEmpty(t, health.Message)
+	select {
+	case event := <-recorder.Events:
+		assert.Contains(t, event, corev1.EventTypeWarning)
+		assert.Contains(t, event, EventClusterDegraded)
+		assert.Contains(t, event, "Cluster entered failover phase: Pending: "+string(cnpgv1.PhaseFailOver))
+	default:
+		t.Fatal("expected ClusterDegraded warning event")
+	}
+	select {
+	case extra := <-recorder.Events:
+		t.Errorf("unexpected extra event: %s", extra)
+	default:
 	}
 }
 
