@@ -654,16 +654,15 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 		t.Parallel()
 		enabled := true
 		className := "csi-snapclass"
-		backupCfg := *cfg
-		backupCfg.Spec.Backup = &enterprisev4.BackupConfig{Enabled: &enabled}
-		backupCfg.CNPG = &enterprisev4.CNPGConfig{
-			PrimaryUpdateMethod: cfg.CNPG.PrimaryUpdateMethod,
-			Backup: &enterprisev4.CNPGBackupConfig{
-				VolumeSnapshot: &enterprisev4.CNPGVolumeSnapshotConfig{
-					ClassName: &className,
-				},
+		specCopy := *cfg.Spec
+		specCopy.Backup = &enterprisev4.BackupConfig{Enabled: &enabled}
+		cnpgCopy := *cfg.CNPG
+		cnpgCopy.Backup = &enterprisev4.CNPGBackupConfig{
+			VolumeSnapshot: &enterprisev4.CNPGVolumeSnapshotConfig{
+				ClassName: &className,
 			},
 		}
+		backupCfg := MergedConfig{Spec: &specCopy, CNPG: &cnpgCopy}
 
 		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, &backupCfg, "my-secret", false)
 
@@ -680,8 +679,10 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 		liveSpec := cnpgv1.ClusterSpec{Backup: staleBackup}
 
 		disabled := false
-		disabledCfg := *cfg
-		disabledCfg.Spec.Backup = &enterprisev4.BackupConfig{Enabled: &disabled}
+		specCopy := *cfg.Spec
+		specCopy.Backup = &enterprisev4.BackupConfig{Enabled: &disabled}
+		cnpgCopy := *cfg.CNPG
+		disabledCfg := MergedConfig{Spec: &specCopy, CNPG: &cnpgCopy}
 
 		spec := buildCNPGClusterSpec(liveSpec, &disabledCfg, "my-secret", false)
 
