@@ -76,7 +76,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		if err := setStatus(ctx, c, rc.Metrics, postgresCluster, postgresCluster.Status.DeepCopy(), conditionType, status, reason, message, phase); err != nil {
 			return err
 		}
-		rc.emitClusterPhaseTransition(postgresCluster, oldPhase, currentPhase())
+		rc.emitClusterPhaseTransition(postgresCluster, oldPhase, currentPhase(), reason, message)
 		return nil
 	}
 	updateComponentHealthStatus := func(before *enterprisev4.PostgresClusterStatus, health componentHealth) error {
@@ -84,7 +84,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		if err := setStatusFromHealth(ctx, c, rc.Metrics, postgresCluster, before, health); err != nil {
 			return err
 		}
-		rc.emitClusterPhaseTransition(postgresCluster, oldPhase, currentPhase())
+		rc.emitClusterPhaseTransition(postgresCluster, oldPhase, currentPhase(), health.Reason, health.Message)
 		return nil
 	}
 	updatePhaseStatus := func(phase reconcileClusterPhases) error {
@@ -92,7 +92,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		if err := setPhaseStatus(ctx, c, postgresCluster, phase); err != nil {
 			return err
 		}
-		rc.emitClusterPhaseTransition(postgresCluster, oldPhase, currentPhase())
+		rc.emitClusterPhaseTransition(postgresCluster, oldPhase, currentPhase(), "", "")
 		return nil
 	}
 

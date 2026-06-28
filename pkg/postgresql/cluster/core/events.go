@@ -16,8 +16,6 @@ limitations under the License.
 package core
 
 import (
-	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -54,6 +52,13 @@ const (
 	EventUnmanagedRolesSweepFailed = "UnmanagedRolesSweepFailed"
 )
 
+const (
+	msgClusterReady                = "Cluster is up and running"
+	msgClusterEnteredPhase         = "Cluster entered phase: "
+	msgClusterEnteredRecoveryPhase = "Cluster entered recovery phase: "
+	msgClusterEnteredFailoverPhase = "Cluster entered failover phase: "
+)
+
 func (rc *ReconcileContext) emitNormal(obj client.Object, reason, message string) {
 	rc.Recorder.Event(obj, corev1.EventTypeNormal, reason, message)
 }
@@ -65,14 +70,28 @@ func (rc *ReconcileContext) emitWarning(obj client.Object, reason, message strin
 // emitClusterPhaseTransition emits ClusterReady or ClusterDegraded only on
 // actual phase transitions. Provisioning and Configuring are expected phases
 // after our own create/update operations, so they don't emit ClusterDegraded.
-func (rc *ReconcileContext) emitClusterPhaseTransition(obj client.Object, oldPhase, newPhase string) {
-	switch {
-	case oldPhase != string(readyClusterPhase) && newPhase == string(readyClusterPhase):
-		rc.emitNormal(obj, EventClusterReady, "Cluster is up and running")
+func (rc *ReconcileContext) emitClusterPhaseTransition(obj client.Object, oldPhase, newPhase string, reason conditionReasons, message string) {
+	if oldPhase != string(readyClusterPhase) && newPhase == string(readyClusterPhase) {
+		rc.emitNormal(obj, EventClusterReady, msgClusterReady)
+		return
+	}
 	// only when cluster degraded from ready but not to provisioning or configuring
-	case oldPhase == string(readyClusterPhase) && newPhase != string(readyClusterPhase) &&
-		newPhase != string(provisioningClusterPhase) && newPhase != string(configuringClusterPhase):
-		rc.emitWarning(obj, EventClusterDegraded, fmt.Sprintf("Cluster entered phase: %s", newPhase))
+	if oldPhase == string(readyClusterPhase) &&
+		newPhase != string(readyClusterPhase) &&
+		newPhase != string(provisioningClusterPhase) &&
+		newPhase != string(configuringClusterPhase) {
+		prefix := msgClusterEnteredPhase
+		switch reason {
+		case reasonCNPGRecovery:
+			prefix = msgClusterEnteredRecoveryPhase
+		case reasonCNPGFailingOver:
+			prefix = msgClusterEnteredFailoverPhase
+		}
+		eventMessage := prefix + newPhase
+		if message != "" {
+			eventMessage += ": " + message
+		}
+		rc.emitWarning(obj, EventClusterDegraded, eventMessage)
 	}
 }
 

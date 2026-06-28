@@ -35,6 +35,7 @@ const (
 	EventCleanupComplete               = "CleanupComplete"
 	EventClusterNotFound               = "ClusterNotFound"
 	EventClusterNotReady               = "ClusterNotReady"
+	EventWaitingForClusterRecovery     = "WaitingForClusterRecovery"
 	EventRoleConflict                  = "RoleConflict"
 	EventRoleReconcileFailed           = "RoleReconcileFailed"
 	EventRoleSecretsFailed             = "RoleSecretsFailed"

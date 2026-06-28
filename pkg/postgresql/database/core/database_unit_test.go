@@ -320,6 +320,121 @@ func TestPostgresDatabaseServiceTerminalOnMissingExternalSecret(t *testing.T) {
 	assert.Contains(t, err.Error(), "external-rw-secret")
 }
 
+func TestDatabaseClusterNotReadyConditionReason(t *testing.T) {
+	scheme := testScheme(t)
+	ctx := context.Background()
+	const ns = "dbs"
+
+	pendingPhase := "Pending"
+	readyDBCondition := metav1.Condition{
+		Type:    string(clusterReady),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(reasonClusterAvailable),
+		Message: "Cluster is operational",
+	}
+	recoveryDBCondition := metav1.Condition{
+		Type:    string(clusterReady),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(reasonClusterRecovery),
+		Message: "Cluster is recovering; waiting for it to become ready",
+	}
+	recoveryClusterCondition := metav1.Condition{
+		Type:   "ClusterReady",
+		Status: metav1.ConditionFalse,
+		Reason: string(cnpgReasonRecovery),
+	}
+
+	tests := []struct {
+		name                string
+		dbPhase             string
+		dbCondition         metav1.Condition
+		clusterConditions   []metav1.Condition
+		wantConditionReason string
+		wantEvent           string // non-empty: assert event contains this string
+	}{
+		{
+			name:                "planned cluster change reports provisioning",
+			dbPhase:             string(readyDBPhase),
+			dbCondition:         readyDBCondition,
+			wantConditionReason: string(reasonClusterProvisioning),
+		},
+		{
+			name:                "wasReady + recovery cluster reports recovery and emits event",
+			dbPhase:             string(readyDBPhase),
+			dbCondition:         readyDBCondition,
+			clusterConditions:   []metav1.Condition{recoveryClusterCondition},
+			wantConditionReason: string(reasonClusterRecovery),
+			wantEvent:           EventWaitingForClusterRecovery,
+		},
+		{
+			name:                "existing recovery condition persists on subsequent reconcile",
+			dbPhase:             pendingPhase,
+			dbCondition:         recoveryDBCondition,
+			clusterConditions:   []metav1.Condition{recoveryClusterCondition},
+			wantConditionReason: string(reasonClusterRecovery),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			postgresDB := &enterprisev4.PostgresDatabase{
+				TypeMeta: metav1.TypeMeta{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresDatabase"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "primary",
+					Namespace:  ns,
+					UID:        types.UID("pdb-uid"),
+					Generation: 1,
+					Finalizers: []string{postgresDatabaseFinalizerName},
+				},
+				Spec: enterprisev4.PostgresDatabaseSpec{
+					ClusterRef: corev1.LocalObjectReference{Name: "primary-cluster"},
+					Databases:  []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+				},
+				Status: enterprisev4.PostgresDatabaseStatus{
+					Phase:      &tt.dbPhase,
+					Conditions: []metav1.Condition{tt.dbCondition},
+					Databases:  []enterprisev4.DatabaseInfo{{Name: "payments"}},
+				},
+			}
+			postgresCluster := &enterprisev4.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresCluster"},
+				ObjectMeta: metav1.ObjectMeta{Name: "primary-cluster", Namespace: ns},
+				Status: enterprisev4.PostgresClusterStatus{
+					Phase:      &pendingPhase,
+					Conditions: tt.clusterConditions,
+				},
+			}
+			c := testClient(t, scheme, postgresDB, postgresCluster)
+			recorder := record.NewFakeRecorder(10)
+
+			result, err := PostgresDatabaseService(
+				ctx,
+				&ReconcileContext{Client: c, Scheme: scheme, Recorder: recorder, Metrics: &pgprometheus.NoopRecorder{}},
+				postgresDB,
+				nil,
+			)
+
+			require.NoError(t, err)
+			assert.Equal(t, ctrl.Result{RequeueAfter: retryDelay}, result)
+			updated := &enterprisev4.PostgresDatabase{}
+			require.NoError(t, c.Get(ctx, types.NamespacedName{Name: postgresDB.Name, Namespace: postgresDB.Namespace}, updated))
+			condition := meta.FindStatusCondition(updated.Status.Conditions, string(clusterReady))
+			require.NotNil(t, condition)
+			assert.Equal(t, metav1.ConditionFalse, condition.Status)
+			assert.Equal(t, tt.wantConditionReason, condition.Reason)
+			if tt.wantEvent != "" {
+				select {
+				case event := <-recorder.Events:
+					assert.Contains(t, event, corev1.EventTypeWarning)
+					assert.Contains(t, event, tt.wantEvent)
+				default:
+					t.Fatal("expected warning event")
+				}
+			}
+		})
+	}
+}
+
 // TestPostgresDatabaseServiceRequeuesWhenMissingSecretStatusWriteFailsTransiently
 // verifies that when an external role secret is missing AND the SecretsReady=False
 // status write fails for a non-conflict reason (e.g. transient API unavailability),

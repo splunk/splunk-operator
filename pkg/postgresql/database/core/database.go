@@ -193,8 +193,20 @@ func PostgresDatabaseService(
 
 	switch clusterStatus {
 	case ClusterNotReady, ClusterNoProvisionerRef:
-		rc.emitWarnOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, clusterReady, EventClusterNotReady, fmt.Sprintf("referenced PostgresCluster %s is not ready yet", postgresDB.Spec.ClusterRef.Name))
-		if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterProvisioning, "Cluster is not in ready state yet", pendingDBPhase); err != nil {
+		eventReason := EventClusterNotReady
+		eventMessage := fmt.Sprintf("referenced PostgresCluster %s is not ready yet", postgresDB.Spec.ClusterRef.Name)
+		conditionReason := reasonClusterProvisioning
+		conditionMessage := "Cluster is not in ready state yet"
+		clusterCondition := meta.FindStatusCondition(postgresDB.Status.Conditions, string(clusterReady))
+		reportRecovery := wasReady || (clusterCondition != nil && clusterCondition.Reason == string(reasonClusterRecovery))
+		if reportRecovery && isClusterInRecovery(cluster) {
+			eventReason = EventWaitingForClusterRecovery
+			eventMessage = fmt.Sprintf("referenced PostgresCluster %s is recovering", postgresDB.Spec.ClusterRef.Name)
+			conditionReason = reasonClusterRecovery
+			conditionMessage = "Cluster is recovering; waiting for it to become ready"
+		}
+		rc.emitWarnOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, clusterReady, eventReason, eventMessage)
+		if err := updateStatus(clusterReady, metav1.ConditionFalse, conditionReason, conditionMessage, pendingDBPhase); err != nil {
 			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictClusterStatus, "persisting cluster provisioning status"); ok {
 				return result, conflictErr
 			}
@@ -533,6 +545,14 @@ func fetchCluster(ctx context.Context, c client.Client, postgresDB *enterprisev4
 		return nil, err
 	}
 	return cluster, nil
+}
+
+func isClusterInRecovery(cluster *enterprisev4.PostgresCluster) bool {
+	cond := meta.FindStatusCondition(cluster.Status.Conditions, string(clusterReady))
+	if cond == nil {
+		return false
+	}
+	return cond.Reason == string(cnpgReasonRecovery) || cond.Reason == string(cnpgReasonFailingOver)
 }
 
 func getClusterReadyStatus(cluster *enterprisev4.PostgresCluster) clusterReadyStatus {
