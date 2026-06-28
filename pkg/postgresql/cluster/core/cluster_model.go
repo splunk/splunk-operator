@@ -242,12 +242,23 @@ func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error
 		} else {
 			health = newReadyHealth(clusterReady, reasonCNPGClusterHealthy, msgProvisionerHealthy)
 		}
-	case cnpgv1.PhaseFirstPrimary, cnpgv1.PhaseCreatingReplica, cnpgv1.PhaseWaitingForInstancesToBeActive:
+	case cnpgv1.PhaseFirstPrimary, cnpgv1.PhaseCreatingReplica:
 		health = newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGProvisioning, phase))
+	case cnpgv1.PhaseWaitingForInstancesToBeActive:
+		desiredInstances := p.cnpgCluster.Status.Instances
+		if p.mergedConfig != nil && p.mergedConfig.Spec != nil && p.mergedConfig.Spec.Instances != nil {
+			desiredInstances = int(*p.mergedConfig.Spec.Instances)
+		}
+		alreadyProvisioning := p.cluster.Status.Phase != nil && *p.cluster.Status.Phase == string(provisioningClusterPhase)
+		if p.cnpgPatch.requiresPhaseGate() || desiredInstances != p.cnpgCluster.Status.Instances || alreadyProvisioning {
+			health = newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGProvisioning, phase))
+		} else {
+			health = newPendingHealth(clusterReady, reasonCNPGRecovery, string(phase))
+		}
 	case cnpgv1.PhaseSwitchover:
 		health = newConfiguringHealth(clusterReady, reasonCNPGSwitchover, msgCNPGSwitchover)
 	case cnpgv1.PhaseFailOver:
-		health = newConfiguringHealth(clusterReady, reasonCNPGFailingOver, msgCNPGFailingOver)
+		health = newPendingHealth(clusterReady, reasonCNPGFailingOver, string(phase))
 	case cnpgv1.PhaseInplacePrimaryRestart, cnpgv1.PhaseInplaceDeletePrimaryRestart:
 		health = newConfiguringHealth(clusterReady, reasonCNPGRestarting, fmt.Sprintf(msgFmtCNPGRestarting, phase))
 	case cnpgv1.PhaseUpgrade, cnpgv1.PhaseMajorUpgrade, cnpgv1.PhaseUpgradeDelayed, cnpgv1.PhaseOnlineUpgrading:

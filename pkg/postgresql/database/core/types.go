@@ -90,6 +90,7 @@ const (
 	// condition reasons
 	reasonClusterNotFound            conditionReasons = "ClusterNotFound"
 	reasonClusterProvisioning        conditionReasons = "ClusterProvisioning"
+	reasonClusterRecovery            conditionReasons = "ClusterRecovery"
 	reasonClusterInfoFetchFailed     conditionReasons = "ClusterInfoFetchNotPossible"
 	reasonClusterAvailable           conditionReasons = "ClusterAvailable"
 	reasonDatabasesAvailable         conditionReasons = "DatabasesAvailable"
@@ -114,6 +115,8 @@ const (
 	reasonPrivilegesGranted          conditionReasons = "PrivilegesGranted"
 	reasonPrivilegesGrantFailed      conditionReasons = "PrivilegesGrantFailed"
 	reasonPrivilegesTerminalFailure  conditionReasons = "PrivilegesTerminalFailure"
+	cnpgReasonRecovery               conditionReasons = "CNPGClusterRecovery"
+	cnpgReasonFailingOver            conditionReasons = "CNPGFailingOver"
 
 	// ClusterReady sentinel values returned by getClusterReadyStatus.
 	ClusterNotReady         clusterReadyStatus = "NotReady"
