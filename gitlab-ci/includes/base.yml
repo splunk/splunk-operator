@@ -187,6 +187,36 @@ default:
   rules:
     - if: '$CI_PIPELINE_SOURCE =~ /^(web|api|schedule)$/ && $SOK_PIPELINE_MODE == "github_admin_daily"'
 
+# Auto GitLab->GitHub mirror push, on the post-merge pipeline of a protected
+# mirrored branch (develop/main). Dormant until PIPELINE_GITHUB_MIRROR_PUSH_ENABLED
+# is set "true" (do this only AFTER the first cutover). The push script is
+# fast-forward-only here: a non-fast-forward fails closed (no MIRROR_ALLOW_NON_FF),
+# so an accidental history rewrite can never be auto-published. Never runs in MR
+# pipelines or the scheduled github_* admin lanes.
+.rules-github-mirror-push-lane:
+  rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - if: '$PIPELINE_GITHUB_MIRROR_PUSH_ENABLED != "true"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_REF_PROTECTED == "true" && ($CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main") && $PIPELINE_GITHUB_APP_ID'
+
+# Manual mirror cutover / exclusion-list change — the only times a
+# non-fast-forward is expected (MIRROR_ALLOW_NON_FF=1). Selectable once the App
+# credentials are loaded (PIPELINE_GITHUB_APP_ID set); must be drained per the
+# mirror runbook before triggering. Manual so it is never run automatically.
+.rules-github-mirror-cutover-lane:
+  rules:
+    - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_REF_PROTECTED == "true" && ($CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main") && $PIPELINE_GITHUB_APP_ID'
+      when: manual
+      allow_failure: true
+
 .rules-default-validation-lane:
   rules:
     - if: '$SOK_PIPELINE_MODE =~ /^(github_intake|github_mirror_health|github_admin_daily)$/'
