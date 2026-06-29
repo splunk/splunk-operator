@@ -98,7 +98,7 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 	existingCNPG := &cnpgv1.Cluster{}
 	err := p.client.Get(ctx, types.NamespacedName{Name: p.cluster.Name, Namespace: p.cluster.Namespace}, existingCNPG)
 
-	desiredSpec := buildCNPGClusterSpec(*existingCNPG.Spec.DeepCopy(), p.mergedConfig, p.contracts.Secret.Name, p.metricsEnabled)
+	desiredSpec := buildCNPGClusterSpec(*existingCNPG.Spec.DeepCopy(), p.mergedConfig, p.cluster.Name, p.contracts.Secret.Name, p.metricsEnabled)
 	desiredSpec.PostgresConfiguration.Parameters = maps.Clone(existingCNPG.Spec.PostgresConfiguration.Parameters)
 	applyPoolerSANs(&desiredSpec, poolerEnabled, p.cluster.Name, p.cluster.Namespace)
 	if err != nil && !apierrors.IsNotFound(err) {
@@ -432,11 +432,13 @@ func ValidateCrossResource(class *enterprisev4.PostgresClusterClass, cluster *en
 
 	backupEnabled := (cluster.Spec.Backup != nil && cluster.Spec.Backup.Enabled != nil && *cluster.Spec.Backup.Enabled) ||
 		(class.Spec.Config != nil && class.Spec.Config.Backup != nil && class.Spec.Config.Backup.Enabled != nil && *class.Spec.Config.Backup.Enabled)
-	if backupEnabled && (class.Spec.CNPG == nil || class.Spec.CNPG.Backup == nil || class.Spec.CNPG.Backup.VolumeSnapshot == nil) {
+	backupProviderConfigured := class.Spec.CNPG != nil && class.Spec.CNPG.Backup != nil &&
+		(class.Spec.CNPG.Backup.VolumeSnapshot != nil || class.Spec.CNPG.Backup.BarmanObjectStore != nil)
+	if backupEnabled && !backupProviderConfigured {
 		errs = append(errs, ConfigValidationError{
 			Field:   "spec.backup.enabled",
 			Value:   true,
-			Message: "backup requires cnpg.backup.volumeSnapshot configuration in PostgresClusterClass",
+			Message: "backup requires cnpg.backup.volumeSnapshot or cnpg.backup.barmanObjectStore configuration in PostgresClusterClass",
 		})
 	}
 
@@ -517,7 +519,7 @@ func validatePostgreSQLConfigNoCNPGFixedKeys(params map[string]string) error {
 // otherwise external changes to those fields on the CNPG cluster will be silently ignored.
 // Operator-controlled invariants (e.g. SuperuserSecret, EnableSuperuserAccess) are exempt — they
 // are always the same value and are never exposed in the PostgresCluster CRD.
-func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, secretName string, postgresMetricsEnabled bool) cnpgv1.ClusterSpec {
+func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, clusterName, secretName string, postgresMetricsEnabled bool) cnpgv1.ClusterSpec {
 	live.ImageName = fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", *specCfg.Spec.PostgresVersion)
 	live.Instances = int(*specCfg.Spec.Instances)
 	live.PostgresConfiguration = cnpgv1.PostgresConfiguration{
@@ -542,10 +544,42 @@ func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, secret
 	}
 	live.InheritedMetadata = &cnpgv1.EmbeddedObjectMetadata{Annotations: annotations}
 	live.Backup = nil
-	if specCfg.Spec.Backup != nil && specCfg.Spec.Backup.Enabled != nil && *specCfg.Spec.Backup.Enabled && specCfg.CNPG != nil && specCfg.CNPG.Backup != nil && specCfg.CNPG.Backup.VolumeSnapshot != nil {
+	if backupIsEnabled(specCfg) && specCfg.CNPG != nil && specCfg.CNPG.Backup != nil && specCfg.CNPG.Backup.VolumeSnapshot != nil {
 		live.Backup = buildCNPGBackupConfiguration(specCfg)
 	}
+	// Preserve plugins owned by other controllers/users: drop only our managed
+	// barman entry from the live spec, then append the desired one (if any).
+	filtered := make([]cnpgv1.PluginConfiguration, 0, len(live.Plugins))
+	for _, p := range live.Plugins {
+		if p.Name != barmanCloudPluginName {
+			filtered = append(filtered, p)
+		}
+	}
+	live.Plugins = append(filtered, buildCNPGPlugins(specCfg, clusterName)...)
 	return live
+}
+
+// barmanCloudPluginName is the CNPG plugin name for the barman-cloud object store backup plugin.
+const barmanCloudPluginName = "barman-cloud.cloudnative-pg.io"
+
+func buildCNPGPlugins(cfg *MergedConfig, clusterName string) []cnpgv1.PluginConfiguration {
+	if activeBarmanObjectStoreCfg(cfg) == nil {
+		return nil
+	}
+	return []cnpgv1.PluginConfiguration{
+		{
+			Name:          barmanCloudPluginName,
+			Enabled:       ptr.To(true),
+			IsWALArchiver: ptr.To(true),
+			Parameters: map[string]string{
+				"barmanObjectName": objectStoreName(clusterName),
+			},
+		},
+	}
+}
+
+func objectStoreName(clusterName string) string {
+	return clusterName + "-object-store"
 }
 
 func buildCNPGBackupConfiguration(cfg *MergedConfig) *cnpgv1.BackupConfiguration {
@@ -620,7 +654,7 @@ func buildBootstrapRecovery(b *enterprisev4.BootstrapFrom) *cnpgv1.BootstrapReco
 func buildCNPGCluster(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, secretName string, postgresMetricsEnabled bool) (*cnpgv1.Cluster, error) {
 	cnpg := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, secretName, postgresMetricsEnabled),
+		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, cluster.Name, secretName, postgresMetricsEnabled),
 	}
 	if err := ctrl.SetControllerReference(cluster, cnpg, scheme); err != nil {
 		return nil, fmt.Errorf("setting controller reference on CNPG cluster: %w", err)
@@ -666,6 +700,20 @@ func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec) normalizedCNPGClusterSpec
 			normalized.Backup.Labels = spec.Backup.VolumeSnapshot.Labels
 			normalized.Backup.Annotations = spec.Backup.VolumeSnapshot.Annotations
 		}
+	}
+	for _, p := range spec.Plugins {
+		np := normalizedPluginSpec{Name: p.Name}
+		// CNPG defaults Enabled to true when unset, so a nil pointer normalizes to true
+		// to match what the API server stores — otherwise drift would be flagged on every
+		// reconcile against our explicitly-true desired spec.
+		np.Enabled = p.Enabled == nil || *p.Enabled
+		if p.IsWALArchiver != nil {
+			np.IsWALArchiver = *p.IsWALArchiver
+		}
+		if len(p.Parameters) > 0 {
+			np.Parameters = maps.Clone(p.Parameters)
+		}
+		normalized.Plugins = append(normalized.Plugins, np)
 	}
 	return normalized
 }

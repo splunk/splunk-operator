@@ -65,6 +65,7 @@ type normalizedCNPGClusterSpec struct {
 	InheritedAnnotations map[string]string
 	ServerAltDNSNames    []string
 	Backup               *normalizedBackupSpec
+	Plugins              []normalizedPluginSpec
 	BootstrapType        bootstrapKind
 }
 
@@ -85,6 +86,13 @@ type normalizedBackupSpec struct {
 	Online                 *bool
 	Labels                 map[string]string
 	Annotations            map[string]string
+}
+
+type normalizedPluginSpec struct {
+	Name          string
+	Enabled       bool
+	IsWALArchiver bool
+	Parameters    map[string]string
 }
 
 // normalizedCNPGPoolerSpec is a subset of cnpgv1.PoolerSpec fields used for drift detection.
@@ -161,6 +169,7 @@ const (
 	clusterReady      conditionTypes = "ClusterReady"
 	poolerReady       conditionTypes = "PoolerReady"
 	backupReady       conditionTypes = "BackupReady"
+	objectStoreReady  conditionTypes = "ObjectStoreReady"
 	managedRolesReady conditionTypes = "ManagedRolesReady"
 	secretsReady      conditionTypes = "SecretsReady"
 	configMapsReady   conditionTypes = "ConfigMapsReady"
@@ -211,8 +220,14 @@ const (
 	reasonBackupDisabled              conditionReasons = "BackupDisabled"
 	reasonBackupConfigured            conditionReasons = "BackupConfigured"
 	reasonBackupVolumeSnapshotMissing conditionReasons = "BackupVolumeSnapshotMissing"
+	reasonBackupProviderMissing       conditionReasons = "BackupProviderMissing"
 	reasonScheduledBackupCreated      conditionReasons = "ScheduledBackupCreated"
 	reasonScheduledBackupFailed       conditionReasons = "ScheduledBackupFailed"
+
+	// condition reasons — objectStoreReady
+	reasonObjectStoreDisabled        conditionReasons = "ObjectStoreDisabled"
+	reasonObjectStoreConfigured      conditionReasons = "ObjectStoreConfigured"
+	reasonObjectStoreReconcileFailed conditionReasons = "ObjectStoreReconcileFailed"
 
 	// condition reasons — CNPG cluster phase mapping
 	reasonCNPGClusterHealthy     conditionReasons = "CNPGClusterHealthy"

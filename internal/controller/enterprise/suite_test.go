@@ -77,6 +77,9 @@ var _ = BeforeSuite(func(ctx context.Context) {
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "..", "config", "crd", "bases"),
 			filepath.Join(cnpgModuleDir, "config", "crd", "bases"),
+			// Minimal barman-cloud ObjectStore CRD; the plugin's real CRD is not
+			// vendored, so the object-storage backup specs register a trimmed copy.
+			filepath.Join("testdata"),
 		},
 		ErrorIfCRDPathMissing: true,
 	}

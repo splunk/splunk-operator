@@ -78,6 +78,19 @@ func newTestCluster(name, ns string) *enterprisev4.PostgresCluster {
 	}
 }
 
+// ownedByCluster returns an OwnerReferences slice marking the object as controlled by the
+// given PostgresCluster, matching what ctrl.SetControllerReference writes at runtime. Used to
+// seed ScheduledBackups that the controller is allowed to garbage-collect.
+func ownedByCluster(cluster *enterprisev4.PostgresCluster) []metav1.OwnerReference {
+	return []metav1.OwnerReference{{
+		APIVersion: enterprisev4.GroupVersion.String(),
+		Kind:       "PostgresCluster",
+		Name:       cluster.Name,
+		UID:        cluster.UID,
+		Controller: ptr.To(true),
+	}}
+}
+
 func newTestMergedConfig(backupEnabled bool, schedule string) *MergedConfig {
 	instances := int32(3)
 	version := "18"
@@ -156,7 +169,7 @@ func TestBackupModel_Reconcile_Disabled(t *testing.T) {
 		// Arrange
 		cluster := newTestCluster("c1", "ns1")
 		cfg := newTestMergedConfig(false, "")
-		existingSB := &cnpgv1.ScheduledBackup{ObjectMeta: metav1.ObjectMeta{Name: "c1-backup", Namespace: "ns1"}}
+		existingSB := &cnpgv1.ScheduledBackup{ObjectMeta: metav1.ObjectMeta{Name: "c1-backup", Namespace: "ns1", OwnerReferences: ownedByCluster(cluster)}}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingSB).Build()
 		model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
@@ -271,7 +284,7 @@ func TestBackupModel_Reconcile_Enabled(t *testing.T) {
 		// Assert
 		require.Error(t, err)
 		assert.Equal(t, pgcConstants.Failed, health.State)
-		assert.Equal(t, reasonBackupVolumeSnapshotMissing, health.Reason)
+		assert.Equal(t, reasonBackupProviderMissing, health.Reason)
 	})
 }
 
@@ -485,6 +498,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 
 		health, err := model.Observe(ctx, nil)
 
+		// Assert — schedule times are copied into in-memory cluster status; writeComponentStatus persists them
 		require.NoError(t, err)
 		assert.Equal(t, pgcConstants.Ready, health.State)
 		persisted := &enterprisev4.PostgresCluster{}
@@ -834,7 +848,7 @@ func TestBuildCNPGClusterSpec_Backup(t *testing.T) {
 		cfg := newTestMergedConfig(true, "0 2 * * *")
 
 		// Act
-		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "secret", false)
+		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "secret", false)
 
 		// Assert
 		require.NotNil(t, spec.Backup)
@@ -848,7 +862,7 @@ func TestBuildCNPGClusterSpec_Backup(t *testing.T) {
 		cfg := newTestMergedConfig(false, "")
 
 		// Act
-		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "secret", false)
+		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "secret", false)
 
 		// Assert
 		assert.Nil(t, spec.Backup)
@@ -860,7 +874,7 @@ func TestBuildCNPGClusterSpec_Backup(t *testing.T) {
 		cfg.CNPG.Backup = nil
 
 		// Act
-		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "secret", false)
+		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "secret", false)
 
 		// Assert
 		assert.Nil(t, spec.Backup)
@@ -932,4 +946,291 @@ func TestBackupModel_ContractsNotReady(t *testing.T) {
 		assert.Equal(t, pgcConstants.Pending, health.State)
 		assert.Equal(t, reasonUpstreamNotReady, health.Reason)
 	})
+}
+
+// --- Barman object store backup ---
+
+// newTestMergedConfigBarman builds a barman-object-store-only backup config (no volume snapshot),
+// so single-provider barman behaviour can be asserted in isolation. Use
+// newTestMergedConfigDualProvider for the both-providers case.
+func newTestMergedConfigBarman(schedule string) *MergedConfig {
+	cfg := newTestMergedConfig(true, schedule)
+	cfg.CNPG.Backup.VolumeSnapshot = nil
+	cfg.CNPG.Backup.BarmanObjectStore = newTestBarmanObjectStoreConfig()
+	return cfg
+}
+
+func newTestBarmanObjectStoreConfig() *enterprisev4.CNPGBarmanObjectStoreConfig {
+	return &enterprisev4.CNPGBarmanObjectStoreConfig{
+		DestinationPath: "s3://test-bucket/clusters/",
+		S3Credentials: enterprisev4.CNPGBarmanS3Credentials{
+			AccessKeyId:     corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "s3-creds"}, Key: "accessKeyId"},
+			SecretAccessKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "s3-creds"}, Key: "secretAccessKey"},
+		},
+	}
+}
+
+// newTestMergedConfigDualProvider configures both volume snapshot and barman object store on an
+// enabled backup.
+func newTestMergedConfigDualProvider(schedule string) *MergedConfig {
+	cfg := newTestMergedConfig(true, schedule)
+	cfg.CNPG.Backup.BarmanObjectStore = newTestBarmanObjectStoreConfig()
+	return cfg
+}
+
+func TestBackupModel_Barman_CreatesPluginScheduledBackup(t *testing.T) {
+	scheme := newTestScheme()
+	cluster := newTestCluster("c1", "ns1")
+	cnpg := newTestCNPGCluster("c1", "ns1")
+	cfg := newTestMergedConfigBarman("0 2 * * *")
+	emitter := &captureBackupEmitter{}
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	model := newTestBackupModel(c, scheme, emitter, noopHealthUpdater, cluster, cfg, cnpg)
+
+	reconcileErr := model.Reconcile(context.Background())
+	require.NoError(t, reconcileErr)
+
+	sb := &cnpgv1.ScheduledBackup{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup-objectstore", Namespace: "ns1"}, sb))
+	assert.Equal(t, cnpgv1.BackupMethodPlugin, sb.Spec.Method)
+	require.NotNil(t, sb.Spec.PluginConfiguration)
+	assert.Equal(t, "barman-cloud.cloudnative-pg.io", sb.Spec.PluginConfiguration.Name)
+	assert.Contains(t, emitter.normals[0], EventScheduledBackupCreated)
+
+	// Barman-only config must not create the volume-snapshot ScheduledBackup.
+	vsSB := &cnpgv1.ScheduledBackup{}
+	getErr := c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, vsSB)
+	assert.True(t, apierrors.IsNotFound(getErr), "no volume-snapshot ScheduledBackup expected for barman-only config")
+}
+
+func TestBackupModel_Barman_PopulatesObjectStoreStatus(t *testing.T) {
+	scheme := newTestScheme()
+	cluster := newTestCluster("c1", "ns1")
+	cfg := newTestMergedConfigBarman("0 2 * * *")
+	now := metav1.Now()
+	next := metav1.NewTime(now.Add(3600 * 1e9))
+	sb := &cnpgv1.ScheduledBackup{
+		ObjectMeta: metav1.ObjectMeta{Name: "c1-backup-objectstore", Namespace: "ns1"},
+		Spec:       cnpgv1.ScheduledBackupSpec{Schedule: "0 0 2 * * *", Cluster: cnpgv1.LocalObjectReference{Name: "c1"}},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, sb).WithStatusSubresource(cluster, sb).Build()
+	sb.Status = cnpgv1.ScheduledBackupStatus{LastScheduleTime: &now, NextScheduleTime: &next}
+	require.NoError(t, c.Status().Update(context.Background(), sb))
+	model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
+
+	health, err := model.Observe(context.Background(), nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, pgcConstants.Ready, health.State)
+	require.NotNil(t, cluster.Status.BackupStatus)
+	require.NotNil(t, cluster.Status.BackupStatus.ObjectStore)
+	assert.True(t, cluster.Status.BackupStatus.ObjectStore.Enabled)
+	assert.Nil(t, cluster.Status.BackupStatus.VolumeSnapshot)
+}
+
+// --- Dual provider (volume snapshot + barman object store) ---
+
+func TestBackupModel_DualProvider_CreatesBothScheduledBackups(t *testing.T) {
+	scheme := newTestScheme()
+	cluster := newTestCluster("c1", "ns1")
+	cnpg := newTestCNPGCluster("c1", "ns1")
+	cfg := newTestMergedConfigDualProvider("0 2 * * *")
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	model := newTestBackupModel(c, scheme, &captureBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
+
+	require.NoError(t, model.Reconcile(context.Background()))
+
+	vsSB := &cnpgv1.ScheduledBackup{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, vsSB))
+	assert.Equal(t, cnpgv1.BackupMethodVolumeSnapshot, vsSB.Spec.Method)
+	assert.Nil(t, vsSB.Spec.PluginConfiguration)
+
+	osSB := &cnpgv1.ScheduledBackup{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup-objectstore", Namespace: "ns1"}, osSB))
+	assert.Equal(t, cnpgv1.BackupMethodPlugin, osSB.Spec.Method)
+	require.NotNil(t, osSB.Spec.PluginConfiguration)
+	assert.Equal(t, "barman-cloud.cloudnative-pg.io", osSB.Spec.PluginConfiguration.Name)
+}
+
+func TestBackupModel_DualProvider_PopulatesBothStatuses(t *testing.T) {
+	scheme := newTestScheme()
+	cluster := newTestCluster("c1", "ns1")
+	cfg := newTestMergedConfigDualProvider("0 2 * * *")
+	vsSB := &cnpgv1.ScheduledBackup{
+		ObjectMeta: metav1.ObjectMeta{Name: "c1-backup", Namespace: "ns1"},
+		Spec:       cnpgv1.ScheduledBackupSpec{Schedule: "0 0 2 * * *", Cluster: cnpgv1.LocalObjectReference{Name: "c1"}},
+	}
+	osSB := &cnpgv1.ScheduledBackup{
+		ObjectMeta: metav1.ObjectMeta{Name: "c1-backup-objectstore", Namespace: "ns1"},
+		Spec:       cnpgv1.ScheduledBackupSpec{Schedule: "0 0 2 * * *", Cluster: cnpgv1.LocalObjectReference{Name: "c1"}},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, vsSB, osSB).WithStatusSubresource(cluster).Build()
+	model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
+
+	health, err := model.Observe(context.Background(), nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, pgcConstants.Ready, health.State)
+	require.NotNil(t, cluster.Status.BackupStatus)
+	require.NotNil(t, cluster.Status.BackupStatus.VolumeSnapshot)
+	assert.True(t, cluster.Status.BackupStatus.VolumeSnapshot.Enabled)
+	require.NotNil(t, cluster.Status.BackupStatus.ObjectStore)
+	assert.True(t, cluster.Status.BackupStatus.ObjectStore.Enabled)
+}
+
+func TestBackupModel_DualProvider_PendingUntilBothScheduledBackupsExist(t *testing.T) {
+	scheme := newTestScheme()
+	cluster := newTestCluster("c1", "ns1")
+	cfg := newTestMergedConfigDualProvider("0 2 * * *")
+	// Only the volume-snapshot ScheduledBackup exists yet.
+	vsSB := &cnpgv1.ScheduledBackup{
+		ObjectMeta: metav1.ObjectMeta{Name: "c1-backup", Namespace: "ns1"},
+		Spec:       cnpgv1.ScheduledBackupSpec{Schedule: "0 0 2 * * *", Cluster: cnpgv1.LocalObjectReference{Name: "c1"}},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, vsSB).WithStatusSubresource(cluster).Build()
+	model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
+
+	health, err := model.Observe(context.Background(), nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, pgcConstants.Pending, health.State)
+}
+
+func TestBackupModel_DualProvider_GCsObjectStoreBackupWhenProviderRemoved(t *testing.T) {
+	scheme := newTestScheme()
+	cluster := newTestCluster("c1", "ns1")
+	cnpg := newTestCNPGCluster("c1", "ns1")
+	// Both ScheduledBackups already exist from a prior dual-provider config, controlled by
+	// this PostgresCluster so the GC ownership guard permits deleting the removed provider's.
+	vsSB := &cnpgv1.ScheduledBackup{ObjectMeta: metav1.ObjectMeta{Name: "c1-backup", Namespace: "ns1", OwnerReferences: ownedByCluster(cluster)}}
+	osSB := &cnpgv1.ScheduledBackup{ObjectMeta: metav1.ObjectMeta{Name: "c1-backup-objectstore", Namespace: "ns1", OwnerReferences: ownedByCluster(cluster)}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(vsSB, osSB).Build()
+
+	// New config keeps only the volume-snapshot provider.
+	cfg := newTestMergedConfig(true, "0 2 * * *")
+	model := newTestBackupModel(c, scheme, &captureBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
+
+	require.NoError(t, model.Reconcile(context.Background()))
+
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, &cnpgv1.ScheduledBackup{}),
+		"volume-snapshot ScheduledBackup must remain")
+	gcErr := c.Get(context.Background(), types.NamespacedName{Name: "c1-backup-objectstore", Namespace: "ns1"}, &cnpgv1.ScheduledBackup{})
+	assert.True(t, apierrors.IsNotFound(gcErr), "object-store ScheduledBackup must be garbage-collected when barman provider is removed")
+}
+
+func TestBackupModel_Reconcile_DoesNotDeleteForeignScheduledBackup(t *testing.T) {
+	scheme := newTestScheme()
+	cluster := newTestCluster("c1", "ns1")
+	cnpg := newTestCNPGCluster("c1", "ns1")
+	// A ScheduledBackup sharing the deterministic name but controlled by a different owner.
+	foreign := &cnpgv1.ScheduledBackup{ObjectMeta: metav1.ObjectMeta{
+		Name:      "c1-backup",
+		Namespace: "ns1",
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: enterprisev4.GroupVersion.String(),
+			Kind:       "PostgresCluster",
+			Name:       "someone-else",
+			UID:        "other-uid-999",
+			Controller: ptr.To(true),
+		}},
+	}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(foreign).Build()
+
+	// Backup disabled — Reconcile would try to delete every deterministic name.
+	cfg := newTestMergedConfig(false, "")
+	model := newTestBackupModel(c, scheme, &captureBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
+
+	require.NoError(t, model.Reconcile(context.Background()))
+
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, &cnpgv1.ScheduledBackup{}),
+		"foreign ScheduledBackup must not be deleted by this controller")
+}
+
+func TestBuildCNPGClusterSpec_BarmanDisabledOmitsPlugin(t *testing.T) {
+	cfg := newTestMergedConfigBarman("0 2 * * *")
+	cfg.Spec.Backup.Enabled = ptr.To(false)
+
+	spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "secret", false)
+
+	assert.Nil(t, spec.Backup)
+	assert.Empty(t, spec.Plugins)
+}
+
+func TestBuildCNPGClusterSpec_PreservesForeignPlugins(t *testing.T) {
+	t.Run("keeps unmanaged plugins and appends barman entry", func(t *testing.T) {
+		cfg := newTestMergedConfigBarman("0 2 * * *")
+		live := cnpgv1.ClusterSpec{
+			Plugins: []cnpgv1.PluginConfiguration{
+				{Name: "some-other.plugin.io"},
+			},
+		}
+
+		spec := buildCNPGClusterSpec(live, cfg, "c1", "secret", false)
+
+		names := make([]string, 0, len(spec.Plugins))
+		for _, p := range spec.Plugins {
+			names = append(names, p.Name)
+		}
+		assert.Contains(t, names, "some-other.plugin.io", "foreign plugin must be preserved")
+		assert.Contains(t, names, "barman-cloud.cloudnative-pg.io", "barman plugin must be present")
+		assert.Len(t, spec.Plugins, 2)
+	})
+
+	t.Run("does not duplicate barman plugin across reconciles", func(t *testing.T) {
+		cfg := newTestMergedConfigBarman("0 2 * * *")
+		live := cnpgv1.ClusterSpec{
+			Plugins: []cnpgv1.PluginConfiguration{
+				{Name: "some-other.plugin.io"},
+				{Name: "barman-cloud.cloudnative-pg.io", Parameters: map[string]string{"stale": "true"}},
+			},
+		}
+
+		spec := buildCNPGClusterSpec(live, cfg, "c1", "secret", false)
+
+		var barmanCount int
+		for _, p := range spec.Plugins {
+			if p.Name == "barman-cloud.cloudnative-pg.io" {
+				barmanCount++
+				assert.NotContains(t, p.Parameters, "stale", "stale barman entry must be replaced, not kept")
+			}
+		}
+		assert.Equal(t, 1, barmanCount, "barman plugin must appear exactly once")
+		assert.Len(t, spec.Plugins, 2)
+	})
+
+	t.Run("drops stale barman plugin when backups disabled", func(t *testing.T) {
+		cfg := newTestMergedConfigBarman("0 2 * * *")
+		cfg.Spec.Backup.Enabled = ptr.To(false)
+		live := cnpgv1.ClusterSpec{
+			Plugins: []cnpgv1.PluginConfiguration{
+				{Name: "some-other.plugin.io"},
+				{Name: "barman-cloud.cloudnative-pg.io"},
+			},
+		}
+
+		spec := buildCNPGClusterSpec(live, cfg, "c1", "secret", false)
+
+		require.Len(t, spec.Plugins, 1)
+		assert.Equal(t, "some-other.plugin.io", spec.Plugins[0].Name)
+	})
+}
+
+func TestBackupModel_NilTarget_UsesDefault(t *testing.T) {
+	// Target is *string with kubebuilder default but may be nil when constructed programmatically.
+	scheme := newTestScheme()
+	cluster := newTestCluster("c1", "ns1")
+	cnpg := newTestCNPGCluster("c1", "ns1")
+	cfg := newTestMergedConfig(true, "0 2 * * *")
+	cfg.CNPG.Backup.Target = nil // explicitly nil — must not panic
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
+
+	require.NotPanics(t, func() {
+		_ = model.Reconcile(context.Background())
+	})
+	require.NoError(t, model.Reconcile(context.Background()))
+
+	sb := &cnpgv1.ScheduledBackup{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, sb))
+	assert.Equal(t, cnpgv1.BackupTargetStandby, sb.Spec.Target)
 }

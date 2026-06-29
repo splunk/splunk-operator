@@ -20,6 +20,7 @@ const (
 	ComponentProvisioner  = "provisioner"
 	ComponentPooler       = "pooler"
 	ComponentBackup       = "backup"
+	ComponentObjectStore  = "objectStore"
 	ComponentConfigMap    = "configMap"
 	ComponentSecret       = "secret"
 )
