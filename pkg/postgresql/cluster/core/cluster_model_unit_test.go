@@ -218,7 +218,7 @@ func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 	}
 	existingCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, "pg1-secret", false),
+		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, "pg1", "pg1-secret", false),
 	}
 	events := &captureEventEmitter{}
 	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, existingCNPG)
@@ -283,7 +283,7 @@ func TestClusterModelAppliesPostgreSQLParametersWithSSAOwnership(t *testing.T) {
 			Namespace:   cluster.Namespace,
 			Annotations: map[string]string{},
 		},
-		Spec: buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, "pg1-secret", false),
+		Spec: buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, cluster.Name, "pg1-secret", false),
 	}
 	require.NoError(t, ctrl.SetControllerReference(cluster, existingCNPG, scheme))
 	existingCNPG.Spec.PostgresConfiguration.Parameters["cnpg_injected"] = "keep-me"
@@ -370,7 +370,7 @@ func TestClusterModelAdoptsAndPrunesLegacyPostgreSQLParameters(t *testing.T) {
 				},
 			},
 		},
-		Spec: buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, "pg1-secret", false),
+		Spec: buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, cluster.Name, "pg1-secret", false),
 	}
 	require.NoError(t, ctrl.SetControllerReference(cluster, existingCNPG, scheme))
 	existingCNPG.Spec.PostgresConfiguration.Parameters["application_name"] = "keep-me"
@@ -603,7 +603,7 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 		},
 	}
 
-	spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "my-secret", false)
+	spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "my-secret", false)
 
 	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:18", spec.ImageName)
 	assert.Equal(t, 3, spec.Instances)
@@ -625,7 +625,7 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 	assert.Empty(t, spec.InheritedMetadata.Annotations)
 
 	t.Run("adds postgres scrape annotations when enabled", func(t *testing.T) {
-		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "my-secret", true)
+		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "my-secret", true)
 
 		require.NotNil(t, spec.InheritedMetadata)
 		assert.Equal(t, "true", spec.InheritedMetadata.Annotations[prometheusScrapeAnnotation])
@@ -640,7 +640,7 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 		}
 
 		liveCluster := cnpgv1.ClusterSpec{Managed: &cnpgv1.ManagedConfiguration{Roles: managedRoles}}
-		spec := buildCNPGClusterSpec(liveCluster, cfg, "my-secret", true)
+		spec := buildCNPGClusterSpec(liveCluster, cfg, "c1", "my-secret", true)
 
 		require.NotNil(t, spec.Managed)
 		assert.Equal(t, managedRoles, spec.Managed.Roles)
@@ -664,7 +664,7 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 		}
 		backupCfg := MergedConfig{Spec: &specCopy, CNPG: &cnpgCopy}
 
-		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, &backupCfg, "my-secret", false)
+		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, &backupCfg, "c1", "my-secret", false)
 
 		require.NotNil(t, spec.Backup)
 		require.NotNil(t, spec.Backup.VolumeSnapshot)
@@ -684,7 +684,7 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 		cnpgCopy := *cfg.CNPG
 		disabledCfg := MergedConfig{Spec: &specCopy, CNPG: &cnpgCopy}
 
-		spec := buildCNPGClusterSpec(liveSpec, &disabledCfg, "my-secret", false)
+		spec := buildCNPGClusterSpec(liveSpec, &disabledCfg, "c1", "my-secret", false)
 
 		assert.Nil(t, spec.Backup, "stale backup config must be cleared when backup is disabled")
 	})
@@ -1105,6 +1105,60 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 				ServerAltDNSNames: []string{"z.example", "a.example"},
 			},
 		},
+		{
+			name: "plugin with nil Enabled normalizes to enabled (CNPG default)",
+			spec: cnpgv1.ClusterSpec{
+				ImageName: "img:18",
+				Instances: 1,
+				Plugins: []cnpgv1.PluginConfiguration{
+					{Name: barmanCloudPluginName, IsWALArchiver: ptr.To(true)},
+				},
+			},
+			expected: normalizedCNPGClusterSpec{
+				ImageName:           "img:18",
+				Instances:           1,
+				PrimaryUpdateMethod: "",
+				Plugins: []normalizedPluginSpec{
+					{Name: barmanCloudPluginName, Enabled: true, IsWALArchiver: true},
+				},
+			},
+		},
+		{
+			name: "plugin explicitly disabled is detected as disabled for drift",
+			spec: cnpgv1.ClusterSpec{
+				ImageName: "img:18",
+				Instances: 1,
+				Plugins: []cnpgv1.PluginConfiguration{
+					{Name: barmanCloudPluginName, Enabled: ptr.To(false), IsWALArchiver: ptr.To(true)},
+				},
+			},
+			expected: normalizedCNPGClusterSpec{
+				ImageName:           "img:18",
+				Instances:           1,
+				PrimaryUpdateMethod: "",
+				Plugins: []normalizedPluginSpec{
+					{Name: barmanCloudPluginName, Enabled: false, IsWALArchiver: true},
+				},
+			},
+		},
+		{
+			name: "plugin explicitly enabled is preserved",
+			spec: cnpgv1.ClusterSpec{
+				ImageName: "img:18",
+				Instances: 1,
+				Plugins: []cnpgv1.PluginConfiguration{
+					{Name: barmanCloudPluginName, Enabled: ptr.To(true), IsWALArchiver: ptr.To(true)},
+				},
+			},
+			expected: normalizedCNPGClusterSpec{
+				ImageName:           "img:18",
+				Instances:           1,
+				PrimaryUpdateMethod: "",
+				Plugins: []normalizedPluginSpec{
+					{Name: barmanCloudPluginName, Enabled: true, IsWALArchiver: true},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1140,7 +1194,7 @@ func TestClusterModelAdoptsOrphanedCNPGCluster(t *testing.T) {
 	clusterClass := &enterprisev4.PostgresClusterClass{ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"}}
 	orphanedCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "pg1-secret", false),
+		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "pg1-secret", false),
 	}
 	events := &captureEventEmitter{}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(orphanedCNPG).Build()
@@ -1267,7 +1321,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 		}
 		cnpg := &cnpgv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-			Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, mergedConfig, "pg1-secret", false),
+			Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, mergedConfig, cluster.Name, "pg1-secret", false),
 			Status:     cnpgStatus,
 		}
 		require.NoError(t, ctrl.SetControllerReference(cluster, cnpg, scheme))
@@ -1288,7 +1342,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 				cluster := examplePgCluster.DeepCopy()
 				cnpg := &cnpgv1.Cluster{
 					ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-					Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, mergedConfig, "pg1-secret", false),
+					Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, mergedConfig, cluster.Name, "pg1-secret", false),
 					Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy, Instances: int(instances), ReadyInstances: int(instances)},
 				}
 				require.NoError(t, ctrl.SetControllerReference(cluster, cnpg, scheme))
@@ -1647,7 +1701,7 @@ func TestClusterModelActuatePreservesManagedRoles(t *testing.T) {
 
 	existingCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "pg1-secret", false),
+		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "pg1-secret", false),
 	}
 	roleConfig := cnpgv1.ManagedConfiguration{
 		Roles: []cnpgv1.RoleConfiguration{
@@ -2161,7 +2215,7 @@ func TestBuildCNPGClusterSpec_RoundTripUnderCRDDefaulting(t *testing.T) {
 			t.Parallel()
 
 			cfg := tc.fixture.mergedConfig()
-			desiredSpec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "test-secret", tc.fixture.metricsEnabled)
+			desiredSpec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "test-secret", tc.fixture.metricsEnabled)
 
 			beforeRT := &cnpgv1.Cluster{
 				TypeMeta: metav1.TypeMeta{
@@ -2198,7 +2252,7 @@ func TestBuildCNPGClusterSpec_RoundTrip_NegativeControl(t *testing.T) {
 	ss := loadCNPGClusterStructuralSchema(t)
 
 	cfg := defaultRoundTripFixture().mergedConfig()
-	desiredSpec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "test-secret", false)
+	desiredSpec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "test-secret", false)
 	desiredSpec.PrimaryUpdateMethod = "" // simulate pre-fix builder
 
 	beforeRT := &cnpgv1.Cluster{

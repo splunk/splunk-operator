@@ -310,6 +310,25 @@ spec:
               backupStatus:
                 description: BackupStatus contains the observed state of backup configuration.
                 properties:
+                  objectStore:
+                    description: ObjectStore contains status for barman object storage
+                      backups.
+                    properties:
+                      enabled:
+                        description: Enabled indicates whether object store backups
+                          are active.
+                        type: boolean
+                      lastScheduleTime:
+                        description: LastScheduleTime is when the last backup was
+                          scheduled.
+                        format: date-time
+                        type: string
+                      nextScheduleTime:
+                        description: NextScheduleTime is the next scheduled backup
+                          time.
+                        format: date-time
+                        type: string
+                    type: object
                   volumeSnapshot:
                     description: VolumeSnapshot contains status for volume snapshot
                       backups.

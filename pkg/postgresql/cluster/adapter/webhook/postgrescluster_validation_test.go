@@ -1075,7 +1075,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			},
 			wantErrCount:  1,
 			wantErrFields: []string{"spec.backup.enabled"},
-			wantErrMsgs:   []string{"backup requires cnpg.backup.volumeSnapshot configuration in PostgresClusterClass"},
+			wantErrMsgs:   []string{"backup requires cnpg.backup.volumeSnapshot or cnpg.backup.barmanObjectStore configuration in PostgresClusterClass"},
 			wantErrValues: []any{true},
 		},
 		{
@@ -1114,7 +1114,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			},
 			wantErrCount:  2,
 			wantErrFields: []string{"spec.backup.schedule", "spec.backup.enabled"},
-			wantErrMsgs:   []string{"backup.schedule is required when backup.enabled is true", "backup requires cnpg.backup.volumeSnapshot configuration in PostgresClusterClass"},
+			wantErrMsgs:   []string{"backup.schedule is required when backup.enabled is true", "backup requires cnpg.backup.volumeSnapshot or cnpg.backup.barmanObjectStore configuration in PostgresClusterClass"},
 		},
 		{
 			name: "invalid - backup enabled, volumeSnapshot present, but no schedule anywhere",
@@ -1203,7 +1203,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			},
 			wantErrCount:  1,
 			wantErrFields: []string{"spec.backup.enabled"},
-			wantErrMsgs:   []string{"backup requires cnpg.backup.volumeSnapshot configuration in PostgresClusterClass"},
+			wantErrMsgs:   []string{"backup requires cnpg.backup.volumeSnapshot or cnpg.backup.barmanObjectStore configuration in PostgresClusterClass"},
 		},
 		{
 			name: "invalid - class has no config, cluster missing required fields",

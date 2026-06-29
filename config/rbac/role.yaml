@@ -45,6 +45,18 @@ rules:
   - update
   - watch
 - apiGroups:
+  - barmancloud.cnpg.io
+  resources:
+  - objectstores
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - enterprise.splunk.com
   resources:
   - clustermanagers

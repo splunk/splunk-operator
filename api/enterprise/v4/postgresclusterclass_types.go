@@ -25,7 +25,7 @@ import (
 // +kubebuilder:validation:XValidation:rule="!has(self.cnpg) || self.provisioner == 'postgresql.cnpg.io'",message="cnpg config can only be set when provisioner is postgresql.cnpg.io"
 // +kubebuilder:validation:XValidation:rule="self.provisioner != 'postgresql.cnpg.io' || has(self.cnpg)",message="cnpg config is required when provisioner is postgresql.cnpg.io"
 // +kubebuilder:validation:XValidation:rule="!has(self.config) || !has(self.config.connectionPooler) || !has(self.config.connectionPooler.enabled) || !self.config.connectionPooler.enabled || (has(self.cnpg) && has(self.cnpg.connectionPooler))",message="cnpg.connectionPooler must be set when config.connectionPooler.enabled is true"
-// +kubebuilder:validation:XValidation:rule="!has(self.config) || !has(self.config.backup) || !has(self.config.backup.enabled) || !self.config.backup.enabled || (has(self.cnpg) && has(self.cnpg.backup) && has(self.cnpg.backup.volumeSnapshot))",message="cnpg.backup.volumeSnapshot must be set when config.backup.enabled is true"
+// +kubebuilder:validation:XValidation:rule="!has(self.config) || !has(self.config.backup) || !has(self.config.backup.enabled) || !self.config.backup.enabled || (has(self.cnpg) && has(self.cnpg.backup) && (has(self.cnpg.backup.volumeSnapshot) || has(self.cnpg.backup.barmanObjectStore)))",message="cnpg.backup.volumeSnapshot or cnpg.backup.barmanObjectStore must be set when config.backup.enabled is true"
 // +kubebuilder:validation:XValidation:rule="!has(self.config) || !has(self.config.backup) || !has(self.config.backup.enabled) || !self.config.backup.enabled || (has(self.config.backup.schedule) && self.config.backup.schedule != '')",message="config.backup.schedule is required when config.backup.enabled is true"
 // +kubebuilder:validation:XValidation:rule="self == oldSelf",message="PostgresClusterClass is immutable after creation"
 // PostgresClusterClassSpec defines the desired state of PostgresClusterClass.
@@ -234,11 +234,77 @@ type CNPGBackupConfig struct {
 	// +optional
 	VolumeSnapshot *CNPGVolumeSnapshotConfig `json:"volumeSnapshot,omitempty"`
 
+	// BarmanObjectStore configures object storage backups via the barman-cloud CNPG plugin.
+	// The operator creates and manages a barmancloud.cnpg.io/v1 ObjectStore from this config.
+	// +optional
+	BarmanObjectStore *CNPGBarmanObjectStoreConfig `json:"barmanObjectStore,omitempty"`
+
 	// Target selects which instance performs backups.
 	// +kubebuilder:validation:Enum=primary;prefer-standby
 	// +kubebuilder:default="prefer-standby"
 	// +optional
 	Target *string `json:"target,omitempty"`
+}
+
+// CNPGBarmanObjectStoreConfig contains the configuration for object storage backups
+// via the barman-cloud CNPG plugin. The operator creates and manages a
+// barmancloud.cnpg.io/v1 ObjectStore resource in the cluster namespace from this config.
+// Users only need to create the referenced credentials Secret.
+type CNPGBarmanObjectStoreConfig struct {
+	// DestinationPath is the S3-compatible object storage path for backups.
+	// Example: "s3://my-bucket/postgres/clusters/"
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	DestinationPath string `json:"destinationPath"`
+
+	// EndpointURL is the S3-compatible endpoint URL.
+	// Defaults to AWS S3 if omitted.
+	// Example: "https://s3.us-east-1.amazonaws.com"
+	// +optional
+	EndpointURL *string `json:"endpointURL,omitempty"`
+
+	// S3Credentials contains the references to the Kubernetes Secret holding AWS credentials.
+	// The referenced Secret must exist in the same namespace as the PostgresCluster.
+	// +kubebuilder:validation:Required
+	S3Credentials CNPGBarmanS3Credentials `json:"s3Credentials"`
+
+	// WAL contains WAL archiving configuration.
+	// +optional
+	WAL *CNPGBarmanWALConfig `json:"wal,omitempty"`
+
+	// RetentionPolicy defines how long backups are retained.
+	// Format: positive number followed by 'd' (days). Example: "30d".
+	// +kubebuilder:validation:Pattern=`^[1-9][0-9]*d$`
+	// +optional
+	RetentionPolicy *string `json:"retentionPolicy,omitempty"`
+}
+
+// +kubebuilder:validation:XValidation:rule="size(self.accessKeyId.name) > 0",message="accessKeyId.name must not be empty"
+// +kubebuilder:validation:XValidation:rule="size(self.accessKeyId.key) > 0",message="accessKeyId.key must not be empty"
+// +kubebuilder:validation:XValidation:rule="size(self.secretAccessKey.name) > 0",message="secretAccessKey.name must not be empty"
+// +kubebuilder:validation:XValidation:rule="size(self.secretAccessKey.key) > 0",message="secretAccessKey.key must not be empty"
+// CNPGBarmanS3Credentials references Kubernetes Secret keys for AWS S3 credentials.
+type CNPGBarmanS3Credentials struct {
+	// AccessKeyId references the Secret key containing the AWS access key ID.
+	// +kubebuilder:validation:Required
+	AccessKeyId corev1.SecretKeySelector `json:"accessKeyId"`
+
+	// SecretAccessKey references the Secret key containing the AWS secret access key.
+	// +kubebuilder:validation:Required
+	SecretAccessKey corev1.SecretKeySelector `json:"secretAccessKey"`
+}
+
+// CNPGBarmanWALConfig contains WAL archiving configuration for barman.
+type CNPGBarmanWALConfig struct {
+	// Compression algorithm for WAL files.
+	// +kubebuilder:validation:Enum=gzip;bzip2;snappy
+	// +optional
+	Compression *string `json:"compression,omitempty"`
+
+	// Encryption algorithm for WAL files.
+	// +kubebuilder:validation:Enum=AES256;"aws:kms"
+	// +optional
+	Encryption *string `json:"encryption,omitempty"`
 }
 
 // CNPGVolumeSnapshotConfig contains volume snapshot backup settings.

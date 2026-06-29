@@ -32,7 +32,9 @@ import (
 	sharedreconcile "github.com/splunk/splunk-operator/pkg/postgresql/shared/reconcile"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -103,7 +105,7 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	return ctrl.NewControllerManagedBy(mgr).
+	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
 		WithEventFilter(predicate.Funcs{GenericFunc: func(event.GenericEvent) bool { return false }}).
 		For(&enterprisev4.PostgresCluster{}, builder.WithPredicates(postgresClusterPredicator())).
 		Owns(&cnpgv1.Cluster{}, builder.WithPredicates(cnpgClusterPredicator())).
@@ -116,12 +118,62 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			builder.WithPredicates(postgresDatabaseForClusterPredicator())).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.enqueueClustersForExternalSecret),
-			builder.WithPredicates(predicates.ExternalSecret())).
+			builder.WithPredicates(predicates.ExternalSecret()))
+
+	// The barman-cloud ObjectStore CRD is optional. Only register an owner watch when
+	// the CRD is installed — Owns() on an unregistered GVK would fail informer startup.
+	// When present, this re-enqueues the owning PostgresCluster on out-of-band edits or
+	// deletion of the operator-managed ObjectStore so drift is repaired promptly.
+	installed, err := objectStoreCRDInstalled(mgr)
+	if err != nil {
+		// A discovery error other than "CRD absent" (e.g. a transient failure during
+		// startup) must not silently disable the watch for the controller's lifetime —
+		// surface it so manager startup fails and is retried.
+		return fmt.Errorf("probing barman-cloud ObjectStore CRD presence: %w", err)
+	}
+	if installed {
+		objectStore := &unstructured.Unstructured{}
+		objectStore.SetGroupVersionKind(clustercore.ObjectStoreGVK)
+		ctrlBuilder = ctrlBuilder.Owns(objectStore, builder.WithPredicates(objectStorePredicator()))
+	} else {
+		slog.Info("barman-cloud ObjectStore CRD not installed; skipping ObjectStore owner watch",
+			"controller", "postgresCluster")
+	}
+
+	return ctrlBuilder.
 		Named("postgresCluster").
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: ClusterTotalWorker,
 		}).
 		Complete(r)
+}
+
+// objectStoreCRDInstalled reports whether the barman-cloud ObjectStore CRD is registered
+// in the cluster, via the manager's RESTMapper. A no-match (CRD absent) is reported as
+// (false, nil) so the operator runs on clusters without the plugin; any other discovery
+// error is returned so the caller can fail startup rather than permanently skip the watch.
+func objectStoreCRDInstalled(mgr ctrl.Manager) (bool, error) {
+	gvk := clustercore.ObjectStoreGVK
+	_, err := mgr.GetRESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err == nil {
+		return true, nil
+	}
+	if meta.IsNoMatchError(err) {
+		return false, nil
+	}
+	return false, err
+}
+
+// objectStorePredicator re-enqueues on spec changes and deletion of an owned ObjectStore.
+// Status-only updates and creates (the operator just made it) are ignored to avoid churn.
+func objectStorePredicator() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return e.ObjectNew.GetGeneration() != e.ObjectOld.GetGeneration()
+		},
+		DeleteFunc: func(event.DeleteEvent) bool { return true },
+		CreateFunc: func(event.CreateEvent) bool { return false },
+	}
 }
 
 func mapDatabaseToCluster(_ context.Context, obj client.Object) []reconcile.Request {
