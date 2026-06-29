@@ -1,14 +1,32 @@
 #!/usr/bin/env bash
 #
 # Fail if any file that would be mirrored to GitHub references
-# docs/splunk_private/.  Directories listed in PRIVATE_DIRS are
-# GitLab-only and are allowed to reference private docs.
+# docs/splunk_private/.  Directories listed in gitlab-only-paths.conf
+# are GitLab-only (stripped before the mirror push) and are therefore
+# allowed to reference private docs.
 set -euo pipefail
 
-PRIVATE_DIRS=(
-  "gitlab-ci/"
-  "docs/splunk_private/"
-)
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+config_file="${script_dir}/gitlab-only-paths.conf"
+
+if [ ! -f "$config_file" ]; then
+  printf 'ERROR: missing config file: %s\n' "$config_file" >&2
+  exit 1
+fi
+
+PRIVATE_DIRS=()
+while IFS= read -r line || [ -n "$line" ]; do
+  line="${line%%#*}"                 # strip inline comments
+  line="${line#"${line%%[![:space:]]*}"}"  # strip leading whitespace
+  line="${line%"${line##*[![:space:]]}"}"  # strip trailing whitespace
+  [ -z "$line" ] && continue
+  PRIVATE_DIRS+=("$line")
+done < "$config_file"
+
+if [ "${#PRIVATE_DIRS[@]}" -eq 0 ]; then
+  printf 'ERROR: no paths parsed from %s\n' "$config_file" >&2
+  exit 1
+fi
 
 exclude_args=()
 for dir in "${PRIVATE_DIRS[@]}"; do

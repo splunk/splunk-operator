@@ -59,3 +59,60 @@ github-mirror-daily-health-check:
   artifacts:
     paths:
       - ci-output/
+
+# --- GitLab -> GitHub mirror PUSH (writes to GitHub; one-way) -----------------
+# Credential contract (set as project CI/CD variables; NOT in repo):
+#   PIPELINE_GITHUB_APP_ID            org App id, required to enable
+#   PIPELINE_GITHUB_APP_PRIVATE_KEY   masked + protected env_var: BASE64 of the
+#                                     App .pem. Do NOT paste raw PEM.
+#   PIPELINE_GITHUB_APP_INSTALLATION_ID  optional; auto-discovered if unset
+#   PIPELINE_GITHUB_MIRROR_PUSH_ENABLED  "true" to arm the AUTO job (after the first cutover)
+.github-mirror-push-base:
+  extends: .admin-job
+  variables:
+    MIRROR_TARGET_REPO: "splunk/splunk-operator"
+    MIRROR_BRANCHES: "main develop"
+    GIT_STRATEGY: clone
+  # Serialize: never let two merges race two pushes to the same GitHub refs.
+  resource_group: github-mirror-push
+  before_script:
+    - . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
+    - install_os_packages git git-filter-repo
+    - ensure_jq
+    - require_envs PIPELINE_GITHUB_APP_ID PIPELINE_GITHUB_APP_PRIVATE_KEY
+    - materialize_file_secret "${PIPELINE_GITHUB_APP_PRIVATE_KEY}" "${CI_PROJECT_DIR}/.ci-secrets/github-app.pem"
+    - export GITHUB_APP_ID="${PIPELINE_GITHUB_APP_ID}"
+    - export GITHUB_APP_PRIVATE_KEY_FILE="${CI_PROJECT_DIR}/.ci-secrets/github-app.pem"
+    - export GITHUB_APP_INSTALLATION_ID="${PIPELINE_GITHUB_APP_INSTALLATION_ID:-}"
+    - git --version && git-filter-repo --version
+  after_script:
+    - rm -rf "${CI_PROJECT_DIR}/.ci-secrets"
+  artifacts:
+    when: always
+    paths:
+      - ci-output/
+
+# Steady-state: runs automatically on each protected develop/main post-merge
+# pipeline once armed. Fast-forward only — a non-ff fails closed (see runbook).
+github-mirror-push:
+  extends:
+    - .github-mirror-push-base
+    - .rules-github-mirror-push-lane
+  variables:
+    WORKFLOW_SLUG: github-mirror-push
+  script:
+    - bash gitlab-ci/github-mirror-push.sh
+    - bash gitlab-ci/github-mirror-verify.sh
+
+# First cutover and exclusion-list changes: MANUAL only, allows the expected
+# non-fast-forward. Drain/notify open PRs per the runbook before triggering.
+github-mirror-cutover:
+  extends:
+    - .github-mirror-push-base
+    - .rules-github-mirror-cutover-lane
+  variables:
+    WORKFLOW_SLUG: github-mirror-cutover
+    MIRROR_ALLOW_NON_FF: "1"
+  script:
+    - bash gitlab-ci/github-mirror-push.sh
+    - bash gitlab-ci/github-mirror-verify.sh
