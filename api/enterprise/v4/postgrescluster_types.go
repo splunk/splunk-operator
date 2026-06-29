@@ -288,6 +288,24 @@ type BackupStatus struct {
 	// VolumeSnapshot contains status for volume snapshot backups.
 	// +optional
 	VolumeSnapshot *VolumeSnapshotBackupStatus `json:"volumeSnapshot,omitempty"`
+
+	// ObjectStore contains status for barman object storage backups.
+	// +optional
+	ObjectStore *ObjectStoreBackupStatus `json:"objectStore,omitempty"`
+}
+
+// ObjectStoreBackupStatus contains the observed state of barman object storage backups.
+type ObjectStoreBackupStatus struct {
+	// Enabled indicates whether object store backups are active.
+	Enabled bool `json:"enabled"`
+
+	// LastScheduleTime is when the last backup was scheduled.
+	// +optional
+	LastScheduleTime *metav1.Time `json:"lastScheduleTime,omitempty"`
+
+	// NextScheduleTime is the next scheduled backup time.
+	// +optional
+	NextScheduleTime *metav1.Time `json:"nextScheduleTime,omitempty"`
 }
 
 // VolumeSnapshotBackupStatus contains the observed state of volume snapshot backups.

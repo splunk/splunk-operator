@@ -164,6 +164,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	contracts := &reconcileContracts{}
 	components := []component{
 		newSecretModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, postgresSecretName, contracts),
+		newObjectStoreModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, mergedConfig),
 		newClusterModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, clusterClass, mergedConfig, contracts),
 		newManagedRolesModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, contracts, newRoleSweeper),
 		newPoolerModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, clusterClass, mergedConfig, contracts),
@@ -459,6 +460,15 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterpr
 			if !refRemoved {
 				logger.InfoContext(ctx, "owner reference already removed from CNPG Cluster, skipping patch")
 			}
+			// Strip the barman-cloud WAL archiver plugin before orphaning. The ObjectStore CR
+			// it references is owned by this PostgresCluster and will be garbage-collected, so a
+			// retained cluster would otherwise keep archiving WAL to a dangling config (failing
+			// archiver, or — if the ObjectStore lingers — S3 growing unbounded with no owner to
+			// reclaim it). This mirrors the volume-snapshot survivor, which retains its dormant
+			// backup config but runs no active archiver. Existing S3 backups are untouched.
+			if removeBarmanWALArchiverPlugin(cnpgCluster) {
+				logger.InfoContext(ctx, "stripped barman-cloud WAL archiver plugin from retained CNPG Cluster")
+			}
 			if err := patchObject(ctx, c, originalCNPG, cnpgCluster, "CNPGCluster"); err != nil {
 				return fmt.Errorf("patching CNPG cluster after removing owner reference: %w", err)
 			}
@@ -518,6 +528,24 @@ func removeOwnerRef(scheme *runtime.Scheme, owner, obj client.Object) (bool, err
 		return false, fmt.Errorf("removing owner reference: %w", err)
 	}
 	return true, nil
+}
+
+// removeBarmanWALArchiverPlugin drops the operator-managed barman-cloud plugin entry from the
+// CNPG cluster spec, leaving any plugins owned by other controllers/users intact. It returns
+// true if an entry was removed. Used when orphaning a cluster on Retain so the survivor stops
+// archiving WAL to an ObjectStore that is about to be garbage-collected.
+func removeBarmanWALArchiverPlugin(cnpgCluster *cnpgv1.Cluster) bool {
+	filtered := cnpgCluster.Spec.Plugins[:0:0]
+	removed := false
+	for _, p := range cnpgCluster.Spec.Plugins {
+		if p.Name == barmanCloudPluginName {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, p)
+	}
+	cnpgCluster.Spec.Plugins = filtered
+	return removed
 }
 
 // patchObject patches obj from original; treats NotFound as a no-op.

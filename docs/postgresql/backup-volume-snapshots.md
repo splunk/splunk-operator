@@ -77,7 +77,9 @@ spec:
 **Validation rules (enforced at admission):**
 
 - `config.backup.schedule` is **required** when `config.backup.enabled` is `true`.
-- `cnpg.backup.volumeSnapshot` is **required** when `config.backup.enabled` is `true`.
+- At least one of `cnpg.backup.volumeSnapshot` or `cnpg.backup.barmanObjectStore` is **required** when `config.backup.enabled` is `true`.
+
+> **Object storage backups:** For S3/Barman-based backups instead of (or alongside) volume snapshots, see [Automated Backups via Object Storage](./backup-object-storage.md).
 
 ### 3.2 PostgresCluster (user / application team)
 
@@ -153,7 +155,7 @@ kubectl get volumesnapshots -n <namespace>
 
 ## 6. Snapshot retention
 
-**Important:** CNPG does **not** automatically prune volume snapshots. The `retentionPolicy` functionality applies only to Barman [object-store backups](https://cloudnative-pg.io/docs/1.28/backup/#object-storebased-backups), not volume snapshots.
+**Important:** CNPG does **not** automatically prune volume snapshots. Automatic retention only applies to object storage backups — see [Automated Backups via Object Storage](./backup-object-storage.md#6-retention).
 
 Cleanup depends on `snapshotOwnerReference`:
 

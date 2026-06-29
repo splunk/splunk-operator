@@ -1344,6 +1344,158 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(pc.Status.BackupStatus).To(BeNil())
 			})
 		})
+
+		// Object-storage (barman) backup: a full apply -> reconcile -> status loop that
+		// mirrors the volume-snapshot specs above but exercises the managed ObjectStore,
+		// the barman-cloud WAL-archiver plugin on the CNPG Cluster, the plugin-method
+		// ScheduledBackup, and the objectStore BackupStatus/ObjectStoreReady condition.
+		Context("with object-storage (barman) backup enabled in class", func() {
+			var classNameObjectStore string
+
+			objectStoreKey := func() types.NamespacedName {
+				return types.NamespacedName{Name: clusterName + "-object-store", Namespace: namespace}
+			}
+			getObjectStore := func() (*unstructured.Unstructured, error) {
+				obj := &unstructured.Unstructured{}
+				obj.SetGroupVersionKind(core.ObjectStoreGVK)
+				err := k8sClient.Get(ctx, objectStoreKey(), obj)
+				return obj, err
+			}
+
+			BeforeEach(func() {
+				classNameObjectStore = classNamePrefix + "objectstore-" + fmt.Sprintf(
+					"%d-%d-%d",
+					GinkgoParallelProcess(),
+					GinkgoRandomSeed(),
+					CurrentSpecReport().LeafNodeLocation.LineNumber,
+				)
+
+				pgClassObjectStore := &enterprisev4.PostgresClusterClass{
+					ObjectMeta: metav1.ObjectMeta{Name: classNameObjectStore},
+					Spec: enterprisev4.PostgresClusterClassSpec{
+						Provisioner: provisioner,
+						Config: &enterprisev4.PostgresClusterClassConfig{
+							Instances:       ptr.To(clusterMemberCount),
+							Storage:         ptr.To(resource.MustParse(storageAmount)),
+							PostgresVersion: ptr.To(postgresVersion),
+							Backup: &enterprisev4.BackupConfig{
+								Enabled:  ptr.To(true),
+								Schedule: ptr.To("0 2 * * *"),
+							},
+						},
+						CNPG: &enterprisev4.CNPGConfig{
+							Backup: &enterprisev4.CNPGBackupConfig{
+								Target: ptr.To("prefer-standby"),
+								BarmanObjectStore: &enterprisev4.CNPGBarmanObjectStoreConfig{
+									DestinationPath: "s3://test-bucket/clusters/",
+									EndpointURL:     ptr.To("https://s3.us-east-1.amazonaws.com"),
+									RetentionPolicy: ptr.To("30d"),
+									S3Credentials: enterprisev4.CNPGBarmanS3Credentials{
+										AccessKeyId: v1.SecretKeySelector{
+											LocalObjectReference: v1.LocalObjectReference{Name: "s3-credentials"},
+											Key:                  "accessKeyId",
+										},
+										SecretAccessKey: v1.SecretKeySelector{
+											LocalObjectReference: v1.LocalObjectReference{Name: "s3-credentials"},
+											Key:                  "secretAccessKey",
+										},
+									},
+									WAL: &enterprisev4.CNPGBarmanWALConfig{Compression: ptr.To("gzip")},
+								},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, pgClassObjectStore)).To(Succeed())
+
+				pgCluster.Spec.Class = classNameObjectStore
+			})
+
+			AfterEach(func() {
+				existing := &enterprisev4.PostgresClusterClass{}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: classNameObjectStore}, existing)
+				if err == nil {
+					Expect(k8sClient.Delete(ctx, existing)).To(Succeed())
+				} else {
+					Expect(apierrors.IsNotFound(err)).To(BeTrue())
+				}
+			})
+
+			It("reconciles the managed ObjectStore, barman plugin, plugin ScheduledBackup, and status", func() {
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+
+				By("creating the managed ObjectStore owned by the PostgresCluster")
+				obj, err := getObjectStore()
+				Expect(err).NotTo(HaveOccurred())
+				dest, found, err := unstructured.NestedString(obj.Object, "spec", "configuration", "destinationPath")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(found).To(BeTrue())
+				Expect(dest).To(Equal("s3://test-bucket/clusters/"))
+				owner := metav1.GetControllerOf(obj)
+				Expect(owner).NotTo(BeNil())
+				Expect(owner.Kind).To(Equal("PostgresCluster"))
+				Expect(owner.Name).To(Equal(clusterName))
+
+				By("configuring the barman-cloud WAL archiver plugin on the CNPG Cluster")
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				var barmanPlugin *cnpgv1.PluginConfiguration
+				for i := range cnpg.Spec.Plugins {
+					if cnpg.Spec.Plugins[i].Name == "barman-cloud.cloudnative-pg.io" {
+						barmanPlugin = &cnpg.Spec.Plugins[i]
+						break
+					}
+				}
+				Expect(barmanPlugin).NotTo(BeNil(), "barman-cloud plugin should be set on the CNPG Cluster")
+				Expect(barmanPlugin.IsWALArchiver).NotTo(BeNil())
+				Expect(*barmanPlugin.IsWALArchiver).To(BeTrue())
+				Expect(barmanPlugin.Parameters).To(HaveKeyWithValue("barmanObjectName", clusterName+"-object-store"))
+
+				By("publishing the ObjectStoreReady condition")
+				pc := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				objStoreCond := meta.FindStatusCondition(pc.Status.Conditions, "ObjectStoreReady")
+				Expect(objStoreCond).NotTo(BeNil())
+				Expect(objStoreCond.Status).To(Equal(metav1.ConditionTrue))
+				Expect(objStoreCond.Reason).To(Equal("ObjectStoreConfigured"))
+
+				By("creating a plugin-method ScheduledBackup once CNPG is healthy")
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGClusterHealthy(cnpg, clusterName, "")
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+				reconcileNTimes(1)
+
+				sbKey := types.NamespacedName{Name: clusterName + "-backup-objectstore", Namespace: namespace}
+				sb := &cnpgv1.ScheduledBackup{}
+				Expect(k8sClient.Get(ctx, sbKey, sb)).To(Succeed())
+				Expect(sb.Spec.Method).To(Equal(cnpgv1.BackupMethodPlugin))
+				Expect(sb.Spec.PluginConfiguration).NotTo(BeNil())
+				Expect(sb.Spec.PluginConfiguration.Name).To(Equal("barman-cloud.cloudnative-pg.io"))
+				Expect(sb.Spec.Cluster.Name).To(Equal(clusterName))
+
+				By("populating objectStore BackupStatus and BackupReady condition")
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				backupCond := meta.FindStatusCondition(pc.Status.Conditions, "BackupReady")
+				Expect(backupCond).NotTo(BeNil())
+				Expect(backupCond.Status).To(Equal(metav1.ConditionTrue))
+				Expect(backupCond.Reason).To(Equal("BackupConfigured"))
+				Expect(pc.Status.BackupStatus).NotTo(BeNil())
+				Expect(pc.Status.BackupStatus.ObjectStore).NotTo(BeNil())
+				Expect(pc.Status.BackupStatus.ObjectStore.Enabled).To(BeTrue())
+
+				By("garbage-collecting the ObjectStore when the cluster disables backup")
+				current := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+				current.Spec.Backup = &enterprisev4.BackupConfig{Enabled: ptr.To(false)}
+				Expect(k8sClient.Update(ctx, current)).To(Succeed())
+				reconcileNTimes(2)
+
+				Expect(apierrors.IsNotFound(k8sClient.Get(ctx, sbKey, sb))).To(BeTrue())
+				_, err = getObjectStore()
+				Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			})
+		})
 	})
 
 	When("deleting a PostgresCluster", func() {

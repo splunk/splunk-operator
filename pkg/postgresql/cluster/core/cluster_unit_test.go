@@ -724,6 +724,119 @@ func TestHandleFinalizerUnknownDeletionPolicy(t *testing.T) {
 	assert.Contains(t, err.Error(), unknownPolicy)
 }
 
+func TestRemoveBarmanWALArchiverPlugin(t *testing.T) {
+	t.Parallel()
+
+	otherPlugin := cnpgv1.PluginConfiguration{Name: "some-other.plugin.io"}
+	barmanPlugin := cnpgv1.PluginConfiguration{Name: barmanCloudPluginName}
+
+	tests := []struct {
+		name            string
+		plugins         []cnpgv1.PluginConfiguration
+		expectedRemoved bool
+		expectedNames   []string
+	}{
+		{
+			name:            "no plugins",
+			plugins:         nil,
+			expectedRemoved: false,
+			expectedNames:   []string{},
+		},
+		{
+			name:            "removes barman, keeps foreign plugin",
+			plugins:         []cnpgv1.PluginConfiguration{otherPlugin, barmanPlugin},
+			expectedRemoved: true,
+			expectedNames:   []string{otherPlugin.Name},
+		},
+		{
+			name:            "only barman present",
+			plugins:         []cnpgv1.PluginConfiguration{barmanPlugin},
+			expectedRemoved: true,
+			expectedNames:   []string{},
+		},
+		{
+			name:            "no barman present leaves plugins untouched",
+			plugins:         []cnpgv1.PluginConfiguration{otherPlugin},
+			expectedRemoved: false,
+			expectedNames:   []string{otherPlugin.Name},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cnpg := &cnpgv1.Cluster{Spec: cnpgv1.ClusterSpec{Plugins: tt.plugins}}
+
+			removed := removeBarmanWALArchiverPlugin(cnpg)
+
+			assert.Equal(t, tt.expectedRemoved, removed)
+			gotNames := make([]string, 0, len(cnpg.Spec.Plugins))
+			for _, p := range cnpg.Spec.Plugins {
+				gotNames = append(gotNames, p.Name)
+			}
+			assert.Equal(t, tt.expectedNames, gotNames)
+		})
+	}
+}
+
+func TestHandleFinalizerRetainStripsBarmanPlugin(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	now := metav1.Now()
+	retain := clusterDeletionPolicyRetain
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "pg1",
+			Namespace:         "default",
+			UID:               "owner-uid",
+			DeletionTimestamp: &now,
+			Finalizers:        []string{PostgresClusterFinalizerName},
+		},
+		Spec: enterprisev4.PostgresClusterSpec{
+			ClusterDeletionPolicy: &retain,
+		},
+	}
+
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pg1",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "enterprise.splunk.com/v4",
+				Kind:       "PostgresCluster",
+				Name:       "pg1",
+				UID:        "owner-uid",
+				Controller: ptr.To(true),
+			}},
+		},
+		Spec: cnpgv1.ClusterSpec{
+			Plugins: []cnpgv1.PluginConfiguration{
+				{Name: "keep-me.plugin.io"},
+				{Name: barmanCloudPluginName, IsWALArchiver: ptr.To(true)},
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, cnpg).Build()
+	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+	require.NoError(t, handleFinalizer(context.Background(), rc, cluster))
+
+	got := &cnpgv1.Cluster{}
+	require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "pg1", Namespace: "default"}, got))
+
+	gotNames := make([]string, 0, len(got.Spec.Plugins))
+	for _, p := range got.Spec.Plugins {
+		gotNames = append(gotNames, p.Name)
+	}
+	assert.Equal(t, []string{"keep-me.plugin.io"}, gotNames, "barman plugin stripped, foreign plugin retained")
+	assert.Empty(t, got.OwnerReferences, "owner reference removed so retained cluster is orphaned")
+}
+
 func TestRemoveOwnerRef(t *testing.T) {
 	scheme := runtime.NewScheme()
 	corev1.AddToScheme(scheme)
@@ -880,6 +993,64 @@ func TestDeleteCNPGCluster(t *testing.T) {
 			err := deleteCNPGCluster(context.Background(), c, tt.cluster)
 
 			require.NoError(t, err)
+		})
+	}
+}
+
+func TestGeneratePassword(t *testing.T) {
+	pw, err := generatePassword()
+
+	require.NoError(t, err)
+	assert.Len(t, pw, 32)
+
+	t.Run("generates unique passwords", func(t *testing.T) {
+		pw2, err := generatePassword()
+
+		require.NoError(t, err)
+		assert.NotEqual(t, pw, pw2)
+	})
+}
+
+func TestValidateCrossResource_VersionFloor(t *testing.T) {
+	makeClass := func(floor string) *enterprisev4.PostgresClusterClass {
+		return &enterprisev4.PostgresClusterClass{
+			ObjectMeta: metav1.ObjectMeta{Name: "cls"},
+			Spec: enterprisev4.PostgresClusterClassSpec{
+				Provisioner: "postgresql.cnpg.io",
+				Config:      &enterprisev4.PostgresClusterClassConfig{PostgresVersion: ptr.To(floor)},
+			},
+		}
+	}
+	makeCluster := func(version string) *enterprisev4.PostgresCluster {
+		return &enterprisev4.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg"},
+			Spec:       enterprisev4.PostgresClusterSpec{PostgresVersion: ptr.To(version)},
+		}
+	}
+
+	tests := []struct {
+		name       string
+		classFloor string
+		clusterVer string
+		wantErr    bool
+	}{
+		{"major-only cluster below minor floor", "17.2", "17", true},
+		{"major-only cluster equal to major-only floor", "17", "17", false},
+		{"minor cluster equal to floor", "17.2", "17.2", false},
+		{"minor cluster above floor", "17.2", "17.3", false},
+		{"minor cluster below floor", "17.2", "17.1", true},
+		{"higher major bypasses minor floor", "17.2", "18", false},
+		{"lower major rejected", "17.2", "16.9", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := ValidateCrossResource(makeClass(tt.classFloor), makeCluster(tt.clusterVer))
+			if tt.wantErr {
+				assert.NotEmpty(t, errs, "expected validation error")
+			} else {
+				assert.Empty(t, errs, "expected no validation error")
+			}
 		})
 	}
 }

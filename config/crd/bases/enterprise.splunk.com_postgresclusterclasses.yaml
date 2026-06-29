@@ -70,6 +70,118 @@ spec:
                       Backup contains CNPG-specific backup configuration.
                       Cannot be overridden in PostgresCluster CR (platform policy).
                     properties:
+                      barmanObjectStore:
+                        description: |-
+                          BarmanObjectStore configures object storage backups via the barman-cloud CNPG plugin.
+                          The operator creates and manages a barmancloud.cnpg.io/v1 ObjectStore from this config.
+                        properties:
+                          destinationPath:
+                            description: |-
+                              DestinationPath is the S3-compatible object storage path for backups.
+                              Example: "s3://my-bucket/postgres/clusters/"
+                            minLength: 1
+                            type: string
+                          endpointURL:
+                            description: |-
+                              EndpointURL is the S3-compatible endpoint URL.
+                              Defaults to AWS S3 if omitted.
+                              Example: "https://s3.us-east-1.amazonaws.com"
+                            type: string
+                          retentionPolicy:
+                            description: |-
+                              RetentionPolicy defines how long backups are retained.
+                              Format: positive number followed by 'd' (days). Example: "30d".
+                            pattern: ^[1-9][0-9]*d$
+                            type: string
+                          s3Credentials:
+                            description: |-
+                              S3Credentials contains the references to the Kubernetes Secret holding AWS credentials.
+                              The referenced Secret must exist in the same namespace as the PostgresCluster.
+                            properties:
+                              accessKeyId:
+                                description: AccessKeyId references the Secret key
+                                  containing the AWS access key ID.
+                                properties:
+                                  key:
+                                    description: The key of the secret to select from.  Must
+                                      be a valid secret key.
+                                    type: string
+                                  name:
+                                    default: ""
+                                    description: |-
+                                      Name of the referent.
+                                      This field is effectively required, but due to backwards compatibility is
+                                      allowed to be empty. Instances of this type with an empty value here are
+                                      almost certainly wrong.
+                                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    type: string
+                                  optional:
+                                    description: Specify whether the Secret or its
+                                      key must be defined
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              secretAccessKey:
+                                description: SecretAccessKey references the Secret
+                                  key containing the AWS secret access key.
+                                properties:
+                                  key:
+                                    description: The key of the secret to select from.  Must
+                                      be a valid secret key.
+                                    type: string
+                                  name:
+                                    default: ""
+                                    description: |-
+                                      Name of the referent.
+                                      This field is effectively required, but due to backwards compatibility is
+                                      allowed to be empty. Instances of this type with an empty value here are
+                                      almost certainly wrong.
+                                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    type: string
+                                  optional:
+                                    description: Specify whether the Secret or its
+                                      key must be defined
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            required:
+                            - accessKeyId
+                            - secretAccessKey
+                            type: object
+                            x-kubernetes-validations:
+                            - message: accessKeyId.name must not be empty
+                              rule: size(self.accessKeyId.name) > 0
+                            - message: accessKeyId.key must not be empty
+                              rule: size(self.accessKeyId.key) > 0
+                            - message: secretAccessKey.name must not be empty
+                              rule: size(self.secretAccessKey.name) > 0
+                            - message: secretAccessKey.key must not be empty
+                              rule: size(self.secretAccessKey.key) > 0
+                          wal:
+                            description: WAL contains WAL archiving configuration.
+                            properties:
+                              compression:
+                                description: Compression algorithm for WAL files.
+                                enum:
+                                - gzip
+                                - bzip2
+                                - snappy
+                                type: string
+                              encryption:
+                                description: Encryption algorithm for WAL files.
+                                enum:
+                                - AES256
+                                - aws:kms
+                                type: string
+                            type: object
+                        required:
+                        - destinationPath
+                        - s3Credentials
+                        type: object
                       target:
                         default: prefer-standby
                         description: Target selects which instance performs backups.
@@ -367,11 +479,11 @@ spec:
                 is true
               rule: '!has(self.config) || !has(self.config.connectionPooler) || !has(self.config.connectionPooler.enabled)
                 || !self.config.connectionPooler.enabled || (has(self.cnpg) && has(self.cnpg.connectionPooler))'
-            - message: cnpg.backup.volumeSnapshot must be set when config.backup.enabled
-                is true
+            - message: cnpg.backup.volumeSnapshot or cnpg.backup.barmanObjectStore
+                must be set when config.backup.enabled is true
               rule: '!has(self.config) || !has(self.config.backup) || !has(self.config.backup.enabled)
                 || !self.config.backup.enabled || (has(self.cnpg) && has(self.cnpg.backup)
-                && has(self.cnpg.backup.volumeSnapshot))'
+                && (has(self.cnpg.backup.volumeSnapshot) || has(self.cnpg.backup.barmanObjectStore)))'
             - message: config.backup.schedule is required when config.backup.enabled
                 is true
               rule: '!has(self.config) || !has(self.config.backup) || !has(self.config.backup.enabled)

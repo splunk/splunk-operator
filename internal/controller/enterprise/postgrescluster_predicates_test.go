@@ -16,11 +16,45 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
+
+func TestObjectStorePredicator(t *testing.T) {
+	t.Parallel()
+	pred := objectStorePredicator()
+
+	newObjectStore := func(generation int64) *unstructured.Unstructured {
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(clustercore.ObjectStoreGVK)
+		obj.SetName("c1-object-store")
+		obj.SetNamespace("default")
+		obj.SetGeneration(generation)
+		return obj
+	}
+
+	t.Run("no spec change is ignored", func(t *testing.T) {
+		t.Parallel()
+		got := pred.Update(event.UpdateEvent{ObjectOld: newObjectStore(1), ObjectNew: newObjectStore(1)})
+		assert.False(t, got)
+	})
+
+	t.Run("generation change fires", func(t *testing.T) {
+		t.Parallel()
+		got := pred.Update(event.UpdateEvent{ObjectOld: newObjectStore(1), ObjectNew: newObjectStore(2)})
+		assert.True(t, got)
+	})
+
+	t.Run("delete fires", func(t *testing.T) {
+		t.Parallel()
+		got := pred.Delete(event.DeleteEvent{Object: newObjectStore(1)})
+		assert.True(t, got)
+	})
+}
 
 func dbWithStatusRoles(name, cluster string, roleNames ...string) *enterprisev4.PostgresDatabase {
 	roles := make([]enterprisev4.DatabaseRoleInfo, 0, len(roleNames))
