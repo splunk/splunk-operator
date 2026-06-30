@@ -98,6 +98,20 @@ github-mirror-push:
   extends:
     - .github-mirror-push-base
     - .rules-github-mirror-push-lane
+  # flaky integration job can't skip the mirror, but still
+  # gates on verify + the test stage
+  needs:
+    - private-docs-reference-check
+    - ai-config-files-check
+    - job: unit-tests
+      optional: true
+      artifacts: false
+    - job: kubectl-splunk-tests
+      optional: true
+      artifacts: false
+    - job: helm-chart-tests
+      optional: true
+      artifacts: false
   variables:
     WORKFLOW_SLUG: github-mirror-push
   script:
@@ -110,6 +124,18 @@ github-mirror-cutover:
   extends:
     - .github-mirror-push-base
     - .rules-github-mirror-cutover-lane
+  needs:
+    - private-docs-reference-check
+    - ai-config-files-check
+    - job: unit-tests
+      optional: true
+      artifacts: false
+    - job: kubectl-splunk-tests
+      optional: true
+      artifacts: false
+    - job: helm-chart-tests
+      optional: true
+      artifacts: false
   variables:
     WORKFLOW_SLUG: github-mirror-cutover
     MIRROR_ALLOW_NON_FF: "1"
