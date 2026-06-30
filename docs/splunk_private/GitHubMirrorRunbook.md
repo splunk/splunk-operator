@@ -42,6 +42,10 @@ The strip is by-range but the guarantee is **whole-history**: because the bounda
 
 `git filter-repo` is deterministic: identical inputs produce identical output SHAs. So in steady state, even the rewritten `develop` is a fast-forward over the previously-mirrored tip (`push_mode=ff`) and needs no force. A **non-fast-forward only arises on first cutover or an exclusion-list change** — both of which must be deliberate, drained operations. The guard makes those the only two times `MIRROR_ALLOW_NON_FF=1` is used; a surprise `nonff` in a routine run is a signal to stop and investigate.
 
+## When the mirror runs in the pipeline
+
+Both mirror jobs (`github-mirror-push` and `github-mirror-cutover`) run on the pipeline **DAG** via `needs:`, not in stage order. They wait only for the two `verify`-stage guards (`private-docs-reference-check` and `ai-config-files-check`) and the blocking `test`-stage jobs (`unit-tests`, `kubectl-splunk-tests`, `helm-chart-tests`) — **not** for `integration`. So the mirror publishes once code is proven safe-to-mirror and tests pass, and a **flaky `integration` job no longer skips it**.
+
 ---
 
 ## Scenario 1 — First mirror (cutover)
