@@ -171,6 +171,71 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			Expect(testenv.VerifyCRConditionsForPhase("IngestorCluster", ic.Name, ic.Status.Conditions, enterpriseApi.PhaseReady)).To(Succeed(), "IngestorCluster conditions not met")
 		})
 
+		It("Splunk Operator can update IngestorCluster and IndexerCluster queueRef and objectStorageRef", Label("tier:e2e-full", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+			Expect(testcaseEnvInst.SetupIngestorStack(ctx, deployment, queue, objectStorage, cmSpec)).To(Succeed(), "Unable to setup ingestor stack")
+
+			// Deploy a second Queue and ObjectStorage with different names
+			queue2 := queue
+			queue2.SQS.Name = queue.SQS.Name + "-v2"
+			queue2.SQS.DLQ = queue.SQS.DLQ + "-v2"
+			q2, err := deployment.DeployQueue(ctx, "queue-v2", queue2)
+			Expect(err).To(Succeed(), "Unable to deploy second Queue")
+			os2, err := deployment.DeployObjectStorage(ctx, "os-v2", objectStorage)
+			Expect(err).To(Succeed(), "Unable to deploy second ObjectStorage")
+
+			// Update IngestorCluster refs
+			ingest := &enterpriseApi.IngestorCluster{}
+			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-ingest", ingest)).To(Succeed(), "Failed to get IngestorCluster")
+			ingest.Spec.QueueRef = v1.ObjectReference{Name: q2.Name}
+			ingest.Spec.ObjectStorageRef = v1.ObjectReference{Name: os2.Name}
+			Expect(deployment.UpdateCR(ctx, ingest)).To(Succeed(), "Unable to update IngestorCluster CR with new refs")
+			Expect(testcaseEnvInst.VerifyIngestorReady(ctx, deployment)).To(Succeed(), "IngestorCluster not ready after ref update")
+
+			// Update IndexerCluster refs
+			idxc := &enterpriseApi.IndexerCluster{}
+			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-idxc", idxc)).To(Succeed(), "Failed to get IndexerCluster")
+			idxc.Spec.QueueRef = v1.ObjectReference{Name: q2.Name}
+			idxc.Spec.ObjectStorageRef = v1.ObjectReference{Name: os2.Name}
+			Expect(deployment.UpdateCR(ctx, idxc)).To(Succeed(), "Unable to update IndexerCluster CR with new refs")
+			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "IndexerCluster not ready after ref update")
+
+			// Verify applied refs match the new values
+			Expect(deployment.GetInstance(ctx, ingest.Name, ingest)).To(Succeed(), "Failed to re-fetch IngestorCluster")
+			Expect(ingest.Status.AppliedQueueRef.Name).To(Equal(q2.Name), "IngestorCluster applied queue ref mismatch")
+			Expect(ingest.Status.AppliedObjectStorageRef.Name).To(Equal(os2.Name), "IngestorCluster applied object storage ref mismatch")
+
+			Expect(deployment.GetInstance(ctx, idxc.Name, idxc)).To(Succeed(), "Failed to re-fetch IndexerCluster")
+			Expect(idxc.Status.AppliedQueueRef.Name).To(Equal(q2.Name), "IndexerCluster applied queue ref mismatch")
+			Expect(idxc.Status.AppliedObjectStorageRef.Name).To(Equal(os2.Name), "IndexerCluster applied object storage ref mismatch")
+
+			// Verify conf files reflect the new v2 queue configuration
+			expectedV2 := []string{
+				fmt.Sprintf("[remote_queue:%s]", queue2.SQS.Name),
+				fmt.Sprintf("remote_queue.sqs_smartbus.dead_letter_queue.name = %s", queue2.SQS.DLQ),
+			}
+			oldQueueStale := []string{
+				fmt.Sprintf("[remote_queue:%s]", queue.SQS.Name),
+				fmt.Sprintf("remote_queue.sqs_smartbus.dead_letter_queue.name = %s", queue.SQS.DLQ),
+			}
+			pods := testenv.DumpGetPods(deployment.GetName())
+			for _, pod := range pods {
+				if strings.Contains(pod, "ingest") || strings.Contains(pod, "idxc") {
+					outputsConf, err := testenv.GetConfFile(pod, "opt/splunk/etc/system/local/outputs.conf", deployment.GetName())
+					Expect(err).To(Succeed(), "Failed to get outputs.conf from pod %s", pod)
+					Expect(testenv.ValidateContent(outputsConf, expectedV2, true)).To(Succeed(), "outputs.conf on %s missing v2 queue config", pod)
+					Expect(testenv.ValidateContent(outputsConf, oldQueueStale, false)).To(Succeed(), "outputs.conf on %s still contains old queue config", pod)
+				}
+				if strings.Contains(pod, "idxc") {
+					inputsConf, err := testenv.GetConfFile(pod, "opt/splunk/etc/system/local/inputs.conf", deployment.GetName())
+					Expect(err).To(Succeed(), "Failed to get inputs.conf from pod %s", pod)
+					Expect(testenv.ValidateContent(inputsConf, expectedV2, true)).To(Succeed(), "inputs.conf on %s missing v2 queue config", pod)
+					Expect(testenv.ValidateContent(inputsConf, oldQueueStale, false)).To(Succeed(), "inputs.conf on %s still contains old queue config", pod)
+				}
+			}
+
+			Expect(testenv.DeleteIngestorStack(ctx, deployment)).To(Succeed(), "Unable to delete ingestor stack")
+		})
+
 		It("Splunk Operator can deploy Ingestors and Indexers with correct setup", Label("tier:e2e-full", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account

@@ -26,8 +26,6 @@ const (
 	IngestorClusterPausedAnnotation = "ingestorcluster.enterprise.splunk.com/paused"
 )
 
-// +kubebuilder:validation:XValidation:rule="self.queueRef == oldSelf.queueRef",message="queueRef is immutable once created"
-// +kubebuilder:validation:XValidation:rule="self.objectStorageRef == oldSelf.objectStorageRef",message="objectStorageRef is immutable once created"
 // IngestorClusterSpec defines the spec of Ingestor Cluster
 type IngestorClusterSpec struct {
 	// Common Splunk spec
@@ -89,6 +87,14 @@ type IngestorClusterStatus struct {
 
 	// Auxiliary message describing CR status
 	Message string `json:"message"`
+
+	// Last-applied queue reference; used to detect ref changes and trigger config updates
+	// +optional
+	AppliedQueueRef corev1.ObjectReference `json:"appliedQueueRef,omitempty"`
+
+	// Last-applied object storage reference; used to detect ref changes and trigger config updates
+	// +optional
+	AppliedObjectStorageRef corev1.ObjectReference `json:"appliedObjectStorageRef,omitempty"`
 
 	// Credential secret version to track changes to the secret and trigger rolling restart of indexer cluster peers when the secret is updated
 	CredentialSecretVersion string `json:"credentialSecretVersion,omitempty"`

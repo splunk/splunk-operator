@@ -1079,3 +1079,224 @@ func TestIngScaledUpQueueConfigUpdatedIngestorsRestartedScaledDownEvents(t *test
 	}
 	assert.True(t, scaledDown)
 }
+
+func TestRefChangeTriggersConfigUpdate(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	ctx := context.TODO()
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	scheme := runtime.NewScheme()
+	_ = enterpriseApi.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	c := newFakeClientBuilder(scheme).Build()
+
+	queueOld := &enterpriseApi.Queue{
+		ObjectMeta: metav1.ObjectMeta{Name: "queue-old", Namespace: "test"},
+		Spec: enterpriseApi.QueueSpec{
+			Provider: "sqs",
+			SQS: enterpriseApi.SQSSpec{
+				Name: "old-queue", AuthRegion: "us-west-2",
+				Endpoint: "https://sqs.us-west-2.amazonaws.com", DLQ: "old-dlq",
+			},
+		},
+	}
+	queueNew := &enterpriseApi.Queue{
+		ObjectMeta: metav1.ObjectMeta{Name: "queue-new", Namespace: "test"},
+		Spec: enterpriseApi.QueueSpec{
+			Provider: "sqs",
+			SQS: enterpriseApi.SQSSpec{
+				Name: "new-queue", AuthRegion: "us-west-2",
+				Endpoint: "https://sqs.us-west-2.amazonaws.com", DLQ: "new-dlq",
+			},
+		},
+	}
+	objStorage := &enterpriseApi.ObjectStorage{
+		ObjectMeta: metav1.ObjectMeta{Name: "os", Namespace: "test"},
+		Spec: enterpriseApi.ObjectStorageSpec{
+			Provider: "s3",
+			S3:       enterpriseApi.S3Spec{Endpoint: "https://s3.us-west-2.amazonaws.com", Path: "bucket/key"},
+		},
+	}
+	_ = c.Create(ctx, queueOld)
+	_ = c.Create(ctx, queueNew)
+	_ = c.Create(ctx, objStorage)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-secrets", Namespace: "test"},
+		Data:       map[string][]byte{"password": []byte("dummy")},
+	}
+	_ = c.Create(ctx, secret)
+
+	probeConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-test-probe-configmap", Namespace: "test"},
+	}
+	_ = c.Create(ctx, probeConfigMap)
+
+	osRef := corev1.ObjectReference{Name: objStorage.Name, Namespace: objStorage.Namespace}
+	oldQueueRef := corev1.ObjectReference{Name: queueOld.Name, Namespace: queueOld.Namespace}
+	newQueueRef := corev1.ObjectReference{Name: queueNew.Name, Namespace: queueNew.Namespace}
+
+	cr := &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			Replicas: 1,
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock:           true,
+				ServiceAccount: "sa",
+			},
+			QueueRef:         oldQueueRef,
+			ObjectStorageRef: osRef,
+		},
+		Status: enterpriseApi.IngestorClusterStatus{
+			Replicas:        1,
+			ServiceAccount:  "sa",
+			TelAppInstalled: true,
+		},
+	}
+	_ = c.Create(ctx, cr)
+
+	oneReplica := int32(1)
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetSplunkStatefulsetName(SplunkIngestor, cr.GetName()),
+			Namespace: cr.GetNamespace(),
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &oneReplica,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app.kubernetes.io/instance": "splunk-test-ingestor"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app.kubernetes.io/instance": "splunk-test-ingestor"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}},
+				},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas: oneReplica, ReadyReplicas: oneReplica,
+			CurrentRevision: "v1", UpdateRevision: "v1",
+		},
+	}
+	_ = c.Create(ctx, sts)
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: GetSplunkStatefulsetPodName(SplunkIngestor, cr.GetName(), 0), Namespace: cr.GetNamespace(),
+			Labels: map[string]string{
+				"app.kubernetes.io/instance": GetSplunkStatefulsetName(SplunkIngestor, cr.GetName()),
+				"controller-revision-hash":   "v1",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Volumes: []corev1.Volume{
+				{Name: "mnt-splunk-secrets", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "test-secrets"}}},
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase:             corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{Ready: true}},
+		},
+	}
+	_ = c.Create(ctx, pod)
+
+	// --- Pass 1: settle the StatefulSet template (returns Updating) ---
+	_, err := ApplyIngestorCluster(ctx, c, cr)
+	assert.NoError(t, err)
+
+	// --- Pass 2: STS template now matches → Ready; initial config applied with oldQueueRef ---
+	mockHTTPClient := &spltest.MockHTTPClient{}
+	origNew := newIngestorClusterPodManager
+	newIngestorClusterPodManager = func(l *slog.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
+		return ingestorClusterPodManager{
+			c: c, log: l, cr: cr, secrets: secret,
+			newSplunkClient: func(uri, user, pass string) *splclient.SplunkClient {
+				return &splclient.SplunkClient{ManagementURI: uri, Username: user, Password: pass, Client: mockHTTPClient}
+			},
+		}
+	}
+	defer func() { newIngestorClusterPodManager = origNew }()
+
+	addQueueHandlers := func(queue *enterpriseApi.Queue) {
+		provider := "sqs_smartbus"
+		propertyKVList := [][]string{
+			{"remote_queue.type", provider},
+			{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
+			{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
+			{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
+			{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), objStorage.Spec.S3.Endpoint},
+			{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), objStorage.Spec.S3.Path},
+			{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
+			{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
+			{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
+			{fmt.Sprintf("remote_queue.%s.send_interval", provider), "5s"},
+		}
+		body := buildFormBody(propertyKVList)
+		crForHandlers := cr.DeepCopy()
+		crForHandlers.Status.ReadyReplicas = oneReplica
+		addRemoteQueueHandlersForIngestor(mockHTTPClient, crForHandlers, &queue.Spec, "conf-outputs", body)
+
+		pipelineKVList := [][]string{
+			{"pipeline:remotequeueruleset", "disabled", "false"},
+			{"pipeline:ruleset", "disabled", "true"},
+			{"pipeline:remotequeuetyping", "disabled", "false"},
+			{"pipeline:remotequeueoutput", "disabled", "false"},
+			{"pipeline:typing", "disabled", "true"},
+			{"pipeline:indexerPipe", "disabled", "true"},
+		}
+		for i := int32(0); i < oneReplica; i++ {
+			podName := GetSplunkStatefulsetPodName(SplunkIngestor, cr.GetName(), i)
+			baseURL := fmt.Sprintf("https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/servicesNS/nobody/system/configs/conf-default-mode", podName, cr.GetName(), cr.GetNamespace())
+			for _, field := range pipelineKVList {
+				req, _ := http.NewRequest("POST", baseURL, strings.NewReader(fmt.Sprintf("name=%s", field[0])))
+				mockHTTPClient.AddHandler(req, 200, "", nil)
+				updateURL := fmt.Sprintf("%s/%s", baseURL, field[0])
+				req, _ = http.NewRequest("POST", updateURL, strings.NewReader(fmt.Sprintf("%s=%s", field[1], field[2])))
+				mockHTTPClient.AddHandler(req, 200, "", nil)
+			}
+			restartURL := fmt.Sprintf("https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/services/server/control/restart", podName, cr.GetName(), cr.GetNamespace())
+			req, _ := http.NewRequest("POST", restartURL, nil)
+			mockHTTPClient.AddHandler(req, 200, "", nil)
+		}
+	}
+
+	// Pass 2 exercises the backfill path: empty applied refs → status initialized, no restart.
+	_, err = ApplyIngestorCluster(ctx, c, cr)
+	assert.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseReady, cr.Status.Phase)
+	assert.Equal(t, oldQueueRef, cr.Status.AppliedQueueRef, "backfill should set applied ref from spec")
+	for _, event := range recorder.events {
+		assert.NotEqual(t, "QueueConfigUpdated", event.reason, "backfill must not trigger config update")
+		assert.NotEqual(t, "IngestorsRestarted", event.reason, "backfill must not trigger restart")
+	}
+
+	// --- Pass 3: swap queueRef → config update + restart must fire ---
+	recorder.events = []mockEvent{}
+	cr.Spec.QueueRef = newQueueRef
+
+	addQueueHandlers(queueNew)
+	_, err = ApplyIngestorCluster(ctx, c, cr)
+	assert.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseReady, cr.Status.Phase)
+
+	queueUpdated := false
+	ingestorsRestarted := false
+	for _, event := range recorder.events {
+		if event.reason == "QueueConfigUpdated" {
+			queueUpdated = true
+		}
+		if event.reason == "IngestorsRestarted" {
+			ingestorsRestarted = true
+		}
+	}
+	assert.True(t, queueUpdated, "expected QueueConfigUpdated event on ref change")
+	assert.True(t, ingestorsRestarted, "expected IngestorsRestarted event on ref change")
+	assert.Equal(t, newQueueRef, cr.Status.AppliedQueueRef, "applied ref should match spec after update")
+	assert.Equal(t, osRef, cr.Status.AppliedObjectStorageRef, "applied OS ref should match spec after update")
+}
