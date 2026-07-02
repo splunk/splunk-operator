@@ -466,7 +466,154 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 		})
 	})
 
-	Context("IndexerCluster spec immutability", func() {
+	Context("IngestorCluster spec mutability", func() {
+
+		It("should allow update that changes queueRef and objectStorageRef", func() {
+			namespace := "ns-mut-ing-1"
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+
+			queue := &enterpriseApi.Queue{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "queue-mut",
+					Namespace: namespace,
+				},
+				Spec: enterpriseApi.QueueSpec{
+					Provider: "sqs",
+					SQS: enterpriseApi.SQSSpec{
+						Name:       "test-queue",
+						AuthRegion: "us-west-2",
+						DLQ:        "test-dlq",
+					},
+				},
+			}
+			os := &enterpriseApi.ObjectStorage{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "os-mut",
+					Namespace: namespace,
+				},
+				Spec: enterpriseApi.ObjectStorageSpec{
+					Provider: "s3",
+					S3: enterpriseApi.S3Spec{
+						Path: "ingestion/test",
+					},
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), queue)).Should(Succeed())
+			Expect(k8sClient.Create(context.Background(), os)).Should(Succeed())
+
+			ing := &enterpriseApi.IngestorCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "ing-mut",
+					Namespace: namespace,
+				},
+				Spec: enterpriseApi.IngestorClusterSpec{
+					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "IfNotPresent",
+						},
+					},
+					Replicas: 1,
+					QueueRef: corev1.ObjectReference{
+						Name:      queue.Name,
+						Namespace: namespace,
+					},
+					ObjectStorageRef: corev1.ObjectReference{
+						Name:      os.Name,
+						Namespace: namespace,
+					},
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), ing)).Should(Succeed())
+
+			fetched := &enterpriseApi.IngestorCluster{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{
+				Name: ing.Name, Namespace: namespace,
+			}, fetched)).Should(Succeed())
+
+			fetched.Spec.QueueRef.Name = "different-queue"
+			fetched.Spec.ObjectStorageRef.Name = "different-os"
+			Expect(k8sClient.Update(context.Background(), fetched)).Should(Succeed())
+
+			Expect(k8sClient.Delete(context.Background(), ing)).Should(Succeed())
+			Expect(k8sClient.Delete(context.Background(), os)).Should(Succeed())
+			Expect(k8sClient.Delete(context.Background(), queue)).Should(Succeed())
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+
+		It("should allow idempotent update with same queueRef and objectStorageRef", func() {
+			namespace := "ns-mut-ing-2"
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+
+			queue := &enterpriseApi.Queue{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "queue-idem",
+					Namespace: namespace,
+				},
+				Spec: enterpriseApi.QueueSpec{
+					Provider: "sqs",
+					SQS: enterpriseApi.SQSSpec{
+						Name:       "test-queue",
+						AuthRegion: "us-west-2",
+						DLQ:        "test-dlq",
+					},
+				},
+			}
+			os := &enterpriseApi.ObjectStorage{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "os-idem",
+					Namespace: namespace,
+				},
+				Spec: enterpriseApi.ObjectStorageSpec{
+					Provider: "s3",
+					S3: enterpriseApi.S3Spec{
+						Path: "ingestion/test",
+					},
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), queue)).Should(Succeed())
+			Expect(k8sClient.Create(context.Background(), os)).Should(Succeed())
+
+			ing := &enterpriseApi.IngestorCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "ing-idem",
+					Namespace: namespace,
+				},
+				Spec: enterpriseApi.IngestorClusterSpec{
+					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "IfNotPresent",
+						},
+					},
+					Replicas: 1,
+					QueueRef: corev1.ObjectReference{
+						Name:      queue.Name,
+						Namespace: namespace,
+					},
+					ObjectStorageRef: corev1.ObjectReference{
+						Name:      os.Name,
+						Namespace: namespace,
+					},
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), ing)).Should(Succeed())
+
+			fetched := &enterpriseApi.IngestorCluster{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{
+				Name: ing.Name, Namespace: namespace,
+			}, fetched)).Should(Succeed())
+
+			Expect(k8sClient.Update(context.Background(), fetched)).Should(Succeed())
+
+			Expect(k8sClient.Delete(context.Background(), ing)).Should(Succeed())
+			Expect(k8sClient.Delete(context.Background(), os)).Should(Succeed())
+			Expect(k8sClient.Delete(context.Background(), queue)).Should(Succeed())
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+	})
+
+	Context("IndexerCluster spec mutability", func() {
 
 		It("should allow idempotent update with queueRef and objectStorageRef", func() {
 			namespace := "ns-imm-idxc-1"
@@ -508,7 +655,7 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("should reject update that changes queueRef", func() {
+		It("should allow update that changes queueRef and objectStorageRef", func() {
 			namespace := "ns-imm-idxc-2"
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
@@ -544,9 +691,7 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 
 			fetched.Spec.QueueRef.Name = "different-queue"
 			fetched.Spec.ObjectStorageRef.Name = "different-os"
-			err := k8sClient.Update(context.Background(), fetched)
-			Expect(err).Should(HaveOccurred())
-			Expect(err.Error()).Should(ContainSubstring("is immutable once created"))
+			Expect(k8sClient.Update(context.Background(), fetched)).Should(Succeed())
 
 			Expect(k8sClient.Delete(context.Background(), idxc)).Should(Succeed())
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
