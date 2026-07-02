@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -272,11 +273,26 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		secretChanged := cr.Status.CredentialSecretVersion != qosCfg.Version
 		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
 
-		logger.DebugContext(ctx, "checking for changes", "previousCredentialSecretVersion", cr.Status.CredentialSecretVersion, "previousServiceAccount", cr.Status.ServiceAccount, "secretChanged", secretChanged, "serviceAccountChanged", serviceAccountChanged)
+		emptyRef := corev1.ObjectReference{}
+		appliedRefsUnset := cr.Status.AppliedQueueRef == emptyRef && cr.Status.AppliedObjectStorageRef == emptyRef
+		queueRefChanged := !appliedRefsUnset && !reflect.DeepEqual(cr.Status.AppliedQueueRef, cr.Spec.QueueRef)
+		objectStorageRefChanged := !appliedRefsUnset && !reflect.DeepEqual(cr.Status.AppliedObjectStorageRef, cr.Spec.ObjectStorageRef)
 
-		// If queue is updated
+		if appliedRefsUnset && cr.Spec.QueueRef.Name != "" {
+			cr.Status.AppliedQueueRef = cr.Spec.QueueRef
+			cr.Status.AppliedObjectStorageRef = cr.Spec.ObjectStorageRef
+			logger.InfoContext(ctx, "backfilled applied refs from spec (operator upgrade)", "appliedQueueRef", cr.Status.AppliedQueueRef.Name, "appliedObjectStorageRef", cr.Status.AppliedObjectStorageRef.Name)
+		}
+
+		if !appliedRefsUnset && cr.Spec.QueueRef.Name == "" {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "queueRef and objectStorageRef cannot be removed once applied")
+			return result, fmt.Errorf("queueRef was cleared but was previously applied as %q; restore the refs to recover", cr.Status.AppliedQueueRef.Name)
+		}
+
+		logger.DebugContext(ctx, "checking for changes", "previousCredentialSecretVersion", cr.Status.CredentialSecretVersion, "previousServiceAccount", cr.Status.ServiceAccount, "secretChanged", secretChanged, "serviceAccountChanged", serviceAccountChanged, "queueRefChanged", queueRefChanged, "objectStorageRefChanged", objectStorageRefChanged)
+
 		if cr.Spec.QueueRef.Name != "" {
-			if secretChanged || serviceAccountChanged {
+			if secretChanged || serviceAccountChanged || queueRefChanged || objectStorageRefChanged {
 				mgr := newIndexerClusterPodManager(logger, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 				err = mgr.updateIndexerConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
 				if err != nil {
@@ -304,8 +320,10 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 				cr.Status.CredentialSecretVersion = qosCfg.Version
 				cr.Status.ServiceAccount = cr.Spec.ServiceAccount
+				cr.Status.AppliedQueueRef = cr.Spec.QueueRef
+				cr.Status.AppliedObjectStorageRef = cr.Spec.ObjectStorageRef
 
-				logger.InfoContext(ctx, "updated status", "credentialSecretVersion", cr.Status.CredentialSecretVersion, "serviceAccount", cr.Status.ServiceAccount)
+				logger.InfoContext(ctx, "updated status", "credentialSecretVersion", cr.Status.CredentialSecretVersion, "serviceAccount", cr.Status.ServiceAccount, "appliedQueueRef", cr.Status.AppliedQueueRef.Name, "appliedObjectStorageRef", cr.Status.AppliedObjectStorageRef.Name)
 			}
 		}
 
@@ -592,10 +610,26 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		secretChanged := cr.Status.CredentialSecretVersion != qosCfg.Version
 		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
 
-		logger.DebugContext(ctx, "checking for changes", "previousCredentialSecretVersion", cr.Status.CredentialSecretVersion, "previousServiceAccount", cr.Status.ServiceAccount, "secretChanged", secretChanged, "serviceAccountChanged", serviceAccountChanged)
+		emptyRef := corev1.ObjectReference{}
+		appliedRefsUnset := cr.Status.AppliedQueueRef == emptyRef && cr.Status.AppliedObjectStorageRef == emptyRef
+		queueRefChanged := !appliedRefsUnset && !reflect.DeepEqual(cr.Status.AppliedQueueRef, cr.Spec.QueueRef)
+		objectStorageRefChanged := !appliedRefsUnset && !reflect.DeepEqual(cr.Status.AppliedObjectStorageRef, cr.Spec.ObjectStorageRef)
+
+		if appliedRefsUnset && cr.Spec.QueueRef.Name != "" {
+			cr.Status.AppliedQueueRef = cr.Spec.QueueRef
+			cr.Status.AppliedObjectStorageRef = cr.Spec.ObjectStorageRef
+			logger.InfoContext(ctx, "backfilled applied refs from spec (operator upgrade)", "appliedQueueRef", cr.Status.AppliedQueueRef.Name, "appliedObjectStorageRef", cr.Status.AppliedObjectStorageRef.Name)
+		}
+
+		if !appliedRefsUnset && cr.Spec.QueueRef.Name == "" {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "queueRef and objectStorageRef cannot be removed once applied")
+			return result, fmt.Errorf("queueRef was cleared but was previously applied as %q; restore the refs to recover", cr.Status.AppliedQueueRef.Name)
+		}
+
+		logger.DebugContext(ctx, "checking for changes", "previousCredentialSecretVersion", cr.Status.CredentialSecretVersion, "previousServiceAccount", cr.Status.ServiceAccount, "secretChanged", secretChanged, "serviceAccountChanged", serviceAccountChanged, "queueRefChanged", queueRefChanged, "objectStorageRefChanged", objectStorageRefChanged)
 
 		if cr.Spec.QueueRef.Name != "" {
-			if secretChanged || serviceAccountChanged {
+			if secretChanged || serviceAccountChanged || queueRefChanged || objectStorageRefChanged {
 				mgr := newIndexerClusterPodManager(logger, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 				err = mgr.updateIndexerConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
 				if err != nil {
@@ -621,8 +655,10 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 				cr.Status.CredentialSecretVersion = qosCfg.Version
 				cr.Status.ServiceAccount = cr.Spec.ServiceAccount
+				cr.Status.AppliedQueueRef = cr.Spec.QueueRef
+				cr.Status.AppliedObjectStorageRef = cr.Spec.ObjectStorageRef
 
-				logger.InfoContext(ctx, "updated status", "credentialSecretVersion", cr.Status.CredentialSecretVersion, "serviceAccount", cr.Status.ServiceAccount)
+				logger.InfoContext(ctx, "updated status", "credentialSecretVersion", cr.Status.CredentialSecretVersion, "serviceAccount", cr.Status.ServiceAccount, "appliedQueueRef", cr.Status.AppliedQueueRef.Name, "appliedObjectStorageRef", cr.Status.AppliedObjectStorageRef.Name)
 			}
 		}
 
