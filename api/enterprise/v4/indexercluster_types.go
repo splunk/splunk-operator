@@ -35,8 +35,6 @@ const (
 )
 
 // +kubebuilder:validation:XValidation:rule="has(self.queueRef) == has(self.objectStorageRef)",message="queueRef and objectStorageRef must both be set or both be empty"
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.queueRef) || (has(self.queueRef) && self.queueRef == oldSelf.queueRef)",message="queueRef is immutable once created"
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.objectStorageRef) || (has(self.objectStorageRef) && self.objectStorageRef == oldSelf.objectStorageRef)",message="objectStorageRef is immutable once created"
 // IndexerClusterSpec defines the desired state of a Splunk Enterprise indexer cluster
 type IndexerClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
@@ -136,6 +134,14 @@ type IndexerClusterStatus struct {
 
 	// Auxiliary message describing CR status
 	Message string `json:"message"`
+
+	// Last-applied queue reference; used to detect ref changes and trigger config updates
+	// +optional
+	AppliedQueueRef corev1.ObjectReference `json:"appliedQueueRef,omitempty"`
+
+	// Last-applied object storage reference; used to detect ref changes and trigger config updates
+	// +optional
+	AppliedObjectStorageRef corev1.ObjectReference `json:"appliedObjectStorageRef,omitempty"`
 
 	// Credential secret version to track changes to the secret and trigger rolling restart of indexer cluster peers when the secret is updated
 	CredentialSecretVersion string `json:"credentialSecretVersion,omitempty"`

@@ -253,10 +253,20 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		secretChanged := cr.Status.CredentialSecretVersion != qosCfg.Version
 		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
 
-		logger.DebugContext(ctx, "checking for changes", "previousCredentialSecretVersion", cr.Status.CredentialSecretVersion, "previousServiceAccount", cr.Status.ServiceAccount, "secretChanged", secretChanged, "serviceAccountChanged", serviceAccountChanged)
+		emptyRef := corev1.ObjectReference{}
+		appliedRefsUnset := cr.Status.AppliedQueueRef == emptyRef && cr.Status.AppliedObjectStorageRef == emptyRef
+		queueRefChanged := !appliedRefsUnset && !reflect.DeepEqual(cr.Status.AppliedQueueRef, cr.Spec.QueueRef)
+		objectStorageRefChanged := !appliedRefsUnset && !reflect.DeepEqual(cr.Status.AppliedObjectStorageRef, cr.Spec.ObjectStorageRef)
 
-		// If queue is updated
-		if secretChanged || serviceAccountChanged {
+		if appliedRefsUnset {
+			cr.Status.AppliedQueueRef = cr.Spec.QueueRef
+			cr.Status.AppliedObjectStorageRef = cr.Spec.ObjectStorageRef
+			logger.InfoContext(ctx, "backfilled applied refs from spec (operator upgrade)", "appliedQueueRef", cr.Status.AppliedQueueRef.Name, "appliedObjectStorageRef", cr.Status.AppliedObjectStorageRef.Name)
+		}
+
+		logger.DebugContext(ctx, "checking for changes", "previousCredentialSecretVersion", cr.Status.CredentialSecretVersion, "previousServiceAccount", cr.Status.ServiceAccount, "secretChanged", secretChanged, "serviceAccountChanged", serviceAccountChanged, "queueRefChanged", queueRefChanged, "objectStorageRefChanged", objectStorageRefChanged)
+
+		if secretChanged || serviceAccountChanged || queueRefChanged || objectStorageRefChanged {
 			ingMgr := newIngestorClusterPodManager(logger, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 			err = ingMgr.updateIngestorConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
 			if err != nil {
@@ -284,8 +294,10 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 			cr.Status.CredentialSecretVersion = qosCfg.Version
 			cr.Status.ServiceAccount = cr.Spec.ServiceAccount
+			cr.Status.AppliedQueueRef = cr.Spec.QueueRef
+			cr.Status.AppliedObjectStorageRef = cr.Spec.ObjectStorageRef
 
-			logger.InfoContext(ctx, "updated status", "credentialSecretVersion", cr.Status.CredentialSecretVersion, "serviceAccount", cr.Status.ServiceAccount)
+			logger.InfoContext(ctx, "updated status", "credentialSecretVersion", cr.Status.CredentialSecretVersion, "serviceAccount", cr.Status.ServiceAccount, "appliedQueueRef", cr.Status.AppliedQueueRef.Name, "appliedObjectStorageRef", cr.Status.AppliedObjectStorageRef.Name)
 		}
 
 		// Upgrade from automated MC to MC CRD
