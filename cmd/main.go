@@ -32,7 +32,7 @@ import (
 	"github.com/splunk/splunk-operator/internal/controller/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/logging"
-	"github.com/splunk/splunk-operator/pkg/splunk/enterprise/validation"
+	"github.com/splunk/splunk-operator/pkg/splunk/validation"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.

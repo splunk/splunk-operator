@@ -15,6 +15,9 @@
 
 /*
 Package validation implements admission webhooks and CR spec validation.
-Promoted from enterprise/validation/ to a top-level package under pkg/splunk/.
+
+Allowed imports from pkg/splunk/:
+
+	common/, util/
 */
 package validation
