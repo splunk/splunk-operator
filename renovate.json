@@ -30,6 +30,10 @@
   "ignorePaths": [
     ".github/**"
   ],
+  "ignoreDeps": [
+    "docker.io/splunk/universalforwarder",
+    "docker.io/splunk/splunk"
+  ],
   "assignAutomerge": true,
   "reviewers": [
     "gabrielm",
