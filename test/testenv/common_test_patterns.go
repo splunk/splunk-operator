@@ -22,6 +22,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	corev1 "k8s.io/api/core/v1"
+	wait "k8s.io/apimachinery/pkg/util/wait"
 )
 
 // ClusterCoordinator abstracts the v3/v4 API differences for cluster
@@ -276,6 +277,33 @@ func (testcaseenv *TestCaseEnv) VerifyClusterReadyAndRFSF(ctx context.Context, d
 		return err
 	}
 	return testcaseenv.VerifyRFSFMet(ctx, deployment)
+}
+
+// VerifyC3ClusterReadyAndRFSF verifies C3 cluster readiness and RF/SF met, retrying
+// with a per-attempt timeout to tolerate transient phase flips during app-framework operations.
+func (testcaseenv *TestCaseEnv) VerifyC3ClusterReadyAndRFSF(ctx context.Context, deployment *Deployment, verifyCoordinator func(context.Context, *Deployment) error) error {
+	overallTimeout := deployment.GetTimeout()
+	if overallTimeout <= 0 {
+		overallTimeout = DefaultTimeout
+	}
+	var lastErr error
+	pollErr := wait.PollUntilContextTimeout(ctx, PollInterval, overallTimeout, false, func(pollCtx context.Context) (bool, error) {
+		attemptCtx, cancel := context.WithTimeout(pollCtx, ReadinessPollTimeout)
+		defer cancel()
+		if err := testcaseenv.VerifyC3ClusterReady(attemptCtx, deployment, verifyCoordinator); err != nil {
+			lastErr = err
+			return false, nil
+		}
+		if err := testcaseenv.VerifyRFSFMet(attemptCtx, deployment); err != nil {
+			lastErr = err
+			return false, nil
+		}
+		return true, nil
+	})
+	if pollErr != nil {
+		return fmt.Errorf("%w: last error: %v", pollErr, lastErr)
+	}
+	return nil
 }
 
 // TriggerAndVerifyTelemetry is a common pattern for telemetry verification
