@@ -4093,7 +4093,9 @@ func TestIdxcRefChangeTriggersConfigUpdate(t *testing.T) {
 
 	_, err = ApplyIndexerClusterManager(ctx, c, cr)
 	assert.NoError(t, err)
-	assert.Equal(t, enterpriseApi.PhaseReady, cr.Status.Phase)
+	// A ref change restarts every indexer, so the CR must report Updating (not
+	// Ready) until the pods come back, otherwise callers observe a Ready->Updating flip.
+	assert.Equal(t, enterpriseApi.PhaseUpdating, cr.Status.Phase)
 
 	queueUpdated := false
 	indexersRestarted := false

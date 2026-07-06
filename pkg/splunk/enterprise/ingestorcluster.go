@@ -298,6 +298,14 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			cr.Status.AppliedObjectStorageRef = cr.Spec.ObjectStorageRef
 
 			logger.InfoContext(ctx, "updated status", "credentialSecretVersion", cr.Status.CredentialSecretVersion, "serviceAccount", cr.Status.ServiceAccount, "appliedQueueRef", cr.Status.AppliedQueueRef.Name, "appliedObjectStorageRef", cr.Status.AppliedObjectStorageRef.Name)
+
+			// The Splunk restart above takes every ingestor out of a ready state,
+			// but the phase was already computed as Ready from the pre-restart pods.
+			// Report Updating and requeue so the CR does not momentarily advertise
+			// Ready while the restart is in flight (which otherwise causes a
+			// Ready->Updating flip once the next reconcile observes the restart).
+			setPhaseAndConditions(enterpriseApi.PhaseUpdating, "Restarting pods to apply Queue/Pipeline configuration change")
+			return result, nil
 		}
 
 		// Upgrade from automated MC to MC CRD
