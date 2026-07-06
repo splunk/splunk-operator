@@ -306,8 +306,14 @@ func TestApplyIngestorCluster(t *testing.T) {
 		mockHTTPClient.AddHandler(req, 200, "", nil)
 	}
 
-	// Second reconcile should now yield Ready
+	// Second reconcile applies the Queue/Pipeline config for the first time, which
+	// restarts the pods, so the CR reports Updating (not Ready) until they recover.
 	cr.Status.TelAppInstalled = true
+	result, err = ApplyIngestorCluster(ctx, c, cr)
+	assert.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseUpdating, cr.Status.Phase)
+
+	// Third reconcile: config already applied (no restart), so it settles to Ready.
 	result, err = ApplyIngestorCluster(ctx, c, cr)
 	assert.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhaseReady, cr.Status.Phase)
@@ -1023,7 +1029,9 @@ func TestIngScaledUpQueueConfigUpdatedIngestorsRestartedScaledDownEvents(t *test
 	cr.Status.CredentialSecretVersion = "old"
 	_, err = ApplyIngestorCluster(ctx, c, cr)
 	assert.NoError(t, err)
-	assert.Equal(t, enterpriseApi.PhaseReady, cr.Status.Phase)
+	// The credential change restarts every ingestor, so the CR reports Updating
+	// (not Ready) until the pods come back.
+	assert.Equal(t, enterpriseApi.PhaseUpdating, cr.Status.Phase)
 	assert.Equal(t, threeReplicas, cr.Status.ReadyReplicas)
 
 	scaledUp := false
@@ -1283,7 +1291,9 @@ func TestRefChangeTriggersConfigUpdate(t *testing.T) {
 	addQueueHandlers(queueNew)
 	_, err = ApplyIngestorCluster(ctx, c, cr)
 	assert.NoError(t, err)
-	assert.Equal(t, enterpriseApi.PhaseReady, cr.Status.Phase)
+	// A ref change restarts every ingestor, so the CR must report Updating (not
+	// Ready) until the pods come back, otherwise callers observe a Ready->Updating flip.
+	assert.Equal(t, enterpriseApi.PhaseUpdating, cr.Status.Phase)
 
 	queueUpdated := false
 	ingestorsRestarted := false
