@@ -324,6 +324,14 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				cr.Status.AppliedObjectStorageRef = cr.Spec.ObjectStorageRef
 
 				logger.InfoContext(ctx, "updated status", "credentialSecretVersion", cr.Status.CredentialSecretVersion, "serviceAccount", cr.Status.ServiceAccount, "appliedQueueRef", cr.Status.AppliedQueueRef.Name, "appliedObjectStorageRef", cr.Status.AppliedObjectStorageRef.Name)
+
+				// The Splunk restart above takes every indexer out of a ready state,
+				// but mgr.Update() already computed Ready from the pre-restart pods.
+				// Report Updating and requeue so the CR does not momentarily advertise
+				// Ready while the restart is in flight (which otherwise causes a
+				// Ready->Updating flip once the next reconcile observes the restart).
+				setPhaseAndConditions(enterpriseApi.PhaseUpdating, "Restarting pods to apply Queue/Pipeline configuration change")
+				return result, nil
 			}
 		}
 
@@ -659,6 +667,14 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 				cr.Status.AppliedObjectStorageRef = cr.Spec.ObjectStorageRef
 
 				logger.InfoContext(ctx, "updated status", "credentialSecretVersion", cr.Status.CredentialSecretVersion, "serviceAccount", cr.Status.ServiceAccount, "appliedQueueRef", cr.Status.AppliedQueueRef.Name, "appliedObjectStorageRef", cr.Status.AppliedObjectStorageRef.Name)
+
+				// The Splunk restart above takes every indexer out of a ready state,
+				// but mgr.Update() already computed Ready from the pre-restart pods.
+				// Report Updating and requeue so the CR does not momentarily advertise
+				// Ready while the restart is in flight (which otherwise causes a
+				// Ready->Updating flip once the next reconcile observes the restart).
+				setPhaseAndConditions(enterpriseApi.PhaseUpdating, "Restarting pods to apply Queue/Pipeline configuration change")
+				return result, nil
 			}
 		}
 
