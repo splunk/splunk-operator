@@ -49,7 +49,7 @@ var _ = Describe("LicenseMaster Controller", Label("integration"), func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			annotations[enterpriseApiV3.LicenseMasterPausedAnnotation] = ""
+			annotations[enterpriseApiV3.LicenseMasterPausedAnnotation] = "true"
 			CreateLicenseMaster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
 			ssSpec, _ := GetLicenseMaster("test", nsSpecs.Name)
 			annotations = map[string]string{}
@@ -101,7 +101,7 @@ var _ = Describe("LicenseMaster Controller", Label("integration"), func() {
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 			// reconcile with updated annotations for pause
 			annotations := make(map[string]string)
-			annotations[enterpriseApiV3.LicenseMasterPausedAnnotation] = ""
+			annotations[enterpriseApiV3.LicenseMasterPausedAnnotation] = "true"
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
 			_, err = instance.Reconcile(ctx, request)

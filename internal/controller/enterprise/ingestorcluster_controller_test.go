@@ -24,6 +24,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -61,7 +62,7 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 		It("Create IngestorCluster custom resource with annotations should pause", func() {
 			namespace := "ns-splunk-ing-2"
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.IngestorClusterPausedAnnotation] = ""
+			annotations[enterpriseApi.IngestorClusterPausedAnnotation] = "true"
 			ApplyIngestorCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
@@ -189,7 +190,7 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 			}
 
 			ctx := context.TODO()
-			builder := fake.NewClientBuilder()
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.IngestorCluster{})
 			c := builder.Build()
 			instance := IngestorClusterReconciler{
 				Client: c,
@@ -208,12 +209,17 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 			Expect(c.Create(ctx, icSpec)).Should(Succeed())
 
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.IngestorClusterPausedAnnotation] = ""
+			annotations[enterpriseApi.IngestorClusterPausedAnnotation] = "true"
 			icSpec.Annotations = annotations
 			Expect(c.Update(ctx, icSpec)).Should(Succeed())
 
 			_, err = instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
+			// verify Paused=True condition was written
+			Expect(c.Get(ctx, request.NamespacedName, icSpec)).Should(Succeed())
+			pausedCond := meta.FindStatusCondition(icSpec.Status.Conditions, string(enterpriseApi.ConditionPaused))
+			Expect(pausedCond).ToNot(BeNil())
+			Expect(pausedCond.Status).To(Equal(metav1.ConditionTrue))
 
 			annotations = map[string]string{}
 			icSpec.Annotations = annotations
@@ -221,6 +227,11 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 
 			_, err = instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
+			// verify Paused=False condition was written
+			Expect(c.Get(ctx, request.NamespacedName, icSpec)).Should(Succeed())
+			pausedCond = meta.FindStatusCondition(icSpec.Status.Conditions, string(enterpriseApi.ConditionPaused))
+			Expect(pausedCond).ToNot(BeNil())
+			Expect(pausedCond.Status).To(Equal(metav1.ConditionFalse))
 
 			icSpec.DeletionTimestamp = &metav1.Time{}
 			_, err = instance.Reconcile(ctx, request)
