@@ -25,6 +25,7 @@ import (
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
+	cnpgadapter "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	dbadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
@@ -78,13 +79,15 @@ type PostgresClusterReconciler struct {
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=poolers/status,verbs=get
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=scheduledbackups,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=scheduledbackups/status,verbs=get
+// +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=backups,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=backups/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := slog.Default().With("controller", "PostgresCluster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 	ctx = logging.WithLogger(ctx, logger)
 	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics}
-	result, err := clustercore.PostgresClusterService(ctx, rc, req, dbadapter.NewRoleSweeper)
+	result, err := clustercore.PostgresClusterService(ctx, rc, req, dbadapter.NewRoleSweeper, cnpgadapter.NewBackupBackend(r.Client, r.Scheme, r.Recorder))
 	r.FleetCollector.CollectClusterMetrics(ctx, r.Client, r.Metrics)
 	if sharedreconcile.IsPureConflict(err) {
 		return ctrl.Result{Requeue: true}, nil

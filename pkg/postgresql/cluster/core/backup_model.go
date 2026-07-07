@@ -20,18 +20,44 @@ import (
 	"errors"
 	"fmt"
 
-	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/backuptypes"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
-	"k8s.io/apimachinery/pkg/api/equality"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// BackupBackend is the secondary (driven) port the backup component calls out
+// through. The concrete adapter talks to CNPG; callers depend only on this
+// interface, expressed in the operator's own vocabulary. It is defined here,
+// next to its sole consumer (backupModel), so the port lives at its point of
+// use while the value objects it exchanges live in the leaf backuptypes package.
+type BackupBackend interface {
+	// EnsureScheduled creates or updates the scheduled backup to match spec,
+	// owned by owner. It is idempotent.
+	EnsureScheduled(ctx context.Context, owner client.Object, spec backuptypes.ScheduleSpec) error
+	// DeleteScheduled removes the scheduled backup if it exists and is controlled
+	// by owner. It is a no-op when the object is absent or owned by someone else.
+	DeleteScheduled(ctx context.Context, owner client.Object, name, namespace string) error
+	// GetSchedule returns the observed state of the scheduled backup.
+	// No owner filter is applied — the same name can only exist once per
+	// namespace, and callers need to observe the object regardless of who owns it
+	// (e.g. to surface conflicts in status).
+	GetSchedule(ctx context.Context, name, namespace string) (backuptypes.ScheduleResult, error)
+
+	// BackupNow creates a one-shot backup owned by owner if it does not already
+	// exist. It is idempotent on req.Name: a backup with the same name is never
+	// recreated or mutated (CNPG Backup spec is immutable).
+	BackupNow(ctx context.Context, owner client.Object, req backuptypes.BackupRequest) error
+	// GetBackup returns the observed state of a single backup that is controlled
+	// by owner, or (zero, false) when no Backup object with that name exists or
+	// the object is not controlled by owner.
+	GetBackup(ctx context.Context, owner client.Object, name, namespace string) (backuptypes.BackupResult, bool, error)
+	// ListBackups returns the observed state of every backup targeting the named
+	// CNPG cluster in the namespace that is controlled by owner, most recent first.
+	ListBackups(ctx context.Context, owner client.Object, cnpgClusterName, namespace string) ([]backuptypes.BackupResult, error)
+}
 
 const defaultBackupSuffix = "-backup"
 
@@ -45,20 +71,18 @@ type backupEmitter interface {
 }
 
 type backupModel struct {
-	client       client.Client
-	scheme       *runtime.Scheme
 	events       backupEmitter
+	backend      BackupBackend
 	updateStatus healthStatusUpdater
 	cluster      *enterprisev4.PostgresCluster
 	mergedConfig *MergedConfig
 	contracts    *reconcileContracts
 }
 
-func newBackupModel(c client.Client, scheme *runtime.Scheme, events backupEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, mergedConfig *MergedConfig, contracts *reconcileContracts) *backupModel {
+func newBackupModel(backend BackupBackend, events backupEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, mergedConfig *MergedConfig, contracts *reconcileContracts) *backupModel {
 	return &backupModel{
-		client:       c,
-		scheme:       scheme,
 		events:       events,
+		backend:      backend,
 		updateStatus: updateStatus,
 		cluster:      cluster,
 		mergedConfig: mergedConfig,
@@ -80,9 +104,10 @@ type backupProvider struct {
 	kind backupProviderKind
 	// sbName is the deterministic ScheduledBackup name for this provider.
 	sbName string
-	// method/pluginCfg are the CNPG ScheduledBackup fields that select this provider.
-	method    cnpgv1.BackupMethod
-	pluginCfg *cnpgv1.BackupPluginConfiguration
+	// method/pluginName are the engine-agnostic fields that select this provider;
+	// the backend translates them into the concrete CNPG ScheduledBackup.
+	method     backuptypes.BackupMethod
+	pluginName string
 }
 
 type backupProviderKind int
@@ -103,15 +128,15 @@ func (b *backupModel) activeBackupProviders() []backupProvider {
 		providers = append(providers, backupProvider{
 			kind:   providerVolumeSnapshot,
 			sbName: scheduledBackupName(b.cluster.Name),
-			method: cnpgv1.BackupMethodVolumeSnapshot,
+			method: backuptypes.BackupMethodVolumeSnapshot,
 		})
 	}
 	if b.mergedConfig.CNPG.Backup.BarmanObjectStore != nil {
 		providers = append(providers, backupProvider{
-			kind:      providerObjectStore,
-			sbName:    objectStoreBackupName(b.cluster.Name),
-			method:    cnpgv1.BackupMethodPlugin,
-			pluginCfg: &cnpgv1.BackupPluginConfiguration{Name: barmanCloudPluginName},
+			kind:       providerObjectStore,
+			sbName:     objectStoreBackupName(b.cluster.Name),
+			method:     backuptypes.BackupMethodPlugin,
+			pluginName: barmanCloudPluginName,
 		})
 	}
 	return providers
@@ -188,7 +213,7 @@ func (b *backupModel) Reconcile(ctx context.Context) error {
 	desired := make(map[string]struct{})
 	for _, p := range b.activeBackupProviders() {
 		desired[p.sbName] = struct{}{}
-		if err := b.createOrUpdateScheduledBackup(ctx, p); err != nil {
+		if err := b.backend.EnsureScheduled(ctx, b.cluster, b.scheduleSpec(p)); err != nil {
 			return newReconcileFailure(reasonScheduledBackupFailed, err)
 		}
 	}
@@ -202,6 +227,21 @@ func (b *backupModel) Reconcile(ctx context.Context) error {
 		return newReconcileFailure(reasonScheduledBackupFailed, err)
 	}
 	return nil
+}
+
+// scheduleSpec builds the backend-agnostic ScheduleSpec for a provider from the merged config.
+func (b *backupModel) scheduleSpec(provider backupProvider) backuptypes.ScheduleSpec {
+	return backuptypes.ScheduleSpec{
+		Name:            provider.sbName,
+		Namespace:       b.cluster.Namespace,
+		CNPGClusterName: b.contracts.CNPGCluster.Name,
+		// Schedule has a kubebuilder default but may be nil when constructed programmatically.
+		Schedule: ptr.Deref(b.mergedConfig.Spec.Backup.Schedule, ""),
+		// Target has a kubebuilder default but may be nil when constructed programmatically.
+		Target:     ptr.Deref(b.mergedConfig.CNPG.Backup.Target, "prefer-standby"),
+		Method:     provider.method,
+		PluginName: provider.pluginName,
+	}
 }
 
 func (b *backupModel) Observe(ctx context.Context, reconcileErr error) (componentHealth, error) {
@@ -227,25 +267,25 @@ func (b *backupModel) computeHealth(ctx context.Context, reconcileErr error) (co
 	// Pending if any expected one has not appeared yet, Failed on a get error.
 	status := &enterprisev4.BackupStatus{}
 	for _, p := range b.activeBackupProviders() {
-		sb := &cnpgv1.ScheduledBackup{}
-		if err := b.client.Get(ctx, types.NamespacedName{Name: p.sbName, Namespace: b.cluster.Namespace}, sb); err != nil {
-			if apierrors.IsNotFound(err) {
-				return newPendingHealth(backupReady, reasonScheduledBackupCreated, "Waiting for scheduled backup to appear"), nil
-			}
+		schedule, err := b.backend.GetSchedule(ctx, p.sbName, b.cluster.Namespace)
+		if err != nil {
 			return newFailedHealth(backupReady, reasonScheduledBackupFailed, fmt.Sprintf("Failed to get scheduled backup: %v", err)), err
+		}
+		if !schedule.Exists {
+			return newPendingHealth(backupReady, reasonScheduledBackupCreated, "Waiting for scheduled backup to appear"), nil
 		}
 		switch p.kind {
 		case providerObjectStore:
 			status.ObjectStore = &enterprisev4.ObjectStoreBackupStatus{
 				Enabled:          true,
-				LastScheduleTime: sb.Status.LastScheduleTime,
-				NextScheduleTime: sb.Status.NextScheduleTime,
+				LastScheduleTime: schedule.LastScheduleTime,
+				NextScheduleTime: schedule.NextScheduleTime,
 			}
 		case providerVolumeSnapshot:
 			status.VolumeSnapshot = &enterprisev4.VolumeSnapshotBackupStatus{
 				Enabled:          true,
-				LastScheduleTime: sb.Status.LastScheduleTime,
-				NextScheduleTime: sb.Status.NextScheduleTime,
+				LastScheduleTime: schedule.LastScheduleTime,
+				NextScheduleTime: schedule.NextScheduleTime,
 			}
 		}
 	}
@@ -255,84 +295,15 @@ func (b *backupModel) computeHealth(ctx context.Context, reconcileErr error) (co
 	return newReadyHealth(backupReady, reasonBackupConfigured, msgScheduledBackupReady), nil
 }
 
-func (b *backupModel) createOrUpdateScheduledBackup(ctx context.Context, provider backupProvider) error {
-	schedule := toSixFieldCron(*b.mergedConfig.Spec.Backup.Schedule)
-
-	// Target has a kubebuilder default but may be nil when constructed programmatically.
-	target := cnpgv1.BackupTarget(ptr.Deref(b.mergedConfig.CNPG.Backup.Target, "prefer-standby"))
-
-	desired := &cnpgv1.ScheduledBackup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      provider.sbName,
-			Namespace: b.cluster.Namespace,
-		},
-		Spec: cnpgv1.ScheduledBackupSpec{
-			Schedule:             schedule,
-			Cluster:              cnpgv1.LocalObjectReference{Name: b.contracts.CNPGCluster.Name},
-			Method:               provider.method,
-			Target:               target,
-			BackupOwnerReference: "cluster",
-			PluginConfiguration:  provider.pluginCfg,
-		},
-	}
-	if err := ctrl.SetControllerReference(b.cluster, desired, b.scheme); err != nil {
-		return fmt.Errorf("setting controller reference on ScheduledBackup: %w", err)
-	}
-
-	existing := &cnpgv1.ScheduledBackup{}
-	err := b.client.Get(ctx, types.NamespacedName{Name: provider.sbName, Namespace: b.cluster.Namespace}, existing)
-	if apierrors.IsNotFound(err) {
-		if createErr := b.client.Create(ctx, desired); createErr != nil {
-			return fmt.Errorf("creating ScheduledBackup: %w", createErr)
-		}
-		b.events.emitNormal(b.cluster, EventScheduledBackupCreated, "Scheduled backup created")
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("getting ScheduledBackup: %w", err)
-	}
-
-	ownersBefore := existing.DeepCopy().OwnerReferences
-	if err := ctrl.SetControllerReference(b.cluster, existing, b.scheme); err != nil {
-		return fmt.Errorf("repairing controller reference on ScheduledBackup: %w", err)
-	}
-	ownerChanged := !equality.Semantic.DeepEqual(ownersBefore, existing.OwnerReferences)
-	specChanged := !equality.Semantic.DeepEqual(existing.Spec, desired.Spec)
-
-	if !specChanged && !ownerChanged {
-		return nil
-	}
-
-	existing.Spec = desired.Spec
-	if err := b.client.Update(ctx, existing); err != nil {
-		return fmt.Errorf("updating ScheduledBackup: %w", err)
-	}
-	return nil
-}
-
 // deleteScheduledBackups removes each named ScheduledBackup if present, treating absence as a
 // no-op. Used both to tear down all backups when disabled and to GC a provider's ScheduledBackup
-// when that provider is no longer configured.
+// when that provider is no longer configured. The backend only deletes objects this
+// PostgresCluster controls.
 func (b *backupModel) deleteScheduledBackups(ctx context.Context, names []string) error {
 	for _, name := range names {
-		sb := &cnpgv1.ScheduledBackup{}
-		err := b.client.Get(ctx, types.NamespacedName{Name: name, Namespace: b.cluster.Namespace}, sb)
-		if apierrors.IsNotFound(err) {
-			continue
+		if err := b.backend.DeleteScheduled(ctx, b.cluster, name, b.cluster.Namespace); err != nil {
+			return err
 		}
-		if err != nil {
-			return fmt.Errorf("getting ScheduledBackup for deletion: %w", err)
-		}
-		// Only delete a ScheduledBackup this PostgresCluster controls. A user- or
-		// other-controller-owned object sharing the deterministic name must not be
-		// deleted by this controller (mirrors the ObjectStore delete guard).
-		if controller := metav1.GetControllerOf(sb); controller == nil || controller.UID != b.cluster.UID {
-			continue
-		}
-		if err := b.client.Delete(ctx, sb); err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("deleting ScheduledBackup: %w", err)
-		}
-		b.events.emitNormal(b.cluster, EventScheduledBackupDeleted, "Scheduled backup deleted")
 	}
 	return nil
 }

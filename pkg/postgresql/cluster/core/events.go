@@ -47,6 +47,7 @@ const (
 	EventBackupConfigured                 = "BackupConfigured"
 	EventScheduledBackupCreated           = "ScheduledBackupCreated"
 	EventScheduledBackupDeleted           = "ScheduledBackupDeleted"
+	EventOnDemandBackupCreated            = "OnDemandBackupCreated"
 	EventBackupReconcileFailed            = "BackupReconcileFailed"
 	EventObjectStoreBackupReconcileFailed = "ObjectStoreBackupReconcileFailed"
 	EventObjectStoreCreated               = "ObjectStoreCreated"

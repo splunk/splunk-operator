@@ -28,6 +28,7 @@ import (
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/backuptypes"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -135,6 +136,29 @@ func (noopEventEmitter) emitWarning(_ client.Object, _, _ string)               
 func (noopEventEmitter) emitPoolerReadyTransition(_ client.Object, _ []metav1.Condition)    {}
 func (noopEventEmitter) emitPoolerCreationTransition(_ client.Object, _ []metav1.Condition) {}
 func (noopEventEmitter) emitBackupReadyTransition(_ client.Object, _ []metav1.Condition)    {}
+
+// noopBackupBackend is a test stub that satisfies BackupBackend with no-op behaviour.
+// Use it wherever a model test only needs the interface satisfied, not the backup logic.
+type noopBackupBackend struct{}
+
+func (noopBackupBackend) EnsureScheduled(_ context.Context, _ client.Object, _ backuptypes.ScheduleSpec) error {
+	return nil
+}
+func (noopBackupBackend) DeleteScheduled(_ context.Context, _ client.Object, _, _ string) error {
+	return nil
+}
+func (noopBackupBackend) GetSchedule(_ context.Context, _, _ string) (backuptypes.ScheduleResult, error) {
+	return backuptypes.ScheduleResult{}, nil
+}
+func (noopBackupBackend) BackupNow(_ context.Context, _ client.Object, _ backuptypes.BackupRequest) error {
+	return nil
+}
+func (noopBackupBackend) GetBackup(_ context.Context, _ client.Object, _, _ string) (backuptypes.BackupResult, bool, error) {
+	return backuptypes.BackupResult{}, false, nil
+}
+func (noopBackupBackend) ListBackups(_ context.Context, _ client.Object, _, _ string) ([]backuptypes.BackupResult, error) {
+	return nil, nil
+}
 
 type captureEventEmitter struct {
 	normals  []string
