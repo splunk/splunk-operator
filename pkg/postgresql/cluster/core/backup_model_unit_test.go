@@ -22,6 +22,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/backuptypes"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -128,11 +129,92 @@ func noopHealthUpdater(_ *enterprisev4.PostgresClusterStatus, _ componentHealth)
 
 // newTestBackupModel creates a backupModel with contracts.CNPGCluster set to cnpg (may be nil to test contracts-not-ready path).
 func newTestBackupModel(c client.Client, scheme *runtime.Scheme, events backupEmitter, updater healthStatusUpdater, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpg ...*cnpgv1.Cluster) *backupModel {
+	return newTestBackupModelWithBackend(noopBackupBackend{}, events, updater, cluster, cfg, cnpg...)
+}
+
+// newTestBackupModelWithBackend wires a backupModel to an explicit BackupBackend so the
+// model can be unit-tested at its port boundary. The CNPG-specific translation and
+// ownership guards live in the infrastructure/cnpg adapter and are tested there; here we
+// verify that the model drives the port with the correct engine-agnostic spec/requests and
+// maps the observed ScheduleResult back into cluster status.
+func newTestBackupModelWithBackend(backend BackupBackend, events backupEmitter, updater healthStatusUpdater, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpg ...*cnpgv1.Cluster) *backupModel {
 	contracts := &reconcileContracts{}
 	if len(cnpg) > 0 {
 		contracts.CNPGCluster = cnpg[0]
 	}
-	return newBackupModel(c, scheme, events, updater, cluster, cfg, contracts)
+	return newBackupModel(backend, events, updater, cluster, cfg, contracts)
+}
+
+// deletedSchedule records one DeleteScheduled call.
+type deletedSchedule struct{ name, namespace string }
+
+// spyBackupBackend is an in-package test double for BackupBackend. It records the calls the
+// model makes and returns canned observations, so backupModel can be exercised without any
+// CNPG dependency (which would form an import cycle with infrastructure/cnpg).
+type spyBackupBackend struct {
+	ensured []backuptypes.ScheduleSpec
+	deleted []deletedSchedule
+	backups []backuptypes.BackupRequest
+
+	// schedules maps ScheduledBackup name -> the observation GetSchedule returns for it.
+	// Absent names report ScheduleResult{Exists: false}.
+	schedules map[string]backuptypes.ScheduleResult
+
+	ensureErr   error
+	deleteErr   error
+	scheduleErr error
+}
+
+func (s *spyBackupBackend) EnsureScheduled(_ context.Context, _ client.Object, spec backuptypes.ScheduleSpec) error {
+	s.ensured = append(s.ensured, spec)
+	return s.ensureErr
+}
+
+func (s *spyBackupBackend) DeleteScheduled(_ context.Context, _ client.Object, name, namespace string) error {
+	s.deleted = append(s.deleted, deletedSchedule{name: name, namespace: namespace})
+	return s.deleteErr
+}
+
+func (s *spyBackupBackend) GetSchedule(_ context.Context, name, _ string) (backuptypes.ScheduleResult, error) {
+	if s.scheduleErr != nil {
+		return backuptypes.ScheduleResult{}, s.scheduleErr
+	}
+	if r, ok := s.schedules[name]; ok {
+		return r, nil
+	}
+	return backuptypes.ScheduleResult{Exists: false}, nil
+}
+
+func (s *spyBackupBackend) BackupNow(_ context.Context, _ client.Object, req backuptypes.BackupRequest) error {
+	s.backups = append(s.backups, req)
+	return nil
+}
+
+func (s *spyBackupBackend) GetBackup(_ context.Context, _ client.Object, _, _ string) (backuptypes.BackupResult, bool, error) {
+	return backuptypes.BackupResult{}, false, nil
+}
+
+func (s *spyBackupBackend) ListBackups(_ context.Context, _ client.Object, _, _ string) ([]backuptypes.BackupResult, error) {
+	return nil, nil
+}
+
+// ensuredByName returns the most recent ScheduleSpec ensured under name, if any.
+func (s *spyBackupBackend) ensuredByName(name string) (backuptypes.ScheduleSpec, bool) {
+	for i := len(s.ensured) - 1; i >= 0; i-- {
+		if s.ensured[i].Name == name {
+			return s.ensured[i], true
+		}
+	}
+	return backuptypes.ScheduleSpec{}, false
+}
+
+// deletedNames returns the names passed to DeleteScheduled, in call order.
+func (s *spyBackupBackend) deletedNames() []string {
+	names := make([]string, 0, len(s.deleted))
+	for _, d := range s.deleted {
+		names = append(names, d.name)
+	}
+	return names
 }
 
 // newTestCNPGCluster returns a minimal CNPG cluster for seeding contracts in backup model tests.
@@ -165,21 +247,21 @@ func TestBackupModel_Reconcile_Disabled(t *testing.T) {
 		assert.Nil(t, cluster.Status.BackupStatus)
 	})
 
-	t.Run("deletes existing scheduled backup when disabled", func(t *testing.T) {
+	t.Run("deletes every owned scheduled backup when disabled", func(t *testing.T) {
 		// Arrange
 		cluster := newTestCluster("c1", "ns1")
 		cfg := newTestMergedConfig(false, "")
-		existingSB := &cnpgv1.ScheduledBackup{ObjectMeta: metav1.ObjectMeta{Name: "c1-backup", Namespace: "ns1", OwnerReferences: ownedByCluster(cluster)}}
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingSB).Build()
-		model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
+		backend := &spyBackupBackend{}
+		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 		// Act
 		err := model.Reconcile(context.Background())
 
-		// Assert
+		// Assert — model asks the backend to delete both deterministic names; the ownership
+		// guard that keeps foreign objects safe lives in (and is tested by) the adapter.
 		require.NoError(t, err)
-		getErr := c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, &cnpgv1.ScheduledBackup{})
-		assert.True(t, apierrors.IsNotFound(getErr))
+		assert.Empty(t, backend.ensured)
+		assert.ElementsMatch(t, []string{"c1-backup", "c1-backup-objectstore"}, backend.deletedNames())
 	})
 
 	t.Run("no-op when disabled and no scheduled backup exists", func(t *testing.T) {
@@ -204,51 +286,44 @@ func TestBackupModel_Reconcile_Enabled(t *testing.T) {
 	scheme := newTestScheme()
 	cnpg := newTestCNPGCluster("c1", "ns1")
 
-	t.Run("creates scheduled backup", func(t *testing.T) {
+	t.Run("ensures scheduled backup with the volume-snapshot spec", func(t *testing.T) {
 		// Arrange
 		cluster := newTestCluster("c1", "ns1")
 		cfg := newTestMergedConfig(true, "0 2 * * *")
-		emitter := &captureBackupEmitter{}
-		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		model := newTestBackupModel(c, scheme, emitter, noopHealthUpdater, cluster, cfg, cnpg)
+		backend := &spyBackupBackend{}
+		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 		// Act
 		err := model.Reconcile(context.Background())
 
-		// Assert
+		// Assert — model passes the engine-agnostic spec; cron six-field conversion, CNPG method
+		// mapping and object creation are the adapter's job (tested in infrastructure/cnpg).
 		require.NoError(t, err)
-		sb := &cnpgv1.ScheduledBackup{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, sb))
-		assert.Equal(t, "0 0 2 * * *", sb.Spec.Schedule)
-		assert.Equal(t, cnpgv1.BackupMethodVolumeSnapshot, sb.Spec.Method)
-		assert.Equal(t, cnpgv1.BackupTargetStandby, sb.Spec.Target)
-		assert.Equal(t, "c1", sb.Spec.Cluster.Name)
-		assert.Contains(t, emitter.normals[0], EventScheduledBackupCreated)
+		spec, ok := backend.ensuredByName("c1-backup")
+		require.True(t, ok, "volume-snapshot ScheduledBackup must be ensured")
+		assert.Equal(t, "0 2 * * *", spec.Schedule)
+		assert.Equal(t, backuptypes.BackupMethodVolumeSnapshot, spec.Method)
+		assert.Equal(t, "prefer-standby", spec.Target)
+		assert.Equal(t, "c1", spec.CNPGClusterName)
+		assert.Empty(t, spec.PluginName)
 	})
 
-	t.Run("updates existing scheduled backup", func(t *testing.T) {
+	t.Run("ensure is called on every reconcile (idempotent create-or-update)", func(t *testing.T) {
 		// Arrange
 		cluster := newTestCluster("c1", "ns1")
 		cfg := newTestMergedConfig(true, "30 3 * * *")
-		existingSB := &cnpgv1.ScheduledBackup{
-			ObjectMeta: metav1.ObjectMeta{Name: "c1-backup", Namespace: "ns1"},
-			Spec: cnpgv1.ScheduledBackupSpec{
-				Schedule: "0 0 2 * * *",
-				Cluster:  cnpgv1.LocalObjectReference{Name: "c1"},
-				Method:   cnpgv1.BackupMethodVolumeSnapshot,
-			},
-		}
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingSB).Build()
-		model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
+		backend := &spyBackupBackend{}
+		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 		// Act
 		err := model.Reconcile(context.Background())
 
-		// Assert
+		// Assert — the model always drives EnsureScheduled with the desired schedule; whether the
+		// adapter creates or updates the underlying object is the adapter's concern.
 		require.NoError(t, err)
-		sb := &cnpgv1.ScheduledBackup{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, sb))
-		assert.Equal(t, "0 30 3 * * *", sb.Spec.Schedule)
+		spec, ok := backend.ensuredByName("c1-backup")
+		require.True(t, ok)
+		assert.Equal(t, "30 3 * * *", spec.Schedule)
 	})
 
 	t.Run("uses target from cnpg config", func(t *testing.T) {
@@ -256,17 +331,17 @@ func TestBackupModel_Reconcile_Enabled(t *testing.T) {
 		cluster := newTestCluster("c1", "ns1")
 		cfg := newTestMergedConfig(true, "0 2 * * *")
 		cfg.CNPG.Backup.Target = ptr.To("primary")
-		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
+		backend := &spyBackupBackend{}
+		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 		// Act
 		err := model.Reconcile(context.Background())
 
 		// Assert
 		require.NoError(t, err)
-		sb := &cnpgv1.ScheduledBackup{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, sb))
-		assert.Equal(t, cnpgv1.BackupTargetPrimary, sb.Spec.Target)
+		spec, ok := backend.ensuredByName("c1-backup")
+		require.True(t, ok)
+		assert.Equal(t, "primary", spec.Target)
 	})
 
 	t.Run("returns reconcileFailure when volumeSnapshot not configured", func(t *testing.T) {
@@ -289,45 +364,29 @@ func TestBackupModel_Reconcile_Enabled(t *testing.T) {
 }
 
 func TestBackupModel_Reconcile_CreateError(t *testing.T) {
-	// Arrange
-	scheme := newTestScheme()
+	// Arrange — the backend fails to ensure the ScheduledBackup.
 	cluster := newTestCluster("c1", "ns1")
 	cfg := newTestMergedConfig(true, "0 2 * * *")
-	errClient := createErrorClient{
-		Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
-		err:    apierrors.NewServiceUnavailable("unavailable"),
-		matcher: func(obj client.Object) bool {
-			_, ok := obj.(*cnpgv1.ScheduledBackup)
-			return ok
-		},
-	}
+	backend := &spyBackupBackend{ensureErr: apierrors.NewServiceUnavailable("unavailable")}
 	emitter := &captureBackupEmitter{}
-	model := newTestBackupModel(errClient, scheme, emitter, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
+	model := newTestBackupModelWithBackend(backend, emitter, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 	// Act
 	reconcileErr := model.Reconcile(context.Background())
 	health, err := model.Observe(context.Background(), reconcileErr)
 
-	// Assert
+	// Assert — the model turns a backend ensure error into a failed health + warning event.
 	require.Error(t, err)
 	assert.Equal(t, pgcConstants.Failed, health.State)
 	assert.Len(t, emitter.warnings, 1)
 }
 
 func TestBackupModel_Reconcile_DeleteError(t *testing.T) {
-	// Arrange
-	scheme := newTestScheme()
+	// Arrange — backup disabled, and the backend fails to delete a ScheduledBackup.
 	cluster := newTestCluster("c1", "ns1")
 	cfg := newTestMergedConfig(false, "")
-	errClient := getErrorClient{
-		Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
-		err:    apierrors.NewForbidden(schema.GroupResource{Resource: "scheduledbackups"}, "c1-backup", nil),
-		matcher: func(obj client.Object) bool {
-			_, ok := obj.(*cnpgv1.ScheduledBackup)
-			return ok
-		},
-	}
-	model := newTestBackupModel(errClient, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
+	backend := &spyBackupBackend{deleteErr: apierrors.NewForbidden(schema.GroupResource{Resource: "scheduledbackups"}, "c1-backup", nil)}
+	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 	// Act
 	reconcileErr := model.Reconcile(context.Background())
@@ -361,19 +420,14 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 	scheme := newTestScheme()
 
 	t.Run("ready when scheduled backup exists", func(t *testing.T) {
-		// Arrange
+		// Arrange — backend reports the ScheduledBackup exists.
 		cluster := newTestCluster("c1", "ns1")
 		cfg := newTestMergedConfig(true, "0 2 * * *")
-		sb := &cnpgv1.ScheduledBackup{
-			ObjectMeta: metav1.ObjectMeta{Name: "c1-backup", Namespace: "ns1"},
-			Spec: cnpgv1.ScheduledBackupSpec{
-				Schedule: "0 0 2 * * *",
-				Cluster:  cnpgv1.LocalObjectReference{Name: "c1"},
-			},
-		}
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, sb).WithStatusSubresource(cluster).Build()
+		backend := &spyBackupBackend{schedules: map[string]backuptypes.ScheduleResult{
+			"c1-backup": {Exists: true},
+		}}
 		emitter := &captureBackupEmitter{}
-		model := newTestBackupModel(c, scheme, emitter, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
+		model := newTestBackupModelWithBackend(backend, emitter, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 		// Act
 		health, err := model.Observe(context.Background(), nil)
@@ -389,11 +443,11 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 	})
 
 	t.Run("pending when scheduled backup not found", func(t *testing.T) {
-		// Arrange
+		// Arrange — backend reports the ScheduledBackup does not exist yet.
 		cluster := newTestCluster("c1", "ns1")
 		cfg := newTestMergedConfig(true, "0 2 * * *")
-		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
+		backend := &spyBackupBackend{}
+		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 		// Act
 		health, err := model.Observe(context.Background(), nil)
@@ -405,18 +459,11 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 	})
 
 	t.Run("get error returns failed", func(t *testing.T) {
-		// Arrange
+		// Arrange — backend GetSchedule fails.
 		cluster := newTestCluster("c1", "ns1")
 		cfg := newTestMergedConfig(true, "0 2 * * *")
-		errClient := getErrorClient{
-			Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
-			err:    apierrors.NewServiceUnavailable("down"),
-			matcher: func(obj client.Object) bool {
-				_, ok := obj.(*cnpgv1.ScheduledBackup)
-				return ok
-			},
-		}
-		model := newTestBackupModel(errClient, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
+		backend := &spyBackupBackend{scheduleErr: apierrors.NewServiceUnavailable("down")}
+		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 		// Act
 		health, err := model.Observe(context.Background(), nil)
@@ -426,23 +473,16 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 		assert.Equal(t, pgcConstants.Failed, health.State)
 	})
 
-	t.Run("populates schedule times from ScheduledBackup status", func(t *testing.T) {
-		// Arrange
+	t.Run("populates schedule times from ScheduleResult", func(t *testing.T) {
+		// Arrange — backend surfaces last/next schedule times.
 		cluster := newTestCluster("c1", "ns1")
 		cfg := newTestMergedConfig(true, "0 2 * * *")
 		now := metav1.Now()
 		next := metav1.NewTime(now.Add(24 * 60 * 60 * 1e9))
-		sb := &cnpgv1.ScheduledBackup{
-			ObjectMeta: metav1.ObjectMeta{Name: "c1-backup", Namespace: "ns1"},
-			Spec: cnpgv1.ScheduledBackupSpec{
-				Schedule: "0 0 2 * * *",
-				Cluster:  cnpgv1.LocalObjectReference{Name: "c1"},
-			},
-		}
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, sb).WithStatusSubresource(sb).Build()
-		sb.Status = cnpgv1.ScheduledBackupStatus{LastScheduleTime: &now, NextScheduleTime: &next}
-		require.NoError(t, c.Status().Update(context.Background(), sb))
-		model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
+		backend := &spyBackupBackend{schedules: map[string]backuptypes.ScheduleResult{
+			"c1-backup": {Exists: true, LastScheduleTime: &now, NextScheduleTime: &next},
+		}}
+		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 		// Act
 		health, err := model.Observe(context.Background(), nil)
@@ -479,22 +519,20 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 			},
 		}
 
-		sb := &cnpgv1.ScheduledBackup{
-			ObjectMeta: metav1.ObjectMeta{Name: "c1-backup", Namespace: "ns1"},
-		}
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, sb).WithStatusSubresource(cluster, sb).Build()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).WithStatusSubresource(cluster).Build()
 		require.NoError(t, c.Status().Update(ctx, cluster))
 
-		// New timestamps — only change this reconcile.
+		// New timestamps — only change this reconcile. The backend reports them via ScheduleResult.
 		now2 := metav1.Now()
 		next2 := metav1.NewTime(now2.Add(24 * time.Hour))
-		sb.Status = cnpgv1.ScheduledBackupStatus{LastScheduleTime: &now2, NextScheduleTime: &next2}
-		require.NoError(t, c.Status().Update(ctx, sb))
+		backend := &spyBackupBackend{schedules: map[string]backuptypes.ScheduleResult{
+			"c1-backup": {Exists: true, LastScheduleTime: &now2, NextScheduleTime: &next2},
+		}}
 
 		updater := func(before *enterprisev4.PostgresClusterStatus, health componentHealth) error {
 			return setStatusFromHealth(ctx, c, nil, cluster, before, health)
 		}
-		model := newTestBackupModel(c, scheme, noopBackupEmitter{}, updater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
+		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, updater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 		health, err := model.Observe(ctx, nil)
 
@@ -518,19 +556,16 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 		cfg := newTestMergedConfig(true, "0 2 * * *")
 		now := metav1.Now()
 		next := metav1.NewTime(now.Add(24 * time.Hour))
-		sb := &cnpgv1.ScheduledBackup{
-			ObjectMeta: metav1.ObjectMeta{Name: "c1-backup", Namespace: "ns1"},
-			Spec:       cnpgv1.ScheduledBackupSpec{Schedule: "0 0 2 * * *", Cluster: cnpgv1.LocalObjectReference{Name: "c1"}},
-		}
 		ctx := context.Background()
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, sb).WithStatusSubresource(cluster, sb).Build()
-		sb.Status = cnpgv1.ScheduledBackupStatus{LastScheduleTime: &now, NextScheduleTime: &next}
-		require.NoError(t, c.Status().Update(ctx, sb))
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).WithStatusSubresource(cluster).Build()
+		backend := &spyBackupBackend{schedules: map[string]backuptypes.ScheduleResult{
+			"c1-backup": {Exists: true, LastScheduleTime: &now, NextScheduleTime: &next},
+		}}
 
 		updater := func(before *enterprisev4.PostgresClusterStatus, health componentHealth) error {
 			return setStatusFromHealth(ctx, c, nil, cluster, before, health)
 		}
-		model := newTestBackupModel(c, scheme, noopBackupEmitter{}, updater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
+		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, updater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 		// Act
 		health, err := model.Observe(ctx, nil)
@@ -881,34 +916,24 @@ func TestBuildCNPGClusterSpec_Backup(t *testing.T) {
 	})
 }
 
-func TestBackupModel_Reconcile_RepairsOrphanedOwnerRef(t *testing.T) {
+func TestBackupModel_Reconcile_EnsurePassesOwner(t *testing.T) {
 	t.Parallel()
 
-	// Arrange: ScheduledBackup exists but has no owner reference — simulates a resource
-	// that was created outside the controller or lost its owner ref.
-	scheme := newTestScheme()
+	// The model always drives EnsureScheduled with the PostgresCluster as owner; adopting an
+	// orphaned ScheduledBackup and repairing its owner reference is the adapter's responsibility
+	// (covered by infrastructure/cnpg TestCNPGBackupBackend_EnsureScheduled_* tests).
 	cluster := newTestCluster("c1", "ns1")
 	cfg := newTestMergedConfig(true, "0 2 * * *")
-	orphanedSB := &cnpgv1.ScheduledBackup{
-		ObjectMeta: metav1.ObjectMeta{Name: "c1-backup", Namespace: "ns1"},
-		Spec: cnpgv1.ScheduledBackupSpec{
-			Schedule: "0 0 2 * * *",
-			Cluster:  cnpgv1.LocalObjectReference{Name: "c1"},
-			Method:   cnpgv1.BackupMethodVolumeSnapshot,
-		},
-	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(orphanedSB).Build()
-	model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
+	backend := &spyBackupBackend{}
+	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 	// Act
 	err := model.Reconcile(context.Background())
 
 	// Assert
 	require.NoError(t, err)
-	adopted := &cnpgv1.ScheduledBackup{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "c1-backup", Namespace: "ns1"}, adopted))
-	require.Len(t, adopted.OwnerReferences, 1, "owner reference must be set after repair")
-	assert.Equal(t, cluster.Name, adopted.OwnerReferences[0].Name)
+	_, ok := backend.ensuredByName("c1-backup")
+	require.True(t, ok, "the volume-snapshot ScheduledBackup must be ensured so the adapter can repair ownership")
 }
 
 // --- contracts ---
@@ -978,45 +1003,35 @@ func newTestMergedConfigDualProvider(schedule string) *MergedConfig {
 	return cfg
 }
 
-func TestBackupModel_Barman_CreatesPluginScheduledBackup(t *testing.T) {
-	scheme := newTestScheme()
+func TestBackupModel_Barman_EnsuresPluginScheduledBackup(t *testing.T) {
 	cluster := newTestCluster("c1", "ns1")
 	cnpg := newTestCNPGCluster("c1", "ns1")
 	cfg := newTestMergedConfigBarman("0 2 * * *")
-	emitter := &captureBackupEmitter{}
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
-	model := newTestBackupModel(c, scheme, emitter, noopHealthUpdater, cluster, cfg, cnpg)
+	backend := &spyBackupBackend{}
+	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
-	reconcileErr := model.Reconcile(context.Background())
-	require.NoError(t, reconcileErr)
+	require.NoError(t, model.Reconcile(context.Background()))
 
-	sb := &cnpgv1.ScheduledBackup{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup-objectstore", Namespace: "ns1"}, sb))
-	assert.Equal(t, cnpgv1.BackupMethodPlugin, sb.Spec.Method)
-	require.NotNil(t, sb.Spec.PluginConfiguration)
-	assert.Equal(t, "barman-cloud.cloudnative-pg.io", sb.Spec.PluginConfiguration.Name)
-	assert.Contains(t, emitter.normals[0], EventScheduledBackupCreated)
+	// Barman-only config ensures the object-store ScheduledBackup with the plugin method...
+	spec, ok := backend.ensuredByName("c1-backup-objectstore")
+	require.True(t, ok, "object-store ScheduledBackup must be ensured")
+	assert.Equal(t, backuptypes.BackupMethodPlugin, spec.Method)
+	assert.Equal(t, "barman-cloud.cloudnative-pg.io", spec.PluginName)
 
-	// Barman-only config must not create the volume-snapshot ScheduledBackup.
-	vsSB := &cnpgv1.ScheduledBackup{}
-	getErr := c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, vsSB)
-	assert.True(t, apierrors.IsNotFound(getErr), "no volume-snapshot ScheduledBackup expected for barman-only config")
+	// ...and must not ensure the volume-snapshot ScheduledBackup.
+	_, vsOK := backend.ensuredByName("c1-backup")
+	assert.False(t, vsOK, "no volume-snapshot ScheduledBackup expected for barman-only config")
 }
 
 func TestBackupModel_Barman_PopulatesObjectStoreStatus(t *testing.T) {
-	scheme := newTestScheme()
 	cluster := newTestCluster("c1", "ns1")
 	cfg := newTestMergedConfigBarman("0 2 * * *")
 	now := metav1.Now()
 	next := metav1.NewTime(now.Add(3600 * 1e9))
-	sb := &cnpgv1.ScheduledBackup{
-		ObjectMeta: metav1.ObjectMeta{Name: "c1-backup-objectstore", Namespace: "ns1"},
-		Spec:       cnpgv1.ScheduledBackupSpec{Schedule: "0 0 2 * * *", Cluster: cnpgv1.LocalObjectReference{Name: "c1"}},
-	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, sb).WithStatusSubresource(cluster, sb).Build()
-	sb.Status = cnpgv1.ScheduledBackupStatus{LastScheduleTime: &now, NextScheduleTime: &next}
-	require.NoError(t, c.Status().Update(context.Background(), sb))
-	model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
+	backend := &spyBackupBackend{schedules: map[string]backuptypes.ScheduleResult{
+		"c1-backup-objectstore": {Exists: true, LastScheduleTime: &now, NextScheduleTime: &next},
+	}}
+	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 	health, err := model.Observe(context.Background(), nil)
 
@@ -1030,42 +1045,34 @@ func TestBackupModel_Barman_PopulatesObjectStoreStatus(t *testing.T) {
 
 // --- Dual provider (volume snapshot + barman object store) ---
 
-func TestBackupModel_DualProvider_CreatesBothScheduledBackups(t *testing.T) {
-	scheme := newTestScheme()
+func TestBackupModel_DualProvider_EnsuresBothScheduledBackups(t *testing.T) {
 	cluster := newTestCluster("c1", "ns1")
 	cnpg := newTestCNPGCluster("c1", "ns1")
 	cfg := newTestMergedConfigDualProvider("0 2 * * *")
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
-	model := newTestBackupModel(c, scheme, &captureBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
+	backend := &spyBackupBackend{}
+	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 	require.NoError(t, model.Reconcile(context.Background()))
 
-	vsSB := &cnpgv1.ScheduledBackup{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, vsSB))
-	assert.Equal(t, cnpgv1.BackupMethodVolumeSnapshot, vsSB.Spec.Method)
-	assert.Nil(t, vsSB.Spec.PluginConfiguration)
+	vs, ok := backend.ensuredByName("c1-backup")
+	require.True(t, ok)
+	assert.Equal(t, backuptypes.BackupMethodVolumeSnapshot, vs.Method)
+	assert.Empty(t, vs.PluginName)
 
-	osSB := &cnpgv1.ScheduledBackup{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup-objectstore", Namespace: "ns1"}, osSB))
-	assert.Equal(t, cnpgv1.BackupMethodPlugin, osSB.Spec.Method)
-	require.NotNil(t, osSB.Spec.PluginConfiguration)
-	assert.Equal(t, "barman-cloud.cloudnative-pg.io", osSB.Spec.PluginConfiguration.Name)
+	os, ok := backend.ensuredByName("c1-backup-objectstore")
+	require.True(t, ok)
+	assert.Equal(t, backuptypes.BackupMethodPlugin, os.Method)
+	assert.Equal(t, "barman-cloud.cloudnative-pg.io", os.PluginName)
 }
 
 func TestBackupModel_DualProvider_PopulatesBothStatuses(t *testing.T) {
-	scheme := newTestScheme()
 	cluster := newTestCluster("c1", "ns1")
 	cfg := newTestMergedConfigDualProvider("0 2 * * *")
-	vsSB := &cnpgv1.ScheduledBackup{
-		ObjectMeta: metav1.ObjectMeta{Name: "c1-backup", Namespace: "ns1"},
-		Spec:       cnpgv1.ScheduledBackupSpec{Schedule: "0 0 2 * * *", Cluster: cnpgv1.LocalObjectReference{Name: "c1"}},
-	}
-	osSB := &cnpgv1.ScheduledBackup{
-		ObjectMeta: metav1.ObjectMeta{Name: "c1-backup-objectstore", Namespace: "ns1"},
-		Spec:       cnpgv1.ScheduledBackupSpec{Schedule: "0 0 2 * * *", Cluster: cnpgv1.LocalObjectReference{Name: "c1"}},
-	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, vsSB, osSB).WithStatusSubresource(cluster).Build()
-	model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
+	backend := &spyBackupBackend{schedules: map[string]backuptypes.ScheduleResult{
+		"c1-backup":             {Exists: true},
+		"c1-backup-objectstore": {Exists: true},
+	}}
+	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 	health, err := model.Observe(context.Background(), nil)
 
@@ -1079,16 +1086,13 @@ func TestBackupModel_DualProvider_PopulatesBothStatuses(t *testing.T) {
 }
 
 func TestBackupModel_DualProvider_PendingUntilBothScheduledBackupsExist(t *testing.T) {
-	scheme := newTestScheme()
 	cluster := newTestCluster("c1", "ns1")
 	cfg := newTestMergedConfigDualProvider("0 2 * * *")
 	// Only the volume-snapshot ScheduledBackup exists yet.
-	vsSB := &cnpgv1.ScheduledBackup{
-		ObjectMeta: metav1.ObjectMeta{Name: "c1-backup", Namespace: "ns1"},
-		Spec:       cnpgv1.ScheduledBackupSpec{Schedule: "0 0 2 * * *", Cluster: cnpgv1.LocalObjectReference{Name: "c1"}},
-	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, vsSB).WithStatusSubresource(cluster).Build()
-	model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
+	backend := &spyBackupBackend{schedules: map[string]backuptypes.ScheduleResult{
+		"c1-backup": {Exists: true},
+	}}
+	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 	health, err := model.Observe(context.Background(), nil)
 
@@ -1097,53 +1101,41 @@ func TestBackupModel_DualProvider_PendingUntilBothScheduledBackupsExist(t *testi
 }
 
 func TestBackupModel_DualProvider_GCsObjectStoreBackupWhenProviderRemoved(t *testing.T) {
-	scheme := newTestScheme()
 	cluster := newTestCluster("c1", "ns1")
 	cnpg := newTestCNPGCluster("c1", "ns1")
-	// Both ScheduledBackups already exist from a prior dual-provider config, controlled by
-	// this PostgresCluster so the GC ownership guard permits deleting the removed provider's.
-	vsSB := &cnpgv1.ScheduledBackup{ObjectMeta: metav1.ObjectMeta{Name: "c1-backup", Namespace: "ns1", OwnerReferences: ownedByCluster(cluster)}}
-	osSB := &cnpgv1.ScheduledBackup{ObjectMeta: metav1.ObjectMeta{Name: "c1-backup-objectstore", Namespace: "ns1", OwnerReferences: ownedByCluster(cluster)}}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(vsSB, osSB).Build()
+	backend := &spyBackupBackend{}
 
-	// New config keeps only the volume-snapshot provider.
+	// New config keeps only the volume-snapshot provider; the object-store provider was removed.
 	cfg := newTestMergedConfig(true, "0 2 * * *")
-	model := newTestBackupModel(c, scheme, &captureBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
+	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 	require.NoError(t, model.Reconcile(context.Background()))
 
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, &cnpgv1.ScheduledBackup{}),
-		"volume-snapshot ScheduledBackup must remain")
-	gcErr := c.Get(context.Background(), types.NamespacedName{Name: "c1-backup-objectstore", Namespace: "ns1"}, &cnpgv1.ScheduledBackup{})
-	assert.True(t, apierrors.IsNotFound(gcErr), "object-store ScheduledBackup must be garbage-collected when barman provider is removed")
+	// The volume-snapshot provider is ensured; the stale object-store name is asked to be deleted.
+	// The adapter's ownership guard (tested there) protects foreign objects with the same name.
+	_, ensured := backend.ensuredByName("c1-backup")
+	assert.True(t, ensured, "volume-snapshot ScheduledBackup must be ensured")
+	assert.Contains(t, backend.deletedNames(), "c1-backup-objectstore",
+		"object-store ScheduledBackup must be garbage-collected when barman provider is removed")
+	assert.NotContains(t, backend.deletedNames(), "c1-backup",
+		"active volume-snapshot ScheduledBackup must not be deleted")
 }
 
-func TestBackupModel_Reconcile_DoesNotDeleteForeignScheduledBackup(t *testing.T) {
-	scheme := newTestScheme()
+func TestBackupModel_Reconcile_DeletesAllNamesWhenDisabled(t *testing.T) {
 	cluster := newTestCluster("c1", "ns1")
 	cnpg := newTestCNPGCluster("c1", "ns1")
-	// A ScheduledBackup sharing the deterministic name but controlled by a different owner.
-	foreign := &cnpgv1.ScheduledBackup{ObjectMeta: metav1.ObjectMeta{
-		Name:      "c1-backup",
-		Namespace: "ns1",
-		OwnerReferences: []metav1.OwnerReference{{
-			APIVersion: enterprisev4.GroupVersion.String(),
-			Kind:       "PostgresCluster",
-			Name:       "someone-else",
-			UID:        "other-uid-999",
-			Controller: ptr.To(true),
-		}},
-	}}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(foreign).Build()
+	backend := &spyBackupBackend{}
 
-	// Backup disabled — Reconcile would try to delete every deterministic name.
+	// Backup disabled — Reconcile asks the backend to delete every deterministic name. The
+	// adapter's ownership guard (tested in infrastructure/cnpg) ensures foreign objects sharing
+	// a name are never actually deleted.
 	cfg := newTestMergedConfig(false, "")
-	model := newTestBackupModel(c, scheme, &captureBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
+	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 	require.NoError(t, model.Reconcile(context.Background()))
 
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, &cnpgv1.ScheduledBackup{}),
-		"foreign ScheduledBackup must not be deleted by this controller")
+	assert.Empty(t, backend.ensured)
+	assert.ElementsMatch(t, []string{"c1-backup", "c1-backup-objectstore"}, backend.deletedNames())
 }
 
 func TestBuildCNPGClusterSpec_BarmanDisabledOmitsPlugin(t *testing.T) {
@@ -1217,20 +1209,19 @@ func TestBuildCNPGClusterSpec_PreservesForeignPlugins(t *testing.T) {
 
 func TestBackupModel_NilTarget_UsesDefault(t *testing.T) {
 	// Target is *string with kubebuilder default but may be nil when constructed programmatically.
-	scheme := newTestScheme()
 	cluster := newTestCluster("c1", "ns1")
 	cnpg := newTestCNPGCluster("c1", "ns1")
 	cfg := newTestMergedConfig(true, "0 2 * * *")
 	cfg.CNPG.Backup.Target = nil // explicitly nil — must not panic
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
-	model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
+	backend := &spyBackupBackend{}
+	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 	require.NotPanics(t, func() {
 		_ = model.Reconcile(context.Background())
 	})
 	require.NoError(t, model.Reconcile(context.Background()))
 
-	sb := &cnpgv1.ScheduledBackup{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, sb))
-	assert.Equal(t, cnpgv1.BackupTargetStandby, sb.Spec.Target)
+	spec, ok := backend.ensuredByName("c1-backup")
+	require.True(t, ok)
+	assert.Equal(t, "prefer-standby", spec.Target, "nil target must default to prefer-standby")
 }
