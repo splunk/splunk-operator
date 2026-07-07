@@ -18,6 +18,7 @@ package enterprise
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -26,6 +27,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/stretchr/testify/require"
+	reconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
@@ -265,6 +267,7 @@ func TestSetVolumeDefault(t *testing.T) {
 }
 
 func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	cr := enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
@@ -288,12 +291,18 @@ func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.
 	client := spltest.NewMockClient()
 
 	_, err := ApplyClusterManager(context.TODO(), client, &cr, nil)
-	if err == nil {
-		t.Errorf("ApplyClusterManager should fail on invalid smartstore config")
+	// ValidateSplunkSmartstoreSpec is called inside validateClusterManagerSpec — stalled, returns terminal error
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
+	}
+	stalledCond := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected Stalled=True for invalid SmartStore config")
 	}
 }
 
 func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone",
@@ -320,8 +329,13 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	_, err := ApplyStandalone(context.Background(), client, &cr)
-	if err == nil {
-		t.Errorf("ApplyStandalone should fail on invalid smartstore config")
+	// ValidateSplunkSmartstoreSpec is called inside validateStandaloneSpec — stalled, returns terminal error
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
+	}
+	stalledCond := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected Stalled=True for invalid SmartStore config")
 	}
 }
 

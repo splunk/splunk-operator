@@ -63,13 +63,15 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	var err error
 	// Initialize phase and conditions
 	isPaused := cr.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true"
-	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
-		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, phase, isPaused, message, cr.GetGeneration())
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string, isStalled bool) {
+		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
+			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(), IsStalled: isStalled,
+		})
 		cr.Status.Phase = result.Phase
 		cr.Status.Conditions = result.Conditions
 		cr.Status.ObservedGeneration = cr.GetGeneration()
 	}
-	setPhaseAndConditions(enterpriseApi.PhaseError, "")
+	setPhaseAndConditions(enterpriseApi.PhaseError, "", false)
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
@@ -78,8 +80,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	err = validateIndexerClusterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "IndexerClusterSpecValidationFailed", "Validation of Indexer Cluster spec failed. Check operator logs for details.")
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Indexer Cluster spec validation failed")
-		return result, fmt.Errorf("validate indexer cluster spec: %w", err)
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Indexer Cluster spec validation failed", true)
+		return reconcile.Result{}, reconcile.TerminalError(err)
 	}
 
 	// updates status after function completes
@@ -105,7 +107,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplySplunkConfigFailed", "Create or update of general config failed. Check operator logs for details.")
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration", false)
 		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
@@ -134,7 +136,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		err = VerifyRFPeers(ctx, mgr, client)
 		if err != nil {
 			eventPublisher.Warning(ctx, "VerifyRFPeersFailed", "Verification of RF peer failed. Check operator logs for details.")
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Replication factor peer verification failed")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Replication factor peer verification failed", false)
 			return result, fmt.Errorf("verify RF peers: %w", err)
 		}
 	}
@@ -145,7 +147,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted", false)
 			cr.Status.ClusterManagerPhase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
@@ -159,7 +161,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Create or update of headless service for Indexer Cluster failed. Check operator logs for details.")
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update headless service")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update headless service", false)
 		return result, fmt.Errorf("apply headless service: %w", err)
 	}
 
@@ -167,7 +169,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Create or update of service for Indexer Cluster failed. Check operator logs for details.")
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update regular service")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update regular service", false)
 		return result, fmt.Errorf("apply service: %w", err)
 	}
 
@@ -175,7 +177,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	statefulSet, err := getIndexerStatefulSet(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "GetIndexerStatefulSetFailed", "Get Indexer stateful set failed. Check operator logs for details.")
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet", false)
 		return result, fmt.Errorf("get indexer statefulset: %w", err)
 	}
 
@@ -227,7 +229,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
 		if err != nil || !continueReconcile {
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed", false)
 			}
 			return result, err
 		}
@@ -238,7 +240,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateFailed", "Update of stateful set failed. Check operator logs for details.")
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods", false)
 			return result, fmt.Errorf("update statefulset: %w", err)
 		}
 	} else {
@@ -246,7 +248,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		err = client.Delete(ctx, statefulSet)
 		if err != nil {
 			eventPublisher.Warning(ctx, "DeleteFailed", "Delete of stateful set failed. Check operator logs for details.")
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to upgrade StatefulSet")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to upgrade StatefulSet", false)
 			return result, fmt.Errorf("delete statefulset: %w", err)
 		}
 		time.Sleep(1 * time.Second)
@@ -255,17 +257,17 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateFailed", "Update of stateful set failed. Check operator logs for details.")
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods after upgrade")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods after upgrade", false)
 			return result, fmt.Errorf("update statefulset: %w", err)
 		}
 	}
-	setPhaseAndConditions(phase, "")
+	setPhaseAndConditions(phase, "", false)
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		qosCfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, cr.Spec.QueueRef, cr.Spec.ObjectStorageRef, cr.Spec.ServiceAccount)
 		if err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to resolve Queue configuration")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to resolve Queue configuration", false)
 			return result, fmt.Errorf("resolve queue/object storage config: %w", err)
 		}
 		logger.DebugContext(ctx, "resolved Queue/ObjectStorage config", "queue", qosCfg.Queue, "objectStorage", qosCfg.OS, "version", qosCfg.Version, "serviceAccount", cr.Spec.ServiceAccount)
@@ -285,8 +287,9 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		}
 
 		if !appliedRefsUnset && cr.Spec.QueueRef.Name == "" {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "queueRef and objectStorageRef cannot be removed once applied")
-			return result, fmt.Errorf("queueRef was cleared but was previously applied as %q; restore the refs to recover", cr.Status.AppliedQueueRef.Name)
+			setPhaseAndConditions(enterpriseApi.PhaseError, "queueRef and objectStorageRef cannot be removed once applied", true)
+			err = fmt.Errorf("queueRef was cleared but was previously applied as %q; restore the refs to recover", cr.Status.AppliedQueueRef.Name)
+			return reconcile.Result{}, reconcile.TerminalError(err)
 		}
 
 		logger.DebugContext(ctx, "checking for changes", "previousCredentialSecretVersion", cr.Status.CredentialSecretVersion, "previousServiceAccount", cr.Status.ServiceAccount, "secretChanged", secretChanged, "serviceAccountChanged", serviceAccountChanged, "queueRefChanged", queueRefChanged, "objectStorageRefChanged", objectStorageRefChanged)
@@ -297,7 +300,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				err = mgr.updateIndexerConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
 				if err != nil {
 					eventPublisher.Warning(ctx, "UpdateConfFilesFailed", "Failed to update conf file for Queue/Pipeline config. Check operator logs for details.")
-					setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply Queue configuration")
+					setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply Queue configuration", false)
 					return result, fmt.Errorf("update queue/pipeline conf files: %w", err)
 				}
 
@@ -309,7 +312,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 					idxcClient := mgr.getClient(ctx, i)
 					err = idxcClient.RestartSplunk()
 					if err != nil {
-						setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to restart Indexer pods")
+						setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to restart Indexer pods", false)
 						return result, err
 					}
 					logger.DebugContext(ctx, "restarted splunk", "indexer", i)
@@ -340,7 +343,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
 		if err != nil {
 			eventPublisher.Warning(ctx, "RetrieveCMSpecFailed", "Retrieval of Cluster Manager spec failed. Check operator logs for details.")
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to retrieve Cluster Manager spec")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to retrieve Cluster Manager spec", false)
 			return result, fmt.Errorf("retrieve CM spec: %w", err)
 		}
 		if cmMonitoringConsoleConfigRef != "" {
@@ -352,7 +355,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				err := c.AutomateMCApplyChanges()
 				if err != nil {
 					eventPublisher.Warning(ctx, "AutomateMCApplyChangesFailed", "Get Monitoring Console client failed. Check operator logs for details.")
-					setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
+					setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration", false)
 					return result, fmt.Errorf("automate MC apply changes: %w", err)
 				}
 			}
@@ -365,8 +368,9 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			if len(cr.Spec.ClusterManagerRef.Name) > 0 {
 				managerIdxcName = cr.Spec.ClusterManagerRef.Name
 			} else {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Empty Cluster Manager reference")
-				return result, errors.New("empty cluster manager reference")
+				err = errors.New("empty Cluster Manager reference")
+				setPhaseAndConditions(enterpriseApi.PhaseError, err.Error(), true)
+				return reconcile.Result{}, reconcile.TerminalError(err)
 			}
 			cmPodName := fmt.Sprintf("splunk-%s-cluster-manager-%s", managerIdxcName, "0")
 			podExecClient := splutil.GetPodExecClient(client, cr, cmPodName)
@@ -374,7 +378,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ClusterMaintenanceModeFailed", "Set Cluster maintenance mode failed. Check operator logs for details.")
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to set Cluster Maintenance Mode")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to set Cluster Maintenance Mode", false)
 				return result, fmt.Errorf("set cluster maintenance mode: %w", err)
 			}
 		}
@@ -393,7 +397,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		err = splctrl.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
 		if err != nil {
 			eventPublisher.Warning(ctx, "SetStatefulSetOwnerRefFailed", "Set stateful set owner reference failed. Check operator logs for details.")
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to set StatefulSet owner reference")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to set StatefulSet owner reference", false)
 			result.Requeue = true
 			return result, fmt.Errorf("set statefulset owner ref: %w", err)
 		}
@@ -421,22 +425,29 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// Initialize phase and conditions
 	isPaused := cr.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true"
-	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
-		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, phase, isPaused, message, cr.GetGeneration())
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string, isStalled bool) {
+		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
+			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(), IsStalled: isStalled,
+		})
 		cr.Status.Phase = result.Phase
 		cr.Status.Conditions = result.Conditions
 		cr.Status.ObservedGeneration = cr.GetGeneration()
 	}
 
+	var err error
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr, &err)
+
 	// validate and updates defaults for CR
-	err := validateIndexerClusterSpec(ctx, client, cr)
+	err = validateIndexerClusterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "ValidateIndexerClusterSpecFailed", "Validate Indexer Cluster spec failed. Check operator logs for details.")
-		return result, fmt.Errorf("validate indexer cluster spec: %w", err)
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Indexer Cluster spec validation failed", true)
+		return reconcile.Result{}, reconcile.TerminalError(err)
 	}
 
 	// updates status after function completes
-	setPhaseAndConditions(enterpriseApi.PhaseError, "")
+	setPhaseAndConditions(enterpriseApi.PhaseError, "", false)
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
 		logger.InfoContext(ctx, "scaling up IndexerCluster", "previousReplicas", cr.Status.Replicas, "newReplicas", cr.Spec.Replicas)
@@ -454,9 +465,6 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	if cr.Status.IdxcPasswordChangedSecrets == nil {
 		cr.Status.IdxcPasswordChangedSecrets = make(map[string]bool)
 	}
-
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr, &err)
 
 	// create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
@@ -499,7 +507,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted", false)
 			cr.Status.ClusterMasterPhase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
@@ -605,7 +613,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			return result, fmt.Errorf("update statefulset: %w", err)
 		}
 	}
-	setPhaseAndConditions(phase, "")
+	setPhaseAndConditions(phase, "", false)
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
@@ -630,8 +638,9 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		}
 
 		if !appliedRefsUnset && cr.Spec.QueueRef.Name == "" {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "queueRef and objectStorageRef cannot be removed once applied")
-			return result, fmt.Errorf("queueRef was cleared but was previously applied as %q; restore the refs to recover", cr.Status.AppliedQueueRef.Name)
+			setPhaseAndConditions(enterpriseApi.PhaseError, "queueRef and objectStorageRef cannot be removed once applied", true)
+			err = fmt.Errorf("queueRef was cleared but was previously applied as %q; restore the refs to recover", cr.Status.AppliedQueueRef.Name)
+			return reconcile.Result{}, reconcile.TerminalError(err)
 		}
 
 		logger.DebugContext(ctx, "checking for changes", "previousCredentialSecretVersion", cr.Status.CredentialSecretVersion, "previousServiceAccount", cr.Status.ServiceAccount, "secretChanged", secretChanged, "serviceAccountChanged", serviceAccountChanged, "queueRefChanged", queueRefChanged, "objectStorageRefChanged", objectStorageRefChanged)
