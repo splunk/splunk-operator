@@ -33,6 +33,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -99,11 +101,21 @@ func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, errors.Wrap(err, "could not load monitoring console data")
 	}
 
-	// If the reconciliation is paused, requeue
-	annotations := instance.GetAnnotations()
-	if annotations != nil {
-		if _, ok := annotations[enterpriseApi.MonitoringConsolePausedAnnotation]; ok {
-			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
+	// If the reconciliation is paused, set the Paused condition and requeue
+	if instance.GetAnnotations()[enterpriseApi.MonitoringConsolePausedAnnotation] == "true" {
+		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, instance.Status.Phase, true, "", instance.GetGeneration())
+		instance.Status.Conditions = result.Conditions
+		if err := r.Status().Update(ctx, instance); err != nil {
+			logger.ErrorContext(ctx, "failed to update paused status", "error", err)
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
+	} else if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); cond != nil && cond.Status == metav1.ConditionTrue {
+		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, instance.Status.Phase, false, "", instance.GetGeneration())
+		instance.Status.Conditions = result.Conditions
+		if err := r.Status().Update(ctx, instance); err != nil {
+			logger.ErrorContext(ctx, "failed to update unpaused status", "error", err)
+			return ctrl.Result{}, err
 		}
 	}
 
