@@ -109,7 +109,7 @@ func TestValidateComponentOrder(t *testing.T) {
 			newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, mergedConfig, contracts),
 			newManagedRolesModel(c, scheme, noopEventEmitter{}, nil, cluster, contracts, nil),
 			newPoolerModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, mergedConfig, contracts),
-			newBackupModel(c, scheme, noopEventEmitter{}, nil, cluster, mergedConfig, contracts),
+			newBackupModel(noopBackupBackend{}, noopEventEmitter{}, nil, cluster, mergedConfig, contracts),
 			newConfigMapModel(c, scheme, noopEventEmitter{}, nil, cluster, contracts),
 		}
 		assert.NoError(t, validateComponentOrder(components))
