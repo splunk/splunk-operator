@@ -41,7 +41,7 @@ import (
 )
 
 // PostgresClusterService is the application service entry point called by the primary adapter (reconciler).
-func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.Request, newRoleSweeper ports.NewRoleSweeperFunc) (ctrl.Result, error) {
+func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.Request, newRoleSweeper ports.NewRoleSweeperFunc, backupBackend BackupBackend) (ctrl.Result, error) {
 	c := rc.Client
 	logger := logging.FromContext(ctx).With("func", "PostgresClusterService")
 	logger.DebugContext(ctx, "reconciling PostgresCluster")
@@ -168,7 +168,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		newClusterModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, clusterClass, mergedConfig, contracts),
 		newManagedRolesModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, contracts, newRoleSweeper),
 		newPoolerModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, clusterClass, mergedConfig, contracts),
-		newBackupModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, mergedConfig, contracts),
+		newBackupModel(backupBackend, rc, updateComponentHealthStatus, postgresCluster, mergedConfig, contracts),
 		newConfigMapModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, contracts),
 	}
 	if err := validateComponentOrder(components); err != nil {
