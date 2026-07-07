@@ -18,6 +18,7 @@ package enterprise
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -39,6 +40,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	reconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -882,11 +884,13 @@ func TestSearchHeadSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	// Attempt to apply the search head spec
 	_, err := ApplySearchHeadCluster(ctx, c, &shc)
 
-	// Assert that an error is returned
-	if err == nil {
-		t.Errorf("Expected error when SPLUNK_GENERAL_TERMS is not set, but got none")
-	} else if !strings.Contains(err.Error(), "license not accepted") {
-		t.Errorf("Unexpected error message: %v", err)
+	// SPLUNK_GENERAL_TERMS unset is a stalled misconfiguration: reconciler returns terminal error (no requeue)
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
+	}
+	stalledCond := splcommon.GetCondition(shc.Status.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected Stalled=True when SPLUNK_GENERAL_TERMS is not set")
 	}
 }
 
@@ -920,9 +924,9 @@ func TestApplySearchHeadClusterValidationFailure(t *testing.T) {
 		t.Errorf("shc CR creation failed: %v", err)
 	}
 
-	result, err := ApplySearchHeadCluster(ctx, c, shc)
-	if err == nil {
-		t.Errorf("Expected error for negative InitialDelaySeconds, got nil")
+	_, err = ApplySearchHeadCluster(ctx, c, shc)
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
 	if shc.Status.Phase != enterpriseApi.PhaseError {
 		t.Errorf("Expected PhaseError, got %v", shc.Status.Phase)
@@ -930,8 +934,9 @@ func TestApplySearchHeadClusterValidationFailure(t *testing.T) {
 	if shc.Status.DeployerPhase != enterpriseApi.PhaseError {
 		t.Errorf("Expected DeployerPhaseError, got %v", shc.Status.DeployerPhase)
 	}
-	if !result.Requeue {
-		t.Errorf("Expected result.Requeue to be true on error")
+	stalledCond := splcommon.GetCondition(shc.Status.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected Stalled=True for spec validation failure")
 	}
 }
 

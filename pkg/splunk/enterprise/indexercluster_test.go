@@ -28,7 +28,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/stretchr/testify/assert"
@@ -43,6 +44,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -87,18 +89,17 @@ func TestApplyIndexerClusterOld(t *testing.T) {
 		},
 	}
 
-	// Initial run, invalid spec
+	// Initial run: missing ClusterManagerRef — stalled spec validation failure, returns terminal error (no requeue)
 	_, err := ApplyIndexerCluster(ctx, c, &idxCr)
-	if err == nil {
-		t.Errorf("Expected error, cm missing")
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
 
-	// ApplySplunkConfigError
 	rerr := errors.New(splcommon.Rerr)
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
 	_, err = ApplyIndexerCluster(ctx, c, &idxCr)
-	if err == nil {
-		t.Errorf("Expected error, cm missing")
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
 
 	// Set CM Ref, but no CM
@@ -224,11 +225,11 @@ func TestApplyIndexerCluster(t *testing.T) {
 	current.Status.IndexerSecretChanged = append(current.Status.IndexerSecretChanged, true)
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
-	reconcile := func(c *spltest.MockClient, cr interface{}) error {
+	reconcileFn := func(c *spltest.MockClient, cr interface{}) error {
 		_, err := ApplyIndexerClusterManager(context.TODO(), c, cr.(*enterpriseApi.IndexerCluster))
 		return err
 	}
-	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyIndexerClusterManager", &current, revised, createCalls, updateCalls, reconcile, true)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyIndexerClusterManager", &current, revised, createCalls, updateCalls, reconcileFn, true)
 
 	// // test deletion
 	currentTime := metav1.NewTime(time.Now())
@@ -240,14 +241,30 @@ func TestApplyIndexerCluster(t *testing.T) {
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
 
-	// Negative testing
+	// Negative testing: GET error causes ApplySplunkConfig to fail (non-terminal error —
+	// spec validation passes because ValidateImagePullSecrets only calls GET when ImagePullSecrets
+	// are configured, which they are not here)
 	ctx := context.TODO()
 	c := spltest.NewMockClient()
 	rerr := errors.New(splcommon.Rerr)
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
 	_, err := ApplyIndexerClusterManager(ctx, c, &current)
 	if err == nil {
-		t.Errorf("Expected error")
+		t.Errorf("expected non-nil error when ApplySplunkConfig fails due to GET error")
+	}
+
+	// Terminal spec validation: missing ClusterManagerRef causes validateIndexerClusterSpec to
+	// return an error → reconciler returns nil (stalled pattern) and sets Stalled condition
+	noRefCR := current.DeepCopy()
+	noRefCR.Spec.ClusterManagerRef = corev1.ObjectReference{}
+	noRefCR.Spec.ClusterMasterRef = corev1.ObjectReference{}
+	_, err = ApplyIndexerClusterManager(ctx, spltest.NewMockClient(), noRefCR)
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
+	}
+	stalledCond := splcommon.GetCondition(noRefCR.Status.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected Stalled=True when spec validation fails")
 	}
 
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
@@ -1327,10 +1344,15 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 	c.AddObject(&cm)
 
 	cm.Status.Phase = enterpriseApi.PhaseReady
-	// Empty ClusterManagerRef should return an error
+	// Empty ClusterManagerRef is caught in validateIndexerClusterSpec — terminal path returns nil (no requeue)
 	cr.Spec.ClusterManagerRef.Name = ""
-	if _, err := ApplyIndexerClusterManager(context.TODO(), c, &cr); err == nil {
-		t.Errorf("ApplyIndxerCluster() should have returned error")
+	_, err := ApplyIndexerClusterManager(context.TODO(), c, &cr)
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
+	}
+	stalledCond := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected Stalled=True for empty ClusterManagerRef")
 	}
 
 	cr.Spec.ClusterManagerRef.Name = "manager1"
@@ -1473,11 +1495,14 @@ func TestIndexerClusterSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	// Attempt to apply the indexer cluster spec
 	_, err := ApplyIndexerCluster(ctx, c, &idxc)
 
-	// Assert that an error is returned
-	if err == nil {
-		t.Errorf("Expected error when SPLUNK_GENERAL_TERMS is not set, but got none")
-	} else if !strings.Contains(err.Error(), "license not accepted") {
-		t.Errorf("Unexpected error message: %v", err)
+	// SPLUNK_GENERAL_TERMS unset is a stalled misconfiguration: reconciler returns terminal error (no requeue)
+	// and persists Stalled=True via deferred updateCRStatus.
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
+	}
+	stalledCond := splcommon.GetCondition(idxc.Status.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected Stalled=True when SPLUNK_GENERAL_TERMS is not set")
 	}
 }
 

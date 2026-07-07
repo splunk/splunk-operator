@@ -22,13 +22,14 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/stretchr/testify/assert"
+	reconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -94,11 +95,11 @@ func TestApplyLicenseManager(t *testing.T) {
 
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
-	reconcile := func(c *spltest.MockClient, cr interface{}) error {
+	reconcileFn := func(c *spltest.MockClient, cr interface{}) error {
 		_, err := ApplyLicenseManager(context.Background(), c, cr.(*enterpriseApi.LicenseManager))
 		return err
 	}
-	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyLicenseManager", &current, revised, createCalls, updateCalls, reconcile, true)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyLicenseManager", &current, revised, createCalls, updateCalls, reconcileFn, true)
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
@@ -110,13 +111,17 @@ func TestApplyLicenseManager(t *testing.T) {
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
 
-	// Negative testing
+	// Negative testing: spec validation failure is a terminal condition — returns nil (no requeue)
 	c := spltest.NewMockClient()
 	ctx := context.TODO()
 	current.Spec.LivenessInitialDelaySeconds = -1
 	_, err := ApplyLicenseManager(ctx, c, &current)
-	if err == nil {
-		t.Errorf("Expected error")
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
+	}
+	stalledCond := splcommon.GetCondition(current.Status.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected Stalled=True for spec validation failure")
 	}
 
 	rerr := errors.New(splcommon.Rerr)
@@ -223,11 +228,13 @@ func TestLicenseManagerSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	// Attempt to apply the license manager spec
 	_, err := ApplyLicenseManager(ctx, c, &lm)
 
-	// Assert that an error is returned
-	if err == nil {
-		t.Errorf("Expected error when SPLUNK_GENERAL_TERMS is not set, but got none")
-	} else if !strings.Contains(err.Error(), "license not accepted") {
-		t.Errorf("Unexpected error message: %v", err)
+	// SPLUNK_GENERAL_TERMS unset is a stalled misconfiguration: reconciler returns terminal error (no requeue)
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
+	}
+	stalledCond := splcommon.GetCondition(lm.Status.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected Stalled=True when SPLUNK_GENERAL_TERMS is not set")
 	}
 }
 

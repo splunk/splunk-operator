@@ -101,14 +101,14 @@ func TestSetPhaseAndConditions_AllPhases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := SetPhaseAndConditions(nil, tt.phase, tt.isPaused, tt.message, generation)
+			result := SetPhaseAndConditions(nil, PhaseConditionInput{Phase: tt.phase, IsPaused: tt.isPaused, Message: tt.message, Generation: generation, IsStalled: false})
 
 			if result.Phase != tt.phase {
 				t.Errorf("SetPhaseAndConditions() Phase = %v, want %v", result.Phase, tt.phase)
 			}
 
-			if len(result.Conditions) != 3 {
-				t.Errorf("SetPhaseAndConditions() Conditions count = %v, want 3", len(result.Conditions))
+			if len(result.Conditions) != 4 {
+				t.Errorf("SetPhaseAndConditions() Conditions count = %v, want 4", len(result.Conditions))
 			}
 
 			readyCondition := GetCondition(result.Conditions, enterpriseApi.ConditionReady)
@@ -137,7 +137,7 @@ func TestSetPhaseAndConditions_AllPhases(t *testing.T) {
 }
 
 func TestSetPhaseAndConditions_Paused(t *testing.T) {
-	result := SetPhaseAndConditions(nil, enterpriseApi.PhaseReady, true, "", 1)
+	result := SetPhaseAndConditions(nil, PhaseConditionInput{Phase: enterpriseApi.PhaseReady, IsPaused: true, Message: "", Generation: 1, IsStalled: false})
 
 	pausedCondition := GetCondition(result.Conditions, enterpriseApi.ConditionPaused)
 	if pausedCondition == nil {
@@ -155,7 +155,7 @@ func TestSetPhaseAndConditions_Paused(t *testing.T) {
 }
 
 func TestSetPhaseAndConditions_NotPaused(t *testing.T) {
-	result := SetPhaseAndConditions(nil, enterpriseApi.PhaseReady, false, "", 1)
+	result := SetPhaseAndConditions(nil, PhaseConditionInput{Phase: enterpriseApi.PhaseReady, IsPaused: false, Message: "", Generation: 1, IsStalled: false})
 
 	pausedCondition := GetCondition(result.Conditions, enterpriseApi.ConditionPaused)
 	if pausedCondition == nil {
@@ -225,7 +225,7 @@ func TestSetPhaseAndConditions_Progressing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := SetPhaseAndConditions(nil, tt.phase, false, "", 1)
+			result := SetPhaseAndConditions(nil, PhaseConditionInput{Phase: tt.phase, IsPaused: false, Message: "", Generation: 1, IsStalled: false})
 
 			progressingCondition := GetCondition(result.Conditions, enterpriseApi.ConditionProgressing)
 			if progressingCondition == nil {
@@ -416,6 +416,98 @@ func TestIsPaused(t *testing.T) {
 	}
 }
 
+func TestSetPhaseAndConditions_Stalled(t *testing.T) {
+	result := SetPhaseAndConditions(nil, PhaseConditionInput{Phase: enterpriseApi.PhaseError, IsPaused: false, Message: "spec is invalid", Generation: 1, IsStalled: true})
+
+	stalledCond := GetCondition(result.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil {
+		t.Fatal("Stalled condition not found")
+	}
+	if stalledCond.Status != metav1.ConditionTrue {
+		t.Errorf("Stalled.Status = %v, want True", stalledCond.Status)
+	}
+	if stalledCond.Reason != string(enterpriseApi.ReasonStalled) {
+		t.Errorf("Stalled.Reason = %v, want %v", stalledCond.Reason, enterpriseApi.ReasonStalled)
+	}
+	if stalledCond.Message != "spec is invalid" {
+		t.Errorf("Stalled.Message = %q, want %q", stalledCond.Message, "spec is invalid")
+	}
+}
+
+func TestSetPhaseAndConditions_NotStalled(t *testing.T) {
+	result := SetPhaseAndConditions(nil, PhaseConditionInput{Phase: enterpriseApi.PhaseError, IsPaused: false, Message: "transient error", Generation: 1, IsStalled: false})
+
+	stalledCond := GetCondition(result.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil {
+		t.Fatal("Stalled condition not found")
+	}
+	if stalledCond.Status != metav1.ConditionFalse {
+		t.Errorf("Stalled.Status = %v, want False", stalledCond.Status)
+	}
+	if stalledCond.Reason != string(enterpriseApi.ReasonNotStalled) {
+		t.Errorf("Stalled.Reason = %v, want %v", stalledCond.Reason, enterpriseApi.ReasonNotStalled)
+	}
+	if stalledCond.Message != "" {
+		t.Errorf("Stalled.Message = %q, want empty", stalledCond.Message)
+	}
+}
+
+func TestSetPhaseAndConditions_StalledConditionClearedOnNextReconcile(t *testing.T) {
+	generation := int64(1)
+
+	// First reconcile: stalled
+	first := SetPhaseAndConditions(nil, PhaseConditionInput{Phase: enterpriseApi.PhaseError, IsPaused: false, Message: "spec is invalid", Generation: generation, IsStalled: true})
+	stalledCond := GetCondition(first.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
+		t.Fatal("expected Stalled=True after first reconcile")
+	}
+
+	// Second reconcile: init call (isStalled=false) — simulates the start of next reconcile cycle
+	second := SetPhaseAndConditions(first.Conditions, PhaseConditionInput{Phase: enterpriseApi.PhaseError, IsPaused: false, Message: "", Generation: generation, IsStalled: false})
+	stalledCond = GetCondition(second.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil {
+		t.Fatal("Stalled condition not found after second reconcile")
+	}
+	if stalledCond.Status != metav1.ConditionFalse {
+		t.Errorf("Stalled.Status = %v, want False — condition should be cleared when isStalled=false", stalledCond.Status)
+	}
+
+	// Third reconcile: error is fixed, full success
+	third := SetPhaseAndConditions(second.Conditions, PhaseConditionInput{Phase: enterpriseApi.PhaseReady, IsPaused: false, Message: "", Generation: generation, IsStalled: false})
+	stalledCond = GetCondition(third.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil {
+		t.Fatal("Stalled condition not found after third reconcile")
+	}
+	if stalledCond.Status != metav1.ConditionFalse {
+		t.Errorf("Stalled.Status = %v, want False after successful reconcile", stalledCond.Status)
+	}
+}
+
+func TestSetPhaseAndConditions_StalledOnlyOnPhaseError(t *testing.T) {
+	phases := []enterpriseApi.Phase{
+		enterpriseApi.PhaseReady,
+		enterpriseApi.PhasePending,
+		enterpriseApi.PhaseUpdating,
+		enterpriseApi.PhaseTerminating,
+		enterpriseApi.PhaseScalingUp,
+		enterpriseApi.PhaseScalingDown,
+	}
+
+	for _, phase := range phases {
+		t.Run(string(phase), func(t *testing.T) {
+			result := SetPhaseAndConditions(nil, PhaseConditionInput{Phase: phase, IsPaused: false, Message: "", Generation: 1, IsStalled: true})
+			stalledCond := GetCondition(result.Conditions, enterpriseApi.ConditionStalled)
+			if stalledCond == nil {
+				t.Fatal("Stalled condition not found")
+			}
+			// isStalled=true is ignored for non-error phases: Ready=True and Stalled=True must not coexist
+			if stalledCond.Status != metav1.ConditionFalse {
+				t.Errorf("phase %v: Stalled.Status = %v, want False — stalled must be clamped for non-error phases", phase, stalledCond.Status)
+			}
+		})
+	}
+}
+
 func TestSetPhaseAndConditions_TransitionTimePreservation(t *testing.T) {
 	generation := int64(5)
 	oldTime := metav1.NewTime(time.Now().Add(-1 * time.Hour))
@@ -449,7 +541,7 @@ func TestSetPhaseAndConditions_TransitionTimePreservation(t *testing.T) {
 	}
 
 	// Test 1: Status unchanged - LastTransitionTime should be preserved
-	result := SetPhaseAndConditions(existingConditions, enterpriseApi.PhaseReady, false, "", generation)
+	result := SetPhaseAndConditions(existingConditions, PhaseConditionInput{Phase: enterpriseApi.PhaseReady, IsPaused: false, Message: "", Generation: generation, IsStalled: false})
 
 	readyCondition := GetCondition(result.Conditions, enterpriseApi.ConditionReady)
 	if readyCondition == nil {
@@ -467,7 +559,7 @@ func TestSetPhaseAndConditions_TransitionTimePreservation(t *testing.T) {
 	}
 
 	// Test 2: Status changed - LastTransitionTime should be updated
-	result = SetPhaseAndConditions(existingConditions, enterpriseApi.PhaseError, false, "Error occurred", generation)
+	result = SetPhaseAndConditions(existingConditions, PhaseConditionInput{Phase: enterpriseApi.PhaseError, IsPaused: false, Message: "Error occurred", Generation: generation, IsStalled: false})
 
 	readyCondition = GetCondition(result.Conditions, enterpriseApi.ConditionReady)
 	if readyCondition == nil {
@@ -483,7 +575,7 @@ func TestSetPhaseAndConditions_TransitionTimePreservation(t *testing.T) {
 	}
 
 	// Test 3: Paused status change - LastTransitionTime should be updated
-	result = SetPhaseAndConditions(existingConditions, enterpriseApi.PhaseReady, true, "", generation)
+	result = SetPhaseAndConditions(existingConditions, PhaseConditionInput{Phase: enterpriseApi.PhaseReady, IsPaused: true, Message: "", Generation: generation, IsStalled: false})
 
 	pausedCondition := GetCondition(result.Conditions, enterpriseApi.ConditionPaused)
 	if pausedCondition == nil {
@@ -499,10 +591,10 @@ func TestSetPhaseAndConditions_TransitionTimePreservation(t *testing.T) {
 	}
 
 	// Test 4: Empty existing conditions - should create new conditions with current time
-	result = SetPhaseAndConditions(nil, enterpriseApi.PhaseReady, false, "", generation)
+	result = SetPhaseAndConditions(nil, PhaseConditionInput{Phase: enterpriseApi.PhaseReady, IsPaused: false, Message: "", Generation: generation, IsStalled: false})
 
-	if len(result.Conditions) != 3 {
-		t.Errorf("Should create 3 conditions, got %d", len(result.Conditions))
+	if len(result.Conditions) != 4 {
+		t.Errorf("Should create 4 conditions (Ready/Progressing/Paused/Stalled), got %d", len(result.Conditions))
 	}
 
 	readyCondition = GetCondition(result.Conditions, enterpriseApi.ConditionReady)

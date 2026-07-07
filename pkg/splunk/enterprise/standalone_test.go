@@ -20,12 +20,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	reconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -128,11 +129,11 @@ func TestApplyStandalone(t *testing.T) {
 	}
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
-	reconcile := func(c *spltest.MockClient, cr interface{}) error {
+	reconcileFn := func(c *spltest.MockClient, cr interface{}) error {
 		_, err := ApplyStandalone(context.Background(), c, cr.(*enterpriseApi.Standalone))
 		return err
 	}
-	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandalone", &current, revised, createCalls, updateCalls, reconcile, true)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandalone", &current, revised, createCalls, updateCalls, reconcileFn, true)
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
@@ -144,14 +145,18 @@ func TestApplyStandalone(t *testing.T) {
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
 
-	// Negative testing
+	// Negative testing: spec validation failure is a terminal condition — returns nil (no requeue)
 	current.Spec.CommonSplunkSpec.LivenessInitialDelaySeconds = -1
 	c := spltest.NewMockClient()
 	ctx := context.TODO()
 	_ = errors.New(splcommon.Rerr)
 	_, err := ApplyStandalone(ctx, c, &current)
-	if err == nil {
-		t.Errorf("Expected error")
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
+	}
+	stalledCond := splcommon.GetCondition(current.Status.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected Stalled=True for spec validation failure")
 	}
 
 	// Smartstore spec
@@ -510,11 +515,13 @@ func TestStandaloneSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	// Attempt to apply the standalone spec
 	_, err := ApplyStandalone(ctx, c, &standalone)
 
-	// Assert that an error is returned
-	if err == nil {
-		t.Errorf("Expected error when SPLUNK_GENERAL_TERMS is not set, but got none")
-	} else if !strings.Contains(err.Error(), "license not accepted") {
-		t.Errorf("Unexpected error message: %v", err)
+	// SPLUNK_GENERAL_TERMS unset is a stalled misconfiguration: reconciler returns terminal error (no requeue)
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
+	}
+	stalledCond := splcommon.GetCondition(standalone.Status.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected Stalled=True when SPLUNK_GENERAL_TERMS is not set")
 	}
 }
 
