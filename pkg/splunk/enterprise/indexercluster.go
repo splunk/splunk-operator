@@ -333,7 +333,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				// Report Updating and requeue so the CR does not momentarily advertise
 				// Ready while the restart is in flight (which otherwise causes a
 				// Ready->Updating flip once the next reconcile observes the restart).
-				setPhaseAndConditions(enterpriseApi.PhaseUpdating, "Restarting pods to apply Queue/Pipeline configuration change")
+				setPhaseAndConditions(enterpriseApi.PhaseUpdating, "Restarting pods to apply Queue/Pipeline configuration change", false)
 				return result, nil
 			}
 		}
@@ -682,7 +682,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 				// Report Updating and requeue so the CR does not momentarily advertise
 				// Ready while the restart is in flight (which otherwise causes a
 				// Ready->Updating flip once the next reconcile observes the restart).
-				setPhaseAndConditions(enterpriseApi.PhaseUpdating, "Restarting pods to apply Queue/Pipeline configuration change")
+				setPhaseAndConditions(enterpriseApi.PhaseUpdating, "Restarting pods to apply Queue/Pipeline configuration change", false)
 				return result, nil
 			}
 		}
