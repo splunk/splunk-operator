@@ -85,7 +85,7 @@ Run these steps **before** enabling the mirror:
    git -C <gitlab-clone> log --oneline main -- <new-path>
    ```
    If it returns anything, drain/notify open `main` PRs as well.
-4. **Run the cutover via the `github-mirror-cutover` CI job.** Merge the `gitlab-only-paths.conf` change to `develop` first — the job reads the config from the branch it runs on — then trigger the manual `github-mirror-cutover` job on the resulting `develop` push pipeline.
+4. **Run the cutover via the `github-mirror-cutover` CI job.** Merge the `gitlab-only-paths.conf` change to `develop` first — the job reads the config from the branch it runs on — then trigger the manual `github-mirror-cutover` job on the resulting `develop` push pipeline. Once steady state is armed, that same pipeline also auto-runs `github-mirror-push`, which hits the expected non-fast-forward and **fails closed by design** — ignore that failure and run the manual cutover.
 5. **Verify** with `gitlab-ci/github-mirror-verify.sh` that the new exclusion set is absent from all history.
 
 ---
@@ -96,4 +96,4 @@ Run these steps **before** enabling the mirror:
 |---|---|---|---|
 | First cutover | post-boundary PRs: merge base invalidated → close internal, rebase external. Pre-boundary PRs: unaffected | none | `1` (drained first) |
 | Steady-state run | untouched | none | unset (ff) |
-| Exclusion-list change | PRs newer than the (possibly earlier) boundary: one-time rebase; older: unaffected | none, unless added path is in `main` | `1` (drained first) |
+| Exclusion-list change | PRs newer than the (possibly earlier) boundary: one-time rebase; older: unaffected | none, unless added path is in `main` | `1` (drained first; armed auto-push fails closed — run manual cutover) |
