@@ -30,7 +30,11 @@ fi
 
 exclude_args=()
 for dir in "${PRIVATE_DIRS[@]}"; do
-  exclude_args+=(":!:${dir}*")
+  # Anchor at a path boundary: strip any trailing slash and add NO glob. A
+  # bare pathspec matches a file exactly and a directory with all its
+  # contents, while ":!:${dir}*" would prefix-match — e.g. a ".gitlab-ci.yml"
+  # entry would also wrongly exempt ".gitlab-ci.yml.bak".
+  exclude_args+=(":!:${dir%/}")
 done
 
 hits=$(git --no-pager grep -l 'splunk_private/' -- '.' "${exclude_args[@]}" 2>&1) || {
