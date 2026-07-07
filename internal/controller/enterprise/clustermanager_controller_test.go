@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -59,7 +60,7 @@ var _ = Describe("ClusterManager Controller", Label("integration"), func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.ClusterManagerPausedAnnotation] = ""
+			annotations[enterpriseApi.ClusterManagerPausedAnnotation] = "true"
 			CreateClusterManager("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
 			ssSpec, _ := GetClusterManager("test", nsSpecs.Name)
 			annotations = map[string]string{}
@@ -92,7 +93,7 @@ var _ = Describe("ClusterManager Controller", Label("integration"), func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			ctx := context.TODO()
-			builder := fake.NewClientBuilder()
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.ClusterManager{})
 			c := builder.Build()
 			instance := ClusterManagerReconciler{
 				Client: c,
@@ -112,16 +113,27 @@ var _ = Describe("ClusterManager Controller", Label("integration"), func() {
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 			// reconcile with updated annotations for pause
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.ClusterManagerPausedAnnotation] = ""
+			annotations[enterpriseApi.ClusterManagerPausedAnnotation] = "true"
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
 			_, err = instance.Reconcile(ctx, request)
+			Expect(err).ToNot(HaveOccurred())
+			// verify Paused=True condition was written
+			Expect(c.Get(ctx, request.NamespacedName, ssSpec)).Should(Succeed())
+			pausedCond := meta.FindStatusCondition(ssSpec.Status.Conditions, string(enterpriseApi.ConditionPaused))
+			Expect(pausedCond).ToNot(BeNil())
+			Expect(pausedCond.Status).To(Equal(metav1.ConditionTrue))
 			// reconcile after removing annotations for pause
 			annotations = map[string]string{}
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
-			// reconcile after adding delete timestamp
+			_, err = instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
+			// verify Paused=False condition was written
+			Expect(c.Get(ctx, request.NamespacedName, ssSpec)).Should(Succeed())
+			pausedCond = meta.FindStatusCondition(ssSpec.Status.Conditions, string(enterpriseApi.ConditionPaused))
+			Expect(pausedCond).ToNot(BeNil())
+			Expect(pausedCond.Status).To(Equal(metav1.ConditionFalse))
 			ssSpec.DeletionTimestamp = &metav1.Time{}
 			_, err = instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())

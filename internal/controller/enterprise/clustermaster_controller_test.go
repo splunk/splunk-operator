@@ -52,7 +52,7 @@ var _ = Describe("ClusterMaster Controller", Label("integration"), func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			annotations[enterpriseApiV3.ClusterMasterPausedAnnotation] = ""
+			annotations[enterpriseApiV3.ClusterMasterPausedAnnotation] = "true"
 			CreateClusterMaster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
 			ssSpec, _ := GetClusterMaster("test", nsSpecs.Name)
 			annotations = map[string]string{}
@@ -105,7 +105,7 @@ var _ = Describe("ClusterMaster Controller", Label("integration"), func() {
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 			// reconcile with updated annotations for pause
 			annotations := make(map[string]string)
-			annotations[enterpriseApiV3.ClusterMasterPausedAnnotation] = ""
+			annotations[enterpriseApiV3.ClusterMasterPausedAnnotation] = "true"
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
 			_, err = instance.Reconcile(ctx, request)
