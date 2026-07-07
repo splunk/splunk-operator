@@ -161,6 +161,9 @@ const (
 
 	// ConditionPaused indicates reconciliation is paused via annotation
 	ConditionPaused ConditionType = "Paused"
+
+	// ConditionStalled indicates the resource is stalled due to a failure that will not self-recover
+	ConditionStalled ConditionType = "Stalled"
 )
 
 // ConditionReason represents the reason for a condition's status
@@ -188,6 +191,10 @@ const (
 
 	// Paused=False reasons
 	ReasonNotPaused ConditionReason = "NotPaused"
+
+	// Stalled reasons
+	ReasonStalled    ConditionReason = "Stalled"
+	ReasonNotStalled ConditionReason = "NotStalled"
 )
 
 // Probe defines set of configurable values for Startup, Readiness, and Liveness probes

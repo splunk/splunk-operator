@@ -38,6 +38,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -141,11 +142,11 @@ func TestApplyClusterManager(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	revised.SetGroupVersionKind(gvk)
-	reconcile := func(c *spltest.MockClient, cr interface{}) error {
+	reconcileFn := func(c *spltest.MockClient, cr interface{}) error {
 		_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager), nil)
 		return err
 	}
-	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManager", &current, revised, createCalls, updateCalls, reconcile, true)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManager", &current, revised, createCalls, updateCalls, reconcileFn, true)
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
@@ -157,7 +158,7 @@ func TestApplyClusterManager(t *testing.T) {
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
 
-	// Negative testing
+	// Negative testing: spec validation failure is a terminal condition — returns nil (no requeue)
 	current.Spec.CommonSplunkSpec.LivenessProbe = &enterpriseApi.Probe{
 		InitialDelaySeconds: -1,
 	}
@@ -165,8 +166,12 @@ func TestApplyClusterManager(t *testing.T) {
 	_ = errors.New(splcommon.Rerr)
 	current.Kind = "ClusterManager"
 	_, err := ApplyClusterManager(ctx, c, &current, nil)
-	if err == nil {
-		t.Errorf("Expected error")
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
+	}
+	stalledCond := splcommon.GetCondition(current.Status.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected Stalled=True for spec validation failure")
 	}
 
 	// Smartstore spec
@@ -542,11 +547,13 @@ func TestClusterManagerSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	// Attempt to apply the cluster manager spec
 	_, err := ApplyClusterManager(ctx, c, &cm, nil)
 
-	// Assert that an error is returned
-	if err == nil {
-		t.Errorf("Expected error when SPLUNK_GENERAL_TERMS is not set, but got none")
-	} else if !strings.Contains(err.Error(), "license not accepted") {
-		t.Errorf("Unexpected error message: %v", err)
+	// SPLUNK_GENERAL_TERMS unset is a stalled misconfiguration: reconciler returns terminal error (no requeue)
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
+	}
+	stalledCond := splcommon.GetCondition(cm.Status.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected Stalled=True when SPLUNK_GENERAL_TERMS is not set")
 	}
 }
 

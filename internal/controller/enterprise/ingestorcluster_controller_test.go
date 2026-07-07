@@ -644,13 +644,20 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 			}
 			Expect(k8sClient.Create(context.Background(), idxc)).Should(Succeed())
 
+			Eventually(func() error {
+				latest := &enterpriseApi.IndexerCluster{}
+				if err := k8sClient.Get(context.Background(), types.NamespacedName{
+					Name: idxc.Name, Namespace: namespace,
+				}, latest); err != nil {
+					return err
+				}
+				return k8sClient.Update(context.Background(), latest)
+			}, timeout, interval).Should(Succeed())
+
 			fetched := &enterpriseApi.IndexerCluster{}
 			Expect(k8sClient.Get(context.Background(), types.NamespacedName{
 				Name: idxc.Name, Namespace: namespace,
 			}, fetched)).Should(Succeed())
-
-			Expect(k8sClient.Update(context.Background(), fetched)).Should(Succeed())
-
 			Expect(k8sClient.Delete(context.Background(), fetched)).Should(Succeed())
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
@@ -684,16 +691,23 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 			}
 			Expect(k8sClient.Create(context.Background(), idxc)).Should(Succeed())
 
+			Eventually(func() error {
+				latest := &enterpriseApi.IndexerCluster{}
+				if err := k8sClient.Get(context.Background(), types.NamespacedName{
+					Name: idxc.Name, Namespace: namespace,
+				}, latest); err != nil {
+					return err
+				}
+				latest.Spec.QueueRef.Name = "different-queue"
+				latest.Spec.ObjectStorageRef.Name = "different-os"
+				return k8sClient.Update(context.Background(), latest)
+			}, timeout, interval).Should(Succeed())
+
 			fetched := &enterpriseApi.IndexerCluster{}
 			Expect(k8sClient.Get(context.Background(), types.NamespacedName{
 				Name: idxc.Name, Namespace: namespace,
 			}, fetched)).Should(Succeed())
-
-			fetched.Spec.QueueRef.Name = "different-queue"
-			fetched.Spec.ObjectStorageRef.Name = "different-os"
-			Expect(k8sClient.Update(context.Background(), fetched)).Should(Succeed())
-
-			Expect(k8sClient.Delete(context.Background(), idxc)).Should(Succeed())
+			Expect(k8sClient.Delete(context.Background(), fetched)).Should(Succeed())
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
@@ -718,13 +732,20 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 			}
 			Expect(k8sClient.Create(context.Background(), idxc)).Should(Succeed())
 
+			Eventually(func() error {
+				fetched := &enterpriseApi.IndexerCluster{}
+				if err := k8sClient.Get(context.Background(), types.NamespacedName{
+					Name: idxc.Name, Namespace: namespace,
+				}, fetched); err != nil {
+					return err
+				}
+				return k8sClient.Update(context.Background(), fetched)
+			}, timeout, interval).Should(Succeed())
+
 			fetched := &enterpriseApi.IndexerCluster{}
 			Expect(k8sClient.Get(context.Background(), types.NamespacedName{
 				Name: idxc.Name, Namespace: namespace,
 			}, fetched)).Should(Succeed())
-
-			Expect(k8sClient.Update(context.Background(), fetched)).Should(Succeed())
-
 			Expect(k8sClient.Delete(context.Background(), fetched)).Should(Succeed())
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
@@ -749,13 +770,16 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 			Expect(k8sClient.Create(context.Background(), idxc)).Should(Succeed())
 
 			fetched := &enterpriseApi.IndexerCluster{}
-			Expect(k8sClient.Get(context.Background(), types.NamespacedName{
-				Name: idxc.Name, Namespace: namespace,
-			}, fetched)).Should(Succeed())
-			Expect(fetched.Spec.Certs).To(BeEmpty())
-
-			fetched.Spec.Certs = []enterpriseApi.CertSpec{}
-			Expect(k8sClient.Update(context.Background(), fetched)).Should(Succeed())
+			Eventually(func() error {
+				if err := k8sClient.Get(context.Background(), types.NamespacedName{
+					Name: idxc.Name, Namespace: namespace,
+				}, fetched); err != nil {
+					return err
+				}
+				Expect(fetched.Spec.Certs).To(BeEmpty())
+				fetched.Spec.Certs = []enterpriseApi.CertSpec{}
+				return k8sClient.Update(context.Background(), fetched)
+			}, timeout, interval).Should(Succeed())
 
 			Expect(k8sClient.Delete(context.Background(), idxc)).Should(Succeed())
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())

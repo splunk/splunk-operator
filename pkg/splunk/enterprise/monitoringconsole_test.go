@@ -15,6 +15,7 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -35,6 +36,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	reconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 func init() {
@@ -621,11 +623,13 @@ func TestMonitoringConsoleSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	c := spltest.NewMockClient()
 	// Attempt to apply the monitoring console spec
 	_, err := ApplyMonitoringConsole(ctx, c, &mc)
-	// Assert that an error is returned
-	if err == nil {
-		t.Errorf("Expected error when SPLUNK_GENERAL_TERMS is not set, but got none")
-	} else if !strings.Contains(err.Error(), "license not accepted") {
-		t.Errorf("Unexpected error message: %v", err)
+	// SPLUNK_GENERAL_TERMS unset is a stalled misconfiguration: reconciler returns terminal error (no requeue)
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
+	}
+	stalledCond := splcommon.GetCondition(mc.Status.Conditions, enterpriseApi.ConditionStalled)
+	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
+		t.Errorf("expected Stalled=True when SPLUNK_GENERAL_TERMS is not set")
 	}
 }
 func TestAppFrameworkApplyMonitoringConsoleShouldNotFail(t *testing.T) {
