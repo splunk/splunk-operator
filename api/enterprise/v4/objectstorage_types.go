@@ -90,7 +90,7 @@ type ObjectStorageStatus struct {
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxiliary message describing CR status"
 // +kubebuilder:storageversion
 
-// ObjectStorage is the Schema for the objectstorages API
+// ObjectStorage is the Schema for the objectstorages API. NOTE: ObjectStorage is part of the index and ingestion separation feature, which is currently in Preview and not recommended for production use.
 type ObjectStorage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`

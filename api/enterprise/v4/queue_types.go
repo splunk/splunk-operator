@@ -119,7 +119,7 @@ type QueueStatus struct {
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxiliary message describing CR status"
 // +kubebuilder:storageversion
 
-// Queue is the Schema for the queues API
+// Queue is the Schema for the queues API. NOTE: Queue is part of the index and ingestion separation feature, which is currently in Preview and not recommended for production use.
 type Queue struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`

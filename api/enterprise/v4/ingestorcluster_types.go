@@ -118,7 +118,7 @@ type IngestorClusterStatus struct {
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxiliary message describing CR status"
 // +kubebuilder:storageversion
 
-// IngestorCluster is the Schema for the ingestorclusters API
+// IngestorCluster is the Schema for the ingestorclusters API. NOTE: IngestorCluster is part of the index and ingestion separation feature, which is currently in Preview and not recommended for production use.
 type IngestorCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
