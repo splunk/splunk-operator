@@ -1,5 +1,4 @@
 // Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
-
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,8 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/*
-Package client provides a simple client for the Splunk Enterprise REST API.
-This package has no dependencies outside of the standard go library.
-*/
+// Package client wires together the remote storage and Splunk REST sub-packages
+// and exposes backward-compatible type aliases for existing callers.
+//
+// Sub-packages:
+//
+//	splunk/          Splunk Enterprise REST API client
+//	storage/         Remote storage client registry and test utilities
+//	storage/aws/     AWS S3 remote storage client
+//	storage/azure/   Azure Blob Storage remote storage client
+//	storage/gcp/     Google Cloud Storage remote storage client
+//	storage/minio/   Minio/S3-compatible remote storage client
 package client

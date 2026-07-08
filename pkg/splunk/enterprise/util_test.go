@@ -42,7 +42,7 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -111,9 +111,9 @@ func TestGetRemoteStorageClient(t *testing.T) {
 		return nil
 	}
 
-	splclient.RegisterRemoteDataClient(ctx, "aws")
-	getClientWrapper := splclient.RemoteDataClientsMap["aws"]
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splclient.NewMockAWSS3Client)
+	splstorage.RegisterRemoteDataClient(ctx, "aws")
+	getClientWrapper := splstorage.RemoteDataClientsMap["aws"]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splstorage.NewMockAWSS3Client)
 
 	// Cover no secret key, empty GetInitFunc case
 	GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[0], "location", fn)
@@ -640,8 +640,8 @@ func TestGetLocalAppFileName(t *testing.T) {
 }
 
 func TestCheckIfAnAppIsActiveOnRemoteStore(t *testing.T) {
-	var remoteObjList []*splclient.RemoteObject
-	var entry *splclient.RemoteObject
+	var remoteObjList []*splcommon.RemoteObject
+	var entry *splcommon.RemoteObject
 
 	tmpAppName := "xys.spl"
 	entry = allocateRemoteObject("d41d8cd98f00", tmpAppName, 2322, nil)
@@ -921,7 +921,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	var appDeployContext enterpriseApi.AppDeploymentContext
-	var remoteObjListMap map[string]splclient.RemoteDataListResponse
+	var remoteObjListMap map[string]splcommon.RemoteDataListResponse
 	var appFramworkConf enterpriseApi.AppFrameworkSpec = cr.Spec.AppFrameworkConfig
 	var err error
 
@@ -929,7 +929,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 		appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
 	}
 
-	var RemoteDataListResponse splclient.RemoteDataListResponse
+	var RemoteDataListResponse splcommon.RemoteDataListResponse
 
 	// Test-1: Empty remoteObjectList Map should return an error
 	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
@@ -940,7 +940,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 
 	// Test-2: Valid remoteObjectList should not cause an error
 	startAppPathAndName := "bucketpath1/bpath2/locationpath1/lpath2/adminCategoryOne.tgz"
-	remoteObjListMap = make(map[string]splclient.RemoteDataListResponse)
+	remoteObjListMap = make(map[string]splcommon.RemoteDataListResponse)
 	// Prepare a RemoteDataListResponse
 	RemoteDataListResponse.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 10)
 	// Set the app source with a matching one
@@ -1259,8 +1259,8 @@ func TestHasAppRepoCheckTimerExpired(t *testing.T) {
 	}
 }
 
-func allocateRemoteObject(etag string, key string, Size int64, lastModified *time.Time) *splclient.RemoteObject {
-	var remoteObj splclient.RemoteObject
+func allocateRemoteObject(etag string, key string, Size int64, lastModified *time.Time) *splcommon.RemoteObject {
+	var remoteObj splcommon.RemoteObject
 
 	remoteObj.Etag = &etag
 	remoteObj.Key = &key
@@ -1270,9 +1270,9 @@ func allocateRemoteObject(etag string, key string, Size int64, lastModified *tim
 	return &remoteObj
 }
 
-func createRemoteObjectList(etag string, key string, Size int64, lastModified *time.Time, count uint16) []*splclient.RemoteObject {
-	var remoteObjList []*splclient.RemoteObject
-	var remoteObj *splclient.RemoteObject
+func createRemoteObjectList(etag string, key string, Size int64, lastModified *time.Time, count uint16) []*splcommon.RemoteObject {
+	var remoteObjList []*splcommon.RemoteObject
+	var remoteObj *splcommon.RemoteObject
 
 	for i := 1; i <= int(count); i++ {
 		tag := strconv.Itoa(i)
@@ -3534,15 +3534,15 @@ func TestAppRepositoryConnectionFailedEvent(t *testing.T) {
 
 	// Register a mock provider that always returns an error from getClient
 	mockProvider := "mock-failing-provider"
-	splclient.RemoteDataClientsMap[mockProvider] = splclient.GetRemoteDataClientWrapper{
-		GetRemoteDataClient: func(ctx context.Context, bucket, accessKeyID, secretAccessKey, prefix, startAfter, region, endpoint string, fn splclient.GetInitFunc) (splclient.RemoteDataClient, error) {
+	splstorage.RemoteDataClientsMap[mockProvider] = splstorage.GetRemoteDataClientWrapper{
+		GetRemoteDataClient: func(ctx context.Context, bucket, accessKeyID, secretAccessKey, prefix, startAfter, region, endpoint string, fn splcommon.GetInitFunc) (splcommon.RemoteDataClient, error) {
 			return nil, fmt.Errorf("mock connection timeout")
 		},
 		GetInitFunc: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			return nil
 		},
 	}
-	defer delete(splclient.RemoteDataClientsMap, mockProvider)
+	defer delete(splstorage.RemoteDataClientsMap, mockProvider)
 
 	vol := &enterpriseApi.VolumeSpec{
 		Name:      "test-vol",

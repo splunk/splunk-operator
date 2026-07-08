@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package client
+package azure_test
 
 import (
 	"context"
@@ -30,6 +30,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	storageazure "github.com/splunk/splunk-operator/pkg/splunk/client/storage/azure"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -40,15 +42,15 @@ type MockContainerClient struct {
 }
 
 // NewListBlobsFlatPager mocks the NewListBlobsFlatPager method.
-func (m *MockContainerClient) NewListBlobsFlatPager(options *azblob.ListBlobsFlatOptions) *runtime.Pager[azblob.ListBlobsFlatResponse] {
+func (m *MockContainerClient) NewListBlobsFlatPager(options *container.ListBlobsFlatOptions) *runtime.Pager[azblob.ListBlobsFlatResponse] {
 	args := m.Called(options)
 	return args.Get(0).(*runtime.Pager[azblob.ListBlobsFlatResponse])
 }
 
 // NewBlobClient mocks the NewBlobClient method.
-func (m *MockContainerClient) NewBlobClient(blobName string) BlobClientInterface {
+func (m *MockContainerClient) NewBlobClient(blobName string) storageazure.BlobClientInterface {
 	args := m.Called(blobName)
-	return args.Get(0).(BlobClientInterface)
+	return args.Get(0).(storageazure.BlobClientInterface)
 }
 
 // MockBlobClient is a mock implementation of BlobClientInterface.
@@ -123,14 +125,14 @@ func TestAzureBlobClient_GetAppsList_SharedKey(t *testing.T) {
 	mockContainerClient.On("NewListBlobsFlatPager", mock.Anything).Return(runtimePager)
 
 	// Initialize AzureBlobClient with the mock container client.
-	azureClient := &AzureBlobClient{
+	azureClient := &storageazure.BlobClient{
 		BucketName:         "test-container",
 		StorageAccountName: "test-account",
 		Prefix:             "",
 		StartAfter:         "",
 		Endpoint:           "",
 		ContainerClient:    mockContainerClient,
-		CredentialType:     CredentialTypeSharedKey,
+		CredentialType:     storageazure.CredentialTypeSharedKey,
 	}
 
 	// Execute GetAppsList.
@@ -199,14 +201,14 @@ func TestAzureBlobClient_GetAppsList_AzureAD(t *testing.T) {
 	mockContainerClient.On("NewListBlobsFlatPager", mock.Anything).Return(runtimePager)
 
 	// Initialize AzureBlobClient with the mock container client.
-	azureClient := &AzureBlobClient{
+	azureClient := &storageazure.BlobClient{
 		BucketName:         "test-container",
 		StorageAccountName: "test-account",
 		Prefix:             "",
 		StartAfter:         "",
 		Endpoint:           "",
 		ContainerClient:    mockContainerClient,
-		CredentialType:     CredentialTypeAzureAD,
+		CredentialType:     storageazure.CredentialTypeAzureAD,
 	}
 
 	// Execute GetAppsList.
@@ -250,14 +252,14 @@ func TestAzureBlobClient_GetAppsList_Error(t *testing.T) {
 	mockContainerClient.On("NewListBlobsFlatPager", mock.Anything).Return(runtimePager)
 
 	// Initialize AzureBlobClient with the mock container client.
-	azureClient := &AzureBlobClient{
+	azureClient := &storageazure.BlobClient{
 		BucketName:         "test-container",
 		StorageAccountName: "test-account",
 		Prefix:             "",
 		StartAfter:         "",
 		Endpoint:           "",
 		ContainerClient:    mockContainerClient,
-		CredentialType:     CredentialTypeAzureAD,
+		CredentialType:     storageazure.CredentialTypeAzureAD,
 	}
 
 	// Execute GetAppsList.
@@ -266,7 +268,7 @@ func TestAzureBlobClient_GetAppsList_Error(t *testing.T) {
 
 	// Assertions.
 	require.Error(t, err)
-	require.Equal(t, RemoteDataListResponse{}, resp)
+	require.Equal(t, splcommon.RemoteDataListResponse{}, resp)
 
 	// Verify that all expectations were met.
 	mockContainerClient.AssertExpectations(t)
@@ -290,14 +292,14 @@ func TestAzureBlobClient_DownloadApp_SharedKey(t *testing.T) {
 	mockBlobClient.On("DownloadStream", mock.Anything, mock.Anything).Return(mockDownloadResponse, nil)
 
 	// Initialize AzureBlobClient with the mock container client.
-	azureClient := &AzureBlobClient{
+	azureClient := &storageazure.BlobClient{
 		BucketName:         "test-container",
 		StorageAccountName: "test-account",
 		Prefix:             "",
 		StartAfter:         "",
 		Endpoint:           "",
 		ContainerClient:    mockContainerClient,
-		CredentialType:     CredentialTypeSharedKey,
+		CredentialType:     storageazure.CredentialTypeSharedKey,
 	}
 
 	// Create a temporary file to simulate download.
@@ -307,7 +309,7 @@ func TestAzureBlobClient_DownloadApp_SharedKey(t *testing.T) {
 
 	// Execute DownloadApp.
 	ctx := context.Background()
-	req := RemoteDataDownloadRequest{
+	req := splcommon.RemoteDataDownloadRequest{
 		LocalFile:  tempFile.Name(),
 		RemoteFile: "test-file-sharedkey.txt",
 	}
@@ -345,14 +347,14 @@ func TestAzureBlobClient_DownloadApp_AzureAD(t *testing.T) {
 	mockBlobClient.On("DownloadStream", mock.Anything, mock.Anything).Return(mockDownloadResponse, nil)
 
 	// Initialize AzureBlobClient with the mock container client.
-	azureClient := &AzureBlobClient{
+	azureClient := &storageazure.BlobClient{
 		BucketName:         "test-container",
 		StorageAccountName: "test-account",
 		Prefix:             "",
 		StartAfter:         "",
 		Endpoint:           "",
 		ContainerClient:    mockContainerClient,
-		CredentialType:     CredentialTypeAzureAD,
+		CredentialType:     storageazure.CredentialTypeAzureAD,
 	}
 
 	// Create a temporary file to simulate download.
@@ -362,7 +364,7 @@ func TestAzureBlobClient_DownloadApp_AzureAD(t *testing.T) {
 
 	// Execute DownloadApp.
 	ctx := context.Background()
-	req := RemoteDataDownloadRequest{
+	req := splcommon.RemoteDataDownloadRequest{
 		LocalFile:  tempFile.Name(),
 		RemoteFile: "test-file-azuread.txt",
 	}
@@ -393,14 +395,14 @@ func TestAzureBlobClient_DownloadApp_Error(t *testing.T) {
 	mockBlobClient.On("DownloadStream", mock.Anything, mock.Anything).Return(blob.DownloadStreamResponse{}, fmt.Errorf("blob not found"))
 
 	// Initialize AzureBlobClient with the mock container client.
-	azureClient := &AzureBlobClient{
+	azureClient := &storageazure.BlobClient{
 		BucketName:         "test-container",
 		StorageAccountName: "test-account",
 		Prefix:             "",
 		StartAfter:         "",
 		Endpoint:           "",
 		ContainerClient:    mockContainerClient,
-		CredentialType:     CredentialTypeAzureAD,
+		CredentialType:     storageazure.CredentialTypeAzureAD,
 	}
 
 	// Create a temporary file to simulate download.
@@ -410,7 +412,7 @@ func TestAzureBlobClient_DownloadApp_Error(t *testing.T) {
 
 	// Execute DownloadApp.
 	ctx := context.Background()
-	req := RemoteDataDownloadRequest{
+	req := splcommon.RemoteDataDownloadRequest{
 		LocalFile:  tempFile.Name(),
 		RemoteFile: "nonexistent-file.txt",
 	}

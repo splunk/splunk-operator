@@ -28,7 +28,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -1549,7 +1549,7 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 		t.Error(err.Error())
 	}
 
-	splclient.RegisterRemoteDataClient(ctx, "aws")
+	splstorage.RegisterRemoteDataClient(ctx, "aws")
 
 	for index, appSrc := range cr.Spec.AppFrameworkConfig.AppSources {
 
@@ -1571,8 +1571,8 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 		defer os.Remove(appLoc)
 
 		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-		getClientWrapper := splclient.RemoteDataClientsMap["aws"]
-		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splclient.NewMockAWSS3Client)
+		getClientWrapper := splstorage.RemoteDataClientsMap["aws"]
+		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splstorage.NewMockAWSS3Client)
 
 		initFunc := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 
@@ -1712,10 +1712,10 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 		t.Error(err.Error())
 	}
 
-	splclient.RegisterRemoteDataClient(ctx, "aws")
+	splstorage.RegisterRemoteDataClient(ctx, "aws")
 	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-	getClientWrapper := splclient.RemoteDataClientsMap["aws"]
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splclient.NewMockAWSS3Client)
+	getClientWrapper := splstorage.RemoteDataClientsMap["aws"]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splstorage.NewMockAWSS3Client)
 
 	initFunc := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 

@@ -26,7 +26,7 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	"github.com/splunk/splunk-operator/pkg/logging"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"

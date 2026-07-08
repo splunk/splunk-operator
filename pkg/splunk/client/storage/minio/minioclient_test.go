@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package client
+package minio_test
 
 import (
 	"context"
@@ -22,24 +22,28 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
+	storageminio "github.com/splunk/splunk-operator/pkg/splunk/client/storage/minio"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 func TestInitMinioClientWrapper(t *testing.T) {
 	ctx := context.TODO()
-	minioS3ClientSession := InitMinioClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com", "abcd", "1234")
+	minioS3ClientSession := storageminio.InitClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com", "abcd", "1234")
 	if minioS3ClientSession == nil {
 		t.Errorf("We should have got a valid Minio S3 client object")
 	}
 
 	// Test case without access and secret keys
-	minioS3ClientSession = InitMinioClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com", "", "")
+	minioS3ClientSession = storageminio.InitClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com", "", "")
 	if minioS3ClientSession == nil {
 		t.Errorf("We should have got a valid Minio S3 client object")
 	}
 
 	// Test erroneous minio session
-	minioS3ClientSession = InitMinioClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com:-9000", "", "")
+	minioS3ClientSession = storageminio.InitClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com:-9000", "", "")
 	if minioS3ClientSession != nil {
 		t.Errorf("Should have gotten a nil session due to error in URL")
 	}
@@ -47,24 +51,24 @@ func TestInitMinioClientWrapper(t *testing.T) {
 
 func TestNewMinioClient(t *testing.T) {
 	ctx := context.TODO()
-	fn := InitMinioClientWrapper
+	fn := storageminio.InitClientWrapper
 
 	// Test1. Test for endpoint with https
-	minioS3Client, err := NewMinioClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
+	minioS3Client, err := storageminio.NewMinioClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
 
 	if minioS3Client == nil || err != nil {
 		t.Errorf("NewMinioClient should have returned a valid Minio S3 client.")
 	}
 
 	// Test2. Test for endpoint with http
-	minioS3Client, err = NewMinioClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "http://s3.us-west-2.amazonaws.com", fn)
+	minioS3Client, err = storageminio.NewMinioClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "http://s3.us-west-2.amazonaws.com", fn)
 
 	if minioS3Client == nil || err != nil {
 		t.Errorf("NewMinioClient should have returned a valid Minio S3 client.")
 	}
 
 	// Test3. Test for invalid endpoint
-	minioS3Client, err = NewMinioClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "random-endpoint.com", fn)
+	minioS3Client, err = storageminio.NewMinioClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "random-endpoint.com", fn)
 
 	if minioS3Client != nil || err == nil {
 		t.Errorf("NewMinioClient should have returned a error.")
@@ -115,7 +119,7 @@ func TestMinioGetAppsListShouldNotFail(t *testing.T) {
 		},
 	}
 
-	minioClient := &MinioClient{}
+	minioClient := &storageminio.MinioClient{}
 
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
 	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
@@ -168,15 +172,15 @@ func TestMinioGetAppsListShouldNotFail(t *testing.T) {
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+		vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
 		}
 
 		// Update the GetRemoteDataClient with our mock call which initializes mock minio client
-		getClientWrapper := RemoteDataClientsMap[vol.Provider]
-		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockMinioS3Client)
+		getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
+		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockMinioS3Client)
 
 		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			cl := spltest.MockMinioS3Client{}
@@ -196,7 +200,7 @@ func TestMinioGetAppsListShouldNotFail(t *testing.T) {
 		}
 
 		var mockResponse spltest.MockRemoteDataClient
-		mockResponse, err = ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
+		mockResponse, err = splstorage.ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -238,7 +242,7 @@ func TestMinioGetAppsListShouldFail(t *testing.T) {
 		},
 	}
 
-	minioClient := &MinioClient{}
+	minioClient := &storageminio.MinioClient{}
 
 	Etag := "cc707187b036405f095a8ebb43a782c1"
 	Key := "admin_app.tgz"
@@ -269,14 +273,14 @@ func TestMinioGetAppsListShouldFail(t *testing.T) {
 
 	appSource := appFrameworkRef.AppSources[0]
 
-	vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
 
 	// Update the GetRemoteDataClient with our mock call which initializes mock minio client
-	getClientWrapper := RemoteDataClientsMap[vol.Provider]
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockMinioS3Client)
+	getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockMinioS3Client)
 
 	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		cl := spltest.MockMinioS3Client{}
@@ -339,7 +343,7 @@ func TestMinioDownloadAppShouldNotFail(t *testing.T) {
 		},
 	}
 
-	minioClient := &MinioClient{}
+	minioClient := &storageminio.MinioClient{}
 
 	RemoteFiles := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
 	LocalFiles := []string{"/tmp/admin_app.tgz", "/tmp/security_app.tgz", "/tmp/authentication_app.tgz"}
@@ -371,14 +375,14 @@ func TestMinioDownloadAppShouldNotFail(t *testing.T) {
 
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+		vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			t.Errorf("Unable to get volume for app source : %s", appSource.Name)
 		}
 
 		// Update the GetRemoteDataClient with our mock call which initializes mock minio client
-		getClientWrapper := RemoteDataClientsMap[vol.Provider]
-		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockMinioS3Client)
+		getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
+		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockMinioS3Client)
 
 		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			cl := spltest.MockMinioS3Client{}
@@ -391,7 +395,7 @@ func TestMinioDownloadAppShouldNotFail(t *testing.T) {
 
 		minioClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
 
-		downloadRequest := RemoteDataDownloadRequest{
+		downloadRequest := splcommon.RemoteDataDownloadRequest{
 			LocalFile:  LocalFiles[index],
 			RemoteFile: RemoteFiles[index],
 			Etag:       Etags[index],
@@ -453,7 +457,7 @@ func TestMinioDownloadAppShouldFail(t *testing.T) {
 		},
 	}
 
-	minioClient := &MinioClient{}
+	minioClient := &storageminio.MinioClient{}
 
 	RemoteFile := ""
 	Etag := ""
@@ -464,14 +468,14 @@ func TestMinioDownloadAppShouldFail(t *testing.T) {
 
 	appSource := appFrameworkRef.AppSources[0]
 
-	vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
 	}
 
 	// Update the GetRemoteDataClient with our mock call which initializes mock minio client
-	getClientWrapper := RemoteDataClientsMap[vol.Provider]
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockMinioS3Client)
+	getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockMinioS3Client)
 
 	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		cl := spltest.MockMinioS3Client{}
@@ -484,7 +488,7 @@ func TestMinioDownloadAppShouldFail(t *testing.T) {
 
 	minioClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
 
-	downloadRequest := RemoteDataDownloadRequest{
+	downloadRequest := splcommon.RemoteDataDownloadRequest{
 		LocalFile:  LocalFile[0],
 		RemoteFile: RemoteFile,
 		Etag:       Etag,
@@ -496,7 +500,7 @@ func TestMinioDownloadAppShouldFail(t *testing.T) {
 
 	// Now make the localFile name non-empty string
 	LocalFile[0] = "randomFile"
-	downloadRequest = RemoteDataDownloadRequest{
+	downloadRequest = splcommon.RemoteDataDownloadRequest{
 		LocalFile:  LocalFile[0],
 		RemoteFile: RemoteFile,
 		Etag:       Etag,
