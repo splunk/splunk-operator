@@ -118,22 +118,28 @@ __pycache__/
 .tool-versions
 # AI coding agents / MCP config files (may contain API tokens and credentials)
 # Claude Code / Anthropic
-CLAUDE.md
+CLAUDE.local.md
 .mcp.json
 .claude/
+# MCP config (inside other editors)
+mcp.json
 # Cursor
 .cursor/
 .cursorignore
-.cursorules
+.cursorrules
 # GitHub Copilot
 .github/copilot-instructions.md
 # Windsurf / Codeium
 .codeium/
 .windsurf/
+.windsurfrules
+# Cline
+.clinerules
 # Aider
 .aider*
 # Codex / OpenAI
-codex.md
+AGENTS.override.md
+.codex/
 # Generic agent memory / secrets
 .secrets
 .env.local
