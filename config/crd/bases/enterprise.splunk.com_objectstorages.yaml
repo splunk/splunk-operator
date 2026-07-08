@@ -32,7 +32,9 @@ spec:
     name: v4
     schema:
       openAPIV3Schema:
-        description: ObjectStorage is the Schema for the objectstorages API
+        description: 'ObjectStorage is the Schema for the objectstorages API. NOTE:
+          ObjectStorage is part of the index and ingestion separation feature, which
+          is currently in Preview and not recommended for production use.'
         properties:
           apiVersion:
             description: |-
