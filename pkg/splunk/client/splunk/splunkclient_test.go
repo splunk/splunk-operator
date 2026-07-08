@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package client
+package splunk_test
 
 import (
 	"bytes"
@@ -24,16 +24,18 @@ import (
 	"strings"
 	"testing"
 
+	splunk "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
+var invalidUrlByteArray = []byte{0x7F}
+
 // Error tester for client
-func splunkClientErrorTester(t *testing.T, test func(SplunkClient) error) {
+func splunkClientErrorTester(t *testing.T, test func(splunk.SplunkClient) error) {
 	url := string(invalidUrlByteArray)
 	mockSplunkClient := &spltest.MockHTTPClient{}
-	c := NewSplunkClient(url, "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient(url, "admin", "p@ssw0rd")
 	c.Client = mockSplunkClient
 	err := test(*c)
 	if err == nil {
@@ -41,10 +43,10 @@ func splunkClientErrorTester(t *testing.T, test func(SplunkClient) error) {
 	}
 }
 
-func splunkClientTester(t *testing.T, testMethod string, status int, body string, wantRequest *http.Request, test func(SplunkClient) error) {
+func splunkClientTester(t *testing.T, testMethod string, status int, body string, wantRequest *http.Request, test func(splunk.SplunkClient) error) {
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	mockSplunkClient.AddHandler(wantRequest, status, body, nil)
-	c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
 	c.Client = mockSplunkClient
 	err := test(*c)
 	if err != nil {
@@ -53,12 +55,12 @@ func splunkClientTester(t *testing.T, testMethod string, status int, body string
 	mockSplunkClient.CheckRequests(t, testMethod)
 }
 
-func splunkClientMultipleRequestTester(t *testing.T, testMethod string, status []int, body []string, wantRequest []*http.Request, test func(SplunkClient) error) {
+func splunkClientMultipleRequestTester(t *testing.T, testMethod string, status []int, body []string, wantRequest []*http.Request, test func(splunk.SplunkClient) error) {
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	for i := 0; i < len(wantRequest); i++ {
 		mockSplunkClient.AddHandler(wantRequest[i], status[i], body[i], nil)
 	}
-	c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
 	c.Client = mockSplunkClient
 	err := test(*c)
 	if err != nil {
@@ -70,7 +72,7 @@ func splunkClientMultipleRequestTester(t *testing.T, testMethod string, status [
 func TestSplunkClientDo(t *testing.T) {
 	// Test error in do
 	mockSplunkClient := &spltest.MockHTTPClient{}
-	c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
 	c.Client = mockSplunkClient
 	hreq := http.Request{
 		Header: http.Header{},
@@ -82,7 +84,7 @@ func TestSplunkClientDo(t *testing.T) {
 func TestGetSearchHeadCaptainInfo(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/shcluster/captain/info?count=0&output_mode=json", nil)
 	wantCaptainLabel := "splunk-s2-search-head-0"
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		captainInfo, err := c.GetSearchHeadCaptainInfo()
 		if err != nil {
 			return err
@@ -96,7 +98,7 @@ func TestGetSearchHeadCaptainInfo(t *testing.T) {
 	splunkClientTester(t, "TestGetSearchHeadCaptainInfo", 200, body, wantRequest, test)
 
 	// test body with no entries
-	test = func(c SplunkClient) error {
+	test = func(c splunk.SplunkClient) error {
 		_, err := c.GetSearchHeadCaptainInfo()
 		if err == nil {
 			t.Errorf("GetSearchHeadCaptainInfo returned nil; want error")
@@ -116,7 +118,7 @@ func TestGetSearchHeadCaptainInfo(t *testing.T) {
 func TestGetSearchHeadClusterMemberInfo(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/shcluster/member/info?count=0&output_mode=json", nil)
 	wantMemberStatus := "Up"
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		memberInfo, err := c.GetSearchHeadClusterMemberInfo()
 		if err != nil {
 			return err
@@ -130,7 +132,7 @@ func TestGetSearchHeadClusterMemberInfo(t *testing.T) {
 	splunkClientTester(t, "TestGetSearchHeadClusterMemberInfo", 200, body, wantRequest, test)
 
 	// test body with no entries
-	test = func(c SplunkClient) error {
+	test = func(c splunk.SplunkClient) error {
 		_, err := c.GetSearchHeadClusterMemberInfo()
 		if err == nil {
 			t.Errorf("GetSearchHeadClusterMemberInfo returned nil; want error")
@@ -154,7 +156,7 @@ func TestGetSearchHeadCaptainMembers(t *testing.T) {
 	}
 	wantStatus := "Up"
 	wantCaptain := "splunk-s2-search-head-0"
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		members, err := c.GetSearchHeadCaptainMembers()
 		if err != nil {
 			return err
@@ -186,7 +188,7 @@ func TestGetSearchHeadCaptainMembers(t *testing.T) {
 	splunkClientTester(t, "TestGetSearchHeadCaptainMembers", 200, body, wantRequest, test)
 
 	// test error response
-	test = func(c SplunkClient) error {
+	test = func(c splunk.SplunkClient) error {
 		_, err := c.GetSearchHeadCaptainMembers()
 		if err == nil {
 			t.Errorf("GetSearchHeadCaptainMembers returned nil; want error")
@@ -198,7 +200,7 @@ func TestGetSearchHeadCaptainMembers(t *testing.T) {
 
 func TestSetSearchHeadDetention(t *testing.T) {
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/shcluster/member/control/control/set_manual_detention?manual_detention=on", nil)
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		return c.SetSearchHeadDetention(true)
 	}
 	splunkClientTester(t, "TestSetSearchHeadDetention", 200, "", wantRequest, test)
@@ -211,7 +213,7 @@ func TestBundlePush(t *testing.T) {
 	body := strings.NewReader("&ignore_identical_bundle=true")
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/manager/control/default/apply", body)
 
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		return c.BundlePush(true)
 	}
 	splunkClientTester(t, "TestBundlePush", 200, "", wantRequest, test)
@@ -223,7 +225,7 @@ func TestBundlePush(t *testing.T) {
 func TestRemoveSearchHeadClusterMember(t *testing.T) {
 	// test for 200 response first (sent on first removal request)
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/shcluster/member/consensus/default/remove_server?output_mode=json", nil)
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		return c.RemoveSearchHeadClusterMember()
 	}
 	splunkClientTester(t, "TestRemoveSearchHeadClusterMember", 200, "", wantRequest, test)
@@ -237,7 +239,7 @@ func TestRemoveSearchHeadClusterMember(t *testing.T) {
 	splunkClientTester(t, "TestRemoveSearchHeadClusterMember", 503, body, wantRequest, test)
 
 	// test unrecognized response message
-	test = func(c SplunkClient) error {
+	test = func(c splunk.SplunkClient) error {
 		err := c.RemoveSearchHeadClusterMember()
 		if err == nil {
 			t.Errorf("RemoveSearchHeadClusterMember returned nil; want error")
@@ -262,7 +264,7 @@ func TestRemoveSearchHeadClusterMember(t *testing.T) {
 	splunkClientTester(t, "TestRemoveSearchHeadClusterMember", 404, "", wantRequest, test)
 
 	// Negative testing
-	test = func(c SplunkClient) error {
+	test = func(c splunk.SplunkClient) error {
 		return c.RemoveSearchHeadClusterMember()
 	}
 	splunkClientErrorTester(t, test)
@@ -270,26 +272,26 @@ func TestRemoveSearchHeadClusterMember(t *testing.T) {
 
 func TestGetclusterManagerInfo(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/manager/info?count=0&output_mode=json", nil)
-	wantInfo := ClusterManagerInfo{
+	wantInfo := splunk.ClusterManagerInfo{
 		Initialized:     true,
 		IndexingReady:   true,
 		ServiceReady:    true,
 		MaintenanceMode: false,
 		RollingRestart:  false,
 		Label:           fmt.Sprintf("splunk-%s-cluster-manager-%s", "s1", "0"),
-		ActiveBundle: ClusterBundleInfo{
+		ActiveBundle: splunk.ClusterBundleInfo{
 			BundlePath: "/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle",
 			Checksum:   "14310A4AABD23E85BBD4559C4A3B59F8",
 			Timestamp:  1583870198,
 		},
-		LatestBundle: ClusterBundleInfo{
+		LatestBundle: splunk.ClusterBundleInfo{
 			BundlePath: "/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle",
 			Checksum:   "14310A4AABD23E85BBD4559C4A3B59F8",
 			Timestamp:  1583870198,
 		},
 		StartTime: 1583948636,
 	}
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		gotInfo, err := c.GetClusterManagerInfo()
 		if err != nil {
 			return err
@@ -303,7 +305,7 @@ func TestGetclusterManagerInfo(t *testing.T) {
 	splunkClientTester(t, "TestGetclusterManagerInfo", 200, body, wantRequest, test)
 
 	// test body with no entries
-	test = func(c SplunkClient) error {
+	test = func(c splunk.SplunkClient) error {
 		_, err := c.GetClusterManagerInfo()
 		if err == nil {
 			t.Errorf("GetClusterManagerInfo returned nil; want error")
@@ -320,7 +322,7 @@ func TestGetclusterManagerInfo(t *testing.T) {
 func TestGetIndexerClusterPeerInfo(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/peer/info?count=0&output_mode=json", nil)
 	wantMemberStatus := "Up"
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		info, err := c.GetIndexerClusterPeerInfo()
 		if err != nil {
 			return err
@@ -334,7 +336,7 @@ func TestGetIndexerClusterPeerInfo(t *testing.T) {
 	splunkClientTester(t, "TestGetIndexerClusterPeerInfo", 200, body, wantRequest, test)
 
 	// test body with no entries
-	test = func(c SplunkClient) error {
+	test = func(c splunk.SplunkClient) error {
 		_, err := c.GetIndexerClusterPeerInfo()
 		if err == nil {
 			t.Errorf("GetIndexerClusterPeerInfo returned nil; want error")
@@ -357,7 +359,7 @@ func TestGetClusterManagerPeers(t *testing.T) {
 	}{
 		{ID: "D39B1729-E2C5-4273-B9B2-534DA7C2F866", Label: "splunk-s1-indexer-0", Status: "Up"},
 	}
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		peers, err := c.GetClusterManagerPeers()
 		if err != nil {
 			return err
@@ -386,7 +388,7 @@ func TestGetClusterManagerPeers(t *testing.T) {
 	splunkClientTester(t, "TestGetClusterManagerPeers", 200, body, wantRequest, test)
 
 	// test error response
-	test = func(c SplunkClient) error {
+	test = func(c splunk.SplunkClient) error {
 		_, err := c.GetClusterManagerPeers()
 		if err == nil {
 			t.Errorf("GetClusterManagerPeers returned nil; want error")
@@ -398,7 +400,7 @@ func TestGetClusterManagerPeers(t *testing.T) {
 
 func TestRemoveIndexerClusterPeer(t *testing.T) {
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/manager/control/control/remove_peers?peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866", nil)
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		return c.RemoveIndexerClusterPeer("D39B1729-E2C5-4273-B9B2-534DA7C2F866")
 	}
 	splunkClientTester(t, "TestRemoveIndexerClusterPeer", 200, "", wantRequest, test)
@@ -409,7 +411,7 @@ func TestRemoveIndexerClusterPeer(t *testing.T) {
 
 func TestDecommissionIndexerClusterPeer(t *testing.T) {
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/peer/control/control/decommission?enforce_counts=1", nil)
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		return c.DecommissionIndexerClusterPeer(true)
 	}
 	splunkClientTester(t, "TestDecommissionIndexerClusterPeer", 200, "", wantRequest, test)
@@ -443,7 +445,7 @@ func TestAutomateMCApplyChanges(t *testing.T) {
 		"",
 		"",
 	}
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		return c.AutomateMCApplyChanges()
 	}
 	status := []int{
@@ -453,7 +455,7 @@ func TestAutomateMCApplyChanges(t *testing.T) {
 }
 func TestGetMonitoringconsoleServerRoles(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/server/info/server-info?count=0&output_mode=json", nil)
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		info, err := c.GetMonitoringconsoleServerRoles()
 		if err != nil {
 			return err
@@ -469,13 +471,13 @@ func TestGetMonitoringconsoleServerRoles(t *testing.T) {
 	// Test negative conditions
 	url := string(invalidUrlByteArray)
 	mockSplunkHttpClient := &spltest.MockHTTPClient{}
-	c := NewSplunkClient(url, "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient(url, "admin", "p@ssw0rd")
 	c.Client = mockSplunkHttpClient
 	c.GetMonitoringconsoleServerRoles()
 }
 func TestUpdateDMCGroups(t *testing.T) {
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/search/distributed/groups/indexer/edit", nil)
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		err := c.UpdateDMCGroups("indexer", "splunk_cluster_master")
 		if err != nil {
 			t.Errorf("Unable to update monitoring console clustering groups")
@@ -486,7 +488,7 @@ func TestUpdateDMCGroups(t *testing.T) {
 }
 func TestUpdateDMCClusteringLabelGroup(t *testing.T) {
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/search/distributed/groups/dmc_indexerclustergroup_abc/edit", nil)
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		err := c.UpdateDMCClusteringLabelGroup("abc", "splunk_cluster_master")
 		if err != nil {
 			t.Errorf("Unable to update monitoring console clustering groups")
@@ -499,7 +501,7 @@ func TestUpdateDMCClusteringLabelGroup(t *testing.T) {
 func TestGetMonitoringconsoleAssetTable(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full?count=0&output_mode=json", nil)
 	wantDispatchBuckets := int64(0)
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		info, err := c.GetMonitoringconsoleAssetTable()
 		if err != nil {
 			return err
@@ -515,14 +517,14 @@ func TestGetMonitoringconsoleAssetTable(t *testing.T) {
 	// Test negative conditions
 	url := string(invalidUrlByteArray)
 	mockSplunkHttpClient := &spltest.MockHTTPClient{}
-	c := NewSplunkClient(url, "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient(url, "admin", "p@ssw0rd")
 	c.Client = mockSplunkHttpClient
 	c.GetMonitoringconsoleAssetTable()
 }
 
 func TestPostMonitoringConsoleAssetTable(t *testing.T) {
-	apiResponseMCAssetBuild := new(MCAssetBuildTable)
-	apiResponseMCAssetBuild = &MCAssetBuildTable{
+	apiResponseMCAssetBuild := new(splunk.MCAssetBuildTable)
+	apiResponseMCAssetBuild = &splunk.MCAssetBuildTable{
 		DispatchAutoCancel: "30",
 		DispatchBuckets:    int64(0),
 	}
@@ -530,7 +532,7 @@ func TestPostMonitoringConsoleAssetTable(t *testing.T) {
 	body := strings.NewReader("output_mode=json&trigger_actions=true&dispatch.auto_cancel=30&dispatch.buckets=300&dispatch.enablePreview=true")
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full/dispatch", body)
 	wantRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		return c.PostMonitoringConsoleAssetTable(apiResponseMCAssetBuild)
 	}
 	splunkClientTester(t, "TestPostMonitoringConsoleAssetTable", 201, "", wantRequest, test)
@@ -539,7 +541,7 @@ func TestPostMonitoringConsoleAssetTable(t *testing.T) {
 func TestGetMonitoringConsoleUISettings(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed?count=0&output_mode=json", nil)
 	wantEaiAppName := "splunk_monitoring_console"
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		info, err := c.GetMonitoringConsoleUISettings()
 		if err != nil {
 			return err
@@ -555,14 +557,14 @@ func TestGetMonitoringConsoleUISettings(t *testing.T) {
 	// Test negative conditions
 	url := string(invalidUrlByteArray)
 	mockSplunkHttpClient := &spltest.MockHTTPClient{}
-	c := NewSplunkClient(url, "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient(url, "admin", "p@ssw0rd")
 	c.Client = mockSplunkHttpClient
 	c.GetMonitoringConsoleUISettings()
 }
 
 func TestUpdateLookupUISettings(t *testing.T) {
-	apiResponseUISettings := new(UISettings)
-	apiResponseUISettings = &UISettings{
+	apiResponseUISettings := new(splunk.UISettings)
+	apiResponseUISettings = &splunk.UISettings{
 		Disabled:    false,
 		EaiACL:      "",
 		EaiAppName:  "splunk_monitoring_console",
@@ -572,7 +574,7 @@ func TestUpdateLookupUISettings(t *testing.T) {
 	body := strings.NewReader("output_mode=json&trigger_actions=true&dispatch.auto_cancel=30&dispatch.buckets=300&dispatch.enablePreview=true")
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/configs/conf-splunk_monitoring_console_assets/settings", body)
 	wantRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		return c.UpdateLookupUISettings(wantconfiguredPeers, apiResponseUISettings)
 	}
 	splunkClientTester(t, "TestPostMonitoringconsoleAssetTable", 200, "", wantRequest, test)
@@ -580,14 +582,14 @@ func TestUpdateLookupUISettings(t *testing.T) {
 	// Test negative conditions
 	url := string(invalidUrlByteArray)
 	mockSplunkHttpClient := &spltest.MockHTTPClient{}
-	c := NewSplunkClient(url, "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient(url, "admin", "p@ssw0rd")
 	c.Client = mockSplunkHttpClient
 	c.GetMonitoringConsoleUISettings()
 }
 
 func TestUpdateMonitoringConsoleApp(t *testing.T) {
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/system/apps/local/splunk_monitoring_console", nil)
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		err := c.UpdateMonitoringConsoleApp()
 		if err != nil {
 			t.Log("MonitoringConsole App not updated")
@@ -604,7 +606,7 @@ func TestUpdateMonitoringConsoleApp(t *testing.T) {
 func TestGetClusterInfo(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/config?count=0&output_mode=json", nil)
 	wantMultisite := ""
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		info, err := c.GetClusterInfo(false)
 		if err != nil {
 			return err
@@ -622,7 +624,7 @@ func TestGetClusterInfo(t *testing.T) {
 
 	// Test mock call
 	mockSplunkHttpClient := &spltest.MockHTTPClient{}
-	c := NewSplunkClient(url, "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient(url, "admin", "p@ssw0rd")
 	c.Client = mockSplunkHttpClient
 	c.GetClusterInfo(true)
 
@@ -635,7 +637,7 @@ func TestSetIdxcSecret(t *testing.T) {
 	wantRequest, _ := http.NewRequest("POST", endpoint, nil)
 	wantRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		return c.SetIdxcSecret("changeme")
 	}
 	splunkClientTester(t, "TestSetIdxcSecret", 200, "", wantRequest, test)
@@ -649,11 +651,11 @@ func TestSendTelemetry_Success(t *testing.T) {
 	bodyBytes := []byte(`{"metric":"value"}`)
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/telemetry/metrics", bytes.NewReader(bodyBytes))
 	wantRequest.Header.Set("Content-Type", "application/json")
-	wantResponse := TelemetryResponse{
+	wantResponse := splunk.TelemetryResponse{
 		Message:       "Telemetry sent successfully",
 		MetricValueID: "abc123",
 	}
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		resp, err := c.SendTelemetry(path, bodyBytes)
 		if err != nil {
 			return err
@@ -673,7 +675,7 @@ func TestSendTelemetry_Error(t *testing.T) {
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/telemetry/metrics", bytes.NewReader(bodyBytes))
 	wantRequest.Header.Set("Content-Type", "application/json")
 
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		_, err := c.SendTelemetry(path, bodyBytes)
 		if err == nil {
 			t.Errorf("SendTelemetry should return error for 500 response code")
@@ -687,7 +689,7 @@ func TestSendTelemetry_Error(t *testing.T) {
 
 func TestRestartSplunk(t *testing.T) {
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/server/control/restart", nil)
-	test := func(c SplunkClient) error {
+	test := func(c splunk.SplunkClient) error {
 		return c.RestartSplunk()
 	}
 	splunkClientTester(t, "TestRestartSplunk", 200, "", wantRequest, test)
@@ -717,7 +719,7 @@ func TestUpdateConfFile(t *testing.T) {
 	mockSplunkClient.AddHandler(wantCreateRequest, 201, "", nil)
 	mockSplunkClient.AddHandler(wantUpdateRequest, 200, "", nil)
 
-	c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
 	c.Client = mockSplunkClient
 
 	err := c.UpdateConfFile(ctx, fileName, property, [][]string{{key, value}})

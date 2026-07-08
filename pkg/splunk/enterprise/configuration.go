@@ -37,7 +37,7 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -1468,8 +1468,8 @@ func initAppFrameWorkContext(ctx context.Context, client splcommon.ControllerCli
 	}
 
 	for _, vol := range appFrameworkConf.VolList {
-		if _, ok := splclient.RemoteDataClientsMap[vol.Provider]; !ok {
-			splclient.RegisterRemoteDataClient(ctx, vol.Provider)
+		if _, ok := splstorage.RemoteDataClientsMap[vol.Provider]; !ok {
+			splstorage.RegisterRemoteDataClient(ctx, vol.Provider)
 		}
 	}
 	return nil
@@ -1550,7 +1550,7 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 		}
 
 		if appSrc.VolName != "" {
-			_, err := splclient.CheckIfVolumeExists(appFramework.VolList, appSrc.VolName)
+			_, err := splutil.CheckIfVolumeExists(appFramework.VolList, appSrc.VolName)
 			if err != nil {
 				return fmt.Errorf("invalid Volume Name for App Source: %s. %s", appSrc.Name, err)
 			}
@@ -1604,7 +1604,7 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 	}
 
 	if appFramework.Defaults.VolName != "" {
-		_, err := splclient.CheckIfVolumeExists(appFramework.VolList, appFramework.Defaults.VolName)
+		_, err := splutil.CheckIfVolumeExists(appFramework.VolList, appFramework.Defaults.VolName)
 		if err != nil {
 			return fmt.Errorf("invalid Volume Name for Defaults. Error: %s", err)
 		}
@@ -1785,7 +1785,7 @@ func validateSplunkIndexesSpec(smartstore *enterpriseApi.SmartStoreSpec) error {
 		}
 
 		if index.VolName != "" {
-			_, err := splclient.CheckIfVolumeExists(smartstore.VolList, index.VolName)
+			_, err := splutil.CheckIfVolumeExists(smartstore.VolList, index.VolName)
 			if err != nil {
 				return fmt.Errorf("invalid configuration for index: %s. %s", index.Name, err)
 			}
@@ -1818,7 +1818,7 @@ func ValidateSplunkSmartstoreSpec(ctx context.Context, smartstore *enterpriseApi
 	defaults := smartstore.Defaults
 	// When volName is configured, bucket remote path should also be configured
 	if defaults.VolName != "" {
-		_, err = splclient.CheckIfVolumeExists(smartstore.VolList, defaults.VolName)
+		_, err = splutil.CheckIfVolumeExists(smartstore.VolList, defaults.VolName)
 		if err != nil {
 			return fmt.Errorf("invalid configuration for defaults volume. %s", err)
 		}

@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,61 +13,44 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package client
+package aws_test
 
 import (
 	"context"
-	"crypto/tls"
-	"net/http"
 	"os"
 	"testing"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
+	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
+	storageaws "github.com/splunk/splunk-operator/pkg/splunk/client/storage/aws"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 func TestInitAWSClientWrapper(t *testing.T) {
 	ctx := context.TODO()
-	awsS3ClientSession := InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "abcd", "1234")
+	awsS3ClientSession := storageaws.InitClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "abcd", "1234")
 	if awsS3ClientSession == nil {
 		t.Errorf("We should have got a valid AWS S3 client session object")
 	}
 
-	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "", "")
+	awsS3ClientSession = storageaws.InitClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "", "")
 	if awsS3ClientSession == nil {
 		t.Errorf("Case: Invalid secret/access keys, still returns a session")
 	}
 
-	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2", "", "")
+	awsS3ClientSession = storageaws.InitClientWrapper(ctx, "us-west-2", "", "")
 	if awsS3ClientSession != nil {
 		t.Errorf("Endpoint not resolved, should receive a nil session")
 	}
 
 	// Invalid session test
 	os.Setenv("AWS_STS_REGIONAL_ENDPOINTS", "abcde")
-	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "abcd", "1234")
+	awsS3ClientSession = storageaws.InitClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "abcd", "1234")
 	os.Unsetenv("AWS_STS_REGIONAL_ENDPOINTS")
-}
-
-func TestGetTLSVersion(t *testing.T) {
-	tr := http.Transport{
-		TLSClientConfig: &tls.Config{},
-	}
-
-	versions := []uint16{
-		tls.VersionTLS10,
-		tls.VersionTLS11,
-		tls.VersionTLS12,
-		tls.VersionTLS13,
-		14,
-	}
-
-	for _, val := range versions {
-		tr.TLSClientConfig.MinVersion = val
-		getTLSVersion(&tr)
-	}
 }
 
 func TestGetRegion(t *testing.T) {
@@ -147,7 +130,7 @@ func TestGetRegion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var region string
-			err := GetRegion(ctx, tt.endpoint, &region)
+			err := storageaws.GetRegion(ctx, tt.endpoint, &region)
 
 			if tt.expectError {
 				if err == nil {
@@ -166,40 +149,40 @@ func TestGetRegion(t *testing.T) {
 }
 func TestNewAWSS3Client(t *testing.T) {
 	ctx := context.TODO()
-	fn := InitAWSClientWrapper
-	awsS3Client, err := NewAWSS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
+	fn := storageaws.InitClientWrapper
+	awsS3Client, err := storageaws.NewS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
 	if awsS3Client == nil || err != nil {
-		t.Errorf("NewAWSS3Client should have returned a valid AWS S3 client.")
+		t.Errorf("NewS3Client should have returned a valid AWS S3 client.")
 	}
 
 	// just test the backward compatibility where we do not pass a region explicitly
-	awsS3Client, err = NewAWSS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "", "https://s3.us-west-2.amazonaws.com", fn)
+	awsS3Client, err = storageaws.NewS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "", "https://s3.us-west-2.amazonaws.com", fn)
 	if awsS3Client == nil || err != nil {
-		t.Errorf("NewAWSS3Client should have returned a valid AWS S3 client.")
+		t.Errorf("NewS3Client should have returned a valid AWS S3 client.")
 	}
 
 	// test the invalid scenario where we cannot extract region from endpoint
-	awsS3Client, err = NewAWSS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "", "https://s3.us-west-2.dummyprovider.com", fn)
+	awsS3Client, err = storageaws.NewS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "", "https://s3.us-west-2.dummyprovider.com", fn)
 	if awsS3Client != nil || err == nil {
-		t.Errorf("NewAWSS3Client should have returned a valid AWS S3 client.")
+		t.Errorf("NewS3Client should have returned a valid AWS S3 client.")
 	}
 
 	// Test for invalid scenario, where we return nil client
 	fn = func(context.Context, string, string, string) interface{} {
 		return nil
 	}
-	_, err = NewAWSS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
+	_, err = storageaws.NewS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
 	if err == nil {
-		t.Errorf("NewAWSS3Client should have returned error.")
+		t.Errorf("NewS3Client should have returned error.")
 	}
 
 	// Test for invalid scenario, where we return invalid client
 	fn = func(context.Context, string, string, string) interface{} {
 		return "abcd"
 	}
-	_, err = NewAWSS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
+	_, err = storageaws.NewS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
 	if err == nil {
-		t.Errorf("NewAWSS3Client should have returned error.")
+		t.Errorf("NewS3Client should have returned error.")
 	}
 }
 
@@ -248,7 +231,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 		},
 	}
 
-	awsClient := &AWSS3Client{}
+	awsClient := &storageaws.S3Client{}
 
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
 	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
@@ -301,15 +284,15 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+		vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
 		}
 
 		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-		getClientWrapper := RemoteDataClientsMap[vol.Provider]
-		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
+		getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
+		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
 
 		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			cl := spltest.MockAWSS3Client{}
@@ -329,7 +312,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 		}
 
 		var mockResponse spltest.MockRemoteDataClient
-		mockResponse, err = ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
+		mockResponse, err = splstorage.ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -371,7 +354,7 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 		},
 	}
 
-	awsClient := &AWSS3Client{}
+	awsClient := &storageaws.S3Client{}
 
 	Etag := "cc707187b036405f095a8ebb43a782c1"
 	Key := "admin_app.tgz"
@@ -402,14 +385,14 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 
 	appSource := appFrameworkRef.AppSources[0]
 
-	vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
 
 	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-	getClientWrapper := RemoteDataClientsMap[vol.Provider]
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
+	getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
 
 	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		cl := spltest.MockAWSS3Client{}
@@ -431,7 +414,7 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 	}
 
 	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
 	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		cl := spltest.MockAWSS3ClientError{}
 		// return empty objects list here to test the negative scenario
@@ -492,7 +475,7 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 		},
 	}
 
-	awsClient := &AWSS3Client{
+	awsClient := &storageaws.S3Client{
 		Downloader: spltest.MockAWSDownloadClient{},
 	}
 
@@ -526,14 +509,14 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+		vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			t.Errorf("Unable to get volume for app source : %s", appSource.Name)
 		}
 
 		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-		getClientWrapper := RemoteDataClientsMap[vol.Provider]
-		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
+		getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
+		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
 
 		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			cl := spltest.MockAWSS3Client{}
@@ -546,7 +529,7 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 
 		awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-		downloadRequest := RemoteDataDownloadRequest{
+		downloadRequest := splcommon.RemoteDataDownloadRequest{
 			LocalFile:  LocalFiles[index],
 			RemoteFile: RemoteFiles[index],
 			Etag:       Etags[index],
@@ -607,7 +590,7 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 		},
 	}
 
-	awsClient := &AWSS3Client{
+	awsClient := &storageaws.S3Client{
 		Downloader: spltest.MockAWSDownloadClient{},
 	}
 
@@ -620,14 +603,14 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 
 	appSource := appFrameworkRef.AppSources[0]
 
-	vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
 	}
 
 	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-	getClientWrapper := RemoteDataClientsMap[vol.Provider]
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
+	getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
 
 	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		cl := spltest.MockAWSS3Client{}
@@ -640,7 +623,7 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 
 	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-	downloadRequest := RemoteDataDownloadRequest{
+	downloadRequest := splcommon.RemoteDataDownloadRequest{
 		LocalFile:  LocalFile[0],
 		RemoteFile: RemoteFile,
 		Etag:       Etag,
@@ -652,7 +635,7 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 
 	// Now make the localFile name non-empty string
 	LocalFile[0] = "randomFile"
-	downloadRequest = RemoteDataDownloadRequest{
+	downloadRequest = splcommon.RemoteDataDownloadRequest{
 		LocalFile:  LocalFile[0],
 		RemoteFile: RemoteFile,
 		Etag:       Etag,

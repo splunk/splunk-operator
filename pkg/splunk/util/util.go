@@ -335,6 +335,42 @@ func (podExecClient *PodExecClient) GetClient() splcommon.ControllerClient {
 	return podExecClient.client
 }
 
+// CheckIfVolumeExists checks if the volume is configured or not
+func CheckIfVolumeExists(volumeList []enterpriseApi.VolumeSpec, volName string) (int, error) {
+	for i, volume := range volumeList {
+		if volume.Name == volName {
+			return i, nil
+		}
+	}
+
+	return -1, fmt.Errorf("volume: %s, doesn't exist", volName)
+}
+
+// GetAppSrcVolume gets the volume definition for an app source
+func GetAppSrcVolume(ctx context.Context, appSource enterpriseApi.AppSourceSpec, appFrameworkRef *enterpriseApi.AppFrameworkSpec) (enterpriseApi.VolumeSpec, error) {
+	var volName string
+	var index int
+	var err error
+	var vol enterpriseApi.VolumeSpec
+
+	scopedLog := logging.FromContext(ctx).With("func", "GetAppSrcVolume")
+
+	if appSource.VolName != "" {
+		volName = appSource.VolName
+	} else {
+		volName = appFrameworkRef.Defaults.VolName
+	}
+
+	index, err = CheckIfVolumeExists(appFrameworkRef.VolList, volName)
+	if err != nil {
+		scopedLog.ErrorContext(ctx, "invalid volume name provided. Please specify a valid volume name", "appSource", appSource.Name, "volumeName", volName, "error", err)
+		return vol, err
+	}
+
+	vol = appFrameworkRef.VolList[index]
+	return vol, err
+}
+
 // NewStreamOptionsObject return a new streamoptions object for the given command
 func NewStreamOptionsObject(command string) *remotecommand.StreamOptions {
 	return &remotecommand.StreamOptions{
