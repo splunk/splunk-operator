@@ -178,8 +178,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
-
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
 
@@ -305,8 +304,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
-
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
 
@@ -728,8 +726,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
-
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
 
@@ -753,7 +750,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", Label("tier:e2e-full", "sva:c3", "cloud:aws", "cloud:gcp", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", Label("tier:e2e-full", "sva:c3", "cloud:aws", "cloud:gcp", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -914,8 +911,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
-
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
 
@@ -946,7 +942,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then downgrade them", Label("tier:e2e-full", "sva:c3", "cloud:aws", "cloud:gcp", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then downgrade them", Label("tier:e2e-full", "sva:c3", "cloud:aws", "cloud:gcp", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1119,8 +1115,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
-
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
 
@@ -1337,8 +1332,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
-
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
 
@@ -1430,7 +1424,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", Label("tier:e2e-full", "sva:c3", "cloud:aws", "cloud:gcp", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", Label("tier:e2e-full", "sva:c3", "cloud:aws", "cloud:gcp", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1531,8 +1525,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
-
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
 
@@ -1614,7 +1607,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", Label("tier:e2e-full", "sva:c3", "cloud:aws", "cloud:gcp", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", Label("tier:e2e-full", "sva:c3", "cloud:aws", "cloud:gcp", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1782,8 +1775,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
-
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
 
@@ -2283,8 +2275,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to disable apps on S3")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
-
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Ensure Cluster Master goes to Ready phase
 			Eventually(func() error {
 				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
@@ -2406,8 +2397,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			appFileList = testenv.GetAppFileList(appListV2)
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
-
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
 
@@ -2646,9 +2636,15 @@ var _ = Describe("c3appfw test", func() {
 			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Verify IsDeploymentInProgress Flag is set to true for Cluster Master CR
+			// Verify IsDeploymentInProgress Flag is set to true for Cluster Master CR.
+			// Cap poll at 2m — flag appears within one or two reconcile cycles; the
+			// default deployment.GetTimeout() (100m) causes 100m hangs on race failures.
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag")
-			Expect(testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, cm.Name, cm.Kind)).To(Succeed(), "IsDeploymentInProgress flag not set")
+			Eventually(func() error {
+				flagCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+				defer cancel()
+				return testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(flagCtx, deployment, cm.Name, cm.Kind)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "IsDeploymentInProgress flag not set on CM")
 
 			// Ensure Cluster Master goes to Ready phase
 			Eventually(func() error {
@@ -2659,7 +2655,11 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify IsDeploymentInProgress Flag is set to true for SHC CR
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag")
-			Expect(testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, shc.Name, shc.Kind)).To(Succeed(), "IsDeploymentInProgress flag not set")
+			Eventually(func() error {
+				flagCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+				defer cancel()
+				return testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(flagCtx, deployment, shc.Name, shc.Kind)
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "IsDeploymentInProgress flag not set on SHC")
 
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
 		})
