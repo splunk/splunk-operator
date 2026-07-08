@@ -10,7 +10,7 @@ import (
 	"time"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"

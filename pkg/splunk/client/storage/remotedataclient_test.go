@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,48 +13,51 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package client
+package storage_test
 
 import (
 	"context"
 	"testing"
+
+	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
+	storageaws "github.com/splunk/splunk-operator/pkg/splunk/client/storage/aws"
 )
 
 func TestRegisterRemoteDataClient(t *testing.T) {
 	ctx := context.TODO()
-	// clear any stale entries present in the RemoteDataClientsMap map
-	for k := range RemoteDataClientsMap {
-		delete(RemoteDataClientsMap, k)
+	// clear any stale entries present in the splstorage.RemoteDataClientsMap map
+	for k := range splstorage.RemoteDataClientsMap {
+		delete(splstorage.RemoteDataClientsMap, k)
 	}
 
 	// 1. Test for aws
-	RegisterRemoteDataClient(ctx, "aws")
-	if len(RemoteDataClientsMap) == 0 {
+	splstorage.RegisterRemoteDataClient(ctx, "aws")
+	if len(splstorage.RemoteDataClientsMap) == 0 {
 		t.Errorf("We should have initialized the client for aws.")
 	}
 
 	// 2. Test for minio
-	RegisterRemoteDataClient(ctx, "minio")
-	if len(RemoteDataClientsMap) == 1 {
+	splstorage.RegisterRemoteDataClient(ctx, "minio")
+	if len(splstorage.RemoteDataClientsMap) == 1 {
 		t.Errorf("We should have initialized the client for minio as well.")
 	}
 
 	// 3. Test for azure
-	RegisterRemoteDataClient(ctx, "azure")
-	if len(RemoteDataClientsMap) == 1 {
+	splstorage.RegisterRemoteDataClient(ctx, "azure")
+	if len(splstorage.RemoteDataClientsMap) == 1 {
 		t.Errorf("We should have initialized the client for azure as well.")
 	}
 
 	// 3. Test for invalid provider
-	RegisterRemoteDataClient(ctx, "invalid")
-	if len(RemoteDataClientsMap) > 3 {
+	splstorage.RegisterRemoteDataClient(ctx, "invalid")
+	if len(splstorage.RemoteDataClientsMap) > 3 {
 		t.Errorf("We should only have initialized the client for aws, minio and azure but not for an invalid provider.")
 	}
 
 }
 
 func TestGetSetRemoteDataClientFuncPtr(t *testing.T) {
-	c := &GetRemoteDataClientWrapper{}
+	c := &splstorage.GetRemoteDataClientWrapper{}
 	ctx := context.TODO()
 
 	fn := c.GetRemoteDataClientFuncPtr(ctx)
@@ -62,7 +65,7 @@ func TestGetSetRemoteDataClientFuncPtr(t *testing.T) {
 		t.Errorf("We should have received a nil function pointer")
 	}
 
-	c.SetRemoteDataClientFuncPtr(ctx, "aws", NewAWSS3Client)
+	c.SetRemoteDataClientFuncPtr(ctx, "aws", storageaws.NewS3Client)
 	if c.GetRemoteDataClient == nil {
 		t.Errorf("We should have set GetRemoteDataClient func pointer for AWS client.")
 	}
@@ -70,14 +73,14 @@ func TestGetSetRemoteDataClientFuncPtr(t *testing.T) {
 
 func TestGetSetRemoteDataClientInitFuncPtr(t *testing.T) {
 	ctx := context.TODO()
-	c := &GetRemoteDataClientWrapper{}
+	c := &splstorage.GetRemoteDataClientWrapper{}
 
 	fn := c.GetRemoteDataClientInitFuncPtr(ctx)
 	if fn != nil {
 		t.Errorf("We should have received a nil init function pointer")
 	}
 
-	c.SetRemoteDataClientInitFuncPtr(ctx, "aws", InitAWSClientWrapper)
+	c.SetRemoteDataClientInitFuncPtr(ctx, "aws", storageaws.InitClientWrapper)
 	if c.GetInitFunc == nil {
 		t.Errorf("We should have set GetInitFunc func pointer for AWS client.")
 	}

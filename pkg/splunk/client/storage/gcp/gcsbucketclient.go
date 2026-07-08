@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc.
+// Copyright (c) 2018-2026 Splunk Inc.
 // All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package client
+package gcp
 
 import (
 	"context"
@@ -24,12 +24,13 @@ import (
 	"cloud.google.com/go/storage"
 	//"golang.org/x/oauth2/google"
 	"github.com/splunk/splunk-operator/pkg/logging"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
 
-// blank assignment to verify that GCSClient implements RemoteDataClient
-var _ RemoteDataClient = &GCSClient{}
+// blank assignment to verify that GCSClient implements splcommon.RemoteDataClient
+var _ splcommon.RemoteDataClient = &GCSClient{}
 
 // GCSClientInterface defines the interface for GCS client operations
 type GCSClientInterface interface {
@@ -148,7 +149,7 @@ func InitGcloudClientWrapper(ctx context.Context, region, accessKeyID, secretAcc
 }
 
 // NewGCSClient returns a GCS client
-func NewGCSClient(ctx context.Context, bucketName string, gcpCredentials string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
+func NewGCSClient(ctx context.Context, bucketName string, gcpCredentials string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn splcommon.GetInitFunc) (splcommon.RemoteDataClient, error) {
 	client, err := InitGCSClient(ctx, secretAccessKey)
 	if err != nil {
 		return nil, err
@@ -166,18 +167,12 @@ func NewGCSClient(ctx context.Context, bucketName string, gcpCredentials string,
 	}, nil
 }
 
-// RegisterGCSClient will add the corresponding function pointer to the map
-func RegisterGCSClient() {
-	wrapperObject := GetRemoteDataClientWrapper{GetRemoteDataClient: NewGCSClient, GetInitFunc: InitGcloudClientWrapper}
-	RemoteDataClientsMap["gcp"] = wrapperObject
-}
-
 // GetAppsList gets the list of apps from remote storage
-func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
+func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (splcommon.RemoteDataListResponse, error) {
 	scopedLog := logging.FromContext(ctx).With("func", "GetAppsList")
 
 	scopedLog.InfoContext(ctx, "getting Apps list", "bucket", gcsClient.BucketName)
-	remoteDataClientResponse := RemoteDataListResponse{}
+	remoteDataClientResponse := splcommon.RemoteDataListResponse{}
 
 	query := &storage.Query{
 		Prefix:    gcsClient.Prefix,
@@ -187,7 +182,7 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 	startAfterFound := gcsClient.StartAfter == "" // If StartAfter is empty, skip this check
 	it := gcsClient.BucketHandle.Objects(ctx, query)
 
-	var objects []*RemoteObject
+	var objects []*splcommon.RemoteObject
 	maxKeys := 4000 // Limit the number of objects manually
 
 	if strings.HasSuffix(gcsClient.StartAfter, "/") {
@@ -213,7 +208,7 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 		}
 
 		// Map GCS object attributes to RemoteObject
-		remoteObj := &RemoteObject{
+		remoteObj := &splcommon.RemoteObject{
 			Etag:         &objAttrs.Etag,
 			Key:          &objAttrs.Name,
 			LastModified: &objAttrs.Updated,
@@ -231,7 +226,7 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 }
 
 // DownloadApp downloads the app from remote storage to the local file system
-func (gcsClient *GCSClient) DownloadApp(ctx context.Context, downloadRequest RemoteDataDownloadRequest) (bool, error) {
+func (gcsClient *GCSClient) DownloadApp(ctx context.Context, downloadRequest splcommon.RemoteDataDownloadRequest) (bool, error) {
 	scopedLog := logging.FromContext(ctx).With("func", "DownloadApp", "remoteFile", downloadRequest.RemoteFile, "localFile",
 		downloadRequest.LocalFile, "etag", downloadRequest.Etag)
 

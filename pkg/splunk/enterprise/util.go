@@ -47,7 +47,7 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	"github.com/splunk/splunk-operator/pkg/logging"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -134,16 +134,16 @@ func updateStorageTracker(ctx context.Context) error {
 }
 
 // GetRemoteStorageClient returns the corresponding RemoteDataClient
-func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error) {
+func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
 
 	scopedLog := logging.FromContext(ctx).With("func", "GetRemoteStorageClient", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Get event publisher from context
 	eventPublisher := GetEventPublisher(ctx, cr)
 
-	remoteDataClient := splclient.SplunkRemoteDataClient{}
+	remoteDataClient := splstorage.SplunkRemoteDataClient{}
 	//use the provider name to get the corresponding function pointer
-	getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
+	getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
 	getClient := getClientWrapper.GetRemoteDataClientFuncPtr(ctx)
 
 	appSecretRef := vol.SecretRef
@@ -589,7 +589,7 @@ func getRemoteObjectKey(ctx context.Context, cr splcommon.MetaObject, appFramewo
 		return remoteObjectKey, err
 	}
 
-	vol, err = splclient.GetAppSrcVolume(ctx, *appSrc, appFrameworkConfig)
+	vol, err = splutil.GetAppSrcVolume(ctx, *appSrc, appFrameworkConfig)
 	if err != nil {
 		scopedLog.ErrorContext(ctx, "unable to get volume spec", "error", err)
 		return remoteObjectKey, err
@@ -622,13 +622,13 @@ func getRemoteDataClientMgr(ctx context.Context, client splcommon.ControllerClie
 		return nil, err
 	}
 
-	vol, err = splclient.GetAppSrcVolume(ctx, *appSrc, appFrameworkConfig)
+	vol, err = splutil.GetAppSrcVolume(ctx, *appSrc, appFrameworkConfig)
 	if err != nil {
 		scopedLog.ErrorContext(ctx, "unable to get volume spec", "error", err)
 		return nil, err
 	}
 
-	remoteDataClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
+	remoteDataClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
 	initFunc := remoteDataClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 	remoteDataClientMgr := &RemoteDataClientManager{
 		client:              client,
@@ -903,15 +903,15 @@ type RemoteDataClientManager struct {
 	appFrameworkRef     *enterpriseApi.AppFrameworkSpec
 	vol                 *enterpriseApi.VolumeSpec
 	location            string
-	initFn              splclient.GetInitFunc
+	initFn              splcommon.GetInitFunc
 	getRemoteDataClient func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
 		appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
-		location string, fp splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error)
+		location string, fp splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error)
 }
 
 // GetAppsList gets the apps list
-func (rdcMgr *RemoteDataClientManager) GetAppsList(ctx context.Context) (splclient.RemoteDataListResponse, error) {
-	var remoteDataListResponse splclient.RemoteDataListResponse
+func (rdcMgr *RemoteDataClientManager) GetAppsList(ctx context.Context) (splcommon.RemoteDataListResponse, error) {
+	var remoteDataListResponse splcommon.RemoteDataListResponse
 
 	c, err := rdcMgr.getRemoteDataClient(ctx, rdcMgr.client, rdcMgr.cr, rdcMgr.appFrameworkRef, rdcMgr.vol, rdcMgr.location, rdcMgr.initFn)
 	if err != nil {
@@ -933,7 +933,7 @@ func (rdcMgr *RemoteDataClientManager) DownloadApp(ctx context.Context, remoteFi
 		return err
 	}
 
-	downloadRequest := splclient.RemoteDataDownloadRequest{
+	downloadRequest := splcommon.RemoteDataDownloadRequest{
 		LocalFile:  localFile,
 		RemoteFile: remoteFile,
 		Etag:       etag,
@@ -947,33 +947,33 @@ func (rdcMgr *RemoteDataClientManager) DownloadApp(ctx context.Context, remoteFi
 }
 
 // GetAppsList this func pointer is to use this function in unit test cases
-var GetAppsList = func(ctx context.Context, RemoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
+var GetAppsList = func(ctx context.Context, RemoteDataClientMgr RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
 	remoteDataListResponse, err := RemoteDataClientMgr.GetAppsList(ctx)
 	return remoteDataListResponse, err
 }
 
 // GetAppListFromRemoteBucket gets the list of apps from remote storage.
-func GetAppListFromRemoteBucket(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec) (map[string]splclient.RemoteDataListResponse, error) {
+func GetAppListFromRemoteBucket(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec) (map[string]splcommon.RemoteDataListResponse, error) {
 
 	scopedLog := logging.FromContext(ctx).With("func", "GetAppListFromRemoteBucket", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	sourceToAppListMap := make(map[string]splclient.RemoteDataListResponse)
+	sourceToAppListMap := make(map[string]splcommon.RemoteDataListResponse)
 
 	scopedLog.InfoContext(ctx, "getting the list of apps from remote storage")
 
-	var remoteDataListResponse splclient.RemoteDataListResponse
+	var remoteDataListResponse splcommon.RemoteDataListResponse
 	var vol enterpriseApi.VolumeSpec
 	var err error
 	var allSuccess bool = true
 
 	for _, appSource := range appFrameworkRef.AppSources {
-		vol, err = splclient.GetAppSrcVolume(ctx, appSource, appFrameworkRef)
+		vol, err = splutil.GetAppSrcVolume(ctx, appSource, appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
 		}
 
-		remoteDataClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
+		remoteDataClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
 		initFunc := remoteDataClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 		remoteDataClientMgr := RemoteDataClientManager{
 			client:              client,
@@ -1005,7 +1005,7 @@ func GetAppListFromRemoteBucket(ctx context.Context, client splcommon.Controller
 }
 
 // checkIfAnAppIsActiveOnRemoteStore checks if the App is listed as part of the AppSrc listing
-func checkIfAnAppIsActiveOnRemoteStore(appName string, list []*splclient.RemoteObject) bool {
+func checkIfAnAppIsActiveOnRemoteStore(appName string, list []*splcommon.RemoteObject) bool {
 	for i := range list {
 		if strings.HasSuffix(*list[i].Key, appName) {
 			return true
@@ -1016,7 +1016,7 @@ func checkIfAnAppIsActiveOnRemoteStore(appName string, list []*splclient.RemoteO
 }
 
 // checkIfAppSrcExistsWithRemoteListing checks if a given AppSrc is part of the remote listing
-func checkIfAppSrcExistsWithRemoteListing(appSrc string, remoteObjListingMap map[string]splclient.RemoteDataListResponse) bool {
+func checkIfAppSrcExistsWithRemoteListing(appSrc string, remoteObjListingMap map[string]splcommon.RemoteDataListResponse) bool {
 	if _, ok := remoteObjListingMap[appSrc]; ok {
 		return true
 	}
@@ -1215,7 +1215,7 @@ func isAppRepoStateDeleted(appDeployInfo enterpriseApi.AppDeploymentInfo) bool {
 // handleAppRepoChanges parses the remote storage listing and updates the repoState and deployStatus accordingly
 // client and cr are used when we put the glue logic to hand-off to the side car
 func handleAppRepoChanges(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
-	appDeployContext *enterpriseApi.AppDeploymentContext, remoteObjListingMap map[string]splclient.RemoteDataListResponse, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) (bool, error) {
+	appDeployContext *enterpriseApi.AppDeploymentContext, remoteObjListingMap map[string]splcommon.RemoteDataListResponse, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) (bool, error) {
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 
 	scopedLog := logging.FromContext(ctx).With("func", "handleAppRepoChanges", "kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -1298,7 +1298,7 @@ func isAppExtensionValid(receivedKey string) bool {
 }
 
 // AddOrUpdateAppSrcDeploymentInfoList  modifies the App deployment status as perceived from the remote object listing
-func AddOrUpdateAppSrcDeploymentInfoList(ctx context.Context, appSrcDeploymentInfo *enterpriseApi.AppSrcDeployInfo, remoteS3ObjList []*splclient.RemoteObject) bool {
+func AddOrUpdateAppSrcDeploymentInfoList(ctx context.Context, appSrcDeploymentInfo *enterpriseApi.AppSrcDeployInfo, remoteS3ObjList []*splcommon.RemoteObject) bool {
 
 	scopedLog := logging.FromContext(ctx).With("func", "AddOrUpdateAppSrcDeploymentInfoList", "listLength", len(remoteS3ObjList))
 
@@ -1677,7 +1677,7 @@ func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerC
 		}
 
 		appStatusContext.IsDeploymentInProgress = true
-		var sourceToAppsList map[string]splclient.RemoteDataListResponse
+		var sourceToAppsList map[string]splcommon.RemoteDataListResponse
 
 		scopedLog.InfoContext(ctx, "checking status of apps on remote storage")
 

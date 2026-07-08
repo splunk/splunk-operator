@@ -1,5 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
-
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package client
+package azure
 
 import (
 	"context"
@@ -27,9 +26,10 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/splunk/splunk-operator/pkg/logging"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
-var _ RemoteDataClient = &AzureBlobClient{}
+var _ splcommon.RemoteDataClient = &BlobClient{}
 
 // ContainerClientInterface abstracts the methods used from the Azure SDK's ContainerClient.
 type ContainerClientInterface interface {
@@ -76,8 +76,8 @@ const (
 	CredentialTypeAzureAD
 )
 
-// AzureBlobClient implements the RemoteDataClient interface for Azure Blob Storage.
-type AzureBlobClient struct {
+// BlobClient implements the RemoteDataClient interface for Azure Blob Storage.
+type BlobClient struct {
 	BucketName         string
 	StorageAccountName string
 	Prefix             string
@@ -87,9 +87,9 @@ type AzureBlobClient struct {
 	CredentialType     CredentialType
 }
 
-// NewAzureBlobClient initializes and returns an AzureBlobClient.
+// NewBlobClient initializes and returns a BlobClient.
 // It supports both Shared Key and Azure AD authentication based on provided credentials.
-// NewAzureBlobClient initializes a new AzureBlobClient with the provided parameters.
+// NewBlobClient initializes a new BlobClient with the provided parameters.
 // It supports both Shared Key and Azure AD authentication methods.
 //
 // Parameters:
@@ -111,7 +111,7 @@ type AzureBlobClient struct {
 // authentication method based on the presence of the secretAccessKey. If the
 // secretAccessKey is provided, Shared Key authentication is used; otherwise,
 // Azure AD authentication is used.
-func NewAzureBlobClient(
+func NewBlobClient(
 	ctx context.Context,
 	bucketName string, // Azure Blob container name
 	storageAccountName string, // Azure Storage account name
@@ -120,11 +120,11 @@ func NewAzureBlobClient(
 	startAfter string, // Marker for blob listing (optional)
 	region string, // Azure region (e.g., "eastus")
 	endpoint string, // Custom endpoint (optional)
-	initFunc GetInitFunc, // Initialization function
-) (RemoteDataClient, error) { // Matches GetRemoteDataClient signature
-	scopedLog := logging.FromContext(ctx).With("func", "NewAzureBlobClient")
+	initFunc splcommon.GetInitFunc, // Initialization function
+) (splcommon.RemoteDataClient, error) { // Matches GetRemoteDataClient signature
+	scopedLog := logging.FromContext(ctx).With("func", "NewBlobClient")
 
-	scopedLog.InfoContext(ctx, "initializing AzureBlobClient")
+	scopedLog.InfoContext(ctx, "initializing BlobClient")
 
 	// Execute the initialization function if provided.
 	if initFunc != nil {
@@ -226,7 +226,7 @@ func NewAzureBlobClient(
 		"StorageAccountName", storageAccountName,
 	)
 
-	return &AzureBlobClient{
+	return &BlobClient{
 		BucketName:         bucketName,
 		StorageAccountName: storageAccountName,
 		Prefix:             prefix,
@@ -238,7 +238,7 @@ func NewAzureBlobClient(
 }
 
 // GetAppsList retrieves a list of blobs (apps) from the Azure Blob container.
-func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
+func (client *BlobClient) GetAppsList(ctx context.Context) (splcommon.RemoteDataListResponse, error) {
 	scopedLog := logging.FromContext(ctx).With("func", "AzureBlob:GetAppsList", "Bucket", client.BucketName)
 
 	scopedLog.InfoContext(ctx, "fetching list of apps")
@@ -256,12 +256,12 @@ func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListR
 	// Create a pager to iterate through blobs.
 	pager := client.ContainerClient.NewListBlobsFlatPager(options)
 
-	var blobs []*RemoteObject
+	var blobs []*splcommon.RemoteObject
 	for pager.More() {
 		resp, err := pager.NextPage(ctx)
 		if err != nil {
 			scopedLog.ErrorContext(ctx, "error listing blobs", "error", err)
-			return RemoteDataListResponse{}, fmt.Errorf("error listing blobs: %w", err)
+			return splcommon.RemoteDataListResponse{}, fmt.Errorf("error listing blobs: %w", err)
 		}
 
 		for _, blob := range resp.Segment.BlobItems {
@@ -270,7 +270,7 @@ func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListR
 			lastModified := blob.Properties.LastModified
 			size := blob.Properties.ContentLength
 
-			remoteObject := &RemoteObject{
+			remoteObject := &splcommon.RemoteObject{
 				Etag:         &etag,
 				Key:          &name,
 				LastModified: lastModified,
@@ -282,11 +282,11 @@ func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListR
 
 	scopedLog.InfoContext(ctx, "successfully fetched list of apps", "TotalBlobs", len(blobs))
 
-	return RemoteDataListResponse{Objects: blobs}, nil
+	return splcommon.RemoteDataListResponse{Objects: blobs}, nil
 }
 
 // DownloadApp downloads a specific blob from Azure Blob Storage to a local file.
-func (client *AzureBlobClient) DownloadApp(ctx context.Context, downloadRequest RemoteDataDownloadRequest) (bool, error) {
+func (client *BlobClient) DownloadApp(ctx context.Context, downloadRequest splcommon.RemoteDataDownloadRequest) (bool, error) {
 	scopedLog := logging.FromContext(ctx).With("func", "AzureBlob:DownloadApp",
 		"Bucket", client.BucketName,
 		"RemoteFile", downloadRequest.RemoteFile,
@@ -327,7 +327,7 @@ func (client *AzureBlobClient) DownloadApp(ctx context.Context, downloadRequest 
 }
 
 // NoOpInitFunc performs no additional initialization.
-// It satisfies the GetInitFunc type and can be used when no extra setup is needed.
+// It satisfies the splcommon.GetInitFunc type and can be used when no extra setup is needed.
 func NoOpInitFunc(
 	ctx context.Context,
 	appAzureBlobEndPoint string,
@@ -336,13 +336,4 @@ func NoOpInitFunc(
 ) interface{} {
 	// No additional initialization required.
 	return nil
-}
-
-// RegisterAzureBlobClient registers the AzureBlobClient in the RemoteDataClientsMap.
-func RegisterAzureBlobClient() {
-	wrapperObject := GetRemoteDataClientWrapper{
-		GetRemoteDataClient: NewAzureBlobClient,
-		GetInitFunc:         NoOpInitFunc, // Use CustomInitFunc if additional initialization is needed
-	}
-	RemoteDataClientsMap["azure"] = wrapperObject
 }

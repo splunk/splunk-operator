@@ -28,7 +28,7 @@ sub-packages) must never import each other.
 
 ```
  ┌─────────────────┐
- │  reconcile/<cr>  │  Reads CR, builds objects, applies, delegates workflows
+ │  reconcile/<cr> │  Reads CR, builds objects, applies, delegates workflows
  └──┬───┬───┬───┬──┘
     │   │   │   │
     │   │   │   ▼
@@ -49,6 +49,8 @@ sub-packages) must never import each other.
     ▼
    common/                        Types, interfaces, constants
 ```
+
+All packages may also import `api/enterprise/v4` (CRD types).
 
 | Package | Purpose | Allowed imports from `pkg/splunk/` |
 |---|---|---|

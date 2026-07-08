@@ -1,5 +1,4 @@
 // Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
-
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,27 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package client
-
-import (
-	"bytes"
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"testing"
-)
-
-func loadFixture(t *testing.T, filename string) string {
-	t.Helper()
-	path := filepath.Join("testdata", "fixtures", filename)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("Failed to load fixture %s: %v", filename, err)
-	}
-
-	var compactJSON bytes.Buffer
-	if err := json.Compact(&compactJSON, data); err != nil {
-		t.Fatalf("Failed to compact JSON from fixture %s: %v", filename, err)
-	}
-	return compactJSON.String()
-}
+// Package storage provides the registry of remote storage clients and utilities
+// for registering, looking up, and creating mock clients for testing.
+package storage
