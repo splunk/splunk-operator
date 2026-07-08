@@ -193,6 +193,26 @@ All CR's that support a `replicas` field can be scaled using the `kubectl scale`
 $ kubectl scale idc example --replicas=5
 indexercluster.enterprise.splunk.com/example scaled
 ```
+
+#### Scaling down cluster peers
+Scaling down uses the same `replicas` field — set it to a lower value. For example, to reduce an indexer cluster from 10 peers to 6:
+
+```
+$ kubectl scale idc example --replicas=6
+indexercluster.enterprise.splunk.com/example scaled
+```
+
+The operator coordinates the scale-down at the Splunk layer (decommissioning peers to preserve data integrity) before pods are removed. Keep the following in mind:
+
+* **Minimum of 3 peers.** The operator will not scale below 3 members.
+* **Replication factor floor.** If you request fewer `replicas` than the `replication_factor` (or the `origin` count of `site_replication_factor` for multisite clusters), the operator clamps the count back up to that value.
+* **The command only sets the desired count.** Scale-down is not instantaneous — watch the CR phase and pod count until they settle:
+
+```
+$ kubectl get idc example
+$ kubectl get pods -l app.kubernetes.io/instance=splunk-example-indexer
+```
+
 #### Scaling cluster peers using pod autoscaling
 You can also create [Horizontal Pod Autoscalers](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) to manage dynamic scaling for you. For example:
 

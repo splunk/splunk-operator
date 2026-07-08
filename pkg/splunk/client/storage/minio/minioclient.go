@@ -1,5 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
-
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package client
+package minio
 
 import (
 	"context"
@@ -28,10 +27,13 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/splunk/splunk-operator/pkg/logging"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
-// blank assignment to verify that MinioClient implements RemoteDataClient
-var _ RemoteDataClient = &MinioClient{}
+const httpClientTimeout = 2000
+
+// blank assignment to verify that MinioClient implements splcommon.RemoteDataClient
+var _ splcommon.RemoteDataClient = &MinioClient{}
 
 // SplunkMinioClient is an interface to Minio S3 client
 type SplunkMinioClient interface {
@@ -51,7 +53,7 @@ type MinioClient struct {
 }
 
 // NewMinioClient returns an Minio client
-func NewMinioClient(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
+func NewMinioClient(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn splcommon.GetInitFunc) (splcommon.RemoteDataClient, error) {
 
 	var s3SplunkClient SplunkMinioClient
 	var err error
@@ -75,20 +77,14 @@ func NewMinioClient(ctx context.Context, bucketName string, accessKeyID string, 
 	}, nil
 }
 
-// RegisterMinioClient will add the corresponding function pointer to the map
-func RegisterMinioClient() {
-	wrapperObject := GetRemoteDataClientWrapper{GetRemoteDataClient: NewMinioClient, GetInitFunc: InitMinioClientWrapper}
-	RemoteDataClientsMap["minio"] = wrapperObject
+// InitClientWrapper is a wrapper around InitClientSession
+func InitClientWrapper(ctx context.Context, appS3Endpoint string, accessKeyID string, secretAccessKey string) interface{} {
+	return InitClientSession(ctx, appS3Endpoint, accessKeyID, secretAccessKey)
 }
 
-// InitMinioClientWrapper is a wrapper around InitMinioClientSession
-func InitMinioClientWrapper(ctx context.Context, appS3Endpoint string, accessKeyID string, secretAccessKey string) interface{} {
-	return InitMinioClientSession(ctx, appS3Endpoint, accessKeyID, secretAccessKey)
-}
-
-// InitMinioClientSession initializes and returns a client session object
-func InitMinioClientSession(ctx context.Context, appS3Endpoint string, accessKeyID string, secretAccessKey string) SplunkMinioClient {
-	scopedLog := logging.FromContext(ctx).With("func", "InitMinioClientSession")
+// InitClientSession initializes and returns a client session object
+func InitClientSession(ctx context.Context, appS3Endpoint string, accessKeyID string, secretAccessKey string) SplunkMinioClient {
+	scopedLog := logging.FromContext(ctx).With("func", "InitClientSession")
 
 	// Check if SSL is needed
 	useSSL := true
@@ -114,7 +110,7 @@ func InitMinioClientSession(ctx context.Context, appS3Endpoint string, accessKey
 	// Create a custom http transport as minio doesn't support
 	transport := http.Transport{
 		Dial: (&net.Dialer{
-			Timeout: appFrameworkHttpclientTimeout * time.Second,
+			Timeout: httpClientTimeout * time.Second,
 		}).Dial,
 		DisableCompression: true,
 		TLSClientConfig: &tls.Config{
@@ -142,11 +138,11 @@ func InitMinioClientSession(ctx context.Context, appS3Endpoint string, accessKey
 }
 
 // GetAppsList get the list of apps from remote storage
-func (client *MinioClient) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
+func (client *MinioClient) GetAppsList(ctx context.Context) (splcommon.RemoteDataListResponse, error) {
 	scopedLog := logging.FromContext(ctx).With("func", "GetAppsList")
 
 	scopedLog.InfoContext(ctx, "getting Apps list", "bucket", client.BucketName, "prefix", client.Prefix)
-	remoteDataClientResponse := RemoteDataListResponse{}
+	remoteDataClientResponse := splcommon.RemoteDataListResponse{}
 	s3Client := client.Client
 
 	// Create a bucket list command for all files in bucket
@@ -170,7 +166,7 @@ func (client *MinioClient) GetAppsList(ctx context.Context) (RemoteDataListRespo
 		newLastModified := object.LastModified
 		newSize := object.Size
 		newStorageClass := object.StorageClass
-		newRemoteObject := RemoteObject{Etag: &newETag, Key: &newKey, LastModified: &newLastModified, Size: &newSize, StorageClass: &newStorageClass}
+		newRemoteObject := splcommon.RemoteObject{Etag: &newETag, Key: &newKey, LastModified: &newLastModified, Size: &newSize, StorageClass: &newStorageClass}
 		remoteDataClientResponse.Objects = append(remoteDataClientResponse.Objects, &newRemoteObject)
 	}
 
@@ -178,7 +174,7 @@ func (client *MinioClient) GetAppsList(ctx context.Context) (RemoteDataListRespo
 }
 
 // DownloadApp downloads an app package from remote storage
-func (client *MinioClient) DownloadApp(ctx context.Context, downloadRequest RemoteDataDownloadRequest) (bool, error) {
+func (client *MinioClient) DownloadApp(ctx context.Context, downloadRequest splcommon.RemoteDataDownloadRequest) (bool, error) {
 	scopedLog := logging.FromContext(ctx).With("func", "DownloadApp", "remoteFile", downloadRequest.RemoteFile,
 		"localFile", downloadRequest.LocalFile, "etag", downloadRequest.Etag)
 

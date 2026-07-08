@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc.
+// Copyright (c) 2018-2026 Splunk Inc.
 // All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package client
+package gcp_test
 
 import (
 	"context"
@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	storagegcp "github.com/splunk/splunk-operator/pkg/splunk/client/storage/gcp"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/api/iterator"
@@ -35,12 +37,12 @@ type MockGCSClientInterface struct {
 }
 
 // Bucket mocks the Bucket method of GCSClientInterface
-func (m *MockGCSClientInterface) Bucket(bucketName string) BucketHandleInterface {
+func (m *MockGCSClientInterface) Bucket(bucketName string) storagegcp.BucketHandleInterface {
 	args := m.Called(bucketName)
 	if args.Get(0) == nil {
 		return nil
 	}
-	return args.Get(0).(BucketHandleInterface)
+	return args.Get(0).(storagegcp.BucketHandleInterface)
 }
 
 // MockBucketHandle is a mock implementation of BucketHandleInterface
@@ -49,21 +51,21 @@ type MockBucketHandle struct {
 }
 
 // Objects mocks the Objects method of BucketHandleInterface
-func (m *MockBucketHandle) Objects(ctx context.Context, query *storage.Query) ObjectIteratorInterface {
+func (m *MockBucketHandle) Objects(ctx context.Context, query *storage.Query) storagegcp.ObjectIteratorInterface {
 	args := m.Called(ctx, query)
 	if args.Get(0) == nil {
 		return nil
 	}
-	return args.Get(0).(ObjectIteratorInterface)
+	return args.Get(0).(storagegcp.ObjectIteratorInterface)
 }
 
 // Object mocks the Object method of BucketHandleInterface
-func (m *MockBucketHandle) Object(name string) ObjectHandleInterface {
+func (m *MockBucketHandle) Object(name string) storagegcp.ObjectHandleInterface {
 	args := m.Called(name)
 	if args.Get(0) == nil {
 		return nil
 	}
-	return args.Get(0).(ObjectHandleInterface)
+	return args.Get(0).(storagegcp.ObjectHandleInterface)
 }
 
 // MockObjectIterator is a mock implementation of ObjectIteratorInterface
@@ -146,7 +148,7 @@ func TestGetAppsList(t *testing.T) {
 	mockBucket.On("Objects", mock.Anything, mock.Anything).Return(mockIterator)
 
 	// Create the GCSClient with the mock client
-	gcsClient := &GCSClient{
+	gcsClient := &storagegcp.GCSClient{
 		BucketName:   "test-bucket",
 		Prefix:       "test-prefix/",
 		StartAfter:   "test-prefix/app1",
@@ -195,14 +197,14 @@ func TestDownloadApp(t *testing.T) {
 	defer os.Remove(tmpFile.Name())
 
 	// Create the GCSClient with the mock client
-	gcsClient := &GCSClient{
+	gcsClient := &storagegcp.GCSClient{
 		BucketName:   "test-bucket",
 		Client:       mockClient,
 		BucketHandle: mockBucket, // Set the mocked bucket handle
 	}
 
 	// Prepare download request
-	downloadRequest := RemoteDataDownloadRequest{
+	downloadRequest := splcommon.RemoteDataDownloadRequest{
 		RemoteFile: "remote-file",
 		LocalFile:  tmpFile.Name(),
 		Etag:       "etag",
@@ -238,14 +240,14 @@ func TestDownloadAppError(t *testing.T) {
 	mockObject.On("NewReader", mock.Anything).Return(nil, errors.New("failed to create reader"))
 
 	// Create the GCSClient with the mock client
-	gcsClient := &GCSClient{
+	gcsClient := &storagegcp.GCSClient{
 		BucketName:   "test-bucket",
 		Client:       mockClient,
 		BucketHandle: mockBucket, // Set the mocked bucket handle
 	}
 
 	// Prepare download request
-	downloadRequest := RemoteDataDownloadRequest{
+	downloadRequest := splcommon.RemoteDataDownloadRequest{
 		RemoteFile: "remote-file",
 		LocalFile:  "testfile",
 		Etag:       "etag",

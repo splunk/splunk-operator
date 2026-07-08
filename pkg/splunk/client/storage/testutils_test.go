@@ -1,5 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
-
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package client
+package storage_test
 
 import (
 	"context"
@@ -22,7 +21,9 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
+	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 func TestCheckIfVolumeExists(t *testing.T) {
@@ -47,7 +48,7 @@ func TestCheckIfVolumeExists(t *testing.T) {
 	}
 
 	// Volume that doesn't should error out
-	_, err := CheckIfVolumeExists(SmartStoreConfig.VolList, "random_volume_name")
+	_, err := splutil.CheckIfVolumeExists(SmartStoreConfig.VolList, "random_volume_name")
 
 	if err == nil {
 		t.Errorf("if the volume doesn't exists, error should be reported")
@@ -55,7 +56,7 @@ func TestCheckIfVolumeExists(t *testing.T) {
 
 	// Volume that exists should not error out
 	index := len(SmartStoreConfig.VolList) - 1
-	returnedIndex, err := CheckIfVolumeExists(SmartStoreConfig.VolList, SmartStoreConfig.VolList[index].Name)
+	returnedIndex, err := splutil.CheckIfVolumeExists(SmartStoreConfig.VolList, SmartStoreConfig.VolList[index].Name)
 
 	if err != nil {
 		t.Errorf("existing volume should not error out. index id: %d, error: %s", index, err.Error())
@@ -72,7 +73,7 @@ func TestNewMockAWSS3Client(t *testing.T) {
 		return cl
 	}
 
-	_, err := NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err := splstorage.NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
 
 	if err != nil {
 		t.Errorf("NewMockAWSS3Client should have returned a Mock AWS client.")
@@ -82,7 +83,7 @@ func TestNewMockAWSS3Client(t *testing.T) {
 	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		return nil
 	}
-	_, err = NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err = splstorage.NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
 
 	if err == nil {
 		t.Errorf("NewMockAWSS3Client should have returned an error since we passed nil client in init function.")
@@ -97,7 +98,7 @@ func TestNewMockAWMinioClient(t *testing.T) {
 		return cl
 	}
 
-	_, err := NewMockMinioS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err := splstorage.NewMockMinioS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
 
 	if err != nil {
 		t.Errorf("NewMockAWSS3Client should have returned a Mock AWS client.")
@@ -107,7 +108,7 @@ func TestNewMockAWMinioClient(t *testing.T) {
 	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		return nil
 	}
-	_, err = NewMockMinioS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err = splstorage.NewMockMinioS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
 
 	if err == nil {
 		t.Errorf("NewMockMinioS3Client should have returned an error since we passed nil client in init function.")
@@ -122,7 +123,7 @@ func TestNewMockAzureBlobClient(t *testing.T) {
 		return cl
 	}
 
-	_, err := NewMockAzureBlobClient(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err := splstorage.NewMockAzureBlobClient(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
 
 	if err != nil {
 		t.Errorf("NewMockAzureBlobClient should have returned a Mock AWS client.")
@@ -132,7 +133,7 @@ func TestNewMockAzureBlobClient(t *testing.T) {
 	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		return nil
 	}
-	_, err = NewMockAzureBlobClient(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err = splstorage.NewMockAzureBlobClient(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
 
 	if err == nil {
 		t.Errorf("NewMockAzureBlobClient should have returned an error since we passed nil client in init function.")
@@ -184,7 +185,7 @@ func TestGetVolume(t *testing.T) {
 
 	// test for valid volumes
 	for index, appSource := range appFrameworkRef.AppSources {
-		vol, err := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+		vol, err := splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			t.Errorf("GetVolume should not have returned error")
 		}
@@ -206,7 +207,7 @@ func TestGetVolume(t *testing.T) {
 		},
 	}
 
-	_, err := GetAppSrcVolume(ctx, appFrameworkRef.AppSources[0], &appFrameworkRef)
+	_, err := splutil.GetAppSrcVolume(ctx, appFrameworkRef.AppSources[0], &appFrameworkRef)
 	if err == nil {
 		t.Errorf("GetVolume should have returned error for an invalid volume name")
 	}
