@@ -24,6 +24,7 @@ Please note:
 ## Get Access to the SOK Project in GitLab
 Please submit an access request using the steps below:
 1. Open http://go/fast
+    - **Note:** The Splunk GlobalProtect VPN is required for the above go link. If you have trouble connecting, or do not have access to the GlobalProtect VPN, you can access the link [here](https://splunk.atlassian.net/servicedesk/customer/portal/9).
 2. Click **Access Request**
 3. Select **GitLab Invite Group to Project Request**
 4. Enter the required details, including the GitLab group that needs access
