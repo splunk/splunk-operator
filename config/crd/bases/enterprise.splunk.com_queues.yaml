@@ -32,7 +32,9 @@ spec:
     name: v4
     schema:
       openAPIV3Schema:
-        description: Queue is the Schema for the queues API
+        description: 'Queue is the Schema for the queues API. NOTE: Queue is part
+          of the index and ingestion separation feature, which is currently in Preview
+          and not recommended for production use.'
         properties:
           apiVersion:
             description: |-

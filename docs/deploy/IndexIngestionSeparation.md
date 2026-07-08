@@ -6,6 +6,9 @@ nav_order: 6
 
 # Background
 
+> [!IMPORTANT]
+> **Index and ingestion separation is currently in Preview.** This feature (including the `Queue`, `ObjectStorage`, and `IngestorCluster` custom resources and the `queueRef`/`objectStorageRef` fields on `IndexerCluster`) is not recommended for production use and its API may change in future releases.
+
 Separation between ingestion and indexing services within Splunk Operator for Kubernetes enables the operator to independently manage the ingestion service while maintaining seamless integration with the indexing service.
 
 This separation enables:
