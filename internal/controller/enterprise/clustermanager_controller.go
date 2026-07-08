@@ -104,7 +104,9 @@ func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// If the reconciliation is paused, set the Paused condition and requeue
 	if instance.GetAnnotations()[enterpriseApi.ClusterManagerPausedAnnotation] == "true" {
-		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, instance.Status.Phase, true, "", instance.GetGeneration())
+		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
+			Phase: instance.Status.Phase, IsPaused: true, Message: "", Generation: instance.GetGeneration(),
+		})
 		instance.Status.Conditions = result.Conditions
 		if err := r.Status().Update(ctx, instance); err != nil {
 			logger.ErrorContext(ctx, "failed to update paused status", "error", err)
@@ -112,7 +114,9 @@ func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 		return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 	} else if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); cond != nil && cond.Status == metav1.ConditionTrue {
-		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, instance.Status.Phase, false, "", instance.GetGeneration())
+		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
+			Phase: instance.Status.Phase, IsPaused: false, Message: "", Generation: instance.GetGeneration(),
+		})
 		instance.Status.Conditions = result.Conditions
 		if err := r.Status().Update(ctx, instance); err != nil {
 			logger.ErrorContext(ctx, "failed to update unpaused status", "error", err)
