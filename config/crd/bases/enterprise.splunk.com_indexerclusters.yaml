@@ -5961,7 +5961,9 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
               objectStorageRef:
-                description: Object Storage reference
+                description: 'Object Storage reference. NOTE: part of the index and
+                  ingestion separation feature, which is currently in Preview and
+                  not recommended for production use.'
                 properties:
                   apiVersion:
                     description: API version of the referent.
@@ -6011,7 +6013,9 @@ spec:
                   These annotations override operator-provided pod annotations when keys overlap.
                 type: object
               queueRef:
-                description: Queue reference
+                description: 'Queue reference. NOTE: part of the index and ingestion
+                  separation feature, which is currently in Preview and not recommended
+                  for production use.'
                 properties:
                   apiVersion:
                     description: API version of the referent.

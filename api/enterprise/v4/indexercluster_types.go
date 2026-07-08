@@ -40,11 +40,11 @@ type IndexerClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// +optional
-	// Queue reference
+	// Queue reference. NOTE: part of the index and ingestion separation feature, which is currently in Preview and not recommended for production use.
 	QueueRef corev1.ObjectReference `json:"queueRef,omitempty"`
 
 	// +optional
-	// Object Storage reference
+	// Object Storage reference. NOTE: part of the index and ingestion separation feature, which is currently in Preview and not recommended for production use.
 	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef,omitempty"`
 
 	// Number of indexer cluster peers
