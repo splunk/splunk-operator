@@ -1,7 +1,7 @@
 ---
 title: Contributing
 parent: Internal Onboarding
-nav_order: 5
+nav_order: 6
 ---
 
 # Contributing

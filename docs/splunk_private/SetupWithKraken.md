@@ -29,15 +29,15 @@ Kraken is the internal tool created to support the Kubernetes First push by prov
 
 ### Create an Empty vCluster Kubernetes Environment
 
-1. [Download](https://kraken.splunkdev.page/kraken-docs/cli-preview/) and [install](https://kraken.splunkdev.page/kraken-docs/cli-preview/#1-install-the-cli) the Kraken CLI.
+1. [Download and install](https://kraken.splunkdev.page/kraken-docs/get-started/quick-start/#download-the-cli) the Kraken CLI.
 2. Create a kraken deployment
-   1. For a simple deployment, create a [vCluster-only mode](https://kraken.splunkdev.page/kraken-docs/cli-commands/create-vcluster-only/) deployment.
-   2. For a deployment requiring app framework, create a vCluster-only mode with [app framework infrastructure](https://kraken.splunkdev.page/kraken-docs/cli-commands/create-app-framework/) deployment. Follow the entire page for credentials to the app framework s3 bucket.
+   1. For a simple deployment, create a [vCluster-only mode](https://kraken.splunkdev.page/kraken-docs/workflows/vcluster-only/) deployment.
+   2. For a deployment requiring app framework, create a vCluster-only mode with [app framework infrastructure](https://kraken.splunkdev.page/kraken-docs/features/app-framework/) deployment. Follow the entire page for credentials to the app framework s3 bucket.
 3. Export the deployment ID for the cluster. The deployment ID is in the `id` field of the JSON output from the `kraken create` command.
    ```bash
    export DEPLOYMENT_ID=<deployment ID>
    ```
-4. Follow the workflow to [access the kraken connection](https://kraken.splunkdev.page/kraken-docs/cli-commands/connection-accessing-vcluster/) in your terminal.
+4. Follow the workflow to [access the kraken connection](https://kraken.splunkdev.page/kraken-docs/access/vcluster/) in your terminal.
 
 ## Deploy SOK
 
@@ -176,4 +176,4 @@ Wait for the operator pod to be in the `Running` state. If there are errors, or 
 
 ## Tear Down the Kubernetes Environment
 
-1. [Delete](https://kraken.splunkdev.page/kraken-docs/cli-commands/delete/) the Kraken deployment when it is no longer needed.
+1. [Delete](https://kraken.splunkdev.page/kraken-docs/reference/cli/delete/) the Kraken deployment when it is no longer needed.
