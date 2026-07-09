@@ -73,13 +73,19 @@ The operational check is simple:
 
 The merge request lane is the normal branch-validation path.
 It runs on `merge_request_event`, not on plain feature-branch pushes.
+The same `merge_request_event` workflow rule supports GitLab merged results pipelines; GitLab creates a temporary merge-result commit and runs this lane against that commit instead of only the source branch tip.
 The lane checks the MR description template, runs repository verification, runs unit, `kubectl-splunk`, and `helm-chart-tests` (lint and helm-unittest for all three charts), builds the staged operator image, scans that staged image with the prodsec `.container-scan` template, and runs the smoke fanout on disposable EKS clusters.
 
 In practice this means:
 
 - authors open or update the MR
-- GitLab validates the exact commit under review
+- GitLab validates the temporary merge result of source plus target branch
 - reviewers use the MR pipeline as the source of truth for normal code changes
+
+Merged results pipeline guardrails:
+
+- keep the top-level `.gitlab-ci.yml` `workflow: rules` entry for `CI_PIPELINE_SOURCE == "merge_request_event"` because include-only rules do not enable merge request pipelines by themselves
+- do not add `rules:changes:compare_to` to the MR validation lane; merged results pipelines compare from a temporary merge commit and can make `compare_to` match target-branch changes unexpectedly
 
 ## Develop Lane
 
