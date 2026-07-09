@@ -891,18 +891,24 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 			}
 			Expect(k8sClient.Create(context.Background(), idxc)).Should(Succeed())
 
-			fetched := &enterpriseApi.IndexerCluster{}
-			Expect(k8sClient.Get(context.Background(), types.NamespacedName{
-				Name: idxc.Name, Namespace: namespace,
-			}, fetched)).Should(Succeed())
+			Eventually(func() string {
+				fetched := &enterpriseApi.IndexerCluster{}
+				if err := k8sClient.Get(context.Background(), types.NamespacedName{
+					Name: idxc.Name, Namespace: namespace,
+				}, fetched); err != nil {
+					return err.Error()
+				}
 
-			fetched.Spec.Certs = append(fetched.Spec.Certs, enterpriseApi.CertSpec{
-				SecretRef: corev1.LocalObjectReference{Name: "server-b"},
-				Role:      enterpriseApi.CertRoleServer,
-			})
-			err := k8sClient.Update(context.Background(), fetched)
-			Expect(err).Should(HaveOccurred())
-			Expect(err.Error()).Should(ContainSubstring("at most one entry per role is allowed"))
+				fetched.Spec.Certs = append(fetched.Spec.Certs, enterpriseApi.CertSpec{
+					SecretRef: corev1.LocalObjectReference{Name: "server-b"},
+					Role:      enterpriseApi.CertRoleServer,
+				})
+				err := k8sClient.Update(context.Background(), fetched)
+				if err == nil {
+					return ""
+				}
+				return err.Error()
+			}, timeout, interval).Should(ContainSubstring("at most one entry per role is allowed"))
 
 			Expect(k8sClient.Delete(context.Background(), idxc)).Should(Succeed())
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
