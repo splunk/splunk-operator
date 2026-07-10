@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 )
 
 // --- helpers ---
@@ -137,6 +138,48 @@ func TestValidateCertSecret_AllKeys(t *testing.T) {
 
 func buildClient(objs ...client.Object) client.Client {
 	return fake.NewClientBuilder().WithScheme(scheme()).WithObjects(objs...).Build()
+}
+
+func TestReconcileCerts_GateDisabled_NoCertsMounted(t *testing.T) {
+	config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): false})
+	t.Cleanup(func() {
+		config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): true})
+	})
+
+	secret := noCASecret("ns", "my-server-cert")
+	cr := standaloneWithCerts("ns", "s1", []enterpriseApi.CertSpec{
+		{SecretRef: corev1.LocalObjectReference{Name: "my-server-cert"}, Role: enterpriseApi.CertRoleServer},
+	})
+	c := buildClient(cr, secret)
+
+	cfg, err := ReconcileCerts(context.Background(), c, cr, specToCertEntries(cr.Spec.Certs))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg != nil {
+		t.Fatalf("expected nil CertMountConfig when gate disabled, got: %+v", cfg)
+	}
+}
+
+func TestReconcileCerts_GateEnabled_CertsMounted(t *testing.T) {
+	config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): true})
+
+	secret := noCASecret("ns", "my-server-cert")
+	cr := standaloneWithCerts("ns", "s1", []enterpriseApi.CertSpec{
+		{SecretRef: corev1.LocalObjectReference{Name: "my-server-cert"}, Role: enterpriseApi.CertRoleServer},
+	})
+	c := buildClient(cr, secret)
+
+	cfg, err := ReconcileCerts(context.Background(), c, cr, specToCertEntries(cr.Spec.Certs))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("expected non-nil CertMountConfig when gate enabled")
+	}
+	if len(cfg.Volumes) == 0 {
+		t.Fatal("expected at least one volume to be mounted when gate enabled")
+	}
 }
 
 func TestReconcileCerts_NoCerts(t *testing.T) {

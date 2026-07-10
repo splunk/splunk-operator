@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/splunk/splunk-operator/pkg/config"
 	certs "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
 
@@ -124,7 +125,7 @@ var ApplyLicenseMaster = func(ctx context.Context, client client.Client, instanc
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *LicenseMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	bldr := ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApiV3.LicenseMaster{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
@@ -162,10 +163,15 @@ func (r *LicenseMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
-		}).
-		Watches(&corev1.Secret{},
+		})
+
+	if config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
+		bldr = bldr.Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(
-				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApiV3.LicenseMasterList{}))).
+				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApiV3.LicenseMasterList{})))
+	}
+
+	return bldr.
 		Named("license-master-controller").
 		Complete(r)
 }

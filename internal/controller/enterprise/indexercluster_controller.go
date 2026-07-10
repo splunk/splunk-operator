@@ -27,6 +27,7 @@ import (
 
 	"github.com/pkg/errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
+	"github.com/splunk/splunk-operator/pkg/config"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
@@ -147,7 +148,7 @@ var ApplyIndexerCluster = func(ctx context.Context, client client.Client, instan
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	bldr := ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.IndexerCluster{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
@@ -305,10 +306,15 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
-		}).
-		Watches(&corev1.Secret{},
+		})
+
+	if config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
+		bldr = bldr.Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(
-				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.IndexerClusterList{}))).
+				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.IndexerClusterList{})))
+	}
+
+	return bldr.
 		Named("indexer-cluster-controller").
 		Complete(r)
 }
