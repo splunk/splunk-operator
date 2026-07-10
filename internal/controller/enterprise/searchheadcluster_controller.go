@@ -43,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/splunk/splunk-operator/pkg/config"
 	certs "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
 
@@ -142,7 +143,7 @@ var ApplySearchHeadCluster = func(ctx context.Context, client client.Client, ins
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	bldr := ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.SearchHeadCluster{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
@@ -179,10 +180,15 @@ func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
-		}).
-		Watches(&corev1.Secret{},
+		})
+
+	if config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
+		bldr = bldr.Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(
-				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.SearchHeadClusterList{}))).
+				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.SearchHeadClusterList{})))
+	}
+
+	return bldr.
 		Named("search-head-cluster-controller").
 		Complete(r)
 }

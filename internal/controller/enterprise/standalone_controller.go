@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/pkg/errors"
+	"github.com/splunk/splunk-operator/pkg/config"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	certs "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
@@ -146,7 +147,7 @@ var ApplyStandalone = func(ctx context.Context, client client.Client, instance *
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	bldr := ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.Standalone{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
@@ -184,10 +185,15 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
-		}).
-		Watches(&corev1.Secret{},
+		})
+
+	if config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
+		bldr = bldr.Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(
-				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.StandaloneList{}))).
+				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.StandaloneList{})))
+	}
+
+	return bldr.
 		Named("standalone-controller").
 		Complete(r)
 }

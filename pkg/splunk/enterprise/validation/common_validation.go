@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 )
 
 // storageCapacityRegex validates storage capacity format (e.g., "10Gi", "100Gi")
@@ -37,6 +38,13 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *fie
 	// - ImagePullPolicy: +kubebuilder:validation:Enum=Always;Never;IfNotPresent
 	// - LivenessInitialDelaySeconds: +kubebuilder:validation:Minimum=0
 	// - ReadinessInitialDelaySeconds: +kubebuilder:validation:Minimum=0
+
+	// Reject spec.certs[] when the CertManagement feature is disabled, since the
+	// reconciler silently no-ops it in that state (see certs.ReconcileCerts).
+	if len(spec.Certs) > 0 && !config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
+		allErrs = append(allErrs, field.Forbidden(fldPath.Child("certs"),
+			"the CertManagement feature is not enabled; set --feature-gates=CertManagement=true to activate"))
+	}
 
 	// Validate EtcVolumeStorageConfig
 	allErrs = append(allErrs, validateStorageConfig(&spec.EtcVolumeStorageConfig, fldPath.Child("etcVolumeStorageConfig"))...)
