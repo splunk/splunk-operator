@@ -37,6 +37,7 @@ import (
 	"github.com/pkg/errors"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
+	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -131,7 +132,7 @@ var ApplyIngestorCluster = func(ctx context.Context, client client.Client, insta
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	bldr := ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.IngestorCluster{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
@@ -276,10 +277,15 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
-		}).
-		Watches(&corev1.Secret{},
+		})
+
+	if config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
+		bldr = bldr.Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(
-				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.IngestorClusterList{}))).
+				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.IngestorClusterList{})))
+	}
+
+	return bldr.
 		Named("ingestor-cluster-controller").
 		Complete(r)
 }

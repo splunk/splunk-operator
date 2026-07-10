@@ -20,8 +20,10 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 )
 
 // TestCertSpecFieldAccepted verifies that spec.certs[] is accepted on
@@ -157,6 +159,64 @@ func TestGetCertsHelpers(t *testing.T) {
 		cr.Spec.Certs = certs
 		if got := cr.GetCerts(); len(got) != 1 {
 			t.Errorf("GetCerts() returned %d certs, want 1", len(got))
+		}
+	})
+}
+
+// TestValidateCommonSplunkSpec_CertsGate verifies that spec.certs[] is
+// rejected via field.Forbidden when the CertManagement feature gate is
+// disabled, and accepted when enabled.
+func TestValidateCommonSplunkSpec_CertsGate(t *testing.T) {
+	certSpecs := []enterpriseApi.CertSpec{
+		{SecretRef: corev1.LocalObjectReference{Name: "my-server-cert"}, Role: enterpriseApi.CertRoleServer},
+	}
+
+	t.Run("gate disabled rejects certs", func(t *testing.T) {
+		config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): false})
+		t.Cleanup(func() {
+			config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): true})
+		})
+
+		spec := &enterpriseApi.CommonSplunkSpec{Certs: certSpecs}
+		errs := validateCommonSplunkSpec(spec, field.NewPath("spec"))
+
+		found := false
+		for _, e := range errs {
+			if e.Field == "spec.certs" && e.Type == field.ErrorTypeForbidden {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected field.Forbidden on spec.certs when gate disabled, got: %v", errs)
+		}
+	})
+
+	t.Run("gate enabled accepts certs", func(t *testing.T) {
+		config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): true})
+
+		spec := &enterpriseApi.CommonSplunkSpec{Certs: certSpecs}
+		errs := validateCommonSplunkSpec(spec, field.NewPath("spec"))
+
+		for _, e := range errs {
+			if e.Field == "spec.certs" {
+				t.Fatalf("expected no error on spec.certs when gate enabled, got: %v", e)
+			}
+		}
+	})
+
+	t.Run("gate disabled allows empty certs", func(t *testing.T) {
+		config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): false})
+		t.Cleanup(func() {
+			config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): true})
+		})
+
+		spec := &enterpriseApi.CommonSplunkSpec{}
+		errs := validateCommonSplunkSpec(spec, field.NewPath("spec"))
+
+		for _, e := range errs {
+			if e.Field == "spec.certs" {
+				t.Fatalf("expected no error on spec.certs when certs unset, got: %v", e)
+			}
 		}
 	})
 }

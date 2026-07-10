@@ -44,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/splunk/splunk-operator/pkg/config"
 	certs "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
 
@@ -143,7 +144,7 @@ var ApplyClusterManager = func(ctx context.Context, client client.Client, instan
 }
 
 func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	bldr := ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.ClusterManager{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
@@ -181,10 +182,15 @@ func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
-		}).
-		Watches(&corev1.Secret{},
+		})
+
+	if config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
+		bldr = bldr.Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(
-				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.ClusterManagerList{}))).
+				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.ClusterManagerList{})))
+	}
+
+	return bldr.
 		Named("cluster-manager-controller").
 		Complete(r)
 }
