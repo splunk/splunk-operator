@@ -15,7 +15,7 @@ pkg/splunk/
 ├── workflow/         Multi-step, CR-agnostic state-change workflows
 ├── resources/        K8s object builders — pure functions, no I/O
 ├── k8sops/           K8s API read/apply/diff/merge
-├── validation/       Admission webhooks (promoted from enterprise/validation/)
+├── validation/       Admission webhooks and CR spec validation
 ├── test/             Shared test helpers
 └── util/             Stateless helpers — no CRD type imports
 ```
@@ -117,8 +117,7 @@ parsed result. No scheduling, no multi-step logic, no K8s client I/O.
 
 ### `validation/`
 
-Admission webhooks and CR spec validation. Promoted from
-`enterprise/validation/` to a top-level package.
+Admission webhooks and CR spec validation.
 
 ### `enterprise/` (LEGACY)
 
