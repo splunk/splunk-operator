@@ -24,6 +24,8 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/splunk/splunk-operator/pkg/config"
 )
 
 // CertEntry is a CR-agnostic description of a single cert to mount.
@@ -59,9 +61,13 @@ type CertEntry struct {
 //     as a transient state rather than an error because Phase 2 will auto-generate
 //     missing secrets; the reconcile will retry once the secrets appear.
 func ReconcileCerts(ctx context.Context, c client.Client, cr client.Object, userEntries []CertEntry) (*CertMountConfig, error) {
+	if !config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
+		return nil, nil
+	}
+
 	logger := log.FromContext(ctx)
 	ns := cr.GetNamespace()
-	config := &CertMountConfig{
+	mountConfig := &CertMountConfig{
 		Annotations: make(map[string]string),
 	}
 
@@ -83,7 +89,7 @@ func ReconcileCerts(ctx context.Context, c client.Client, cr client.Object, user
 				}
 				return nil, fmt.Errorf("reconciling operator-driven cert %s: %w", secretName, err)
 			}
-			addCertMount(config, secretName, asIsMountPath(secretName), certHash(secret))
+			addCertMount(mountConfig, secretName, asIsMountPath(secretName), certHash(secret))
 			seen[secretName] = true
 		}
 	}
@@ -97,7 +103,7 @@ func ReconcileCerts(ctx context.Context, c client.Client, cr client.Object, user
 			if k8serrors.IsNotFound(err) {
 				logger.Info("user-declared cert secret not found, skipping mount (Phase 2 will auto-generate)", "secret", entry.SecretName)
 				if seen[entry.SecretName] {
-					removeCertMount(config, entry.SecretName)
+					removeCertMount(mountConfig, entry.SecretName)
 					delete(seen, entry.SecretName)
 				}
 				continue
@@ -111,26 +117,26 @@ func ReconcileCerts(ctx context.Context, c client.Client, cr client.Object, user
 		}
 
 		if seen[entry.SecretName] {
-			removeCertMount(config, entry.SecretName)
+			removeCertMount(mountConfig, entry.SecretName)
 		}
-		addCertMount(config, entry.SecretName, mountPath, certHash(secret))
+		addCertMount(mountConfig, entry.SecretName, mountPath, certHash(secret))
 		seen[entry.SecretName] = true
 	}
 
-	if len(config.Volumes) == 0 {
+	if len(mountConfig.Volumes) == 0 {
 		return nil, nil
 	}
-	return config, nil
+	return mountConfig, nil
 }
 
 // addCertMount appends one volume, one volumeMount, and one annotation for the given secret.
-func addCertMount(config *CertMountConfig, secretName, mountPath, hash string) {
+func addCertMount(mountConfig *CertMountConfig, secretName, mountPath, hash string) {
 	volName := volumeName(secretName)
 	// DefaultMode must be set explicitly to match what Kubernetes stores after creation
 	// (corev1.SecretVolumeSourceDefaultMode = 0644 = 420). Without it the operator's
 	// MergePodUpdates sees a perpetual diff and keeps updating the StatefulSet.
 	defaultMode := corev1.SecretVolumeSourceDefaultMode
-	config.Volumes = append(config.Volumes, corev1.Volume{
+	mountConfig.Volumes = append(mountConfig.Volumes, corev1.Volume{
 		Name: volName,
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
@@ -139,36 +145,36 @@ func addCertMount(config *CertMountConfig, secretName, mountPath, hash string) {
 			},
 		},
 	})
-	config.VolumeMounts = append(config.VolumeMounts, corev1.VolumeMount{
+	mountConfig.VolumeMounts = append(mountConfig.VolumeMounts, corev1.VolumeMount{
 		Name:      volName,
 		MountPath: mountPath,
 		ReadOnly:  true,
 	})
-	config.Annotations[certRevAnnotKey(secretName)] = hash
+	mountConfig.Annotations[certRevAnnotKey(secretName)] = hash
 }
 
 // removeCertMount removes the volume, volumeMount, and annotation for secretName.
-func removeCertMount(config *CertMountConfig, secretName string) {
+func removeCertMount(mountConfig *CertMountConfig, secretName string) {
 	volName := volumeName(secretName)
 	annotKey := certRevAnnotKey(secretName)
 
-	filtered := config.Volumes[:0]
-	for _, v := range config.Volumes {
+	filtered := mountConfig.Volumes[:0]
+	for _, v := range mountConfig.Volumes {
 		if v.Name != volName {
 			filtered = append(filtered, v)
 		}
 	}
-	config.Volumes = filtered
+	mountConfig.Volumes = filtered
 
-	filteredMounts := config.VolumeMounts[:0]
-	for _, m := range config.VolumeMounts {
+	filteredMounts := mountConfig.VolumeMounts[:0]
+	for _, m := range mountConfig.VolumeMounts {
 		if m.Name != volName {
 			filteredMounts = append(filteredMounts, m)
 		}
 	}
-	config.VolumeMounts = filteredMounts
+	mountConfig.VolumeMounts = filteredMounts
 
-	delete(config.Annotations, annotKey)
+	delete(mountConfig.Annotations, annotKey)
 }
 
 // volumeName returns a Kubernetes-safe volume name derived from a Secret name.

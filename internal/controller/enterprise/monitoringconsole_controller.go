@@ -44,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/splunk/splunk-operator/pkg/config"
 	certs "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
 
@@ -143,7 +144,7 @@ var ApplyMonitoringConsole = func(ctx context.Context, client client.Client, ins
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	bldr := ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.MonitoringConsole{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
@@ -195,10 +196,15 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&handler.EnqueueRequestForObject{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
-		}).
-		Watches(&corev1.Secret{},
+		})
+
+	if config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
+		bldr = bldr.Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(
-				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.MonitoringConsoleList{}))).
+				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.MonitoringConsoleList{})))
+	}
+
+	return bldr.
 		Named("monitoring-console-controller").
 		Complete(r)
 }

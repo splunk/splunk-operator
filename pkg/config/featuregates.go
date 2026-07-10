@@ -37,6 +37,10 @@ const (
 	// Replaces the legacy ENABLE_VALIDATION_WEBHOOK env var.
 	ValidationWebhook  featuregate.Feature = "ValidationWebhook"
 	PostgresController featuregate.Feature = "PostgresController"
+	// CertManagement gates spec.certs[] mounting/rotation across all Splunk
+	// Enterprise CR types (ReconcileCerts + the cert-secret watch mapper).
+	// When disabled, spec.certs[] is ignored and no cert volumes are mounted.
+	CertManagement featuregate.Feature = "CertManagement"
 )
 
 // defaultFeatureGates is the authoritative registry of all feature gates and
@@ -45,6 +49,7 @@ const (
 var defaultFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
 	ValidationWebhook:  {Default: false, PreRelease: featuregate.Alpha},
 	PostgresController: {Default: false, PreRelease: featuregate.Alpha},
+	CertManagement:     {Default: true, PreRelease: featuregate.Beta},
 }
 
 var DefaultMutableFeatureGate featuregate.MutableFeatureGate = featuregate.NewFeatureGate()
