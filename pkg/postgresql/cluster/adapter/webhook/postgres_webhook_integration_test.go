@@ -35,7 +35,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/config"
-	"github.com/splunk/splunk-operator/pkg/splunk/enterprise/validation"
+	"github.com/splunk/splunk-operator/pkg/splunk/validation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

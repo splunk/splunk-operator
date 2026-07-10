@@ -10,7 +10,7 @@ This guide covers how to extend the Splunk Operator's [validation webhook](../re
 
 ## 1. Create Validation Functions
 
-Create a new file `pkg/splunk/enterprise/validation/<crd>_validation.go`:
+Create a new file `pkg/splunk/validation/<crd>_validation.go`:
 
 ```go
 package validation
@@ -62,7 +62,7 @@ func Get<CRD>WarningsOnUpdate(obj, oldObj *enterpriseApi.<CRD>) []string {
 
 ## 2. Register the Validator
 
-Add the GVR and validator to `pkg/splunk/enterprise/validation/registry.go`:
+Add the GVR and validator to `pkg/splunk/validation/registry.go`:
 
 ```go
 // Add GVR constant
@@ -93,7 +93,7 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 
 ## 3. Add Unit Tests
 
-Create `pkg/splunk/enterprise/validation/<crd>_validation_test.go` with test cases.
+Create `pkg/splunk/validation/<crd>_validation_test.go` with test cases.
 
 ## 4. Update ValidatingWebhookConfiguration
 
