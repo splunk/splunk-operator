@@ -193,6 +193,17 @@ You should be comfortable with:
    EOF
    ```
 
+   Explanation of Fields:
+
+   - `splunk-operator.enabled: false`: Does not install another Splunk Operator because the lab already deployed one.
+   - `indexerCluster.replicaCount: 3`: Sets the number of indexer peers in each configured indexer cluster.
+   - `searchHeadCluster.replicaCount: 3`: Sets the number of search head peers in each configured search head cluster.
+   - `sva.c3.enabled: true`: Enables the chart's single-site C3 Splunk Validated Architecture.
+   - `sva.c3.indexerClusters`: Lists the indexer clusters to create and associate with the C3 deployment.
+   - `sva.c3.indexerClusters[].name: c3-idxc`: Sets the IndexerCluster CR name.
+   - `sva.c3.searchHeadClusters`: Lists the search head clusters to create and associate with the C3 deployment.
+   - `sva.c3.searchHeadClusters[].name: c3-shc`: Sets the SearchHeadCluster CR name.
+
 2. Install the Splunk Enterprise Helm release.
 
    Run:

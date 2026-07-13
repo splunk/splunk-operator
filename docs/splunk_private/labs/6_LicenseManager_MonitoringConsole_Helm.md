@@ -251,6 +251,18 @@ The License Manager reads the Enterprise license from a Kubernetes ConfigMap. Th
    EOF
    ```
 
+   Explanation of Fields:
+
+   - `splunk-operator.enabled: false`: Does not install another Splunk Operator because the lab already deployed one.
+   - `<component>.enabled: true`: Creates the LicenseManager, MonitoringConsole, ClusterManager, IndexerCluster, or SearchHeadCluster CR for that component.
+   - `<component>.name`: Sets each component's CR name: `c3-lm`, `c3-mc`, `c3-cm`, `c3-idxc`, or `c3-shc`.
+   - `licenseManager.volumes`: Mounts Kubernetes volumes in the License Manager pod.
+   - `licenseManager.volumes[].name: licenses`: Names the mounted license volume.
+   - `licenseManager.volumes[].configMap.name: splunk-licenses`: Populates the volume from the ConfigMap created from the Enterprise license file.
+   - `licenseManager.licenseUrl`: Path to the mounted Enterprise license file inside the License Manager pod.
+   - `indexerCluster.replicaCount: 3`: Sets the number of indexer peers.
+   - `searchHeadCluster.replicaCount: 3`: Sets the number of search head peers.
+
    When `licenseManager.enabled` and `monitoringConsole.enabled` are true, the `splunk/splunk-enterprise` chart automatically adds `licenseManagerRef` and `monitoringConsoleRef` to the generated C3 Custom Resources.
 
 2. Install the Splunk Enterprise Helm release.

@@ -139,15 +139,23 @@ You should be comfortable with:
 
    ```bash
    cat > s1.yaml <<'EOF'
-   apiVersion: enterprise.splunk.com/v4       # CR Version
-   kind: Standalone                           # CR Type
+   apiVersion: enterprise.splunk.com/v4
+   kind: Standalone
    metadata:
-     name: standalone                         # CR Name
-     namespace: splunk-operator               # Kubernetes Namespace to deploy the CR
-     finalizers:                              # Conditions before it fully deleting resources
+     name: standalone
+     namespace: splunk-operator
+     finalizers:
        - enterprise.splunk.com/delete-pvc
    EOF
    ```
+
+   Explanation of Fields:
+
+   - `apiVersion: enterprise.splunk.com/v4`: Splunk Enterprise CR API version.
+   - `kind: Standalone`: Splunk Enterprise CR type.
+   - `metadata.name: standalone`: Name of the Standalone CR.
+   - `metadata.namespace: splunk-operator`: Kubernetes namespace in which to create the CR.
+   - `metadata.finalizers`: Actions that must complete before Kubernetes deletes the CR.
 
 2. Create a Splunk Standalone instance by applying the YAML.
 
@@ -252,17 +260,26 @@ You should be comfortable with:
 
    ```bash
    cat > standalone.yaml <<'EOF'
-   apiVersion: enterprise.splunk.com/v4       # CR Version
-   kind: Standalone                           # CR Type
+   apiVersion: enterprise.splunk.com/v4
+   kind: Standalone
    metadata:
-     name: standalone                         # CR Name
-     namespace: splunk-operator               # Kubernetes Namespace to deploy the CR
-     finalizers:                              # Conditions before it fully deleting resources
+     name: standalone
+     namespace: splunk-operator
+     finalizers:
        - enterprise.splunk.com/delete-pvc
    spec:
-     replicas: 2                              # Number of Standalone pods
+     replicas: 2
    EOF
    ```
+
+   Explanation of Fields:
+
+   - `apiVersion: enterprise.splunk.com/v4`: Splunk Enterprise CR API version.
+   - `kind: Standalone`: Splunk Enterprise CR type.
+   - `metadata.name: standalone`: Name of the existing Standalone CR to update.
+   - `metadata.namespace: splunk-operator`: Kubernetes namespace containing the CR.
+   - `metadata.finalizers`: Actions that must complete before Kubernetes deletes the CR.
+   - `spec.replicas: 2`: Desired number of Standalone pods.
 
 2. Apply the updated YAML.
 

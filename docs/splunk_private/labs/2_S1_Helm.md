@@ -183,6 +183,12 @@ You should be comfortable with:
    EOF
    ```
 
+   Explanation of Fields:
+
+   - `splunk-operator.enabled: false`: Does not install another Splunk Operator because the lab already deployed one.
+   - `standalone.enabled: true`: Creates a Standalone CR through the Splunk Enterprise chart.
+   - `standalone.name: standalone`: Sets the name of the Standalone CR.
+
 2. Install the Splunk Enterprise Helm release.
 
    Run:
@@ -321,6 +327,13 @@ You should be comfortable with:
      replicaCount: 2
    EOF
    ```
+
+   Explanation of Fields:
+
+   - `splunk-operator.enabled: false`: Does not install another Splunk Operator because the lab already deployed one.
+   - `standalone.enabled: true`: Keeps the Standalone CR enabled in the Helm release.
+   - `standalone.name: standalone`: Identifies the existing Standalone CR to update.
+   - `standalone.replicaCount: 2`: Sets the desired number of Standalone pods.
 
 2. Upgrade the Splunk Enterprise Helm release.
 
