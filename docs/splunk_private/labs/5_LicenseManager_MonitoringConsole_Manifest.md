@@ -184,79 +184,96 @@ The License Manager reads the Enterprise license from a Kubernetes ConfigMap. Th
 
    ```bash
    cat > c3-lm-mc.yaml <<'EOF'
-   apiVersion: enterprise.splunk.com/v4       # CR Version
-   kind: LicenseManager                       # CR Type
+   apiVersion: enterprise.splunk.com/v4
+   kind: LicenseManager
    metadata:
-     name: c3-lm                              # CR Name
-     namespace: splunk-operator               # Kubernetes Namespace to deploy the CR
-     finalizers:                              # Conditions before Kubernetes fully deletes resources
+     name: c3-lm
+     namespace: splunk-operator
+     finalizers:
        - enterprise.splunk.com/delete-pvc
    spec:
      volumes:
        - name: licenses
          configMap:
-           name: splunk-licenses              # ConfigMap created from the Enterprise license file
-     licenseUrl: /mnt/licenses/enterprise.lic # Mounted license path inside the License Manager pod
+           name: splunk-licenses
+     licenseUrl: /mnt/licenses/enterprise.lic
      monitoringConsoleRef:
-       name: c3-mc                            # MonitoringConsole CR Name
+       name: c3-mc
    ---
-   apiVersion: enterprise.splunk.com/v4       # CR Version
-   kind: MonitoringConsole                    # CR Type
+   apiVersion: enterprise.splunk.com/v4
+   kind: MonitoringConsole
    metadata:
-     name: c3-mc                              # CR Name
-     namespace: splunk-operator               # Kubernetes Namespace to deploy the CR
-     finalizers:                              # Conditions before Kubernetes fully deletes resources
+     name: c3-mc
+     namespace: splunk-operator
+     finalizers:
        - enterprise.splunk.com/delete-pvc
    spec:
      licenseManagerRef:
-       name: c3-lm                            # LicenseManager CR Name
+       name: c3-lm
    ---
-   apiVersion: enterprise.splunk.com/v4       # CR Version
-   kind: ClusterManager                       # CR Type
+   apiVersion: enterprise.splunk.com/v4
+   kind: ClusterManager
    metadata:
-     name: c3-cm                              # CR Name
-     namespace: splunk-operator               # Kubernetes Namespace to deploy the CR
-     finalizers:                              # Conditions before Kubernetes fully deletes resources
+     name: c3-cm
+     namespace: splunk-operator
+     finalizers:
        - enterprise.splunk.com/delete-pvc
    spec:
      licenseManagerRef:
-       name: c3-lm                            # LicenseManager CR Name
+       name: c3-lm
      monitoringConsoleRef:
-       name: c3-mc                            # MonitoringConsole CR Name
+       name: c3-mc
    ---
-   apiVersion: enterprise.splunk.com/v4       # CR Version
-   kind: IndexerCluster                       # CR Type
+   apiVersion: enterprise.splunk.com/v4
+   kind: IndexerCluster
    metadata:
-     name: c3-idxc                            # CR Name
-     namespace: splunk-operator               # Kubernetes Namespace to deploy the CR
-     finalizers:                              # Conditions before Kubernetes fully deletes resources
-       - enterprise.splunk.com/delete-pvc
-   spec:
-     clusterManagerRef:
-       name: c3-cm                            # ClusterManager CR Name
-     licenseManagerRef:
-       name: c3-lm                            # LicenseManager CR Name
-     monitoringConsoleRef:
-       name: c3-mc                            # MonitoringConsole CR Name
-     replicas: 3                              # Number of indexer pods
-   ---
-   apiVersion: enterprise.splunk.com/v4       # CR Version
-   kind: SearchHeadCluster                    # CR Type
-   metadata:
-     name: c3-shc                             # CR Name
-     namespace: splunk-operator               # Kubernetes Namespace to deploy the CR
-     finalizers:                              # Conditions before Kubernetes fully deletes resources
+     name: c3-idxc
+     namespace: splunk-operator
+     finalizers:
        - enterprise.splunk.com/delete-pvc
    spec:
      clusterManagerRef:
-       name: c3-cm                            # ClusterManager CR Name
+       name: c3-cm
      licenseManagerRef:
-       name: c3-lm                            # LicenseManager CR Name
+       name: c3-lm
      monitoringConsoleRef:
-       name: c3-mc                            # MonitoringConsole CR Name
-     replicas: 3                              # Number of search head pods
+       name: c3-mc
+     replicas: 3
+   ---
+   apiVersion: enterprise.splunk.com/v4
+   kind: SearchHeadCluster
+   metadata:
+     name: c3-shc
+     namespace: splunk-operator
+     finalizers:
+       - enterprise.splunk.com/delete-pvc
+   spec:
+     clusterManagerRef:
+       name: c3-cm
+     licenseManagerRef:
+       name: c3-lm
+     monitoringConsoleRef:
+       name: c3-mc
+     replicas: 3
    EOF
    ```
+
+   Explanation of Fields:
+
+   - `apiVersion: enterprise.splunk.com/v4`: Splunk Enterprise CR API version used by all five resources.
+   - `kind`: Creates a `LicenseManager`, `MonitoringConsole`, `ClusterManager`, `IndexerCluster`, or `SearchHeadCluster` CR.
+   - `metadata.name`: Unique name of each CR.
+   - `metadata.namespace: splunk-operator`: Kubernetes namespace in which to create each CR.
+   - `metadata.finalizers`: Actions that must complete before Kubernetes deletes each CR.
+   - `LicenseManager.spec.volumes`: Mounts Kubernetes volumes in the License Manager pod.
+   - `LicenseManager.spec.volumes[].name: licenses`: Names the mounted license volume.
+   - `LicenseManager.spec.volumes[].configMap.name: splunk-licenses`: Populates the volume from the ConfigMap created from the Enterprise license file.
+   - `LicenseManager.spec.licenseUrl`: Path to the mounted Enterprise license file inside the License Manager pod.
+   - `spec.clusterManagerRef.name: c3-cm`: Connects the indexer and search head clusters to the ClusterManager CR.
+   - `spec.licenseManagerRef.name: c3-lm`: Connects each applicable CR to the LicenseManager CR.
+   - `spec.monitoringConsoleRef.name: c3-mc`: Connects each applicable CR to the MonitoringConsole CR.
+   - `spec.replicas: 3`: Creates three indexer peers or three search head peers for the applicable CR.
+   - `---`: Separates multiple Kubernetes resources in one YAML file.
 
 2. Create the Splunk Enterprise deployment by applying the YAML.
 

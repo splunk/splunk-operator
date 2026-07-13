@@ -139,39 +139,50 @@ You should be comfortable with:
 
    ```bash
    cat > c3.yaml <<'EOF'
-   apiVersion: enterprise.splunk.com/v4       # CR Version
-   kind: ClusterManager                       # CR Type
+   apiVersion: enterprise.splunk.com/v4
+   kind: ClusterManager
    metadata:
-     name: c3-cm                              # CR Name
-     namespace: splunk-operator               # Kubernetes Namespace to deploy the CR
-     finalizers:                              # Conditions before Kubernetes fully deletes resources
+     name: c3-cm
+     namespace: splunk-operator
+     finalizers:
        - enterprise.splunk.com/delete-pvc
    ---
-   apiVersion: enterprise.splunk.com/v4       # CR Version
-   kind: IndexerCluster                       # CR Type
+   apiVersion: enterprise.splunk.com/v4
+   kind: IndexerCluster
    metadata:
-     name: c3-idxc                            # CR Name
-     namespace: splunk-operator               # Kubernetes Namespace to deploy the CR
-     finalizers:                              # Conditions before Kubernetes fully deletes resources
+     name: c3-idxc
+     namespace: splunk-operator
+     finalizers:
        - enterprise.splunk.com/delete-pvc
    spec:
      clusterManagerRef:
-       name: c3-cm                            # ClusterManager CR Name
-     replicas: 3                              # Number of indexer pods
+       name: c3-cm
+     replicas: 3
    ---
-   apiVersion: enterprise.splunk.com/v4       # CR Version
-   kind: SearchHeadCluster                    # CR Type
+   apiVersion: enterprise.splunk.com/v4
+   kind: SearchHeadCluster
    metadata:
-     name: c3-shc                             # CR Name
-     namespace: splunk-operator               # Kubernetes Namespace to deploy the CR
-     finalizers:                              # Conditions before Kubernetes fully deletes resources
+     name: c3-shc
+     namespace: splunk-operator
+     finalizers:
        - enterprise.splunk.com/delete-pvc
    spec:
      clusterManagerRef:
-       name: c3-cm                            # ClusterManager CR Name
-     replicas: 3                              # Number of search head pods
+       name: c3-cm
+     replicas: 3
    EOF
    ```
+
+   Explanation of Fields:
+
+   - `apiVersion: enterprise.splunk.com/v4`: Splunk Enterprise CR API version used by all three resources.
+   - `kind`: Creates a `ClusterManager`, `IndexerCluster`, or `SearchHeadCluster` CR.
+   - `metadata.name`: Unique name of each CR: `c3-cm`, `c3-idxc`, or `c3-shc`.
+   - `metadata.namespace: splunk-operator`: Kubernetes namespace in which to create each CR.
+   - `metadata.finalizers`: Actions that must complete before Kubernetes deletes each CR.
+   - `spec.clusterManagerRef.name: c3-cm`: Connects the indexer and search head clusters to the ClusterManager CR.
+   - `spec.replicas: 3`: Creates three indexer peers or three search head peers for the applicable CR.
+   - `---`: Separates multiple Kubernetes resources in one YAML file.
 
 2. Create the C3 Splunk Enterprise instance by applying the YAML.
 
