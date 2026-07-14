@@ -485,7 +485,7 @@ kubectl delete -n splunk-operator clustermanager cm
 
 ## SmartStore Index Management
 
-Indexes can be managed through the Splunk Operator. Every index configured through the Splunk Operator must be SmartStore enabled. See [SmartStore Resource Guide](../operate/SmartStore.md).
+Indexes can be managed through the Splunk Operator. We recommend that every index configured through the Splunk Operator be SmartStore enabled. See [SmartStore Resource Guide](../operate/SmartStore.md).
 
 ## Using Default Settings
 
