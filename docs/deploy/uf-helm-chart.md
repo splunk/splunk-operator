@@ -1,6 +1,7 @@
 ---
 title: Universal Forwarder Helm Chart
 nav_order: 10
+parent: Deploy & Configure
 ---
 
 # splunk-universalforwarder Helm Chart Deployment Guide

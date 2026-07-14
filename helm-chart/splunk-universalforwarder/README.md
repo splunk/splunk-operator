@@ -8,7 +8,7 @@ Deploys a Splunk Universal Forwarder (UF) on Kubernetes as a stateless-by-defaul
 
 Full deployment guide, configuration reference, forwarding setup, SSL, storage modes, and troubleshooting:
 
-📄 **[docs/uf-helm-chart.md](../../docs/uf-helm-chart.md)**
+📄 **[docs/deploy/uf-helm-chart.md](../../docs/deploy/uf-helm-chart.md)**
 
 ## Quick Install
 
