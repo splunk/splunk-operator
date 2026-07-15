@@ -1,5 +1,5 @@
 .pages-build:
-  image: docker.repo.splunkdev.net/ci-cd/ci-container/ruby-3.4-trixie:6.1.0
+  image: docker.repo.splunkdev.net/ci-cd/ci-container/ruby-3.4-trixie:6.1.1
   before_script: []
   variables:
     BUNDLE_GEMFILE: splunk_private/Gemfile.gitlab
