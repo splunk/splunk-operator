@@ -126,14 +126,14 @@ func TestGetAppsList(t *testing.T) {
 	mockObjects := []*storage.ObjectAttrs{
 		{
 			Name:         "test-prefix/app1",
-			Etag:         "etag1",
+			Generation:   101,
 			Updated:      time.Now(),
 			Size:         1024,
 			StorageClass: "STANDARD",
 		},
 		{
 			Name:         "test-prefix/app2",
-			Etag:         "etag2",
+			Generation:   202,
 			Updated:      time.Now(),
 			Size:         2048,
 			StorageClass: "STANDARD",
@@ -164,7 +164,7 @@ func TestGetAppsList(t *testing.T) {
 	assert.Equal(t, 1, len(resp.Objects)) // Only app2 should be returned due to StartAfter logic
 	assert.Equal(t, "test-prefix/app2", *resp.Objects[0].Key)
 	assert.Equal(t, int64(2048), *resp.Objects[0].Size)
-	assert.Equal(t, "etag2", *resp.Objects[0].Etag)
+	assert.Equal(t, "202", *resp.Objects[0].Etag)
 
 	// Verify expectations
 	mockBucket.AssertExpectations(t)

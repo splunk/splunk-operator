@@ -19,6 +19,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"cloud.google.com/go/storage"
@@ -207,9 +208,18 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (splcommon.RemoteDa
 			continue
 		}
 
+		// GCS ETags are base64 strings. The App Framework's common digest
+		// sanitizer historically removed non-hex characters, which can collapse
+		// distinct GCS ETags to the same value. Object generation is a stable,
+		// filesystem-safe version identifier that changes on every replacement.
+		objectVersion := objAttrs.Etag
+		if objAttrs.Generation > 0 {
+			objectVersion = strconv.FormatInt(objAttrs.Generation, 10)
+		}
+
 		// Map GCS object attributes to RemoteObject
 		remoteObj := &splcommon.RemoteObject{
-			Etag:         &objAttrs.Etag,
+			Etag:         &objectVersion,
 			Key:          &objAttrs.Name,
 			LastModified: &objAttrs.Updated,
 			Size:         &objAttrs.Size,
