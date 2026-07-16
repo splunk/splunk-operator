@@ -392,6 +392,12 @@ err := testcaseEnvInst.WatchForIndexerClusterPhase(ctx, deployment, namespace, c
 
 For SearchHeadCluster, `WatchForSearchHeadClusterPhase` requires **both** `Status.Phase` and `Status.DeployerPhase` to match the expected phase before succeeding.
 
+Transient phases such as `ScalingUp`, `ScalingDown`, and App Framework download/copy phases can complete between polling intervals. When the test needs to prove an operation completed, prefer a durable result: for example, `WaitForSearchHeadClusterScaleComplete` and `WaitForIndexerClusterScaleComplete` check the observed generation and desired/ready replica counts, while `GetAppObjectHashes` plus `WaitForAppObjectHashChange` proves that replacement app content was observed. For multi-app manual polls, use `WaitForAllAppObjectHashesChange` so one updated object cannot mask a missed replacement. Use phase watches only when entering that particular phase is itself the behavior under test.
+
+Test-data ingestion is also asynchronous. Check the error returned by `IngestDataOnIndexers`, then poll `CountSearchResults` until the expected host-scoped count is nonzero. Kubernetes pod readiness and Splunk cluster readiness do not guarantee that a newly monitored file has already been indexed and is visible to distributed search. `IngestFileViaMonitor` copies relative log paths beneath `/opt/splunk` and uses that canonical pod path when adding and validating the monitor.
+
+Specs that intentionally restart the cluster-wide operator must use Ginkgo's `Serial` decorator. The operator is shared by all parallel specs in a suite, so deleting it from one process can otherwise interrupt another process's setup or reconciliation.
+
 #### Watch for App Phase Changes
 
 ```go

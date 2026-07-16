@@ -463,6 +463,73 @@ func (testenvInstance *TestCaseEnv) WaitForAppPhaseChange(ctx context.Context, d
 	})
 }
 
+// GetAppObjectHashes captures the durable object hashes currently recorded for
+// a list of apps. Tests that replace objects in remote storage should take this
+// snapshot before uploading the replacement files.
+func (testenvInstance *TestCaseEnv) GetAppObjectHashes(ctx context.Context, deployment *Deployment, name string, crKind string, appSourceName string, appList []string) (map[string]string, error) {
+	hashes := make(map[string]string, len(appList))
+	for _, appName := range appList {
+		appDeploymentInfo, err := testenvInstance.GetAppDeploymentInfo(ctx, deployment, name, crKind, appSourceName, appName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get deployment info for app %s: %w", appName, err)
+		}
+		if appDeploymentInfo.AppName == "" || appDeploymentInfo.ObjectHash == "" {
+			return nil, fmt.Errorf("app %s has no recorded object hash", appName)
+		}
+		hashes[appName] = appDeploymentInfo.ObjectHash
+	}
+	return hashes, nil
+}
+
+// WaitForAppObjectHashChange waits until the operator records a new object hash
+// for any app in a previously captured snapshot. Unlike observing a transient
+// download or pod-copy phase, this remains reliable when a small object is
+// processed completely between polling intervals.
+func (testenvInstance *TestCaseEnv) WaitForAppObjectHashChange(ctx context.Context, deployment *Deployment, name string, crKind string, appSourceName string, previousHashes map[string]string, timeout time.Duration) error {
+	if len(previousHashes) == 0 {
+		return fmt.Errorf("no previous app object hashes provided")
+	}
+
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		for appName, previousHash := range previousHashes {
+			appDeploymentInfo, err := testenvInstance.GetAppDeploymentInfo(ctx, deployment, name, crKind, appSourceName, appName)
+			if err != nil {
+				testenvInstance.Log.Error(err, "Failed to get app deployment info while waiting for object hash change", "app", appName)
+				continue
+			}
+			if appDeploymentInfo.ObjectHash != "" && appDeploymentInfo.ObjectHash != previousHash {
+				testenvInstance.Log.Info("App object hash changed", "app", appName, "kind", crKind, "name", name)
+				return true, nil
+			}
+		}
+		return false, nil
+	})
+}
+
+// WaitForAllAppObjectHashesChange waits until every app in a previously
+// captured snapshot has a new object hash. This is useful for manual polls,
+// where proceeding after only one changed app can hide a missed replacement.
+func (testenvInstance *TestCaseEnv) WaitForAllAppObjectHashesChange(ctx context.Context, deployment *Deployment, name string, crKind string, appSourceName string, previousHashes map[string]string, timeout time.Duration) error {
+	if len(previousHashes) == 0 {
+		return fmt.Errorf("no previous app object hashes provided")
+	}
+
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		for appName, previousHash := range previousHashes {
+			appDeploymentInfo, err := testenvInstance.GetAppDeploymentInfo(ctx, deployment, name, crKind, appSourceName, appName)
+			if err != nil {
+				testenvInstance.Log.Error(err, "Failed to get app deployment info while waiting for all object hashes to change", "app", appName)
+				return false, nil
+			}
+			if appDeploymentInfo.ObjectHash == "" || appDeploymentInfo.ObjectHash == previousHash {
+				return false, nil
+			}
+		}
+		testenvInstance.Log.Info("All app object hashes changed", "kind", crKind, "name", name, "appSource", appSourceName)
+		return true, nil
+	})
+}
+
 // VerifyAppFrameworkState will perform several verifications needed between the different steps of App Framework tests
 func (testenv *TestCaseEnv) VerifyAppFrameworkState(ctx context.Context, deployment *Deployment, appSource []AppSourceInfo, splunkPodAge map[string]string, clusterManagerBundleHash string) (string, error) {
 	/* Function Steps

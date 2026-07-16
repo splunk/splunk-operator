@@ -772,6 +772,45 @@ func (testenv *TestCaseEnv) VerifySearchHeadClusterPhase(ctx context.Context, de
 	})
 }
 
+// WaitForSearchHeadClusterScaleComplete waits for the requested replica count
+// to be reconciled and ready. This uses durable status fields rather than the
+// transient ScalingUp/ScalingDown phase, which can complete between polls or
+// be obscured by another in-progress reconciliation.
+func (testenv *TestCaseEnv) WaitForSearchHeadClusterScaleComplete(ctx context.Context, deployment *Deployment, expectedReplicas int32) error {
+	shcName := deployment.GetName() + "-shc"
+	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
+		shc := &enterpriseApi.SearchHeadCluster{}
+		if err := deployment.GetInstance(ctx, shcName, shc); err != nil {
+			return false, nil
+		}
+
+		testenv.Log.Info("Waiting for Search Head Cluster scale to complete",
+			"instance", shcName,
+			"generation", shc.Generation,
+			"observedGeneration", shc.Status.ObservedGeneration,
+			"expectedReplicas", expectedReplicas,
+			"replicas", shc.Status.Replicas,
+			"readyReplicas", shc.Status.ReadyReplicas,
+			"phase", shc.Status.Phase,
+			"deployerPhase", shc.Status.DeployerPhase,
+			"captainReady", shc.Status.CaptainReady)
+
+		if shc.Spec.Replicas != expectedReplicas ||
+			shc.Status.ObservedGeneration < shc.Generation ||
+			shc.Status.Replicas != expectedReplicas ||
+			shc.Status.ReadyReplicas != expectedReplicas ||
+			shc.Status.Phase != enterpriseApi.PhaseReady ||
+			shc.Status.DeployerPhase != enterpriseApi.PhaseReady ||
+			!shc.Status.CaptainReady {
+			return false, nil
+		}
+		if err := VerifyCRConditionsForPhase("SearchHeadCluster", shcName, shc.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
+			return false, nil
+		}
+		return true, nil
+	})
+}
+
 // VerifyIndexerClusterPhase verify the phase of idxc matches the given phase.
 // Uses PhaseTransitionTimeout for transient phases (ScalingUp/ScalingDown/Updating)
 // so a missed transient phase surfaces quickly. Uses deployment.GetTimeout() for
@@ -794,6 +833,39 @@ func (testenv *TestCaseEnv) VerifyIndexerClusterPhase(ctx context.Context, deplo
 		}
 		if err := VerifyCRConditionsForPhase("IndexerCluster", idxcName, idxc.Status.Conditions, phase); err != nil {
 			return false, err
+		}
+		return true, nil
+	})
+}
+
+// WaitForIndexerClusterScaleComplete waits for the requested replica count to
+// be reconciled and ready. This uses durable status fields rather than the
+// transient ScalingUp/ScalingDown phase, which can complete between polls.
+func (testenv *TestCaseEnv) WaitForIndexerClusterScaleComplete(ctx context.Context, deployment *Deployment, idxcName string, expectedReplicas int32) error {
+	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
+		idxc := &enterpriseApi.IndexerCluster{}
+		if err := deployment.GetInstance(ctx, idxcName, idxc); err != nil {
+			return false, nil
+		}
+
+		testenv.Log.Info("Waiting for Indexer Cluster scale to complete",
+			"instance", idxcName,
+			"generation", idxc.Generation,
+			"observedGeneration", idxc.Status.ObservedGeneration,
+			"expectedReplicas", expectedReplicas,
+			"replicas", idxc.Status.Replicas,
+			"readyReplicas", idxc.Status.ReadyReplicas,
+			"phase", idxc.Status.Phase)
+
+		if idxc.Spec.Replicas != expectedReplicas ||
+			idxc.Status.ObservedGeneration < idxc.Generation ||
+			idxc.Status.Replicas != expectedReplicas ||
+			idxc.Status.ReadyReplicas != expectedReplicas ||
+			idxc.Status.Phase != enterpriseApi.PhaseReady {
+			return false, nil
+		}
+		if err := VerifyCRConditionsForPhase("IndexerCluster", idxcName, idxc.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
+			return false, nil
 		}
 		return true, nil
 	})

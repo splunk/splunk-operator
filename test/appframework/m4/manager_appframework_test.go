@@ -454,8 +454,9 @@ var _ = Describe("m4appfw test", func() {
 			err = deployment.UpdateCR(ctx, shc)
 			Expect(err).To(Succeed(), "Failed to scale up Search Head Cluster")
 
-			// Ensure Search Head Cluster scales up and go to ScalingUp phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp)).To(Succeed(), "Search Head Cluster phase mismatch")
+			// ScalingUp is transient, so verify the requested generation and
+			// replica count were fully reconciled instead of waiting for that phase.
+			Expect(testcaseEnvInst.WaitForSearchHeadClusterScaleComplete(ctx, deployment, int32(scaledSHReplicas))).To(Succeed(), "Search Head Cluster scale up did not complete")
 
 			// Get instance of current Indexer CR with latest config
 			idxcName := deployment.GetName() + "-" + "site1"
@@ -542,8 +543,7 @@ var _ = Describe("m4appfw test", func() {
 			err = deployment.UpdateCR(ctx, shc)
 			Expect(err).To(Succeed(), "Failed to scale down Search Head Cluster")
 
-			// Ensure Search Head Cluster scales down and go to ScalingDown phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown)).To(Succeed(), "Search Head Cluster phase mismatch")
+			Expect(testcaseEnvInst.WaitForSearchHeadClusterScaleComplete(ctx, deployment, int32(scaledSHReplicas))).To(Succeed(), "Search Head Cluster scale down did not complete")
 
 			// Get instance of current Indexer CR with latest config
 			Expect(deployment.GetInstance(ctx, idxcName, idxc)).To(Succeed(), "Failed to get instance of Indexer Cluster")
@@ -1486,7 +1486,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("can deploy a M4 SVA with App Framework enabled and reset operator pod while app install is in progress", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "cloud:azure", "variant:manager", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled and reset operator pod while app install is in progress", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "cloud:azure", "variant:manager", "feature:appframework"), Serial, NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -1569,7 +1569,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("can deploy a M4 SVA with App Framework enabled and reset operator pod while app download is in progress", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "cloud:azure", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a M4 SVA with App Framework enabled and reset operator pod while app download is in progress", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "cloud:azure", "variant:manager", "feature:appframework"), Serial, NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ##################

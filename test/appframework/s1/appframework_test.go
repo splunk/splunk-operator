@@ -1104,7 +1104,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), Serial, NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1200,7 +1200,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:gcp", "feature:appframework"), Serial, NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 				################## SETUP ####################

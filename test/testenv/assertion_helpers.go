@@ -17,6 +17,7 @@ package testenv
 import (
 	"context"
 	"fmt"
+	"os"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -40,8 +41,8 @@ func (testcaseenv *TestCaseEnv) ScaleSearchHeadCluster(ctx context.Context, depl
 		return fmt.Errorf("failed to scale Search Head Cluster: %w", err)
 	}
 
-	// Verify Search Head Cluster scales up and goes to ScalingUp phase
-	return testcaseenv.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp)
+	// Verify the requested generation and replica count were fully reconciled.
+	return testcaseenv.WaitForSearchHeadClusterScaleComplete(ctx, deployment, int32(newReplicas))
 }
 
 // ScaleIndexerCluster scales an Indexer Cluster to the specified replica count
@@ -197,13 +198,20 @@ func (testcaseenv *TestCaseEnv) VerifyC3ClusterReady(ctx context.Context, deploy
 }
 
 // IngestDataOnIndexers ingests test data on all indexer pods
-func IngestDataOnIndexers(ctx context.Context, deployment *Deployment, indexerCount int) {
+func IngestDataOnIndexers(ctx context.Context, deployment *Deployment, indexerCount int) error {
 	for i := 0; i < indexerCount; i++ {
 		podName := fmt.Sprintf(IndexerPod, deployment.GetName(), i)
 		logFile := fmt.Sprintf("test-log-%s.log", RandomDNSName(3))
-		CreateMockLogfile(logFile, LogLineCount)
-		IngestFileViaMonitor(ctx, deployment, logFile, DefaultIngestIndex, podName)
+		if err := CreateMockLogfile(logFile, LogLineCount); err != nil {
+			return fmt.Errorf("failed to create mock log for pod %s: %w", podName, err)
+		}
+		if err := IngestFileViaMonitor(ctx, deployment, logFile, DefaultIngestIndex, podName); err != nil {
+			_ = os.Remove(logFile)
+			return fmt.Errorf("failed to ingest mock log on pod %s: %w", podName, err)
+		}
+		_ = os.Remove(logFile)
 	}
+	return nil
 }
 
 // IngestDataOnMultisiteIndexers ingests test data on all multisite indexer pods
