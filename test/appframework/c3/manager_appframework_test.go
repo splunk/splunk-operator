@@ -15,7 +15,6 @@ package c3appfw
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -601,8 +600,9 @@ var _ = Describe("c3appfw test", func() {
 			err = deployment.UpdateCR(ctx, shc)
 			Expect(err).To(Succeed(), "Failed to scale up Search Head Cluster")
 
-			// Ensure Search Head Cluster scales up and go to ScalingUp phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp)).To(Succeed(), "Search Head Cluster phase mismatch")
+			// ScalingUp is transient, so verify the requested generation and
+			// replica count were fully reconciled instead of waiting for that phase.
+			Expect(testcaseEnvInst.WaitForSearchHeadClusterScaleComplete(ctx, deployment, int32(scaledSHReplicas))).To(Succeed(), "Search Head Cluster scale up did not complete")
 
 			// Get instance of current Indexer CR with latest config
 			idxcName := deployment.GetName() + "-idxc"
@@ -637,7 +637,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testenv.CheckIndexerOnCM(ctx, deployment, indexerName)).To(Equal(true))
 
 			// Ingest data on Indexers
-			testenv.IngestDataOnIndexers(ctx, deployment, int(scaledIndexerReplicas))
+			Expect(testenv.IngestDataOnIndexers(ctx, deployment, int(scaledIndexerReplicas))).To(Succeed(), "Failed to ingest data on indexers")
 
 			// Ensure Search Head Cluster go to Ready phase
 			Eventually(func() error {
@@ -655,23 +655,10 @@ var _ = Describe("c3appfw test", func() {
 
 			// Search for data on newly added indexer
 			searchPod := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas-1)
-			searchString := fmt.Sprintf("index=%s host=%s | stats count by host", "main", indexerName)
-			searchResultsResp, err := testenv.PerformSearchSync(ctx, deployment, searchPod, searchString)
-			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", searchPod, searchString)
-
-			// Verify result
-			searchResponse := strings.Split(searchResultsResp, "\n")[0]
-			var searchResults map[string]interface{}
-			jsonErr := json.Unmarshal([]byte(searchResponse), &searchResults)
-			Expect(jsonErr).To(Succeed(), "Failed to unmarshal JSON Search Results from response '%s'", searchResultsResp)
-
-			testcaseEnvInst.Log.Info("Search results :", "searchResults", searchResults["result"])
-			Expect(searchResults["result"]).ShouldNot(BeNil(), "No results in search response '%s' on pod %s", searchResults, searchPod)
-
-			resultLine := searchResults["result"].(map[string]interface{})
-			testcaseEnvInst.Log.Info("Sync Search results host count:", "count", resultLine["count"].(string), "host", resultLine["host"].(string))
-			testHostname := strings.Compare(resultLine["host"].(string), indexerName)
-			Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", indexerName, resultLine["host"].(string))
+			searchString := fmt.Sprintf("index=%s host=%s | stats count", testenv.DefaultIngestIndex, indexerName)
+			Eventually(func() (int, error) {
+				return testenv.CountSearchResults(ctx, deployment, searchPod, searchString)
+			}, 2*time.Minute, testenv.PollInterval).Should(BeNumerically(">", 0), "No data from new indexer %s became searchable on pod %s", indexerName, searchPod)
 
 			//########## SCALING UP VERIFICATIONS #########
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
@@ -705,8 +692,7 @@ var _ = Describe("c3appfw test", func() {
 			err = deployment.UpdateCR(ctx, shc)
 			Expect(err).To(Succeed(), "Failed to scale down Search Head Cluster")
 
-			// Ensure Search Head Cluster scales down and go to ScalingDown phase
-			Expect(testcaseEnvInst.VerifySearchHeadClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingDown)).To(Succeed(), "Search Head Cluster phase mismatch")
+			Expect(testcaseEnvInst.WaitForSearchHeadClusterScaleComplete(ctx, deployment, int32(scaledSHReplicas))).To(Succeed(), "Search Head Cluster scale down did not complete")
 
 			// Get instance of current Indexer CR with latest config
 			Expect(deployment.GetInstance(ctx, idxcName, idxc)).To(Succeed(), "Failed to get instance of Indexer Cluster")
@@ -749,22 +735,10 @@ var _ = Describe("c3appfw test", func() {
 
 			// Search for data from removed indexer
 			searchPod = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas-1)
-			searchString = fmt.Sprintf("index=%s host=%s | stats count by host", "main", indexerName)
-			searchResultsResp, err = testenv.PerformSearchSync(ctx, deployment, searchPod, searchString)
-			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", searchPod, searchString)
-
-			// Verify result
-			searchResponse = strings.Split(searchResultsResp, "\n")[0]
-			jsonErr = json.Unmarshal([]byte(searchResponse), &searchResults)
-			Expect(jsonErr).To(Succeed(), "Failed to unmarshal JSON Search Results from response '%s'", searchResultsResp)
-
-			testcaseEnvInst.Log.Info("Search results :", "searchResults", searchResults["result"])
-			Expect(searchResults["result"]).ShouldNot(BeNil(), "No results in search response '%s' on pod %s", searchResults, searchPod)
-
-			resultLine = searchResults["result"].(map[string]interface{})
-			testcaseEnvInst.Log.Info("Sync Search results host count:", "count", resultLine["count"].(string), "host", resultLine["host"].(string))
-			testHostname = strings.Compare(resultLine["host"].(string), indexerName)
-			Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", indexerName, resultLine["host"].(string))
+			searchString = fmt.Sprintf("index=%s host=%s | stats count by host", testenv.DefaultIngestIndex, indexerName)
+			Eventually(func() (int, error) {
+				return testenv.CountSearchResults(ctx, deployment, searchPod, searchString)
+			}, 2*time.Minute, testenv.PollInterval).Should(BeNumerically(">", 0), "Data from retained indexer %s was not searchable on pod %s after scale down", indexerName, searchPod)
 
 			//######## SCALING DOWN VERIFICATIONS #########
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
@@ -1030,6 +1004,9 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
+			previousClusterAppHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cmAppSourceInfoCluster.CrName, cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
+			Expect(err).To(Succeed(), "Unable to capture app object hashes before upgrade")
+
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 			Expect(cloudBackend.DeleteFiles(ctx, uploadedApps)).To(Succeed(), "S3 file deletion failed")
@@ -1059,8 +1036,9 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Check for changes in App phase to determine if next poll has been triggered
-			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
+			// Object hash changes remain observable even if the transient app phases
+			// complete between test polling intervals.
+			Expect(testcaseEnvInst.WaitForAppObjectHashChange(ctx, deployment, cmAppSourceInfoCluster.CrName, cm.Kind, appSourceNameClusterIdxc, previousClusterAppHashes, testenv.AppInstallTimeout)).To(Succeed(), "Updated app object hash not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
 
@@ -1234,6 +1212,9 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############# DOWNGRADE APPS ################
+			previousClusterAppHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cmAppSourceInfoCluster.CrName, cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
+			Expect(err).To(Succeed(), "Unable to capture app object hashes before downgrade")
+
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 			Expect(cloudBackend.DeleteFiles(ctx, uploadedApps)).To(Succeed(), "S3 file deletion failed")
@@ -1263,8 +1244,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Check for changes in App phase to determine if next poll has been triggered
-			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
+			Expect(testcaseEnvInst.WaitForAppObjectHashChange(ctx, deployment, cmAppSourceInfoCluster.CrName, cm.Kind, appSourceNameClusterIdxc, previousClusterAppHashes, testenv.AppInstallTimeout)).To(Succeed(), "Downgraded app object hash not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
 
@@ -1882,6 +1862,9 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
+			previousClusterAppHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cmAppSourceInfoCluster.CrName, cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
+			Expect(err).To(Succeed(), "Unable to capture app object hashes before manual upgrade")
+
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 			Expect(cloudBackend.DeleteFiles(ctx, uploadedApps)).To(Succeed(), "S3 file deletion failed")
@@ -1923,8 +1906,7 @@ var _ = Describe("c3appfw test", func() {
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
-			// Check for changes in App phase to determine if next poll has been triggered
-			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
+			Expect(testcaseEnvInst.WaitForAppObjectHashChange(ctx, deployment, cmAppSourceInfoCluster.CrName, cm.Kind, appSourceNameClusterIdxc, previousClusterAppHashes, testenv.AppInstallTimeout)).To(Succeed(), "Manually updated app object hash not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
 
@@ -2184,7 +2166,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 	// Vivek need testing
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("can deploy a C3 SVA with App Framework enabled and reset operator pod while app install is in progress", Label("tier:e2e-full", "sva:c3", "cloud:aws", "cloud:gcp", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with App Framework enabled and reset operator pod while app install is in progress", Label("tier:e2e-full", "sva:c3", "cloud:aws", "cloud:gcp", "variant:manager", "feature:appframework"), Serial, NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2269,7 +2251,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("can deploy a C3 SVA with App Framework enabled and reset operator pod while app download is in progress", Label("tier:e2e-full", "sva:c3", "cloud:aws", "cloud:gcp", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		It("can deploy a C3 SVA with App Framework enabled and reset operator pod while app download is in progress", Label("tier:e2e-full", "sva:c3", "cloud:aws", "cloud:gcp", "variant:manager", "feature:appframework"), Serial, NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2527,6 +2509,8 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify App Download is in progress on Cluster Manager
 			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
+			previousAppHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to capture app object hashes before update")
 
 			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
@@ -2552,9 +2536,8 @@ var _ = Describe("c3appfw test", func() {
 				return testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appListV1, false, "enabled", false, false)
 			}, deployment.GetTimeout(), testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 
-			// Check for changes in App phase to determine if next poll has been triggered
 			appFileList = testenv.GetAppFileList(appListV2)
-			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
+			Expect(testcaseEnvInst.WaitForAppObjectHashChange(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, previousAppHashes, testenv.AppInstallTimeout)).To(Succeed(), "Updated app object hash not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
 
