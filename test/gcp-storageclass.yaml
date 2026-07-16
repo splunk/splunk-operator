@@ -4,6 +4,8 @@ metadata:
   name: default
   annotations:
     storageclass.kubernetes.io/is-default-class: "true"
-provisioner: kubernetes.io/gce-pd
+provisioner: pd.csi.storage.gke.io
+parameters:
+  type: pd-standard
 reclaimPolicy: Delete
-volumeBindingMode: Immediate
+volumeBindingMode: WaitForFirstConsumer

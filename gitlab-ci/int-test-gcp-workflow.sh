@@ -97,6 +97,25 @@ prepare_gcp_service_account_key() {
   gcp_service_account_key_prepared="true"
 }
 
+wait_for_resource() {
+  resource="$1"
+  namespace="$2"
+  timeout_seconds="$3"
+  poll_seconds=5
+  elapsed_seconds=0
+
+  printf 'Waiting up to %ss for %s/%s to be created\n' "${timeout_seconds}" "${namespace}" "${resource}"
+  until kubectl get "${resource}" -n "${namespace}" >/dev/null 2>&1; do
+    if [ "${elapsed_seconds}" -ge "${timeout_seconds}" ]; then
+      printf 'Timed out waiting for %s/%s to be created\n' "${namespace}" "${resource}" >&2
+      return 1
+    fi
+    sleep "${poll_seconds}"
+    elapsed_seconds=$((elapsed_seconds + poll_seconds))
+  done
+  printf 'Found %s/%s\n' "${namespace}" "${resource}"
+}
+
 gcp_auth_mode="service-account-key"
 if gcp_oidc_ready; then
   gcp_auth_mode="oidc"
@@ -136,8 +155,9 @@ export CLUSTER_NODES="$(first_nonempty "${PIPELINE_GCP_CLUSTER_NODES:-}" "${JOB_
 export CLUSTER_WIDE="$(first_nonempty "${PIPELINE_GCP_CLUSTER_WIDE:-}" "${JOB_CLOUD_CLUSTER_WIDE:-}" "true")"
 export DEPLOYMENT_TYPE="$(first_nonempty "${PIPELINE_GCP_DEPLOYMENT_TYPE:-}" "${JOB_CLOUD_DEPLOYMENT_TYPE:-}" "manifest")"
 export GCP_PROJECT_ID="${PIPELINE_GCP_PROJECT_ID}"
-export GCP_REGION="$(first_nonempty "${JOB_CLOUD_GCP_REGION:-}" "${PIPELINE_GCP_REGION:-}" "us-west2")"
-export GCP_ZONE="$(first_nonempty "${JOB_CLOUD_GCP_ZONE:-}" "${PIPELINE_GCP_ZONE:-}" "${GCP_REGION}-a")"
+export GCP_REGION="$(first_nonempty "${PIPELINE_GCP_REGION:-}" "${JOB_CLOUD_GCP_REGION:-}" "us-west2")"
+export GCP_ZONE="$(first_nonempty "${PIPELINE_GCP_ZONE:-}" "${JOB_CLOUD_GCP_ZONE:-}" "${GCP_REGION}-a")"
+export GCP_ZONE_FALLBACKS="$(first_nonempty "${PIPELINE_GCP_ZONE_FALLBACKS:-}" "${JOB_CLOUD_GCP_ZONE_FALLBACKS:-}" "")"
 export AWS_S3_REGION="${GCP_REGION}"
 export S3_REGION="${GCP_REGION}"
 export GCP_NETWORK="$(first_nonempty "${PIPELINE_GCP_NETWORK:-}" "default")"
@@ -256,6 +276,7 @@ append_context "${context_file}" "enterprise_source_image" "${enterprise_source_
 append_context "${context_file}" "gcp_project_id" "${GCP_PROJECT_ID}"
 append_context "${context_file}" "gcp_region" "${GCP_REGION}"
 append_context "${context_file}" "gcp_zone" "${GCP_ZONE}"
+append_context "${context_file}" "gcp_zone_fallbacks" "${GCP_ZONE_FALLBACKS:-}"
 append_context "${context_file}" "gcp_registry_pull_mode_effective" "${PRIVATE_REGISTRY_AUTH_MODE}"
 append_context "${context_file}" "gcp_node_service_account_email" "${GCP_NODE_SERVICE_ACCOUNT_EMAIL:-}"
 append_context "${context_file}" "test_labels" "${TEST_LABELS}"
@@ -276,14 +297,29 @@ log_step "gcp:registry-enterprise-image:complete ${PRIVATE_SPLUNK_ENTERPRISE_IMA
 
 if [ "${cluster_mode}" = "ephemeral-gke" ]; then
   log_step "gcp:cluster-up:start ${TEST_CLUSTER_NAME}" | tee -a "${cluster_log}" >/dev/null
-  make cluster-up 2>&1 | tee -a "${cluster_log}"
+  # A failed gcloud create can leave an ERROR cluster, managed instance groups,
+  # or partially created N2 VMs. Mark cleanup required before creation begins so
+  # the exit trap handles both complete and partial clusters.
   cluster_created="true"
+  make cluster-up 2>&1 | tee -a "${cluster_log}"
   log_step "gcp:cluster-up:complete" | tee -a "${cluster_log}" >/dev/null
 else
   log_step "gcp:cluster-up:skipped mode=${cluster_mode}" | tee -a "${cluster_log}" >/dev/null
 fi
 kubectl get nodes -o wide 2>&1 | tee -a "${cluster_log}"
 kubectl get pods -A 2>&1 | tee -a "${cluster_log}"
+
+log_step "gcp:cluster-nodes:wait-ready" | tee -a "${cluster_log}" >/dev/null
+run_and_tee "${cluster_log}" kubectl wait node --all --for=condition=Ready --timeout=300s
+log_step "gcp:cluster-system-pods:wait-ready" | tee -a "${cluster_log}" >/dev/null
+# Wait for kube-system daemonsets/deployments to be ready (GKE uses kube-dns, not coredns).
+# Skips GKE-managed logging/monitoring daemonsets which are disabled at cluster creation.
+run_and_tee "${cluster_log}" wait_for_resource daemonset/kube-proxy kube-system 180
+run_and_tee "${cluster_log}" kubectl rollout status daemonset/kube-proxy -n kube-system --timeout=180s
+run_and_tee "${cluster_log}" wait_for_resource deployment/kube-dns kube-system 180
+run_and_tee "${cluster_log}" kubectl rollout status deployment/kube-dns -n kube-system --timeout=180s
+kubectl get pods -A 2>&1 | tee -a "${cluster_log}"
+log_step "gcp:cluster-system-pods:ready" | tee -a "${cluster_log}" >/dev/null
 
 if [ -f "${CI_PROJECT_DIR}/test/gcp-storageclass.yaml" ]; then
   log_step "gcp:storageclass:apply" | tee -a "${cluster_log}" >/dev/null

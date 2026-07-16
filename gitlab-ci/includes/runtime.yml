@@ -394,6 +394,7 @@ qualification-gcp-c3-validation:
     JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:c3 && cloud:gcp && variant:master"
     JOB_CLOUD_TEST_TIMEOUT: 225m
     JOB_CLOUD_GCP_ZONE: us-west2-a
+    JOB_CLOUD_GCP_ZONE_FALLBACKS: "us-west2-b us-west2-c"
 
 qualification-gcp-c3-manager-validation:
   extends: .runtime-released-sok-gcp-validation-job
@@ -401,7 +402,8 @@ qualification-gcp-c3-manager-validation:
     WORKFLOW_SLUG: qualification-gcp-c3-manager-validation
     JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:c3 && cloud:gcp && variant:manager"
     JOB_CLOUD_TEST_TIMEOUT: 225m
-    JOB_CLOUD_GCP_ZONE: us-west2-b
+    JOB_CLOUD_GCP_ZONE: us-west2-a
+    JOB_CLOUD_GCP_ZONE_FALLBACKS: "us-west2-b us-west2-c"
 
 qualification-gcp-m4-validation:
   extends: .runtime-released-sok-gcp-validation-job
@@ -409,7 +411,8 @@ qualification-gcp-m4-validation:
     WORKFLOW_SLUG: qualification-gcp-m4-validation
     JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:m4 && cloud:gcp && variant:master"
     JOB_CLOUD_TEST_TIMEOUT: 225m
-    JOB_CLOUD_GCP_ZONE: us-west2-c
+    JOB_CLOUD_GCP_ZONE: us-west2-a
+    JOB_CLOUD_GCP_ZONE_FALLBACKS: "us-west2-b us-west2-c"
 
 qualification-gcp-m4-manager-validation:
   extends: .runtime-released-sok-gcp-validation-job
@@ -418,6 +421,7 @@ qualification-gcp-m4-manager-validation:
     JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:m4 && cloud:gcp && variant:manager"
     JOB_CLOUD_TEST_TIMEOUT: 225m
     JOB_CLOUD_GCP_ZONE: us-west2-a
+    JOB_CLOUD_GCP_ZONE_FALLBACKS: "us-west2-b us-west2-c"
 
 qualification-gcp-s1-validation:
   extends: .runtime-released-sok-gcp-validation-job
@@ -425,7 +429,8 @@ qualification-gcp-s1-validation:
     WORKFLOW_SLUG: qualification-gcp-s1-validation
     JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:s1 && cloud:gcp"
     JOB_CLOUD_TEST_TIMEOUT: 225m
-    JOB_CLOUD_GCP_ZONE: us-west2-b
+    JOB_CLOUD_GCP_ZONE: us-west2-a
+    JOB_CLOUD_GCP_ZONE_FALLBACKS: "us-west2-b us-west2-c"
 
 qualification-distroless-appframeworks-s1-validation:
   extends:
@@ -809,6 +814,7 @@ nightly-gcp-c3-validation:
     JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:c3 && cloud:gcp && variant:master"
     JOB_CLOUD_TEST_TIMEOUT: 225m
     JOB_CLOUD_GCP_ZONE: us-west2-a
+    JOB_CLOUD_GCP_ZONE_FALLBACKS: "us-west2-b us-west2-c"
 
 nightly-gcp-c3-manager-validation:
   extends: .runtime-nightly-gcp-validation-job
@@ -816,7 +822,8 @@ nightly-gcp-c3-manager-validation:
     WORKFLOW_SLUG: nightly-gcp-c3-manager-validation
     JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:c3 && cloud:gcp && variant:manager"
     JOB_CLOUD_TEST_TIMEOUT: 225m
-    JOB_CLOUD_GCP_ZONE: us-west2-b
+    JOB_CLOUD_GCP_ZONE: us-west2-a
+    JOB_CLOUD_GCP_ZONE_FALLBACKS: "us-west2-b us-west2-c"
 
 nightly-gcp-m4-validation:
   extends: .runtime-nightly-gcp-validation-job
@@ -824,7 +831,8 @@ nightly-gcp-m4-validation:
     WORKFLOW_SLUG: nightly-gcp-m4-validation
     JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:m4 && cloud:gcp && variant:master"
     JOB_CLOUD_TEST_TIMEOUT: 225m
-    JOB_CLOUD_GCP_ZONE: us-west2-c
+    JOB_CLOUD_GCP_ZONE: us-west2-a
+    JOB_CLOUD_GCP_ZONE_FALLBACKS: "us-west2-b us-west2-c"
 
 nightly-gcp-m4-manager-validation:
   extends: .runtime-nightly-gcp-validation-job
@@ -833,6 +841,7 @@ nightly-gcp-m4-manager-validation:
     JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:m4 && cloud:gcp && variant:manager"
     JOB_CLOUD_TEST_TIMEOUT: 225m
     JOB_CLOUD_GCP_ZONE: us-west2-a
+    JOB_CLOUD_GCP_ZONE_FALLBACKS: "us-west2-b us-west2-c"
 
 nightly-gcp-s1-validation:
   extends: .runtime-nightly-gcp-validation-job
@@ -840,4 +849,5 @@ nightly-gcp-s1-validation:
     WORKFLOW_SLUG: nightly-gcp-s1-validation
     JOB_CLOUD_TEST_LABELS: "tier:e2e-full && sva:s1 && cloud:gcp"
     JOB_CLOUD_TEST_TIMEOUT: 225m
-    JOB_CLOUD_GCP_ZONE: us-west2-b
+    JOB_CLOUD_GCP_ZONE: us-west2-a
+    JOB_CLOUD_GCP_ZONE_FALLBACKS: "us-west2-b us-west2-c"

@@ -16,6 +16,7 @@
 package testenv
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -49,15 +50,16 @@ import (
 //   - Timestamps for the logs are set to a line a second ending with the current time
 func CreateMockLogfile(logFile string, totalLines int) error {
 	// Create data log
-	var file, err = os.Create(logFile)
+	file, err := os.Create(logFile)
 	if err != nil {
 		logf.Log.Error(err, "Failed File Created", "logFile", logFile)
 		return err
 	}
+	defer func() { _ = file.Close() }()
 	logf.Log.Info("File Created Successfully", "logFile", logFile)
 
 	// Write some text line-by-line to file.
-	var logLine strings.Builder
+	writer := bufio.NewWriter(file)
 	level := "DEBUG"
 	component := "GenericComponent"
 	msg := "This log line is special!"
@@ -65,23 +67,27 @@ func CreateMockLogfile(logFile string, totalLines int) error {
 
 	// Simulate a log every second.  This could be adjusted however for this simple case its probably sufficient
 	timestamp = timestamp.Add(time.Second * time.Duration(-totalLines))
-	rand.Seed(time.Now().UnixNano())
+	random := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	// Write each line to the file
 	for i := 0; i < totalLines; i++ {
-		fmt.Fprintf(&logLine, "%s %s %s %s randomNumber=%d\n", timestamp.Format("01-02-2006 15:04:05.000"), level, component, msg, rand.Int63())
-		_, err = file.WriteString(logLine.String())
+		_, err = fmt.Fprintf(writer, "%s %s %s %s randomNumber=%d\n", timestamp.Format("01-02-2006 15:04:05.000"), level, component, msg, random.Int63())
 		if err != nil {
-			logf.Log.Error(err, "Failed File Write", "logFile", logFile, "logLine", logLine.String())
+			logf.Log.Error(err, "Failed File Write", "logFile", logFile)
 			return err
 		}
 		timestamp = timestamp.Add(time.Second)
 	}
 
+	if err := writer.Flush(); err != nil {
+		logf.Log.Error(err, "Failed File Flush", "logFile", logFile)
+		return err
+	}
+
 	// Save logFile
 	err = file.Sync()
 	if err != nil {
-		logf.Log.Error(err, "Failed File Save", "logFile", logFile, "logLine", logLine)
+		logf.Log.Error(err, "Failed File Save", "logFile", logFile)
 		return err
 	}
 	logf.Log.Info("File Updated Successfully", "logFile", logFile)
@@ -225,9 +231,10 @@ func CopyFileToPod(ctx context.Context, deployment *Deployment, podName string, 
 
 // IngestFileViaMonitor ingests a file into an instance using the monitor CLI
 func IngestFileViaMonitor(ctx context.Context, deployment *Deployment, logFile string, indexName string, podName string) error {
+	monitorPath := monitorPathForLogFile(logFile)
 
 	// Send it to the instance
-	resp, stderr, cpErr := CopyFileToPod(ctx, deployment, podName, logFile, logFile)
+	resp, stderr, cpErr := CopyFileToPod(ctx, deployment, podName, logFile, monitorPath)
 	if cpErr != nil {
 		logf.Log.Error(cpErr, "Failed File Copy to pod", "logFile", logFile, "podName", podName, "stderr", stderr)
 		return cpErr
@@ -241,7 +248,7 @@ func IngestFileViaMonitor(ctx context.Context, deployment *Deployment, logFile s
 	password := "$(cat /mnt/splunk-secrets/password)"
 	splunkCmd := "add monitor"
 
-	fmt.Fprintf(&addMonitorCmd, "%s %s %s -index %s -auth %s:%s", splunkBin, splunkCmd, logFile, indexName, username, password)
+	fmt.Fprintf(&addMonitorCmd, "%s %s %s -index %s -auth %s:%s", splunkBin, splunkCmd, monitorPath, indexName, username, password)
 	command := []string{"/bin/bash"}
 	stdin := addMonitorCmd.String()
 	addMonitorResp, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
@@ -251,12 +258,24 @@ func IngestFileViaMonitor(ctx context.Context, deployment *Deployment, logFile s
 	}
 
 	// Validate the expected CLI response
-	var expectedResp strings.Builder
-	fmt.Fprintf(&expectedResp, "Added monitor of '%s'", logFile)
-	if strings.Compare(addMonitorResp, expectedResp.String()) == 0 {
+	if !isSuccessfulAddMonitorResponse(addMonitorResp, monitorPath) {
+		err = fmt.Errorf("unexpected response while adding monitor for %s on pod %s: %q", logFile, podName, addMonitorResp)
 		logf.Log.Error(err, "Failed response to add monitor to splunk", "pod", podName, "addMonitorResp", addMonitorResp)
 		return err
 	}
 	logf.Log.Info("File Ingested via add monitor Successfully", "logFile", logFile, "addMonitorResp", addMonitorResp)
 	return nil
+}
+
+func monitorPathForLogFile(logFile string) string {
+	if path.IsAbs(logFile) {
+		return path.Clean(logFile)
+	}
+	return path.Join("/opt/splunk", logFile)
+}
+
+func isSuccessfulAddMonitorResponse(response, monitorPath string) bool {
+	expected := fmt.Sprintf("Added monitor of '%s'", path.Clean(monitorPath))
+	trimmedResponse := strings.TrimSpace(response)
+	return trimmedResponse == expected || trimmedResponse == expected+"."
 }
