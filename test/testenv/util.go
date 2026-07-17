@@ -1209,19 +1209,26 @@ func DeleteFilesOnOperatorPod(ctx context.Context, deployment *Deployment, podNa
 	return nil
 }
 
-// DumpGetSplunkVersion prints the splunk version installed on pods
+// DumpGetSplunkVersion prints the splunk version installed on pods.
+// Runs asynchronously so callers on a tight polling budget (e.g.
+// PollConsistentlyWithTolerance) aren't starved by these blocking kubectl execs.
 func DumpGetSplunkVersion(ctx context.Context, ns string, deployment *Deployment, filterString string) {
-	splunkPods := DumpGetPods(ns)
-	cmd := "/opt/splunk/bin/splunk -version"
-	for _, podName := range splunkPods {
-		if strings.Contains(podName, filterString) {
-			stdout, err := ExecuteCommandOnPod(ctx, deployment, podName, cmd)
-			if err != nil {
-				logf.Log.Error(err, "Failed to get splunkd version on the pod", "podName", podName)
+	go func() {
+		dumpCtx, cancel := context.WithTimeout(context.Background(), KubectlExecTimeout)
+		defer cancel()
+
+		splunkPods := DumpGetPods(ns)
+		cmd := "/opt/splunk/bin/splunk -version"
+		for _, podName := range splunkPods {
+			if strings.Contains(podName, filterString) {
+				stdout, err := ExecuteCommandOnPod(dumpCtx, deployment, podName, cmd)
+				if err != nil {
+					logf.Log.Error(err, "Failed to get splunkd version on the pod", "podName", podName)
+				}
+				logf.Log.Info("Splunk Version Found", "podName", podName, "version", string(stdout))
 			}
-			logf.Log.Info("Splunk Version Found", "podName", podName, "version", string(stdout))
 		}
-	}
+	}()
 }
 
 // CreateDummyFileOnOperator creates a dummy file of specified size at path provided
