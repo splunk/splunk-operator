@@ -53,21 +53,24 @@ This chart:
 | PersistentVolume provisioner | Only required when `storage.emptyDir: false` |
 | `helm-unittest` plugin | Only needed to run `helm unittest` |
 
-> **Splunk General Terms:** Use of the Splunk Universal Forwarder image requires acceptance of the Splunk General Terms. See [Splunk General Terms Acceptance](https://splunk.github.io/splunk-operator/#splunk-general-terms-acceptance) in the Splunk Operator documentation for the required `SPLUNK_GENERAL_TERMS` env var and the legal language you must accept before setting it.
+> **Splunk General Terms:** Use of the Splunk Universal Forwarder image requires acceptance of the Splunk General Terms. See [Splunk General Terms Acceptance](../README.md#splunk-general-terms-acceptance) in the Splunk Operator documentation for the required `SPLUNK_GENERAL_TERMS` env var and the legal language you must accept before setting it.
 
 ---
 
 ## 3. Quick Install
 
-Minimum required: one of `splunkConfig.forwardServer` or `splunkConfig.deploymentServer`, plus a non-default password.
+Minimum required: one of `splunkConfig.forwardServer` or `splunkConfig.deploymentServer`, a non-default password, and explicit acceptance of the Splunk General Terms.
 
 ```sh
 helm install my-uf ./helm-chart/splunk-universalforwarder \
   --namespace my-namespace \
   --create-namespace \
   --set splunkConfig.forwardServer=indexer.example.com:9997 \
-  --set splunkConfig.password=MySecurePassword1
+  --set splunkConfig.password=MySecurePassword1 \
+  --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page>
 ```
+
+> The chart fails at render time if `splunkConfig.splunkGeneralTerms` is not set to the required value. See [Splunk General Terms Acceptance](../README.md#splunk-general-terms-acceptance) for the required value and legal language.
 
 > **Security note:** `--set` values appear in shell history. For production use a `--values` file or `splunkConfig.existingSecret` (see [Password Setup](#6-password-setup)).
 
@@ -100,7 +103,8 @@ The chart deploys a **Deployment**. One or more replicas can be configured via `
 helm install my-uf ./helm-chart/splunk-universalforwarder \
   --set replicaCount=2 \
   --set splunkConfig.forwardServer=indexer.example.com:9997 \
-  --set splunkConfig.password=MySecurePassword1
+  --set splunkConfig.password=MySecurePassword1 \
+  --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page>
 ```
 
 ---
@@ -140,6 +144,7 @@ splunkConfig:
     - idx1.example.com:9997
     - idx2.example.com:9997
   password: MySecurePassword1
+  splunkGeneralTerms: "<value-from-splunk-general-terms-acceptance-page>"
 ```
 
 ```sh
@@ -208,7 +213,8 @@ Each entry maps to a `splunk add` call during Ansible init. The items are comma-
 ```sh
 helm install my-uf ./helm-chart/splunk-universalforwarder \
   --set splunkConfig.forwardServer=indexer.example.com:9997 \
-  --set splunkConfig.password=MySecurePassword1
+  --set splunkConfig.password=MySecurePassword1 \
+  --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page>
 ```
 
 The chart creates a Secret with two keys:
@@ -252,7 +258,8 @@ Then reference it:
 ```sh
 helm install my-uf ./helm-chart/splunk-universalforwarder \
   --set splunkConfig.forwardServer=indexer.example.com:9997 \
-  --set splunkConfig.existingSecret=my-uf-secret
+  --set splunkConfig.existingSecret=my-uf-secret \
+  --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page>
 ```
 
 The chart skips Secret creation entirely and mounts the named Secret. The password validation guard is also skipped when `existingSecret` is set.
@@ -265,7 +272,8 @@ The chart skips Secret creation entirely and mounts the named Secret. The passwo
 helm upgrade my-uf ./helm-chart/splunk-universalforwarder \
   --namespace my-namespace \
   --set splunkConfig.forwardServer=indexer.example.com:9997 \
-  --set splunkConfig.password=NewSecurePassword1
+  --set splunkConfig.password=NewSecurePassword1 \
+  --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page>
 ```
 
 **Durable mode (`storage.emptyDir: false`):** password rotation requires deleting the PVCs so Splunk reinitialises with the new credential (the old passwd hash is stored on the PVC):
@@ -285,7 +293,8 @@ helm install my-uf ./helm-chart/splunk-universalforwarder \
   --namespace my-namespace \
   --set storage.emptyDir=false \
   --set splunkConfig.forwardServer=indexer.example.com:9997 \
-  --set splunkConfig.password=NewSecurePassword1
+  --set splunkConfig.password=NewSecurePassword1 \
+  --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page>
 ```
 
 ---
@@ -307,7 +316,8 @@ Enable SSL in the chart:
 helm install my-uf ./helm-chart/splunk-universalforwarder \
   --set splunkConfig.forwardServer=indexer.example.com:9997 \
   --set splunkConfig.password=MySecurePassword1 \
-  --set splunkConfig.ssl.secretName=uf-s2s-certs
+  --set splunkConfig.ssl.secretName=uf-s2s-certs \
+  --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page>
 ```
 
 The chart:
@@ -338,7 +348,8 @@ This is the right choice for a **pure forwarding tier** that receives data over 
 # Default — no extra flags needed
 helm install my-uf ./helm-chart/splunk-universalforwarder \
   --set splunkConfig.forwardServer=indexer.example.com:9997 \
-  --set splunkConfig.password=MySecurePassword1
+  --set splunkConfig.password=MySecurePassword1 \
+  --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page>
 ```
 
 ### 8.2 Durable mode (`storage.emptyDir: false`)
@@ -357,6 +368,7 @@ helm install my-uf ./helm-chart/splunk-universalforwarder \
   --set storage.emptyDir=false \
   --set splunkConfig.forwardServer=indexer.example.com:9997 \
   --set splunkConfig.password=MySecurePassword1 \
+  --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page> \
   --set "splunkConfig.add[0]=monitor /var/log/app/*.log"
 ```
 
@@ -394,6 +406,7 @@ The Service exposes four ports by default when `service.enabled=true`:
 helm install my-uf ./helm-chart/splunk-universalforwarder \
   --set splunkConfig.forwardServer=indexer.example.com:9997 \
   --set splunkConfig.password=MySecurePassword1 \
+  --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page> \
   --set service.enabled=true \
   --set "splunkConfig.add[0]=udp 514"
 ```
@@ -435,6 +448,7 @@ Expose the HEC endpoint externally via an `Ingress` resource. Requires `service.
 helm install my-uf ./helm-chart/splunk-universalforwarder \
   --set splunkConfig.forwardServer=indexer.example.com:9997 \
   --set splunkConfig.password=MySecurePassword1 \
+  --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page> \
   --set service.enabled=true \
   --set ingress.enabled=true \
   --set ingress.className=nginx \
@@ -543,6 +557,7 @@ When `networkPolicy.enabled=true` with empty `ingress`/`egress` lists, the polic
 | `splunkConfig.passwordKey` | `password` | Key within the Secret holding the password |
 | `splunkConfig.forwardServer` | `""` | `host:port` of the downstream indexer (required unless `deploymentServer` or `forwardServers` is set) |
 | `splunkConfig.forwardServers` | `[]` | List of indexer endpoints; takes precedence over `forwardServer` when non-empty |
+| `splunkConfig.splunkGeneralTerms` | `""` | **Required.** Set to the value from [Splunk General Terms Acceptance](../README.md#splunk-general-terms-acceptance) after reviewing and accepting the terms. The chart fails at render time if it is not set correctly. |
 | `splunkConfig.deploymentServer` | `""` | `host:port` of the Deployment Server |
 | `splunkConfig.deploymentClientName` | `""` | Client name reported to the Deployment Server |
 | `splunkConfig.add` | `[]` | List of `splunk add` arguments, e.g. `["monitor /var/log/app/*.log"]` |
@@ -678,7 +693,8 @@ Default `service.ports`:
 helm upgrade my-uf ./helm-chart/splunk-universalforwarder \
   --namespace my-namespace \
   --set splunkConfig.forwardServer=indexer.example.com:9997 \
-  --set splunkConfig.password=MySecurePassword1
+  --set splunkConfig.password=MySecurePassword1 \
+  --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page>
 ```
 
 Pass all values you want to keep — `helm upgrade` does not preserve previously `--set` values unless you use `--reuse-values` (not recommended; use a values file instead).
@@ -830,12 +846,13 @@ The `splunk-universalforwarder` chart is included as an optional, disabled-by-de
 ```sh
 helm install my-stack ./helm-chart/splunk-enterprise \
   --namespace my-namespace \
-  --set universalforwarder.enabled=true \
-  --set "universalforwarder.splunkConfig.forwardServer=<indexer-svc>.<namespace>.svc.cluster.local:9997" \
-  --set universalforwarder.splunkConfig.password=MySecurePassword1
+  --set splunk-universalforwarder.enabled=true \
+  --set "splunk-universalforwarder.splunkConfig.forwardServer=<indexer-svc>.<namespace>.svc.cluster.local:9997" \
+  --set splunk-universalforwarder.splunkConfig.password=MySecurePassword1 \
+  --set "splunk-universalforwarder.splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page>"
 ```
 
-All `splunk-universalforwarder` values are namespaced under `universalforwarder.*` when used as a sub-chart.
+All `splunk-universalforwarder` values are namespaced under `splunk-universalforwarder.*` when used as a sub-chart.
 
 ### Enable when upgrading an existing splunk-enterprise release
 
@@ -843,9 +860,10 @@ All `splunk-universalforwarder` values are namespaced under `universalforwarder.
 helm upgrade my-stack ./helm-chart/splunk-enterprise \
   --namespace my-namespace \
   --values values-production.yaml \
-  --set universalforwarder.enabled=true \
-  --set "universalforwarder.splunkConfig.forwardServer=splunk-my-stack-standalone-service.my-namespace.svc.cluster.local:9997" \
-  --set universalforwarder.splunkConfig.password=MySecurePassword1
+  --set splunk-universalforwarder.enabled=true \
+  --set "splunk-universalforwarder.splunkConfig.forwardServer=splunk-my-stack-standalone-service.my-namespace.svc.cluster.local:9997" \
+  --set splunk-universalforwarder.splunkConfig.password=MySecurePassword1 \
+  --set "splunk-universalforwarder.splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page>"
 ```
 
 ---

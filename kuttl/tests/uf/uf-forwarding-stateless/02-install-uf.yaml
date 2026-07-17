@@ -5,5 +5,5 @@ commands:
   # KUTTL_SPLUNK_UF_IMAGE is docker.io/splunk/universalforwarder:<tag> — falls back
   # to chart default if env var is unset. Uses $NAMESPACE explicitly because bash -c
   # wrapping prevents kuttl from appending --namespace automatically.
-  - command: bash -c "EXTRA=''; if [ -n \"$KUTTL_SPLUNK_UF_IMAGE\" ]; then EXTRA=\"--set image.repository=${KUTTL_SPLUNK_UF_IMAGE%:*} --set image.tag=${KUTTL_SPLUNK_UF_IMAGE##*:}\"; fi; helm install splunk-uf ../../../../helm-chart/splunk-universalforwarder --namespace $NAMESPACE --set splunkConfig.forwardServer=splunk-stdln-standalone-service.$NAMESPACE.svc.cluster.local:9997 --set splunkConfig.password=TestPassword1 $EXTRA"
+  - command: bash -c "EXTRA=''; if [ -n \"$KUTTL_SPLUNK_UF_IMAGE\" ]; then EXTRA=\"--set image.repository=${KUTTL_SPLUNK_UF_IMAGE%:*} --set image.tag=${KUTTL_SPLUNK_UF_IMAGE##*:}\"; fi; helm install splunk-uf ../../../../helm-chart/splunk-universalforwarder --namespace $NAMESPACE --set splunkConfig.forwardServer=splunk-stdln-standalone-service.$NAMESPACE.svc.cluster.local:9997 --set splunkConfig.password=TestPassword1 --set splunkConfig.splunkGeneralTerms=--accept-sgt-current-at-splunk-com $EXTRA"
     namespaced: true
