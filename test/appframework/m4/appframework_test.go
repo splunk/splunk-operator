@@ -495,6 +495,7 @@ var _ = Describe("m4appfw test", func() {
 			searchPod := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 0)
 			indexerName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 1)
 			searchString := fmt.Sprintf("index=%s host=%s | stats count by host", "main", indexerName)
+			Expect(testenv.WaitForSearchResultsNonEmpty(ctx, deployment, searchPod, searchString, 2*time.Minute)).To(Succeed(), "Timed out waiting for data from indexer %s to become searchable", indexerName)
 			searchResultsResp, err := testenv.PerformSearchSync(ctx, deployment, searchPod, searchString)
 			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", searchPod, searchString)
 
@@ -570,6 +571,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Search for data from removed indexer
 			searchString = fmt.Sprintf("index=%s host=%s | stats count by host", "main", indexerName)
+			Expect(testenv.WaitForSearchResultsNonEmpty(ctx, deployment, searchPod, searchString, 2*time.Minute)).To(Succeed(), "Timed out waiting for data from indexer %s to remain searchable after scale down", indexerName)
 			searchResultsResp, err = testenv.PerformSearchSync(ctx, deployment, searchPod, searchString)
 			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", searchPod, searchString)
 
