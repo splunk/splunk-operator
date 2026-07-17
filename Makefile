@@ -164,7 +164,7 @@ HELM_ENTERPRISE_CHART = helm-chart/splunk-enterprise
 .PHONY: helm-lint
 helm-lint: ## Lint Helm charts
 	helm lint $(HELM_OPERATOR_CHART)
-	helm lint $(HELM_UF_CHART) --set splunkConfig.forwardServer=indexer:9997 --set splunkConfig.password=Test1234!
+	helm lint $(HELM_UF_CHART) --set splunkConfig.forwardServer=indexer:9997 --set splunkConfig.password=Test1234! --set splunkConfig.splunkGeneralTerms=$(SPLUNK_GENERAL_TERMS)
 	@mkdir -p $(HELM_ENTERPRISE_CHART)/charts
 	@rm -f $(HELM_ENTERPRISE_CHART)/charts/splunk-operator-*.tgz $(HELM_ENTERPRISE_CHART)/charts/splunk-universalforwarder-*.tgz
 	helm package $(HELM_OPERATOR_CHART) --destination $(HELM_ENTERPRISE_CHART)/charts
@@ -181,7 +181,7 @@ helm-check: helm-lint helm-test ## Run Helm lint and unit tests
 
 .PHONY: helm-lint-uf
 helm-lint-uf: ## Lint the UF Helm chart
-	helm lint $(HELM_UF_CHART) --set splunkConfig.forwardServer=indexer:9997 --set splunkConfig.password=Test1234!
+	helm lint $(HELM_UF_CHART) --set splunkConfig.forwardServer=indexer:9997 --set splunkConfig.password=Test1234! --set splunkConfig.splunkGeneralTerms=$(SPLUNK_GENERAL_TERMS)
 
 .PHONY: helm-test-uf
 helm-test-uf: setup/helm-unittest ## Run UF Helm chart unit tests

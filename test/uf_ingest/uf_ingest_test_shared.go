@@ -97,6 +97,10 @@ func RunUFToStandaloneIngestTest(ctx context.Context, deployment *testenv.Deploy
 	// Standalone receives forwarded data on its ClusterIP service (port 9997)
 	standaloneService := fmt.Sprintf("splunk-%s-standalone-service.%s.svc.cluster.local", standalone.Name, ns)
 
+	// Reuse the operator's explicit SGT acceptance when installing the UF chart.
+	sgt := readOperatorSGT(ctx, testcaseEnvInst)
+	Expect(sgt).NotTo(BeEmpty(), "SPLUNK_GENERAL_TERMS not set on operator deployment; cannot accept SGT for UF")
+
 	// Deploy the UF chart into the test namespace, pointing at the standalone.
 	installArgs := []string{
 		"install", ufRelease,
@@ -104,21 +108,12 @@ func RunUFToStandaloneIngestTest(ctx context.Context, deployment *testenv.Deploy
 		"--namespace", ns,
 		"--set", fmt.Sprintf("splunkConfig.forwardServer=%s:9997", standaloneService),
 		"--set", "splunkConfig.password=IntegTest1!",
+		"--set", "splunkConfig.splunkGeneralTerms=" + sgt,
 	}
 	installCmd := exec.CommandContext(ctx, "helm", installArgs...)
 	out, installErr := installCmd.CombinedOutput()
 	testcaseEnvInst.Log.Info("helm install UF", "output", string(out))
 	Expect(installErr).To(Succeed(), "helm install splunk-universalforwarder failed: %s", string(out))
-
-	// Inject SPLUNK_GENERAL_TERMS from the operator deployment so the UF pod
-	// accepts the Splunk General Terms without the chart having to hardcode it.
-	sgt := readOperatorSGT(ctx, testcaseEnvInst)
-	Expect(sgt).NotTo(BeEmpty(), "SPLUNK_GENERAL_TERMS not set on operator deployment; cannot accept SGT for UF")
-	setEnvCmd := exec.CommandContext(ctx, "kubectl", "set", "env",
-		"-n", ns, "deployment/"+ufDeploymentName, "SPLUNK_GENERAL_TERMS="+sgt)
-	setEnvOut, setEnvErr := setEnvCmd.CombinedOutput()
-	testcaseEnvInst.Log.Info("kubectl set env SPLUNK_GENERAL_TERMS on UF deployment", "output", string(setEnvOut))
-	Expect(setEnvErr).To(Succeed(), "kubectl set env failed: %s", string(setEnvOut))
 
 	// Register Helm uninstall so the release is cleaned up even on failure
 	DeferCleanup(func() {

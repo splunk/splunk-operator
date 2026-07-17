@@ -404,7 +404,7 @@ The pipeline is designed to collect operator-facing evidence by default instead 
 
 - `merge-request-description-check`: the MR template is incomplete or the wrong template was used
 - `format-and-vet`, `unit-tests`, `kubectl-splunk-tests`: repository code, formatting, unit tests, or local toolchain assumptions are broken
-- `helm-chart-tests`: a Helm lint error or failing helm-unittest case in the splunk-operator, splunk-enterprise, or splunk-universalforwarder chart; run `make helm-lint` and `make helm-check-uf` locally to reproduce
+- `helm-chart-tests`: a Helm lint error or failing helm-unittest case in the splunk-operator, splunk-enterprise, or splunk-universalforwarder chart; run `make helm-lint SPLUNK_GENERAL_TERMS="<required value>"` and `make helm-check-uf SPLUNK_GENERAL_TERMS="<required value>"` locally to reproduce; find the `<required value>` in the main [README](../docs/README.md#splunk-general-terms-acceptance)
 - `nightly-eks-integration-ufingest-validation`: the UF DaemonSet did not become ready (check DaemonSet events and image pull), or no forwarded events reached the standalone (check TCP 9997 connectivity between UF and standalone pods, and the UF outputs.conf rendered by the Helm chart)
 - `build-stage-image`: image build, registry auth, or staging-repository configuration is broken
 - `scan-stage-image-container` or `scan-released-operator-image-container`: the prodsec scanner found an issue, could not read `ci-output/build-test-push-workflow-artifactory-image-ref.txt`, or could not scan the exported `CONTAINER_IMAGE`

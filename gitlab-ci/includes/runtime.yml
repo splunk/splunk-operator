@@ -280,7 +280,7 @@ helm-eks-validation:
   variables:
     WORKFLOW_SLUG: helm-test-workflow
     JOB_HELM_TEST_PROFILE: full
-    JOB_HELM_TEST_TIMEOUT: "7000"
+    JOB_HELM_TEST_TIMEOUT: "2000"
   script:
     - gitlab-ci/helm-test-workflow.sh
   artifacts:
@@ -791,7 +791,7 @@ nightly-helm-validation:
     WORKFLOW_SLUG: nightly-helm-validation
     BUILD_IMAGE_REF_FILE: ci-output/build-test-push-workflow-ecr-image-ref.txt
     JOB_HELM_TEST_PROFILE: full
-    JOB_HELM_TEST_TIMEOUT: "7000"
+    JOB_HELM_TEST_TIMEOUT: "2000"
   script:
     - gitlab-ci/helm-test-workflow.sh
   artifacts:

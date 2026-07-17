@@ -1,6 +1,9 @@
 {{- if and (not .Values.splunkConfig.forwardServer) (not .Values.splunkConfig.deploymentServer) (not .Values.splunkConfig.forwardServers) }}
 {{- fail "splunkConfig.forwardServer or splunkConfig.deploymentServer must be set. A Universal Forwarder with no destination will silently drop all collected logs." }}
 {{- end }}
+{{- if ne .Values.splunkConfig.splunkGeneralTerms "--accept-sgt-current-at-splunk-com" }}
+{{- fail "splunkConfig.splunkGeneralTerms not accepted. Review the Splunk General Terms and set splunkConfig.splunkGeneralTerms to the required acceptance value. See https://splunk.github.io/splunk-operator/#splunk-general-terms-acceptance for the required value and legal language." }}
+{{- end }}
 {{- if and (not .Values.splunkConfig.existingSecret) (eq .Values.splunkConfig.password "changeme") }}
 {{- fail "splunkConfig.password must be changed from default 'changeme'. Set splunkConfig.password or provide splunkConfig.existingSecret." }}
 {{- end }}

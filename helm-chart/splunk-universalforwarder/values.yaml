@@ -39,6 +39,13 @@ splunkConfig:
   # Required unless forwardServer is set (FWD-02)
   deploymentServer: ""
 
+  # Splunk General Terms acceptance flag.
+  # The UF image exits immediately unless SPLUNK_GENERAL_TERMS is set to the
+  # accepted value. Review the linked legal language before setting this value.
+  # https://splunk.github.io/splunk-operator/#splunk-general-terms-acceptance
+  # Maps to SPLUNK_GENERAL_TERMS and matches the splunk-operator chart key.
+  splunkGeneralTerms: ""
+
   # FWD-04: Optional client name reported to Deployment Server
   # Maps to SPLUNK_DEPLOYMENT_CLIENT_NAME env var
   deploymentClientName: ""

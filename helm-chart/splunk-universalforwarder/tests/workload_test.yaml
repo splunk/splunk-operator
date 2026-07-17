@@ -15,12 +15,22 @@ tests:
             name: SPLUNK_START_ARGS
             value: "--accept-license"
 
-  - it: should not have SPLUNK_GENERAL_TERMS hardcoded (must be set by user per Legal)
+  - it: should not emit SPLUNK_GENERAL_TERMS when splunkGeneralTerms is empty
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
             name: SPLUNK_GENERAL_TERMS
+
+  - it: should emit SPLUNK_GENERAL_TERMS when splunkGeneralTerms is set
+    set:
+      splunkConfig.splunkGeneralTerms: "--accept-sgt-current-at-splunk-com"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_GENERAL_TERMS
+            value: "--accept-sgt-current-at-splunk-com"
 
   # Mirrors Standalone operator pattern
   - it: should set SPLUNK_DEFAULTS_URL to /mnt/splunk-secrets/default.yml

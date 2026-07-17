@@ -281,7 +281,7 @@ append_context "${context_file}" "generated_kuttl_config" "${generated_kuttl_con
 append_context "${context_file}" "helm_repo_path" "${HELM_REPO_PATH}"
 
 log_step "tests:helm-kuttl:start"
-make helm-kuttl-test KUTTL_CONFIG="${generated_kuttl_config}" 2>&1 | tee -a "${kuttl_log}"
+run_and_tee "${kuttl_log}" make helm-kuttl-test KUTTL_CONFIG="${generated_kuttl_config}"
 log_step "tests:helm-kuttl:complete"
 
 copy_kuttl_junit

@@ -83,7 +83,7 @@ helm-chart-tests:
       - .helm-data/plugins/
   script:
     - make setup/helm-unittest
-    - make helm-lint
+    - make helm-lint SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com"
     - helm unittest --output-file helm-unittest-operator-junit.xml --output-type JUnit ${HELM_OPERATOR_CHART}
     - helm unittest --output-file helm-unittest-uf-junit.xml --output-type JUnit ${HELM_UF_CHART}
   artifacts:
