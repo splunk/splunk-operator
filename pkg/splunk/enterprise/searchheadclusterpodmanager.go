@@ -69,6 +69,17 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.CaptainReady {
 		logger.InfoContext(ctx, "SearchHeadCluster is not ready", "error", err)
+		// A scale up/down can already be underway even while captain election
+		// is in flight (e.g. the member being recycled was the captain). Report
+		// the transient phase from replica counts alone so callers don't see a
+		// false Pending for the whole election window; PrepareScaleDown/Recycle
+		// still won't run until CaptainReady returns true on a later reconcile.
+		if mgr.cr.Status.ReadyReplicas > desiredReplicas {
+			return enterpriseApi.PhaseScalingDown, nil
+		}
+		if mgr.cr.Status.ReadyReplicas > 0 && mgr.cr.Status.ReadyReplicas < desiredReplicas {
+			return enterpriseApi.PhaseScalingUp, nil
+		}
 		return enterpriseApi.PhasePending, nil
 	}
 
@@ -208,6 +219,10 @@ func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int
 		logger.InfoContext(ctx, "releasing SearchHeadCluster member from detention", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
 		return false, c.SetSearchHeadDetention(false)
+
+	case "": // member info is transiently unavailable (e.g. pod mid-restart); wait for it to come back
+		logger.InfoContext(ctx, "member status is transiently unavailable, waiting for it to be reported again", "memberName", memberName)
+		return false, nil
 	}
 
 	// unhandled status

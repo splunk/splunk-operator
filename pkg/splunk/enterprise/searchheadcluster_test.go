@@ -283,6 +283,16 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	method := "searchHeadClusterPodManager.Update(API failure)"
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhasePending, statefulSet, wantCalls, nil, statefulSet)
 
+	// captain not ready (e.g. mid fleet-recycle captain election) but a scale up is
+	// underway -> report ScalingUp instead of masking it behind Pending
+	method = "searchHeadClusterPodManager.Update(API failure, scaling up)"
+	searchHeadClusterPodManagerTester(t, method, mockHandlers, 2, enterpriseApi.PhaseScalingUp, statefulSet, wantCalls, nil, statefulSet)
+
+	// captain not ready but a scale down is underway -> report ScalingDown instead
+	// of masking it behind Pending
+	method = "searchHeadClusterPodManager.Update(API failure, scaling down)"
+	searchHeadClusterPodManagerTester(t, method, mockHandlers, 0, enterpriseApi.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet)
+
 	// test 1 ready pod
 	mockHandlers = []spltest.MockHTTPHandler{
 		{
@@ -412,6 +422,36 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	method = "searchHeadClusterPodManager.Update(Remove Member)"
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod, pvcList[0], pvcList[1])
 
+}
+
+func TestFinishRecycle(t *testing.T) {
+	ctx := context.TODO()
+	mgr := &searchHeadClusterPodManager{
+		cr: &enterpriseApi.SearchHeadCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "stack1", Namespace: "test"},
+		},
+	}
+
+	// member is up, not in detention -> recycle is complete
+	mgr.cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{{Status: "Up"}}
+	complete, err := mgr.FinishRecycle(ctx, 0)
+	if err != nil || !complete {
+		t.Errorf("FinishRecycle(Up) = %v, %v; want true, nil", complete, err)
+	}
+
+	// member info was transiently unavailable (e.g. pod mid-restart) -> wait, don't error
+	mgr.cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{{Status: ""}}
+	complete, err = mgr.FinishRecycle(ctx, 0)
+	if err != nil || complete {
+		t.Errorf("FinishRecycle(empty status) = %v, %v; want false, nil", complete, err)
+	}
+
+	// any other unrecognized status is still a hard error
+	mgr.cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{{Status: "Down"}}
+	complete, err = mgr.FinishRecycle(ctx, 0)
+	if err == nil || complete {
+		t.Errorf("FinishRecycle(Down) = %v, %v; want false, error", complete, err)
+	}
 }
 
 func TestApplyShcSecret(t *testing.T) {
@@ -656,6 +696,138 @@ func TestApplyShcSecret(t *testing.T) {
 	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	}
+}
+
+// TestApplyShcSecretAdminPasswordNotStarvedByShcSecretAlreadyChanged is a regression test:
+// when a pod's shc_secret was already marked as synced in a prior reconcile, its
+// independent admin-password check must still run instead of being skipped.
+func TestApplyShcSecretAdminPasswordNotStarvedByShcSecretAlreadyChanged(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+	var initObjectList []client.Object
+
+	c := spltest.NewMockClient()
+
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Errorf("Apply namespace scoped secret failed")
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-search-head-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "v0",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							MountPath: "/mnt/splunk-secrets",
+							Name:      "mnt-splunk-secrets",
+						},
+					},
+				},
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: "mnt-splunk-secrets",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: "stack1-secrets",
+						},
+					},
+				},
+			},
+		},
+	}
+	initObjectList = append(initObjectList, pod)
+
+	// Pod's mounted secret already matches the namespace shc_secret, but its
+	// admin password does not -- the shc_secret branch must not be entered
+	// (and thus won't short-circuit via "continue"), while the admin password
+	// branch below still needs to run regardless.
+	secrets := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1-secrets",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			"password":   {'1'},
+			"shc_secret": {'a'},
+		},
+	}
+	initObjectList = append(initObjectList, secrets)
+
+	c.AddObjects(initObjectList)
+
+	mockHandlers := []spltest.MockHTTPHandler{
+		{
+			Method: "POST",
+			URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/server/control/restart",
+			Status: 200,
+			Err:    nil,
+		},
+	}
+
+	cr := enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
+	// Simulate a prior reconcile that already synced shc_secret for pod 0.
+	cr.Status.ShcSecretChanged = []bool{true}
+	mockSplunkClient := &spltest.MockHTTPClient{}
+	mockSplunkClient.AddHandlers(mockHandlers...)
+	mgr := &searchHeadClusterPodManager{
+		c:       c,
+		cr:      &cr,
+		secrets: secrets,
+		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
+			c := splclient.NewSplunkClient(managementURI, username, password)
+			c.Client = mockSplunkClient
+			return c
+		},
+	}
+
+	podExecCommands := []string{
+		"opt/splunk/bin/splunk cmd splunkd rest",
+	}
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
+		{
+			StdOut: "",
+			StdErr: "",
+			Err:    nil,
+		},
+	}
+
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
+
+	// Namespace secret's shc_secret ('a') already matches the pod's, so the
+	// admin-password mismatch is the only thing that should trigger a sync.
+	// Bump the resource version so ApplyShcSecret doesn't early-return.
+	mgr.cr.Status.NamespaceSecretResourceVersion = "0"
+
+	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
+	if err != nil {
+		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	}
+
+	if !mgr.cr.Status.AdminSecretChanged[0] {
+		t.Errorf("Admin password sync was skipped for pod 0 even though shc_secret was already in sync")
+	}
+	if len(mockPodExecClient.GotCmdList) == 0 {
+		t.Errorf("Expected admin password change command to be executed, but none was")
 	}
 }
 

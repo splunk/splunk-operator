@@ -388,39 +388,70 @@ func (testenv *TestCaseEnv) VerifySingleSiteIndexersReady(ctx context.Context, d
 // IngestorsReady verify ingestors go to ready state
 func (testenv *TestCaseEnv) VerifyIngestorReady(ctx context.Context, deployment *Deployment) error {
 	instanceName := fmt.Sprintf("%s-ingest", deployment.GetName())
-	// Use optimized watch to wait for Ready phase
-	err := testenv.WatchForIngestorClusterPhase(ctx, deployment, testenv.GetName(), instanceName, enterpriseApi.PhaseReady, DefaultTimeout)
-	if err != nil {
-		return fmt.Errorf("IngestorCluster failed to reach Ready phase: %w", err)
-	}
 
-	// Refresh the instance to get latest state
+	// Honor the deployment's configured timeout so suites that explicitly opt
+	// into a larger budget aren't silently hard-capped at DefaultTimeout (30m).
+	overallTimeout := deployment.GetTimeout()
+	if overallTimeout <= 0 {
+		overallTimeout = DefaultTimeout
+	}
+	overallDeadline := time.Now().Add(overallTimeout)
+
 	ingest := &enterpriseApi.IngestorCluster{}
-	err = deployment.GetInstance(ctx, instanceName, ingest)
-	if err != nil {
-		return fmt.Errorf("failed to get IngestorCluster instance: %w", err)
-	}
-	testenv.Log.Info("IngestorCluster reached Ready phase", "instance", instanceName, "phase", ingest.Status.Phase)
-	DumpGetPods(testenv.GetName())
+	// Retry the "wait for Ready + verify it stays Ready" cycle as a single
+	// unit, bounded by the deployment timeout. A brief flip back to Updating
+	// (e.g. right after a live CR ref update triggers a real reconcile) should
+	// not fail the whole spec — we just re-wait for the next steady Ready and
+	// retry the consistency window.
+	for {
+		remaining := time.Until(overallDeadline)
+		if remaining <= 0 {
+			return fmt.Errorf("IngestorCluster did not reach steady Ready phase within %s", overallTimeout)
+		}
 
-	// In a steady state, we should stay in Ready and not flip-flop around.
-	// Allow up to 2 consecutive non-Ready observations to tolerate transient phase churn.
-	firstFailure := true
-	return PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
+		// Use optimized watch to wait for Ready phase. Cap each wait attempt
+		// at the remaining overall budget.
+		err := testenv.WatchForIngestorClusterPhase(ctx, deployment, testenv.GetName(), instanceName, enterpriseApi.PhaseReady, remaining)
+		if err != nil {
+			return fmt.Errorf("IngestorCluster failed to reach Ready phase: %w", err)
+		}
+
+		// Refresh the instance to get latest state
 		if err := deployment.GetInstance(ctx, instanceName, ingest); err != nil {
-			testenv.Log.Info("Transient error refreshing IngestorCluster during consistency check", "error", err)
+			return fmt.Errorf("failed to get IngestorCluster instance: %w", err)
 		}
-		testenv.Log.Info("Check for Consistency ingestor instance's phase to be ready", "instance", instanceName, "phase", ingest.Status.Phase)
-		if ingest.Status.Phase != enterpriseApi.PhaseReady {
-			if firstFailure {
-				DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-ingest-")
-				firstFailure = false
+		testenv.Log.Info("IngestorCluster reached Ready phase", "instance", instanceName, "phase", ingest.Status.Phase)
+		DumpGetPods(testenv.GetName())
+
+		// In a steady state, we should stay in Ready and not flip-flop around.
+		// Allow up to 2 consecutive non-Ready observations to tolerate transient phase churn.
+		firstFailure := true
+		consistencyErr := PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
+			if err := deployment.GetInstance(ctx, instanceName, ingest); err != nil {
+				testenv.Log.Info("Transient error refreshing IngestorCluster during consistency check", "error", err)
 			}
-			return fmt.Errorf("ingestor phase flipped to %s", ingest.Status.Phase)
+			testenv.Log.Info("Check for Consistency ingestor instance's phase to be ready", "instance", instanceName, "phase", ingest.Status.Phase)
+			if ingest.Status.Phase != enterpriseApi.PhaseReady {
+				if firstFailure {
+					DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-ingest-")
+					firstFailure = false
+				}
+				return fmt.Errorf("ingestor phase flipped to %s", ingest.Status.Phase)
+			}
+			firstFailure = true
+			return VerifyCRConditionsForPhase("IngestorCluster", instanceName, ingest.Status.Conditions, enterpriseApi.PhaseReady)
+		})
+		if consistencyErr == nil {
+			return nil
 		}
-		firstFailure = true
-		return VerifyCRConditionsForPhase("IngestorCluster", instanceName, ingest.Status.Conditions, enterpriseApi.PhaseReady)
-	})
+
+		// Bail out immediately on context cancellation rather than spinning.
+		if ctx.Err() != nil {
+			return fmt.Errorf("context cancelled while waiting for steady IngestorCluster Ready: %w", consistencyErr)
+		}
+
+		testenv.Log.Info("IngestorCluster consistency check failed, will re-wait for steady Ready", "error", consistencyErr, "remaining", time.Until(overallDeadline))
+	}
 }
 
 // VerifyClusterManagerReady verify Cluster Manager Instance is in ready status
@@ -745,13 +776,20 @@ func (testenv *TestCaseEnv) VerifyConfOnPod(ctx context.Context, podName string,
 }
 
 // VerifySearchHeadClusterPhase verify the phase of SHC matches given phase.
-// Uses PhaseTransitionTimeout for transient phases (ScalingUp/ScalingDown/Updating)
-// so a missed transient phase surfaces quickly. Uses deployment.GetTimeout() for
-// PhaseReady so a valid Ready transition is not prematurely failed.
+// Uses PhaseTransitionTimeout for the Updating phase so a missed transient
+// phase surfaces quickly. Uses SHCScalingTransitionTimeout for ScalingUp/
+// ScalingDown, since a SHC replica-count change forces a fleet-wide member
+// recycle that can mask the transient phase behind failed captain elections
+// for longer than PhaseTransitionTimeout (see SHCScalingTransitionTimeout doc).
+// Uses deployment.GetTimeout() for PhaseReady so a valid Ready transition is
+// not prematurely failed.
 func (testenv *TestCaseEnv) VerifySearchHeadClusterPhase(ctx context.Context, deployment *Deployment, phase enterpriseApi.Phase) error {
 	timeout := PhaseTransitionTimeout
-	if phase == enterpriseApi.PhaseReady {
+	switch phase {
+	case enterpriseApi.PhaseReady:
 		timeout = deployment.GetTimeout()
+	case enterpriseApi.PhaseScalingUp, enterpriseApi.PhaseScalingDown:
+		timeout = SHCScalingTransitionTimeout
 	}
 	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 		shc := &enterpriseApi.SearchHeadCluster{}
@@ -2453,6 +2491,13 @@ func (testenv *TestCaseEnv) VerifyStandaloneConditionReady(ctx context.Context, 
 // by convention name and verifies all have Ready condition True. If the v4 ClusterManager
 // object is not present (i.e. the test is running the v3 ClusterMaster variant), this is
 // a no-op since v3 CRs do not publish a Conditions field.
+// The condition checks are retried with tolerance for up to 2 consecutive transient
+// non-Ready observations, since pods can briefly flap during legitimate operator activity.
+// The whole check is additionally wrapped in an outer retry loop bounded by the
+// deployment timeout, mirroring VerifySearchHeadClusterReady/VerifyIngestorReady: a
+// flap that outlasts the short tolerance window (e.g. a second, later flap after the
+// dedicated per-component readiness checks already passed) re-waits instead of failing
+// the whole spec.
 func (testenv *TestCaseEnv) VerifyC3ConditionsReady(ctx context.Context, deployment *Deployment) error {
 	name := deployment.GetName()
 
@@ -2463,31 +2508,58 @@ func (testenv *TestCaseEnv) VerifyC3ConditionsReady(ctx context.Context, deploym
 		}
 		return fmt.Errorf("failed to get ClusterManager instance: %w", err)
 	}
-	if err := VerifyCRConditionsForPhase("ClusterManager", name, cm.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
-		return err
-	}
 
 	idxcName := name + "-idxc"
-	idc := &enterpriseApi.IndexerCluster{}
-	if err := deployment.GetInstance(ctx, idxcName, idc); err != nil {
-		return fmt.Errorf("failed to get IndexerCluster instance: %w", err)
-	}
-	if err := VerifyCRConditionsForPhase("IndexerCluster", idxcName, idc.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
-		return err
-	}
-
 	shcName := name + "-shc"
-	shc := &enterpriseApi.SearchHeadCluster{}
-	if err := deployment.GetInstance(ctx, shcName, shc); err != nil {
-		return fmt.Errorf("failed to get SearchHeadCluster instance: %w", err)
+
+	overallTimeout := deployment.GetTimeout()
+	if overallTimeout <= 0 {
+		overallTimeout = DefaultTimeout
 	}
-	return VerifyCRConditionsForPhase("SearchHeadCluster", shcName, shc.Status.Conditions, enterpriseApi.PhaseReady)
+	overallDeadline := time.Now().Add(overallTimeout)
+
+	for {
+		err := PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
+			if err := deployment.GetInstance(ctx, name, cm); err != nil {
+				return fmt.Errorf("failed to get ClusterManager instance: %w", err)
+			}
+			if err := VerifyCRConditionsForPhase("ClusterManager", name, cm.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
+				return err
+			}
+
+			idc := &enterpriseApi.IndexerCluster{}
+			if err := deployment.GetInstance(ctx, idxcName, idc); err != nil {
+				return fmt.Errorf("failed to get IndexerCluster instance: %w", err)
+			}
+			if err := VerifyCRConditionsForPhase("IndexerCluster", idxcName, idc.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
+				return err
+			}
+
+			shc := &enterpriseApi.SearchHeadCluster{}
+			if err := deployment.GetInstance(ctx, shcName, shc); err != nil {
+				return fmt.Errorf("failed to get SearchHeadCluster instance: %w", err)
+			}
+			return VerifyCRConditionsForPhase("SearchHeadCluster", shcName, shc.Status.Conditions, enterpriseApi.PhaseReady)
+		})
+		if err == nil {
+			return nil
+		}
+		if ctx.Err() != nil || time.Now().After(overallDeadline) {
+			return fmt.Errorf("C3 conditions did not reach steady Ready within %s: %w", overallTimeout, err)
+		}
+		testenv.Log.Info("C3 conditions consistency check failed, will re-wait for steady Ready", "error", err, "remaining", time.Until(overallDeadline))
+	}
 }
 
 // VerifyM4ConditionsReady fetches ClusterManager, per-site IndexerClusters, and
 // SearchHeadCluster and verifies all have Ready condition True. If the v4 ClusterManager
 // object is not present (i.e. the test is running the v3 ClusterMaster variant), this is
 // a no-op since v3 CRs do not publish a Conditions field.
+// The condition checks are retried with tolerance for up to 2 consecutive transient
+// non-Ready observations, since pods can briefly flap during legitimate operator activity.
+// The whole check is additionally wrapped in an outer retry loop bounded by the
+// deployment timeout, mirroring VerifySearchHeadClusterReady/VerifyIngestorReady: a
+// flap that outlasts the short tolerance window re-waits instead of failing the whole spec.
 func (testenv *TestCaseEnv) VerifyM4ConditionsReady(ctx context.Context, deployment *Deployment, siteCount int) error {
 	name := deployment.GetName()
 
@@ -2498,27 +2570,49 @@ func (testenv *TestCaseEnv) VerifyM4ConditionsReady(ctx context.Context, deploym
 		}
 		return fmt.Errorf("failed to get ClusterManager instance: %w", err)
 	}
-	if err := VerifyCRConditionsForPhase("ClusterManager", name, cm.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
-		return err
-	}
-
-	for site := 1; site <= siteCount; site++ {
-		instanceName := fmt.Sprintf("%s-site%d", name, site)
-		idc := &enterpriseApi.IndexerCluster{}
-		if err := deployment.GetInstance(ctx, instanceName, idc); err != nil {
-			return fmt.Errorf("failed to get IndexerCluster instance %s: %w", instanceName, err)
-		}
-		if err := VerifyCRConditionsForPhase("IndexerCluster", instanceName, idc.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
-			return err
-		}
-	}
 
 	shcName := name + "-shc"
-	shc := &enterpriseApi.SearchHeadCluster{}
-	if err := deployment.GetInstance(ctx, shcName, shc); err != nil {
-		return fmt.Errorf("failed to get SearchHeadCluster instance: %w", err)
+
+	overallTimeout := deployment.GetTimeout()
+	if overallTimeout <= 0 {
+		overallTimeout = DefaultTimeout
 	}
-	return VerifyCRConditionsForPhase("SearchHeadCluster", shcName, shc.Status.Conditions, enterpriseApi.PhaseReady)
+	overallDeadline := time.Now().Add(overallTimeout)
+
+	for {
+		err := PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
+			if err := deployment.GetInstance(ctx, name, cm); err != nil {
+				return fmt.Errorf("failed to get ClusterManager instance: %w", err)
+			}
+			if err := VerifyCRConditionsForPhase("ClusterManager", name, cm.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
+				return err
+			}
+
+			for site := 1; site <= siteCount; site++ {
+				instanceName := fmt.Sprintf("%s-site%d", name, site)
+				idc := &enterpriseApi.IndexerCluster{}
+				if err := deployment.GetInstance(ctx, instanceName, idc); err != nil {
+					return fmt.Errorf("failed to get IndexerCluster instance %s: %w", instanceName, err)
+				}
+				if err := VerifyCRConditionsForPhase("IndexerCluster", instanceName, idc.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
+					return err
+				}
+			}
+
+			shc := &enterpriseApi.SearchHeadCluster{}
+			if err := deployment.GetInstance(ctx, shcName, shc); err != nil {
+				return fmt.Errorf("failed to get SearchHeadCluster instance: %w", err)
+			}
+			return VerifyCRConditionsForPhase("SearchHeadCluster", shcName, shc.Status.Conditions, enterpriseApi.PhaseReady)
+		})
+		if err == nil {
+			return nil
+		}
+		if ctx.Err() != nil || time.Now().After(overallDeadline) {
+			return fmt.Errorf("M4 conditions did not reach steady Ready within %s: %w", overallTimeout, err)
+		}
+		testenv.Log.Info("M4 conditions consistency check failed, will re-wait for steady Ready", "error", err, "remaining", time.Until(overallDeadline))
+	}
 }
 
 // VerifyM1ConditionsReady fetches ClusterManager and per-site IndexerClusters
