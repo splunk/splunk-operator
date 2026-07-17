@@ -344,48 +344,46 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		// If shc secret is different from namespace scoped secret change it
 		if shcSecret != nsShcSecret {
 			podLogger.InfoContext(ctx, "shcSecret different from namespace scoped secret, changing shc secret")
-			// If shc secret already changed, ignore
-			if i < int32(len(mgr.cr.Status.ShcSecretChanged)) {
-				if mgr.cr.Status.ShcSecretChanged[i] {
-					continue
+			// If shc secret already changed, skip the sync below, but still fall through
+			// to the independent admin-password check for this pod.
+			shcSecretAlreadyChanged := i < int32(len(mgr.cr.Status.ShcSecretChanged)) && mgr.cr.Status.ShcSecretChanged[i]
+			if !shcSecretAlreadyChanged {
+				// Change shc secret key
+				command := fmt.Sprintf("/opt/splunk/bin/splunk edit shcluster-config -auth admin:%s -secret %s", adminPwd, nsShcSecret)
+				streamOptions.Stdin = strings.NewReader(command)
+
+				_, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+				if err != nil {
+					// Emit event for password sync failure
+					if eventPublisher != nil {
+						eventPublisher.Warning(ctx, EventReasonPasswordSyncFailed,
+							fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
+					}
+					return err
 				}
-			}
+				podLogger.InfoContext(ctx, "shcSecret changed")
 
-			// Change shc secret key
-			command := fmt.Sprintf("/opt/splunk/bin/splunk edit shcluster-config -auth admin:%s -secret %s", adminPwd, nsShcSecret)
-			streamOptions.Stdin = strings.NewReader(command)
+				howManyPodsHaveSecretChanged += 1
 
-			_, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
-			if err != nil {
-				// Emit event for password sync failure
-				if eventPublisher != nil {
-					eventPublisher.Warning(ctx, EventReasonPasswordSyncFailed,
-						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
+				// Get client for Pod and restart splunk instance on pod
+				shClient := mgr.getClient(ctx, i)
+				err = shClient.RestartSplunk()
+				if err != nil {
+					// Emit event for password sync failure
+					if eventPublisher != nil {
+						eventPublisher.Warning(ctx, EventReasonPasswordSyncFailed,
+							fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
+					}
+					return err
 				}
-				return err
-			}
-			podLogger.InfoContext(ctx, "shcSecret changed")
+				podLogger.InfoContext(ctx, "restarted Splunk")
 
-			howManyPodsHaveSecretChanged += 1
-
-			// Get client for Pod and restart splunk instance on pod
-			shClient := mgr.getClient(ctx, i)
-			err = shClient.RestartSplunk()
-			if err != nil {
-				// Emit event for password sync failure
-				if eventPublisher != nil {
-					eventPublisher.Warning(ctx, EventReasonPasswordSyncFailed,
-						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
+				// Set the shc_secret changed flag to true
+				if i < int32(len(mgr.cr.Status.ShcSecretChanged)) {
+					mgr.cr.Status.ShcSecretChanged[i] = true
+				} else {
+					mgr.cr.Status.ShcSecretChanged = append(mgr.cr.Status.ShcSecretChanged, true)
 				}
-				return err
-			}
-			podLogger.InfoContext(ctx, "restarted Splunk")
-
-			// Set the shc_secret changed flag to true
-			if i < int32(len(mgr.cr.Status.ShcSecretChanged)) {
-				mgr.cr.Status.ShcSecretChanged[i] = true
-			} else {
-				mgr.cr.Status.ShcSecretChanged = append(mgr.cr.Status.ShcSecretChanged, true)
 			}
 		}
 

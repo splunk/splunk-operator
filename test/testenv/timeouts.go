@@ -57,8 +57,11 @@ const DefaultTimeout = 30 * time.Minute
 const ReadinessPollTimeout = 5 * time.Minute
 
 // AppInstallTimeout is the timeout for waiting for apps to reach Install phase on a CR.
-// C3 deployments require bundle push across all indexers and SHC deployer which can exceed 5 minutes.
-const AppInstallTimeout = 10 * time.Minute
+// C3 deployments require bundle push across all indexers and SHC deployer which can exceed
+// 5 minutes; under nightly load the initial bundle push alone (gated by SHC/CM readiness
+// flaps) has been observed to take up to ~4 minutes before the poll for the next phase
+// change even starts, so 10 minutes leaves too little margin.
+const AppInstallTimeout = 15 * time.Minute
 
 // AppStateVerificationTimeout is the timeout for VerifyAppState polls that
 // try to catch a transient app-framework phase (e.g. download-in-progress).
@@ -117,9 +120,31 @@ const MCConfigMapPollTimeout = 5 * time.Minute
 // phase surfaces as the real symptom instead of a Ginkgo NodeTimeout.
 const PhaseTransitionTimeout = 10 * time.Minute
 
+// SHCScalingTransitionTimeout bounds polls waiting for a SearchHeadCluster to
+// enter ScalingUp/ScalingDown. Wider than PhaseTransitionTimeout because a SHC
+// replica-count change updates SPLUNK_SEARCH_HEAD_URL (a function of replica
+// count) on every member, so MergePodUpdates recycles the entire remaining
+// fleet sequentially -- not just the joining/leaving member. While any member
+// is mid-recycle, captain election fails, which short-circuits
+// searchHeadClusterPodManager.Update to PhasePending before it ever reaches
+// the code that reports ScalingUp/ScalingDown, so the transient phase can
+// stay unobservable for as long as the fleet-wide recycle takes (~10 min
+// observed on a 4-member SHC scale-down, CI job 242227286, 2026-07-13).
+const SHCScalingTransitionTimeout = 20 * time.Minute
+
 // KubectlExecTimeout bounds longer `kubectl exec` and `kubectl logs` calls
 // (cat config files, dump pod logs). Still below the 30s Ginkgo grace period.
 const KubectlExecTimeout = 25 * time.Second
+
+// BestEffortProbeTimeout bounds the log-only diagnostic probes
+// (VerifyIsDeploymentInProgressFlagIsSet / WaitForAppPhaseChange) that run
+// between an app-framework CR update and its C3/M4 readiness check. These
+// probes only log a miss and never fail the spec, since a small app diff can
+// complete within a single reconcile and flip the flag/phase back before the
+// probe observes it. A 2-minute poll on a guaranteed-miss adds real wall
+// clock across the many call sites that repeat this pattern, so keep it just
+// long enough for one or two PollInterval cycles.
+const BestEffortProbeTimeout = 20 * time.Second
 
 // Suite-level timeouts. Applied via GinkgoConfiguration().Timeout in suite files.
 // Sized for sequential spec execution (no ginkgo -nodes parallelism).

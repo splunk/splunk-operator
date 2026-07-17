@@ -66,7 +66,7 @@ func RunC3CPUUpdateTest(ctx context.Context, deployment *testenv.Deployment, tes
 	Expect(testcaseEnvInst.TriggerAndVerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)).To(Succeed(), "Telemetry verification failed")
 
 	// Verify RF/SF
-	Expect(testcaseEnvInst.VerifyClusterReadyAndRFSF(ctx, deployment)).To(Succeed(), "Cluster not ready or RF/SF not met")
+	Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "Cluster not ready or RF/SF not met")
 
 	// Verify CPU limits on Indexers before updating the CR
 	indexerCount := 3

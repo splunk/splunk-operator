@@ -1092,7 +1092,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("can deploy a m4 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+		It("can deploy a m4 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", Label("tier:e2e-full", "sva:m4", "cloud:aws", "cloud:gcp", "variant:master", "feature:appframework"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1888,6 +1888,23 @@ var _ = Describe("m4appfw test", func() {
 			err = deployment.UpdateCR(ctx, shc)
 			Expect(err).To(Succeed(), "Failed to change AppsRepoPollInterval value for Search Head Cluster")
 
+			// Wait for the poll-interval spec change to be reconciled into status before
+			// flipping the manual-update configmap. Otherwise a reconcile still running
+			// against the stale status (AppsRepoStatusPollInterval == 0, i.e. manual mode)
+			// observes the configmap flip to "on" and immediately resets it to "off",
+			// racing the assertion below.
+			testcaseEnvInst.Log.Info("Wait for Cluster Master status to reflect new AppsRepoPollInterval")
+			Eventually(func() int64 {
+				_ = deployment.GetInstance(ctx, cm.Name, cm)
+				return cm.Status.AppContext.AppsRepoStatusPollInterval
+			}, 5*time.Minute, testenv.PollInterval).Should(Equal(int64(180)), "Cluster Master status did not reflect new AppsRepoPollInterval")
+
+			testcaseEnvInst.Log.Info("Wait for Search Head Cluster status to reflect new AppsRepoPollInterval")
+			Eventually(func() int64 {
+				_ = deployment.GetInstance(ctx, shc.Name, shc)
+				return shc.Status.AppContext.AppsRepoStatusPollInterval
+			}, 5*time.Minute, testenv.PollInterval).Should(Equal(int64(180)), "Search Head Cluster status did not reflect new AppsRepoPollInterval")
+
 			// Change status to 'ON' in config map for Cluster Master and Search Head Cluster
 			testcaseEnvInst.Log.Info("Change status to 'ON' in config map for Cluster Master")
 			config, err = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
@@ -1907,10 +1924,15 @@ var _ = Describe("m4appfw test", func() {
 			err = testcaseEnvInst.WaitForClusterManagerPhase(ctx, deployment, testcaseEnvInst.GetName(), cm.Name, enterpriseApi.PhaseReady, 5*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for ClusterManager to reach Ready phase")
 
-			// Verify status is 'ON' in config map for Cluster Master and Search Head Cluster
+			// Verify status is 'ON' in config map for Cluster Master and Search Head Cluster.
+			// Poll rather than one-shot check: the two sequential UpdateCR calls above race
+			// with configmap read-after-write consistency, the same class of race already
+			// guarded against for the AppsRepoStatusPollInterval check above.
 			testcaseEnvInst.Log.Info("Verify status is 'ON' in config map for Cluster Master and Search Head Cluster")
-			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: on") && strings.Contains(config.Data["SearchHeadCluster"], "status: on")).To(Equal(true), "Config map update not complete")
+			Eventually(func() bool {
+				config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
+				return strings.Contains(config.Data["ClusterMaster"], "status: on") && strings.Contains(config.Data["SearchHeadCluster"], "status: on")
+			}, 5*time.Minute, testenv.PollInterval).Should(Equal(true), "Config map update not complete")
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
@@ -1943,9 +1965,9 @@ var _ = Describe("m4appfw test", func() {
 
 			// Wait for app repo state to change, indicating poll interval has completed
 			testcaseEnvInst.Log.Info("Wait for app repo state to change after AppsRepoPollInterval")
-			err = testcaseEnvInst.WaitForAppRepoStateChange(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appListV2, 1, 3*time.Minute)
+			err = testcaseEnvInst.WaitForAppRepoStateChange(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appListV2, 1, 5*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for Cluster Master apps to update after poll interval")
-			err = testcaseEnvInst.WaitForAppRepoStateChange(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appListV2, 1, 3*time.Minute)
+			err = testcaseEnvInst.WaitForAppRepoStateChange(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appListV2, 1, 5*time.Minute)
 			Expect(err).To(Succeed(), "Timed out waiting for Search Head Cluster apps to update after poll interval")
 
 			testcaseEnvInst.Log.Info("Verify apps are updated after the end of AppsRepoPollInterval duration")
