@@ -12,14 +12,17 @@ Full deployment guide, configuration reference, forwarding setup, SSL, storage m
 
 ## Quick Install
 
+Before installing, read the [Splunk General Terms Acceptance](https://splunk.github.io/splunk-operator/#splunk-general-terms-acceptance) section and explicitly set `splunkConfig.splunkGeneralTerms` to indicate acceptance.
+
 ```sh
 helm install my-uf ./helm-chart/splunk-universalforwarder \
   --namespace my-namespace \
   --create-namespace \
   --set splunkConfig.forwardServer=indexer.example.com:9997 \
-  --set splunkConfig.password=MySecurePassword1
+  --set splunkConfig.password=MySecurePassword1 \
+  --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page>
 ```
 
-> You must set `SPLUNK_GENERAL_TERMS` after reading the [Splunk General Terms Acceptance](https://splunk.github.io/splunk-operator/#splunk-general-terms-acceptance) section of the Splunk Operator docs.
+> The chart fails at render time if `splunkConfig.splunkGeneralTerms` is not set to the required value.
 
 See `values.yaml` for all configurable options.
