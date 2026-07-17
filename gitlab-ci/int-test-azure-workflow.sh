@@ -217,6 +217,17 @@ export STORAGE_ACCOUNT="${AZURE_STORAGE_ACCOUNT}"
 export STORAGE_ACCOUNT_KEY="${AZURE_STORAGE_ACCOUNT_KEY}"
 export ENTERPRISE_LICENSE_LOCATION="$(first_nonempty "${PIPELINE_AZURE_ENTERPRISE_LICENSE_LOCATION:-}" "test_licenses")"
 
+if [ "${cluster_mode}" = "ephemeral-aks" ]; then
+  cluster_config_summary="$(validate_and_print_cloud_cluster_config \
+    "azure" \
+    "${TEST_CLUSTER_NAME}" \
+    "${CLUSTER_WORKERS}" \
+    "${SPLUNK_OPERATOR_IMAGE}" \
+    "${TEST_LABELS}" \
+    "${TEST_TIMEOUT}")"
+  printf '%s\n' "${cluster_config_summary}" | tee -a "${cluster_log}"
+fi
+
 append_operator_runtime_context "${context_file}"
 append_context "${context_file}" "cluster_mode" "${cluster_mode}"
 append_context "${context_file}" "cluster_provider" "${CLUSTER_PROVIDER}"
