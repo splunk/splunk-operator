@@ -106,7 +106,7 @@ release-helm-validation:
   variables:
     WORKFLOW_SLUG: release-helm-validation
     JOB_HELM_TEST_PROFILE: full
-    JOB_HELM_TEST_TIMEOUT: "7000"
+    JOB_HELM_TEST_TIMEOUT: "2000"
   script:
     - gitlab-ci/helm-test-workflow.sh
   artifacts:

@@ -635,7 +635,7 @@ resolve_helm_test_profile() {
     ""|smoke)
       RESOLVED_HELM_TEST_PROFILE="smoke"
       RESOLVED_HELM_TEST_DIRS="./kuttl/tests/helm/s1,./kuttl/tests/helm/s1-with-operator,./kuttl/tests/helm/operator-with-ephemeral-volume"
-      RESOLVED_HELM_TEST_TIMEOUT="$(first_nonempty "${PIPELINE_HELM_TEST_TIMEOUT:-}" "${JOB_HELM_TEST_TIMEOUT:-}" "4000")"
+      RESOLVED_HELM_TEST_TIMEOUT="$(first_nonempty "${PIPELINE_HELM_TEST_TIMEOUT:-}" "${JOB_HELM_TEST_TIMEOUT:-}" "2000")"
       RESOLVED_HELM_TEST_PARALLEL="$(first_nonempty "${PIPELINE_HELM_TEST_PARALLEL:-}" "${JOB_HELM_TEST_PARALLEL:-}" "1")"
       ;;
     qualification|full)
@@ -643,13 +643,13 @@ resolve_helm_test_profile() {
       # the full Helm suite now, so normalize the effective profile to `full`.
       RESOLVED_HELM_TEST_PROFILE="full"
       RESOLVED_HELM_TEST_DIRS="$(first_nonempty "${PIPELINE_HELM_TEST_DIRS:-}" "${JOB_HELM_TEST_DIRS:-}" "./kuttl/tests/helm,./kuttl/tests/uf")"
-      RESOLVED_HELM_TEST_TIMEOUT="$(first_nonempty "${PIPELINE_HELM_TEST_TIMEOUT:-}" "${JOB_HELM_TEST_TIMEOUT:-}" "7000")"
+      RESOLVED_HELM_TEST_TIMEOUT="$(first_nonempty "${PIPELINE_HELM_TEST_TIMEOUT:-}" "${JOB_HELM_TEST_TIMEOUT:-}" "2000")"
       RESOLVED_HELM_TEST_PARALLEL="$(first_nonempty "${PIPELINE_HELM_TEST_PARALLEL:-}" "${JOB_HELM_TEST_PARALLEL:-}" "1")"
       ;;
     *)
       RESOLVED_HELM_TEST_PROFILE="${requested_profile}"
       RESOLVED_HELM_TEST_DIRS="$(first_nonempty "${PIPELINE_HELM_TEST_DIRS:-}" "${JOB_HELM_TEST_DIRS:-}" "./kuttl/tests/helm")"
-      RESOLVED_HELM_TEST_TIMEOUT="$(first_nonempty "${PIPELINE_HELM_TEST_TIMEOUT:-}" "${JOB_HELM_TEST_TIMEOUT:-}" "7000")"
+      RESOLVED_HELM_TEST_TIMEOUT="$(first_nonempty "${PIPELINE_HELM_TEST_TIMEOUT:-}" "${JOB_HELM_TEST_TIMEOUT:-}" "2000")"
       RESOLVED_HELM_TEST_PARALLEL="$(first_nonempty "${PIPELINE_HELM_TEST_PARALLEL:-}" "${JOB_HELM_TEST_PARALLEL:-}" "1")"
       ;;
   esac

@@ -133,6 +133,10 @@ spec:
               value: "splunk_universal_forwarder"
             - name: SPLUNK_HOME_OWNERSHIP_ENFORCEMENT
               value: "false"
+            {{- if .Values.splunkConfig.splunkGeneralTerms }}
+            - name: SPLUNK_GENERAL_TERMS
+              value: {{ .Values.splunkConfig.splunkGeneralTerms | quote }}
+            {{- end }}
             # Declarative password setup mirrors Standalone operator pattern.
             # SPLUNK_DECLARATIVE_ADMIN_PASSWORD=true + a non-default password avoids
             # the "remote login disabled" lockout that triggers when password="changeme".

@@ -5,6 +5,7 @@ tests:
   - it: should fail when both forwardServer and deploymentServer are empty
     set:
       splunkConfig.password: "TestPassword1"
+      splunkConfig.splunkGeneralTerms: "--accept-sgt-current-at-splunk-com"
     asserts:
       - failedTemplate:
           errorPattern: "splunkConfig.forwardServer or splunkConfig.deploymentServer must be set"
@@ -13,6 +14,7 @@ tests:
     set:
       splunkConfig.forwardServer: "indexer.example.com:9997"
       splunkConfig.password: "TestPassword1"
+      splunkConfig.splunkGeneralTerms: "--accept-sgt-current-at-splunk-com"
     asserts:
       - hasDocuments:
           count: 0
@@ -21,6 +23,7 @@ tests:
     set:
       splunkConfig.deploymentServer: "ds.example.com:8089"
       splunkConfig.password: "TestPassword1"
+      splunkConfig.splunkGeneralTerms: "--accept-sgt-current-at-splunk-com"
     asserts:
       - hasDocuments:
           count: 0
@@ -31,6 +34,7 @@ tests:
         - "idx1.example.com:9997"
         - "idx2.example.com:9997"
       splunkConfig.password: "TestPassword1"
+      splunkConfig.splunkGeneralTerms: "--accept-sgt-current-at-splunk-com"
     asserts:
       - hasDocuments:
           count: 0
@@ -38,6 +42,7 @@ tests:
   - it: should fail when password is default changeme
     set:
       splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.splunkGeneralTerms: "--accept-sgt-current-at-splunk-com"
     asserts:
       - failedTemplate:
           errorPattern: "splunkConfig.password must be changed from default"
@@ -46,6 +51,7 @@ tests:
     set:
       splunkConfig.forwardServer: "indexer.example.com:9997"
       splunkConfig.existingSecret: "my-secret"
+      splunkConfig.splunkGeneralTerms: "--accept-sgt-current-at-splunk-com"
     asserts:
       - hasDocuments:
           count: 0
@@ -54,6 +60,7 @@ tests:
     set:
       splunkConfig.forwardServer: "indexer.example.com:9997"
       splunkConfig.password: "TestPassword1"
+      splunkConfig.splunkGeneralTerms: "--accept-sgt-current-at-splunk-com"
       ingress.enabled: true
       service.enabled: false
     asserts:
@@ -64,8 +71,26 @@ tests:
     set:
       splunkConfig.forwardServer: "indexer.example.com:9997"
       splunkConfig.password: "TestPassword1"
+      splunkConfig.splunkGeneralTerms: "--accept-sgt-current-at-splunk-com"
       ingress.enabled: true
       service.enabled: true
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: should fail when splunkGeneralTerms is not set
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - failedTemplate:
+          errorPattern: "splunkConfig.splunkGeneralTerms not accepted"
+
+  - it: should fail when splunkGeneralTerms has the wrong value
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      splunkConfig.splunkGeneralTerms: "yes"
+    asserts:
+      - failedTemplate:
+          errorPattern: "splunkConfig.splunkGeneralTerms not accepted"
