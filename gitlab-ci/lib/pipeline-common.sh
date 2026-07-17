@@ -125,6 +125,59 @@ require_envs() {
   done
 }
 
+validate_cloud_cluster_name() {
+  cluster_provider="$1"
+  cluster_name="$2"
+
+  case "${cluster_provider}" in
+    eks)
+      # eksctl uses the cluster name in CloudFormation stack names, which do not
+      # allow underscores, and in Kubernetes labels, which are limited to 63
+      # characters and must end with an alphanumeric character.
+      if [ "${#cluster_name}" -gt 63 ] || ! printf '%s' "${cluster_name}" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$'; then
+        echo "Invalid EKS cluster name '${cluster_name}': expected 1-63 letters, numbers, or hyphens, beginning and ending with a letter or number" >&2
+        return 1
+      fi
+      ;;
+    azure)
+      if [ "${#cluster_name}" -gt 63 ] || ! printf '%s' "${cluster_name}" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9_-]*[A-Za-z0-9])?$'; then
+        echo "Invalid AKS cluster name '${cluster_name}': expected 1-63 letters, numbers, hyphens, or underscores, beginning and ending with a letter or number" >&2
+        return 1
+      fi
+      ;;
+    gcp)
+      if [ "${#cluster_name}" -gt 40 ] || ! printf '%s' "${cluster_name}" | grep -Eq '^[a-z]([-a-z0-9]*[a-z0-9])?$'; then
+        echo "Invalid GKE cluster name '${cluster_name}': expected 1-40 lowercase letters, numbers, or hyphens, beginning with a letter and ending with a letter or number" >&2
+        return 1
+      fi
+      ;;
+    *)
+      echo "Cannot validate cluster name for unknown cloud provider '${cluster_provider}'" >&2
+      return 1
+      ;;
+  esac
+}
+
+validate_and_print_cloud_cluster_config() {
+  cluster_provider="$1"
+  cluster_name="$2"
+  node_count="$3"
+  image="$4"
+  labels="$5"
+  timeout="$6"
+
+  validate_cloud_cluster_name "${cluster_provider}" "${cluster_name}" || return 1
+
+  printf '%s\n' \
+    'Cloud cluster configuration (validated)' \
+    "  provider: ${cluster_provider}" \
+    "  cluster_name: ${cluster_name}" \
+    "  node_count: ${node_count}" \
+    "  image: ${image}" \
+    "  labels: ${labels}" \
+    "  timeout: ${timeout}"
+}
+
 materialize_file_secret() {
   secret_value="$1"
   output_path="$2"

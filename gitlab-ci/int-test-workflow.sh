@@ -156,6 +156,17 @@ export EKSCTL_VERSION="$(first_nonempty "${PIPELINE_EKSCTL_VERSION:-}" "${EKSCTL
 export KUBECTL_VERSION="$(first_nonempty "${PIPELINE_KUBECTL_VERSION:-}" "${KUBECTL_VERSION:-}" "")"
 export EKS_CLUSTER_K8_VERSION="$(first_nonempty "${PIPELINE_EKS_CLUSTER_K8_VERSION:-}" "${EKS_CLUSTER_K8_VERSION:-}" "")"
 
+if [ "${use_existing_cluster}" = "false" ]; then
+  cluster_config_summary="$(validate_and_print_cloud_cluster_config \
+    "eks" \
+    "${TEST_CLUSTER_NAME}" \
+    "${CLUSTER_WORKERS}" \
+    "${SPLUNK_OPERATOR_IMAGE}" \
+    "${TEST_LABELS}" \
+    "${TEST_TIMEOUT}")"
+  printf '%s\n' "${cluster_config_summary}" | tee -a "${cluster_log}"
+fi
+
 append_operator_runtime_context "${context_file}"
 append_context "${context_file}" "ecr_registry" "${ECR_REGISTRY}"
 append_context "${context_file}" "ecr_region" "${ECR_REGION}"

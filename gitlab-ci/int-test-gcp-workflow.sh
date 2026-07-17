@@ -187,6 +187,17 @@ export COMMIT_HASH="${CI_COMMIT_SHORT_SHA:-${CI_COMMIT_SHA}}"
 require_nonempty "${TEST_BUCKET}" "PIPELINE_TEST_BUCKET or PIPELINE_GCP_TEST_CONTAINER for GCP validation"
 require_nonempty "${TEST_INDEXES_S3_BUCKET}" "PIPELINE_TEST_INDEXES_S3_BUCKET or PIPELINE_GCP_INDEXES_CONTAINER for GCP validation"
 
+if [ "${cluster_mode}" = "ephemeral-gke" ]; then
+  cluster_config_summary="$(validate_and_print_cloud_cluster_config \
+    "gcp" \
+    "${TEST_CLUSTER_NAME}" \
+    "${CLUSTER_WORKERS}" \
+    "${SPLUNK_OPERATOR_IMAGE}" \
+    "${TEST_LABELS}" \
+    "${TEST_TIMEOUT}")"
+  printf '%s\n' "${cluster_config_summary}" | tee -a "${cluster_log}"
+fi
+
 gcp_login_service_account_key() {
   prepare_gcp_service_account_key
   gcloud auth activate-service-account --key-file="${gcp_key_file}" >/dev/null
