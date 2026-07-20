@@ -28,6 +28,7 @@ Each directory under `test/` is a separate Ginkgo test suite (Go package) with i
 | `test/smartstore/` | SmartStore configuration and functionality |
 | `test/secret/` | Secret management |
 | `test/ingest_search/` | Data ingest and search verification |
+| `test/indexing_clustering/` | Indexer cluster deployment, RF/SF, peer health, restart, and search-head-cluster scenarios |
 | `test/index_and_ingestion_separation/` | Index vs ingestion separation |
 | `test/delete_cr/` | CR deletion behavior |
 | `test/appframework_aws/` | App Framework with AWS S3 (`s1/`, `c3/`, `m4/` sub-suites) |
@@ -127,6 +128,7 @@ graph TD
 - Creates a unique namespace and sets up all required resources:
   - Cloud provider index secrets (EKS/Azure/GCP), created from environment variables
   - License ConfigMap (only when `--license-file` is provided; without it, Splunk instances use trial license)
+  - App download PVC wiring on the operator deployment; the helper retries update conflicts and skips duplicate `app-staging` volume and mount entries
 - **Prerequisites validation (fail-fast):** `SetupTestCaseEnv` calls `ValidateTestPrerequisites` immediately after creating the namespace and deployment. This checks that (a) the test namespace exists and (b) the operator pod is `Running` and `Ready` in the correct namespace (`splunk-operator` for cluster-wide, or the test namespace otherwise). If either check fails, the test fails fast with a clear error before any long-running operations begin
 - Torn down via `testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)` — which handles failure detection, skip-teardown on failure, deployment cleanup, and namespace deletion in one call
 
@@ -292,7 +294,7 @@ Test selection is driven by Ginkgo `Label(...)` arguments on `It` blocks and fil
 - A **variant** label (where a CR has V3/V4 variants): `variant:manager` (ClusterManager / V4) or `variant:master` (ClusterMaster / V3).
 - A **feature** label — exactly one, matching the test's directory:
   `feature:appframework` (under `test/appframework_*`), `feature:smartstore`, `feature:monitoringconsole`,
-  `feature:secret`, `feature:crcrud`, `feature:deletecr`, `feature:licensemanager`, `feature:ingestsearch`, `feature:indingsep`, `feature:basic`.
+  `feature:secret`, `feature:crcrud`, `feature:deletecr`, `feature:licensemanager`, `feature:ingestsearch`, `feature:indingsep`, `feature:basic`, `feature:idxclustering`.
 - **Extra / scenario** labels when they carry meaning orthogonal to the above:
   `suite:mc1` / `suite:mc2` (CI parallelization groups),
   `feature:scaling` (added in addition to the test's primary `feature:*` label on scale-up/scale-down scenarios so the `managerscaling` CI job can target them).
@@ -522,6 +524,36 @@ Install the version specified by `GO_VERSION` in `.env`.
 
 You need a cluster with `kubectl` configured and a default StorageClass backed by a CSI driver for dynamic PVC provisioning (Splunk CRs create StatefulSets with PVCs).
 
+For a local single-node k3s workstation, point `kubectl` and the tests at the k3s kubeconfig:
+
+```bash
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+kubectl get nodes
+kubectl get storageclass
+```
+
+If you use a local registry, make sure k3s can pull from it. A common setup is `localhost:5000`:
+
+```bash
+docker ps --filter name=registry --format '{{.Names}}' | grep -q '^registry$' || \
+  docker run -d --restart=always -p 127.0.0.1:5000:5000 --name registry registry:2
+```
+
+If k3s cannot pull from `localhost:5000`, configure the k3s registry mirror and restart k3s:
+
+```bash
+sudo mkdir -p /etc/rancher/k3s
+sudo tee /etc/rancher/k3s/registries.yaml >/dev/null <<'EOF'
+mirrors:
+  "localhost:5000":
+    endpoint:
+      - "http://localhost:5000"
+EOF
+sudo systemctl restart k3s
+```
+
+Use k3s for direct local suite runs that do not require cloud storage credentials. Cloud-backed suites still need their documented `eks`, `azure`, or `gcp` provider setup because storage helpers select provider-specific S3, Azure Blob, or GCS behavior from the cloud test environment.
+
 **3. Install the Ginkgo CLI**
 
 ```bash
@@ -630,6 +662,16 @@ ginkgo -v --label-filter="tier:e2e-pr && sva:s1" ./test/smoke -- \
 ```
 
 Suites under `test/appframework_*`, `test/smartstore/`, and `test/index_and_ingestion_separation/` require cloud storage setup (steps 9–10 above).
+
+For a local k3s run, explicitly use the k3s kubeconfig. Single-node k3s is resource constrained, so start with one suite and one Ginkgo process. Do not use this path for suites that require cloud storage setup, such as App Framework, SmartStore, or index/ingestion separation.
+
+```bash
+KUBECONFIG=/etc/rancher/k3s/k3s.yaml DEBUG=False \
+ginkgo -v --trace --timeout=240m ./test/indexing_clustering -- \
+  -operator-image=$OPERATOR_IMG \
+  -splunk-image=$SPLUNK_IMG \
+  -cluster-wide=true
+```
 
 ### Run a Specific Test by Name or Label
 

@@ -98,6 +98,18 @@ release-indingsep-validation:
     WORKFLOW_SLUG: release-indingsep-validation
     JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"
 
+release-managerc3idxclustering-validation:
+  extends: .release-validation-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: release-managerc3idxclustering-validation
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:c3 && variant:manager && feature:idxclustering && cloud:aws"
+
+release-managerm4idxclustering-validation:
+  extends: .release-validation-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: release-managerm4idxclustering-validation
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:m4 && variant:manager && feature:idxclustering && cloud:aws"
+
 release-helm-validation:
   extends:
     - .release-validation-runtime-job
@@ -337,6 +349,18 @@ release-distroless-indingsep-validation:
     WORKFLOW_SLUG: release-distroless-indingsep-validation
     JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"
 
+release-distroless-managerc3idxclustering-validation:
+  extends: .release-validation-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: release-distroless-managerc3idxclustering-validation
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:c3 && variant:manager && feature:idxclustering && cloud:aws"
+
+release-distroless-managerm4idxclustering-validation:
+  extends: .release-validation-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: release-distroless-managerm4idxclustering-validation
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:m4 && variant:manager && feature:idxclustering && cloud:aws"
+
 # Keep the arm64 suite set aligned with the existing splunk-operator-cicd
 # release validation matrix instead of drifting from the operational baseline.
 release-graviton-appframeworks-s1-validation:
@@ -394,6 +418,18 @@ release-graviton-indingsep-validation:
   variables:
     WORKFLOW_SLUG: release-graviton-indingsep-validation
     JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"
+
+release-graviton-managerc3idxclustering-validation:
+  extends: .release-validation-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: release-graviton-managerc3idxclustering-validation
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:c3 && variant:manager && feature:idxclustering && cloud:aws"
+
+release-graviton-managerm4idxclustering-validation:
+  extends: .release-validation-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: release-graviton-managerm4idxclustering-validation
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:m4 && variant:manager && feature:idxclustering && cloud:aws"
 
 release-candidate-packaging:
   extends:
