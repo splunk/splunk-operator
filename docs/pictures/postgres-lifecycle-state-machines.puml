@@ -1,0 +1,67 @@
+@startuml
+title Splunk Operator — PostgreSQL Lifecycle State Machines
+
+skinparam StateBackgroundColor #E0F2FE
+skinparam StateBorderColor #0284C7
+skinparam NoteBackgroundColor #F7F9FC
+skinparam NoteBorderColor #64748B
+
+state "PostgresCluster phase" as Cluster {
+  [*] --> Pending
+  Pending : upstream inputs not yet present\n(class, secret, empty CNPG phase);\nCNPG FailOver in progress
+  Provisioning : CNPG FirstPrimary / CreatingReplica;\ncomponent still creating (e.g. pooler)
+  Configuring : CNPG Switchover / Upgrade /\nApplyingConfiguration / Restart / Promotion
+  Ready : all components Ready +\nCNPG Healthy
+  Failed : CNPG Unrecoverable / WaitingForUser /\nplugin or image error; build/patch failed
+
+  Pending --> Provisioning : inputs published
+  Provisioning --> Configuring : CNPG applies change
+  Provisioning --> Ready : all components converge
+  Configuring --> Ready : change complete
+  Ready --> Configuring : spec change / CNPG switchover
+  Ready --> Provisioning : replica rebuild
+  Provisioning --> Failed : unrecoverable
+  Configuring --> Failed : unrecoverable
+  Ready --> Failed : CNPG regresses
+  Failed --> Configuring : manual intervention resolves
+}
+
+note right of Cluster
+  Phase is projected from the CNPG
+  Cluster phase; only the top-level
+  reconciler declares Ready, and only
+  once every component observes Ready.
+end note
+
+state "PostgresDatabase phase" as Database {
+  [*] --> PendingDB
+  PendingDB : cluster not found / not Ready\n(ClusterReady=False)
+  ProvisioningDB : secrets, configMaps, roles,\ndatabases being reconciled
+  ReadyDB : phase set once DatabasesReady=True;\nprivilege grants run after,\ncan leave PrivilegesReady=False while still ReadyDB
+  FailedDB : role conflict / role reconcile failed
+  DeletingDB : deletion in progress\n(finalizer draining)
+
+  PendingDB --> ProvisioningDB : cluster Ready
+  ProvisioningDB --> ReadyDB : DatabasesReady=True\n(privilege grants follow, may lag)
+  ProvisioningDB --> FailedDB : role conflict / failure
+  ProvisioningDB --> PendingDB : cluster regresses
+  ReadyDB --> ProvisioningDB : spec change / drift
+  ReadyDB --> PendingDB : cluster regresses
+  FailedDB --> ProvisioningDB : conflict resolved
+  ReadyDB --> DeletingDB : deletionTimestamp set
+  ProvisioningDB --> DeletingDB : deletionTimestamp set
+  DeletingDB --> [*] : finalizer removed\n(Delete drops, Retain orphans)
+}
+
+note right of Database
+  Linear pipeline accumulates conditions:
+  ClusterReady -> SecretsReady ->
+  ConfigMapsReady -> RolesReady ->
+  DatabasesReady -> PrivilegesReady.
+  Phase is set to ReadyDB at the DatabasesReady
+  step, one step before PrivilegesReady — a
+  superuser secret fetch failure in that last
+  step can leave phase ReadyDB with
+  PrivilegesReady still False.
+end note
+@enduml

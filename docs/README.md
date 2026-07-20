@@ -37,6 +37,14 @@ make deploy IMG=docker.io/splunk/splunk-operator:<tag name> WATCH_NAMESPACE="nam
 
 For more information about this change, see the [Splunk General Terms Migration Documentation](reference/SplunkGeneralTermsMigration.md).
 
+## Architecture
+
+Design documentation for the operator's managed PostgreSQL feature:
+
+- [PostgreSQL Architecture Overview](postgresql/architecture-overview.md) — component, reconcile-flow, and lifecycle diagrams.
+- [Architecture Decision Records (ADRs)](postgresql/adr/README.md) — the decisions behind the design (CRD structure and API group, Actuate/Converge reconcile pattern, CNPG integration and drift reconciliation, PgBouncer integration, PostgresClusterClass abstraction).
+- [RFC Summary](postgresql/rfc-summary.md) — problem statement, considered alternatives, and chosen approach.
+
 ## Development
 
 If you are interested in building or contributing to the Splunk Operator, see the [Development Setup](develop/DevelopmentSetup.md) and [Contributing](develop/Contributing.md) guides.

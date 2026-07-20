@@ -1,0 +1,64 @@
+@startuml
+!include <C4/C4_Container>
+
+title Splunk Operator — Managed PostgreSQL: Component Overview
+LAYOUT_TOP_DOWN()
+
+AddElementTag("operator", $bgColor="#E0F2FE", $fontColor="#0F172A", $borderColor="#0284C7")
+AddElementTag("cnpg", $bgColor="#DCFCE7", $fontColor="#14532D", $borderColor="#16A34A")
+AddElementTag("data", $bgColor="#DCFCE7", $fontColor="#14532D", $borderColor="#16A34A")
+AddElementTag("secret", $bgColor="#FCE7F3", $fontColor="#831843", $borderColor="#DB2777")
+AddElementTag("config", $bgColor="#F7F9FC", $fontColor="#1F2937", $borderColor="#64748B")
+AddElementTag("consumer", $bgColor="#FEF3C7", $fontColor="#78350F", $borderColor="#D97706")
+
+Person(platform, "Platform team", "Owns cluster-scoped policy")
+Person(service, "Service team", "Owns cluster + database instances")
+
+System_Boundary(operator_boundary, "Splunk Operator") {
+  Container(pcc_ctrl, "PostgresClusterClass", "CRD (cluster-scoped)", "Immutable template + platform policy", $tags="operator")
+  Container(pc_ctrl, "PostgresCluster controller", "controller-runtime", "Component pipeline: secret, objectStore, cluster, roles, pooler, backup, configMap", $tags="operator")
+  Container(pdb_ctrl, "PostgresDatabase controller", "controller-runtime", "Linear pipeline: cluster→secrets→configMaps→roles→databases→privileges", $tags="operator")
+}
+
+System_Boundary(cnpg_boundary, "CloudNativePG") {
+  Container(cnpg_op, "CNPG operator", "postgresql.cnpg.io", "Provisions and manages PostgreSQL", $tags="cnpg")
+  Container(cnpg_cluster, "CNPG Cluster", "Cluster CR", "Primary + replicas, managed.roles", $tags="cnpg")
+  Container(pooler, "PgBouncer Poolers", "Pooler CR (RW / RO)", "Connection pooling", $tags="cnpg")
+  Container(scheduled_backup, "ScheduledBackup / ObjectStore", "Barman plugin", "Backup to object storage", $tags="cnpg")
+  ContainerDb(pg, "PostgreSQL", "Pods + PVCs", "Databases, roles, WAL", $tags="data")
+}
+
+Container(eso, "External Secrets Operator", "ESO (optional)", "Materializes external superuser secret", $tags="secret")
+Container(superuser_secret, "superuser Secret", "Kubernetes Secret", "Cluster admin credential", $tags="secret")
+Container(role_secrets, "per-database role Secrets", "Kubernetes Secret", "App credentials (_rw etc.)", $tags="secret")
+Container(conn_configmap, "connection-info ConfigMap", "Kubernetes ConfigMap", "Host/port/pooler endpoints", $tags="config")
+Container(consumer, "Consumer service", "Splunk service", "Reads ConfigMap + Secret to connect", $tags="consumer")
+
+Rel(platform, pcc_ctrl, "Defines classes")
+Rel(service, pc_ctrl, "Creates PostgresCluster")
+Rel(service, pdb_ctrl, "Creates PostgresDatabase")
+
+Rel(pc_ctrl, pcc_ctrl, "Resolves + merges class")
+Rel(pc_ctrl, cnpg_cluster, "Owns / drift-reconciles (SSA)")
+Rel(pc_ctrl, pooler, "Owns")
+Rel(pc_ctrl, scheduled_backup, "Owns")
+Rel(pc_ctrl, superuser_secret, "Owns / reads")
+Rel(pc_ctrl, conn_configmap, "Owns (cluster endpoints)")
+Rel(eso, superuser_secret, "Materializes (external mode)")
+
+Rel(cnpg_op, cnpg_cluster, "Reconciles")
+Rel(cnpg_cluster, pg, "Runs")
+Rel(pooler, pg, "Pools connections to")
+Rel(scheduled_backup, pg, "Backs up")
+
+Rel(pdb_ctrl, pc_ctrl, "clusterRef (same namespace); watches status")
+Rel(pdb_ctrl, cnpg_cluster, "Patches managed.roles via SSA; SQL grants")
+Rel(pdb_ctrl, role_secrets, "Owns")
+Rel(pdb_ctrl, conn_configmap, "Owns (per-database endpoints)")
+
+Rel(consumer, conn_configmap, "Reads endpoints")
+Rel(consumer, role_secrets, "Reads credentials")
+Rel(consumer, pooler, "Connects via", "PostgreSQL/TLS")
+
+SHOW_LEGEND()
+@enduml
